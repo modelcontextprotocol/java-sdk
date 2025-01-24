@@ -4,9 +4,6 @@
 
 package org.modelcontextprotocol.server;
 
-import org.modelcontextprotocol.server.McpServer.PromptRegistration;
-import org.modelcontextprotocol.server.McpServer.ResourceRegistration;
-import org.modelcontextprotocol.server.McpServer.ToolRegistration;
 import org.modelcontextprotocol.spec.McpError;
 import org.modelcontextprotocol.spec.McpSchema;
 import org.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
@@ -94,16 +91,6 @@ public class McpSyncServer {
 	}
 
 	/**
-	 * Add a new tool handler.
-	 * @param toolHandler The tool handler to add
-	 * @deprecated Use {@link #addTool(McpServerFeatures.SyncToolRegistration)}.
-	 */
-	@Deprecated
-	public void addTool(ToolRegistration toolHandler) {
-		this.asyncServer.addTool(toolHandler).block();
-	}
-
-	/**
 	 * Remove a tool handler.
 	 * @param toolName The name of the tool handler to remove
 	 */
@@ -120,16 +107,6 @@ public class McpSyncServer {
 	}
 
 	/**
-	 * Add a new resource handler.
-	 * @param resourceHandler The resource handler to add
-	 * @deprecated Use {@link #addResource(McpServerFeatures.SyncResourceRegistration)}.
-	 */
-	@Deprecated
-	public void addResource(ResourceRegistration resourceHandler) {
-		this.asyncServer.addResource(resourceHandler).block();
-	}
-
-	/**
 	 * Remove a resource handler.
 	 * @param resourceUri The URI of the resource handler to remove
 	 */
@@ -143,16 +120,6 @@ public class McpSyncServer {
 	 */
 	public void addPrompt(McpServerFeatures.SyncPromptRegistration promptRegistration) {
 		this.asyncServer.addPrompt(McpServerFeatures.AsyncPromptRegistration.fromSync(promptRegistration)).block();
-	}
-
-	/**
-	 * Add a new prompt handler.
-	 * @param promptRegistration The prompt registration to add
-	 * @deprecated Use {@link #addPrompt(McpServerFeatures.SyncPromptRegistration)}.
-	 */
-	@Deprecated
-	public void addPrompt(PromptRegistration promptRegistration) {
-		this.asyncServer.addPrompt(promptRegistration).block();
 	}
 
 	/**

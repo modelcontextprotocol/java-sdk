@@ -15,24 +15,21 @@ import java.util.function.Function;
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.modelcontextprotocol.spec.ClientMcpTransport;
 import org.modelcontextprotocol.spec.DefaultMcpSession;
-import org.modelcontextprotocol.spec.McpError;
-import org.modelcontextprotocol.spec.McpSchema;
-import org.modelcontextprotocol.spec.McpTransport;
 import org.modelcontextprotocol.spec.DefaultMcpSession.NotificationHandler;
 import org.modelcontextprotocol.spec.DefaultMcpSession.RequestHandler;
+import org.modelcontextprotocol.spec.McpError;
+import org.modelcontextprotocol.spec.McpSchema;
 import org.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import org.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import org.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
 import org.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import org.modelcontextprotocol.spec.McpSchema.GetPromptResult;
-import org.modelcontextprotocol.spec.McpSchema.Implementation;
 import org.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
 import org.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import org.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import org.modelcontextprotocol.spec.McpSchema.PaginatedRequest;
 import org.modelcontextprotocol.spec.McpSchema.Root;
-import org.modelcontextprotocol.spec.McpSchema.ClientCapabilities.RootCapabilities;
-import org.modelcontextprotocol.spec.McpSchema.ClientCapabilities.Sampling;
+import org.modelcontextprotocol.spec.McpTransport;
 import org.modelcontextprotocol.util.Assert;
 import org.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
@@ -216,107 +213,6 @@ public class McpAsyncClient {
 		}
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_MESSAGE,
 				asyncLoggingNotificationHandler(loggingConsumersFinal));
-
-		this.mcpSession = new DefaultMcpSession(requestTimeout, transport, requestHandlers, notificationHandlers);
-
-	}
-
-	/**
-	 * Create a new McpAsyncClient with the given transport and session request-response
-	 * timeout.
-	 * @param transport the transport to use.
-	 * @param requestTimeout the session request-response timeout.
-	 * @param clientInfo the client implementation information.
-	 * @param clientCapabilities the client capabilities.
-	 * @param roots the roots.
-	 * @param toolsChangeConsumers the tools change consumers.
-	 * @param resourcesChangeConsumers the resources change consumers.
-	 * @param promptsChangeConsumers the prompts change consumers.
-	 * @param loggingConsumers the logging consumers.
-	 * @param samplingHandler the sampling handler.
-	 * @deprecated Use {@link McpClient#async(ClientMcpTransport)} to obtain an instance.
-	 */
-	@Deprecated
-	public McpAsyncClient(ClientMcpTransport transport, Duration requestTimeout, Implementation clientInfo,
-			ClientCapabilities clientCapabilities, Map<String, Root> roots,
-			List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers,
-			List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers,
-			List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers,
-			List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers,
-			Function<CreateMessageRequest, CreateMessageResult> samplingHandler) {
-
-		Assert.notNull(transport, "Transport must not be null");
-		Assert.notNull(requestTimeout, "Request timeout must not be null");
-		Assert.notNull(clientInfo, "Client info must not be null");
-
-		this.protocolVersions = List.of(McpSchema.LATEST_PROTOCOL_VERSION);
-
-		this.clientInfo = clientInfo;
-
-		this.clientCapabilities = (clientCapabilities != null) ? clientCapabilities
-				: new McpSchema.ClientCapabilities(null, !Utils.isEmpty(roots) ? new RootCapabilities(false) : null,
-						samplingHandler != null ? new Sampling() : null);
-
-		this.transport = transport;
-
-		this.roots = roots != null ? new ConcurrentHashMap<>(roots) : new ConcurrentHashMap<>();
-
-		// Request Handlers
-		Map<String, RequestHandler<?>> requestHandlers = new HashMap<>();
-
-		// Roots List Request Handler
-		if (this.clientCapabilities.roots() != null) {
-			requestHandlers.put(McpSchema.METHOD_ROOTS_LIST, rootsListRequestHandler());
-		}
-
-		// Sampling Handler
-		if (this.clientCapabilities.sampling() != null) {
-			if (samplingHandler == null) {
-				throw new McpError("Sampling handler must not be null when client capabilities include sampling");
-			}
-			this.samplingHandler = r -> Mono.fromCallable(() -> samplingHandler.apply(r))
-				.subscribeOn(Schedulers.boundedElastic());
-			requestHandlers.put(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, samplingCreateMessageHandler());
-		}
-
-		// Notification Handlers
-		Map<String, NotificationHandler> notificationHandlers = new HashMap<>();
-
-		// Tools Change Notification
-		List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumersFinal = new ArrayList<>();
-		toolsChangeConsumersFinal.add((notification) -> logger.info("Tools changed: {}", notification));
-		if (!Utils.isEmpty(toolsChangeConsumers)) {
-			toolsChangeConsumersFinal.addAll(toolsChangeConsumers);
-		}
-		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_TOOLS_LIST_CHANGED,
-				toolsChangeNotificationHandler(toolsChangeConsumersFinal));
-
-		// Resources Change Notification
-		List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumersFinal = new ArrayList<>();
-		resourcesChangeConsumersFinal.add((notification) -> logger.info("Resources changed: {}", notification));
-		if (!Utils.isEmpty(resourcesChangeConsumers)) {
-			resourcesChangeConsumersFinal.addAll(resourcesChangeConsumers);
-		}
-		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED,
-				resourcesChangeNotificationHandler(resourcesChangeConsumersFinal));
-
-		// Prompts Change Notification
-		List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumersFinal = new ArrayList<>();
-		promptsChangeConsumersFinal.add((notification) -> logger.info("Prompts changed: {}", notification));
-		if (!Utils.isEmpty(promptsChangeConsumers)) {
-			promptsChangeConsumersFinal.addAll(promptsChangeConsumers);
-		}
-		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED,
-				promptsChangeNotificationHandler(promptsChangeConsumersFinal));
-
-		// Utility Logging Notification
-		List<Consumer<LoggingMessageNotification>> loggingConsumersFinal = new ArrayList<>();
-		loggingConsumersFinal.add((notification) -> logger.info("Logging: {}", notification));
-		if (!Utils.isEmpty(loggingConsumers)) {
-			loggingConsumersFinal.addAll(loggingConsumers);
-		}
-		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_MESSAGE,
-				loggingNotificationHandler(loggingConsumersFinal));
 
 		this.mcpSession = new DefaultMcpSession(requestTimeout, transport, requestHandlers, notificationHandlers);
 
@@ -599,32 +495,6 @@ public class McpAsyncClient {
 	 * list to all registered consumers 3. Handling any errors that occur during this
 	 * process
 	 */
-	@Deprecated
-	private NotificationHandler toolsChangeNotificationHandler(
-			List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers) {
-
-		return params -> listTools().flatMap(listToolsResult -> Mono.fromRunnable(() -> {
-			for (Consumer<List<McpSchema.Tool>> toolsChangeConsumer : toolsChangeConsumers) {
-				toolsChangeConsumer.accept(listToolsResult.tools());
-			}
-		}).subscribeOn(Schedulers.boundedElastic())).onErrorResume(error -> {
-			logger.error("Error handling tools list change notification", error);
-			return Mono.empty();
-		}).then(); // Convert to Mono<Void>
-	}
-
-	/**
-	 * Creates a notification handler for tools/list_changed notifications from the
-	 * server. When the server's available tools change, it sends a notification to inform
-	 * connected clients. This handler automatically fetches the updated tool list and
-	 * distributes it to all registered consumers.
-	 * @param toolsChangeConsumers List of consumers that will be notified when the tools
-	 * list changes. Each consumer receives the complete updated list of tools.
-	 * @return A NotificationHandler that processes tools/list_changed notifications by:
-	 * 1. Fetching the current list of tools from the server 2. Distributing the updated
-	 * list to all registered consumers 3. Handling any errors that occur during this
-	 * process
-	 */
 	private NotificationHandler asyncToolsChangeNotificationHandler(
 			List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers) {
 		// TODO: params are not used yet
@@ -745,20 +615,6 @@ public class McpAsyncClient {
 				VOID_TYPE_REFERENCE);
 	}
 
-	@Deprecated
-	private NotificationHandler resourcesChangeNotificationHandler(
-			List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers) {
-
-		return params -> listResources().flatMap(listResourcesResult -> Mono.fromRunnable(() -> {
-			for (Consumer<List<McpSchema.Resource>> resourceChangeConsumer : resourcesChangeConsumers) {
-				resourceChangeConsumer.accept(listResourcesResult.resources());
-			}
-		}).subscribeOn(Schedulers.boundedElastic())).onErrorResume(error -> {
-			logger.error("Error handling resources list change notification", error);
-			return Mono.empty();
-		}).then();
-	}
-
 	private NotificationHandler asyncResourcesChangeNotificationHandler(
 			List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers) {
 		return params -> listResources().flatMap(listResourcesResult -> Flux.fromIterable(resourcesChangeConsumers)
@@ -814,22 +670,6 @@ public class McpAsyncClient {
 	 */
 	public Mono<Void> promptListChangedNotification() {
 		return this.mcpSession.sendNotification(McpSchema.METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED);
-	}
-
-	@Deprecated
-	private NotificationHandler promptsChangeNotificationHandler(
-			List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers) {
-
-		return params -> {// @formatter:off
-			return listPrompts().flatMap(listPromptsResult -> Mono.fromRunnable(() -> {
-				for (Consumer<List<McpSchema.Prompt>> promptChangeConsumer : promptsChangeConsumers) {
-					promptChangeConsumer.accept(listPromptsResult.prompts());
-				}
-			}).subscribeOn(Schedulers.boundedElastic())).onErrorResume(error -> {
-				logger.error("Error handling prompts list change notification", error);
-				return Mono.empty();
-			}).then(); // Convert to Mono<Void>
-		}; // @formatter:on
 	}
 
 	private NotificationHandler asyncPromptsChangeNotificationHandler(
