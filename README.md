@@ -1,5 +1,5 @@
 # Java & Spring MCP
-[![Build Status](https://github.com/spring-projects-experimental/spring-ai-mcp/actions/workflows/continuous-integration.yml/badge.svg)](https://github.com/spring-projects-experimental/spring-ai-mcp/actions/workflows/continuous-integration.yml)
+[![Build Status](https://github.com/modelcontextprotocol/java-sdk/actions/workflows/continuous-integration.yml/badge.svg)](https://github.com/modelcontextprotocol/java-sdk/actions/workflows/continuous-integration.yml)
 
 Set of projects that provide Java SDK and Spring Framework integration for the [Model Context Protocol](https://modelcontextprotocol.org/docs/concepts/architecture). 
 It enables Java applications to interact with AI models and tools through a standardized interface, supporting both synchronous and asynchronous communication patterns.
@@ -28,8 +28,8 @@ Java implementation of the Model Context Protocol specification. It includes:
 - Servlet-based SSE server (`HttpServletSseServerTransport`) for HTTP SSE Server streaming using traditional Servlet API
 
 #### Optional SSE Transports
-- [WebFlux SSE Transport](https://github.com/spring-projects-experimental/spring-ai-mcp/tree/main/mcp-transport/mcp-webflux-sse-transport) - Reactive HTTP streaming with Spring WebFlux (Client & Server)
-- [WebMvc SSE Transport](https://github.com/spring-projects-experimental/spring-ai-mcp/tree/main/mcp-transport/mcp-webmvc-sse-transport) - Spring MVC based HTTP SSE transport (Server only). 
+- [WebFlux SSE Transport](https://github.com/modelcontextprotocol/java-sdk/tree/main/mcp-transport/mcp-webflux-sse-transport) - Reactive HTTP streaming with Spring WebFlux (Client & Server)
+- [WebMvc SSE Transport](https://github.com/modelcontextprotocol/java-sdk/tree/main/mcp-transport/mcp-webmvc-sse-transport) - Spring MVC based HTTP SSE transport (Server only). 
 You can use the core `HttpClientSseClientTransport` transport as a SSE client.
 
 ### [Spring AI MCP](https://docs.spring.io/spring-ai-mcp/reference/spring-mcp.html)
@@ -47,26 +47,20 @@ Add the following dependencies to your Maven project:
 ```xml
 <!-- Core MCP -->
 <dependency>
-    <groupId>org.springframework.experimental</groupId>
+    <groupId>org.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp</artifactId>
 </dependency>
 
 <!-- Optional: WebFlux SSE transport -->
 <dependency>
-    <groupId>org.springframework.experimental</groupId>
+    <groupId>org.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp-webflux-sse-transport</artifactId>
 </dependency>
 
 <!-- Optional: WebMVC SSE transport -->
 <dependency>
-    <groupId>org.springframework.experimental</groupId>
+    <groupId>org.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp-webmvc-sse-transport</artifactId>
-</dependency>
-
-<!-- Optional: Spring AI integration -->
-<dependency>
-    <groupId>org.springframework.experimental</groupId>
-    <artifactId>spring-ai-mcp</artifactId>
 </dependency>
 ```
 
@@ -105,7 +99,6 @@ Explore these MCP examples in the [spring-ai-examples/model-context-protocol](ht
 
 - [Java MCP SDK documentation](mcp/README.md)
   - [Reference documentation](docs/ref-index.md)
-- [Spring Integration documentation](spring-ai-mcp/README.md)
 
 
 ## Development
@@ -125,7 +118,7 @@ mvn test
 
 ## Contributing
 
-This is an experimental Spring project. Contributions are welcome! Please:
+Contributions are welcome! Please:
 
 1. Fork the repository
 2. Create a feature branch
@@ -138,9 +131,9 @@ This is an experimental Spring project. Contributions are welcome! Please:
 
 ## Links
 
-- [GitHub Repository](https://github.com/spring-projects-experimental/spring-ai-mcp)
-- [Issue Tracker](https://github.com/spring-projects-experimental/spring-ai-mcp/issues)
-- [CI/CD](https://github.com/spring-projects-experimental/spring-ai-mcp/actions)
+- [GitHub Repository](https://github.com/modelcontextprotocol/java-sdk)
+- [Issue Tracker](https://github.com/modelcontextprotocol/java-sdk/issues)
+- [CI/CD](https://github.com/modelcontextprotocol/java-sdk/actions)
 
 ## License
 

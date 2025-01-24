@@ -4,7 +4,7 @@
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<parent>
-		<groupId>org.springframework.experimental</groupId>
+		<groupId>org.modelcontextprotocol.sdk</groupId>
 		<artifactId>mcp-parent</artifactId>
 		<version>0.7.0-SNAPSHOT</version>
 	</parent>
@@ -12,17 +12,17 @@
 	<packaging>jar</packaging>
 	<name>Tests for the Java MCP SDK</name>
 	<description>Provides some shared test fasilities for the MCP Java SDK</description>
-	<url>https://github.com/spring-projects-experimental/spring-ai-mcp</url>
+	<url>https://github.com/modelcontextprotocol/java-sdk</url>
 
 	<scm>
-		<url>https://github.com/spring-projects-experimental/spring-ai-mcp</url>
-		<connection>git://github.com/spring-projects-experimental/spring-ai-mcp.git</connection>
-		<developerConnection>git@github.com:spring-projects-experimental/spring-ai-mcp.git</developerConnection>
+		<url>https://github.com/modelcontextprotocol/java-sdk</url>
+		<connection>git://github.com/modelcontextprotocol/java-sdk.git</connection>
+		<developerConnection>git@github.com/modelcontextprotocol/java-sdk.git</developerConnection>
 	</scm>
 
 	<dependencies>
 		<dependency>
-			<groupId>org.springframework.experimental</groupId>
+			<groupId>org.modelcontextprotocol.sdk</groupId>
 			<artifactId>mcp</artifactId>
 			<version>0.7.0-SNAPSHOT</version>
 		</dependency>

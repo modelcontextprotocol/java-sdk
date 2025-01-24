@@ -2,7 +2,7 @@
 
 ```xml
 <dependency>
-    <groupId>org.springframework.experimental</groupId>
+    <groupId>org.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp-webmvc-sse-transport</artifactId>
 </dependency>
 ```

@@ -1,4 +1,3 @@
 * xref:overview.adoc[Overview]
 ** xref:dependency-management.adoc[Dependency Management]
 * xref:mcp.adoc[MCP Java SDK]
-* xref:spring-mcp.adoc[Spring AI MCP]

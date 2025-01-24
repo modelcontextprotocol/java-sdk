@@ -20,7 +20,7 @@ Maven::
 <dependencyManagement>
     <dependencies>
         <dependency>
-            <groupId>org.springframework.experimental</groupId>
+            <groupId>org.modelcontextprotocol.sdk</groupId>
             <artifactId>mcp-bom</artifactId>
             <version>0.6.0-SNAPSHOT</version>
             <type>pom</type>
@@ -35,7 +35,7 @@ Gradle::
 [source,groovy,indent=0,subs="verbatim,quotes"]
 ----
 dependencies {
-  implementation platform("org.springframework.experimental:mcp-bom:0.6.0-SNAPSHOT")
+  implementation platform("org.modelcontextprotocol.sdk:mcp-bom:0.6.0-SNAPSHOT")
   //...
 }
 ----
@@ -53,17 +53,16 @@ The following dependencies are available and managed by the BOM:
 
 === Core Dependencies
 
-* `org.springframework.experimental:mcp` - Core MCP library providing the base functionality and APIs for Model Context Protocol implementation.
-* `org.springframework.experimental:spring-ai-mcp` - Spring AI integration with MCP, providing Spring-specific features and utilities.
+* `org.modelcontextprotocol.sdk:mcp` - Core MCP library providing the base functionality and APIs for Model Context Protocol implementation.
 
 === Transport Dependencies
 
-* `org.springframework.experimental:mcp-webflux-sse-transport` - WebFlux-based Server-Sent Events (SSE) transport implementation for reactive applications.
-* `org.springframework.experimental:mcp-webmvc-sse-transport` - WebMVC-based Server-Sent Events (SSE) transport implementation for servlet-based applications.
+* `org.modelcontextprotocol.sdk:mcp-webflux-sse-transport` - WebFlux-based Server-Sent Events (SSE) transport implementation for reactive applications.
+* `org.modelcontextprotocol.sdk:mcp-webmvc-sse-transport` - WebMVC-based Server-Sent Events (SSE) transport implementation for servlet-based applications.
 
 === Testing Dependencies
 
-* `org.springframework.experimental:mcp-test` - Testing utilities and support for MCP-based applications.
+* `org.modelcontextprotocol.sdk:mcp-test` - Testing utilities and support for MCP-based applications.
 
 [[repositories]]
 === Milestone and Snapshot Repositories

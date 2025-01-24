@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.springframework.experimental</groupId>
+        <groupId>org.modelcontextprotocol.sdk</groupId>
         <artifactId>mcp-parent</artifactId>
         <version>0.7.0-SNAPSHOT</version>
     </parent>
@@ -16,40 +16,40 @@
     <name>Spring AI MCP BOM</name>
     <description>Spring AI MCP Bill of Materials</description>
 
-    <url>https://github.com/spring-projects-experimental/spring-ai-mcp</url>
+	<url>https://github.com/modelcontextprotocol/java-sdk</url>
 
-    <scm>
-        <url>https://github.com/spring-projects-experimental/spring-ai-mcp</url>
-        <connection>git://github.com/spring-projects-experimental/spring-ai-mcp.git</connection>
-        <developerConnection>git@github.com/spring-projects-experimental/spring-ai-mcp.git</developerConnection>
-    </scm>
+	<scm>
+		<url>https://github.com/modelcontextprotocol/java-sdk</url>
+		<connection>git://github.com/modelcontextprotocol/java-sdk.git</connection>
+		<developerConnection>git@github.com/modelcontextprotocol/java-sdk.git</developerConnection>
+	</scm>
 
     <dependencyManagement>
         <dependencies>
             <!-- Core MCP -->
             <dependency>
-                <groupId>org.springframework.experimental</groupId>
+                <groupId>org.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <!-- MCP Test -->
             <dependency>
-                <groupId>org.springframework.experimental</groupId>
+                <groupId>org.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-test</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <!-- MCP Transport - WebFlux SSE -->
             <dependency>
-                <groupId>org.springframework.experimental</groupId>
+                <groupId>org.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-webflux-sse-transport</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <!-- MCP Transport - WebMVC SSE -->
             <dependency>
-                <groupId>org.springframework.experimental</groupId>
+                <groupId>org.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-webmvc-sse-transport</artifactId>
                 <version>${project.version}</version>
             </dependency>

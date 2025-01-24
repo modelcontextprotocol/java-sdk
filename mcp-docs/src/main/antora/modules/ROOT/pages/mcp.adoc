@@ -34,7 +34,7 @@ The core MCP functionality:
 [source,xml]
 ----
 <dependency>
-    <groupId>org.springframework.experimental</groupId>
+    <groupId>org.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp</artifactId>
 </dependency>
 ----
@@ -46,13 +46,13 @@ For HTTP SSE transport implementations, add one of the following dependencies
 ----
 <!-- Spring WebFlux-based SSE client and server transport -->
 <dependency>
-    <groupId>org.springframework.experimental</groupId>
+    <groupId>org.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp-webflux-sse-transport</artifactId>
 </dependency>
 
 <!-- Spring WebMVC-based SSE server transport -->
 <dependency>
-    <groupId>org.springframework.experimental</groupId>
+    <groupId>org.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp-webmvc-sse-transport</artifactId>
 </dependency>
 ----
@@ -64,7 +64,7 @@ The core MCP functionality:
 [source,groovy]
 ----
 dependencies {
-    implementation 'org.springframework.experimental:mcp'
+    implementation 'org.modelcontextprotocol.sdk:mcp'
 }
 ----
 +
@@ -74,10 +74,10 @@ For HTTP SSE transport implementations, add one of the following dependencies
 [source,groovy]
 ----
 // Spring WebFlux-based SSE client and server transport
-implementation 'org.springframework.experimental:mcp-webflux-sse-transport'
+implementation 'org.modelcontextprotocol.sdk:mcp-webflux-sse-transport'
 
 // Spring WebMVC-based SSE server transport
-implementation 'org.springframework.experimental:mcp-webmvc-sse-transport'
+implementation 'org.modelcontextprotocol.sdk:mcp-webmvc-sse-transport'
 ----
 ======
 
@@ -543,7 +543,7 @@ public class McpServerConfig implements WebMvcConfigurer {
 }
 ----
 +
-(You can implment non Spring web container as well link:https://github.com/spring-projects-experimental/spring-ai-mcp/blob/main/mcp/src/test/java/org/springframework/ai/mcp/server/transport/HttpServletSseServerTransportIntegrationTests.java[HttpServletSseServerTransportIntegrationTests])
+(You can implment non Spring web container as well link:https://github.com/modelcontextprotocol/java-sdk/blob/main/mcp/src/test/java/org/springframework/ai/mcp/server/transport/HttpServletSseServerTransportIntegrationTests.java[HttpServletSseServerTransportIntegrationTests])
 +
 Implements the MCP HTTP with SSE transport specification using the traditional Servlet API, providing:
 +

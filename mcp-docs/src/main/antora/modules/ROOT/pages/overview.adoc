@@ -25,19 +25,9 @@ Core implementation of the Model Context Protocol specification, providing:
 ** Servlet-based SSE server (`HttpServletSseServerTransport`) for HTTP SSE Server streaming using traditional Servlet API
 
 * *Optional SSE Transports*
-** link:https://github.com/spring-projects-experimental/spring-ai-mcp/tree/main/mcp-transport/mcp-webflux-sse-transport[WebFlux SSE Transport] - Reactive HTTP streaming with Spring WebFlux (Client & Server)
-** link:https://github.com/spring-projects-experimental/spring-ai-mcp/tree/main/mcp-transport/mcp-webmvc-sse-transport[WebMvc SSE Transport] - Spring MVC based SSE transport (Server only). 
+** link:https://github.com/modelcontextprotocol/java-sdk/tree/main/mcp-transport/mcp-webflux-sse-transport[WebFlux SSE Transport] - Reactive HTTP streaming with Spring WebFlux (Client & Server)
+** link:https://github.com/modelcontextprotocol/java-sdk/tree/main/mcp-transport/mcp-webmvc-sse-transport[WebMvc SSE Transport] - Spring MVC based SSE transport (Server only). 
 You can use the core `HttpClientSseClientTransport` transport as a SSE client.
-
-=== xref:spring-mcp.adoc[Spring AI MCP]
-Spring integration features:
-
-* Spring AI tool/function calling system integration
-* Bidirectional conversion between Spring AI function callbacks and MCP tools
-* JSON schema generation for tool input validation
-* Automatic type conversion and error handling
-* Spring-friendly MCP client abstractions
-* Auto-configurations (WIP)
 
 == Getting Started
 
@@ -49,27 +39,22 @@ Maven::
 ----
 <!-- Core MCP -->
 <dependency>
-    <groupId>org.springframework.experimental</groupId>
+    <groupId>org.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp</artifactId>    
 </dependency>
 
 <!-- Optional: WebFlux SSE transport -->
 <dependency>
-    <groupId>org.springframework.experimental</groupId>
+    <groupId>org.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp-webflux-sse-transport</artifactId>
 </dependency>
 
 <!-- Optional: WebMVC SSE transport -->
 <dependency>
-    <groupId>org.springframework.experimental</groupId>
+    <groupId>org.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp-webmvc-sse-transport</artifactId>
 </dependency>
 
-<!-- Optional: Spring AI integration -->
-<dependency>
-    <groupId>org.springframework.experimental</groupId>
-    <artifactId>spring-ai-mcp</artifactId>
-</dependency>
 ----
 +
 Add Spring milestone repository:
@@ -93,10 +78,9 @@ Gradle::
 [source,groovy]
 ----
 dependencies {
-    implementation 'org.springframework.experimental:mcp'                     // Core
-    implementation 'org.springframework.experimental:mcp-webflux-sse-transport'  // Optional
-    implementation 'org.springframework.experimental:mcp-webmvc-sse-transport'   // Optional
-    implementation 'org.springframework.experimental:spring-ai-mcp'              // Optional
+    implementation 'org.modelcontextprotocol.sdk:mcp'                     // Core
+    implementation 'org.modelcontextprotocol.sdk:mcp-webflux-sse-transport'  // Optional
+    implementation 'org.modelcontextprotocol.sdk:mcp-webmvc-sse-transport'   // Optional
 }
 
 repositories {
