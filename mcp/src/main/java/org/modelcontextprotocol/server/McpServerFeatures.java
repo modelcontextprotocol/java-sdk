@@ -1,3 +1,7 @@
+/*
+ * Copyright 2024-2024 the original author or authors.
+ */
+
 package org.modelcontextprotocol.server;
 
 import java.util.ArrayList;

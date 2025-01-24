@@ -123,4 +123,4 @@ mvn test
 
 == License
 
-This project is licensed under the link:LICENSE[Apache License 2.0].
+This project is licensed under the link:LICENSE[MIT].
