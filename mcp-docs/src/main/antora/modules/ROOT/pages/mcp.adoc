@@ -34,7 +34,7 @@ The core MCP functionality:
 [source,xml]
 ----
 <dependency>
-    <groupId>org.modelcontextprotocol.sdk</groupId>
+    <groupId>io.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp</artifactId>
 </dependency>
 ----
@@ -46,13 +46,13 @@ For HTTP SSE transport implementations, add one of the following dependencies
 ----
 <!-- Spring WebFlux-based SSE client and server transport -->
 <dependency>
-    <groupId>org.modelcontextprotocol.sdk</groupId>
+    <groupId>io.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp-webflux-sse-transport</artifactId>
 </dependency>
 
 <!-- Spring WebMVC-based SSE server transport -->
 <dependency>
-    <groupId>org.modelcontextprotocol.sdk</groupId>
+    <groupId>io.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp-webmvc-sse-transport</artifactId>
 </dependency>
 ----
@@ -64,7 +64,7 @@ The core MCP functionality:
 [source,groovy]
 ----
 dependencies {
-    implementation 'org.modelcontextprotocol.sdk:mcp'
+    implementation 'io.modelcontextprotocol.sdk:mcp'
 }
 ----
 +
@@ -74,10 +74,10 @@ For HTTP SSE transport implementations, add one of the following dependencies
 [source,groovy]
 ----
 // Spring WebFlux-based SSE client and server transport
-implementation 'org.modelcontextprotocol.sdk:mcp-webflux-sse-transport'
+implementation 'io.modelcontextprotocol.sdk:mcp-webflux-sse-transport'
 
 // Spring WebMVC-based SSE server transport
-implementation 'org.modelcontextprotocol.sdk:mcp-webmvc-sse-transport'
+implementation 'io.modelcontextprotocol.sdk:mcp-webmvc-sse-transport'
 ----
 ======
 

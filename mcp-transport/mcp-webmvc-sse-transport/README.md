@@ -2,7 +2,7 @@
 
 ```xml
 <dependency>
-    <groupId>org.modelcontextprotocol.sdk</groupId>
+    <groupId>io.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp-webmvc-sse-transport</artifactId>
 </dependency>
 ```

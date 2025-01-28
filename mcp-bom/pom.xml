@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.modelcontextprotocol.sdk</groupId>
+        <groupId>io.modelcontextprotocol.sdk</groupId>
         <artifactId>mcp-parent</artifactId>
         <version>0.7.0-SNAPSHOT</version>
     </parent>
@@ -28,28 +28,28 @@
         <dependencies>
             <!-- Core MCP -->
             <dependency>
-                <groupId>org.modelcontextprotocol.sdk</groupId>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <!-- MCP Test -->
             <dependency>
-                <groupId>org.modelcontextprotocol.sdk</groupId>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-test</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <!-- MCP Transport - WebFlux SSE -->
             <dependency>
-                <groupId>org.modelcontextprotocol.sdk</groupId>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-webflux-sse-transport</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <!-- MCP Transport - WebMVC SSE -->
             <dependency>
-                <groupId>org.modelcontextprotocol.sdk</groupId>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-webmvc-sse-transport</artifactId>
                 <version>${project.version}</version>
             </dependency>

@@ -39,19 +39,19 @@ Maven::
 ----
 <!-- Core MCP -->
 <dependency>
-    <groupId>org.modelcontextprotocol.sdk</groupId>
+    <groupId>io.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp</artifactId>    
 </dependency>
 
 <!-- Optional: WebFlux SSE transport -->
 <dependency>
-    <groupId>org.modelcontextprotocol.sdk</groupId>
+    <groupId>io.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp-webflux-sse-transport</artifactId>
 </dependency>
 
 <!-- Optional: WebMVC SSE transport -->
 <dependency>
-    <groupId>org.modelcontextprotocol.sdk</groupId>
+    <groupId>io.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp-webmvc-sse-transport</artifactId>
 </dependency>
 
@@ -78,9 +78,9 @@ Gradle::
 [source,groovy]
 ----
 dependencies {
-    implementation 'org.modelcontextprotocol.sdk:mcp'                     // Core
-    implementation 'org.modelcontextprotocol.sdk:mcp-webflux-sse-transport'  // Optional
-    implementation 'org.modelcontextprotocol.sdk:mcp-webmvc-sse-transport'   // Optional
+    implementation 'io.modelcontextprotocol.sdk:mcp'                     // Core
+    implementation 'io.modelcontextprotocol.sdk:mcp-webflux-sse-transport'  // Optional
+    implementation 'io.modelcontextprotocol.sdk:mcp-webmvc-sse-transport'   // Optional
 }
 
 repositories {

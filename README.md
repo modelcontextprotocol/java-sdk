@@ -47,19 +47,19 @@ Add the following dependencies to your Maven project:
 ```xml
 <!-- Core MCP -->
 <dependency>
-    <groupId>org.modelcontextprotocol.sdk</groupId>
+    <groupId>io.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp</artifactId>
 </dependency>
 
 <!-- Optional: WebFlux SSE transport -->
 <dependency>
-    <groupId>org.modelcontextprotocol.sdk</groupId>
+    <groupId>io.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp-webflux-sse-transport</artifactId>
 </dependency>
 
 <!-- Optional: WebMVC SSE transport -->
 <dependency>
-    <groupId>org.modelcontextprotocol.sdk</groupId>
+    <groupId>io.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp-webmvc-sse-transport</artifactId>
 </dependency>
 ```

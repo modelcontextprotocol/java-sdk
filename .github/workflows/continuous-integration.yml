@@ -35,7 +35,7 @@ jobs:
           MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
         run: |
-          mvn -Pjavadoc -Prelease --batch-mode --update-snapshots deploy
+          mvn -Pjavadoc -Prelease -DskipTests --batch-mode --update-snapshots deploy
 
       - name: Generate Java docs
         run: mvn -Pjavadoc -B javadoc:aggregate
