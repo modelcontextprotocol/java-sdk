@@ -1,0 +1,104 @@
+---
+title: Dependency Management
+description: Guide to managing dependencies for the Model Context Protocol (MCP) Java SDK
+---
+
+# Dependency Management
+
+## Bill of Materials (BOM)
+
+The Bill of Materials (BOM) declares the recommended versions of all the dependencies used by a given release.
+Using the BOM from your application's build script avoids the need for you to specify and maintain the dependency versions yourself.
+Instead, the version of the BOM you're using determines the utilized dependency versions.
+It also ensures that you're using supported and tested versions of the dependencies by default, unless you choose to override them.
+
+Add the BOM to your project:
+
+<Tabs>
+  <Tab title="Maven">
+```xml
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>org.modelcontextprotocol.sdk</groupId>
+            <artifactId>mcp-bom</artifactId>
+            <version>0.6.0-SNAPSHOT</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+```
+  </Tab>
+
+  <Tab title="Gradle">
+```groovy
+dependencies {
+  implementation platform("org.modelcontextprotocol.sdk:mcp-bom:0.6.0-SNAPSHOT")
+  //...
+}
+```
+
+Gradle users can also use the Spring AI MCP BOM by leveraging Gradle (5.0+) native support for declaring dependency constraints using a Maven BOM.
+This is implemented by adding a 'platform' dependency handler method to the dependencies section of your Gradle build script.
+As shown in the snippet below this can then be followed by version-less declarations of the Starter Dependencies for the one or more spring-ai modules you wish to use, e.g. spring-ai-openai.
+  </Tab>
+</Tabs>
+
+Replace the version number with the version of the BOM you want to use.
+
+## Available Dependencies
+
+The following dependencies are available and managed by the BOM:
+
+### Core Dependencies
+
+- `org.modelcontextprotocol.sdk:mcp` - Core MCP library providing the base functionality and APIs for Model Context Protocol implementation.
+
+### Transport Dependencies
+
+- `org.modelcontextprotocol.sdk:mcp-webflux-sse-transport` - WebFlux-based Server-Sent Events (SSE) transport implementation for reactive applications.
+- `org.modelcontextprotocol.sdk:mcp-webmvc-sse-transport` - WebMVC-based Server-Sent Events (SSE) transport implementation for servlet-based applications.
+
+### Testing Dependencies
+
+- `org.modelcontextprotocol.sdk:mcp-test` - Testing utilities and support for MCP-based applications.
+
+### Milestone and Snapshot Repositories
+
+To use the Milestone and Snapshot version, you need to add references to the Spring Milestone and/or Snapshot repositories in your build file.
+Add the following repository definitions to your Maven or Gradle build file:
+
+<Tabs>
+  <Tab title="Maven">
+```xml
+<repositories>
+  <repository>
+    <id>spring-milestones</id>
+    <n>Spring Milestones</n>
+    <url>https://repo.spring.io/milestone</url>
+    <snapshots>
+      <enabled>false</enabled>
+    </snapshots>
+  </repository>
+  <repository>
+    <id>spring-snapshots</id>
+    <n>Spring Snapshots</n>
+    <url>https://repo.spring.io/snapshot</url>
+    <releases>
+      <enabled>false</enabled>
+    </releases>
+  </repository>
+</repositories>
+```
+  </Tab>
+
+  <Tab title="Gradle">
+```groovy
+repositories {
+    maven { url 'https://repo.spring.io/milestone' }
+    maven { url 'https://repo.spring.io/snapshot' }
+}
+```
+  </Tab>
+</Tabs>

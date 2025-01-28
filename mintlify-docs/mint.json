@@ -1,0 +1,41 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "Model Context Protocol Java SDK",
+  "logo": {
+    "dark": "/logo/dark.svg",
+    "light": "/logo/light.svg"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#09090b",
+    "light": "#FAFAFA",
+    "dark": "#09090b"
+  },
+  "topbarLinks": [],
+  "topbarCtaButton": {
+    "name": "GitHub",
+    "url": "https://github.com/modelcontextprotocol/java-sdk"
+  },
+  "search": {
+    "location": "top"
+  },
+  "navigation": [
+    {
+      "group": "Getting Started",
+      "pages": [
+        "docs/overview",
+        "docs/dependency-management"
+      ]
+    },
+    {
+      "group": "MCP SDK Reference",
+      "pages": [
+        "docs/mcp-overview",
+        "docs/mcp-client",
+        "docs/mcp-server",
+        "docs/mcp-transport",
+        "docs/mcp-capabilities"
+      ]
+    }
+  ]
+}

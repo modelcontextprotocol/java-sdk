@@ -1,0 +1,85 @@
+---
+title: MCP Overview
+description: Overview of the Model Context Protocol (MCP) architecture and key concepts
+---
+
+# Java MCP SDK
+
+Java SDK implementation of the [Model Context Protocol](https://modelcontextprotocol.io/introduction), enabling seamless integration with language models and AI tools.
+
+![Spring AI MCP Client Architecture](/images/spring-ai-mcp-client-architecture.jpg)
+![Spring AI MCP Server Architecture](/images/spring-ai-mcp-server-architecture.jpg)
+
+## Features
+
+- Synchronous and Asynchronous MCP Client and MCP Server implementations
+- Standard MCP operations support:
+  - Protocol [version compatibility negotiation](https://spec.modelcontextprotocol.io/specification/2024-11-05/basic/lifecycle/#initialization)
+  - [Tool](https://spec.modelcontextprotocol.io/specification/2024-11-05/server/tools/) discovery, execution, list change notifications
+  - [Resource](https://spec.modelcontextprotocol.io/specification/2024-11-05/server/resources/) management with URI templates
+  - [Roots](https://spec.modelcontextprotocol.io/specification/2024-11-05/client/roots/) list management and notifications
+  - [Prompt](https://spec.modelcontextprotocol.io/specification/2024-11-05/server/prompts/) handling and management
+  - [Sampling](https://spec.modelcontextprotocol.io/specification/2024-11-05/client/sampling/) support for AI model interactions
+- Multiple transport implementations:
+  - Core transports:
+    - Stdio-based transport for process-based communication
+    - Java HttpClient-based SSE client transport for HTTP SSE Client-side streaming
+    - Servlet-based SSE server transport for HTTP SSE Server streaming
+  - Spring-based transports:
+    - WebFlux SSE transport for reactive HTTP streaming
+    - WebMVC SSE transport for servlet-based HTTP streaming
+
+## Architecture
+
+![MCP Stack Architecture](/images/mcp-stack.svg)
+
+The SDK follows a layered architecture with clear separation of concerns:
+
+- **Client/Server Layer**: Both use McpSession for sync/async operations, with McpClient handling client-side protocol operations and McpServer managing server-side protocol operations.
+- **Session Layer (McpSession)**: Manages communication patterns and state using DefaultMcpSession implementation.
+- **Transport Layer (McpTransport)**: Handles JSON-RPC message serialization/deserialization via:
+  - StdioTransport (stdin/stdout) in the core module
+  - HTTP SSE transports in dedicated transport modules (Java HttpClient, Spring WebFlux, Spring WebMVC)
+
+Following class diagram illustrates the layered architecture of the MCP SDK, showing the relationships between core interfaces (McpTransport, McpSession), their implementations, and the client/server components. It highlights how the transport layer connects to sessions, which in turn support both synchronous and asynchronous client/server implementations.
+
+![MCP SDK Class Diagram](/images/spring-ai-mcp-uml-classdiagram.svg)
+
+Key Interactions:
+
+- **Client/Server Initialization**: Transport setup, protocol compatibility check, capability negotiation, and implementation details exchange.
+- **Message Flow**: JSON-RPC message handling with validation, type-safe response processing, and error handling.
+- **Resource Management**: Resource discovery, URI template-based access, subscription system, and content retrieval.
+
+## Dependencies
+
+Add the following dependency to your Maven project:
+
+<Tabs>
+  <Tab title="Maven">
+The core MCP functionality:
+
+```xml
+<dependency>
+    <groupId>org.modelcontextprotocol.sdk</groupId>
+    <artifactId>mcp</artifactId>
+</dependency>
+```
+
+For HTTP SSE transport implementations, add one of the following dependencies:
+
+```xml
+<!-- Spring WebFlux-based SSE client and server transport -->
+<dependency>
+    <groupId>org.modelcontextprotocol.sdk</groupId>
+    <artifactId>mcp-webflux-sse-transport</artifactId>
+</dependency>
+
+<!-- Spring WebMVC-based SSE server transport -->
+<dependency>
+    <groupId>org.modelcontextprotocol.sdk</groupId>
+    <artifactId>mcp-webmvc-sse-transport</artifactId>
+</dependency>
+```
+  </Tab>
+</Tabs>

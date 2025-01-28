@@ -1,0 +1,98 @@
+---
+title: MCP Server
+description: Learn how to implement and configure a Model Context Protocol (MCP) server
+---
+
+# Model Context Protocol Server
+
+The MCP Server is a foundational component in the Model Context Protocol (MCP) architecture that provides tools, resources, and capabilities to clients. It implements the server-side of the protocol, responsible for:
+
+- Exposing tools that clients can discover and execute
+- Managing resources with URI-based access patterns
+- Providing prompt templates and handling prompt requests
+- Supporting capability negotiation with clients
+- Implementing server-side protocol operations
+- Managing concurrent client connections
+- Providing structured logging and notifications
+
+The server supports both synchronous and asynchronous APIs, allowing for flexible integration in different application contexts.
+
+<Tabs>
+  <Tab title="Sync API">
+```java
+// Create a server with custom configuration
+McpSyncServer syncServer = McpServer.sync(transport)
+    .serverInfo("my-server", "1.0.0")
+    .capabilities(ServerCapabilities.builder()
+        .resources(true)     // Enable resource support
+        .tools(true)         // Enable tool support
+        .prompts(true)       // Enable prompt support
+        .logging()           // Enable logging support
+        .build())
+    .build();
+
+// Initialize the server
+syncServer.initialize();
+
+// Register tools, resources, and prompts
+syncServer.registerTool(syncToolRegistration);
+syncServer.registerResource(syncResourceRegistration);
+syncServer.registerPrompt(syncPromptRegistration);
+
+// Send logging notifications
+syncServer.loggingNotification(LoggingMessageNotification.builder()
+    .level(LoggingLevel.INFO)
+    .logger("custom-logger")
+    .data("Server initialized")
+    .build());
+
+// Close the server when done
+syncServer.close();
+```
+  </Tab>
+
+  <Tab title="Async API">
+```java
+// Create an async server with custom configuration
+McpAsyncServer asyncServer = McpServer.async(transport)
+    .serverInfo("my-server", "1.0.0")
+    .capabilities(ServerCapabilities.builder()
+        .resources(true)     // Enable resource support
+        .tools(true)         // Enable tool support
+        .prompts(true)       // Enable prompt support
+        .logging()           // Enable logging support
+        .build())
+    .build();
+
+// Initialize the server
+asyncServer.initialize()
+    .doOnSuccess(v -> logger.info("Server initialized"))
+    .subscribe();
+
+// Register tools, resources, and prompts
+asyncServer.registerTool(asyncToolRegistration)
+    .doOnSuccess(v -> logger.info("Tool registered"))
+    .subscribe();
+
+asyncServer.registerResource(asyncResourceRegistration)
+    .doOnSuccess(v -> logger.info("Resource registered"))
+    .subscribe();
+
+asyncServer.registerPrompt(asyncPromptRegistration)
+    .doOnSuccess(v -> logger.info("Prompt registered"))
+    .subscribe();
+
+// Send logging notifications
+asyncServer.loggingNotification(LoggingMessageNotification.builder()
+    .level(LoggingLevel.INFO)
+    .logger("custom-logger")
+    .data("Server initialized")
+    .build());
+
+// Close the server when done
+asyncServer.close()
+    .doOnSuccess(v -> logger.info("Server closed"))
+    .subscribe();
+```
+  </Tab>
+</Tabs>

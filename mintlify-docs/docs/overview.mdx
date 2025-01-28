@@ -1,0 +1,55 @@
+---
+title: Overview
+description: Introduction to the Model Context Protocol (MCP) Java SDK
+---
+
+# Java & Spring MCP
+
+Java SDK and Spring Framework integration for the [Model Context Protocol](https://modelcontextprotocol.org/docs/concepts/architecture), enabling standardized interaction with AI models and tools through both synchronous and asynchronous communication.
+
+![Spring AI MCP Client Architecture](/images/spring-ai-mcp-client-architecture.jpg)
+![Spring AI MCP Server Architecture](/images/spring-ai-mcp-server-architecture.jpg)
+
+## Core Components
+
+### [MCP Java SDK](/docs/mcp)
+Core implementation of the Model Context Protocol specification, providing:
+
+- Synchronous and asynchronous [Client](/docs/mcp#mcp-client) and [Server](/docs/mcp#mcp-server) implementations
+- Tool discovery and execution
+- Resource management with URI templates
+- Prompt handling and management
+- Structured logging
+- Request and Notification handling
+
+### MCP Transports
+
+#### Core Transports
+- Stdio-based (`StdioClientTransport`, `StdioServerTransport`) for process-based communication
+- Java HttpClient-based SSE client (`HttpClientSseClientTransport`) for HTTP SSE Client-side streaming
+- Servlet-based SSE server (`HttpServletSseServerTransport`) for HTTP SSE Server streaming using traditional Servlet API
+
+#### Optional SSE Transports
+- [WebFlux SSE Transport](https://github.com/modelcontextprotocol/java-sdk/tree/main/mcp-transport/mcp-webflux-sse-transport) - Reactive HTTP streaming with Spring WebFlux (Client & Server)
+- [WebMvc SSE Transport](https://github.com/modelcontextprotocol/java-sdk/tree/main/mcp-transport/mcp-webmvc-sse-transport) - Spring MVC based SSE transport (Server only). 
+You can use the core `HttpClientSseClientTransport` transport as a SSE client.
+
+## Getting Started
+
+<Tabs>
+  <Tab title="Maven">
+```xml
+<!-- Core MCP -->
+<dependency>
+    <groupId>org.modelcontextprotocol.sdk</groupId>
+    <artifactId>mcp</artifactId>    
+</dependency>
+
+<!-- Optional: WebFlux SSE transport -->
+<dependency>
+    <groupId>org.modelcontextprotocol.sdk</groupId>
+    <artifactId>mcp-webflux-sse-transport</artifactId>
+</dependency>
+```
+  </Tab>
+</Tabs>

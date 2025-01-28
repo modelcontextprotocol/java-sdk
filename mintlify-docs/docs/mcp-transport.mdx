@@ -1,0 +1,144 @@
+---
+title: MCP Transport
+description: Understanding the Model Context Protocol (MCP) transport layer and available implementations
+---
+
+# Model Context Protocol  Transport Layer
+
+The transport layer in the MCP SDK is responsible for handling the communication between clients and servers. It provides different implementations to support various communication protocols and patterns. The SDK includes several built-in transport implementations:
+
+<Tabs>
+  
+  <Tab title="STDIO">
+    <>
+      Create in-process based transport:
+
+      ```java
+      StdioServerTransport transport = new StdioServerTransport(new ObjectMapper());
+      ```
+
+      Provides bidirectional JSON-RPC message handling over standard input/output streams with non-blocking message processing, serialization/deserialization, and graceful shutdown support.
+
+      Key features:
+      <ul>
+        <li>Bidirectional communication through stdin/stdout</li>
+        <li>Process-based integration support</li>
+        <li>Simple setup and configuration</li>
+        <li>Lightweight implementation</li>
+      </ul>
+    </>
+  </Tab>
+
+<Tab title="SSE (WebFlux)">
+  <>
+    <p>Creates WebFlux-based SSE server transport.<br />Requires the <code>mcp-webflux-sse-transport</code> dependency.</p>
+
+    <pre>
+      <code className="language-java">
+        {`@Configuration
+class McpConfig {
+    @Bean
+    WebFluxSseServerTransport webFluxSseServerTransport(ObjectMapper mapper) {
+        return new WebFluxSseServerTransport(mapper, "/mcp/message");
+    }
+
+    @Bean
+    RouterFunction<?> mcpRouterFunction(WebFluxSseServerTransport transport) {
+        return transport.getRouterFunction();
+    }
+}`}
+      </code>
+    </pre>
+
+    <p>Implements the MCP HTTP with SSE transport specification, providing:</p>
+    <ul>
+      <li>Reactive HTTP streaming with WebFlux</li>
+      <li>Concurrent client connections through SSE endpoints</li>
+      <li>Message routing and session management</li>
+      <li>Graceful shutdown capabilities</li>
+    </ul>
+  </>
+</Tab>
+
+
+<Tab title="SSE (WebMvc)">
+  <>
+    <p>Creates WebMvc-based SSE server transport.<br />Requires the <code>mcp-webmvc-sse-transport</code> dependency.</p>
+
+    <pre>
+      <code className="language-java">
+        {`@Configuration
+@EnableWebMvc
+class McpConfig {
+    @Bean
+    WebMvcSseServerTransport webMvcSseServerTransport(ObjectMapper mapper) {
+        return new WebMvcSseServerTransport(mapper, "/mcp/message");
+    }
+
+    @Bean
+    RouterFunction<ServerResponse> mcpRouterFunction(WebMvcSseServerTransport transport) {
+        return transport.getRouterFunction();
+    }
+}`}
+      </code>
+    </pre>
+
+    <p>Implements the MCP HTTP with SSE transport specification, providing:</p>
+    <ul>
+      <li>Server-side event streaming</li>
+      <li>Integration with Spring WebMVC</li>
+      <li>Support for traditional web applications</li>
+      <li>Synchronous operation handling</li>
+    </ul>
+  </>
+</Tab>
+
+
+<Tab title="SSE (Servlet)">
+  <>
+    <p>
+      Creates a Servlet-based SSE server transport.<br />
+      Included in the core <code>mcp</code> module.<br />
+      The <code>HttpServletSseServerTransport</code> can be used with any Servlet container.
+      To use it with a Spring Web application, you can register it as a Servlet bean:
+    </p>
+
+    <pre>
+      <code className="language-java">
+        {`@Configuration
+@EnableWebMvc
+public class McpServerConfig implements WebMvcConfigurer {
+
+    @Bean
+    public HttpServletSseServerTransport servletSseServerTransport() {
+        return new HttpServletSseServerTransport(new ObjectMapper(), "/mcp/message");
+    }
+
+    @Bean
+    public ServletRegistrationBean customServletBean(HttpServletSseServerTransport servlet) {
+        return new ServletRegistrationBean(servlet);
+    }
+}`}
+      </code>
+    </pre>
+
+    <p>
+      Implements the MCP HTTP with SSE transport specification using the traditional Servlet API, providing:
+    </p>
+    <ul>
+      <li>Asynchronous message handling using Servlet 6.0 async support</li>
+      <li>Session management for multiple client connections</li>
+      <li>
+        Two types of endpoints:
+        <ul>
+          <li>SSE endpoint (<code>/sse</code>) for server-to-client events</li>
+          <li>Message endpoint (configurable) for client-to-server requests</li>
+        </ul>
+      </li>
+      <li>Error handling and response formatting</li>
+      <li>Graceful shutdown support</li>
+    </ul>
+  </>
+</Tab>
+
+</Tabs>
