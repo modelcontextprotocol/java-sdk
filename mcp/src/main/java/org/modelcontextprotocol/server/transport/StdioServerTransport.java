@@ -105,10 +105,10 @@ public class StdioServerTransport implements ServerMcpTransport {
 			.flatMap(message -> Mono.just(message)
 				.transform(inboundMessageHandler)
 				.contextWrite(ctx -> ctx.put("observation", "myObservation")))
-			.doOnComplete(() -> {
+			.doOnTerminate(() -> {
+				// The outbound processing will dispose its scheduler upon completion
 				this.outboundSink.tryEmitComplete();
 				this.inboundScheduler.dispose();
-				this.outboundScheduler.dispose();
 			})
 			.subscribe();
 	}
@@ -208,13 +208,13 @@ public class StdioServerTransport implements ServerMcpTransport {
 			 })
 			 .doOnComplete(() -> {
 				 isClosing = true;
-				 outboundSink.tryEmitComplete();
+				 outboundScheduler.dispose();
 			 })
 			 .doOnError(e -> {
 				 if (!isClosing) {
 					 logger.error("Error in outbound processing", e);
 					 isClosing = true;
-					 outboundSink.tryEmitComplete();
+					 outboundScheduler.dispose();
 				 }
 			 })
 			 .map(msg -> (JSONRPCMessage) msg);
@@ -224,26 +224,15 @@ public class StdioServerTransport implements ServerMcpTransport {
 
 	@Override
 	public Mono<Void> closeGracefully() {
-
-		return Mono.fromRunnable(() -> {
+		return Mono.<Void>defer(() -> {
 			isClosing = true;
 			logger.debug("Initiating graceful shutdown");
-		}).then(Mono.defer(() -> {
-			// First complete the sinks to stop processing
+			// Completing the inbound causes the outbound to be completed as well, so
+			// we only close the inbound.
 			inboundSink.tryEmitComplete();
-			outboundSink.tryEmitComplete();
-			return Mono.delay(Duration.ofMillis(100));
-		})).then(Mono.fromRunnable(() -> {
-			try {
-				// Dispose schedulers with longer timeout
-				inboundScheduler.dispose();
-				outboundScheduler.dispose();
-				logger.info("Graceful shutdown completed");
-			}
-			catch (Exception e) {
-				logger.error("Error during graceful shutdown", e);
-			}
-		})).then().subscribeOn(Schedulers.boundedElastic());
+			logger.info("Graceful shutdown complete");
+			return Mono.empty();
+		}).subscribeOn(Schedulers.boundedElastic());
 	}
 
 	@Override
