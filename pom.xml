@@ -91,6 +91,7 @@
 		<tomcat.version>11.0.2</tomcat.version>
 		<jakarta.servlet.version>6.1.0</jakarta.servlet.version>
 		<awaitility.version>4.2.0</awaitility.version>
+		<bnd-maven-plugin.version>7.1.0</bnd-maven-plugin.version>
 	</properties>
 
 	<modules>
