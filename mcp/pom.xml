@@ -20,6 +20,50 @@
 		<developerConnection>git@github.com/modelcontextprotocol/java-sdk.git</developerConnection>
 	</scm>
 
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>biz.aQute.bnd</groupId>
+				<artifactId>bnd-maven-plugin</artifactId>
+				<version>${bnd-maven-plugin.version}</version>
+				<executions>
+					<execution>
+						<id>bnd-process</id>
+						<goals>
+							<goal>bnd-process</goal>
+						</goals>
+						<configuration>
+							<bnd><![CDATA[
+								Bundle-Name:            Bundle ${project.groupId} : ${project.artifactId}
+								version:                ${versionmask;===;${version_cleanup;${project.version}}}
+								Bundle-SymbolicName:    ${project.groupId}.${project.artifactId}
+								Bundle-Version:         ${version}
+								Automatic-Module-Name:  ${project.groupId}.${project.artifactId}
+								Import-Package:         jakarta.*;resolution:=optional, \
+								                        *;
+								Export-Package:         io.modelcontextprotocol.*;version="${version}";-noimport:=true
+								-noimportjava:          true;
+								-nouses:                true;
+								-removeheaders:         Private-Package
+								]]>
+							</bnd>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<configuration>
+					<archive>
+						<manifestFile>${project.build.outputDirectory}/META-INF/MANIFEST.MF</manifestFile>
+					</archive>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
 	<dependencies>
 
 		<dependency>
