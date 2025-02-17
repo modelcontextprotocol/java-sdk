@@ -1,23 +1,26 @@
 # MCP Java SDK
 [![Build Status](https://github.com/modelcontextprotocol/java-sdk/actions/workflows/continuous-integration.yml/badge.svg)](https://github.com/modelcontextprotocol/java-sdk/actions/workflows/continuous-integration.yml)
 
-Set of projects that provide Java SDK integration for the [Model Context Protocol](https://modelcontextprotocol.org/docs/concepts/architecture). 
-It enables Java applications to interact with AI models and tools through a standardized interface, supporting both synchronous and asynchronous communication patterns.
+A set of projects that provide Java SDK integration for the [Model Context Protocol](https://modelcontextprotocol.org/docs/concepts/architecture). 
+This SDK enables Java applications to interact with AI models and tools through a standardized interface, supporting both synchronous and asynchronous communication patterns.
 
 ## 📚 Reference Documentation
 
-For comprehensive guides and API documentation, visit the [MCP Java SDK Reference Documentation](https://modelcontextprotocol.io/sdk/java/mcp-overview).
+#### MCP Java SDK documentation
+For comprehensive guides and SDK API documentation, visit the [MCP Java SDK Reference Documentation](https://modelcontextprotocol.io/sdk/java/mcp-overview).
 
+#### Spring AI MCP documentation
+[Spring AI MCP](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) extends the MCP Java SDK with Spring Boot integration, providing both [client](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html) and [server](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-server-boot-starter-docs.html) starters. Bootstrap your AI applications with MCP support using [Spring Initializer](https://start.spring.io).
 
 ## Development
 
-- Building from Source
+### Building from Source
 
 ```bash
 mvn clean install
 ```
 
-- Running Tests
+### Running Tests
 
 ```bash
 mvn test
@@ -44,4 +47,4 @@ Contributions are welcome! Please:
 
 ## License
 
-This project is licensed under the [MIT](LICENSE).
+This project is licensed under the [MIT License](LICENSE).
