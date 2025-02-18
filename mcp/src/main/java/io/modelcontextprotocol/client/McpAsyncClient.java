@@ -297,6 +297,14 @@ public class McpAsyncClient {
 	}
 
 	/**
+	 * Check if the client-server connection is initialized.
+	 * @return true if the client-server connection is initialized
+	 */
+	public boolean isInitialized() {
+		return this.serverCapabilities != null;
+	}
+
+	/**
 	 * Get the client capabilities that define the supported features and functionality.
 	 * @return The client capabilities
 	 */
@@ -456,6 +464,12 @@ public class McpAsyncClient {
 	 * (false/absent)
 	 */
 	public Mono<McpSchema.CallToolResult> callTool(McpSchema.CallToolRequest callToolRequest) {
+		if (!this.isInitialized()) {
+			return Mono.error(new McpError("Client must be initialized before calling tools"));
+		}
+		if (this.serverCapabilities.tools() == null) {
+			return Mono.error(new McpError("Server does not provide tools capability"));
+		}
 		return this.mcpSession.sendRequest(McpSchema.METHOD_TOOLS_CALL, callToolRequest, CALL_TOOL_RESULT_TYPE_REF);
 	}
 
@@ -477,6 +491,12 @@ public class McpAsyncClient {
 	 * Optional cursor for pagination if more tools are available
 	 */
 	public Mono<McpSchema.ListToolsResult> listTools(String cursor) {
+		if (!this.isInitialized()) {
+			return Mono.error(new McpError("Client must be initialized before calling tools"));
+		}
+		if (this.serverCapabilities.tools() == null) {
+			return Mono.error(new McpError("Server does not provide tools capability"));
+		}
 		return this.mcpSession.sendRequest(McpSchema.METHOD_TOOLS_LIST, new McpSchema.PaginatedRequest(cursor),
 				LIST_TOOLS_RESULT_TYPE_REF);
 	}
@@ -532,6 +552,12 @@ public class McpAsyncClient {
 	 * @return A Mono that completes with the list of resources result
 	 */
 	public Mono<McpSchema.ListResourcesResult> listResources(String cursor) {
+		if (!this.isInitialized()) {
+			return Mono.error(new McpError("Client must be initialized before calling tools"));
+		}
+		if (this.serverCapabilities.resources() == null) {
+			return Mono.error(new McpError("Server does not provide the resources capability"));
+		}
 		return this.mcpSession.sendRequest(McpSchema.METHOD_RESOURCES_LIST, new McpSchema.PaginatedRequest(cursor),
 				LIST_RESOURCES_RESULT_TYPE_REF);
 	}
@@ -551,6 +577,12 @@ public class McpAsyncClient {
 	 * @return A Mono that completes with the resource content
 	 */
 	public Mono<McpSchema.ReadResourceResult> readResource(McpSchema.ReadResourceRequest readResourceRequest) {
+		if (!this.isInitialized()) {
+			return Mono.error(new McpError("Client must be initialized before calling tools"));
+		}
+		if (this.serverCapabilities.resources() == null) {
+			return Mono.error(new McpError("Server does not provide the resources capability"));
+		}
 		return this.mcpSession.sendRequest(McpSchema.METHOD_RESOURCES_READ, readResourceRequest,
 				READ_RESOURCE_RESULT_TYPE_REF);
 	}
@@ -575,17 +607,14 @@ public class McpAsyncClient {
 	 * @return A Mono that completes with the list of resource templates result
 	 */
 	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates(String cursor) {
+		if (!this.isInitialized()) {
+			return Mono.error(new McpError("Client must be initialized before calling tools"));
+		}
+		if (this.serverCapabilities.resources() == null) {
+			return Mono.error(new McpError("Server does not provide the resources capability"));
+		}
 		return this.mcpSession.sendRequest(McpSchema.METHOD_RESOURCES_TEMPLATES_LIST,
 				new McpSchema.PaginatedRequest(cursor), LIST_RESOURCE_TEMPLATES_RESULT_TYPE_REF);
-	}
-
-	/**
-	 * List Changed Notification. When the list of available resources changes, servers
-	 * that declared the listChanged capability SHOULD send a notification.
-	 * @return A Mono that completes when the notification is sent
-	 */
-	public Mono<Void> sendResourcesListChanged() {
-		return this.mcpSession.sendNotification(McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED);
 	}
 
 	/**
@@ -658,16 +687,6 @@ public class McpAsyncClient {
 	 */
 	public Mono<GetPromptResult> getPrompt(GetPromptRequest getPromptRequest) {
 		return this.mcpSession.sendRequest(McpSchema.METHOD_PROMPT_GET, getPromptRequest, GET_PROMPT_RESULT_TYPE_REF);
-	}
-
-	/**
-	 * (Server) An optional notification from the server to the client, informing it that
-	 * the list of prompts it offers has changed. This may be issued by servers without
-	 * any previous subscription from the client.
-	 * @return A Mono that completes when the notification is sent
-	 */
-	public Mono<Void> promptListChangedNotification() {
-		return this.mcpSession.sendNotification(McpSchema.METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED);
 	}
 
 	private NotificationHandler asyncPromptsChangeNotificationHandler(

@@ -258,9 +258,6 @@ public abstract class AbstractMcpSyncClientTests {
 
 		assertThatCode(() -> {
 			client.initialize();
-			// Trigger notifications
-			client.sendResourcesListChanged();
-			client.promptListChangedNotification();
 			client.close();
 		}).doesNotThrowAnyException();
 	}

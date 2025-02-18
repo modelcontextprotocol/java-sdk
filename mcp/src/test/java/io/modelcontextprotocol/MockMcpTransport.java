@@ -38,6 +38,13 @@ public class MockMcpTransport implements ClientMcpTransport, ServerMcpTransport 
 			throw new RuntimeException("Failed to emit message " + message);
 		}
 		inboundMessageCount.incrementAndGet();
+
+		try {
+			Thread.sleep(200);
+		}
+		catch (InterruptedException e) {
+			e.printStackTrace();
+		}
 	}
 
 	@Override

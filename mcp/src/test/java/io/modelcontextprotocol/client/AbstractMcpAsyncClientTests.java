@@ -275,9 +275,6 @@ public abstract class AbstractMcpAsyncClientTests {
 
 		assertThatCode(() -> {
 			client.initialize().block();
-			// Trigger notifications
-			client.sendResourcesListChanged().block();
-			client.promptListChangedNotification().block();
 			client.closeGracefully().block();
 		}).doesNotThrowAnyException();
 	}

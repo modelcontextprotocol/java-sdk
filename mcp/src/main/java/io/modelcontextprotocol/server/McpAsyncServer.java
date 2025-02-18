@@ -188,9 +188,13 @@ public class McpAsyncServer {
 					initializeRequest.protocolVersion(), initializeRequest.capabilities(),
 					initializeRequest.clientInfo());
 
+			// The server MUST respond with the highest protocol version it supports if
+			// it does not support the requested (e.g. Client) version.
 			String serverProtocolVersion = this.protocolVersions.get(this.protocolVersions.size() - 1);
 
 			if (this.protocolVersions.contains(initializeRequest.protocolVersion())) {
+				// If the server supports the requested protocol version, it MUST respond
+				// with the same version.
 				serverProtocolVersion = initializeRequest.protocolVersion();
 			}
 			else {

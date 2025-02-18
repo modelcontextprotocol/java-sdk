@@ -17,7 +17,9 @@ import io.modelcontextprotocol.MockMcpTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
+import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.Root;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
@@ -26,6 +28,91 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 class McpAsyncClientResponseHandlerTests {
+
+	private InitializeResult initialization(McpAsyncClient asyncMcpClient, MockMcpTransport transport) {
+
+		// Create mock server response
+		McpSchema.ServerCapabilities mockServerCapabilities = McpSchema.ServerCapabilities.builder()
+			.tools(true)
+			.resources(true, true) // Enable both resources and resource templates
+			.build();
+		McpSchema.Implementation mockServerInfo = new McpSchema.Implementation("test-server", "1.0.0");
+		McpSchema.InitializeResult mockInitResult = new McpSchema.InitializeResult(McpSchema.LATEST_PROTOCOL_VERSION,
+				mockServerCapabilities, mockServerInfo, "Test instructions");
+
+		Mono<McpSchema.InitializeResult> initMono = asyncMcpClient.initialize();
+
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				McpSchema.JSONRPCRequest initRequest = transport.getLastSentMessageAsRequest();
+				assertThat(initRequest.method()).isEqualTo(McpSchema.METHOD_INITIALIZE);
+
+				// Send mock server response
+				McpSchema.JSONRPCResponse initResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
+						initRequest.id(), mockInitResult, null);
+				transport.simulateIncomingMessage(initResponse);
+			}
+		}).start();
+
+		return initMono.block();
+	}
+
+	@Test
+	void testSuccessfulInitialization() {
+		MockMcpTransport transport = new MockMcpTransport();
+		McpAsyncClient asyncMcpClient = McpClient.async(transport).build();
+
+		// Verify client is not initialized initially
+		assertThat(asyncMcpClient.isInitialized()).isFalse();
+
+		// Create mock server response
+		McpSchema.ServerCapabilities mockServerCapabilities = McpSchema.ServerCapabilities.builder()
+			.tools(true)
+			.resources(true, true) // Enable both resources and resource templates
+			.build();
+		McpSchema.Implementation mockServerInfo = new McpSchema.Implementation("test-server", "1.0.0");
+		McpSchema.InitializeResult mockInitResult = new McpSchema.InitializeResult(McpSchema.LATEST_PROTOCOL_VERSION,
+				mockServerCapabilities, mockServerInfo, "Test instructions");
+
+		// Start initialization
+		Mono<McpSchema.InitializeResult> initMono = asyncMcpClient.initialize();
+
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				McpSchema.JSONRPCRequest initRequest = transport.getLastSentMessageAsRequest();
+				assertThat(initRequest.method()).isEqualTo(McpSchema.METHOD_INITIALIZE);
+
+				// Send mock server response
+				McpSchema.JSONRPCResponse initResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
+						initRequest.id(), mockInitResult, null);
+				transport.simulateIncomingMessage(initResponse);
+			}
+		}).start();
+
+		InitializeResult result = initMono.block();
+
+		// Verify initialized notification was sent
+		McpSchema.JSONRPCMessage notificationMessage = transport.getLastSentMessage();
+		assertThat(notificationMessage).isInstanceOf(McpSchema.JSONRPCNotification.class);
+		McpSchema.JSONRPCNotification notification = (McpSchema.JSONRPCNotification) notificationMessage;
+		assertThat(notification.method()).isEqualTo(McpSchema.METHOD_NOTIFICATION_INITIALIZED);
+
+		// Verify initialization result
+		assertThat(result).isNotNull();
+		assertThat(result.protocolVersion()).isEqualTo(McpSchema.LATEST_PROTOCOL_VERSION);
+		assertThat(result.capabilities()).isEqualTo(mockServerCapabilities);
+		assertThat(result.serverInfo()).isEqualTo(mockServerInfo);
+		assertThat(result.instructions()).isEqualTo("Test instructions");
+
+		// Verify client state after initialization
+		assertThat(asyncMcpClient.isInitialized()).isTrue();
+		assertThat(asyncMcpClient.getServerCapabilities()).isEqualTo(mockServerCapabilities);
+		assertThat(asyncMcpClient.getServerInfo()).isEqualTo(mockServerInfo);
+
+		asyncMcpClient.closeGracefully();
+	}
 
 	@Test
 	void testToolsChangeNotificationHandling() throws JsonProcessingException {
@@ -40,6 +127,8 @@ class McpAsyncClientResponseHandlerTests {
 
 		// Create client with tools change consumer
 		McpAsyncClient asyncMcpClient = McpClient.async(transport).toolsChangeConsumer(toolsChangeConsumer).build();
+
+		assertThat(initialization(asyncMcpClient, transport)).isNotNull();
 
 		// Create a mock tools list that the server will return
 		Map<String, Object> inputSchema = Map.of("type", "object", "properties", Map.of(), "required", List.of());
@@ -78,6 +167,8 @@ class McpAsyncClientResponseHandlerTests {
 			.roots(new Root("file:///test/path", "test-root"))
 			.build();
 
+		assertThat(initialization(asyncMcpClient, transport)).isNotNull();
+
 		// Simulate incoming request
 		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
 				McpSchema.METHOD_ROOTS_LIST, "test-id", null);
@@ -111,6 +202,8 @@ class McpAsyncClientResponseHandlerTests {
 		McpAsyncClient asyncMcpClient = McpClient.async(transport)
 			.resourcesChangeConsumer(resourcesChangeConsumer)
 			.build();
+
+		assertThat(initialization(asyncMcpClient, transport)).isNotNull();
 
 		// Create a mock resources list that the server will return
 		McpSchema.Resource mockResource = new McpSchema.Resource("test://resource", "Test Resource", "A test resource",
@@ -155,6 +248,8 @@ class McpAsyncClientResponseHandlerTests {
 
 		// Create client with prompts change consumer
 		McpAsyncClient asyncMcpClient = McpClient.async(transport).promptsChangeConsumer(promptsChangeConsumer).build();
+
+		assertThat(initialization(asyncMcpClient, transport)).isNotNull();
 
 		// Create a mock prompts list that the server will return
 		McpSchema.Prompt mockPrompt = new McpSchema.Prompt("test-prompt", "Test Prompt Description",
@@ -203,6 +298,8 @@ class McpAsyncClientResponseHandlerTests {
 			.sampling(samplingHandler)
 			.build();
 
+		assertThat(initialization(asyncMcpClient, transport)).isNotNull();
+
 		// Create a mock create message request
 		var messageRequest = new McpSchema.CreateMessageRequest(
 				List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("Test message"))),
@@ -246,6 +343,8 @@ class McpAsyncClientResponseHandlerTests {
 		McpAsyncClient asyncMcpClient = McpClient.async(transport)
 			.capabilities(ClientCapabilities.builder().build()) // No sampling capability
 			.build();
+
+		assertThat(initialization(asyncMcpClient, transport)).isNotNull();
 
 		// Create a mock create message request
 		var messageRequest = new McpSchema.CreateMessageRequest(

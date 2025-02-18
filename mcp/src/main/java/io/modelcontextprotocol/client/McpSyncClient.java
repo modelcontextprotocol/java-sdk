@@ -285,14 +285,6 @@ public class McpSyncClient implements AutoCloseable {
 	}
 
 	/**
-	 * List Changed Notification. When the list of available resources changes, servers
-	 * that declared the listChanged capability SHOULD send a notification:
-	 */
-	public void sendResourcesListChanged() {
-		this.delegate.sendResourcesListChanged().block();
-	}
-
-	/**
 	 * Subscriptions. The protocol supports optional subscriptions to resource changes.
 	 * Clients can subscribe to specific resources and receive notifications when they
 	 * change.
@@ -327,15 +319,6 @@ public class McpSyncClient implements AutoCloseable {
 
 	public GetPromptResult getPrompt(GetPromptRequest getPromptRequest) {
 		return this.delegate.getPrompt(getPromptRequest).block();
-	}
-
-	/**
-	 * (Server) An optional notification from the server to the client, informing it that
-	 * the list of prompts it offers has changed. This may be issued by servers without
-	 * any previous subscription from the client.
-	 */
-	public void promptListChangedNotification() {
-		this.delegate.promptListChangedNotification().block();
 	}
 
 	/**
