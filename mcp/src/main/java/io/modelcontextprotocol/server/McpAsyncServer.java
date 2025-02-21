@@ -138,18 +138,14 @@ public class McpAsyncServer {
 		}
 
 		// Add resources API handlers if provided
-		if (!Utils.isEmpty(this.resources)) {
+		if (serverCapabilities.resources() != null) {
 			requestHandlers.put(McpSchema.METHOD_RESOURCES_LIST, resourcesListRequestHandler());
 			requestHandlers.put(McpSchema.METHOD_RESOURCES_READ, resourcesReadRequestHandler());
-		}
-
-		// Add resource templates API handlers if provided.
-		if (!Utils.isEmpty(this.resourceTemplates)) {
 			requestHandlers.put(McpSchema.METHOD_RESOURCES_TEMPLATES_LIST, resourceTemplateListRequestHandler());
 		}
 
 		// Add prompts API handlers if provider exists
-		if (!Utils.isEmpty(this.prompts)) {
+		if (serverCapabilities.prompts() != null) {
 			requestHandlers.put(McpSchema.METHOD_PROMPT_LIST, promptsListRequestHandler());
 			requestHandlers.put(McpSchema.METHOD_PROMPT_GET, promptsGetRequestHandler());
 		}
