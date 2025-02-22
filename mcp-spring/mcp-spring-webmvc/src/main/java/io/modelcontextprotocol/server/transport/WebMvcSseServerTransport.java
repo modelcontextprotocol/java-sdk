@@ -217,6 +217,14 @@ public class WebMvcSseServerTransport implements ServerMcpTransport {
 		// Send initial endpoint event
 		try {
 			return ServerResponse.sse(sseBuilder -> {
+				sseBuilder.onComplete(() -> {
+					logger.debug("SSE connection completed for session: {}", sessionId);
+					sessions.remove(sessionId);
+				});
+				sseBuilder.onTimeout(() -> {
+					logger.debug("SSE connection timed out for session: {}", sessionId);
+					sessions.remove(sessionId);
+				});
 
 				ClientSession session = new ClientSession(sessionId, sseBuilder);
 				this.sessions.put(sessionId, session);
