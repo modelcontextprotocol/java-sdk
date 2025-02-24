@@ -303,7 +303,7 @@ public class WebFluxSseClientTransport implements ClientMcpTransport {
 	} // @formatter:on
 
 	/**
-	 * Unmarshals data from a generic Object into the specified type using the configured
+	 * Unmarshalls data from a generic Object into the specified type using the configured
 	 * ObjectMapper.
 	 *
 	 * <p>
@@ -313,7 +313,7 @@ public class WebFluxSseClientTransport implements ClientMcpTransport {
 	 * @param <T> the target type to convert the data into
 	 * @param data the source object to convert
 	 * @param typeRef the TypeReference describing the target type
-	 * @return the unmarshaled object of type T
+	 * @return the unmarshalled object of type T
 	 * @throws IllegalArgumentException if the conversion cannot be performed
 	 */
 	@Override
