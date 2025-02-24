@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
@@ -228,7 +229,7 @@ public class WebMvcSseServerTransport implements ServerMcpTransport {
 					logger.error("Failed to poll event from session queue: {}", e.getMessage());
 					sseBuilder.error(e);
 				}
-			});
+			}, Duration.ZERO);
 		}
 		catch (Exception e) {
 			logger.error("Failed to send initial endpoint event to session {}: {}", sessionId, e.getMessage());
