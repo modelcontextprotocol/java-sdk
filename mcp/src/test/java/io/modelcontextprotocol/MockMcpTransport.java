@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol;
 
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
@@ -33,18 +34,14 @@ public class MockMcpTransport implements ClientMcpTransport, ServerMcpTransport 
 
 	private final Flux<McpSchema.JSONRPCMessage> outboundView = outgoing.asFlux().cache(1);
 
+	java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+
 	public void simulateIncomingMessage(McpSchema.JSONRPCMessage message) {
 		if (inbound.tryEmitNext(message).isFailure()) {
 			throw new RuntimeException("Failed to emit message " + message);
 		}
 		inboundMessageCount.incrementAndGet();
-
-		try {
-			Thread.sleep(200);
-		}
-		catch (InterruptedException e) {
-			e.printStackTrace();
-		}
+		latch = new java.util.concurrent.CountDownLatch(1);
 	}
 
 	@Override
@@ -52,18 +49,25 @@ public class MockMcpTransport implements ClientMcpTransport, ServerMcpTransport 
 		if (outgoing.tryEmitNext(message).isFailure()) {
 			return Mono.error(new RuntimeException("Can't emit outgoing message " + message));
 		}
+		latch.countDown();
 		return Mono.empty();
 	}
 
 	public McpSchema.JSONRPCRequest getLastSentMessageAsRequest() {
-		return (JSONRPCRequest) outboundView.blockFirst();
+		return (JSONRPCRequest) getLastSentMessage();
 	}
 
 	public McpSchema.JSONRPCNotification getLastSentMessageAsNotifiation() {
-		return (JSONRPCNotification) outboundView.blockFirst();
+		return (JSONRPCNotification) getLastSentMessage();
 	}
 
 	public McpSchema.JSONRPCMessage getLastSentMessage() {
+		try {
+			latch.await(200, TimeUnit.MILLISECONDS);
+		}
+		catch (InterruptedException e) {
+			e.printStackTrace();
+		}
 		return outboundView.blockFirst();
 	}
 

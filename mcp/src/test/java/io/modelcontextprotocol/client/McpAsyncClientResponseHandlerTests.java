@@ -37,9 +37,6 @@ class McpAsyncClientResponseHandlerTests {
 					.build(),
 				new McpSchema.Implementation("test-server", "1.0.0"), "Test instructions");
 
-		// Use CountDownLatch to coordinate between threads
-		java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
-
 		// Create a Mono that will handle the initialization and response simulation
 		return asyncMcpClient.initialize().doOnSubscribe(subscription -> {
 			// Run in a separate reactive context to avoid blocking the main subscription
@@ -51,17 +48,7 @@ class McpAsyncClientResponseHandlerTests {
 				McpSchema.JSONRPCResponse initResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
 						initRequest.id(), mockInitResult, null);
 				transport.simulateIncomingMessage(initResponse);
-				latch.countDown();
 			}).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic()).subscribe();
-		}).doOnTerminate(() -> {
-			try {
-				// Wait for the response simulation to complete
-				latch.await(5, java.util.concurrent.TimeUnit.SECONDS);
-			}
-			catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-				throw new RuntimeException("Interrupted while waiting for initialization", e);
-			}
 		}).block();
 	}
 
@@ -82,9 +69,6 @@ class McpAsyncClientResponseHandlerTests {
 		McpSchema.InitializeResult mockInitResult = new McpSchema.InitializeResult(McpSchema.LATEST_PROTOCOL_VERSION,
 				mockServerCapabilities, mockServerInfo, "Test instructions");
 
-		// Use CountDownLatch to coordinate between threads
-		java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
-
 		// Start initialization with reactive handling
 		InitializeResult result = asyncMcpClient.initialize().doOnSubscribe(subscription -> {
 			// Run in a separate reactive context to avoid blocking the main subscription
@@ -96,17 +80,8 @@ class McpAsyncClientResponseHandlerTests {
 				McpSchema.JSONRPCResponse initResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
 						initRequest.id(), mockInitResult, null);
 				transport.simulateIncomingMessage(initResponse);
-				latch.countDown();
+				// latch.countDown();
 			}).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic()).subscribe();
-		}).doOnTerminate(() -> {
-			try {
-				// Wait for the response simulation to complete
-				latch.await(5, java.util.concurrent.TimeUnit.SECONDS);
-			}
-			catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-				throw new RuntimeException("Interrupted while waiting for initialization", e);
-			}
 		}).block();
 
 		// Verify initialized notification was sent
