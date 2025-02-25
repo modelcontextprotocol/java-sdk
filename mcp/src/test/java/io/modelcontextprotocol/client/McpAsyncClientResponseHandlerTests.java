@@ -19,7 +19,6 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.Root;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
@@ -30,21 +29,21 @@ import static org.awaitility.Awaitility.await;
 class McpAsyncClientResponseHandlerTests {
 
 	private InitializeResult initialization(McpAsyncClient asyncMcpClient, MockMcpTransport transport) {
-
 		// Create mock server response
-		McpSchema.ServerCapabilities mockServerCapabilities = McpSchema.ServerCapabilities.builder()
-			.tools(true)
-			.resources(true, true) // Enable both resources and resource templates
-			.build();
-		McpSchema.Implementation mockServerInfo = new McpSchema.Implementation("test-server", "1.0.0");
 		McpSchema.InitializeResult mockInitResult = new McpSchema.InitializeResult(McpSchema.LATEST_PROTOCOL_VERSION,
-				mockServerCapabilities, mockServerInfo, "Test instructions");
+				McpSchema.ServerCapabilities.builder()
+					.tools(true)
+					.resources(true, true) // Enable both resources and resource templates
+					.build(),
+				new McpSchema.Implementation("test-server", "1.0.0"), "Test instructions");
 
-		Mono<McpSchema.InitializeResult> initMono = asyncMcpClient.initialize();
+		// Use CountDownLatch to coordinate between threads
+		java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
 
-		new Thread(new Runnable() {
-			@Override
-			public void run() {
+		// Create a Mono that will handle the initialization and response simulation
+		return asyncMcpClient.initialize().doOnSubscribe(subscription -> {
+			// Run in a separate reactive context to avoid blocking the main subscription
+			Mono.fromRunnable(() -> {
 				McpSchema.JSONRPCRequest initRequest = transport.getLastSentMessageAsRequest();
 				assertThat(initRequest.method()).isEqualTo(McpSchema.METHOD_INITIALIZE);
 
@@ -52,10 +51,18 @@ class McpAsyncClientResponseHandlerTests {
 				McpSchema.JSONRPCResponse initResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
 						initRequest.id(), mockInitResult, null);
 				transport.simulateIncomingMessage(initResponse);
+				latch.countDown();
+			}).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic()).subscribe();
+		}).doOnTerminate(() -> {
+			try {
+				// Wait for the response simulation to complete
+				latch.await(5, java.util.concurrent.TimeUnit.SECONDS);
 			}
-		}).start();
-
-		return initMono.block();
+			catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				throw new RuntimeException("Interrupted while waiting for initialization", e);
+			}
+		}).block();
 	}
 
 	@Test
@@ -75,12 +82,13 @@ class McpAsyncClientResponseHandlerTests {
 		McpSchema.InitializeResult mockInitResult = new McpSchema.InitializeResult(McpSchema.LATEST_PROTOCOL_VERSION,
 				mockServerCapabilities, mockServerInfo, "Test instructions");
 
-		// Start initialization
-		Mono<McpSchema.InitializeResult> initMono = asyncMcpClient.initialize();
+		// Use CountDownLatch to coordinate between threads
+		java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
 
-		new Thread(new Runnable() {
-			@Override
-			public void run() {
+		// Start initialization with reactive handling
+		InitializeResult result = asyncMcpClient.initialize().doOnSubscribe(subscription -> {
+			// Run in a separate reactive context to avoid blocking the main subscription
+			Mono.fromRunnable(() -> {
 				McpSchema.JSONRPCRequest initRequest = transport.getLastSentMessageAsRequest();
 				assertThat(initRequest.method()).isEqualTo(McpSchema.METHOD_INITIALIZE);
 
@@ -88,10 +96,18 @@ class McpAsyncClientResponseHandlerTests {
 				McpSchema.JSONRPCResponse initResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
 						initRequest.id(), mockInitResult, null);
 				transport.simulateIncomingMessage(initResponse);
+				latch.countDown();
+			}).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic()).subscribe();
+		}).doOnTerminate(() -> {
+			try {
+				// Wait for the response simulation to complete
+				latch.await(5, java.util.concurrent.TimeUnit.SECONDS);
 			}
-		}).start();
-
-		InitializeResult result = initMono.block();
+			catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				throw new RuntimeException("Interrupted while waiting for initialization", e);
+			}
+		}).block();
 
 		// Verify initialized notification was sent
 		McpSchema.JSONRPCMessage notificationMessage = transport.getLastSentMessage();
