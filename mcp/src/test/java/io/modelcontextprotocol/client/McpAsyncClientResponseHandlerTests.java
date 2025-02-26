@@ -22,49 +22,53 @@ import io.modelcontextprotocol.spec.McpSchema.Root;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
+import static io.modelcontextprotocol.spec.McpSchema.METHOD_INITIALIZE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 class McpAsyncClientResponseHandlerTests {
 
-	private InitializeResult initialization(McpAsyncClient asyncMcpClient, MockMcpTransport transport) {
-		// Create mock server response
+	private static final McpSchema.Implementation SERVER_INFO = new McpSchema.Implementation("test-server", "1.0.0");
+
+	private static final McpSchema.ServerCapabilities SERVER_CAPABILITIES = McpSchema.ServerCapabilities.builder()
+		.tools(true)
+		.resources(true, true) // Enable both resources and resource templates
+		.build();
+
+	private static MockMcpTransport initializationEnabledTransport() {
+		return initializationEnabledTransport(SERVER_CAPABILITIES, SERVER_INFO);
+	}
+
+	private static MockMcpTransport initializationEnabledTransport(McpSchema.ServerCapabilities mockServerCapabilities,
+			McpSchema.Implementation mockServerInfo) {
 		McpSchema.InitializeResult mockInitResult = new McpSchema.InitializeResult(McpSchema.LATEST_PROTOCOL_VERSION,
-				McpSchema.ServerCapabilities.builder()
-					.tools(true)
-					.resources(true, true) // Enable both resources and resource templates
-					.build(),
-				new McpSchema.Implementation("test-server", "1.0.0"), "Test instructions");
+				mockServerCapabilities, mockServerInfo, "Test instructions");
 
-		// Create a Mono that will handle the initialization and response simulation
-		return asyncMcpClient.initialize().doOnSubscribe(subscription -> {
-			// Run in a separate reactive context to avoid blocking the main subscription
-			Mono.fromRunnable(() -> {
-				McpSchema.JSONRPCRequest initRequest = transport.getLastSentMessageAsRequest();
-				assertThat(initRequest.method()).isEqualTo(McpSchema.METHOD_INITIALIZE);
-
-				// Send mock server response
+		return new MockMcpTransport((t, message) -> {
+			if (message instanceof McpSchema.JSONRPCRequest r && METHOD_INITIALIZE.equals(r.method())) {
 				McpSchema.JSONRPCResponse initResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
-						initRequest.id(), mockInitResult, null);
-				transport.simulateIncomingMessage(initResponse);
-			}).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic()).subscribe();
-		}).block();
+						r.id(), mockInitResult, null);
+				t.simulateIncomingMessage(initResponse);
+			}
+		});
 	}
 
 	@Test
 	void testSuccessfulInitialization() {
-		MockMcpTransport transport = new MockMcpTransport();
+		McpSchema.Implementation serverInfo = new McpSchema.Implementation("mcp-test-server", "0.0.1");
+		McpSchema.ServerCapabilities serverCapabilities = McpSchema.ServerCapabilities.builder()
+			.tools(false)
+			.resources(true, true) // Enable both resources and resource templates
+			.build();
+		MockMcpTransport transport = initializationEnabledTransport(serverCapabilities, serverInfo);
 		McpAsyncClient asyncMcpClient = McpClient.async(transport).build();
 
 		// Verify client is not initialized initially
 		assertThat(asyncMcpClient.isInitialized()).isFalse();
 
 		// Start initialization with reactive handling
-		InitializeResult result = initialization(asyncMcpClient, transport);
-
-		// Verify client state after initialization
-		assertThat(asyncMcpClient.isInitialized()).isTrue();
+		InitializeResult result = asyncMcpClient.initialize().block();
 
 		// Verify initialized notification was sent
 		McpSchema.JSONRPCMessage notificationMessage = transport.getLastSentMessage();
@@ -75,16 +79,21 @@ class McpAsyncClientResponseHandlerTests {
 		// Verify initialization result
 		assertThat(result).isNotNull();
 		assertThat(result.protocolVersion()).isEqualTo(McpSchema.LATEST_PROTOCOL_VERSION);
-		assertThat(result.capabilities()).isEqualTo(asyncMcpClient.getServerCapabilities());
-		assertThat(result.serverInfo()).isEqualTo(asyncMcpClient.getServerInfo());
+		assertThat(result.capabilities()).isEqualTo(serverCapabilities);
+		assertThat(result.serverInfo()).isEqualTo(serverInfo);
 		assertThat(result.instructions()).isEqualTo("Test instructions");
+
+		// Verify client state after initialization
+		assertThat(asyncMcpClient.isInitialized()).isTrue();
+		assertThat(asyncMcpClient.getServerCapabilities()).isEqualTo(serverCapabilities);
+		assertThat(asyncMcpClient.getServerInfo()).isEqualTo(serverInfo);
 
 		asyncMcpClient.closeGracefully();
 	}
 
 	@Test
 	void testToolsChangeNotificationHandling() throws JsonProcessingException {
-		MockMcpTransport transport = new MockMcpTransport();
+		MockMcpTransport transport = initializationEnabledTransport();
 
 		// Create a list to store received tools for verification
 		List<McpSchema.Tool> receivedTools = new ArrayList<>();
@@ -96,7 +105,7 @@ class McpAsyncClientResponseHandlerTests {
 		// Create client with tools change consumer
 		McpAsyncClient asyncMcpClient = McpClient.async(transport).toolsChangeConsumer(toolsChangeConsumer).build();
 
-		assertThat(initialization(asyncMcpClient, transport)).isNotNull();
+		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Create a mock tools list that the server will return
 		Map<String, Object> inputSchema = Map.of("type", "object", "properties", Map.of(), "required", List.of());
@@ -118,24 +127,22 @@ class McpAsyncClientResponseHandlerTests {
 		transport.simulateIncomingMessage(toolsListResponse);
 
 		// Verify the consumer received the expected tools
-		await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
-			assertThat(receivedTools).hasSize(1);
-			assertThat(receivedTools.get(0).name()).isEqualTo("test-tool");
-			assertThat(receivedTools.get(0).description()).isEqualTo("Test Tool Description");
-		});
+		assertThat(receivedTools).hasSize(1);
+		assertThat(receivedTools.get(0).name()).isEqualTo("test-tool");
+		assertThat(receivedTools.get(0).description()).isEqualTo("Test Tool Description");
 
 		asyncMcpClient.closeGracefully();
 	}
 
 	@Test
 	void testRootsListRequestHandling() {
-		MockMcpTransport transport = new MockMcpTransport();
+		MockMcpTransport transport = initializationEnabledTransport();
 
 		McpAsyncClient asyncMcpClient = McpClient.async(transport)
 			.roots(new Root("file:///test/path", "test-root"))
 			.build();
 
-		assertThat(initialization(asyncMcpClient, transport)).isNotNull();
+		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Simulate incoming request
 		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
@@ -157,7 +164,7 @@ class McpAsyncClientResponseHandlerTests {
 
 	@Test
 	void testResourcesChangeNotificationHandling() {
-		MockMcpTransport transport = new MockMcpTransport();
+		MockMcpTransport transport = initializationEnabledTransport();
 
 		// Create a list to store received resources for verification
 		List<McpSchema.Resource> receivedResources = new ArrayList<>();
@@ -171,7 +178,7 @@ class McpAsyncClientResponseHandlerTests {
 			.resourcesChangeConsumer(resourcesChangeConsumer)
 			.build();
 
-		assertThat(initialization(asyncMcpClient, transport)).isNotNull();
+		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Create a mock resources list that the server will return
 		McpSchema.Resource mockResource = new McpSchema.Resource("test://resource", "Test Resource", "A test resource",
@@ -193,19 +200,17 @@ class McpAsyncClientResponseHandlerTests {
 		transport.simulateIncomingMessage(resourcesListResponse);
 
 		// Verify the consumer received the expected resources
-		await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
-			assertThat(receivedResources).hasSize(1);
-			assertThat(receivedResources.get(0).uri()).isEqualTo("test://resource");
-			assertThat(receivedResources.get(0).name()).isEqualTo("Test Resource");
-			assertThat(receivedResources.get(0).description()).isEqualTo("A test resource");
-		});
+		assertThat(receivedResources).hasSize(1);
+		assertThat(receivedResources.get(0).uri()).isEqualTo("test://resource");
+		assertThat(receivedResources.get(0).name()).isEqualTo("Test Resource");
+		assertThat(receivedResources.get(0).description()).isEqualTo("A test resource");
 
 		asyncMcpClient.closeGracefully();
 	}
 
 	@Test
 	void testPromptsChangeNotificationHandling() {
-		MockMcpTransport transport = new MockMcpTransport();
+		MockMcpTransport transport = initializationEnabledTransport();
 
 		// Create a list to store received prompts for verification
 		List<McpSchema.Prompt> receivedPrompts = new ArrayList<>();
@@ -217,7 +222,7 @@ class McpAsyncClientResponseHandlerTests {
 		// Create client with prompts change consumer
 		McpAsyncClient asyncMcpClient = McpClient.async(transport).promptsChangeConsumer(promptsChangeConsumer).build();
 
-		assertThat(initialization(asyncMcpClient, transport)).isNotNull();
+		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Create a mock prompts list that the server will return
 		McpSchema.Prompt mockPrompt = new McpSchema.Prompt("test-prompt", "Test Prompt Description",
@@ -238,20 +243,18 @@ class McpAsyncClientResponseHandlerTests {
 		transport.simulateIncomingMessage(promptsListResponse);
 
 		// Verify the consumer received the expected prompts
-		await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
-			assertThat(receivedPrompts).hasSize(1);
-			assertThat(receivedPrompts.get(0).name()).isEqualTo("test-prompt");
-			assertThat(receivedPrompts.get(0).description()).isEqualTo("Test Prompt Description");
-			assertThat(receivedPrompts.get(0).arguments()).hasSize(1);
-			assertThat(receivedPrompts.get(0).arguments().get(0).name()).isEqualTo("arg1");
-		});
+		assertThat(receivedPrompts).hasSize(1);
+		assertThat(receivedPrompts.get(0).name()).isEqualTo("test-prompt");
+		assertThat(receivedPrompts.get(0).description()).isEqualTo("Test Prompt Description");
+		assertThat(receivedPrompts.get(0).arguments()).hasSize(1);
+		assertThat(receivedPrompts.get(0).arguments().get(0).name()).isEqualTo("arg1");
 
 		asyncMcpClient.closeGracefully();
 	}
 
 	@Test
 	void testSamplingCreateMessageRequestHandling() {
-		MockMcpTransport transport = new MockMcpTransport();
+		MockMcpTransport transport = initializationEnabledTransport();
 
 		// Create a test sampling handler that echoes back the input
 		Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler = request -> {
@@ -266,7 +269,7 @@ class McpAsyncClientResponseHandlerTests {
 			.sampling(samplingHandler)
 			.build();
 
-		assertThat(initialization(asyncMcpClient, transport)).isNotNull();
+		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Create a mock create message request
 		var messageRequest = new McpSchema.CreateMessageRequest(
@@ -305,14 +308,14 @@ class McpAsyncClientResponseHandlerTests {
 
 	@Test
 	void testSamplingCreateMessageRequestHandlingWithoutCapability() {
-		MockMcpTransport transport = new MockMcpTransport();
+		MockMcpTransport transport = initializationEnabledTransport();
 
 		// Create client without sampling capability
 		McpAsyncClient asyncMcpClient = McpClient.async(transport)
 			.capabilities(ClientCapabilities.builder().build()) // No sampling capability
 			.build();
 
-		assertThat(initialization(asyncMcpClient, transport)).isNotNull();
+		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Create a mock create message request
 		var messageRequest = new McpSchema.CreateMessageRequest(

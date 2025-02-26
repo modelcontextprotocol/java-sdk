@@ -4,20 +4,20 @@
 
 package io.modelcontextprotocol;
 
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.ClientMcpTransport;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.ServerMcpTransport;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCNotification;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
-import io.modelcontextprotocol.spec.ServerMcpTransport;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
-import reactor.core.scheduler.Schedulers;
 
 /**
  * A mock implementation of the {@link ClientMcpTransport} and {@link ServerMcpTransport}
@@ -25,36 +25,31 @@ import reactor.core.scheduler.Schedulers;
  */
 public class MockMcpTransport implements ClientMcpTransport, ServerMcpTransport {
 
-	private final AtomicInteger inboundMessageCount = new AtomicInteger(0);
-
-	private final Sinks.Many<McpSchema.JSONRPCMessage> outgoing = Sinks.many().multicast().onBackpressureBuffer();
-
 	private final Sinks.Many<McpSchema.JSONRPCMessage> inbound = Sinks.many().unicast().onBackpressureBuffer();
 
-	private final Flux<McpSchema.JSONRPCMessage> outboundView = outgoing.asFlux().cache(1);
+	private final List<McpSchema.JSONRPCMessage> sent = new ArrayList<>();
 
-	// Latch to wait for the next message(s) to be sent in response of simulated incoming
-	// message
-	java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+	private final BiConsumer<MockMcpTransport, McpSchema.JSONRPCMessage> interceptor;
 
-	public void simulateIncomingMessage(McpSchema.JSONRPCMessage message) {
-		simulateIncomingMessage(message, 1);
+	public MockMcpTransport() {
+		this((t, msg) -> {
+		});
 	}
 
-	public void simulateIncomingMessage(McpSchema.JSONRPCMessage message, int expectedResponseMessagesCount) {
+	public MockMcpTransport(BiConsumer<MockMcpTransport, McpSchema.JSONRPCMessage> interceptor) {
+		this.interceptor = interceptor;
+	}
+
+	public void simulateIncomingMessage(McpSchema.JSONRPCMessage message) {
 		if (inbound.tryEmitNext(message).isFailure()) {
-			throw new RuntimeException("Failed to emit message " + message);
+			throw new RuntimeException("Failed to process incoming message " + message);
 		}
-		inboundMessageCount.incrementAndGet();
-		latch = new java.util.concurrent.CountDownLatch(expectedResponseMessagesCount);
 	}
 
 	@Override
 	public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
-		if (outgoing.tryEmitNext(message).isFailure()) {
-			return Mono.error(new RuntimeException("Can't emit outgoing message " + message));
-		}
-		latch.countDown();
+		sent.add(message);
+		interceptor.accept(this, message);
 		return Mono.empty();
 	}
 
@@ -62,18 +57,12 @@ public class MockMcpTransport implements ClientMcpTransport, ServerMcpTransport 
 		return (JSONRPCRequest) getLastSentMessage();
 	}
 
-	public McpSchema.JSONRPCNotification getLastSentMessageAsNotifiation() {
+	public McpSchema.JSONRPCNotification getLastSentMessageAsNotification() {
 		return (JSONRPCNotification) getLastSentMessage();
 	}
 
 	public McpSchema.JSONRPCMessage getLastSentMessage() {
-		try {
-			latch.await();
-		}
-		catch (InterruptedException e) {
-			e.printStackTrace();
-		}
-		return outboundView.blockFirst();
+		return !sent.isEmpty() ? sent.get(sent.size() - 1) : null;
 	}
 
 	private volatile boolean connected = false;
@@ -85,7 +74,6 @@ public class MockMcpTransport implements ClientMcpTransport, ServerMcpTransport 
 		}
 		connected = true;
 		return inbound.asFlux()
-			.publishOn(Schedulers.boundedElastic())
 			.flatMap(message -> Mono.just(message).transform(handler))
 			.doFinally(signal -> connected = false)
 			.then();
@@ -95,7 +83,6 @@ public class MockMcpTransport implements ClientMcpTransport, ServerMcpTransport 
 	public Mono<Void> closeGracefully() {
 		return Mono.defer(() -> {
 			connected = false;
-			outgoing.tryEmitComplete();
 			inbound.tryEmitComplete();
 			// Wait for all subscribers to complete
 			return Mono.empty();
