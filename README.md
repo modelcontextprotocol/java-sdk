@@ -17,13 +17,15 @@ For comprehensive guides and SDK API documentation, visit the [MCP Java SDK Refe
 ### Building from Source
 
 ```bash
-mvn clean install
+./mvnw clean install -DskipTests
 ```
 
 ### Running Tests
 
+To run the tests you have to pre-install `Docker` and `npx`.
+
 ```bash
-mvn test
+./mvnw test
 ```
 
 ## Contributing
