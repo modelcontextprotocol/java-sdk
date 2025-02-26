@@ -492,7 +492,7 @@ public class McpAsyncClient {
 	 */
 	public Mono<McpSchema.ListToolsResult> listTools(String cursor) {
 		if (!this.isInitialized()) {
-			return Mono.error(new McpError("Client must be initialized before calling tools"));
+			return Mono.error(new McpError("Client must be initialized before listing tools"));
 		}
 		if (this.serverCapabilities.tools() == null) {
 			return Mono.error(new McpError("Server does not provide tools capability"));
@@ -553,7 +553,7 @@ public class McpAsyncClient {
 	 */
 	public Mono<McpSchema.ListResourcesResult> listResources(String cursor) {
 		if (!this.isInitialized()) {
-			return Mono.error(new McpError("Client must be initialized before calling tools"));
+			return Mono.error(new McpError("Client must be initialized before listing resources"));
 		}
 		if (this.serverCapabilities.resources() == null) {
 			return Mono.error(new McpError("Server does not provide the resources capability"));
@@ -578,7 +578,7 @@ public class McpAsyncClient {
 	 */
 	public Mono<McpSchema.ReadResourceResult> readResource(McpSchema.ReadResourceRequest readResourceRequest) {
 		if (!this.isInitialized()) {
-			return Mono.error(new McpError("Client must be initialized before calling tools"));
+			return Mono.error(new McpError("Client must be initialized before reading resources"));
 		}
 		if (this.serverCapabilities.resources() == null) {
 			return Mono.error(new McpError("Server does not provide the resources capability"));
@@ -608,7 +608,7 @@ public class McpAsyncClient {
 	 */
 	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates(String cursor) {
 		if (!this.isInitialized()) {
-			return Mono.error(new McpError("Client must be initialized before calling tools"));
+			return Mono.error(new McpError("Client must be initialized before listing resource templates"));
 		}
 		if (this.serverCapabilities.resources() == null) {
 			return Mono.error(new McpError("Server does not provide the resources capability"));
