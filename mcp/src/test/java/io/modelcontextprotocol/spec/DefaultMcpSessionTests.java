@@ -82,7 +82,7 @@ class DefaultMcpSessionTests {
 		StepVerifier.create(responseMono).then(() -> {
 			McpSchema.JSONRPCRequest request = transport.getLastSentMessageAsRequest();
 			transport.simulateIncomingMessage(
-					new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), responseData, null));
+					new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), responseData, null), 0);
 		}).consumeNextWith(response -> {
 			// Verify the request was sent
 			McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessageAsRequest();

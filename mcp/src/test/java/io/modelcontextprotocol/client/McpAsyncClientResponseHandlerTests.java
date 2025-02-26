@@ -60,29 +60,11 @@ class McpAsyncClientResponseHandlerTests {
 		// Verify client is not initialized initially
 		assertThat(asyncMcpClient.isInitialized()).isFalse();
 
-		// Create mock server response
-		McpSchema.ServerCapabilities mockServerCapabilities = McpSchema.ServerCapabilities.builder()
-			.tools(true)
-			.resources(true, true) // Enable both resources and resource templates
-			.build();
-		McpSchema.Implementation mockServerInfo = new McpSchema.Implementation("test-server", "1.0.0");
-		McpSchema.InitializeResult mockInitResult = new McpSchema.InitializeResult(McpSchema.LATEST_PROTOCOL_VERSION,
-				mockServerCapabilities, mockServerInfo, "Test instructions");
-
 		// Start initialization with reactive handling
-		InitializeResult result = asyncMcpClient.initialize().doOnSubscribe(subscription -> {
-			// Run in a separate reactive context to avoid blocking the main subscription
-			Mono.fromRunnable(() -> {
-				McpSchema.JSONRPCRequest initRequest = transport.getLastSentMessageAsRequest();
-				assertThat(initRequest.method()).isEqualTo(McpSchema.METHOD_INITIALIZE);
+		InitializeResult result = initialization(asyncMcpClient, transport);
 
-				// Send mock server response
-				McpSchema.JSONRPCResponse initResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
-						initRequest.id(), mockInitResult, null);
-				transport.simulateIncomingMessage(initResponse);
-				// latch.countDown();
-			}).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic()).subscribe();
-		}).block();
+		// Verify client state after initialization
+		assertThat(asyncMcpClient.isInitialized()).isTrue();
 
 		// Verify initialized notification was sent
 		McpSchema.JSONRPCMessage notificationMessage = transport.getLastSentMessage();
@@ -93,14 +75,9 @@ class McpAsyncClientResponseHandlerTests {
 		// Verify initialization result
 		assertThat(result).isNotNull();
 		assertThat(result.protocolVersion()).isEqualTo(McpSchema.LATEST_PROTOCOL_VERSION);
-		assertThat(result.capabilities()).isEqualTo(mockServerCapabilities);
-		assertThat(result.serverInfo()).isEqualTo(mockServerInfo);
+		assertThat(result.capabilities()).isEqualTo(asyncMcpClient.getServerCapabilities());
+		assertThat(result.serverInfo()).isEqualTo(asyncMcpClient.getServerInfo());
 		assertThat(result.instructions()).isEqualTo("Test instructions");
-
-		// Verify client state after initialization
-		assertThat(asyncMcpClient.isInitialized()).isTrue();
-		assertThat(asyncMcpClient.getServerCapabilities()).isEqualTo(mockServerCapabilities);
-		assertThat(asyncMcpClient.getServerInfo()).isEqualTo(mockServerInfo);
 
 		asyncMcpClient.closeGracefully();
 	}

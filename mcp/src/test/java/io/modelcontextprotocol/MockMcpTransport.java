@@ -4,7 +4,6 @@
 
 package io.modelcontextprotocol;
 
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
@@ -12,9 +11,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.ClientMcpTransport;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.ServerMcpTransport;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCNotification;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
+import io.modelcontextprotocol.spec.ServerMcpTransport;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
@@ -34,14 +33,20 @@ public class MockMcpTransport implements ClientMcpTransport, ServerMcpTransport 
 
 	private final Flux<McpSchema.JSONRPCMessage> outboundView = outgoing.asFlux().cache(1);
 
+	// Latch to wait for the next message(s) to be sent in response of simulated incoming
+	// message
 	java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
 
 	public void simulateIncomingMessage(McpSchema.JSONRPCMessage message) {
+		simulateIncomingMessage(message, 1);
+	}
+
+	public void simulateIncomingMessage(McpSchema.JSONRPCMessage message, int expectedResponseMessagesCount) {
 		if (inbound.tryEmitNext(message).isFailure()) {
 			throw new RuntimeException("Failed to emit message " + message);
 		}
 		inboundMessageCount.incrementAndGet();
-		latch = new java.util.concurrent.CountDownLatch(1);
+		latch = new java.util.concurrent.CountDownLatch(expectedResponseMessagesCount);
 	}
 
 	@Override
@@ -63,7 +68,7 @@ public class MockMcpTransport implements ClientMcpTransport, ServerMcpTransport 
 
 	public McpSchema.JSONRPCMessage getLastSentMessage() {
 		try {
-			latch.await(200, TimeUnit.MILLISECONDS);
+			latch.await();
 		}
 		catch (InterruptedException e) {
 			e.printStackTrace();
