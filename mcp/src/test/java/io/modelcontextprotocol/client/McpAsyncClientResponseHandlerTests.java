@@ -4,7 +4,6 @@
 
 package io.modelcontextprotocol.client;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -25,7 +24,6 @@ import reactor.core.publisher.Mono;
 import static io.modelcontextprotocol.spec.McpSchema.METHOD_INITIALIZE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.awaitility.Awaitility.await;
 
 class McpAsyncClientResponseHandlerTests {
 

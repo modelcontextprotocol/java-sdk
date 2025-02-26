@@ -19,7 +19,6 @@ import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 
-@SuppressWarnings("unused")
 /**
  * A mock implementation of the {@link ClientMcpTransport} and {@link ServerMcpTransport}
  * interfaces.
