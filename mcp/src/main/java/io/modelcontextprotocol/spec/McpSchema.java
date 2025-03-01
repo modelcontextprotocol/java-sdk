@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -964,7 +965,7 @@ public final class McpSchema {
 			@JsonSubTypes.Type(value = EmbeddedResource.class, name = "resource") })
 	public sealed interface Content permits TextContent, ImageContent, EmbeddedResource {
 
-		String type();
+		// String type();
 
 	}
 
@@ -972,19 +973,10 @@ public final class McpSchema {
 	public record TextContent( // @formatter:off
 		@JsonProperty("audience") List<Role> audience,
 		@JsonProperty("priority") Double priority,
-		@JsonProperty("type") String type,
 		@JsonProperty("text") String text) implements Content { // @formatter:on
 
-		public TextContent {
-			type = "text";
-		}
-
-		public String type() {
-			return type;
-		}
-
 		public TextContent(String content) {
-			this(null, null, "text", content);
+			this(null, null, content);
 		}
 	}
 
@@ -992,33 +984,15 @@ public final class McpSchema {
 	public record ImageContent( // @formatter:off
 		@JsonProperty("audience") List<Role> audience,
 		@JsonProperty("priority") Double priority,
-		@JsonProperty("type") String type,
 		@JsonProperty("data") String data,
 		@JsonProperty("mimeType") String mimeType) implements Content { // @formatter:on
-
-		public ImageContent {
-			type = "image";
-		}
-
-		public String type() {
-			return type;
-		}
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	public record EmbeddedResource( // @formatter:off
 		@JsonProperty("audience") List<Role> audience,
 		@JsonProperty("priority") Double priority,
-		@JsonProperty("type") String type,
 		@JsonProperty("resource") ResourceContents resource) implements Content { // @formatter:on
-
-		public EmbeddedResource {
-			type = "resource";
-		}
-
-		public String type() {
-			return type;
-		}
 	}
 
 	// ---------------------------
