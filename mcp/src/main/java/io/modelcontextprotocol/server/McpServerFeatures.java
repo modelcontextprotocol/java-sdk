@@ -13,6 +13,7 @@ import java.util.function.Function;
 
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.UriTemplate;
 import io.modelcontextprotocol.util.Utils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -31,14 +32,14 @@ public class McpServerFeatures {
 	 * @param serverCapabilities The server capabilities
 	 * @param tools The list of tool registrations
 	 * @param resources The map of resource registrations
-	 * @param resourceTemplates The list of resource templates
+	 * @param resourceTemplates The list of resource templates registrations
 	 * @param prompts The map of prompt registrations
 	 * @param rootsChangeConsumers The list of consumers that will be notified when the
 	 * roots list changes
 	 */
 	record Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 			List<McpServerFeatures.AsyncToolRegistration> tools, Map<String, AsyncResourceRegistration> resources,
-			List<McpSchema.ResourceTemplate> resourceTemplates,
+			Map<String, McpServerFeatures.AsyncResourceTemplateRegistration> resourceTemplates,
 			Map<String, McpServerFeatures.AsyncPromptRegistration> prompts,
 			List<Function<List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
 
@@ -48,14 +49,14 @@ public class McpServerFeatures {
 		 * @param serverCapabilities The server capabilities
 		 * @param tools The list of tool registrations
 		 * @param resources The map of resource registrations
-		 * @param resourceTemplates The list of resource templates
+		 * @param resourceTemplates The list of resource registrations templates
 		 * @param prompts The map of prompt registrations
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpServerFeatures.AsyncToolRegistration> tools, Map<String, AsyncResourceRegistration> resources,
-				List<McpSchema.ResourceTemplate> resourceTemplates,
+				Map<String, McpServerFeatures.AsyncResourceTemplateRegistration> resourceTemplates,
 				Map<String, McpServerFeatures.AsyncPromptRegistration> prompts,
 				List<Function<List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
 
@@ -75,7 +76,7 @@ public class McpServerFeatures {
 
 			this.tools = (tools != null) ? tools : List.of();
 			this.resources = (resources != null) ? resources : Map.of();
-			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : List.of();
+			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : Map.of();
 			this.prompts = (prompts != null) ? prompts : Map.of();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : List.of();
 		}
@@ -99,6 +100,11 @@ public class McpServerFeatures {
 				resources.put(key, AsyncResourceRegistration.fromSync(resource));
 			});
 
+			Map<String, AsyncResourceTemplateRegistration> resourceTemplates = new HashMap<>();
+			syncSpec.resourceTemplates().forEach((key, resource) -> {
+				resourceTemplates.put(key, AsyncResourceTemplateRegistration.fromSync(resource));
+			});
+
 			Map<String, AsyncPromptRegistration> prompts = new HashMap<>();
 			syncSpec.prompts().forEach((key, prompt) -> {
 				prompts.put(key, AsyncPromptRegistration.fromSync(prompt));
@@ -111,8 +117,8 @@ public class McpServerFeatures {
 					.subscribeOn(Schedulers.boundedElastic()));
 			}
 
-			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources,
-					syncSpec.resourceTemplates(), prompts, rootChangeConsumers);
+			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources, resourceTemplates,
+					prompts, rootChangeConsumers);
 		}
 	}
 
@@ -123,7 +129,7 @@ public class McpServerFeatures {
 	 * @param serverCapabilities The server capabilities
 	 * @param tools The list of tool registrations
 	 * @param resources The map of resource registrations
-	 * @param resourceTemplates The list of resource templates
+	 * @param resourceTemplates The map of resource templates registrations
 	 * @param prompts The map of prompt registrations
 	 * @param rootsChangeConsumers The list of consumers that will be notified when the
 	 * roots list changes
@@ -131,7 +137,7 @@ public class McpServerFeatures {
 	record Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 			List<McpServerFeatures.SyncToolRegistration> tools,
 			Map<String, McpServerFeatures.SyncResourceRegistration> resources,
-			List<McpSchema.ResourceTemplate> resourceTemplates,
+			Map<String, McpServerFeatures.SyncResourceTemplateRegistration> resourceTemplates,
 			Map<String, McpServerFeatures.SyncPromptRegistration> prompts,
 			List<Consumer<List<McpSchema.Root>>> rootsChangeConsumers) {
 
@@ -149,7 +155,7 @@ public class McpServerFeatures {
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpServerFeatures.SyncToolRegistration> tools,
 				Map<String, McpServerFeatures.SyncResourceRegistration> resources,
-				List<McpSchema.ResourceTemplate> resourceTemplates,
+				Map<String, McpServerFeatures.SyncResourceTemplateRegistration> resourceTemplates,
 				Map<String, McpServerFeatures.SyncPromptRegistration> prompts,
 				List<Consumer<List<McpSchema.Root>>> rootsChangeConsumers) {
 
@@ -169,7 +175,7 @@ public class McpServerFeatures {
 
 			this.tools = (tools != null) ? tools : new ArrayList<>();
 			this.resources = (resources != null) ? resources : new HashMap<>();
-			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : new ArrayList<>();
+			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : new HashMap<>();
 			this.prompts = (prompts != null) ? prompts : new HashMap<>();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : new ArrayList<>();
 		}
@@ -256,6 +262,53 @@ public class McpServerFeatures {
 				return null;
 			}
 			return new AsyncResourceRegistration(resource.resource(),
+					req -> Mono.fromCallable(() -> resource.readHandler().apply(req))
+						.subscribeOn(Schedulers.boundedElastic()));
+		}
+	}
+
+	/**
+	 * Registration of a resource template with its asynchronous handler function.
+	 * Resources provide context to AI models by exposing data such as:
+	 * <ul>
+	 * <li>File contents
+	 * <li>Database records
+	 * <li>API responses
+	 * <li>System information
+	 * <li>Application state
+	 * </ul>
+	 *
+	 * <p>
+	 * Example resource registration: <pre>{@code
+	 * new McpServerFeatures.AsyncResourceTemplateRegistration(
+	 *     new ResourceTemplate("docs", "Documentation files", "text/markdown"),
+	 *     request -> {
+	 *         String content = readFile(request.getPath());
+	 *         return Mono.just(new ReadResourceResult(content));
+	 *     }
+	 * )
+	 * }</pre>
+	 *
+	 * @param resource The resource template definition including name, description, and
+	 * MIME type
+	 * @param readHandler The function that handles resource read requests
+	 */
+	public record AsyncResourceTemplateRegistration(McpSchema.ResourceTemplate resource, UriTemplate uriTemplate,
+			Function<McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
+
+		public AsyncResourceTemplateRegistration(McpSchema.ResourceTemplate resource,
+				Function<McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
+			this(resource, new UriTemplate(resource.uriTemplate()), readHandler);
+		}
+
+		static AsyncResourceTemplateRegistration fromSync(SyncResourceTemplateRegistration resource) {
+			// FIXME: This is temporary, proper validation should be implemented
+			if (resource == null) {
+				return null;
+			}
+
+			return new AsyncResourceTemplateRegistration(resource.resource(),
+					new UriTemplate(resource.resource().uriTemplate()),
 					req -> Mono.fromCallable(() -> resource.readHandler().apply(req))
 						.subscribeOn(Schedulers.boundedElastic()));
 		}
@@ -366,6 +419,35 @@ public class McpServerFeatures {
 	 * @param readHandler The function that handles resource read requests
 	 */
 	public record SyncResourceRegistration(McpSchema.Resource resource,
+			Function<McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
+	}
+
+	/**
+	 * Registration of a resource template with its synchronous handler function.
+	 * Resources provide context to AI models by exposing data such as:
+	 * <ul>
+	 * <li>File contents
+	 * <li>Database records
+	 * <li>API responses
+	 * <li>System information
+	 * <li>Application state
+	 * </ul>
+	 *
+	 * <p>
+	 * Example resource registration: <pre>{@code
+	 * new McpServerFeatures.SyncResourceRegistration(
+	 *     new Resource("docs", "Documentation files", "text/markdown"),
+	 *     request -> {
+	 *         String content = readFile(request.getPath());
+	 *         return new ReadResourceResult(content);
+	 *     }
+	 * )
+	 * }</pre>
+	 *
+	 * @param resource The resource definition including name, description, and MIME type
+	 * @param readHandler The function that handles resource read requests
+	 */
+	public record SyncResourceTemplateRegistration(McpSchema.ResourceTemplate resource,
 			Function<McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
 	}
 

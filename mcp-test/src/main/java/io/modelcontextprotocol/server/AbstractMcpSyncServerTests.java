@@ -38,6 +38,8 @@ public abstract class AbstractMcpSyncServerTests {
 
 	private static final String TEST_RESOURCE_URI = "test://resource";
 
+	private static final String TEST_RESOURCE_TEMPLATE_URI = "test://resource/{id}";
+
 	private static final String TEST_PROMPT_NAME = "test-prompt";
 
 	abstract protected ServerMcpTransport createMcpTransport();
@@ -208,6 +210,23 @@ public abstract class AbstractMcpSyncServerTests {
 	}
 
 	@Test
+	void testAddResourceTemplate() {
+		var mcpSyncServer = McpServer.sync(createMcpTransport())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(true, false).build())
+			.build();
+
+		McpSchema.ResourceTemplate resource = new McpSchema.ResourceTemplate(TEST_RESOURCE_TEMPLATE_URI,
+				"Test Resource", "text/plain", "Test resource description", null);
+		McpServerFeatures.SyncResourceTemplateRegistration registration = new McpServerFeatures.SyncResourceTemplateRegistration(
+				resource, req -> new ReadResourceResult(List.of()));
+
+		assertThatCode(() -> mcpSyncServer.addResourceTemplate(registration)).doesNotThrowAnyException();
+
+		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
+	}
+
+	@Test
 	void testAddResourceWithNullRegistration() {
 		var mcpSyncServer = McpServer.sync(createMcpTransport())
 			.serverInfo("test-server", "1.0.0")
@@ -215,6 +234,21 @@ public abstract class AbstractMcpSyncServerTests {
 			.build();
 
 		assertThatThrownBy(() -> mcpSyncServer.addResource((McpServerFeatures.SyncResourceRegistration) null))
+			.isInstanceOf(McpError.class)
+			.hasMessage("Resource must not be null");
+
+		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testAddResourceTemplateWithNullRegistration() {
+		var mcpSyncServer = McpServer.sync(createMcpTransport())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(true, false).build())
+			.build();
+
+		assertThatThrownBy(
+				() -> mcpSyncServer.addResourceTemplate((McpServerFeatures.SyncResourceTemplateRegistration) null))
 			.isInstanceOf(McpError.class)
 			.hasMessage("Resource must not be null");
 
@@ -235,10 +269,32 @@ public abstract class AbstractMcpSyncServerTests {
 	}
 
 	@Test
+	void testAddResourceTemplateWithoutCapability() {
+		var serverWithoutResources = McpServer.sync(createMcpTransport()).serverInfo("test-server", "1.0.0").build();
+
+		McpSchema.ResourceTemplate resource = new McpSchema.ResourceTemplate(TEST_RESOURCE_TEMPLATE_URI,
+				"Test Resource", "text/plain", "Test resource description", null);
+		McpServerFeatures.SyncResourceTemplateRegistration registration = new McpServerFeatures.SyncResourceTemplateRegistration(
+				resource, req -> new ReadResourceResult(List.of()));
+
+		assertThatThrownBy(() -> serverWithoutResources.addResourceTemplate(registration)).isInstanceOf(McpError.class)
+			.hasMessage("Server must be configured with resource capabilities");
+	}
+
+	@Test
 	void testRemoveResourceWithoutCapability() {
 		var serverWithoutResources = McpServer.sync(createMcpTransport()).serverInfo("test-server", "1.0.0").build();
 
 		assertThatThrownBy(() -> serverWithoutResources.removeResource(TEST_RESOURCE_URI)).isInstanceOf(McpError.class)
+			.hasMessage("Server must be configured with resource capabilities");
+	}
+
+	@Test
+	void testRemoveResourceTemplateWithoutCapability() {
+		var serverWithoutResources = McpServer.sync(createMcpTransport()).serverInfo("test-server", "1.0.0").build();
+
+		assertThatThrownBy(() -> serverWithoutResources.removeResourceTemplate(TEST_RESOURCE_TEMPLATE_URI))
+			.isInstanceOf(McpError.class)
 			.hasMessage("Server must be configured with resource capabilities");
 	}
 
