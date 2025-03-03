@@ -9,9 +9,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
+import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * @author Christian Tzolov
@@ -26,16 +29,46 @@ public class McpSchemaTests {
 	void testTextContent() throws Exception {
 		McpSchema.TextContent test = new McpSchema.TextContent("XXX");
 		String value = mapper.writeValueAsString(test);
-		assertEquals("""
-				{"type":"text","text":"XXX"}""", value);
+		assertThat(value).isEqualTo("""
+				{"type":"text","text":"XXX"}""");
+	}
+
+	@Test
+	void testTextContentDeserialization() throws Exception {
+		McpSchema.TextContent textContent = mapper.readValue("""
+				{"type":"text","text":"XXX"}""", McpSchema.TextContent.class);
+
+		assertThat(textContent).isNotNull();
+		assertThat(textContent.type()).isEqualTo("text");
+		assertThat(textContent.text()).isEqualTo("XXX");
+	}
+
+	@Test
+	void testContentDeserializationWrongType() throws Exception {
+
+		assertThatThrownBy(() -> mapper.readValue("""
+				{"type":"WRONG","text":"XXX"}""", McpSchema.TextContent.class))
+			.isInstanceOf(InvalidTypeIdException.class)
+			.hasMessageContaining(
+					"Could not resolve type id 'WRONG' as a subtype of `io.modelcontextprotocol.spec.McpSchema$TextContent`: known type ids = [image, resource, text]");
 	}
 
 	@Test
 	void testImageContent() throws Exception {
 		McpSchema.ImageContent test = new McpSchema.ImageContent(null, null, "base64encodeddata", "image/png");
 		String value = mapper.writeValueAsString(test);
-		assertEquals("""
-				{"type":"image","data":"base64encodeddata","mimeType":"image/png"}""", value);
+		assertThat(value).isEqualTo("""
+				{"type":"image","data":"base64encodeddata","mimeType":"image/png"}""");
+	}
+
+	@Test
+	void testImageContentDeserialization() throws Exception {
+		McpSchema.ImageContent imageContent = mapper.readValue("""
+				{"type":"image","data":"base64encodeddata","mimeType":"image/png"}""", McpSchema.ImageContent.class);
+		assertThat(imageContent).isNotNull();
+		assertThat(imageContent.type()).isEqualTo("image");
+		assertThat(imageContent.data()).isEqualTo("base64encodeddata");
+		assertThat(imageContent.mimeType()).isEqualTo("image/png");
 	}
 
 	@Test
@@ -46,10 +79,23 @@ public class McpSchemaTests {
 		McpSchema.EmbeddedResource test = new McpSchema.EmbeddedResource(null, null, resourceContents);
 
 		String value = mapper.writeValueAsString(test);
-		assertEquals(
+		assertThat(value).isEqualTo(
+				"""
+						{"type":"resource","resource":{"uri":"resource://test","mimeType":"text/plain","text":"Sample resource content"}}""");
+	}
+
+	@Test
+	void testEmbeddedResourceDeserialization() throws Exception {
+		McpSchema.EmbeddedResource embeddedResource = mapper.readValue(
 				"""
 						{"type":"resource","resource":{"uri":"resource://test","mimeType":"text/plain","text":"Sample resource content"}}""",
-				value);
+				McpSchema.EmbeddedResource.class);
+		assertThat(embeddedResource).isNotNull();
+		assertThat(embeddedResource.type()).isEqualTo("resource");
+		assertThat(embeddedResource.resource()).isNotNull();
+		assertThat(embeddedResource.resource().uri()).isEqualTo("resource://test");
+		assertThat(embeddedResource.resource().mimeType()).isEqualTo("text/plain");
+		assertThat(((TextResourceContents) embeddedResource.resource()).text()).isEqualTo("Sample resource content");
 	}
 
 	@Test
@@ -60,10 +106,24 @@ public class McpSchemaTests {
 		McpSchema.EmbeddedResource test = new McpSchema.EmbeddedResource(null, null, resourceContents);
 
 		String value = mapper.writeValueAsString(test);
-		assertEquals(
+		assertThat(value).isEqualTo(
+				"""
+						{"type":"resource","resource":{"uri":"resource://test","mimeType":"application/octet-stream","blob":"base64encodedblob"}}""");
+	}
+
+	@Test
+	void testEmbeddedResourceWithBlobContentsDeserialization() throws Exception {
+		McpSchema.EmbeddedResource embeddedResource = mapper.readValue(
 				"""
 						{"type":"resource","resource":{"uri":"resource://test","mimeType":"application/octet-stream","blob":"base64encodedblob"}}""",
-				value);
+				McpSchema.EmbeddedResource.class);
+		assertThat(embeddedResource).isNotNull();
+		assertThat(embeddedResource.type()).isEqualTo("resource");
+		assertThat(embeddedResource.resource()).isNotNull();
+		assertThat(embeddedResource.resource().uri()).isEqualTo("resource://test");
+		assertThat(embeddedResource.resource().mimeType()).isEqualTo("application/octet-stream");
+		assertThat(((McpSchema.BlobResourceContents) embeddedResource.resource()).blob())
+			.isEqualTo("base64encodedblob");
 	}
 
 	// JSON-RPC Message Types Tests
@@ -77,8 +137,8 @@ public class McpSchemaTests {
 				params);
 
 		String value = mapper.writeValueAsString(request);
-		assertEquals("""
-				{"jsonrpc":"2.0","method":"method_name","id":1,"params":{"key":"value"}}""", value);
+		assertThat(value).isEqualTo("""
+				{"jsonrpc":"2.0","method":"method_name","id":1,"params":{"key":"value"}}""");
 	}
 
 	@Test
@@ -90,8 +150,8 @@ public class McpSchemaTests {
 				"notification_method", params);
 
 		String value = mapper.writeValueAsString(notification);
-		assertEquals("""
-				{"jsonrpc":"2.0","method":"notification_method","params":{"key":"value"}}""", value);
+		assertThat(value).isEqualTo("""
+				{"jsonrpc":"2.0","method":"notification_method","params":{"key":"value"}}""");
 	}
 
 	@Test
@@ -102,8 +162,8 @@ public class McpSchemaTests {
 		McpSchema.JSONRPCResponse response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, 1, result, null);
 
 		String value = mapper.writeValueAsString(response);
-		assertEquals("""
-				{"jsonrpc":"2.0","id":1,"result":{"result_key":"result_value"}}""", value);
+		assertThat(value).isEqualTo("""
+				{"jsonrpc":"2.0","id":1,"result":{"result_key":"result_value"}}""");
 	}
 
 	@Test
@@ -114,8 +174,8 @@ public class McpSchemaTests {
 		McpSchema.JSONRPCResponse response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, 1, null, error);
 
 		String value = mapper.writeValueAsString(response);
-		assertEquals("""
-				{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"Invalid request"}}""", value);
+		assertThat(value).isEqualTo("""
+				{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"Invalid request"}}""");
 	}
 
 	// Initialization Tests
@@ -129,14 +189,12 @@ public class McpSchemaTests {
 
 		McpSchema.Implementation clientInfo = new McpSchema.Implementation("test-client", "1.0.0");
 
-		McpSchema.InitializeRequest request = new McpSchema.InitializeRequest(McpSchema.LATEST_PROTOCOL_VERSION,
-				capabilities, clientInfo);
+		McpSchema.InitializeRequest request = new McpSchema.InitializeRequest("2024-11-05", capabilities, clientInfo);
 
 		String value = mapper.writeValueAsString(request);
-		assertEquals(
+		assertThat(value).isEqualTo(
 				"""
-						{"protocolVersion":"2024-11-05","capabilities":{"roots":{"listChanged":true},"sampling":{}},"clientInfo":{"name":"test-client","version":"1.0.0"}}""",
-				value);
+						{"protocolVersion":"2024-11-05","capabilities":{"roots":{"listChanged":true},"sampling":{}},"clientInfo":{"name":"test-client","version":"1.0.0"}}""");
 	}
 
 	@Test
@@ -150,14 +208,13 @@ public class McpSchemaTests {
 
 		McpSchema.Implementation serverInfo = new McpSchema.Implementation("test-server", "1.0.0");
 
-		McpSchema.InitializeResult result = new McpSchema.InitializeResult(McpSchema.LATEST_PROTOCOL_VERSION,
-				capabilities, serverInfo, "Server initialized successfully");
+		McpSchema.InitializeResult result = new McpSchema.InitializeResult("2024-11-05", capabilities, serverInfo,
+				"Server initialized successfully");
 
 		String value = mapper.writeValueAsString(result);
-		assertEquals(
+		assertThat(value).isEqualTo(
 				"""
-						{"protocolVersion":"2024-11-05","capabilities":{"logging":{},"prompts":{"listChanged":true},"resources":{"subscribe":true,"listChanged":true},"tools":{"listChanged":true}},"serverInfo":{"name":"test-server","version":"1.0.0"},"instructions":"Server initialized successfully"}""",
-				value);
+						{"protocolVersion":"2024-11-05","capabilities":{"logging":{},"prompts":{"listChanged":true},"resources":{"subscribe":true,"listChanged":true},"tools":{"listChanged":true}},"serverInfo":{"name":"test-server","version":"1.0.0"},"instructions":"Server initialized successfully"}""");
 	}
 
 	// Resource Tests
@@ -171,10 +228,9 @@ public class McpSchemaTests {
 				"text/plain", annotations);
 
 		String value = mapper.writeValueAsString(resource);
-		assertEquals(
+		assertThat(value).isEqualTo(
 				"""
-						{"uri":"resource://test","name":"Test Resource","description":"A test resource","mimeType":"text/plain","annotations":{"audience":["user","assistant"],"priority":0.8}}""",
-				value);
+						{"uri":"resource://test","name":"Test Resource","description":"A test resource","mimeType":"text/plain","annotations":{"audience":["user","assistant"],"priority":0.8}}""");
 	}
 
 	@Test
@@ -185,10 +241,9 @@ public class McpSchemaTests {
 				"A test resource template", "text/plain", annotations);
 
 		String value = mapper.writeValueAsString(template);
-		assertEquals(
+		assertThat(value).isEqualTo(
 				"""
-						{"uriTemplate":"resource://{param}/test","name":"Test Template","description":"A test resource template","mimeType":"text/plain","annotations":{"audience":["user"],"priority":0.5}}""",
-				value);
+						{"uriTemplate":"resource://{param}/test","name":"Test Template","description":"A test resource template","mimeType":"text/plain","annotations":{"audience":["user"],"priority":0.5}}""");
 	}
 
 	@Test
@@ -203,10 +258,9 @@ public class McpSchemaTests {
 				"next-cursor");
 
 		String value = mapper.writeValueAsString(result);
-		assertEquals(
+		assertThat(value).isEqualTo(
 				"""
-						{"resources":[{"uri":"resource://test1","name":"Test Resource 1","description":"First test resource","mimeType":"text/plain"},{"uri":"resource://test2","name":"Test Resource 2","description":"Second test resource","mimeType":"application/json"}],"nextCursor":"next-cursor"}""",
-				value);
+						{"resources":[{"uri":"resource://test1","name":"Test Resource 1","description":"First test resource","mimeType":"text/plain"},{"uri":"resource://test2","name":"Test Resource 2","description":"Second test resource","mimeType":"application/json"}],"nextCursor":"next-cursor"}""");
 	}
 
 	@Test
@@ -221,10 +275,9 @@ public class McpSchemaTests {
 				Arrays.asList(template1, template2), "next-cursor");
 
 		String value = mapper.writeValueAsString(result);
-		assertEquals(
+		assertThat(value).isEqualTo(
 				"""
-						{"resourceTemplates":[{"uriTemplate":"resource://{param}/test1","name":"Test Template 1","description":"First test template","mimeType":"text/plain"},{"uriTemplate":"resource://{param}/test2","name":"Test Template 2","description":"Second test template","mimeType":"application/json"}],"nextCursor":"next-cursor"}""",
-				value);
+						{"resourceTemplates":[{"uriTemplate":"resource://{param}/test1","name":"Test Template 1","description":"First test template","mimeType":"text/plain"},{"uriTemplate":"resource://{param}/test2","name":"Test Template 2","description":"Second test template","mimeType":"application/json"}],"nextCursor":"next-cursor"}""");
 	}
 
 	@Test
@@ -232,8 +285,8 @@ public class McpSchemaTests {
 		McpSchema.ReadResourceRequest request = new McpSchema.ReadResourceRequest("resource://test");
 
 		String value = mapper.writeValueAsString(request);
-		assertEquals("""
-				{"uri":"resource://test"}""", value);
+		assertThat(value).isEqualTo("""
+				{"uri":"resource://test"}""");
 	}
 
 	@Test
@@ -247,10 +300,9 @@ public class McpSchemaTests {
 		McpSchema.ReadResourceResult result = new McpSchema.ReadResourceResult(Arrays.asList(contents1, contents2));
 
 		String value = mapper.writeValueAsString(result);
-		assertEquals(
+		assertThat(value).isEqualTo(
 				"""
-						{"contents":[{"uri":"resource://test1","mimeType":"text/plain","text":"Sample text content"},{"uri":"resource://test2","mimeType":"application/octet-stream","blob":"base64encodedblob"}]}""",
-				value);
+						{"contents":[{"uri":"resource://test1","mimeType":"text/plain","text":"Sample text content"},{"uri":"resource://test2","mimeType":"application/octet-stream","blob":"base64encodedblob"}]}""");
 	}
 
 	// Prompt Tests
@@ -264,10 +316,9 @@ public class McpSchemaTests {
 		McpSchema.Prompt prompt = new McpSchema.Prompt("test-prompt", "A test prompt", Arrays.asList(arg1, arg2));
 
 		String value = mapper.writeValueAsString(prompt);
-		assertEquals(
+		assertThat(value).isEqualTo(
 				"""
-						{"name":"test-prompt","description":"A test prompt","arguments":[{"name":"arg1","description":"First argument","required":true},{"name":"arg2","description":"Second argument","required":false}]}""",
-				value);
+						{"name":"test-prompt","description":"A test prompt","arguments":[{"name":"arg1","description":"First argument","required":true},{"name":"arg2","description":"Second argument","required":false}]}""");
 	}
 
 	@Test
@@ -277,8 +328,8 @@ public class McpSchemaTests {
 		McpSchema.PromptMessage message = new McpSchema.PromptMessage(McpSchema.Role.USER, content);
 
 		String value = mapper.writeValueAsString(message);
-		assertEquals("""
-				{"role":"user","content":{"type":"text","text":"Hello, world!"}}""", value);
+		assertThat(value).isEqualTo("""
+				{"role":"user","content":{"type":"text","text":"Hello, world!"}}""");
 	}
 
 	@Test
@@ -293,10 +344,9 @@ public class McpSchemaTests {
 				"next-cursor");
 
 		String value = mapper.writeValueAsString(result);
-		assertEquals(
+		assertThat(value).isEqualTo(
 				"""
-						{"prompts":[{"name":"prompt1","description":"First prompt","arguments":[{"name":"arg","description":"An argument","required":true}]},{"name":"prompt2","description":"Second prompt","arguments":[]}],"nextCursor":"next-cursor"}""",
-				value);
+						{"prompts":[{"name":"prompt1","description":"First prompt","arguments":[{"name":"arg","description":"An argument","required":true}]},{"name":"prompt2","description":"Second prompt","arguments":[]}],"nextCursor":"next-cursor"}""");
 	}
 
 	@Test
@@ -309,11 +359,8 @@ public class McpSchemaTests {
 
 		String value = mapper.writeValueAsString(request);
 
-		// Use Jackson to parse both the expected and actual JSON to compare them as
-		// objects
-		// This ignores the order of properties in JSON objects
-		assertEquals(mapper.readTree("""
-				{"name":"test-prompt","arguments":{"arg1":"value1","arg2":42}}"""), mapper.readTree(value));
+		assertThat(mapper.readTree(value)).isEqualTo(mapper.readTree("""
+				{"name":"test-prompt","arguments":{"arg1":"value1","arg2":42}}"""));
 	}
 
 	@Test
@@ -329,10 +376,9 @@ public class McpSchemaTests {
 				Arrays.asList(message1, message2));
 
 		String value = mapper.writeValueAsString(result);
-		assertEquals(
+		assertThat(value).isEqualTo(
 				"""
-						{"description":"A test prompt result","messages":[{"role":"assistant","content":{"type":"text","text":"System message"}},{"role":"user","content":{"type":"text","text":"User message"}}]}""",
-				value);
+						{"description":"A test prompt result","messages":[{"role":"assistant","content":{"type":"text","text":"System message"}},{"role":"user","content":{"type":"text","text":"User message"}}]}""");
 	}
 
 	// Tool Tests
@@ -357,10 +403,9 @@ public class McpSchemaTests {
 		McpSchema.Tool tool = new McpSchema.Tool("test-tool", "A test tool", schemaJson);
 
 		String value = mapper.writeValueAsString(tool);
-		assertEquals(
+		assertThat(value).isEqualTo(
 				"""
-						{"name":"test-tool","description":"A test tool","inputSchema":{"type":"object","properties":{"name":{"type":"string"},"value":{"type":"number"}},"required":["name"]}}""",
-				value);
+						{"name":"test-tool","description":"A test tool","inputSchema":{"type":"object","properties":{"name":{"type":"string"},"value":{"type":"number"}},"required":["name"]}}""");
 	}
 
 	@Test
@@ -372,8 +417,8 @@ public class McpSchemaTests {
 		McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("test-tool", arguments);
 
 		String value = mapper.writeValueAsString(request);
-		assertEquals("""
-				{"name":"test-tool","arguments":{"name":"test","value":42}}""", value);
+		assertThat(value).isEqualTo("""
+				{"name":"test-tool","arguments":{"name":"test","value":42}}""");
 	}
 
 	@Test
@@ -383,8 +428,8 @@ public class McpSchemaTests {
 		McpSchema.CallToolResult result = new McpSchema.CallToolResult(Collections.singletonList(content), false);
 
 		String value = mapper.writeValueAsString(result);
-		assertEquals("""
-				{"content":[{"type":"text","text":"Tool execution result"}],"isError":false}""", value);
+		assertThat(value).isEqualTo("""
+				{"content":[{"type":"text","text":"Tool execution result"}],"isError":false}""");
 	}
 
 	// Sampling Tests
@@ -409,10 +454,9 @@ public class McpSchemaTests {
 				Arrays.asList("STOP", "END"), metadata);
 
 		String value = mapper.writeValueAsString(request);
-		assertEquals(
+		assertThat(value).isEqualTo(
 				"""
-						{"messages":[{"role":"user","content":{"type":"text","text":"User message"}}],"modelPreferences":{"hints":[{"name":"gpt-4"}],"costPriority":0.3,"speedPriority":0.7,"intelligencePriority":0.9},"systemPrompt":"You are a helpful assistant","includeContext":"this_server","temperature":0.7,"maxTokens":1000,"stopSequences":["STOP","END"],"metadata":{"session":"test-session"}}""",
-				value);
+						{"messages":[{"role":"user","content":{"type":"text","text":"User message"}}],"modelPreferences":{"hints":[{"name":"gpt-4"}],"costPriority":0.3,"speedPriority":0.7,"intelligencePriority":0.9},"systemPrompt":"You are a helpful assistant","includeContext":"this_server","temperature":0.7,"maxTokens":1000,"stopSequences":["STOP","END"],"metadata":{"session":"test-session"}}""");
 	}
 
 	@Test
@@ -423,10 +467,9 @@ public class McpSchemaTests {
 				"gpt-4", McpSchema.CreateMessageResult.StopReason.END_TURN);
 
 		String value = mapper.writeValueAsString(result);
-		assertEquals(
+		assertThat(value).isEqualTo(
 				"""
-						{"role":"assistant","content":{"type":"text","text":"Assistant response"},"model":"gpt-4","stopReason":"end_turn"}""",
-				value);
+						{"role":"assistant","content":{"type":"text","text":"Assistant response"},"model":"gpt-4","stopReason":"end_turn"}""");
 	}
 
 	// Roots Tests
@@ -436,8 +479,8 @@ public class McpSchemaTests {
 		McpSchema.Root root = new McpSchema.Root("file:///path/to/root", "Test Root");
 
 		String value = mapper.writeValueAsString(root);
-		assertEquals("""
-				{"uri":"file:///path/to/root","name":"Test Root"}""", value);
+		assertThat(value).isEqualTo("""
+				{"uri":"file:///path/to/root","name":"Test Root"}""");
 	}
 
 	@Test
@@ -449,10 +492,9 @@ public class McpSchemaTests {
 		McpSchema.ListRootsResult result = new McpSchema.ListRootsResult(Arrays.asList(root1, root2));
 
 		String value = mapper.writeValueAsString(result);
-		assertEquals(
+		assertThat(value).isEqualTo(
 				"""
-						{"roots":[{"uri":"file:///path/to/root1","name":"First Root"},{"uri":"file:///path/to/root2","name":"Second Root"}]}""",
-				value);
+						{"roots":[{"uri":"file:///path/to/root1","name":"First Root"},{"uri":"file:///path/to/root2","name":"Second Root"}]}""");
 	}
 
 }

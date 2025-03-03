@@ -9,7 +9,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -965,7 +964,18 @@ public final class McpSchema {
 			@JsonSubTypes.Type(value = EmbeddedResource.class, name = "resource") })
 	public sealed interface Content permits TextContent, ImageContent, EmbeddedResource {
 
-		// String type();
+		default String type() {
+			if (this instanceof TextContent) {
+				return "text";
+			}
+			else if (this instanceof ImageContent) {
+				return "image";
+			}
+			else if (this instanceof EmbeddedResource) {
+				return "resource";
+			}
+			throw new IllegalArgumentException("Unknown content type: " + this);
+		}
 
 	}
 
