@@ -11,7 +11,7 @@
 	<artifactId>mcp</artifactId>
 	<packaging>jar</packaging>
 	<name>Java MCP SDK</name>
-	<description>Java SDK implementation of the Model Context Protocol, enabling seamless integration with language models and AI tools</description>	
+	<description>Java SDK implementation of the Model Context Protocol, enabling seamless integration with language models and AI tools</description>
 	<url>https://github.com/modelcontextprotocol/java-sdk</url>
 
 	<scm>
@@ -51,7 +51,7 @@
 					</execution>
 				</executions>
 			</plugin>
-			
+
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-jar-plugin</artifactId>
@@ -158,12 +158,20 @@
 			<scope>test</scope>
 		</dependency>
 
+		<dependency>
+			<groupId>net.javacrumbs.json-unit</groupId>
+			<artifactId>json-unit-assertj</artifactId>
+			<version>${json-unit-assertj.version}</version>
+			<scope>test</scope>
+		</dependency>
+
+
 		<!-- Used by the HttpServletSseServerTransport -->
 		<dependency>
 			<groupId>jakarta.servlet</groupId>
 			<artifactId>jakarta.servlet-api</artifactId>
 			<version>${jakarta.servlet.version}</version>
-			<scope>provided</scope>		
+			<scope>provided</scope>
 		</dependency>
 
 		<!-- Tomcat dependencies for testing -->
