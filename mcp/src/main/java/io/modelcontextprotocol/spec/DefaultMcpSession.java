@@ -35,6 +35,7 @@ import reactor.core.publisher.MonoSink;
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
  */
+// TODO: DefaultMcpSession is only relevant to the client-side.
 public class DefaultMcpSession implements McpSession {
 
 	/** Logger for this class */
