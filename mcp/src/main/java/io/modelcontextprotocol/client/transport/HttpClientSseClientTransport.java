@@ -86,7 +86,7 @@ public class HttpClientSseClientTransport implements ClientMcpTransport {
 	private volatile boolean isClosing = false;
 
 	/** Latch for coordinating endpoint discovery */
-	private CountDownLatch closeLatch = new CountDownLatch(1);
+	private final CountDownLatch closeLatch = new CountDownLatch(1);
 
 	/** Holds the discovered message endpoint URL */
 	private final AtomicReference<String> messageEndpoint = new AtomicReference<>();
