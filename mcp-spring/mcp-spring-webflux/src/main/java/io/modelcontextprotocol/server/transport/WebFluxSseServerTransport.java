@@ -1,7 +1,6 @@
 package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -89,16 +88,24 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 
 	private final RouterFunction<?> routerFunction;
 
-	private ServerMcpSession.InitHandler initHandler;
-
-	private Map<String, ServerMcpSession.RequestHandler<?>> requestHandlers;
-
-	private Map<String, ServerMcpSession.NotificationHandler> notificationHandlers;
+	private ServerMcpSession.Factory sessionFactory;
 
 	/**
 	 * Map of active client sessions, keyed by session ID.
 	 */
-	private final ConcurrentHashMap<String, WebFluxMcpSession> sessions = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<String, ServerMcpSession> sessions = new ConcurrentHashMap<>();
+
+	// FIXME: This is a bit clumsy. The McpAsyncServer handles global notifications
+	//  using the transport and we need access to child transports for each session to
+	//  use the sendMessage method. Ideally, the particular transport would be an
+	//  abstraction of a specialized session that can handle only notifications and we
+	//  could delegate to all child sessions without directly going through the transport.
+	//  The conversion from a notification to message happens both in McpAsyncServer
+	//  and in ServerMcpSession and it would be beneficial to have a unified interface
+	//  for both. An MCP server implementation can use both McpServerExchange and
+	//  Mcp(Sync|Async)Server to send notifications so the capability needs to lie in
+	//  both places.
+	private final ConcurrentHashMap<String, WebFluxMcpSessionTransport> sessionTransports = new ConcurrentHashMap<>();
 
 	/**
 	 * Flag indicating if the transport is shutting down.
@@ -143,12 +150,8 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 	}
 
 	@Override
-	public void registerHandlers(ServerMcpSession.InitHandler initHandler,
-			Map<String, ServerMcpSession.RequestHandler<?>> requestHandlers,
-			Map<String, ServerMcpSession.NotificationHandler> notificationHandlers) {
-		this.initHandler = initHandler;
-		this.requestHandlers = requestHandlers;
-		this.notificationHandlers = notificationHandlers;
+	public void setSessionFactory(ServerMcpSession.Factory sessionFactory) {
+		this.sessionFactory = sessionFactory;
 	}
 
 	/**
@@ -177,7 +180,7 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 
 		logger.debug("Attempting to broadcast message to {} active sessions", sessions.size());
 
-		return Flux.fromStream(sessions.values().stream())
+		return Flux.fromStream(sessionTransports.values().stream())
 			.flatMap(session -> session.sendMessage(message)
 				.doOnError(e -> logger.error("Failed to " + "send message to session {}: {}", session.sessionId,
 						e.getMessage()))
@@ -218,7 +221,7 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 	public Mono<Void> closeGracefully() {
 		return Flux.fromIterable(sessions.values())
 			.doFirst(() -> logger.debug("Initiating graceful shutdown with {} active sessions", sessions.size()))
-			.doOnNext(WebFluxMcpSession::close)
+			.flatMap(ServerMcpSession::closeGracefully)
 			.then();
 	}
 
@@ -264,9 +267,11 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 			.body(Flux.<ServerSentEvent<?>>create(sink -> {
 				String sessionId = UUID.randomUUID().toString();
 				logger.debug("Creating new SSE connection for session: {}", sessionId);
-				WebFluxMcpSession session = new WebFluxMcpSession(sessionId, sink, initHandler, requestHandlers,
-						notificationHandlers);
-				sessions.put(sessionId, session);
+				WebFluxMcpSessionTransport
+						sessionTransport = new WebFluxMcpSessionTransport(sessionId, sink);
+
+				sessions.put(sessionId, sessionFactory.create(sessionTransport));
+				sessionTransports.put(sessionId, sessionTransport);
 
 				// Send initial endpoint event
 				logger.debug("Sending initial endpoint event to session: {}", sessionId);
@@ -323,15 +328,13 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 		});
 	}
 
-	private class WebFluxMcpSession extends ServerMcpSession {
+	private class WebFluxMcpSessionTransport implements ServerMcpTransport.Child {
 
 		final String sessionId;
 
 		private final FluxSink<ServerSentEvent<?>> sink;
 
-		public WebFluxMcpSession(String sessionId, FluxSink<ServerSentEvent<?>> sink, InitHandler initHandler,
-				Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
-			super(WebFluxSseServerTransport.this, initHandler, requestHandlers, notificationHandlers);
+		public WebFluxMcpSessionTransport(String sessionId, FluxSink<ServerSentEvent<?>> sink) {
 			this.sessionId = sessionId;
 			this.sink = sink;
 		}
@@ -356,6 +359,11 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 				Throwable exception = Exceptions.unwrap(e);
 				sink.error(exception);
 			}).then();
+		}
+
+		@Override
+		public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
+			return WebFluxSseServerTransport.this.unmarshalFrom(data, typeRef);
 		}
 
 		@Override
