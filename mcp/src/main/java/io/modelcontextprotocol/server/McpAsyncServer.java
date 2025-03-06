@@ -157,18 +157,17 @@ public class McpAsyncServer {
 				asyncRootsListChangedNotificationHandler(rootsChangeConsumers));
 
 		this.transport = mcpTransport;
-		mcpTransport.registerHandlers(this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers);
+		mcpTransport.setSessionFactory(transport -> new ServerMcpSession(transport,
+				this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers));
 	}
 
 	// ---------------------------------------
 	// Lifecycle Management
 	// ---------------------------------------
 	private Mono<McpSchema.InitializeResult> asyncInitializeRequestHandler(
-			ServerMcpSession.ClientInitConsumer initConsumer, Object params) {
+			ServerMcpSession.ClientInitConsumer initConsumer, McpSchema.InitializeRequest initializeRequest) {
 		return Mono.defer(() -> {
-			McpSchema.InitializeRequest initializeRequest = transport.unmarshalFrom(params,
-					new TypeReference<McpSchema.InitializeRequest>() {
-					});
+
 
 			initConsumer.init(initializeRequest.capabilities(), initializeRequest.clientInfo());
 

@@ -13,7 +13,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Sinks;
 
-public abstract class ServerMcpSession implements McpSession {
+public class ServerMcpSession implements McpSession {
 
 	private static final Logger logger = LoggerFactory.getLogger(ServerMcpSession.class);
 
@@ -48,12 +48,6 @@ public abstract class ServerMcpSession implements McpSession {
 		exchangeSink.tryEmitValue(new ServerMcpExchange(this, clientCapabilities, clientInfo));
 	}
 
-	public Mono<ServerMcpExchange> exchange() {
-		return exchangeSink.asMono();
-	}
-
-	protected abstract Mono<Void> sendMessage(McpSchema.JSONRPCMessage message);
-
 	private String generateRequestId() {
 		return this.sessionPrefix + "-" + this.requestCounter.getAndIncrement();
 	}
@@ -65,7 +59,7 @@ public abstract class ServerMcpSession implements McpSession {
 			this.pendingResponses.put(requestId, sink);
 			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, method,
 					requestId, requestParams);
-			this.sendMessage(jsonrpcRequest).subscribe(v -> {
+			this.transport.sendMessage(jsonrpcRequest).subscribe(v -> {
 			}, error -> {
 				this.pendingResponses.remove(requestId);
 				sink.error(error);
@@ -89,7 +83,7 @@ public abstract class ServerMcpSession implements McpSession {
 	public Mono<Void> sendNotification(String method, Map<String, Object> params) {
 		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
 				method, params);
-		return this.sendMessage(jsonrpcNotification);
+		return this.transport.sendMessage(jsonrpcNotification);
 	}
 
 	public Mono<Void> handle(McpSchema.JSONRPCMessage message) {
@@ -114,8 +108,8 @@ public abstract class ServerMcpSession implements McpSession {
 							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 									error.getMessage(), null));
 					// TODO: Should the error go to SSE or back as POST return?
-					return this.sendMessage(errorResponse).then(Mono.empty());
-				}).flatMap(this::sendMessage);
+					return this.transport.sendMessage(errorResponse).then(Mono.empty());
+				}).flatMap(this.transport::sendMessage);
 			}
 			else if (message instanceof McpSchema.JSONRPCNotification notification) {
 				// TODO handle errors for communication to without initialization
@@ -142,7 +136,11 @@ public abstract class ServerMcpSession implements McpSession {
 			Mono<?> resultMono;
 			if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
 				// TODO handle situation where already initialized!
-				resultMono = this.initHandler.handle(new ClientInitConsumer(), request.params())
+				McpSchema.InitializeRequest initializeRequest =
+						transport.unmarshalFrom(request.params(),
+						new TypeReference<McpSchema.InitializeRequest>() {
+						});
+				resultMono = this.initHandler.handle(new ClientInitConsumer(), initializeRequest)
 					.doOnNext(initResult -> this.isInitialized = true);
 			}
 			else {
@@ -196,6 +194,16 @@ public abstract class ServerMcpSession implements McpSession {
 		}
 	}
 
+	@Override
+	public Mono<Void> closeGracefully() {
+		return this.transport.closeGracefully();
+	}
+
+	@Override
+	public void close() {
+		this.transport.close();
+	}
+
 	public class ClientInitConsumer {
 
 		public void init(McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo) {
@@ -206,7 +214,8 @@ public abstract class ServerMcpSession implements McpSession {
 
 	public interface InitHandler {
 
-		Mono<McpSchema.InitializeResult> handle(ClientInitConsumer clientInitConsumer, Object params);
+		Mono<McpSchema.InitializeResult> handle(ClientInitConsumer clientInitConsumer,
+				McpSchema.InitializeRequest initializeRequest);
 
 	}
 
@@ -220,6 +229,11 @@ public abstract class ServerMcpSession implements McpSession {
 
 		Mono<T> handle(ServerMcpExchange exchange, Object params);
 
+	}
+
+	@FunctionalInterface
+	public interface Factory {
+		ServerMcpSession create(ServerMcpTransport.Child sessionTransport);
 	}
 
 }

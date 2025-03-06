@@ -3,7 +3,6 @@
 */
 package io.modelcontextprotocol.spec;
 
-import java.util.Map;
 import java.util.function.Function;
 
 import reactor.core.publisher.Mono;
@@ -20,8 +19,12 @@ public interface ServerMcpTransport extends McpTransport {
 		throw new IllegalStateException("Server transport does not support connect method");
 	}
 
-	void registerHandlers(ServerMcpSession.InitHandler initHandler,
-			Map<String, ServerMcpSession.RequestHandler<?>> requestHandlers,
-			Map<String, ServerMcpSession.NotificationHandler> notificationHandlers);
+	void setSessionFactory(ServerMcpSession.Factory sessionFactory);
 
+	interface Child extends McpTransport {
+		@Override
+		default Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
+			throw new IllegalStateException("Server transport does not support connect method");
+		}
+	}
 }
