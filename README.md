@@ -10,7 +10,7 @@ This SDK enables Java applications to interact with AI models and tools through 
 For comprehensive guides and SDK API documentation, visit the [MCP Java SDK Reference Documentation](https://modelcontextprotocol.io/sdk/java/mcp-overview).
 
 #### Quarkus MCP servers documentation
-[Quarkus MCP Servers](https://github.com/quarkiverse/quarkus-mcp-servers) provides Quarkus integration with several servers implemented as Quarkus extensions.
+[Quarkus MCP Servers](https://github.com/quarkiverse/quarkus-mcp-servers) provides Quarkus integration with several servers implemented as Quarkus extensions. Bootstrap your AI applications with MCP support using [Quarkus code](https://code.quarkus.io).
 
 #### Spring AI MCP documentation
 [Spring AI MCP](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) extends the MCP Java SDK with Spring Boot integration, providing both [client](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html) and [server](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-server-boot-starter-docs.html) starters. Bootstrap your AI applications with MCP support using [Spring Initializer](https://start.spring.io).
