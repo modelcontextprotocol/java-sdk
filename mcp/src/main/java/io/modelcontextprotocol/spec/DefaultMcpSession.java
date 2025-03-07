@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * Default implementation of the MCP (Model Context Protocol) session that manages
@@ -135,13 +136,13 @@ public class DefaultMcpSession implements McpSession {
 			}
 			else if (message instanceof McpSchema.JSONRPCRequest request) {
 				logger.debug("Received request: {}", request);
-				handleIncomingRequest(request).subscribe(response -> transport.sendMessage(response).subscribe(),
-						error -> {
-							var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-									null, new McpSchema.JSONRPCResponse.JSONRPCError(
-											McpSchema.ErrorCodes.INTERNAL_ERROR, error.getMessage(), null));
-							transport.sendMessage(errorResponse).subscribe();
-						});
+				handleIncomingRequest(request).flatMap(transport::sendMessage).onErrorResume(error -> {
+					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
+							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+									error.getMessage(), null));
+					return transport.sendMessage(errorResponse);
+				}).subscribe();
+
 			}
 			else if (message instanceof McpSchema.JSONRPCNotification notification) {
 				logger.debug("Received notification: {}", notification);
