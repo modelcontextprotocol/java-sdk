@@ -336,7 +336,7 @@ public class McpAsyncClient {
 	}
 
 	// --------------------------
-	// Basic Utilites
+	// Basic Utilities
 	// --------------------------
 
 	/**

@@ -107,7 +107,7 @@ public class DefaultMcpSession implements McpSession {
 	public DefaultMcpSession(Duration requestTimeout, McpTransport transport,
 			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
 
-		Assert.notNull(requestTimeout, "The requstTimeout can not be null");
+		Assert.notNull(requestTimeout, "The requestTimeout can not be null");
 		Assert.notNull(transport, "The transport can not be null");
 		Assert.notNull(requestHandlers, "The requestHandlers can not be null");
 		Assert.notNull(notificationHandlers, "The notificationHandlers can not be null");
@@ -127,7 +127,7 @@ public class DefaultMcpSession implements McpSession {
 				logger.debug("Received Response: {}", response);
 				var sink = pendingResponses.remove(response.id());
 				if (sink == null) {
-					logger.warn("Unexpected response for unkown id {}", response.id());
+					logger.warn("Unexpected response for unknown id {}", response.id());
 				}
 				else {
 					sink.success(response);
