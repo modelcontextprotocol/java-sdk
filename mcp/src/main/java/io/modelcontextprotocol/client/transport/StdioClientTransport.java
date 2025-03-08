@@ -293,7 +293,7 @@ public class StdioClientTransport implements ClientMcpTransport {
 	 */
 	private void startOutboundProcessing() {
 		this.handleOutbound(messages -> messages
-			// this bit is important since writes come from user threads and we
+			// this bit is important since writes come from user threads, and we
 			// want to ensure that the actual writing happens on a dedicated thread
 			.publishOn(outboundScheduler)
 			.handle((message, s) -> {
