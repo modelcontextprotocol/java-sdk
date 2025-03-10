@@ -176,6 +176,7 @@ public final class McpSchema {
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record JSONRPCRequest( // @formatter:off
 			@JsonProperty("jsonrpc") String jsonrpc,
 			@JsonProperty("method") String method,
@@ -184,6 +185,7 @@ public final class McpSchema {
 	} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record JSONRPCNotification( // @formatter:off
 			@JsonProperty("jsonrpc") String jsonrpc,
 			@JsonProperty("method") String method,
@@ -191,6 +193,7 @@ public final class McpSchema {
 	} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record JSONRPCResponse( // @formatter:off
 			@JsonProperty("jsonrpc") String jsonrpc,
 			@JsonProperty("id") Object id,
@@ -198,6 +201,7 @@ public final class McpSchema {
 			@JsonProperty("error") JSONRPCError error) implements JSONRPCMessage {
 
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record JSONRPCError(
 			@JsonProperty("code") int code,
 			@JsonProperty("message") String message,
@@ -209,6 +213,7 @@ public final class McpSchema {
 	// Initialization
 	// ---------------------------
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record InitializeRequest( // @formatter:off
 		@JsonProperty("protocolVersion") String protocolVersion,
 		@JsonProperty("capabilities") ClientCapabilities capabilities,
@@ -239,6 +244,7 @@ public final class McpSchema {
 	 *
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ClientCapabilities( // @formatter:off
 		@JsonProperty("experimental") Map<String, Object> experimental,
 		@JsonProperty("roots") RootCapabilities roots,
@@ -253,7 +259,8 @@ public final class McpSchema {
 		 * @param listChanged Whether the client would send notification about roots
 		 * 		  has changed since the last time the server checked.
 		 */
-		@JsonInclude(JsonInclude.Include.NON_ABSENT)			
+		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)	
 		public record RootCapabilities(
 			@JsonProperty("listChanged") Boolean listChanged) {
 		}
@@ -303,6 +310,7 @@ public final class McpSchema {
 	}// @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ServerCapabilities( // @formatter:off
 		@JsonProperty("experimental") Map<String, Object> experimental,
 		@JsonProperty("logging") LoggingCapabilities logging,
@@ -375,6 +383,7 @@ public final class McpSchema {
 	} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Implementation(// @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("version") String version) {
@@ -413,6 +422,7 @@ public final class McpSchema {
 	 * optional. It is a number between 0 and 1.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Annotations( // @formatter:off
 		@JsonProperty("audience") List<Role> audience,
 		@JsonProperty("priority") Double priority) {
@@ -458,6 +468,7 @@ public final class McpSchema {
 	 * @see <a href="https://datatracker.ietf.org/doc/html/rfc6570">RFC 6570</a>
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ResourceTemplate( // @formatter:off
 		@JsonProperty("uriTemplate") String uriTemplate,
 		@JsonProperty("name") String name,
@@ -481,6 +492,7 @@ public final class McpSchema {
 	} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ReadResourceRequest( // @formatter:off
 		@JsonProperty("uri") String uri){
 	} // @formatter:on
@@ -499,11 +511,13 @@ public final class McpSchema {
 	 * it is up to the server how to interpret it.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record SubscribeRequest( // @formatter:off
 		@JsonProperty("uri") String uri){
 	} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record UnsubscribeRequest( // @formatter:off
 		@JsonProperty("uri") String uri){
 	} // @formatter:on
@@ -574,6 +588,7 @@ public final class McpSchema {
 	 * @param arguments A list of arguments to use for templating the prompt.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Prompt( // @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("description") String description,
@@ -588,6 +603,7 @@ public final class McpSchema {
 	 * @param required Whether this argument must be provided.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record PromptArgument( // @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("description") String description,
@@ -604,6 +620,7 @@ public final class McpSchema {
 	 * @param content The content of the message of type {@link Content}.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record PromptMessage( // @formatter:off
 		@JsonProperty("role") Role role,
 		@JsonProperty("content") Content content) {
@@ -630,6 +647,7 @@ public final class McpSchema {
 	 * @param arguments Arguments to use for templating the prompt.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record GetPromptRequest(// @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("arguments") Map<String, Object> arguments) implements Request {
@@ -667,7 +685,7 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	record JsonSchema( // @formatter:off
+	public record JsonSchema( // @formatter:off
 		@JsonProperty("type") String type,
 		@JsonProperty("properties") Map<String, Object> properties,
 		@JsonProperty("required") List<String> required,
@@ -688,6 +706,7 @@ public final class McpSchema {
 	 * arguments before sending them to the server.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Tool( // @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("description") String description,
@@ -742,6 +761,7 @@ public final class McpSchema {
 	// Sampling Interfaces
 	// ---------------------------
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ModelPreferences(// @formatter:off
 		@JsonProperty("hints") List<ModelHint> hints,
 		@JsonProperty("costPriority") Double costPriority,
@@ -750,10 +770,12 @@ public final class McpSchema {
 	} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ModelHint(@JsonProperty("name") String name) {
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record SamplingMessage(// @formatter:off
 		@JsonProperty("role") Role role,
 		@JsonProperty("content") Content content) {
@@ -761,6 +783,7 @@ public final class McpSchema {
 
 	// Sampling and Message Creation
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record CreateMessageRequest(// @formatter:off
 		@JsonProperty("messages") List<SamplingMessage> messages,
 		@JsonProperty("modelPreferences") ModelPreferences modelPreferences,
@@ -837,6 +860,7 @@ public final class McpSchema {
 	// Pagination Interfaces
 	// ---------------------------
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record PaginatedRequest(@JsonProperty("cursor") String cursor) {
 	}
 
@@ -848,6 +872,7 @@ public final class McpSchema {
 	// ---------------------------
 	// Progress and Logging
 	// ---------------------------
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ProgressNotification(// @formatter:off
 		@JsonProperty("progressToken") String progressToken,
 		@JsonProperty("progress") double progress,
@@ -864,6 +889,7 @@ public final class McpSchema {
 	 * @param logger The logger that generated the message.
 	 * @param data JSON-serializable logging data.
 	 */
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record LoggingMessageNotification(// @formatter:off
 		@JsonProperty("level") LoggingLevel level,
 		@JsonProperty("logger") String logger,
@@ -980,6 +1006,7 @@ public final class McpSchema {
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record TextContent( // @formatter:off
 		@JsonProperty("audience") List<Role> audience,
 		@JsonProperty("priority") Double priority,
@@ -991,6 +1018,7 @@ public final class McpSchema {
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ImageContent( // @formatter:off
 		@JsonProperty("audience") List<Role> audience,
 		@JsonProperty("priority") Double priority,
@@ -999,6 +1027,7 @@ public final class McpSchema {
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record EmbeddedResource( // @formatter:off
 		@JsonProperty("audience") List<Role> audience,
 		@JsonProperty("priority") Double priority,
@@ -1019,6 +1048,7 @@ public final class McpSchema {
 	 * for referencing the root in other parts of the application.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Root( // @formatter:off
 		@JsonProperty("uri") String uri,
 		@JsonProperty("name") String name) {
