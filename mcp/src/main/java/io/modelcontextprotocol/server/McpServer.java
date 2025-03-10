@@ -310,29 +310,29 @@ public interface McpServer {
 		 * Registers multiple resources with their handlers using a Map. This method is
 		 * useful when resources are dynamically generated or loaded from a configuration
 		 * source.
-		 * @param resourceRegsitrations Map of resource name to registration. Must not be
+		 * @param resourceRegistrations Map of resource name to registration. Must not be
 		 * null.
 		 * @return This builder instance for method chaining
-		 * @throws IllegalArgumentException if resourceRegsitrations is null
+		 * @throws IllegalArgumentException if resourceRegistrations is null
 		 * @see #resources(McpServerFeatures.AsyncResourceRegistration...)
 		 */
-		public AsyncSpec resources(Map<String, McpServerFeatures.AsyncResourceRegistration> resourceRegsitrations) {
-			Assert.notNull(resourceRegsitrations, "Resource handlers map must not be null");
-			this.resources.putAll(resourceRegsitrations);
+		public AsyncSpec resources(Map<String, McpServerFeatures.AsyncResourceRegistration> resourceRegistrations) {
+			Assert.notNull(resourceRegistrations, "Resource handlers map must not be null");
+			this.resources.putAll(resourceRegistrations);
 			return this;
 		}
 
 		/**
 		 * Registers multiple resources with their handlers using a List. This method is
 		 * useful when resources need to be added in bulk from a collection.
-		 * @param resourceRegsitrations List of resource registrations. Must not be null.
+		 * @param resourceRegistrations List of resource registrations. Must not be null.
 		 * @return This builder instance for method chaining
-		 * @throws IllegalArgumentException if resourceRegsitrations is null
+		 * @throws IllegalArgumentException if resourceRegistrations is null
 		 * @see #resources(McpServerFeatures.AsyncResourceRegistration...)
 		 */
-		public AsyncSpec resources(List<McpServerFeatures.AsyncResourceRegistration> resourceRegsitrations) {
-			Assert.notNull(resourceRegsitrations, "Resource handlers list must not be null");
-			for (McpServerFeatures.AsyncResourceRegistration resource : resourceRegsitrations) {
+		public AsyncSpec resources(List<McpServerFeatures.AsyncResourceRegistration> resourceRegistrations) {
+			Assert.notNull(resourceRegistrations, "Resource handlers list must not be null");
+			for (McpServerFeatures.AsyncResourceRegistration resource : resourceRegistrations) {
 				this.resources.put(resource.resource().uri(), resource);
 			}
 			return this;
@@ -688,29 +688,29 @@ public interface McpServer {
 		 * Registers multiple resources with their handlers using a Map. This method is
 		 * useful when resources are dynamically generated or loaded from a configuration
 		 * source.
-		 * @param resourceRegsitrations Map of resource name to registration. Must not be
+		 * @param resourceRegistrations Map of resource name to registration. Must not be
 		 * null.
 		 * @return This builder instance for method chaining
-		 * @throws IllegalArgumentException if resourceRegsitrations is null
+		 * @throws IllegalArgumentException if resourceRegistrations is null
 		 * @see #resources(McpServerFeatures.SyncResourceRegistration...)
 		 */
-		public SyncSpec resources(Map<String, McpServerFeatures.SyncResourceRegistration> resourceRegsitrations) {
-			Assert.notNull(resourceRegsitrations, "Resource handlers map must not be null");
-			this.resources.putAll(resourceRegsitrations);
+		public SyncSpec resources(Map<String, McpServerFeatures.SyncResourceRegistration> resourceRegistrations) {
+			Assert.notNull(resourceRegistrations, "Resource handlers map must not be null");
+			this.resources.putAll(resourceRegistrations);
 			return this;
 		}
 
 		/**
 		 * Registers multiple resources with their handlers using a List. This method is
 		 * useful when resources need to be added in bulk from a collection.
-		 * @param resourceRegsitrations List of resource registrations. Must not be null.
+		 * @param resourceRegistrations List of resource registrations. Must not be null.
 		 * @return This builder instance for method chaining
-		 * @throws IllegalArgumentException if resourceRegsitrations is null
+		 * @throws IllegalArgumentException if resourceRegistrations is null
 		 * @see #resources(McpServerFeatures.SyncResourceRegistration...)
 		 */
-		public SyncSpec resources(List<McpServerFeatures.SyncResourceRegistration> resourceRegsitrations) {
-			Assert.notNull(resourceRegsitrations, "Resource handlers list must not be null");
-			for (McpServerFeatures.SyncResourceRegistration resource : resourceRegsitrations) {
+		public SyncSpec resources(List<McpServerFeatures.SyncResourceRegistration> resourceRegistrations) {
+			Assert.notNull(resourceRegistrations, "Resource handlers list must not be null");
+			for (McpServerFeatures.SyncResourceRegistration resource : resourceRegistrations) {
 				this.resources.put(resource.resource().uri(), resource);
 			}
 			return this;
