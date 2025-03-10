@@ -685,7 +685,7 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	record JsonSchema( // @formatter:off
+	public record JsonSchema( // @formatter:off
 		@JsonProperty("type") String type,
 		@JsonProperty("properties") Map<String, Object> properties,
 		@JsonProperty("required") List<String> required,
