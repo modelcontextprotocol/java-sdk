@@ -5,6 +5,10 @@ import reactor.core.publisher.Mono;
 
 public class ServerMcpExchange {
 
+	// map(roots)
+	// map(resource_subscription)
+	// initialization state
+
 	private final ServerMcpSession session;
 
 	private final McpSchema.ClientCapabilities clientCapabilities;

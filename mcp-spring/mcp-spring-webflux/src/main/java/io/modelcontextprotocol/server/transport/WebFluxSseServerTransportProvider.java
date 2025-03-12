@@ -1,13 +1,15 @@
 package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
-import java.util.UUID;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpServerTransport;
+import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.ServerMcpSession;
 import io.modelcontextprotocol.spec.ServerMcpTransport;
 import io.modelcontextprotocol.util.Assert;
@@ -61,9 +63,10 @@ import org.springframework.web.reactive.function.server.ServerResponse;
  * @see ServerMcpTransport
  * @see ServerSentEvent
  */
-public class WebFluxSseServerTransport implements ServerMcpTransport {
+public class WebFluxSseServerTransportProvider implements McpServerTransportProvider {
 
-	private static final Logger logger = LoggerFactory.getLogger(WebFluxSseServerTransport.class);
+	private static final Logger logger = LoggerFactory.getLogger(
+			WebFluxSseServerTransportProvider.class);
 
 	/**
 	 * Event type for JSON-RPC messages sent through the SSE connection.
@@ -95,18 +98,6 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 	 */
 	private final ConcurrentHashMap<String, ServerMcpSession> sessions = new ConcurrentHashMap<>();
 
-	// FIXME: This is a bit clumsy. The McpAsyncServer handles global notifications
-	//  using the transport and we need access to child transports for each session to
-	//  use the sendMessage method. Ideally, the particular transport would be an
-	//  abstraction of a specialized session that can handle only notifications and we
-	//  could delegate to all child sessions without directly going through the transport.
-	//  The conversion from a notification to message happens both in McpAsyncServer
-	//  and in ServerMcpSession and it would be beneficial to have a unified interface
-	//  for both. An MCP server implementation can use both McpServerExchange and
-	//  Mcp(Sync|Async)Server to send notifications so the capability needs to lie in
-	//  both places.
-	private final ConcurrentHashMap<String, WebFluxMcpSessionTransport> sessionTransports = new ConcurrentHashMap<>();
-
 	/**
 	 * Flag indicating if the transport is shutting down.
 	 */
@@ -121,7 +112,7 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 	 * setup. Must not be null.
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
-	public WebFluxSseServerTransport(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
+	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
@@ -145,7 +136,7 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 	 * setup. Must not be null.
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
-	public WebFluxSseServerTransport(ObjectMapper objectMapper, String messageEndpoint) {
+	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint) {
 		this(objectMapper, messageEndpoint, DEFAULT_SSE_ENDPOINT);
 	}
 
@@ -167,12 +158,13 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 	 * <li>Attempts to send the event to all active sessions</li>
 	 * <li>Tracks and reports any delivery failures</li>
 	 * </ul>
-	 * @param message The JSON-RPC message to broadcast
+	 * @param method The JSON-RPC method to send to clients
+	 * @param params The method parameters to send to clients
 	 * @return A Mono that completes when the message has been sent to all sessions, or
 	 * errors if any session fails to receive the message
 	 */
 	@Override
-	public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+	public Mono<Void> notifyClients(String method, Map<String, Object> params) {
 		if (sessions.isEmpty()) {
 			logger.debug("No active sessions to broadcast message to");
 			return Mono.empty();
@@ -180,27 +172,13 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 
 		logger.debug("Attempting to broadcast message to {} active sessions", sessions.size());
 
-		return Flux.fromStream(sessionTransports.values().stream())
-			.flatMap(session -> session.sendMessage(message)
-				.doOnError(e -> logger.error("Failed to " + "send message to session {}: {}", session.sessionId,
+		return Flux.fromStream(sessions.values().stream())
+			.flatMap(session -> session.sendNotification(method, params)
+				.doOnError(e -> logger.error("Failed to " + "send message to session " +
+								"{}: {}", session.getId(),
 						e.getMessage()))
 				.onErrorComplete())
 			.then();
-	}
-
-	/**
-	 * Converts data from one type to another using the configured ObjectMapper. This
-	 * method is primarily used for converting between different representations of
-	 * JSON-RPC message data.
-	 * @param <T> The target type to convert to
-	 * @param data The source data to convert
-	 * @param typeRef Type reference describing the target type
-	 * @return The converted data
-	 * @throws IllegalArgumentException if the conversion fails
-	 */
-	@Override
-	public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-		return this.objectMapper.convertValue(data, typeRef);
 	}
 
 	/**
@@ -265,13 +243,13 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 		return ServerResponse.ok()
 			.contentType(MediaType.TEXT_EVENT_STREAM)
 			.body(Flux.<ServerSentEvent<?>>create(sink -> {
-				String sessionId = UUID.randomUUID().toString();
-				logger.debug("Creating new SSE connection for session: {}", sessionId);
-				WebFluxMcpSessionTransport
-						sessionTransport = new WebFluxMcpSessionTransport(sessionId, sink);
+				WebFluxMcpSessionTransport sessionTransport = new WebFluxMcpSessionTransport(sink);
 
-				sessions.put(sessionId, sessionFactory.create(sessionTransport));
-				sessionTransports.put(sessionId, sessionTransport);
+				ServerMcpSession session = sessionFactory.create(sessionTransport);
+				String sessionId = session.getId();
+
+				logger.debug("Created new SSE connection for session: {}", sessionId);
+				sessions.put(sessionId, session);
 
 				// Send initial endpoint event
 				logger.debug("Sending initial endpoint event to session: {}", sessionId);
@@ -328,14 +306,47 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 		});
 	}
 
-	private class WebFluxMcpSessionTransport implements ServerMcpTransport.Child {
+	/*
+	Current:
 
-		final String sessionId;
+	framework layer:
+	  var transport = new WebFluxSseServerTransport(objectMapper, "/mcp", "/sse");
+	  McpServer.async(ServerMcpTransport transport)
+
+	client connects ->
+	  WebFluxSseServerTransport creates a:
+	    - var sessionTransport = WebFluxMcpSessionTransport
+	    - ServerMcpSession(sessionId, sessionTransport)
+
+	  WebFluxSseServerTransport IS_A ServerMcpTransport IS_A McpTransport
+	  WebFluxMcpSessionTransport IS_A ServerMcpSessionTransport IS_A McpTransport
+
+	  McpTransport contains connect() which should be removed
+	  ClientMcpTransport should have connect()
+	  ServerMcpTransport should have setSessionFactory()
+
+	Possible Future:
+	  var transportProvider = new WebFluxSseServerTransport(objectMapper, "/mcp", "/sse");
+	  WebFluxSseServerTransport IS_A ServerMcpTransportProvider ?
+	  ServerMcpTransportProvider creates ServerMcpTransport
+
+	  // disadvantage - too much breaks, e.g.
+	  McpServer.async(ServerMcpTransportProvider transportProvider)
+
+	  // advantage
+
+	  ClientMcpTransport and ServerMcpTransport BOTH represent 1:1 relationship
+
+
+
+
+	 */
+
+	private class WebFluxMcpSessionTransport implements McpServerTransport {
 
 		private final FluxSink<ServerSentEvent<?>> sink;
 
-		public WebFluxMcpSessionTransport(String sessionId, FluxSink<ServerSentEvent<?>> sink) {
-			this.sessionId = sessionId;
+		public WebFluxMcpSessionTransport(FluxSink<ServerSentEvent<?>> sink) {
 			this.sink = sink;
 		}
 
@@ -363,7 +374,7 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 
 		@Override
 		public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-			return WebFluxSseServerTransport.this.unmarshalFrom(data, typeRef);
+			return objectMapper.convertValue(data, typeRef);
 		}
 
 		@Override

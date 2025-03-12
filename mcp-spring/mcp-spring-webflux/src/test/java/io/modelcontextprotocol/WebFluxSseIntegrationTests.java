@@ -16,7 +16,7 @@ import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
-import io.modelcontextprotocol.server.transport.WebFluxSseServerTransport;
+import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -55,14 +55,14 @@ public class WebFluxSseIntegrationTests {
 
 	private DisposableServer httpServer;
 
-	private WebFluxSseServerTransport mcpServerTransport;
+	private WebFluxSseServerTransportProvider mcpServerTransport;
 
 	ConcurrentHashMap<String, McpClient.SyncSpec> clientBulders = new ConcurrentHashMap<>();
 
 	@BeforeEach
 	public void before() {
 
-		this.mcpServerTransport = new WebFluxSseServerTransport(new ObjectMapper(), MESSAGE_ENDPOINT);
+		this.mcpServerTransport = new WebFluxSseServerTransportProvider(new ObjectMapper(), MESSAGE_ENDPOINT);
 
 		HttpHandler httpHandler = RouterFunctions.toHttpHandler(mcpServerTransport.getRouterFunction());
 		ReactorHttpHandlerAdapter adapter = new ReactorHttpHandlerAdapter(httpHandler);

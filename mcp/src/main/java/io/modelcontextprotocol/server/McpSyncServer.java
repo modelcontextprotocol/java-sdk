@@ -69,6 +69,7 @@ public class McpSyncServer {
 	 * Retrieves the list of all roots provided by the client.
 	 * @return The list of roots
 	 */
+	@Deprecated
 	public McpSchema.ListRootsResult listRoots() {
 		return this.listRoots(null);
 	}
@@ -78,6 +79,7 @@ public class McpSyncServer {
 	 * @param cursor Optional pagination cursor from a previous list request
 	 * @return The list of roots
 	 */
+	@Deprecated
 	public McpSchema.ListRootsResult listRoots(String cursor) {
 		return this.asyncServer.listRoots(cursor).block();
 	}
@@ -157,6 +159,7 @@ public class McpSyncServer {
 	 * Get the client capabilities that define the supported features and functionality.
 	 * @return The client capabilities
 	 */
+	@Deprecated
 	public ClientCapabilities getClientCapabilities() {
 		return this.asyncServer.getClientCapabilities();
 	}
@@ -165,6 +168,7 @@ public class McpSyncServer {
 	 * Get the client implementation information.
 	 * @return The client implementation details
 	 */
+	@Deprecated
 	public McpSchema.Implementation getClientInfo() {
 		return this.asyncServer.getClientInfo();
 	}
@@ -238,6 +242,7 @@ public class McpSyncServer {
 	 * "https://spec.modelcontextprotocol.io/specification/client/sampling/">Sampling
 	 * Specification</a>
 	 */
+	@Deprecated
 	public McpSchema.CreateMessageResult createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
 		return this.asyncServer.createMessage(createMessageRequest).block();
 	}

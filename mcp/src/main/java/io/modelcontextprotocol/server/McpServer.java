@@ -11,7 +11,9 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpTransport;
 import io.modelcontextprotocol.spec.ServerMcpTransport;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -132,8 +134,13 @@ public interface McpServer {
 	 * @param transport The transport layer implementation for MCP communication
 	 * @return A new instance of {@link SyncSpec} for configuring the server.
 	 */
+	@Deprecated
 	static AsyncSpec async(ServerMcpTransport transport) {
 		return new AsyncSpec(transport);
+	}
+
+	static AsyncSpec async(McpServerTransportProvider transportProvider) {
+		return new AsyncSpec(transportProvider);
 	}
 
 	/**
@@ -145,6 +152,7 @@ public interface McpServer {
 				"1.0.0");
 
 		private final ServerMcpTransport transport;
+		private final McpServerTransportProvider transportProvider;
 
 		private McpSchema.Implementation serverInfo = DEFAULT_SERVER_INFO;
 
@@ -181,9 +189,16 @@ public interface McpServer {
 
 		private final List<Function<List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers = new ArrayList<>();
 
+		private AsyncSpec(McpServerTransportProvider transportProvider) {
+			Assert.notNull(transportProvider, "Transport provider must not be null");
+			this.transport = null;
+			this.transportProvider = transportProvider;
+		}
+
 		private AsyncSpec(ServerMcpTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
 			this.transport = transport;
+			this.transportProvider = null;
 		}
 
 		/**
@@ -507,9 +522,15 @@ public interface McpServer {
 		 * settings
 		 */
 		public McpAsyncServer build() {
-			return new McpAsyncServer(this.transport,
-					new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools, this.resources,
-							this.resourceTemplates, this.prompts, this.rootsChangeConsumers));
+			var features = new McpServerFeatures.Async(this.serverInfo,
+					this.serverCapabilities,	this.tools, this.resources,
+					this.resourceTemplates, this.prompts, this.rootsChangeConsumers);
+			if (this.transportProvider != null) {
+				// FIXME: provide ObjectMapper configuration
+				return new McpAsyncServer(this.transportProvider, new ObjectMapper(), features);
+			} else {
+				return new McpAsyncServer(this.transport, features);
+			}
 		}
 
 	}
@@ -523,6 +544,7 @@ public interface McpServer {
 				"1.0.0");
 
 		private final ServerMcpTransport transport;
+		private final McpServerTransportProvider transportProvider;
 
 		private McpSchema.Implementation serverInfo = DEFAULT_SERVER_INFO;
 
@@ -559,9 +581,16 @@ public interface McpServer {
 
 		private final List<Consumer<List<McpSchema.Root>>> rootsChangeConsumers = new ArrayList<>();
 
+		private SyncSpec(McpServerTransportProvider transportProvider) {
+			Assert.notNull(transportProvider, "Transport provider must not be null");
+			this.transportProvider = transportProvider;
+			this.transport = null;
+		}
+
 		private SyncSpec(ServerMcpTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
 			this.transport = transport;
+			this.transportProvider = null;
 		}
 
 		/**
@@ -620,7 +649,7 @@ public interface McpServer {
 		/**
 		 * Adds a single tool with its implementation handler to the server. This is a
 		 * convenience method for registering individual tools without creating a
-		 * {@link ToolRegistration} explicitly.
+		 * {@link McpServerFeatures.SyncToolRegistration} explicitly.
 		 *
 		 * <p>
 		 * Example usage: <pre>{@code
@@ -888,8 +917,12 @@ public interface McpServer {
 		public McpSyncServer build() {
 			McpServerFeatures.Sync syncFeatures = new McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,
 					this.tools, this.resources, this.resourceTemplates, this.prompts, this.rootsChangeConsumers);
-			return new McpSyncServer(
-					new McpAsyncServer(this.transport, McpServerFeatures.Async.fromSync(syncFeatures)));
+			McpServerFeatures.Async asyncFeatures =
+					McpServerFeatures.Async.fromSync(syncFeatures);
+			var asyncServer = this.transportProvider != null ? new McpAsyncServer(this.transportProvider, new ObjectMapper(), asyncFeatures)
+					: new McpAsyncServer(this.transport, asyncFeatures);
+
+			return new McpSyncServer(asyncServer);
 		}
 
 	}
