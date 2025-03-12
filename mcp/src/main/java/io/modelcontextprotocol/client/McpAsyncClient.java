@@ -88,7 +88,7 @@ public class McpAsyncClient {
 
 	/**
 	 * The max timeout to await for the client-server connection to be initialized.
-	 * Usually x2 the request timeout.
+	 * Usually x2 the request timeout. // TODO should we make it configurable?
 	 */
 	private final Duration initializationTimeout;
 
@@ -298,23 +298,17 @@ public class McpAsyncClient {
 	 * </ul>
 	 * <br/>
 	 * The client MUST initiate this phase by sending an initialize request containing:
-	 * <ul>
-	 * <li>The protocol version the client supports</li>
-	 * <li>The client's capabilities</li>
-	 * <li>Client implementation information</li>
-	 * </ul>
-	 *
-	 * The server MUST respond with its own capabilities and information:
-	 * {@link McpSchema.ServerCapabilities}. <br/>
+	 * The protocol version the client supports, client's capabilities and clients
+	 * implementation information.
+	 * <p/>
+	 * The server MUST respond with its own capabilities and information.
+	 * <p/>
 	 * After successful initialization, the client MUST send an initialized notification
 	 * to indicate it is ready to begin normal operations.
-	 *
-	 * <br/>
-	 *
-	 * <a href=
-	 * "https://github.com/modelcontextprotocol/specification/blob/main/docs/specification/basic/lifecycle.md#initialization">Initialization
-	 * Spec</a>
 	 * @return the initialize result.
+	 * @see <a href=
+	 * "https://github.com/modelcontextprotocol/specification/blob/main/docs/specification/basic/lifecycle.md#initialization">MCP
+	 * Initialization Spec</a>
 	 */
 	public Mono<McpSchema.InitializeResult> initialize() {
 
@@ -386,8 +380,8 @@ public class McpAsyncClient {
 	// --------------------------
 	/**
 	 * Adds a new root to the client's root list.
-	 * @param root The root to add
-	 * @return A Mono that completes when the root is added and notifications are sent
+	 * @param root The root to add.
+	 * @return A Mono that completes when the root is added and notifications are sent.
 	 */
 	public Mono<Void> addRoot(Root root) {
 
@@ -420,8 +414,8 @@ public class McpAsyncClient {
 
 	/**
 	 * Removes a root from the client's root list.
-	 * @param rootUri The URI of the root to remove
-	 * @return A Mono that completes when the root is removed and notifications are sent
+	 * @param rootUri The URI of the root to remove.
+	 * @return A Mono that completes when the root is removed and notifications are sent.
 	 */
 	public Mono<Void> removeRoot(String rootUri) {
 
@@ -453,8 +447,9 @@ public class McpAsyncClient {
 
 	/**
 	 * Manually sends a roots/list_changed notification. The addRoot and removeRoot
-	 * methods automatically send the roots/list_changed notification.
-	 * @return A Mono that completes when the notification is sent
+	 * methods automatically send the roots/list_changed notification if the client is in
+	 * an initialized state.
+	 * @return A Mono that completes when the notification is sent.
 	 */
 	public Mono<Void> rootsListChangedNotification() {
 		return this.withInitializationCheck("sending roots list changed notification",
@@ -500,19 +495,9 @@ public class McpAsyncClient {
 	 * Calls a tool provided by the server. Tools enable servers to expose executable
 	 * functionality that can interact with external systems, perform computations, and
 	 * take actions in the real world.
-	 * @param callToolRequest The request containing:
-	 * <ul>
-	 * <li><b>name</b>: The name of the tool to call (must match a tool name from
-	 * tools/list)</li>
-	 * <li><b>arguments</b>: Arguments that conform to the tool's input schema</li>
-	 * </ul>
-	 * @return A Mono that emits the tool execution result containing:
-	 * <ul>
-	 * <li><b>content</b>: List of content items (text, images, or embedded resources)
-	 * representing the tool's output</li>
-	 * <li><b>isError</b>: Boolean indicating if the execution failed (true) or succeeded
-	 * (false/absent)</li>
-	 * </ul>
+	 * @param callToolRequest The request containing the tool name and input parameters
+	 * @return A Mono that emits the result of the tool call, including the output and any
+	 * errors
 	 * @see McpSchema.CallToolRequest
 	 * @see McpSchema.CallToolResult
 	 * @see #listTools()
@@ -528,9 +513,7 @@ public class McpAsyncClient {
 
 	/**
 	 * Retrieves the list of all tools provided by the server.
-	 * @return A Mono that emits the list of tools result containing: - tools: List of
-	 * available tools, each with a name, description, and input schema - nextCursor:
-	 * Optional cursor for pagination if more tools are available
+	 * @return A Mono that emits the list of tools result.
 	 */
 	public Mono<McpSchema.ListToolsResult> listTools() {
 		return this.listTools(null);
@@ -539,9 +522,7 @@ public class McpAsyncClient {
 	/**
 	 * Retrieves a paginated list of tools provided by the server.
 	 * @param cursor Optional pagination cursor from a previous list request
-	 * @return A Mono that emits the list of tools result containing: - tools: List of
-	 * available tools, each with a name, description, and input schema - nextCursor:
-	 * Optional cursor for pagination if more tools are available
+	 * @return A Mono that emits the list of tools result
 	 */
 	public Mono<McpSchema.ListToolsResult> listTools(String cursor) {
 		return this.withInitializationCheck("listing tools", initializedResult -> {
@@ -553,18 +534,6 @@ public class McpAsyncClient {
 		});
 	}
 
-	/**
-	 * Creates a notification handler for tools/list_changed notifications from the
-	 * server. When the server's available tools change, it sends a notification to inform
-	 * connected clients. This handler automatically fetches the updated tool list and
-	 * distributes it to all registered consumers.
-	 * @param toolsChangeConsumers List of consumers that will be notified when the tools
-	 * list changes. Each consumer receives the complete updated list of tools.
-	 * @return A NotificationHandler that processes tools/list_changed notifications by:
-	 * 1. Fetching the current list of tools from the server 2. Distributing the updated
-	 * list to all registered consumers 3. Handling any errors that occur during this
-	 * process
-	 */
 	private NotificationHandler asyncToolsChangeNotificationHandler(
 			List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers) {
 		// TODO: params are not used yet
@@ -595,13 +564,7 @@ public class McpAsyncClient {
 	 * Retrieves the list of all resources provided by the server. Resources represent any
 	 * kind of UTF-8 encoded data that an MCP server makes available to clients, such as
 	 * database records, API responses, log files, and more.
-	 * @return A Mono that completes with the list of resources result containing:
-	 * <ul>
-	 * <li><b>resources</b>: List of available resources, each with a URI, name, and
-	 * optional description</li>
-	 * <li><b>nextCursor</b>: Optional cursor for pagination if more resources are
-	 * available</li>
-	 * </ul>
+	 * @return A Mono that completes with the list of resources result.
 	 * @see McpSchema.ListResourcesResult
 	 * @see #readResource(McpSchema.Resource)
 	 */
@@ -613,14 +576,8 @@ public class McpAsyncClient {
 	 * Retrieves a paginated list of resources provided by the server. Resources represent
 	 * any kind of UTF-8 encoded data that an MCP server makes available to clients, such
 	 * as database records, API responses, log files, and more.
-	 * @param cursor Optional pagination cursor from a previous list request
-	 * @return A Mono that completes with the list of resources result containing:
-	 * <ul>
-	 * <li><b>resources</b>: List of available resources, each with a URI, name, and
-	 * optional description</li>
-	 * <li><b>nextCursor</b>: Optional cursor for pagination if more resources are
-	 * available</li>
-	 * </ul>
+	 * @param cursor Optional pagination cursor from a previous list request.
+	 * @return A Mono that completes with the list of resources result.
 	 * @see McpSchema.ListResourcesResult
 	 * @see #readResource(McpSchema.Resource)
 	 */
@@ -638,12 +595,8 @@ public class McpAsyncClient {
 	 * Reads the content of a specific resource identified by the provided Resource
 	 * object. This method fetches the actual data that the resource represents.
 	 * @param resource The resource to read, containing the URI that identifies the
-	 * resource
-	 * @return A Mono that completes with the resource content containing:
-	 * <ul>
-	 * <li><b>contents</b>: List of content items, each with a URI, MIME type, and the
-	 * actual text content</li>
-	 * </ul>
+	 * resource.
+	 * @return A Mono that completes with the resource content.
 	 * @see McpSchema.Resource
 	 * @see McpSchema.ReadResourceResult
 	 */
@@ -655,11 +608,7 @@ public class McpAsyncClient {
 	 * Reads the content of a specific resource identified by the provided request. This
 	 * method fetches the actual data that the resource represents.
 	 * @param readResourceRequest The request containing the URI of the resource to read
-	 * @return A Mono that completes with the resource content containing:
-	 * <ul>
-	 * <li><b>contents</b>: List of content items, each with a URI, MIME type, and the
-	 * actual text content</li>
-	 * </ul>
+	 * @return A Mono that completes with the resource content.
 	 * @see McpSchema.ReadResourceRequest
 	 * @see McpSchema.ReadResourceResult
 	 */
@@ -681,14 +630,7 @@ public class McpAsyncClient {
 	 * <p>
 	 * For example, a template like "weather://{city}/forecast" allows clients to access
 	 * weather forecasts for different cities by substituting the {city} parameter.
-	 * @return A Mono that completes with the list of resource templates result
-	 * containing:
-	 * <ul>
-	 * <li><b>resourceTemplates</b>: List of available resource templates, each with a URI
-	 * template, name, and optional description</li>
-	 * <li><b>nextCursor</b>: Optional cursor for pagination if more templates are
-	 * available</li>
-	 * </ul>
+	 * @return A Mono that completes with the list of resource templates result.
 	 * @see McpSchema.ListResourceTemplatesResult
 	 */
 	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates() {
@@ -703,15 +645,8 @@ public class McpAsyncClient {
 	 * <p>
 	 * For example, a template like "weather://{city}/forecast" allows clients to access
 	 * weather forecasts for different cities by substituting the {city} parameter.
-	 * @param cursor Optional pagination cursor from a previous list request
-	 * @return A Mono that completes with the list of resource templates result
-	 * containing:
-	 * <ul>
-	 * <li><b>resourceTemplates</b>: List of available resource templates, each with a URI
-	 * template, name, and optional description</li>
-	 * <li><b>nextCursor</b>: Optional cursor for pagination if more templates are
-	 * available</li>
-	 * </ul>
+	 * @param cursor Optional pagination cursor from a previous list request.
+	 * @return A Mono that completes with the list of resource templates result.
 	 * @see McpSchema.ListResourceTemplatesResult
 	 */
 	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates(String cursor) {
@@ -733,11 +668,8 @@ public class McpAsyncClient {
 	 * Resource subscriptions enable real-time updates for dynamic resources that may
 	 * change over time, such as system status information, live data feeds, or
 	 * collaborative documents.
-	 * @param subscribeRequest The request containing:
-	 * <ul>
-	 * <li><b>uri</b>: The URI of the resource to subscribe to</li>
-	 * </ul>
-	 * @return A Mono that completes when the subscription is complete
+	 * @param subscribeRequest The subscribe request containing the URI of the resource.
+	 * @return A Mono that completes when the subscription is complete.
 	 * @see McpSchema.SubscribeRequest
 	 * @see #unsubscribeResource(McpSchema.UnsubscribeRequest)
 	 */
@@ -754,11 +686,9 @@ public class McpAsyncClient {
 	 * This method should be called when the client is no longer interested in receiving
 	 * updates for a particular resource, to reduce unnecessary network traffic and
 	 * processing.
-	 * @param unsubscribeRequest The request containing:
-	 * <ul>
-	 * <li><b>uri</b>: The URI of the resource to unsubscribe from</li>
-	 * </ul>
-	 * @return A Mono that completes when the unsubscription is complete
+	 * @param unsubscribeRequest The unsubscribe request containing the URI of the
+	 * resource.
+	 * @return A Mono that completes when the unsubscription is complete.
 	 * @see McpSchema.UnsubscribeRequest
 	 * @see #subscribeResource(McpSchema.SubscribeRequest)
 	 */
@@ -767,19 +697,6 @@ public class McpAsyncClient {
 			.sendRequest(McpSchema.METHOD_RESOURCES_UNSUBSCRIBE, unsubscribeRequest, VOID_TYPE_REFERENCE));
 	}
 
-	/**
-	 * Creates a notification handler for resources/list_changed notifications from the
-	 * server. When the server's available resources change, it sends a notification to
-	 * inform connected clients. This handler automatically fetches the updated resource
-	 * list and distributes it to all registered consumers.
-	 * @param resourcesChangeConsumers List of consumers that will be notified when the
-	 * resources list changes. Each consumer receives the complete updated list of
-	 * resources.
-	 * @return A NotificationHandler that processes resources/list_changed notifications
-	 * by: 1. Fetching the current list of resources from the server 2. Distributing the
-	 * updated list to all registered consumers 3. Handling any errors that occur during
-	 * this process
-	 */
 	private NotificationHandler asyncResourcesChangeNotificationHandler(
 			List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers) {
 		return params -> listResources().flatMap(listResourcesResult -> Flux.fromIterable(resourcesChangeConsumers)
@@ -801,16 +718,8 @@ public class McpAsyncClient {
 	};
 
 	/**
-	 * Retrieves the list of all prompts provided by the server. Prompts are templates
-	 * that define structured interactions with language models, allowing servers to
-	 * request specific types of AI-generated content.
-	 * @return A Mono that completes with the list of prompts result containing:
-	 * <ul>
-	 * <li><b>prompts</b>: List of available prompts, each with an ID, name, and
-	 * description</li>
-	 * <li><b>nextCursor</b>: Optional cursor for pagination if more prompts are
-	 * available</li>
-	 * </ul>
+	 * Retrieves the list of all prompts provided by the server.
+	 * @return A Mono that completes with the list of prompts result.
 	 * @see McpSchema.ListPromptsResult
 	 * @see #getPrompt(GetPromptRequest)
 	 */
@@ -819,17 +728,9 @@ public class McpAsyncClient {
 	}
 
 	/**
-	 * Retrieves a paginated list of prompts provided by the server. Prompts are templates
-	 * that define structured interactions with language models, allowing servers to
-	 * request specific types of AI-generated content.
+	 * Retrieves a paginated list of prompts provided by the server.
 	 * @param cursor Optional pagination cursor from a previous list request
-	 * @return A Mono that completes with the list of prompts result containing:
-	 * <ul>
-	 * <li><b>prompts</b>: List of available prompts, each with an ID, name, and
-	 * description</li>
-	 * <li><b>nextCursor</b>: Optional cursor for pagination if more prompts are
-	 * available</li>
-	 * </ul>
+	 * @return A Mono that completes with the list of prompts result.
 	 * @see McpSchema.ListPromptsResult
 	 * @see #getPrompt(GetPromptRequest)
 	 */
@@ -846,15 +747,8 @@ public class McpAsyncClient {
 	 * Prompts define structured interactions with language models, allowing servers to
 	 * request specific types of AI-generated content with consistent formatting and
 	 * behavior.
-	 * @param getPromptRequest The request containing:
-	 * <ul>
-	 * <li><b>id</b>: The unique identifier of the prompt to retrieve</li>
-	 * </ul>
-	 * @return A Mono that completes with the prompt result containing:
-	 * <ul>
-	 * <li><b>prompt</b>: The complete prompt details including ID, name, description, and
-	 * template</li>
-	 * </ul>
+	 * @param getPromptRequest The request containing the ID of the prompt to retrieve
+	 * @return A Mono that completes with the prompt result.
 	 * @see McpSchema.GetPromptRequest
 	 * @see McpSchema.GetPromptResult
 	 * @see #listPrompts()
@@ -864,18 +758,6 @@ public class McpAsyncClient {
 			.sendRequest(McpSchema.METHOD_PROMPT_GET, getPromptRequest, GET_PROMPT_RESULT_TYPE_REF));
 	}
 
-	/**
-	 * Creates a notification handler for prompts/list_changed notifications from the
-	 * server. When the server's available prompts change, it sends a notification to
-	 * inform connected clients. This handler automatically fetches the updated prompt
-	 * list and distributes it to all registered consumers.
-	 * @param promptsChangeConsumers List of consumers that will be notified when the
-	 * prompts list changes. Each consumer receives the complete updated list of prompts.
-	 * @return A NotificationHandler that processes prompts/list_changed notifications by:
-	 * 1. Fetching the current list of prompts from the server 2. Distributing the updated
-	 * list to all registered consumers 3. Handling any errors that occur during this
-	 * process
-	 */
 	private NotificationHandler asyncPromptsChangeNotificationHandler(
 			List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers) {
 		return params -> listPrompts().flatMap(listPromptsResult -> Flux.fromIterable(promptsChangeConsumers)
@@ -890,24 +772,6 @@ public class McpAsyncClient {
 	// --------------------------
 	// Logging
 	// --------------------------
-	/**
-	 * Creates a notification handler for logging messages from the server. This handler
-	 * automatically parses incoming log messages and distributes them to all registered
-	 * consumers based on the current logging level.
-	 *
-	 * <p>
-	 * The server can send log messages with different severity levels (DEBUG, INFO, WARN,
-	 * ERROR), and the client can filter these messages using the
-	 * {@link #setLoggingLevel(LoggingLevel)} method.
-	 * @param loggingConsumers List of consumers that will be notified when a logging
-	 * message is received. Each consumer receives the complete logging message
-	 * notification.
-	 * @return A NotificationHandler that processes logging notifications by: 1. Parsing
-	 * the incoming log message 2. Distributing the message to all registered consumers 3.
-	 * Handling any errors that occur during this process
-	 * @see McpSchema.LoggingMessageNotification
-	 * @see #setLoggingLevel(LoggingLevel)
-	 */
 	private NotificationHandler asyncLoggingNotificationHandler(
 			List<Function<LoggingMessageNotification, Mono<Void>>> loggingConsumers) {
 
