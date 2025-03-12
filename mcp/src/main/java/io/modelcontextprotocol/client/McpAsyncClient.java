@@ -495,9 +495,9 @@ public class McpAsyncClient {
 	 * Calls a tool provided by the server. Tools enable servers to expose executable
 	 * functionality that can interact with external systems, perform computations, and
 	 * take actions in the real world.
-	 * @param callToolRequest The request containing the tool name and input parameters
+	 * @param callToolRequest The request containing the tool name and input parameters.
 	 * @return A Mono that emits the result of the tool call, including the output and any
-	 * errors
+	 * errors.
 	 * @see McpSchema.CallToolRequest
 	 * @see McpSchema.CallToolResult
 	 * @see #listTools()
@@ -626,10 +626,6 @@ public class McpAsyncClient {
 	 * Retrieves the list of all resource templates provided by the server. Resource
 	 * templates allow servers to expose parameterized resources using URI templates,
 	 * enabling dynamic resource access based on variable parameters.
-	 *
-	 * <p>
-	 * For example, a template like "weather://{city}/forecast" allows clients to access
-	 * weather forecasts for different cities by substituting the {city} parameter.
 	 * @return A Mono that completes with the list of resource templates result.
 	 * @see McpSchema.ListResourceTemplatesResult
 	 */
@@ -641,10 +637,6 @@ public class McpAsyncClient {
 	 * Retrieves a paginated list of resource templates provided by the server. Resource
 	 * templates allow servers to expose parameterized resources using URI templates,
 	 * enabling dynamic resource access based on variable parameters.
-	 *
-	 * <p>
-	 * For example, a template like "weather://{city}/forecast" allows clients to access
-	 * weather forecasts for different cities by substituting the {city} parameter.
 	 * @param cursor Optional pagination cursor from a previous list request.
 	 * @return A Mono that completes with the list of resource templates result.
 	 * @see McpSchema.ListResourceTemplatesResult
@@ -663,11 +655,6 @@ public class McpAsyncClient {
 	 * Subscribes to changes in a specific resource. When the resource changes on the
 	 * server, the client will receive notifications through the resources change
 	 * notification handler.
-	 *
-	 * <p>
-	 * Resource subscriptions enable real-time updates for dynamic resources that may
-	 * change over time, such as system status information, live data feeds, or
-	 * collaborative documents.
 	 * @param subscribeRequest The subscribe request containing the URI of the resource.
 	 * @return A Mono that completes when the subscription is complete.
 	 * @see McpSchema.SubscribeRequest
@@ -681,11 +668,6 @@ public class McpAsyncClient {
 	/**
 	 * Cancels an existing subscription to a resource. After unsubscribing, the client
 	 * will no longer receive notifications when the resource changes.
-	 *
-	 * <p>
-	 * This method should be called when the client is no longer interested in receiving
-	 * updates for a particular resource, to reduce unnecessary network traffic and
-	 * processing.
 	 * @param unsubscribeRequest The unsubscribe request containing the URI of the
 	 * resource.
 	 * @return A Mono that completes when the unsubscription is complete.
@@ -742,12 +724,7 @@ public class McpAsyncClient {
 	/**
 	 * Retrieves a specific prompt by its ID. This provides the complete prompt template
 	 * including all parameters and instructions for generating AI content.
-	 *
-	 * <p>
-	 * Prompts define structured interactions with language models, allowing servers to
-	 * request specific types of AI-generated content with consistent formatting and
-	 * behavior.
-	 * @param getPromptRequest The request containing the ID of the prompt to retrieve
+	 * @param getPromptRequest The request containing the ID of the prompt to retrieve.
 	 * @return A Mono that completes with the prompt result.
 	 * @see McpSchema.GetPromptRequest
 	 * @see McpSchema.GetPromptResult
@@ -789,18 +766,8 @@ public class McpAsyncClient {
 	/**
 	 * Sets the minimum logging level for messages received from the server. The client
 	 * will only receive log messages at or above the specified severity level.
-	 *
-	 * <p>
-	 * This allows clients to control the verbosity of server logging, filtering out less
-	 * important messages while still receiving critical information.
-	 * @param loggingLevel The minimum logging level to receive, one of:
-	 * <ul>
-	 * <li><b>DEBUG</b>: Detailed information for debugging purposes</li>
-	 * <li><b>INFO</b>: General information about normal operation</li>
-	 * <li><b>WARN</b>: Potential issues that don't prevent normal operation</li>
-	 * <li><b>ERROR</b>: Errors that prevent normal operation</li>
-	 * </ul>
-	 * @return A Mono that completes when the logging level is set
+	 * @param loggingLevel The minimum logging level to receive.
+	 * @return A Mono that completes when the logging level is set.
 	 * @see McpSchema.LoggingLevel
 	 */
 	public Mono<Void> setLoggingLevel(LoggingLevel loggingLevel) {
