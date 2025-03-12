@@ -5,7 +5,7 @@
 package io.modelcontextprotocol.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.server.transport.WebFluxSseServerTransport;
+import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvider;
 import io.modelcontextprotocol.spec.ServerMcpTransport;
 import org.junit.jupiter.api.Timeout;
 import reactor.netty.DisposableServer;
@@ -16,7 +16,7 @@ import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 
 /**
- * Tests for {@link McpSyncServer} using {@link WebFluxSseServerTransport}.
+ * Tests for {@link McpSyncServer} using {@link WebFluxSseServerTransportProvider}.
  *
  * @author Christian Tzolov
  */
@@ -29,11 +29,11 @@ class WebFluxSseMcpSyncServerTests extends AbstractMcpSyncServerTests {
 
 	private DisposableServer httpServer;
 
-	private WebFluxSseServerTransport transport;
+	private WebFluxSseServerTransportProvider transport;
 
 	@Override
 	protected ServerMcpTransport createMcpTransport() {
-		transport = new WebFluxSseServerTransport(new ObjectMapper(), MESSAGE_ENDPOINT);
+		transport = new WebFluxSseServerTransportProvider(new ObjectMapper(), MESSAGE_ENDPOINT);
 		return transport;
 	}
 
