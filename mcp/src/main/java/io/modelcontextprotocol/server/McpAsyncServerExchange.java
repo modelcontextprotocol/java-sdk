@@ -1,13 +1,12 @@
-package io.modelcontextprotocol.spec;
+package io.modelcontextprotocol.server;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpServerSession;
 import reactor.core.publisher.Mono;
 
-public class McpServerExchange {
-
-	// map(roots)
-	// map(resource_subscription)
-	// initialization state
+public class McpAsyncServerExchange {
 
 	private final McpServerSession session;
 
@@ -15,7 +14,7 @@ public class McpServerExchange {
 
 	private final McpSchema.Implementation clientInfo;
 
-	public McpServerExchange(McpServerSession session, McpSchema.ClientCapabilities clientCapabilities,
+	public McpAsyncServerExchange(McpServerSession session, McpSchema.ClientCapabilities clientCapabilities,
 			McpSchema.Implementation clientInfo) {
 		this.session = session;
 		this.clientCapabilities = clientCapabilities;

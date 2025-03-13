@@ -1,7 +1,7 @@
 /*
  * Copyright 2024 - 2024 the original author or authors.
  */
-package io.modelcontextprotocol;
+package io.modelcontextprotocol.server.legacy;
 
 import java.time.Duration;
 import java.util.List;
@@ -17,7 +17,6 @@ import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.transport.WebFluxSseServerTransport;
-import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -56,16 +55,16 @@ public class WebFluxSseIntegrationTests {
 
 	private DisposableServer httpServer;
 
-	private WebFluxSseServerTransportProvider mcpServerTransportProvider;
+	private WebFluxSseServerTransport mcpServerTransport;
 
 	ConcurrentHashMap<String, McpClient.SyncSpec> clientBulders = new ConcurrentHashMap<>();
 
 	@BeforeEach
 	public void before() {
 
-		this.mcpServerTransportProvider = new WebFluxSseServerTransportProvider(new ObjectMapper(), MESSAGE_ENDPOINT);
+		this.mcpServerTransport = new WebFluxSseServerTransport(new ObjectMapper(), MESSAGE_ENDPOINT);
 
-		HttpHandler httpHandler = RouterFunctions.toHttpHandler(mcpServerTransportProvider.getRouterFunction());
+		HttpHandler httpHandler = RouterFunctions.toHttpHandler(mcpServerTransport.getRouterFunction());
 		ReactorHttpHandlerAdapter adapter = new ReactorHttpHandlerAdapter(httpHandler);
 		this.httpServer = HttpServer.create().port(PORT).handle(adapter).bindNow();
 
@@ -85,109 +84,86 @@ public class WebFluxSseIntegrationTests {
 	// ---------------------------------------
 	// Sampling Tests
 	// ---------------------------------------
-	// TODO implement within a tool execution
-	// @Test
-	// void testCreateMessageWithoutInitialization() {
-	// var mcpAsyncServer =
-	// McpServer.async(mcpServerTransportProvider).serverInfo("test-server",
-	// "1.0.0").build();
-	//
-	// var messages = List
-	// .of(new McpSchema.SamplingMessage(McpSchema.Role.USER, new
-	// McpSchema.TextContent("Test message")));
-	// var modelPrefs = new McpSchema.ModelPreferences(List.of(), 1.0, 1.0, 1.0);
-	//
-	// var request = new McpSchema.CreateMessageRequest(messages, modelPrefs, null,
-	// McpSchema.CreateMessageRequest.ContextInclusionStrategy.NONE, null, 100, List.of(),
-	// Map.of());
-	//
-	// StepVerifier.create(mcpAsyncServer.createMessage(request)).verifyErrorSatisfies(error
-	// -> {
-	// assertThat(error).isInstanceOf(McpError.class)
-	// .hasMessage("Client must be initialized. Call the initialize method first!");
-	// });
-	// }
-	//
-	// @ParameterizedTest(name = "{0} : {displayName} ")
-	// @ValueSource(strings = { "httpclient", "webflux" })
-	// void testCreateMessageWithoutSamplingCapabilities(String clientType) {
-	//
-	// var mcpAsyncServer =
-	// McpServer.async(mcpServerTransportProvider).serverInfo("test-server",
-	// "1.0.0").build();
-	//
-	// var clientBuilder = clientBulders.get(clientType);
-	//
-	// var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client",
-	// "0.0.0")).build();
-	//
-	// InitializeResult initResult = client.initialize();
-	// assertThat(initResult).isNotNull();
-	//
-	// var messages = List
-	// .of(new McpSchema.SamplingMessage(McpSchema.Role.USER, new
-	// McpSchema.TextContent("Test message")));
-	// var modelPrefs = new McpSchema.ModelPreferences(List.of(), 1.0, 1.0, 1.0);
-	//
-	// var request = new McpSchema.CreateMessageRequest(messages, modelPrefs, null,
-	// McpSchema.CreateMessageRequest.ContextInclusionStrategy.NONE, null, 100, List.of(),
-	// Map.of());
-	//
-	// StepVerifier.create(mcpAsyncServer.createMessage(request)).verifyErrorSatisfies(error
-	// -> {
-	// assertThat(error).isInstanceOf(McpError.class)
-	// .hasMessage("Client must be configured with sampling capabilities");
-	// });
-	// }
-	//
-	// @ParameterizedTest(name = "{0} : {displayName} ")
-	// @ValueSource(strings = { "httpclient", "webflux" })
-	// void testCreateMessageSuccess(String clientType) throws InterruptedException {
-	//
-	// var clientBuilder = clientBulders.get(clientType);
-	//
-	// var mcpAsyncServer =
-	// McpServer.async(mcpServerTransportProvider).serverInfo("test-server",
-	// "1.0.0").build();
-	//
-	// Function<CreateMessageRequest, CreateMessageResult> samplingHandler = request -> {
-	// assertThat(request.messages()).hasSize(1);
-	// assertThat(request.messages().get(0).content()).isInstanceOf(McpSchema.TextContent.class);
-	//
-	// return new CreateMessageResult(Role.USER, new McpSchema.TextContent("Test
-	// message"), "MockModelName",
-	// CreateMessageResult.StopReason.STOP_SEQUENCE);
-	// };
-	//
-	// var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client",
-	// "0.0.0"))
-	// .capabilities(ClientCapabilities.builder().sampling().build())
-	// .sampling(samplingHandler)
-	// .build();
-	//
-	// InitializeResult initResult = client.initialize();
-	// assertThat(initResult).isNotNull();
-	//
-	// var messages = List
-	// .of(new McpSchema.SamplingMessage(McpSchema.Role.USER, new
-	// McpSchema.TextContent("Test message")));
-	// var modelPrefs = new McpSchema.ModelPreferences(List.of(), 1.0, 1.0, 1.0);
-	//
-	// var request = new McpSchema.CreateMessageRequest(messages, modelPrefs, null,
-	// McpSchema.CreateMessageRequest.ContextInclusionStrategy.NONE, null, 100, List.of(),
-	// Map.of());
-	//
-	// StepVerifier.create(mcpAsyncServer.createMessage(request)).consumeNextWith(result
-	// -> {
-	// assertThat(result).isNotNull();
-	// assertThat(result.role()).isEqualTo(Role.USER);
-	// assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
-	// assertThat(((McpSchema.TextContent) result.content()).text()).isEqualTo("Test
-	// message");
-	// assertThat(result.model()).isEqualTo("MockModelName");
-	// assertThat(result.stopReason()).isEqualTo(CreateMessageResult.StopReason.STOP_SEQUENCE);
-	// }).verifyComplete();
-	// }
+	@Test
+	void testCreateMessageWithoutInitialization() {
+		var mcpAsyncServer = McpServer.async(mcpServerTransport).serverInfo("test-server", "1.0.0").build();
+
+		var messages = List.of(new McpSchema.SamplingMessage(Role.USER, new McpSchema.TextContent("Test message")));
+		var modelPrefs = new McpSchema.ModelPreferences(List.of(), 1.0, 1.0, 1.0);
+
+		var request = new CreateMessageRequest(messages, modelPrefs, null,
+				CreateMessageRequest.ContextInclusionStrategy.NONE, null, 100, List.of(), Map.of());
+
+		StepVerifier.create(mcpAsyncServer.createMessage(request)).verifyErrorSatisfies(error -> {
+			assertThat(error).isInstanceOf(McpError.class)
+				.hasMessage("Client must be initialized. Call the initialize method first!");
+		});
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testCreateMessageWithoutSamplingCapabilities(String clientType) {
+
+		var mcpAsyncServer = McpServer.async(mcpServerTransport).serverInfo("test-server", "1.0.0").build();
+
+		var clientBuilder = clientBulders.get(clientType);
+
+		var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0")).build();
+
+		InitializeResult initResult = client.initialize();
+		assertThat(initResult).isNotNull();
+
+		var messages = List.of(new McpSchema.SamplingMessage(Role.USER, new McpSchema.TextContent("Test message")));
+		var modelPrefs = new McpSchema.ModelPreferences(List.of(), 1.0, 1.0, 1.0);
+
+		var request = new CreateMessageRequest(messages, modelPrefs, null,
+				CreateMessageRequest.ContextInclusionStrategy.NONE, null, 100, List.of(), Map.of());
+
+		StepVerifier.create(mcpAsyncServer.createMessage(request)).verifyErrorSatisfies(error -> {
+			assertThat(error).isInstanceOf(McpError.class)
+				.hasMessage("Client must be configured with sampling capabilities");
+		});
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testCreateMessageSuccess(String clientType) throws InterruptedException {
+
+		var clientBuilder = clientBulders.get(clientType);
+
+		var mcpAsyncServer = McpServer.async(mcpServerTransport).serverInfo("test-server", "1.0.0").build();
+
+		Function<CreateMessageRequest, CreateMessageResult> samplingHandler = request -> {
+			assertThat(request.messages()).hasSize(1);
+			assertThat(request.messages().get(0).content()).isInstanceOf(McpSchema.TextContent.class);
+
+			return new CreateMessageResult(Role.USER, new McpSchema.TextContent("Test message"), "MockModelName",
+					CreateMessageResult.StopReason.STOP_SEQUENCE);
+		};
+
+		var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+			.capabilities(ClientCapabilities.builder().sampling().build())
+			.sampling(samplingHandler)
+			.build();
+
+		InitializeResult initResult = client.initialize();
+		assertThat(initResult).isNotNull();
+
+		var messages = List.of(new McpSchema.SamplingMessage(Role.USER, new McpSchema.TextContent("Test message")));
+		var modelPrefs = new McpSchema.ModelPreferences(List.of(), 1.0, 1.0, 1.0);
+
+		var request = new CreateMessageRequest(messages, modelPrefs, null,
+				CreateMessageRequest.ContextInclusionStrategy.NONE, null, 100, List.of(), Map.of());
+
+		StepVerifier.create(mcpAsyncServer.createMessage(request)).consumeNextWith(result -> {
+			assertThat(result).isNotNull();
+			assertThat(result.role()).isEqualTo(Role.USER);
+			assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
+			assertThat(((McpSchema.TextContent) result.content()).text()).isEqualTo("Test message");
+			assertThat(result.model()).isEqualTo("MockModelName");
+			assertThat(result.stopReason()).isEqualTo(CreateMessageResult.StopReason.STOP_SEQUENCE);
+		}).verifyComplete();
+	}
 
 	// ---------------------------------------
 	// Roots Tests
@@ -200,8 +176,8 @@ public class WebFluxSseIntegrationTests {
 		List<Root> roots = List.of(new Root("uri1://", "root1"), new Root("uri2://", "root2"));
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
-			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
+		var mcpServer = McpServer.sync(mcpServerTransport)
+			.rootsChangeConsumer(rootsUpdate -> rootsRef.set(rootsUpdate))
 			.build();
 
 		var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
@@ -212,6 +188,8 @@ public class WebFluxSseIntegrationTests {
 		assertThat(initResult).isNotNull();
 
 		assertThat(rootsRef.get()).isNull();
+
+		assertThat(mcpServer.listRoots().roots()).containsAll(roots);
 
 		mcpClient.rootsListChangedNotification();
 
@@ -238,39 +216,30 @@ public class WebFluxSseIntegrationTests {
 		mcpServer.close();
 	}
 
-	// @ParameterizedTest(name = "{0} : {displayName} ")
-	// @ValueSource(strings = { "httpclient", "webflux" })
-	// void testRootsWithoutCapability(String clientType) {
-	// var clientBuilder = clientBulders.get(clientType);
-	// AtomicReference<Exception> errorRef = new AtomicReference<>();
-	//
-	// var mcpServer =
-	// McpServer.sync(mcpServerTransportProvider)
-	// // TODO: implement tool handling and try to list roots
-	// .tool(tool, (exchange, args) -> {
-	// try {
-	// exchange.listRoots();
-	// } catch (Exception e) {
-	// errorRef.set(e);
-	// }
-	// }).build();
-	//
-	// // Create client without roots capability
-	// var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().build()) //
-	// No
-	// // roots
-	// // capability
-	// .build();
-	//
-	// InitializeResult initResult = mcpClient.initialize();
-	// assertThat(initResult).isNotNull();
-	//
-	// assertThat(errorRef.get()).isInstanceOf(McpError.class).hasMessage("Roots not
-	// supported");
-	//
-	// mcpClient.close();
-	// mcpServer.close();
-	// }
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testRootsWithoutCapability(String clientType) {
+		var clientBuilder = clientBulders.get(clientType);
+
+		var mcpServer = McpServer.sync(mcpServerTransport).rootsChangeConsumer(rootsUpdate -> {
+		}).build();
+
+		// Create client without roots capability
+		var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().build()) // No
+																							// roots
+																							// capability
+			.build();
+
+		InitializeResult initResult = mcpClient.initialize();
+		assertThat(initResult).isNotNull();
+
+		// Attempt to list roots should fail
+		assertThatThrownBy(() -> mcpServer.listRoots().roots()).isInstanceOf(McpError.class)
+			.hasMessage("Roots not supported");
+
+		mcpClient.close();
+		mcpServer.close();
+	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
@@ -278,8 +247,8 @@ public class WebFluxSseIntegrationTests {
 		var clientBuilder = clientBulders.get(clientType);
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
-			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
+		var mcpServer = McpServer.sync(mcpServerTransport)
+			.rootsChangeConsumer(rootsUpdate -> rootsRef.set(rootsUpdate))
 			.build();
 
 		var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
@@ -301,7 +270,7 @@ public class WebFluxSseIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
-	void testRootsWithMultipleHandlers(String clientType) {
+	void testRootsWithMultipleConsumers(String clientType) {
 		var clientBuilder = clientBulders.get(clientType);
 
 		List<Root> roots = List.of(new Root("uri1://", "root1"));
@@ -309,9 +278,9 @@ public class WebFluxSseIntegrationTests {
 		AtomicReference<List<Root>> rootsRef1 = new AtomicReference<>();
 		AtomicReference<List<Root>> rootsRef2 = new AtomicReference<>();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
-			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef1.set(rootsUpdate))
-			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef2.set(rootsUpdate))
+		var mcpServer = McpServer.sync(mcpServerTransport)
+			.rootsChangeConsumer(rootsUpdate -> rootsRef1.set(rootsUpdate))
+			.rootsChangeConsumer(rootsUpdate -> rootsRef2.set(rootsUpdate))
 			.build();
 
 		var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
@@ -341,8 +310,8 @@ public class WebFluxSseIntegrationTests {
 		List<Root> roots = List.of(new Root("uri1://", "root1"));
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
-			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
+		var mcpServer = McpServer.sync(mcpServerTransport)
+			.rootsChangeConsumer(rootsUpdate -> rootsRef.set(rootsUpdate))
 			.build();
 
 		var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
@@ -383,9 +352,9 @@ public class WebFluxSseIntegrationTests {
 
 		var clientBuilder = clientBulders.get(clientType);
 
-		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
+		var callResponse = new CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpServerFeatures.SyncToolRegistration tool1 = new McpServerFeatures.SyncToolRegistration(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), request -> {
+				new Tool("tool1", "tool1 description", emptyJsonSchema), request -> {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
@@ -396,7 +365,7 @@ public class WebFluxSseIntegrationTests {
 					return callResponse;
 				});
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServer.sync(mcpServerTransport)
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(tool1)
 			.build();
@@ -423,9 +392,9 @@ public class WebFluxSseIntegrationTests {
 
 		var clientBuilder = clientBulders.get(clientType);
 
-		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
+		var callResponse = new CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpServerFeatures.SyncToolRegistration tool1 = new McpServerFeatures.SyncToolRegistration(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), request -> {
+				new Tool("tool1", "tool1 description", emptyJsonSchema), request -> {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
@@ -436,7 +405,7 @@ public class WebFluxSseIntegrationTests {
 					return callResponse;
 				});
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServer.sync(mcpServerTransport)
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(tool1)
 			.build();
@@ -475,7 +444,7 @@ public class WebFluxSseIntegrationTests {
 
 		// Add a new tool
 		McpServerFeatures.SyncToolRegistration tool2 = new McpServerFeatures.SyncToolRegistration(
-				new McpSchema.Tool("tool2", "tool2 description", emptyJsonSchema), request -> callResponse);
+				new Tool("tool2", "tool2 description", emptyJsonSchema), request -> callResponse);
 
 		mcpServer.addTool(tool2);
 

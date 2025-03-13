@@ -5,11 +5,15 @@
 package io.modelcontextprotocol.server;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -121,9 +125,16 @@ public interface McpServer {
 	 * concurrent operations.
 	 * @param transport The transport layer implementation for MCP communication
 	 * @return A new instance of {@link SyncSpec} for configuring the server.
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link #sync(McpServerTransportProvider)} instead.
 	 */
+	@Deprecated
 	static SyncSpec sync(ServerMcpTransport transport) {
 		return new SyncSpec(transport);
+	}
+
+	static SyncSpec sync(McpServerTransportProvider transportProvider) {
+		return new SyncSpec(transportProvider);
 	}
 
 	/**
@@ -132,7 +143,9 @@ public interface McpServer {
 	 * paradigm with non-blocking server transports, making them more efficient for
 	 * high-concurrency scenarios but more complex to implement.
 	 * @param transport The transport layer implementation for MCP communication
-	 * @return A new instance of {@link SyncSpec} for configuring the server.
+	 * @return A new instance of {@link AsyncSpec} for configuring the server.
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link #async(McpServerTransportProvider)} instead.
 	 */
 	@Deprecated
 	static AsyncSpec async(ServerMcpTransport transport) {
@@ -154,6 +167,8 @@ public interface McpServer {
 		private final ServerMcpTransport transport;
 
 		private final McpServerTransportProvider transportProvider;
+
+		private ObjectMapper objectMapper;
 
 		private McpSchema.Implementation serverInfo = DEFAULT_SERVER_INFO;
 
@@ -188,7 +203,7 @@ public interface McpServer {
 		 */
 		private final Map<String, McpServerFeatures.AsyncPromptRegistration> prompts = new HashMap<>();
 
-		private final List<Function<List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers = new ArrayList<>();
+		private final List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeHandlers = new ArrayList<>();
 
 		private AsyncSpec(McpServerTransportProvider transportProvider) {
 			Assert.notNull(transportProvider, "Transport provider must not be null");
@@ -480,10 +495,19 @@ public interface McpServer {
 		 * @param consumer The consumer to register. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumer is null
+		 * @deprecated This method will be removed in 0.9.0. Use
+		 * {@link #rootsChangeHandler(BiFunction)} instead.
 		 */
+		@Deprecated
 		public AsyncSpec rootsChangeConsumer(Function<List<McpSchema.Root>, Mono<Void>> consumer) {
 			Assert.notNull(consumer, "Consumer must not be null");
-			this.rootsChangeConsumers.add(consumer);
+			return this.rootsChangeHandler((exchange, roots) -> consumer.apply(roots));
+		}
+
+		public AsyncSpec rootsChangeHandler(
+				BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>> handler) {
+			Assert.notNull(handler, "Consumer must not be null");
+			this.rootsChangeHandlers.add(handler);
 			return this;
 		}
 
@@ -494,10 +518,22 @@ public interface McpServer {
 		 * @param consumers The list of consumers to register. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumers is null
+		 * @deprecated This method will be removed in 0.9.0. Use
+		 * {@link #rootsChangeHandlers(List)} instead.
 		 */
+		@Deprecated
 		public AsyncSpec rootsChangeConsumers(List<Function<List<McpSchema.Root>, Mono<Void>>> consumers) {
 			Assert.notNull(consumers, "Consumers list must not be null");
-			this.rootsChangeConsumers.addAll(consumers);
+			return this.rootsChangeHandlers(consumers.stream()
+				.map(consumer -> (BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>) (
+						McpAsyncServerExchange exchange, List<McpSchema.Root> roots) -> consumer.apply(roots))
+				.collect(Collectors.toList()));
+		}
+
+		public AsyncSpec rootsChangeHandlers(
+				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> handlers) {
+			Assert.notNull(handlers, "Handlers list must not be null");
+			this.rootsChangeHandlers.addAll(handlers);
 			return this;
 		}
 
@@ -508,12 +544,22 @@ public interface McpServer {
 		 * @param consumers The consumers to register. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumers is null
+		 * @deprecated This method will be removed in 0.9.0. Use
+		 * {@link #rootsChangeHandlers(BiFunction...)} instead.
 		 */
+		@Deprecated
 		public AsyncSpec rootsChangeConsumers(
 				@SuppressWarnings("unchecked") Function<List<McpSchema.Root>, Mono<Void>>... consumers) {
-			for (Function<List<McpSchema.Root>, Mono<Void>> consumer : consumers) {
-				this.rootsChangeConsumers.add(consumer);
-			}
+			return this.rootsChangeConsumers(Arrays.asList(consumers));
+		}
+
+		public AsyncSpec rootsChangeHandlers(
+				@SuppressWarnings("unchecked") BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>... handlers) {
+			return this.rootsChangeHandlers(Arrays.asList(handlers));
+		}
+
+		public AsyncSpec objectMapper(ObjectMapper objectMapper) {
+			this.objectMapper = objectMapper;
 			return this;
 		}
 
@@ -524,10 +570,10 @@ public interface McpServer {
 		 */
 		public McpAsyncServer build() {
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
-					this.resources, this.resourceTemplates, this.prompts, this.rootsChangeConsumers);
+					this.resources, this.resourceTemplates, this.prompts, this.rootsChangeHandlers);
 			if (this.transportProvider != null) {
-				// FIXME: provide ObjectMapper configuration
-				return new McpAsyncServer(this.transportProvider, new ObjectMapper(), features);
+				var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
+				return new McpAsyncServer(this.transportProvider, mapper, features);
 			}
 			else {
 				return new McpAsyncServer(this.transport, features);
@@ -547,6 +593,8 @@ public interface McpServer {
 		private final ServerMcpTransport transport;
 
 		private final McpServerTransportProvider transportProvider;
+
+		private ObjectMapper objectMapper;
 
 		private McpSchema.Implementation serverInfo = DEFAULT_SERVER_INFO;
 
@@ -581,7 +629,7 @@ public interface McpServer {
 		 */
 		private final Map<String, McpServerFeatures.SyncPromptRegistration> prompts = new HashMap<>();
 
-		private final List<Consumer<List<McpSchema.Root>>> rootsChangeConsumers = new ArrayList<>();
+		private final List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeHandlers = new ArrayList<>();
 
 		private SyncSpec(McpServerTransportProvider transportProvider) {
 			Assert.notNull(transportProvider, "Transport provider must not be null");
@@ -875,10 +923,18 @@ public interface McpServer {
 		 * @param consumer The consumer to register. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumer is null
+		 * @deprecated This method will be removed in 0.9.0. Use
+		 * {@link #rootsChangeHandler(BiConsumer)}.
 		 */
+		@Deprecated
 		public SyncSpec rootsChangeConsumer(Consumer<List<McpSchema.Root>> consumer) {
 			Assert.notNull(consumer, "Consumer must not be null");
-			this.rootsChangeConsumers.add(consumer);
+			return this.rootsChangeHandler((exchange, roots) -> consumer.accept(roots));
+		}
+
+		public SyncSpec rootsChangeHandler(BiConsumer<McpSyncServerExchange, List<McpSchema.Root>> handler) {
+			Assert.notNull(handler, "Consumer must not be null");
+			this.rootsChangeHandlers.add(handler);
 			return this;
 		}
 
@@ -889,10 +945,21 @@ public interface McpServer {
 		 * @param consumers The list of consumers to register. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumers is null
+		 * @deprecated This method will be removed in 0.9.0. Use
+		 * {@link #rootsChangeHandlers(List)}.
 		 */
+		@Deprecated
 		public SyncSpec rootsChangeConsumers(List<Consumer<List<McpSchema.Root>>> consumers) {
 			Assert.notNull(consumers, "Consumers list must not be null");
-			this.rootsChangeConsumers.addAll(consumers);
+			return this.rootsChangeHandlers(consumers.stream()
+				.map(consumer -> (BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>) (exchange, roots) -> consumer
+					.accept(roots))
+				.collect(Collectors.toList()));
+		}
+
+		public SyncSpec rootsChangeHandlers(List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> handlers) {
+			Assert.notNull(handlers, "Handlers list must not be null");
+			this.rootsChangeHandlers.addAll(handlers);
 			return this;
 		}
 
@@ -903,11 +970,20 @@ public interface McpServer {
 		 * @param consumers The consumers to register. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumers is null
+		 * @deprecated This method will * be removed in 0.9.0. Use
+		 * {@link #rootsChangeHandlers(BiConsumer[])}.
 		 */
+		@Deprecated
 		public SyncSpec rootsChangeConsumers(Consumer<List<McpSchema.Root>>... consumers) {
-			for (Consumer<List<McpSchema.Root>> consumer : consumers) {
-				this.rootsChangeConsumers.add(consumer);
-			}
+			return this.rootsChangeConsumers(Arrays.asList(consumers));
+		}
+
+		public SyncSpec rootsChangeHandlers(BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>... handlers) {
+			return this.rootsChangeHandlers(List.of(handlers));
+		}
+
+		public SyncSpec objectMapper(ObjectMapper objectMapper) {
+			this.objectMapper = objectMapper;
 			return this;
 		}
 
@@ -918,10 +994,11 @@ public interface McpServer {
 		 */
 		public McpSyncServer build() {
 			McpServerFeatures.Sync syncFeatures = new McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,
-					this.tools, this.resources, this.resourceTemplates, this.prompts, this.rootsChangeConsumers);
+					this.tools, this.resources, this.resourceTemplates, this.prompts, this.rootsChangeHandlers);
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures);
+			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
 			var asyncServer = this.transportProvider != null
-					? new McpAsyncServer(this.transportProvider, new ObjectMapper(), asyncFeatures)
+					? new McpAsyncServer(this.transportProvider, mapper, asyncFeatures)
 					: new McpAsyncServer(this.transport, asyncFeatures);
 
 			return new McpSyncServer(asyncServer);
