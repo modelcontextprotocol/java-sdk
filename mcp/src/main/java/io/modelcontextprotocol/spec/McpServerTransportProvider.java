@@ -29,4 +29,5 @@ public interface McpServerTransportProvider {
 	 * @return a {@link Mono<Void>} that completes when the connection has been closed.
 	 */
 	Mono<Void> closeGracefully();
+
 }

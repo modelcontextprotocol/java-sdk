@@ -34,21 +34,22 @@ public class McpServerSession implements McpSession {
 
 	private final McpServerTransport transport;
 
-	private final Sinks.One<McpServerExchange>                  exchangeSink       = Sinks.one();
+	private final Sinks.One<McpServerExchange> exchangeSink = Sinks.one();
+
 	private final AtomicReference<McpSchema.ClientCapabilities> clientCapabilities = new AtomicReference<>();
+
 	private final AtomicReference<McpSchema.Implementation> clientInfo = new AtomicReference<>();
 
-	// 0 = uninitialized, 1 = initializing, 2 = initialized
-	private static final int UNINITIALIZED = 0;
-	private static final int INITIALIZING = 1;
-	private static final int INITIALIZED = 2;
+	private static final int STATE_UNINITIALIZED = 0;
 
-	private final AtomicInteger state = new AtomicInteger(UNINITIALIZED);
+	private static final int STATE_INITIALIZING = 1;
 
-	public McpServerSession(String id, McpServerTransport transport,
-			InitRequestHandler initHandler,
-			InitNotificationHandler initNotificationHandler,
-			Map<String, RequestHandler<?>> requestHandlers,
+	private static final int STATE_INITIALIZED = 2;
+
+	private final AtomicInteger state = new AtomicInteger(STATE_UNINITIALIZED);
+
+	public McpServerSession(String id, McpServerTransport transport, InitRequestHandler initHandler,
+			InitNotificationHandler initNotificationHandler, Map<String, RequestHandler<?>> requestHandlers,
 			Map<String, NotificationHandler> notificationHandlers) {
 		this.id = id;
 		this.transport = transport;
@@ -155,18 +156,17 @@ public class McpServerSession implements McpSession {
 			Mono<?> resultMono;
 			if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
 				// TODO handle situation where already initialized!
-				McpSchema.InitializeRequest initializeRequest =
-						transport.unmarshalFrom(request.params(),
+				McpSchema.InitializeRequest initializeRequest = transport.unmarshalFrom(request.params(),
 						new TypeReference<McpSchema.InitializeRequest>() {
 						});
 
-				this.state.lazySet(INITIALIZING);
+				this.state.lazySet(STATE_INITIALIZING);
 				this.init(initializeRequest.capabilities(), initializeRequest.clientInfo());
 				resultMono = this.initRequestHandler.handle(initializeRequest);
 			}
 			else {
 				// TODO handle errors for communication to this session without
-				//  initialization happening first
+				// initialization happening first
 				var handler = this.requestHandlers.get(request.method());
 				if (handler == null) {
 					MethodNotFoundError error = getMethodNotFoundError(request.method());
@@ -194,7 +194,7 @@ public class McpServerSession implements McpSession {
 	private Mono<Void> handleIncomingNotification(McpSchema.JSONRPCNotification notification) {
 		return Mono.defer(() -> {
 			if (McpSchema.METHOD_NOTIFICATION_INITIALIZED.equals(notification.method())) {
-				this.state.lazySet(INITIALIZED);
+				this.state.lazySet(STATE_INITIALIZED);
 				exchangeSink.tryEmitValue(new McpServerExchange(this, clientCapabilities.get(), clientInfo.get()));
 				return this.initNotificationHandler.handle();
 			}
@@ -204,9 +204,7 @@ public class McpServerSession implements McpSession {
 				logger.error("No handler registered for notification method: {}", notification.method());
 				return Mono.empty();
 			}
-			return this.exchangeSink.asMono()
-			                        .flatMap(exchange ->
-					                        handler.handle(exchange, notification.params()));
+			return this.exchangeSink.asMono().flatMap(exchange -> handler.handle(exchange, notification.params()));
 		});
 	}
 
@@ -234,24 +232,34 @@ public class McpServerSession implements McpSession {
 	}
 
 	public interface InitRequestHandler {
+
 		Mono<McpSchema.InitializeResult> handle(McpSchema.InitializeRequest initializeRequest);
+
 	}
 
 	public interface InitNotificationHandler {
+
 		Mono<Void> handle();
+
 	}
 
 	public interface NotificationHandler {
+
 		Mono<Void> handle(McpServerExchange exchange, Object params);
+
 	}
 
 	public interface RequestHandler<T> {
+
 		Mono<T> handle(McpServerExchange exchange, Object params);
+
 	}
 
 	@FunctionalInterface
 	public interface Factory {
+
 		McpServerSession create(McpServerTransport sessionTransport);
+
 	}
 
 }

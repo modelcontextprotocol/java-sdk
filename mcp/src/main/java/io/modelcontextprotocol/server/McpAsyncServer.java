@@ -96,11 +96,11 @@ public class McpAsyncServer {
 
 	/**
 	 * Create a new McpAsyncServer with the given transport and capabilities.
-	 * @param mcpTransportProvider The transport layer implementation for MCP communication.
+	 * @param mcpTransportProvider The transport layer implementation for MCP
+	 * communication.
 	 * @param features The MCP server supported features.
 	 */
-	McpAsyncServer(McpServerTransportProvider mcpTransportProvider,
-			ObjectMapper objectMapper,
+	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
 			McpServerFeatures.Async features) {
 		this.delegate = new AsyncServerImpl(mcpTransportProvider, objectMapper, features);
 	}
@@ -319,6 +319,7 @@ public class McpAsyncServer {
 	}
 
 	private static class AsyncServerImpl extends McpAsyncServer {
+
 		private final McpServerTransportProvider mcpTransportProvider;
 
 		private final ObjectMapper objectMapper;
@@ -347,11 +348,11 @@ public class McpAsyncServer {
 
 		/**
 		 * Create a new McpAsyncServer with the given transport and capabilities.
-		 * @param mcpTransportProvider The transport layer implementation for MCP communication.
+		 * @param mcpTransportProvider The transport layer implementation for MCP
+		 * communication.
 		 * @param features The MCP server supported features.
 		 */
-		AsyncServerImpl(McpServerTransportProvider mcpTransportProvider,
-				ObjectMapper objectMapper,
+		AsyncServerImpl(McpServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
 				McpServerFeatures.Async features) {
 			this.mcpTransportProvider = mcpTransportProvider;
 			this.objectMapper = objectMapper;
@@ -400,37 +401,36 @@ public class McpAsyncServer {
 			List<Function<List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers = features.rootsChangeConsumers();
 
 			if (Utils.isEmpty(rootsChangeConsumers)) {
-				rootsChangeConsumers = List.of((roots) -> Mono.fromRunnable(() -> logger
-						.warn("Roots list changed notification, but no consumers provided. Roots list changed: {}", roots)));
+				rootsChangeConsumers = List.of((roots) -> Mono.fromRunnable(() -> logger.warn(
+						"Roots list changed notification, but no consumers provided. Roots list changed: {}", roots)));
 			}
 
 			notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED,
 					asyncRootsListChangedNotificationHandler(rootsChangeConsumers));
 
-			mcpTransportProvider.setSessionFactory(transport -> new McpServerSession(
-					UUID.randomUUID().toString(),
-					transport,
-					this::asyncInitializeRequestHandler,
-					Mono::empty,
-					requestHandlers,
-					notificationHandlers));
+			mcpTransportProvider
+				.setSessionFactory(transport -> new McpServerSession(UUID.randomUUID().toString(), transport,
+						this::asyncInitializeRequestHandler, Mono::empty, requestHandlers, notificationHandlers));
 		}
 
 		// ---------------------------------------
 		// Lifecycle Management
 		// ---------------------------------------
-		private Mono<McpSchema.InitializeResult> asyncInitializeRequestHandler(McpSchema.InitializeRequest initializeRequest) {
+		private Mono<McpSchema.InitializeResult> asyncInitializeRequestHandler(
+				McpSchema.InitializeRequest initializeRequest) {
 			return Mono.defer(() -> {
 				logger.info("Client initialize request - Protocol: {}, Capabilities: {}, Info: {}",
 						initializeRequest.protocolVersion(), initializeRequest.capabilities(),
 						initializeRequest.clientInfo());
 
-				// The server MUST respond with the highest protocol version it supports if
+				// The server MUST respond with the highest protocol version it supports
+				// if
 				// it does not support the requested (e.g. Client) version.
 				String serverProtocolVersion = this.protocolVersions.get(this.protocolVersions.size() - 1);
 
 				if (this.protocolVersions.contains(initializeRequest.protocolVersion())) {
-					// If the server supports the requested protocol version, it MUST respond
+					// If the server supports the requested protocol version, it MUST
+					// respond
 					// with the same version.
 					serverProtocolVersion = initializeRequest.protocolVersion();
 				}
@@ -446,7 +446,8 @@ public class McpAsyncServer {
 		}
 
 		/**
-		 * Get the server capabilities that define the supported features and functionality.
+		 * Get the server capabilities that define the supported features and
+		 * functionality.
 		 * @return The server capabilities
 		 */
 		public McpSchema.ServerCapabilities getServerCapabilities() {
@@ -462,7 +463,8 @@ public class McpAsyncServer {
 		}
 
 		/**
-		 * Get the client capabilities that define the supported features and functionality.
+		 * Get the client capabilities that define the supported features and
+		 * functionality.
 		 * @return The client capabilities
 		 */
 		@Deprecated
@@ -517,12 +519,12 @@ public class McpAsyncServer {
 				List<Function<List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
 			return (exchange,
 					params) -> listRoots().flatMap(listRootsResult -> Flux.fromIterable(rootsChangeConsumers)
-			                                                              .flatMap(consumer -> consumer.apply(listRootsResult.roots()))
-			                                                              .onErrorResume(error -> {
-				                                                              logger.error("Error handling roots list change notification", error);
-				                                                              return Mono.empty();
-			                                                              })
-			                                                              .then());
+						.flatMap(consumer -> consumer.apply(listRootsResult.roots()))
+						.onErrorResume(error -> {
+							logger.error("Error handling roots list change notification", error);
+							return Mono.empty();
+						})
+						.then());
 		}
 
 		// ---------------------------------------
@@ -552,7 +554,7 @@ public class McpAsyncServer {
 				// Check for duplicate tool names
 				if (this.tools.stream().anyMatch(th -> th.tool().name().equals(toolRegistration.tool().name()))) {
 					return Mono
-							.error(new McpError("Tool with name '" + toolRegistration.tool().name() + "' already exists"));
+						.error(new McpError("Tool with name '" + toolRegistration.tool().name() + "' already exists"));
 				}
 
 				this.tools.add(toolRegistration);
@@ -579,7 +581,8 @@ public class McpAsyncServer {
 			}
 
 			return Mono.defer(() -> {
-				boolean removed = this.tools.removeIf(toolRegistration -> toolRegistration.tool().name().equals(toolName));
+				boolean removed = this.tools
+					.removeIf(toolRegistration -> toolRegistration.tool().name().equals(toolName));
 				if (removed) {
 					logger.debug("Removed tool handler: {}", toolName);
 					if (this.serverCapabilities.tools().listChanged()) {
@@ -614,15 +617,15 @@ public class McpAsyncServer {
 						});
 
 				Optional<McpServerFeatures.AsyncToolRegistration> toolRegistration = this.tools.stream()
-				                                                                               .filter(tr -> callToolRequest.name().equals(tr.tool().name()))
-				                                                                               .findAny();
+					.filter(tr -> callToolRequest.name().equals(tr.tool().name()))
+					.findAny();
 
 				if (toolRegistration.isEmpty()) {
 					return Mono.error(new McpError("Tool not found: " + callToolRequest.name()));
 				}
 
 				return toolRegistration.map(tool -> tool.call().apply(callToolRequest.arguments()))
-				                       .orElse(Mono.error(new McpError("Tool not found: " + callToolRequest.name())));
+					.orElse(Mono.error(new McpError("Tool not found: " + callToolRequest.name())));
 			};
 		}
 
@@ -646,8 +649,8 @@ public class McpAsyncServer {
 
 			return Mono.defer(() -> {
 				if (this.resources.putIfAbsent(resourceHandler.resource().uri(), resourceHandler) != null) {
-					return Mono
-							.error(new McpError("Resource with URI '" + resourceHandler.resource().uri() + "' already exists"));
+					return Mono.error(new McpError(
+							"Resource with URI '" + resourceHandler.resource().uri() + "' already exists"));
 				}
 				logger.debug("Added resource handler: {}", resourceHandler.resource().uri());
 				if (this.serverCapabilities.resources().listChanged()) {
@@ -688,23 +691,24 @@ public class McpAsyncServer {
 		 * @return A Mono that completes when all clients have been notified
 		 */
 		public Mono<Void> notifyResourcesListChanged() {
-			McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
-					McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED, null);
+			McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(
+					McpSchema.JSONRPC_VERSION, McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED, null);
 			return this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED, null);
 		}
 
 		private McpServerSession.RequestHandler<McpSchema.ListResourcesResult> resourcesListRequestHandler() {
 			return (exchange, params) -> {
 				var resourceList = this.resources.values()
-				                                 .stream()
-				                                 .map(McpServerFeatures.AsyncResourceRegistration::resource)
-				                                 .toList();
+					.stream()
+					.map(McpServerFeatures.AsyncResourceRegistration::resource)
+					.toList();
 				return Mono.just(new McpSchema.ListResourcesResult(resourceList, null));
 			};
 		}
 
 		private McpServerSession.RequestHandler<McpSchema.ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
-			return (exchange, params) -> Mono.just(new McpSchema.ListResourceTemplatesResult(this.resourceTemplates, null));
+			return (exchange, params) -> Mono
+				.just(new McpSchema.ListResourceTemplatesResult(this.resourceTemplates, null));
 
 		}
 
@@ -741,10 +745,10 @@ public class McpAsyncServer {
 
 			return Mono.defer(() -> {
 				McpServerFeatures.AsyncPromptRegistration registration = this.prompts
-						.putIfAbsent(promptRegistration.prompt().name(), promptRegistration);
+					.putIfAbsent(promptRegistration.prompt().name(), promptRegistration);
 				if (registration != null) {
-					return Mono.error(
-							new McpError("Prompt with name '" + promptRegistration.prompt().name() + "' already exists"));
+					return Mono.error(new McpError(
+							"Prompt with name '" + promptRegistration.prompt().name() + "' already exists"));
 				}
 
 				logger.debug("Added prompt handler: {}", promptRegistration.prompt().name());
@@ -804,9 +808,9 @@ public class McpAsyncServer {
 				// });
 
 				var promptList = this.prompts.values()
-				                             .stream()
-				                             .map(McpServerFeatures.AsyncPromptRegistration::prompt)
-				                             .toList();
+					.stream()
+					.map(McpServerFeatures.AsyncPromptRegistration::prompt)
+					.toList();
 
 				return Mono.just(new McpSchema.ListPromptsResult(promptList, null));
 			};
@@ -833,8 +837,8 @@ public class McpAsyncServer {
 		// ---------------------------------------
 
 		/**
-		 * Send a logging message notification to all connected clients. Messages below the
-		 * current minimum logging level will be filtered out.
+		 * Send a logging message notification to all connected clients. Messages below
+		 * the current minimum logging level will be filtered out.
 		 * @param loggingMessageNotification The logging message to send
 		 * @return A Mono that completes when the notification has been sent
 		 */
@@ -856,8 +860,8 @@ public class McpAsyncServer {
 		}
 
 		/**
-		 * Handles requests to set the minimum logging level. Messages below this level will
-		 * not be sent.
+		 * Handles requests to set the minimum logging level. Messages below this level
+		 * will not be sent.
 		 * @return A handler that processes logging level change requests
 		 */
 		private McpServerSession.RequestHandler<Void> setLoggerRequestHandler() {
@@ -876,11 +880,11 @@ public class McpAsyncServer {
 		/**
 		 * Create a new message using the sampling capabilities of the client. The Model
 		 * Context Protocol (MCP) provides a standardized way for servers to request LLM
-		 * sampling (“completions” or “generations”) from language models via clients. This
-		 * flow allows clients to maintain control over model access, selection, and
-		 * permissions while enabling servers to leverage AI capabilities—with no server API
-		 * keys necessary. Servers can request text or image-based interactions and optionally
-		 * include context from MCP servers in their prompts.
+		 * sampling (“completions” or “generations”) from language models via clients.
+		 * This flow allows clients to maintain control over model access, selection, and
+		 * permissions while enabling servers to leverage AI capabilities—with no server
+		 * API keys necessary. Servers can request text or image-based interactions and
+		 * optionally include context from MCP servers in their prompts.
 		 * @param createMessageRequest The request to create a new message
 		 * @return A Mono that completes when the message has been created
 		 * @throws McpError if the client has not been initialized or does not support
@@ -898,19 +902,21 @@ public class McpAsyncServer {
 		}
 
 		/**
-		 * This method is package-private and used for test only. Should not be called by user
-		 * code.
+		 * This method is package-private and used for test only. Should not be called by
+		 * user code.
 		 * @param protocolVersions the Client supported protocol versions.
 		 */
 		void setProtocolVersions(List<String> protocolVersions) {
 			this.protocolVersions = protocolVersions;
 		}
+
 	}
 
 	private static final class LegacyAsyncServer extends McpAsyncServer {
+
 		/**
-		 * The MCP session implementation that manages bidirectional JSON-RPC communication
-		 * between clients and servers.
+		 * The MCP session implementation that manages bidirectional JSON-RPC
+		 * communication between clients and servers.
 		 */
 		private final DefaultMcpSession mcpSession;
 
@@ -995,8 +1001,8 @@ public class McpAsyncServer {
 			List<Function<List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers = features.rootsChangeConsumers();
 
 			if (Utils.isEmpty(rootsChangeConsumers)) {
-				rootsChangeConsumers = List.of((roots) -> Mono.fromRunnable(() -> logger
-						.warn("Roots list changed notification, but no consumers provided. Roots list changed: {}", roots)));
+				rootsChangeConsumers = List.of((roots) -> Mono.fromRunnable(() -> logger.warn(
+						"Roots list changed notification, but no consumers provided. Roots list changed: {}", roots)));
 			}
 
 			notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED,
@@ -1021,12 +1027,14 @@ public class McpAsyncServer {
 						initializeRequest.protocolVersion(), initializeRequest.capabilities(),
 						initializeRequest.clientInfo());
 
-				// The server MUST respond with the highest protocol version it supports if
+				// The server MUST respond with the highest protocol version it supports
+				// if
 				// it does not support the requested (e.g. Client) version.
 				String serverProtocolVersion = this.protocolVersions.get(this.protocolVersions.size() - 1);
 
 				if (this.protocolVersions.contains(initializeRequest.protocolVersion())) {
-					// If the server supports the requested protocol version, it MUST respond
+					// If the server supports the requested protocol version, it MUST
+					// respond
 					// with the same version.
 					serverProtocolVersion = initializeRequest.protocolVersion();
 				}
@@ -1042,7 +1050,8 @@ public class McpAsyncServer {
 		}
 
 		/**
-		 * Get the server capabilities that define the supported features and functionality.
+		 * Get the server capabilities that define the supported features and
+		 * functionality.
 		 * @return The server capabilities
 		 */
 		public McpSchema.ServerCapabilities getServerCapabilities() {
@@ -1058,7 +1067,8 @@ public class McpAsyncServer {
 		}
 
 		/**
-		 * Get the client capabilities that define the supported features and functionality.
+		 * Get the client capabilities that define the supported features and
+		 * functionality.
 		 * @return The client capabilities
 		 */
 		public ClientCapabilities getClientCapabilities() {
@@ -1112,12 +1122,12 @@ public class McpAsyncServer {
 		private DefaultMcpSession.NotificationHandler asyncRootsListChangedNotificationHandler(
 				List<Function<List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
 			return params -> listRoots().flatMap(listRootsResult -> Flux.fromIterable(rootsChangeConsumers)
-			                                                            .flatMap(consumer -> consumer.apply(listRootsResult.roots()))
-			                                                            .onErrorResume(error -> {
-				                                                            logger.error("Error handling roots list change notification", error);
-				                                                            return Mono.empty();
-			                                                            })
-			                                                            .then());
+				.flatMap(consumer -> consumer.apply(listRootsResult.roots()))
+				.onErrorResume(error -> {
+					logger.error("Error handling roots list change notification", error);
+					return Mono.empty();
+				})
+				.then());
 		}
 
 		// ---------------------------------------
@@ -1147,7 +1157,7 @@ public class McpAsyncServer {
 				// Check for duplicate tool names
 				if (this.tools.stream().anyMatch(th -> th.tool().name().equals(toolRegistration.tool().name()))) {
 					return Mono
-							.error(new McpError("Tool with name '" + toolRegistration.tool().name() + "' already exists"));
+						.error(new McpError("Tool with name '" + toolRegistration.tool().name() + "' already exists"));
 				}
 
 				this.tools.add(toolRegistration);
@@ -1174,7 +1184,8 @@ public class McpAsyncServer {
 			}
 
 			return Mono.defer(() -> {
-				boolean removed = this.tools.removeIf(toolRegistration -> toolRegistration.tool().name().equals(toolName));
+				boolean removed = this.tools
+					.removeIf(toolRegistration -> toolRegistration.tool().name().equals(toolName));
 				if (removed) {
 					logger.debug("Removed tool handler: {}", toolName);
 					if (this.serverCapabilities.tools().listChanged()) {
@@ -1209,15 +1220,15 @@ public class McpAsyncServer {
 						});
 
 				Optional<McpServerFeatures.AsyncToolRegistration> toolRegistration = this.tools.stream()
-				                                                                               .filter(tr -> callToolRequest.name().equals(tr.tool().name()))
-				                                                                               .findAny();
+					.filter(tr -> callToolRequest.name().equals(tr.tool().name()))
+					.findAny();
 
 				if (toolRegistration.isEmpty()) {
 					return Mono.error(new McpError("Tool not found: " + callToolRequest.name()));
 				}
 
 				return toolRegistration.map(tool -> tool.call().apply(callToolRequest.arguments()))
-				                       .orElse(Mono.error(new McpError("Tool not found: " + callToolRequest.name())));
+					.orElse(Mono.error(new McpError("Tool not found: " + callToolRequest.name())));
 			};
 		}
 
@@ -1241,8 +1252,8 @@ public class McpAsyncServer {
 
 			return Mono.defer(() -> {
 				if (this.resources.putIfAbsent(resourceHandler.resource().uri(), resourceHandler) != null) {
-					return Mono
-							.error(new McpError("Resource with URI '" + resourceHandler.resource().uri() + "' already exists"));
+					return Mono.error(new McpError(
+							"Resource with URI '" + resourceHandler.resource().uri() + "' already exists"));
 				}
 				logger.debug("Added resource handler: {}", resourceHandler.resource().uri());
 				if (this.serverCapabilities.resources().listChanged()) {
@@ -1289,9 +1300,9 @@ public class McpAsyncServer {
 		private DefaultMcpSession.RequestHandler<McpSchema.ListResourcesResult> resourcesListRequestHandler() {
 			return params -> {
 				var resourceList = this.resources.values()
-				                                 .stream()
-				                                 .map(McpServerFeatures.AsyncResourceRegistration::resource)
-				                                 .toList();
+					.stream()
+					.map(McpServerFeatures.AsyncResourceRegistration::resource)
+					.toList();
 				return Mono.just(new McpSchema.ListResourcesResult(resourceList, null));
 			};
 		}
@@ -1334,10 +1345,10 @@ public class McpAsyncServer {
 
 			return Mono.defer(() -> {
 				McpServerFeatures.AsyncPromptRegistration registration = this.prompts
-						.putIfAbsent(promptRegistration.prompt().name(), promptRegistration);
+					.putIfAbsent(promptRegistration.prompt().name(), promptRegistration);
 				if (registration != null) {
-					return Mono.error(
-							new McpError("Prompt with name '" + promptRegistration.prompt().name() + "' already exists"));
+					return Mono.error(new McpError(
+							"Prompt with name '" + promptRegistration.prompt().name() + "' already exists"));
 				}
 
 				logger.debug("Added prompt handler: {}", promptRegistration.prompt().name());
@@ -1397,9 +1408,9 @@ public class McpAsyncServer {
 				// });
 
 				var promptList = this.prompts.values()
-				                             .stream()
-				                             .map(McpServerFeatures.AsyncPromptRegistration::prompt)
-				                             .toList();
+					.stream()
+					.map(McpServerFeatures.AsyncPromptRegistration::prompt)
+					.toList();
 
 				return Mono.just(new McpSchema.ListPromptsResult(promptList, null));
 			};
@@ -1426,8 +1437,8 @@ public class McpAsyncServer {
 		// ---------------------------------------
 
 		/**
-		 * Send a logging message notification to all connected clients. Messages below the
-		 * current minimum logging level will be filtered out.
+		 * Send a logging message notification to all connected clients. Messages below
+		 * the current minimum logging level will be filtered out.
 		 * @param loggingMessageNotification The logging message to send
 		 * @return A Mono that completes when the notification has been sent
 		 */
@@ -1449,8 +1460,8 @@ public class McpAsyncServer {
 		}
 
 		/**
-		 * Handles requests to set the minimum logging level. Messages below this level will
-		 * not be sent.
+		 * Handles requests to set the minimum logging level. Messages below this level
+		 * will not be sent.
 		 * @return A handler that processes logging level change requests
 		 */
 		private DefaultMcpSession.RequestHandler<Void> setLoggerRequestHandler() {
@@ -1471,11 +1482,11 @@ public class McpAsyncServer {
 		/**
 		 * Create a new message using the sampling capabilities of the client. The Model
 		 * Context Protocol (MCP) provides a standardized way for servers to request LLM
-		 * sampling (“completions” or “generations”) from language models via clients. This
-		 * flow allows clients to maintain control over model access, selection, and
-		 * permissions while enabling servers to leverage AI capabilities—with no server API
-		 * keys necessary. Servers can request text or image-based interactions and optionally
-		 * include context from MCP servers in their prompts.
+		 * sampling (“completions” or “generations”) from language models via clients.
+		 * This flow allows clients to maintain control over model access, selection, and
+		 * permissions while enabling servers to leverage AI capabilities—with no server
+		 * API keys necessary. Servers can request text or image-based interactions and
+		 * optionally include context from MCP servers in their prompts.
 		 * @param createMessageRequest The request to create a new message
 		 * @return A Mono that completes when the message has been created
 		 * @throws McpError if the client has not been initialized or does not support
@@ -1500,8 +1511,8 @@ public class McpAsyncServer {
 		}
 
 		/**
-		 * This method is package-private and used for test only. Should not be called by user
-		 * code.
+		 * This method is package-private and used for test only. Should not be called by
+		 * user code.
 		 * @param protocolVersions the Client supported protocol versions.
 		 */
 		void setProtocolVersions(List<String> protocolVersions) {
@@ -1509,4 +1520,5 @@ public class McpAsyncServer {
 		}
 
 	}
+
 }
