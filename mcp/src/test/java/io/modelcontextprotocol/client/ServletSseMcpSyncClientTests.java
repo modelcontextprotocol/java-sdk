@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol.client;
 
+import java.time.Duration;
+
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.spec.ClientMcpTransport;
 import org.junit.jupiter.api.Timeout;
@@ -42,6 +44,11 @@ class ServletSseMcpSyncClientTests extends AbstractMcpSyncClientTests {
 	@Override
 	protected void onClose() {
 		container.stop();
+	}
+
+	@Override
+	protected Duration getTimeoutDuration() {
+		return Duration.ofMillis(300);
 	}
 
 }
