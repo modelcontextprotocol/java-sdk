@@ -293,6 +293,9 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
 				return session.handle(message).flatMap(response -> ServerResponse.ok().build()).onErrorResume(error -> {
 					logger.error("Error processing  message: {}", error.getMessage());
+					// TODO: instead of signalling the error, just respond with 200 OK
+					// - the error is signalled on the SSE connection
+					// return ServerResponse.ok().build();
 					return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
 						.bodyValue(new McpError(error.getMessage()));
 				});

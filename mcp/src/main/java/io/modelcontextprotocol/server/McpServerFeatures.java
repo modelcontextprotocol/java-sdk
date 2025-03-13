@@ -8,7 +8,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import io.modelcontextprotocol.spec.McpSchema;
@@ -40,7 +41,7 @@ public class McpServerFeatures {
 			List<McpServerFeatures.AsyncToolRegistration> tools, Map<String, AsyncResourceRegistration> resources,
 			List<McpSchema.ResourceTemplate> resourceTemplates,
 			Map<String, McpServerFeatures.AsyncPromptRegistration> prompts,
-			List<Function<List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
+			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -57,7 +58,7 @@ public class McpServerFeatures {
 				List<McpServerFeatures.AsyncToolRegistration> tools, Map<String, AsyncResourceRegistration> resources,
 				List<McpSchema.ResourceTemplate> resourceTemplates,
 				Map<String, McpServerFeatures.AsyncPromptRegistration> prompts,
-				List<Function<List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
+				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -104,10 +105,11 @@ public class McpServerFeatures {
 				prompts.put(key, AsyncPromptRegistration.fromSync(prompt));
 			});
 
-			List<Function<List<McpSchema.Root>, Mono<Void>>> rootChangeConsumers = new ArrayList<>();
+			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootChangeConsumers = new ArrayList<>();
 
 			for (var rootChangeConsumer : syncSpec.rootsChangeConsumers()) {
-				rootChangeConsumers.add(list -> Mono.<Void>fromRunnable(() -> rootChangeConsumer.accept(list))
+				rootChangeConsumers.add((exchange, list) -> Mono
+					.<Void>fromRunnable(() -> rootChangeConsumer.accept(new McpSyncServerExchange(exchange), list))
 					.subscribeOn(Schedulers.boundedElastic()));
 			}
 
@@ -133,7 +135,7 @@ public class McpServerFeatures {
 			Map<String, McpServerFeatures.SyncResourceRegistration> resources,
 			List<McpSchema.ResourceTemplate> resourceTemplates,
 			Map<String, McpServerFeatures.SyncPromptRegistration> prompts,
-			List<Consumer<List<McpSchema.Root>>> rootsChangeConsumers) {
+			List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -151,7 +153,7 @@ public class McpServerFeatures {
 				Map<String, McpServerFeatures.SyncResourceRegistration> resources,
 				List<McpSchema.ResourceTemplate> resourceTemplates,
 				Map<String, McpServerFeatures.SyncPromptRegistration> prompts,
-				List<Consumer<List<McpSchema.Root>>> rootsChangeConsumers) {
+				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 

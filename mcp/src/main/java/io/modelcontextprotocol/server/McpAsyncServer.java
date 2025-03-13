@@ -12,7 +12,9 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -398,11 +400,14 @@ public class McpAsyncServer {
 
 			notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_INITIALIZED, (exchange, params) -> Mono.empty());
 
-			List<Function<List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers = features.rootsChangeConsumers();
+			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers = features
+				.rootsChangeConsumers();
 
 			if (Utils.isEmpty(rootsChangeConsumers)) {
-				rootsChangeConsumers = List.of((roots) -> Mono.fromRunnable(() -> logger.warn(
-						"Roots list changed notification, but no consumers provided. Roots list changed: {}", roots)));
+				rootsChangeConsumers = List.of((exchange,
+						roots) -> Mono.fromRunnable(() -> logger.warn(
+								"Roots list changed notification, but no consumers provided. Roots list changed: {}",
+								roots)));
 			}
 
 			notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED,
@@ -516,15 +521,15 @@ public class McpAsyncServer {
 		}
 
 		private McpServerSession.NotificationHandler asyncRootsListChangedNotificationHandler(
-				List<Function<List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
-			return (exchange,
-					params) -> listRoots().flatMap(listRootsResult -> Flux.fromIterable(rootsChangeConsumers)
-						.flatMap(consumer -> consumer.apply(listRootsResult.roots()))
-						.onErrorResume(error -> {
-							logger.error("Error handling roots list change notification", error);
-							return Mono.empty();
-						})
-						.then());
+				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
+			return (exchange, params) -> exchange.listRoots()
+				.flatMap(listRootsResult -> Flux.fromIterable(rootsChangeConsumers)
+					.flatMap(consumer -> consumer.apply(exchange, listRootsResult.roots()))
+					.onErrorResume(error -> {
+						logger.error("Error handling roots list change notification", error);
+						return Mono.empty();
+					})
+					.then());
 		}
 
 		// ---------------------------------------
@@ -998,7 +1003,12 @@ public class McpAsyncServer {
 
 			notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_INITIALIZED, (params) -> Mono.empty());
 
-			List<Function<List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers = features.rootsChangeConsumers();
+			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeHandlers = features
+				.rootsChangeConsumers();
+
+			List<Function<List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers = rootsChangeHandlers.stream()
+				.map(handler -> (Function<List<McpSchema.Root>, Mono<Void>>) (roots) -> handler.apply(null, roots))
+				.toList();
 
 			if (Utils.isEmpty(rootsChangeConsumers)) {
 				rootsChangeConsumers = List.of((roots) -> Mono.fromRunnable(() -> logger.warn(

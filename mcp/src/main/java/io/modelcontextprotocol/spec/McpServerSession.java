@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -34,7 +35,7 @@ public class McpServerSession implements McpSession {
 
 	private final McpServerTransport transport;
 
-	private final Sinks.One<McpServerExchange> exchangeSink = Sinks.one();
+	private final Sinks.One<McpAsyncServerExchange> exchangeSink = Sinks.one();
 
 	private final AtomicReference<McpSchema.ClientCapabilities> clientCapabilities = new AtomicReference<>();
 
@@ -195,7 +196,7 @@ public class McpServerSession implements McpSession {
 		return Mono.defer(() -> {
 			if (McpSchema.METHOD_NOTIFICATION_INITIALIZED.equals(notification.method())) {
 				this.state.lazySet(STATE_INITIALIZED);
-				exchangeSink.tryEmitValue(new McpServerExchange(this, clientCapabilities.get(), clientInfo.get()));
+				exchangeSink.tryEmitValue(new McpAsyncServerExchange(this, clientCapabilities.get(), clientInfo.get()));
 				return this.initNotificationHandler.handle();
 			}
 
@@ -245,13 +246,13 @@ public class McpServerSession implements McpSession {
 
 	public interface NotificationHandler {
 
-		Mono<Void> handle(McpServerExchange exchange, Object params);
+		Mono<Void> handle(McpAsyncServerExchange exchange, Object params);
 
 	}
 
 	public interface RequestHandler<T> {
 
-		Mono<T> handle(McpServerExchange exchange, Object params);
+		Mono<T> handle(McpAsyncServerExchange exchange, Object params);
 
 	}
 
