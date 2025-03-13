@@ -48,8 +48,6 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	protected ClientMcpTransport mcpTransport;
 
-	// private static final Duration TIMEOUT = Duration.ofMillis(1000);
-
 	private static final String ECHO_TEST_MESSAGE = "Hello MCP Spring AI!";
 
 	abstract protected ClientMcpTransport createMcpTransport();
