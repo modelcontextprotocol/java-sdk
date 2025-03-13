@@ -152,6 +152,7 @@ public interface McpServer {
 				"1.0.0");
 
 		private final ServerMcpTransport transport;
+
 		private final McpServerTransportProvider transportProvider;
 
 		private McpSchema.Implementation serverInfo = DEFAULT_SERVER_INFO;
@@ -522,13 +523,13 @@ public interface McpServer {
 		 * settings
 		 */
 		public McpAsyncServer build() {
-			var features = new McpServerFeatures.Async(this.serverInfo,
-					this.serverCapabilities,	this.tools, this.resources,
-					this.resourceTemplates, this.prompts, this.rootsChangeConsumers);
+			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
+					this.resources, this.resourceTemplates, this.prompts, this.rootsChangeConsumers);
 			if (this.transportProvider != null) {
 				// FIXME: provide ObjectMapper configuration
 				return new McpAsyncServer(this.transportProvider, new ObjectMapper(), features);
-			} else {
+			}
+			else {
 				return new McpAsyncServer(this.transport, features);
 			}
 		}
@@ -544,6 +545,7 @@ public interface McpServer {
 				"1.0.0");
 
 		private final ServerMcpTransport transport;
+
 		private final McpServerTransportProvider transportProvider;
 
 		private McpSchema.Implementation serverInfo = DEFAULT_SERVER_INFO;
@@ -917,9 +919,9 @@ public interface McpServer {
 		public McpSyncServer build() {
 			McpServerFeatures.Sync syncFeatures = new McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,
 					this.tools, this.resources, this.resourceTemplates, this.prompts, this.rootsChangeConsumers);
-			McpServerFeatures.Async asyncFeatures =
-					McpServerFeatures.Async.fromSync(syncFeatures);
-			var asyncServer = this.transportProvider != null ? new McpAsyncServer(this.transportProvider, new ObjectMapper(), asyncFeatures)
+			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures);
+			var asyncServer = this.transportProvider != null
+					? new McpAsyncServer(this.transportProvider, new ObjectMapper(), asyncFeatures)
 					: new McpAsyncServer(this.transport, asyncFeatures);
 
 			return new McpSyncServer(asyncServer);

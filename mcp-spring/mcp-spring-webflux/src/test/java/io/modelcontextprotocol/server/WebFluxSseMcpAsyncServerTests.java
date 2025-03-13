@@ -5,7 +5,7 @@
 package io.modelcontextprotocol.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvider;
+import io.modelcontextprotocol.server.transport.WebFluxSseServerTransport;
 import io.modelcontextprotocol.spec.ServerMcpTransport;
 import org.junit.jupiter.api.Timeout;
 import reactor.netty.DisposableServer;
@@ -16,7 +16,7 @@ import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 
 /**
- * Tests for {@link McpAsyncServer} using {@link WebFluxSseServerTransportProvider}.
+ * Tests for {@link McpAsyncServer} using {@link WebFluxSseServerTransport}.
  *
  * @author Christian Tzolov
  */
@@ -31,7 +31,7 @@ class WebFluxSseMcpAsyncServerTests extends AbstractMcpAsyncServerTests {
 
 	@Override
 	protected ServerMcpTransport createMcpTransport() {
-		var transport = new WebFluxSseServerTransportProvider(new ObjectMapper(), MESSAGE_ENDPOINT);
+		var transport = new WebFluxSseServerTransport(new ObjectMapper(), MESSAGE_ENDPOINT);
 
 		HttpHandler httpHandler = RouterFunctions.toHttpHandler(transport.getRouterFunction());
 		ReactorHttpHandlerAdapter adapter = new ReactorHttpHandlerAdapter(httpHandler);
