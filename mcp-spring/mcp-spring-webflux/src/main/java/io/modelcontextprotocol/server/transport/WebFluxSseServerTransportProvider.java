@@ -10,7 +10,7 @@ import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
-import io.modelcontextprotocol.spec.ServerMcpSession;
+import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.ServerMcpTransport;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
@@ -91,12 +91,12 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 	private final RouterFunction<?> routerFunction;
 
-	private ServerMcpSession.Factory sessionFactory;
+	private McpServerSession.Factory sessionFactory;
 
 	/**
 	 * Map of active client sessions, keyed by session ID.
 	 */
-	private final ConcurrentHashMap<String, ServerMcpSession> sessions = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<String, McpServerSession> sessions = new ConcurrentHashMap<>();
 
 	/**
 	 * Flag indicating if the transport is shutting down.
@@ -141,7 +141,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	}
 
 	@Override
-	public void setSessionFactory(ServerMcpSession.Factory sessionFactory) {
+	public void setSessionFactory(McpServerSession.Factory sessionFactory) {
 		this.sessionFactory = sessionFactory;
 	}
 
@@ -199,7 +199,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	public Mono<Void> closeGracefully() {
 		return Flux.fromIterable(sessions.values())
 			.doFirst(() -> logger.debug("Initiating graceful shutdown with {} active sessions", sessions.size()))
-			.flatMap(ServerMcpSession::closeGracefully)
+			.flatMap(McpServerSession::closeGracefully)
 			.then();
 	}
 
@@ -245,7 +245,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			.body(Flux.<ServerSentEvent<?>>create(sink -> {
 				WebFluxMcpSessionTransport sessionTransport = new WebFluxMcpSessionTransport(sink);
 
-				ServerMcpSession session = sessionFactory.create(sessionTransport);
+				McpServerSession session = sessionFactory.create(sessionTransport);
 				String sessionId = session.getId();
 
 				logger.debug("Created new SSE connection for session: {}", sessionId);
@@ -288,7 +288,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			return ServerResponse.badRequest().bodyValue(new McpError("Session ID missing in message endpoint"));
 		}
 
-		ServerMcpSession session = sessions.get(request.queryParam("sessionId").get());
+		McpServerSession session = sessions.get(request.queryParam("sessionId").get());
 
 		return request.bodyToMono(String.class).flatMap(body -> {
 			try {

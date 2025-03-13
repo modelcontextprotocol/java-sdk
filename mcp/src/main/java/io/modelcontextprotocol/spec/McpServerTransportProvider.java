@@ -7,7 +7,7 @@ import reactor.core.publisher.Mono;
 public interface McpServerTransportProvider {
 
 	// TODO: Consider adding a ProviderFactory that gets the Session Factory
-	void setSessionFactory(ServerMcpSession.Factory sessionFactory);
+	void setSessionFactory(McpServerSession.Factory sessionFactory);
 
 	Mono<Void> notifyClients(String method, Map<String, Object> params);
 

@@ -14,9 +14,9 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Sinks;
 
-public class ServerMcpSession implements McpSession {
+public class McpServerSession implements McpSession {
 
-	private static final Logger logger = LoggerFactory.getLogger(ServerMcpSession.class);
+	private static final Logger logger = LoggerFactory.getLogger(McpServerSession.class);
 
 	private final ConcurrentHashMap<Object, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
 
@@ -34,7 +34,7 @@ public class ServerMcpSession implements McpSession {
 
 	private final McpServerTransport transport;
 
-	private final Sinks.One<ServerMcpExchange> exchangeSink = Sinks.one();
+	private final Sinks.One<McpServerExchange>                  exchangeSink       = Sinks.one();
 	private final AtomicReference<McpSchema.ClientCapabilities> clientCapabilities = new AtomicReference<>();
 	private final AtomicReference<McpSchema.Implementation> clientInfo = new AtomicReference<>();
 
@@ -45,7 +45,7 @@ public class ServerMcpSession implements McpSession {
 
 	private final AtomicInteger state = new AtomicInteger(UNINITIALIZED);
 
-	public ServerMcpSession(String id, McpServerTransport transport,
+	public McpServerSession(String id, McpServerTransport transport,
 			InitRequestHandler initHandler,
 			InitNotificationHandler initNotificationHandler,
 			Map<String, RequestHandler<?>> requestHandlers,
@@ -195,7 +195,7 @@ public class ServerMcpSession implements McpSession {
 		return Mono.defer(() -> {
 			if (McpSchema.METHOD_NOTIFICATION_INITIALIZED.equals(notification.method())) {
 				this.state.lazySet(INITIALIZED);
-				exchangeSink.tryEmitValue(new ServerMcpExchange(this, clientCapabilities.get(), clientInfo.get()));
+				exchangeSink.tryEmitValue(new McpServerExchange(this, clientCapabilities.get(), clientInfo.get()));
 				return this.initNotificationHandler.handle();
 			}
 
@@ -242,16 +242,16 @@ public class ServerMcpSession implements McpSession {
 	}
 
 	public interface NotificationHandler {
-		Mono<Void> handle(ServerMcpExchange exchange, Object params);
+		Mono<Void> handle(McpServerExchange exchange, Object params);
 	}
 
 	public interface RequestHandler<T> {
-		Mono<T> handle(ServerMcpExchange exchange, Object params);
+		Mono<T> handle(McpServerExchange exchange, Object params);
 	}
 
 	@FunctionalInterface
 	public interface Factory {
-		ServerMcpSession create(McpServerTransport sessionTransport);
+		McpServerSession create(McpServerTransport sessionTransport);
 	}
 
 }
