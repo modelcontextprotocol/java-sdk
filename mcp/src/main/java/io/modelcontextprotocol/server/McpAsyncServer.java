@@ -185,9 +185,21 @@ public class McpAsyncServer {
 	 * Add a new tool registration at runtime.
 	 * @param toolRegistration The tool registration to add
 	 * @return Mono that completes when clients have been notified of the change
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link #addTool(McpServerFeatures.AsyncToolSpecification)}.
 	 */
+	@Deprecated
 	public Mono<Void> addTool(McpServerFeatures.AsyncToolRegistration toolRegistration) {
 		return this.delegate.addTool(toolRegistration);
+	}
+
+	/**
+	 * Add a new tool specification at runtime.
+	 * @param toolSpecification The tool specification to add
+	 * @return Mono that completes when clients have been notified of the change
+	 */
+	public Mono<Void> addTool(McpServerFeatures.AsyncToolSpecification toolSpecification) {
+		return this.delegate.addTool(toolSpecification);
 	}
 
 	/**
@@ -215,8 +227,20 @@ public class McpAsyncServer {
 	 * Add a new resource handler at runtime.
 	 * @param resourceHandler The resource handler to add
 	 * @return Mono that completes when clients have been notified of the change
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link #addResource(McpServerFeatures.AsyncResourceSpecification)}.
 	 */
+	@Deprecated
 	public Mono<Void> addResource(McpServerFeatures.AsyncResourceRegistration resourceHandler) {
+		return this.delegate.addResource(resourceHandler);
+	}
+
+	/**
+	 * Add a new resource handler at runtime.
+	 * @param resourceHandler The resource handler to add
+	 * @return Mono that completes when clients have been notified of the change
+	 */
+	public Mono<Void> addResource(McpServerFeatures.AsyncResourceSpecification resourceHandler) {
 		return this.delegate.addResource(resourceHandler);
 	}
 
@@ -245,9 +269,21 @@ public class McpAsyncServer {
 	 * Add a new prompt handler at runtime.
 	 * @param promptRegistration The prompt handler to add
 	 * @return Mono that completes when clients have been notified of the change
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link #addPrompt(McpServerFeatures.AsyncPromptSpecification)}.
 	 */
+	@Deprecated
 	public Mono<Void> addPrompt(McpServerFeatures.AsyncPromptRegistration promptRegistration) {
 		return this.delegate.addPrompt(promptRegistration);
+	}
+
+	/**
+	 * Add a new prompt handler at runtime.
+	 * @param promptSpecification The prompt handler to add
+	 * @return Mono that completes when clients have been notified of the change
+	 */
+	public Mono<Void> addPrompt(McpServerFeatures.AsyncPromptSpecification promptSpecification) {
+		return this.delegate.addPrompt(promptSpecification);
 	}
 
 	/**
@@ -536,20 +572,8 @@ public class McpAsyncServer {
 		// ---------------------------------------
 
 		/**
-		 * Add a new tool registration at runtime.
-		 * @param toolRegistration The tool registration to add
-		 * @return Mono that completes when clients have been notified of the change
-		 * @deprecated This method will be removed in 0.9.0. Use
-		 * {@link #addTool(McpServerFeatures.AsyncToolSpecification)}.
-		 */
-		@Deprecated
-		public Mono<Void> addTool(McpServerFeatures.AsyncToolRegistration toolRegistration) {
-			return this.addTool(toolRegistration.toSpecification());
-		}
-
-		/**
-		 * Add a new tool registration at runtime.
-		 * @param toolSpecification The tool registration to add
+		 * Add a new tool specification at runtime.
+		 * @param toolSpecification The tool specification to add
 		 * @return Mono that completes when clients have been notified of the change
 		 */
 		public Mono<Void> addTool(McpServerFeatures.AsyncToolSpecification toolSpecification) {
@@ -583,6 +607,11 @@ public class McpAsyncServer {
 			});
 		}
 
+		@Override
+		public Mono<Void> addTool(McpServerFeatures.AsyncToolRegistration toolRegistration) {
+			return this.addTool(toolRegistration.toSpecification());
+		}
+
 		/**
 		 * Remove a tool handler at runtime.
 		 * @param toolName The name of the tool handler to remove
@@ -598,7 +627,7 @@ public class McpAsyncServer {
 
 			return Mono.defer(() -> {
 				boolean removed = this.tools
-					.removeIf(toolRegistration -> toolRegistration.tool().name().equals(toolName));
+					.removeIf(toolSpecification -> toolSpecification.tool().name().equals(toolName));
 				if (removed) {
 					logger.debug("Removed tool handler: {}", toolName);
 					if (this.serverCapabilities.tools().listChanged()) {
@@ -651,18 +680,6 @@ public class McpAsyncServer {
 
 		/**
 		 * Add a new resource handler at runtime.
-		 * @param resourceHandler The resource handler to add
-		 * @return Mono that completes when clients have been notified of the change
-		 * @deprecated This method will be removed in 0.9.0. Use
-		 * {@link #addResource(McpServerFeatures.AsyncResourceSpecification)}.
-		 */
-		@Deprecated
-		public Mono<Void> addResource(McpServerFeatures.AsyncResourceRegistration resourceHandler) {
-			return this.addResource(resourceHandler.toSpecification());
-		}
-
-		/**
-		 * Add a new resource handler at runtime.
 		 * @param resourceSpecification The resource handler to add
 		 * @return Mono that completes when clients have been notified of the change
 		 */
@@ -686,6 +703,11 @@ public class McpAsyncServer {
 				}
 				return Mono.empty();
 			});
+		}
+
+		@Override
+		public Mono<Void> addResource(McpServerFeatures.AsyncResourceRegistration resourceHandler) {
+			return this.addResource(resourceHandler.toSpecification());
 		}
 
 		/**
@@ -744,9 +766,9 @@ public class McpAsyncServer {
 						new TypeReference<McpSchema.ReadResourceRequest>() {
 						});
 				var resourceUri = resourceRequest.uri();
-				McpServerFeatures.AsyncResourceSpecification registration = this.resources.get(resourceUri);
-				if (registration != null) {
-					return registration.readHandler().apply(exchange, resourceRequest);
+				McpServerFeatures.AsyncResourceSpecification specification = this.resources.get(resourceUri);
+				if (specification != null) {
+					return specification.readHandler().apply(exchange, resourceRequest);
 				}
 				return Mono.error(new McpError("Resource not found: " + resourceUri));
 			};
@@ -758,24 +780,12 @@ public class McpAsyncServer {
 
 		/**
 		 * Add a new prompt handler at runtime.
-		 * @param promptRegistration The prompt handler to add
-		 * @return Mono that completes when clients have been notified of the change
-		 * @deprecated This method will be removed in 0.9.0. Use
-		 * {@link #addPrompt(McpServerFeatures.AsyncPromptSpecification)}.
-		 */
-		@Deprecated
-		public Mono<Void> addPrompt(McpServerFeatures.AsyncPromptRegistration promptRegistration) {
-			return this.addPrompt(promptRegistration.toSpecification());
-		}
-
-		/**
-		 * Add a new prompt handler at runtime.
 		 * @param promptSpecification The prompt handler to add
 		 * @return Mono that completes when clients have been notified of the change
 		 */
 		public Mono<Void> addPrompt(McpServerFeatures.AsyncPromptSpecification promptSpecification) {
 			if (promptSpecification == null) {
-				return Mono.error(new McpError("Prompt registration must not be null"));
+				return Mono.error(new McpError("Prompt specification must not be null"));
 			}
 			if (this.serverCapabilities.prompts() == null) {
 				return Mono.error(new McpError("Server must be configured with prompt capabilities"));
@@ -799,6 +809,11 @@ public class McpAsyncServer {
 				}
 				return Mono.empty();
 			});
+		}
+
+		@Override
+		public Mono<Void> addPrompt(McpServerFeatures.AsyncPromptRegistration promptRegistration) {
+			return this.addPrompt(promptRegistration.toSpecification());
 		}
 
 		/**
@@ -1056,6 +1071,24 @@ public class McpAsyncServer {
 					notificationHandlers);
 		}
 
+		@Override
+		public Mono<Void> addTool(McpServerFeatures.AsyncToolSpecification toolSpecification) {
+			throw new IllegalArgumentException(
+					"McpAsyncServer configured with legacy " + "transport. Use McpServerTransportProvider instead.");
+		}
+
+		@Override
+		public Mono<Void> addResource(McpServerFeatures.AsyncResourceSpecification resourceHandler) {
+			throw new IllegalArgumentException(
+					"McpAsyncServer configured with legacy " + "transport. Use McpServerTransportProvider instead.");
+		}
+
+		@Override
+		public Mono<Void> addPrompt(McpServerFeatures.AsyncPromptSpecification promptSpecification) {
+			throw new IllegalArgumentException(
+					"McpAsyncServer configured with legacy " + "transport. Use McpServerTransportProvider instead.");
+		}
+
 		// ---------------------------------------
 		// Lifecycle Management
 		// ---------------------------------------
@@ -1182,6 +1215,7 @@ public class McpAsyncServer {
 		 * @param toolRegistration The tool registration to add
 		 * @return Mono that completes when clients have been notified of the change
 		 */
+		@Override
 		public Mono<Void> addTool(McpServerFeatures.AsyncToolRegistration toolRegistration) {
 			if (toolRegistration == null) {
 				return Mono.error(new McpError("Tool registration must not be null"));
@@ -1284,6 +1318,7 @@ public class McpAsyncServer {
 		 * @param resourceHandler The resource handler to add
 		 * @return Mono that completes when clients have been notified of the change
 		 */
+		@Override
 		public Mono<Void> addResource(McpServerFeatures.AsyncResourceRegistration resourceHandler) {
 			if (resourceHandler == null || resourceHandler.resource() == null) {
 				return Mono.error(new McpError("Resource must not be null"));
@@ -1379,6 +1414,7 @@ public class McpAsyncServer {
 		 * @param promptRegistration The prompt handler to add
 		 * @return Mono that completes when clients have been notified of the change
 		 */
+		@Override
 		public Mono<Void> addPrompt(McpServerFeatures.AsyncPromptRegistration promptRegistration) {
 			if (promptRegistration == null) {
 				return Mono.error(new McpError("Prompt registration must not be null"));
