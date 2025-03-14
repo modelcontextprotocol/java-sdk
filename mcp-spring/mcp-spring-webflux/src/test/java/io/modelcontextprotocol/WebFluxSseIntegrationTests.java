@@ -384,8 +384,8 @@ public class WebFluxSseIntegrationTests {
 		var clientBuilder = clientBulders.get(clientType);
 
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
-		McpServerFeatures.SyncToolRegistration tool1 = new McpServerFeatures.SyncToolRegistration(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), request -> {
+		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
@@ -424,8 +424,8 @@ public class WebFluxSseIntegrationTests {
 		var clientBuilder = clientBulders.get(clientType);
 
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
-		McpServerFeatures.SyncToolRegistration tool1 = new McpServerFeatures.SyncToolRegistration(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), request -> {
+		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
