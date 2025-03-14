@@ -14,7 +14,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -333,13 +332,13 @@ public class McpAsyncServer {
 		/**
 		 * Thread-safe list of tool handlers that can be modified at runtime.
 		 */
-		private final CopyOnWriteArrayList<McpServerFeatures.AsyncToolRegistration> tools = new CopyOnWriteArrayList<>();
+		private final CopyOnWriteArrayList<McpServerFeatures.AsyncToolSpecification> tools = new CopyOnWriteArrayList<>();
 
 		private final CopyOnWriteArrayList<McpSchema.ResourceTemplate> resourceTemplates = new CopyOnWriteArrayList<>();
 
-		private final ConcurrentHashMap<String, McpServerFeatures.AsyncResourceRegistration> resources = new ConcurrentHashMap<>();
+		private final ConcurrentHashMap<String, McpServerFeatures.AsyncResourceSpecification> resources = new ConcurrentHashMap<>();
 
-		private final ConcurrentHashMap<String, McpServerFeatures.AsyncPromptRegistration> prompts = new ConcurrentHashMap<>();
+		private final ConcurrentHashMap<String, McpServerFeatures.AsyncPromptSpecification> prompts = new ConcurrentHashMap<>();
 
 		private LoggingLevel minLoggingLevel = LoggingLevel.DEBUG;
 
@@ -540,15 +539,27 @@ public class McpAsyncServer {
 		 * Add a new tool registration at runtime.
 		 * @param toolRegistration The tool registration to add
 		 * @return Mono that completes when clients have been notified of the change
+		 * @deprecated This method will be removed in 0.9.0. Use
+		 * {@link #addTool(McpServerFeatures.AsyncToolSpecification)}.
 		 */
+		@Deprecated
 		public Mono<Void> addTool(McpServerFeatures.AsyncToolRegistration toolRegistration) {
-			if (toolRegistration == null) {
-				return Mono.error(new McpError("Tool registration must not be null"));
+			return this.addTool(toolRegistration.toSpecification());
+		}
+
+		/**
+		 * Add a new tool registration at runtime.
+		 * @param toolSpecification The tool registration to add
+		 * @return Mono that completes when clients have been notified of the change
+		 */
+		public Mono<Void> addTool(McpServerFeatures.AsyncToolSpecification toolSpecification) {
+			if (toolSpecification == null) {
+				return Mono.error(new McpError("Tool specification must not be null"));
 			}
-			if (toolRegistration.tool() == null) {
+			if (toolSpecification.tool() == null) {
 				return Mono.error(new McpError("Tool must not be null"));
 			}
-			if (toolRegistration.call() == null) {
+			if (toolSpecification.call() == null) {
 				return Mono.error(new McpError("Tool call handler must not be null"));
 			}
 			if (this.serverCapabilities.tools() == null) {
@@ -557,13 +568,13 @@ public class McpAsyncServer {
 
 			return Mono.defer(() -> {
 				// Check for duplicate tool names
-				if (this.tools.stream().anyMatch(th -> th.tool().name().equals(toolRegistration.tool().name()))) {
+				if (this.tools.stream().anyMatch(th -> th.tool().name().equals(toolSpecification.tool().name()))) {
 					return Mono
-						.error(new McpError("Tool with name '" + toolRegistration.tool().name() + "' already exists"));
+						.error(new McpError("Tool with name '" + toolSpecification.tool().name() + "' already exists"));
 				}
 
-				this.tools.add(toolRegistration);
-				logger.debug("Added tool handler: {}", toolRegistration.tool().name());
+				this.tools.add(toolSpecification);
+				logger.debug("Added tool handler: {}", toolSpecification.tool().name());
 
 				if (this.serverCapabilities.tools().listChanged()) {
 					return notifyToolsListChanged();
@@ -609,7 +620,7 @@ public class McpAsyncServer {
 
 		private McpServerSession.RequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
 			return (exchange, params) -> {
-				List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolRegistration::tool).toList();
+				List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList();
 
 				return Mono.just(new McpSchema.ListToolsResult(tools, null));
 			};
@@ -621,15 +632,15 @@ public class McpAsyncServer {
 						new TypeReference<McpSchema.CallToolRequest>() {
 						});
 
-				Optional<McpServerFeatures.AsyncToolRegistration> toolRegistration = this.tools.stream()
+				Optional<McpServerFeatures.AsyncToolSpecification> toolSpecification = this.tools.stream()
 					.filter(tr -> callToolRequest.name().equals(tr.tool().name()))
 					.findAny();
 
-				if (toolRegistration.isEmpty()) {
+				if (toolSpecification.isEmpty()) {
 					return Mono.error(new McpError("Tool not found: " + callToolRequest.name()));
 				}
 
-				return toolRegistration.map(tool -> tool.call().apply(callToolRequest.arguments()))
+				return toolSpecification.map(tool -> tool.call().apply(exchange, callToolRequest.arguments()))
 					.orElse(Mono.error(new McpError("Tool not found: " + callToolRequest.name())));
 			};
 		}
@@ -642,9 +653,21 @@ public class McpAsyncServer {
 		 * Add a new resource handler at runtime.
 		 * @param resourceHandler The resource handler to add
 		 * @return Mono that completes when clients have been notified of the change
+		 * @deprecated This method will be removed in 0.9.0. Use
+		 * {@link #addResource(McpServerFeatures.AsyncResourceSpecification)}.
 		 */
+		@Deprecated
 		public Mono<Void> addResource(McpServerFeatures.AsyncResourceRegistration resourceHandler) {
-			if (resourceHandler == null || resourceHandler.resource() == null) {
+			return this.addResource(resourceHandler.toSpecification());
+		}
+
+		/**
+		 * Add a new resource handler at runtime.
+		 * @param resourceSpecification The resource handler to add
+		 * @return Mono that completes when clients have been notified of the change
+		 */
+		public Mono<Void> addResource(McpServerFeatures.AsyncResourceSpecification resourceSpecification) {
+			if (resourceSpecification == null || resourceSpecification.resource() == null) {
 				return Mono.error(new McpError("Resource must not be null"));
 			}
 
@@ -653,11 +676,11 @@ public class McpAsyncServer {
 			}
 
 			return Mono.defer(() -> {
-				if (this.resources.putIfAbsent(resourceHandler.resource().uri(), resourceHandler) != null) {
+				if (this.resources.putIfAbsent(resourceSpecification.resource().uri(), resourceSpecification) != null) {
 					return Mono.error(new McpError(
-							"Resource with URI '" + resourceHandler.resource().uri() + "' already exists"));
+							"Resource with URI '" + resourceSpecification.resource().uri() + "' already exists"));
 				}
-				logger.debug("Added resource handler: {}", resourceHandler.resource().uri());
+				logger.debug("Added resource handler: {}", resourceSpecification.resource().uri());
 				if (this.serverCapabilities.resources().listChanged()) {
 					return notifyResourcesListChanged();
 				}
@@ -679,7 +702,7 @@ public class McpAsyncServer {
 			}
 
 			return Mono.defer(() -> {
-				McpServerFeatures.AsyncResourceRegistration removed = this.resources.remove(resourceUri);
+				McpServerFeatures.AsyncResourceSpecification removed = this.resources.remove(resourceUri);
 				if (removed != null) {
 					logger.debug("Removed resource handler: {}", resourceUri);
 					if (this.serverCapabilities.resources().listChanged()) {
@@ -696,8 +719,6 @@ public class McpAsyncServer {
 		 * @return A Mono that completes when all clients have been notified
 		 */
 		public Mono<Void> notifyResourcesListChanged() {
-			McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(
-					McpSchema.JSONRPC_VERSION, McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED, null);
 			return this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED, null);
 		}
 
@@ -705,7 +726,7 @@ public class McpAsyncServer {
 			return (exchange, params) -> {
 				var resourceList = this.resources.values()
 					.stream()
-					.map(McpServerFeatures.AsyncResourceRegistration::resource)
+					.map(McpServerFeatures.AsyncResourceSpecification::resource)
 					.toList();
 				return Mono.just(new McpSchema.ListResourcesResult(resourceList, null));
 			};
@@ -723,9 +744,9 @@ public class McpAsyncServer {
 						new TypeReference<McpSchema.ReadResourceRequest>() {
 						});
 				var resourceUri = resourceRequest.uri();
-				McpServerFeatures.AsyncResourceRegistration registration = this.resources.get(resourceUri);
+				McpServerFeatures.AsyncResourceSpecification registration = this.resources.get(resourceUri);
 				if (registration != null) {
-					return registration.readHandler().apply(resourceRequest);
+					return registration.readHandler().apply(exchange, resourceRequest);
 				}
 				return Mono.error(new McpError("Resource not found: " + resourceUri));
 			};
@@ -739,9 +760,21 @@ public class McpAsyncServer {
 		 * Add a new prompt handler at runtime.
 		 * @param promptRegistration The prompt handler to add
 		 * @return Mono that completes when clients have been notified of the change
+		 * @deprecated This method will be removed in 0.9.0. Use
+		 * {@link #addPrompt(McpServerFeatures.AsyncPromptSpecification)}.
 		 */
+		@Deprecated
 		public Mono<Void> addPrompt(McpServerFeatures.AsyncPromptRegistration promptRegistration) {
-			if (promptRegistration == null) {
+			return this.addPrompt(promptRegistration.toSpecification());
+		}
+
+		/**
+		 * Add a new prompt handler at runtime.
+		 * @param promptSpecification The prompt handler to add
+		 * @return Mono that completes when clients have been notified of the change
+		 */
+		public Mono<Void> addPrompt(McpServerFeatures.AsyncPromptSpecification promptSpecification) {
+			if (promptSpecification == null) {
 				return Mono.error(new McpError("Prompt registration must not be null"));
 			}
 			if (this.serverCapabilities.prompts() == null) {
@@ -749,14 +782,14 @@ public class McpAsyncServer {
 			}
 
 			return Mono.defer(() -> {
-				McpServerFeatures.AsyncPromptRegistration registration = this.prompts
-					.putIfAbsent(promptRegistration.prompt().name(), promptRegistration);
-				if (registration != null) {
+				McpServerFeatures.AsyncPromptSpecification specification = this.prompts
+					.putIfAbsent(promptSpecification.prompt().name(), promptSpecification);
+				if (specification != null) {
 					return Mono.error(new McpError(
-							"Prompt with name '" + promptRegistration.prompt().name() + "' already exists"));
+							"Prompt with name '" + promptSpecification.prompt().name() + "' already exists"));
 				}
 
-				logger.debug("Added prompt handler: {}", promptRegistration.prompt().name());
+				logger.debug("Added prompt handler: {}", promptSpecification.prompt().name());
 
 				// Servers that declared the listChanged capability SHOULD send a
 				// notification,
@@ -782,7 +815,7 @@ public class McpAsyncServer {
 			}
 
 			return Mono.defer(() -> {
-				McpServerFeatures.AsyncPromptRegistration removed = this.prompts.remove(promptName);
+				McpServerFeatures.AsyncPromptSpecification removed = this.prompts.remove(promptName);
 
 				if (removed != null) {
 					logger.debug("Removed prompt handler: {}", promptName);
@@ -814,7 +847,7 @@ public class McpAsyncServer {
 
 				var promptList = this.prompts.values()
 					.stream()
-					.map(McpServerFeatures.AsyncPromptRegistration::prompt)
+					.map(McpServerFeatures.AsyncPromptSpecification::prompt)
 					.toList();
 
 				return Mono.just(new McpSchema.ListPromptsResult(promptList, null));
@@ -828,12 +861,12 @@ public class McpAsyncServer {
 						});
 
 				// Implement prompt retrieval logic here
-				McpServerFeatures.AsyncPromptRegistration registration = this.prompts.get(promptRequest.name());
-				if (registration == null) {
+				McpServerFeatures.AsyncPromptSpecification specification = this.prompts.get(promptRequest.name());
+				if (specification == null) {
 					return Mono.error(new McpError("Prompt not found: " + promptRequest.name()));
 				}
 
-				return registration.promptHandler().apply(promptRequest);
+				return specification.promptHandler().apply(exchange, promptRequest);
 			};
 		}
 
@@ -938,13 +971,13 @@ public class McpAsyncServer {
 		/**
 		 * Thread-safe list of tool handlers that can be modified at runtime.
 		 */
-		private final CopyOnWriteArrayList<McpServerFeatures.AsyncToolRegistration> tools = new CopyOnWriteArrayList<>();
+		private final CopyOnWriteArrayList<McpServerFeatures.AsyncToolSpecification> tools = new CopyOnWriteArrayList<>();
 
 		private final CopyOnWriteArrayList<McpSchema.ResourceTemplate> resourceTemplates = new CopyOnWriteArrayList<>();
 
-		private final ConcurrentHashMap<String, McpServerFeatures.AsyncResourceRegistration> resources = new ConcurrentHashMap<>();
+		private final ConcurrentHashMap<String, McpServerFeatures.AsyncResourceSpecification> resources = new ConcurrentHashMap<>();
 
-		private final ConcurrentHashMap<String, McpServerFeatures.AsyncPromptRegistration> prompts = new ConcurrentHashMap<>();
+		private final ConcurrentHashMap<String, McpServerFeatures.AsyncPromptSpecification> prompts = new ConcurrentHashMap<>();
 
 		private LoggingLevel minLoggingLevel = LoggingLevel.DEBUG;
 
@@ -1170,7 +1203,7 @@ public class McpAsyncServer {
 						.error(new McpError("Tool with name '" + toolRegistration.tool().name() + "' already exists"));
 				}
 
-				this.tools.add(toolRegistration);
+				this.tools.add(toolRegistration.toSpecification());
 				logger.debug("Added tool handler: {}", toolRegistration.tool().name());
 
 				if (this.serverCapabilities.tools().listChanged()) {
@@ -1217,7 +1250,7 @@ public class McpAsyncServer {
 
 		private DefaultMcpSession.RequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
 			return params -> {
-				List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolRegistration::tool).toList();
+				List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList();
 
 				return Mono.just(new McpSchema.ListToolsResult(tools, null));
 			};
@@ -1229,7 +1262,7 @@ public class McpAsyncServer {
 						new TypeReference<McpSchema.CallToolRequest>() {
 						});
 
-				Optional<McpServerFeatures.AsyncToolRegistration> toolRegistration = this.tools.stream()
+				Optional<McpServerFeatures.AsyncToolSpecification> toolRegistration = this.tools.stream()
 					.filter(tr -> callToolRequest.name().equals(tr.tool().name()))
 					.findAny();
 
@@ -1237,7 +1270,7 @@ public class McpAsyncServer {
 					return Mono.error(new McpError("Tool not found: " + callToolRequest.name()));
 				}
 
-				return toolRegistration.map(tool -> tool.call().apply(callToolRequest.arguments()))
+				return toolRegistration.map(tool -> tool.call().apply(null, callToolRequest.arguments()))
 					.orElse(Mono.error(new McpError("Tool not found: " + callToolRequest.name())));
 			};
 		}
@@ -1261,7 +1294,8 @@ public class McpAsyncServer {
 			}
 
 			return Mono.defer(() -> {
-				if (this.resources.putIfAbsent(resourceHandler.resource().uri(), resourceHandler) != null) {
+				if (this.resources.putIfAbsent(resourceHandler.resource().uri(),
+						resourceHandler.toSpecification()) != null) {
 					return Mono.error(new McpError(
 							"Resource with URI '" + resourceHandler.resource().uri() + "' already exists"));
 				}
@@ -1287,7 +1321,7 @@ public class McpAsyncServer {
 			}
 
 			return Mono.defer(() -> {
-				McpServerFeatures.AsyncResourceRegistration removed = this.resources.remove(resourceUri);
+				McpServerFeatures.AsyncResourceSpecification removed = this.resources.remove(resourceUri);
 				if (removed != null) {
 					logger.debug("Removed resource handler: {}", resourceUri);
 					if (this.serverCapabilities.resources().listChanged()) {
@@ -1311,7 +1345,7 @@ public class McpAsyncServer {
 			return params -> {
 				var resourceList = this.resources.values()
 					.stream()
-					.map(McpServerFeatures.AsyncResourceRegistration::resource)
+					.map(McpServerFeatures.AsyncResourceSpecification::resource)
 					.toList();
 				return Mono.just(new McpSchema.ListResourcesResult(resourceList, null));
 			};
@@ -1328,9 +1362,9 @@ public class McpAsyncServer {
 						new TypeReference<McpSchema.ReadResourceRequest>() {
 						});
 				var resourceUri = resourceRequest.uri();
-				McpServerFeatures.AsyncResourceRegistration registration = this.resources.get(resourceUri);
+				McpServerFeatures.AsyncResourceSpecification registration = this.resources.get(resourceUri);
 				if (registration != null) {
-					return registration.readHandler().apply(resourceRequest);
+					return registration.readHandler().apply(null, resourceRequest);
 				}
 				return Mono.error(new McpError("Resource not found: " + resourceUri));
 			};
@@ -1354,8 +1388,8 @@ public class McpAsyncServer {
 			}
 
 			return Mono.defer(() -> {
-				McpServerFeatures.AsyncPromptRegistration registration = this.prompts
-					.putIfAbsent(promptRegistration.prompt().name(), promptRegistration);
+				McpServerFeatures.AsyncPromptSpecification registration = this.prompts
+					.putIfAbsent(promptRegistration.prompt().name(), promptRegistration.toSpecification());
 				if (registration != null) {
 					return Mono.error(new McpError(
 							"Prompt with name '" + promptRegistration.prompt().name() + "' already exists"));
@@ -1387,7 +1421,7 @@ public class McpAsyncServer {
 			}
 
 			return Mono.defer(() -> {
-				McpServerFeatures.AsyncPromptRegistration removed = this.prompts.remove(promptName);
+				McpServerFeatures.AsyncPromptSpecification removed = this.prompts.remove(promptName);
 
 				if (removed != null) {
 					logger.debug("Removed prompt handler: {}", promptName);
@@ -1419,7 +1453,7 @@ public class McpAsyncServer {
 
 				var promptList = this.prompts.values()
 					.stream()
-					.map(McpServerFeatures.AsyncPromptRegistration::prompt)
+					.map(McpServerFeatures.AsyncPromptSpecification::prompt)
 					.toList();
 
 				return Mono.just(new McpSchema.ListPromptsResult(promptList, null));
@@ -1433,12 +1467,12 @@ public class McpAsyncServer {
 						});
 
 				// Implement prompt retrieval logic here
-				McpServerFeatures.AsyncPromptRegistration registration = this.prompts.get(promptRequest.name());
+				McpServerFeatures.AsyncPromptSpecification registration = this.prompts.get(promptRequest.name());
 				if (registration == null) {
 					return Mono.error(new McpError("Prompt not found: " + promptRequest.name()));
 				}
 
-				return registration.promptHandler().apply(promptRequest);
+				return registration.promptHandler().apply(null, promptRequest);
 			};
 		}
 
