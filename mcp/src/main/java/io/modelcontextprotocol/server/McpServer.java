@@ -168,7 +168,7 @@ public interface McpServer {
 		 */
 		private final Map<String, McpServerFeatures.AsyncResourceRegistration> resources = new HashMap<>();
 
-		private final List<ResourceTemplate> resourceTemplates = new ArrayList<>();
+		private final Map<String, McpServerFeatures.AsyncResourceTemplateRegistration> resourceTemplates = new HashMap<>();
 
 		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
@@ -377,10 +377,15 @@ public interface McpServer {
 		 * @param resourceTemplates List of resource templates. If null, clears existing
 		 * templates.
 		 * @return This builder instance for method chaining
-		 * @see #resourceTemplates(ResourceTemplate...)
+		 * @see #resourceTemplates(McpServerFeatures.AsyncResourceTemplateRegistration...)
 		 */
-		public AsyncSpec resourceTemplates(List<ResourceTemplate> resourceTemplates) {
-			this.resourceTemplates.addAll(resourceTemplates);
+		public AsyncSpec resourceTemplates(
+				List<McpServerFeatures.AsyncResourceTemplateRegistration> resourceTemplates) {
+			Assert.notNull(resourceTemplates, "Resource handlers list must not be null");
+
+			for (McpServerFeatures.AsyncResourceTemplateRegistration resource : resourceTemplates) {
+				this.resourceTemplates.put(resource.resource().uriTemplate(), resource);
+			}
 			return this;
 		}
 
@@ -391,9 +396,9 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @see #resourceTemplates(List)
 		 */
-		public AsyncSpec resourceTemplates(ResourceTemplate... resourceTemplates) {
-			for (ResourceTemplate resourceTemplate : resourceTemplates) {
-				this.resourceTemplates.add(resourceTemplate);
+		public AsyncSpec resourceTemplates(McpServerFeatures.AsyncResourceTemplateRegistration... resourceTemplates) {
+			for (McpServerFeatures.AsyncResourceTemplateRegistration resourceTemplate : resourceTemplates) {
+				this.resourceTemplates.put(resourceTemplate.resource().uriTemplate(), resourceTemplate);
 			}
 			return this;
 		}
@@ -546,7 +551,7 @@ public interface McpServer {
 		 */
 		private final Map<String, McpServerFeatures.SyncResourceRegistration> resources = new HashMap<>();
 
-		private final List<ResourceTemplate> resourceTemplates = new ArrayList<>();
+		private final Map<String, McpServerFeatures.SyncResourceTemplateRegistration> resourceTemplates = new HashMap<>();
 
 		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
@@ -757,8 +762,10 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
-		public SyncSpec resourceTemplates(List<ResourceTemplate> resourceTemplates) {
-			this.resourceTemplates.addAll(resourceTemplates);
+		public SyncSpec resourceTemplates(List<McpServerFeatures.SyncResourceTemplateRegistration> resourceTemplates) {
+			for (McpServerFeatures.SyncResourceTemplateRegistration resourceTemplate : resourceTemplates) {
+				this.resourceTemplates.put(resourceTemplate.resource().uriTemplate(), resourceTemplate);
+			}
 			return this;
 		}
 
@@ -769,9 +776,9 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @see #resourceTemplates(List)
 		 */
-		public SyncSpec resourceTemplates(ResourceTemplate... resourceTemplates) {
-			for (ResourceTemplate resourceTemplate : resourceTemplates) {
-				this.resourceTemplates.add(resourceTemplate);
+		public SyncSpec resourceTemplates(McpServerFeatures.SyncResourceTemplateRegistration... resourceTemplates) {
+			for (McpServerFeatures.SyncResourceTemplateRegistration resourceTemplate : resourceTemplates) {
+				this.resourceTemplates.put(resourceTemplate.resource().uriTemplate(), resourceTemplate);
 			}
 			return this;
 		}
