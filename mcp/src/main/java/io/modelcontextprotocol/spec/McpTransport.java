@@ -46,8 +46,13 @@ public interface McpTransport {
 	 * This method should be called before any message exchange can occur. It sets up the
 	 * necessary resources and establishes the connection to the server.
 	 * </p>
+	 * @deprecated This is only relevant for client-side transports and will be removed
+	 * from this interface in 0.9.0.
 	 */
-	Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler);
+	@Deprecated
+	default Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
+		return Mono.empty();
+	}
 
 	/**
 	 * Closes the transport connection and releases any associated resources.
@@ -69,7 +74,7 @@ public interface McpTransport {
 	Mono<Void> closeGracefully();
 
 	/**
-	 * Sends a message to the server asynchronously.
+	 * Sends a message to the peer asynchronously.
 	 *
 	 * <p>
 	 * This method handles the transmission of messages to the server in an asynchronous

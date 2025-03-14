@@ -64,7 +64,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testConstructorWithInvalidArguments() {
-		assertThatThrownBy(() -> McpServer.sync(null)).isInstanceOf(IllegalArgumentException.class)
+		assertThatThrownBy(() -> McpServer.sync((ServerMcpTransport) null)).isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Transport must not be null");
 
 		assertThatThrownBy(() -> McpServer.sync(createMcpTransport()).serverInfo(null))

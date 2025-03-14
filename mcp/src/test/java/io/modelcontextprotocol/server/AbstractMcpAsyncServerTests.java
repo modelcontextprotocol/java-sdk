@@ -22,6 +22,7 @@ import io.modelcontextprotocol.spec.ServerMcpTransport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -67,7 +68,8 @@ public abstract class AbstractMcpAsyncServerTests {
 
 	@Test
 	void testConstructorWithInvalidArguments() {
-		assertThatThrownBy(() -> McpServer.async(null)).isInstanceOf(IllegalArgumentException.class)
+		assertThatThrownBy(() -> McpServer.async((ServerMcpTransport) null))
+			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Transport must not be null");
 
 		assertThatThrownBy(() -> McpServer.async(createMcpTransport()).serverInfo((McpSchema.Implementation) null))
