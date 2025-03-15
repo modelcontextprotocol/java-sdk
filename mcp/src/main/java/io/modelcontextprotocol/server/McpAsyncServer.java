@@ -6,6 +6,7 @@ package io.modelcontextprotocol.server;
 
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -129,7 +130,7 @@ public class McpAsyncServer {
 		requestHandlers.put(McpSchema.METHOD_INITIALIZE, asyncInitializeRequestHandler());
 
 		// Ping MUST respond with an empty data, but not NULL response.
-		requestHandlers.put(McpSchema.METHOD_PING, (params) -> Mono.just(""));
+		requestHandlers.put(McpSchema.METHOD_PING, (params) -> Mono.just(Collections.emptyMap()));
 
 		// Add tools API handlers if the tool capability is enabled
 		if (this.serverCapabilities.tools() != null) {
