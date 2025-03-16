@@ -796,8 +796,8 @@ public final class McpSchema {
 
 		public enum ContextInclusionStrategy {
 			@JsonProperty("none") NONE,
-			@JsonProperty("this_server") THIS_SERVER,
-			@JsonProperty("all_server") ALL_SERVERS
+			@JsonProperty("thisServer") THIS_SERVER,
+			@JsonProperty("allServers") ALL_SERVERS
 		}
 	}// @formatter:on
 
