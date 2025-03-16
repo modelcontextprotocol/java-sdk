@@ -220,7 +220,8 @@ public class McpServerFeatures {
 				return null;
 			}
 			return new AsyncToolSpecification(tool.tool(),
-					(exchange, map) -> Mono.fromCallable(() -> tool.call().apply(exchange, map))
+					(exchange, map) -> Mono
+						.fromCallable(() -> tool.call().apply(new McpSyncServerExchange(exchange), map))
 						.subscribeOn(Schedulers.boundedElastic()));
 		}
 	}
@@ -259,7 +260,8 @@ public class McpServerFeatures {
 				return null;
 			}
 			return new AsyncResourceSpecification(resource.resource(),
-					(exchange, req) -> Mono.fromCallable(() -> resource.readHandler().apply(exchange, req))
+					(exchange, req) -> Mono
+						.fromCallable(() -> resource.readHandler().apply(new McpSyncServerExchange(exchange), req))
 						.subscribeOn(Schedulers.boundedElastic()));
 		}
 	}
@@ -301,7 +303,8 @@ public class McpServerFeatures {
 				return null;
 			}
 			return new AsyncPromptSpecification(prompt.prompt(),
-					(exchange, req) -> Mono.fromCallable(() -> prompt.promptHandler().apply(exchange, req))
+					(exchange, req) -> Mono
+						.fromCallable(() -> prompt.promptHandler().apply(new McpSyncServerExchange(exchange), req))
 						.subscribeOn(Schedulers.boundedElastic()));
 		}
 	}
@@ -340,7 +343,7 @@ public class McpServerFeatures {
 	 * returning results
 	 */
 	public record SyncToolSpecification(McpSchema.Tool tool,
-			BiFunction<McpAsyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> call) {
+			BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> call) {
 	}
 
 	/**
@@ -369,7 +372,7 @@ public class McpServerFeatures {
 	 * @param readHandler The function that handles resource read requests
 	 */
 	public record SyncResourceSpecification(McpSchema.Resource resource,
-			BiFunction<McpAsyncServerExchange, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
+			BiFunction<McpSyncServerExchange, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
 	}
 
 	/**
@@ -401,7 +404,7 @@ public class McpServerFeatures {
 	 * formatted templates
 	 */
 	public record SyncPromptSpecification(McpSchema.Prompt prompt,
-			BiFunction<McpAsyncServerExchange, McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler) {
+			BiFunction<McpSyncServerExchange, McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler) {
 	}
 
 	// ---------------------------------------
