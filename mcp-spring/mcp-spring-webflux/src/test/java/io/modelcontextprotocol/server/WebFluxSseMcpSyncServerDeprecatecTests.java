@@ -5,8 +5,8 @@
 package io.modelcontextprotocol.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvider;
-import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.server.transport.WebFluxSseServerTransport;
+import io.modelcontextprotocol.spec.ServerMcpTransport;
 import org.junit.jupiter.api.Timeout;
 import reactor.netty.DisposableServer;
 import reactor.netty.http.server.HttpServer;
@@ -16,31 +16,33 @@ import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 
 /**
- * Tests for {@link McpAsyncServer} using {@link WebFluxSseServerTransportProvider}.
+ * Tests for {@link McpSyncServer} using {@link WebFluxSseServerTransport}.
  *
  * @author Christian Tzolov
  */
+@Deprecated
 @Timeout(15) // Giving extra time beyond the client timeout
-class WebFluxSseMcpAsyncServerTests extends AbstractMcpAsyncServerTests {
+class WebFluxSseMcpSyncServerDeprecatecTests extends AbstractMcpSyncServerDeprecatedTests {
 
-	private static final int PORT = 8181;
+	private static final int PORT = 8182;
 
 	private static final String MESSAGE_ENDPOINT = "/mcp/message";
 
 	private DisposableServer httpServer;
 
-	@Override
-	protected McpServerTransportProvider createMcpTransportProvider() {
-		var transportProvider = new WebFluxSseServerTransportProvider(new ObjectMapper(), MESSAGE_ENDPOINT);
+	private WebFluxSseServerTransport transport;
 
-		HttpHandler httpHandler = RouterFunctions.toHttpHandler(transportProvider.getRouterFunction());
-		ReactorHttpHandlerAdapter adapter = new ReactorHttpHandlerAdapter(httpHandler);
-		httpServer = HttpServer.create().port(PORT).handle(adapter).bindNow();
-		return transportProvider;
+	@Override
+	protected ServerMcpTransport createMcpTransport() {
+		transport = new WebFluxSseServerTransport(new ObjectMapper(), MESSAGE_ENDPOINT);
+		return transport;
 	}
 
 	@Override
 	protected void onStart() {
+		HttpHandler httpHandler = RouterFunctions.toHttpHandler(transport.getRouterFunction());
+		ReactorHttpHandlerAdapter adapter = new ReactorHttpHandlerAdapter(httpHandler);
+		httpServer = HttpServer.create().port(PORT).handle(adapter).bindNow();
 	}
 
 	@Override

@@ -21,7 +21,7 @@ import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
 
 @Timeout(15)
-class WebMvcSseSyncServerTransportTests extends AbstractMcpSyncServerTests {
+class WebMvcSseSyncServerTransportTests extends AbstractMcpSyncServerDeprecatedTests {
 
 	private static final String MESSAGE_ENDPOINT = "/mcp/message";
 

@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Timeout;
  * @author Christian Tzolov
  */
 @Timeout(15) // Giving extra time beyond the client timeout
-class ServletSseMcpSyncServerTests extends AbstractMcpSyncServerTests {
+class ServletSseMcpSyncServerTests extends AbstractMcpSyncServerDeprecatedTests {
 
 	@Override
 	protected ServerMcpTransport createMcpTransport() {

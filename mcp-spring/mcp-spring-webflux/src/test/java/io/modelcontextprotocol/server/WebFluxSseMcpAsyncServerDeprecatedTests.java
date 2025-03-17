@@ -5,8 +5,8 @@
 package io.modelcontextprotocol.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvider;
-import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.server.transport.WebFluxSseServerTransport;
+import io.modelcontextprotocol.spec.ServerMcpTransport;
 import org.junit.jupiter.api.Timeout;
 import reactor.netty.DisposableServer;
 import reactor.netty.http.server.HttpServer;
@@ -16,12 +16,13 @@ import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 
 /**
- * Tests for {@link McpAsyncServer} using {@link WebFluxSseServerTransportProvider}.
+ * Tests for {@link McpAsyncServer} using {@link WebFluxSseServerTransport}.
  *
  * @author Christian Tzolov
  */
+@Deprecated
 @Timeout(15) // Giving extra time beyond the client timeout
-class WebFluxSseMcpAsyncServerTests extends AbstractMcpAsyncServerTests {
+class WebFluxSseMcpAsyncServerDeprecatedTests extends AbstractMcpAsyncServerDeprecatedTests {
 
 	private static final int PORT = 8181;
 
@@ -30,13 +31,14 @@ class WebFluxSseMcpAsyncServerTests extends AbstractMcpAsyncServerTests {
 	private DisposableServer httpServer;
 
 	@Override
-	protected McpServerTransportProvider createMcpTransportProvider() {
-		var transportProvider = new WebFluxSseServerTransportProvider(new ObjectMapper(), MESSAGE_ENDPOINT);
+	protected ServerMcpTransport createMcpTransport() {
+		var transport = new WebFluxSseServerTransport(new ObjectMapper(), MESSAGE_ENDPOINT);
 
-		HttpHandler httpHandler = RouterFunctions.toHttpHandler(transportProvider.getRouterFunction());
+		HttpHandler httpHandler = RouterFunctions.toHttpHandler(transport.getRouterFunction());
 		ReactorHttpHandlerAdapter adapter = new ReactorHttpHandlerAdapter(httpHandler);
 		httpServer = HttpServer.create().port(PORT).handle(adapter).bindNow();
-		return transportProvider;
+
+		return transport;
 	}
 
 	@Override

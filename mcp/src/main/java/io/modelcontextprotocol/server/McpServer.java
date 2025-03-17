@@ -879,8 +879,6 @@ public interface McpServer {
 		 * @param handler The handler to register. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumer is null
-		 * @deprecated This method will be removed in 0.9.0. Use
-		 * {@link #rootsChangeHandler(BiConsumer)}.
 		 */
 		public SyncSpecification rootsChangeHandler(BiConsumer<McpSyncServerExchange, List<McpSchema.Root>> handler) {
 			Assert.notNull(handler, "Consumer must not be null");
@@ -895,8 +893,6 @@ public interface McpServer {
 		 * @param handlers The list of handlers to register. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumers is null
-		 * @deprecated This method will be removed in 0.9.0. Use
-		 * {@link #rootsChangeHandlers(List)}.
 		 */
 		public SyncSpecification rootsChangeHandlers(
 				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> handlers) {

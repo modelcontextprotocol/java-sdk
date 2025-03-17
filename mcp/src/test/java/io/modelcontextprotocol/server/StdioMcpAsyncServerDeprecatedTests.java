@@ -5,8 +5,7 @@
 package io.modelcontextprotocol.server;
 
 import io.modelcontextprotocol.server.transport.StdioServerTransport;
-import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
-import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.ServerMcpTransport;
 import org.junit.jupiter.api.Timeout;
 
 /**
@@ -14,12 +13,13 @@ import org.junit.jupiter.api.Timeout;
  *
  * @author Christian Tzolov
  */
+@Deprecated
 @Timeout(15) // Giving extra time beyond the client timeout
-class StdioMcpAsyncServerTests extends AbstractMcpAsyncServerTests {
+class StdioMcpAsyncServerDeprecatedTests extends AbstractMcpAsyncServerDeprecatedTests {
 
 	@Override
-	protected McpServerTransportProvider createMcpTransportProvider() {
-		return new StdioServerTransportProvider();
+	protected ServerMcpTransport createMcpTransport() {
+		return new StdioServerTransport();
 	}
 
 }
