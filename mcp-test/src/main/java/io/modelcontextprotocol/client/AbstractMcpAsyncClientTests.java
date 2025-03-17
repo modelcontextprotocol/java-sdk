@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import io.modelcontextprotocol.spec.ClientMcpTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
@@ -49,7 +49,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	private static final String ECHO_TEST_MESSAGE = "Hello MCP Spring AI!";
 
-	abstract protected ClientMcpTransport createMcpTransport();
+	abstract protected McpClientTransport createMcpTransport();
 
 	protected void onStart() {
 	}

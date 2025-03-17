@@ -5,8 +5,8 @@
 package io.modelcontextprotocol.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.server.transport.WebMvcSseServerTransportProvider;
-import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.server.transport.WebMvcSseServerTransport;
+import io.modelcontextprotocol.spec.ServerMcpTransport;
 import org.apache.catalina.Context;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.startup.Tomcat;
@@ -20,8 +20,9 @@ import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
 
+@Deprecated
 @Timeout(15)
-class WebMvcSseAsyncServerTransportTests extends AbstractMcpAsyncServerTests {
+class WebMvcSseSyncServerTransportDeprecatedTests extends AbstractMcpSyncServerDeprecatedTests {
 
 	private static final String MESSAGE_ENDPOINT = "/mcp/message";
 
@@ -29,20 +30,20 @@ class WebMvcSseAsyncServerTransportTests extends AbstractMcpAsyncServerTests {
 
 	private Tomcat tomcat;
 
-	private McpServerTransportProvider transportProvider;
+	private WebMvcSseServerTransport transport;
 
 	@Configuration
 	@EnableWebMvc
 	static class TestConfig {
 
 		@Bean
-		public WebMvcSseServerTransportProvider webMvcSseServerTransportProvider() {
-			return new WebMvcSseServerTransportProvider(new ObjectMapper(), MESSAGE_ENDPOINT);
+		public WebMvcSseServerTransport webMvcSseServerTransport() {
+			return new WebMvcSseServerTransport(new ObjectMapper(), MESSAGE_ENDPOINT);
 		}
 
 		@Bean
-		public RouterFunction<ServerResponse> routerFunction(WebMvcSseServerTransportProvider transportProvider) {
-			return transportProvider.getRouterFunction();
+		public RouterFunction<ServerResponse> routerFunction(WebMvcSseServerTransport transport) {
+			return transport.getRouterFunction();
 		}
 
 	}
@@ -50,7 +51,7 @@ class WebMvcSseAsyncServerTransportTests extends AbstractMcpAsyncServerTests {
 	private AnnotationConfigWebApplicationContext appContext;
 
 	@Override
-	protected McpServerTransportProvider createMcpTransportProvider() {
+	protected ServerMcpTransport createMcpTransport() {
 		// Set up Tomcat first
 		tomcat = new Tomcat();
 		tomcat.setPort(PORT);
@@ -69,7 +70,7 @@ class WebMvcSseAsyncServerTransportTests extends AbstractMcpAsyncServerTests {
 		appContext.refresh();
 
 		// Get the transport from Spring context
-		transportProvider = appContext.getBean(WebMvcSseServerTransportProvider.class);
+		transport = appContext.getBean(WebMvcSseServerTransport.class);
 
 		// Create DispatcherServlet with our Spring context
 		DispatcherServlet dispatcherServlet = new DispatcherServlet(appContext);
@@ -88,7 +89,7 @@ class WebMvcSseAsyncServerTransportTests extends AbstractMcpAsyncServerTests {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		return transportProvider;
+		return transport;
 	}
 
 	@Override
@@ -97,8 +98,8 @@ class WebMvcSseAsyncServerTransportTests extends AbstractMcpAsyncServerTests {
 
 	@Override
 	protected void onClose() {
-		if (transportProvider != null) {
-			transportProvider.closeGracefully().block();
+		if (transport != null) {
+			transport.closeGracefully().block();
 		}
 		if (appContext != null) {
 			appContext.close();

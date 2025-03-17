@@ -33,7 +33,10 @@ import reactor.core.scheduler.Schedulers;
  * over stdin/stdout, with errors and debug information sent to stderr.
  *
  * @author Christian Tzolov
+ * @deprecated Use
+ * {@link io.modelcontextprotocol.server.transport.StdioServerTransportProvider} instead.
  */
+@Deprecated
 public class StdioServerTransport implements ServerMcpTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(StdioServerTransport.class);

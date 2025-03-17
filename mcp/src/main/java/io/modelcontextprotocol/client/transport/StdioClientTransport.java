@@ -18,7 +18,7 @@ import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.ClientMcpTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
@@ -38,7 +38,7 @@ import reactor.core.scheduler.Schedulers;
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
  */
-public class StdioClientTransport implements ClientMcpTransport {
+public class StdioClientTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(StdioClientTransport.class);
 

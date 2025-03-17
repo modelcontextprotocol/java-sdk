@@ -3,10 +3,6 @@
 */
 package io.modelcontextprotocol.spec;
 
-import java.util.function.Function;
-
-import reactor.core.publisher.Mono;
-
 /**
  * Marker interface for the client-side MCP transport.
  *

@@ -7,7 +7,7 @@ package io.modelcontextprotocol.client;
 import java.time.Duration;
 
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
-import io.modelcontextprotocol.spec.ClientMcpTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import org.junit.jupiter.api.Timeout;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -30,7 +30,7 @@ class HttpSseMcpSyncClientTests extends AbstractMcpSyncClientTests {
 		.waitingFor(Wait.forHttp("/").forStatusCode(404));
 
 	@Override
-	protected ClientMcpTransport createMcpTransport() {
+	protected McpClientTransport createMcpTransport() {
 		return new HttpClientSseClientTransport(host);
 	}
 
