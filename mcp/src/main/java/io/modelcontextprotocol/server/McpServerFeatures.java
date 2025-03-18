@@ -459,7 +459,7 @@ public class McpServerFeatures {
 					map -> Mono.fromCallable(() -> tool.call().apply(map)).subscribeOn(Schedulers.boundedElastic()));
 		}
 
-		AsyncToolSpecification toSpecification() {
+		public AsyncToolSpecification toSpecification() {
 			return new AsyncToolSpecification(tool(), (exchange, map) -> call.apply(map));
 		}
 	}
@@ -505,7 +505,7 @@ public class McpServerFeatures {
 						.subscribeOn(Schedulers.boundedElastic()));
 		}
 
-		AsyncResourceSpecification toSpecification() {
+		public AsyncResourceSpecification toSpecification() {
 			return new AsyncResourceSpecification(resource(), (exchange, request) -> readHandler.apply(request));
 		}
 	}
@@ -554,7 +554,7 @@ public class McpServerFeatures {
 						.subscribeOn(Schedulers.boundedElastic()));
 		}
 
-		AsyncPromptSpecification toSpecification() {
+		public AsyncPromptSpecification toSpecification() {
 			return new AsyncPromptSpecification(prompt(), (exchange, request) -> promptHandler.apply(request));
 		}
 	}
@@ -597,7 +597,7 @@ public class McpServerFeatures {
 	@Deprecated
 	public record SyncToolRegistration(McpSchema.Tool tool,
 			Function<Map<String, Object>, McpSchema.CallToolResult> call) {
-		SyncToolSpecification toSpecification() {
+		public SyncToolSpecification toSpecification() {
 			return new SyncToolSpecification(tool, (exchange, map) -> call.apply(map));
 		}
 	}
@@ -632,7 +632,7 @@ public class McpServerFeatures {
 	@Deprecated
 	public record SyncResourceRegistration(McpSchema.Resource resource,
 			Function<McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
-		SyncResourceSpecification toSpecification() {
+		public SyncResourceSpecification toSpecification() {
 			return new SyncResourceSpecification(resource, (exchange, request) -> readHandler.apply(request));
 		}
 	}
@@ -670,7 +670,7 @@ public class McpServerFeatures {
 	@Deprecated
 	public record SyncPromptRegistration(McpSchema.Prompt prompt,
 			Function<McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler) {
-		SyncPromptSpecification toSpecification() {
+		public SyncPromptSpecification toSpecification() {
 			return new SyncPromptSpecification(prompt, (exchange, request) -> promptHandler.apply(request));
 		}
 	}
