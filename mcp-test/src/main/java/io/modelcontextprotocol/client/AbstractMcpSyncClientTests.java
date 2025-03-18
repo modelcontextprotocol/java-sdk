@@ -52,8 +52,12 @@ public abstract class AbstractMcpSyncClientTests {
 
 	abstract protected void onClose();
 
-	protected Duration getTimeoutDuration() {
-		return Duration.ofSeconds(2);
+	protected Duration getRequestTimeout() {
+		return Duration.ofSeconds(10);
+	}
+
+	protected Duration getInitializationTimeout() {
+		return Duration.ofSeconds(1);
 	}
 
 	@BeforeEach
@@ -63,7 +67,8 @@ public abstract class AbstractMcpSyncClientTests {
 
 		assertThatCode(() -> {
 			mcpSyncClient = McpClient.sync(mcpTransport)
-				.requestTimeout(getTimeoutDuration())
+				.requestTimeout(getRequestTimeout())
+				.initializationTimeout(getInitializationTimeout())
 				.capabilities(ClientCapabilities.builder().roots(true).build())
 				.build();
 		}).doesNotThrowAnyException();
@@ -215,7 +220,7 @@ public abstract class AbstractMcpSyncClientTests {
 		var transport = createMcpTransport();
 
 		var client = McpClient.sync(transport)
-			.requestTimeout(getTimeoutDuration())
+			.requestTimeout(getRequestTimeout())
 			.roots(new Root("file:///test/path", "test-root"))
 			.build();
 
@@ -313,7 +318,7 @@ public abstract class AbstractMcpSyncClientTests {
 
 		var transport = createMcpTransport();
 		var client = McpClient.sync(transport)
-			.requestTimeout(getTimeoutDuration())
+			.requestTimeout(getRequestTimeout())
 			.toolsChangeConsumer(tools -> toolsNotificationReceived.set(true))
 			.resourcesChangeConsumer(resources -> resourcesNotificationReceived.set(true))
 			.promptsChangeConsumer(prompts -> promptsNotificationReceived.set(true))
@@ -351,7 +356,7 @@ public abstract class AbstractMcpSyncClientTests {
 		var transport = createMcpTransport();
 
 		var client = McpClient.sync(transport)
-			.requestTimeout(getTimeoutDuration())
+			.requestTimeout(getRequestTimeout())
 			.loggingConsumer(notification -> logReceived.set(true))
 			.build();
 

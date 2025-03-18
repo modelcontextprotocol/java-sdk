@@ -18,7 +18,7 @@ import org.testcontainers.containers.wait.strategy.Wait;
  * @author Christian Tzolov
  */
 @Timeout(15) // Giving extra time beyond the client timeout
-class ServletSseMcpSyncClientTests extends AbstractMcpSyncClientTests {
+class HttpSseMcpSyncClientTests extends AbstractMcpSyncClientTests {
 
 	String host = "http://localhost:3003";
 
@@ -44,11 +44,6 @@ class ServletSseMcpSyncClientTests extends AbstractMcpSyncClientTests {
 	@Override
 	protected void onClose() {
 		container.stop();
-	}
-
-	@Override
-	protected Duration getTimeoutDuration() {
-		return Duration.ofMillis(300);
 	}
 
 }

@@ -157,6 +157,8 @@ public interface McpClient {
 
 		private Duration requestTimeout = Duration.ofSeconds(20); // Default timeout
 
+		private Duration initializationTimeout = Duration.ofSeconds(20);
+
 		private ClientCapabilities capabilities;
 
 		private Implementation clientInfo = new Implementation("Java SDK MCP Client", "1.0.0");
@@ -190,6 +192,18 @@ public interface McpClient {
 		public SyncSpec requestTimeout(Duration requestTimeout) {
 			Assert.notNull(requestTimeout, "Request timeout must not be null");
 			this.requestTimeout = requestTimeout;
+			return this;
+		}
+
+		/**
+		 * @param initializationTimeout The duration to wait for the initializaiton
+		 * lifecycle step to complete.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if initializationTimeout is null
+		 */
+		public SyncSpec initializationTimeout(Duration initializationTimeout) {
+			Assert.notNull(initializationTimeout, "Initialization timeout must not be null");
+			this.initializationTimeout = initializationTimeout;
 			return this;
 		}
 
@@ -354,7 +368,8 @@ public interface McpClient {
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
-			return new McpSyncClient(new McpAsyncClient(transport, this.requestTimeout, asyncFeatures));
+			return new McpSyncClient(
+					new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout, asyncFeatures));
 		}
 
 	}
@@ -380,6 +395,8 @@ public interface McpClient {
 		private final ClientMcpTransport transport;
 
 		private Duration requestTimeout = Duration.ofSeconds(20); // Default timeout
+
+		private Duration initializationTimeout = Duration.ofSeconds(20);
 
 		private ClientCapabilities capabilities;
 
@@ -414,6 +431,18 @@ public interface McpClient {
 		public AsyncSpec requestTimeout(Duration requestTimeout) {
 			Assert.notNull(requestTimeout, "Request timeout must not be null");
 			this.requestTimeout = requestTimeout;
+			return this;
+		}
+
+		/**
+		 * @param initializationTimeout The duration to wait for the initializaiton
+		 * lifecycle step to complete.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if initializationTimeout is null
+		 */
+		public AsyncSpec initializationTimeout(Duration initializationTimeout) {
+			Assert.notNull(initializationTimeout, "Initialization timeout must not be null");
+			this.initializationTimeout = initializationTimeout;
 			return this;
 		}
 
@@ -574,7 +603,7 @@ public interface McpClient {
 		 * @return a new instance of {@link McpAsyncClient}.
 		 */
 		public McpAsyncClient build() {
-			return new McpAsyncClient(this.transport, this.requestTimeout,
+			return new McpAsyncClient(this.transport, this.requestTimeout, this.initializationTimeout,
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
 							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.promptsChangeConsumers,
 							this.loggingConsumers, this.samplingHandler));

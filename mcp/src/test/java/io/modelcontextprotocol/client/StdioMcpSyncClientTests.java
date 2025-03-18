@@ -39,7 +39,7 @@ class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 		((StdioClientTransport) mcpTransport).setStdErrorHandler(error -> receivedError.set(error));
 
 		String errorMessage = "Test error";
-		((StdioClientTransport) mcpTransport).getErrorSink().tryEmitNext(errorMessage);
+		((StdioClientTransport) mcpTransport).getErrorSink().emitNext(errorMessage, null);
 
 		assertThat(receivedError.get()).isNotNull().isEqualTo(errorMessage);
 	}

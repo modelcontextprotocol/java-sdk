@@ -4,8 +4,6 @@
 
 package io.modelcontextprotocol.client;
 
-import java.time.Duration;
-
 import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
 import io.modelcontextprotocol.spec.ClientMcpTransport;
 import org.junit.jupiter.api.Timeout;
@@ -46,11 +44,6 @@ class WebFluxSseMcpAsyncClientTests extends AbstractMcpAsyncClientTests {
 	@Override
 	public void onClose() {
 		container.stop();
-	}
-
-	@Override
-	protected Duration getTimeoutDuration() {
-		return Duration.ofMillis(300);
 	}
 
 }
