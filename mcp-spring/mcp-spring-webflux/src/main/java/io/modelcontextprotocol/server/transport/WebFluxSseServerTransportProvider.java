@@ -38,8 +38,9 @@ import org.springframework.web.reactive.function.server.ServerResponse;
  * <p>
  * Key features:
  * <ul>
- * <li>Implements the {@link ServerMcpTransport} interface for MCP server transport
- * functionality</li>
+ * <li>Implements the {@link McpServerTransportProvider} interface that allows managing
+ * {@link McpServerSession} instances and enabling their communication with the
+ * {@link McpServerTransport} abstraction.</li>
  * <li>Uses WebFlux for non-blocking request handling and SSE support</li>
  * <li>Maintains client sessions for reliable message delivery</li>
  * <li>Supports graceful shutdown with session cleanup</li>
@@ -55,12 +56,13 @@ import org.springframework.web.reactive.function.server.ServerResponse;
  *
  * <p>
  * This implementation is thread-safe and can handle multiple concurrent client
- * connections. It uses {@link ConcurrentHashMap} for session management and Reactor's
- * {@link Sinks} for thread-safe message broadcasting.
+ * connections. It uses {@link ConcurrentHashMap} for session management and Project
+ * Reactor's non-blocking APIs for message processing and delivery.
  *
  * @author Christian Tzolov
  * @author Alexandros Pappas
- * @see ServerMcpTransport
+ * @author Dariusz Jędrzejczyk
+ * @see McpServerTransport
  * @see ServerSentEvent
  */
 public class WebFluxSseServerTransportProvider implements McpServerTransportProvider {
@@ -103,7 +105,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	private volatile boolean isClosing = false;
 
 	/**
-	 * Constructs a new WebFlux SSE server transport instance.
+	 * Constructs a new WebFlux SSE server transport provider instance.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 * of MCP messages. Must not be null.
 	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
@@ -126,8 +128,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	}
 
 	/**
-	 * Constructs a new WebFlux SSE server transport instance with the default SSE
-	 * endpoint.
+	 * Constructs a new WebFlux SSE server transport provider instance with the default
+	 * SSE endpoint.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 * of MCP messages. Must not be null.
 	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
@@ -179,8 +181,10 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			.then();
 	}
 
+	// FIXME: This javadoc makes claims about using isClosing flag but it's not actually
+	// doing that.
 	/**
-	 * Initiates a graceful shutdown of the transport. This method ensures all active
+	 * Initiates a graceful shutdown of all the sessions. This method ensures all active
 	 * sessions are properly closed and cleaned up.
 	 *
 	 * <p>
@@ -220,18 +224,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	/**
 	 * Handles new SSE connection requests from clients. Creates a new session for each
 	 * connection and sets up the SSE event stream.
-	 *
-	 * <p>
-	 * The handler performs the following steps:
-	 * <ul>
-	 * <li>Generates a unique session ID</li>
-	 * <li>Creates a new ClientSession instance</li>
-	 * <li>Sends the message endpoint URI as an initial event</li>
-	 * <li>Sets up message forwarding for the session</li>
-	 * <li>Handles connection cleanup on completion or errors</li>
-	 * </ul>
 	 * @param request The incoming server request
-	 * @return A response with the SSE event stream
+	 * @return A Mono which emits a response with the SSE event stream
 	 */
 	private Mono<ServerResponse> handleSseConnection(ServerRequest request) {
 		if (isClosing) {
@@ -275,7 +269,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 * <li>Handles various error conditions with appropriate error responses</li>
 	 * </ul>
 	 * @param request The incoming server request containing the JSON-RPC message
-	 * @return A response indicating the message processing result
+	 * @return A Mono emitting the response indicating the message processing result
 	 */
 	private Mono<ServerResponse> handleMessage(ServerRequest request) {
 		if (isClosing) {
@@ -306,38 +300,6 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			}
 		});
 	}
-
-	/*
-	 * Current:
-	 *
-	 * framework layer: var transport = new WebFluxSseServerTransport(objectMapper,
-	 * "/mcp", "/sse"); McpServer.async(ServerMcpTransport transport)
-	 *
-	 * client connects -> WebFluxSseServerTransport creates a: - var sessionTransport =
-	 * WebFluxMcpSessionTransport - ServerMcpSession(sessionId, sessionTransport)
-	 *
-	 * WebFluxSseServerTransport IS_A ServerMcpTransport IS_A McpTransport
-	 * WebFluxMcpSessionTransport IS_A ServerMcpSessionTransport IS_A McpTransport
-	 *
-	 * McpTransport contains connect() which should be removed ClientMcpTransport should
-	 * have connect() ServerMcpTransport should have setSessionFactory()
-	 *
-	 * Possible Future: var transportProvider = new
-	 * WebFluxSseServerTransport(objectMapper, "/mcp", "/sse"); WebFluxSseServerTransport
-	 * IS_A ServerMcpTransportProvider ? ServerMcpTransportProvider creates
-	 * ServerMcpTransport
-	 *
-	 * // disadvantage - too much breaks, e.g. McpServer.async(ServerMcpTransportProvider
-	 * transportProvider)
-	 *
-	 * // advantage
-	 *
-	 * ClientMcpTransport and ServerMcpTransport BOTH represent 1:1 relationship
-	 *
-	 *
-	 *
-	 *
-	 */
 
 	private class WebFluxMcpSessionTransport implements McpServerTransport {
 
