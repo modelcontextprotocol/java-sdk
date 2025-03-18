@@ -32,6 +32,9 @@ import reactor.core.publisher.Mono;
  * specification. This implementation provides similar functionality to
  * WebFluxSseServerTransport but uses the traditional Servlet API instead of WebFlux.
  *
+ * @deprecated This class will be removed in 0.9.0. Use
+ * {@link HttpServletSseServerTransportProvider}.
+ *
  * <p>
  * The transport handles two types of endpoints:
  * <ul>
@@ -48,7 +51,6 @@ import reactor.core.publisher.Mono;
  * <li>Graceful shutdown support</li>
  * <li>Error handling and response formatting</li>
  * </ul>
- *
  * @author Christian Tzolov
  * @author Alexandros Pappas
  * @see ServerMcpTransport
@@ -56,6 +58,7 @@ import reactor.core.publisher.Mono;
  */
 
 @WebServlet(asyncSupported = true)
+@Deprecated
 public class HttpServletSseServerTransport extends HttpServlet implements ServerMcpTransport {
 
 	/** Logger for this class */
