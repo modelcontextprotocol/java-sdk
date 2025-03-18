@@ -18,7 +18,6 @@ import java.util.stream.Collectors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
-import io.modelcontextprotocol.spec.McpTransport;
 import io.modelcontextprotocol.spec.ServerMcpTransport;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
@@ -55,45 +54,50 @@ import reactor.core.publisher.Mono;
  * <p>
  * The class provides factory methods to create either:
  * <ul>
- * <li>{@link McpAsyncServer} for non-blocking operations with CompletableFuture responses
+ * <li>{@link McpAsyncServer} for non-blocking operations with reactive responses
  * <li>{@link McpSyncServer} for blocking operations with direct responses
  * </ul>
  *
  * <p>
  * Example of creating a basic synchronous server: <pre>{@code
- * McpServer.sync(transport)
+ * McpServer.sync(transportProvider)
  *     .serverInfo("my-server", "1.0.0")
  *     .tool(new Tool("calculator", "Performs calculations", schema),
- *           args -> new CallToolResult("Result: " + calculate(args)))
+ *           (exchange, args) -> new CallToolResult("Result: " + calculate(args)))
  *     .build();
  * }</pre>
  *
  * Example of creating a basic asynchronous server: <pre>{@code
- * McpServer.async(transport)
+ * McpServer.async(transportProvider)
  *     .serverInfo("my-server", "1.0.0")
  *     .tool(new Tool("calculator", "Performs calculations", schema),
- *           args -> Mono.just(new CallToolResult("Result: " + calculate(args))))
+ *           (exchange, args) -> Mono.fromSupplier(() -> calculate(args))
+ *               .map(result -> new CallToolResult("Result: " + result)))
  *     .build();
  * }</pre>
  *
  * <p>
  * Example with comprehensive asynchronous configuration: <pre>{@code
- * McpServer.async(transport)
+ * McpServer.async(transportProvider)
  *     .serverInfo("advanced-server", "2.0.0")
  *     .capabilities(new ServerCapabilities(...))
  *     // Register tools
  *     .tools(
- *         new McpServerFeatures.AsyncToolRegistration(calculatorTool,
- *             args -> Mono.just(new CallToolResult("Result: " + calculate(args)))),
- *         new McpServerFeatures.AsyncToolRegistration(weatherTool,
- *             args -> Mono.just(new CallToolResult("Weather: " + getWeather(args))))
+ *         new McpServerFeatures.AsyncToolSpecification(calculatorTool,
+ *             (exchange, args) -> Mono.fromSupplier(() -> calculate(args))
+ *                 .map(result -> new CallToolResult("Result: " + result))),
+ *         new McpServerFeatures.AsyncToolSpecification(weatherTool,
+ *             (exchange, args) -> Mono.fromSupplier(() -> getWeather(args))
+ *                 .map(result -> new CallToolResult("Weather: " + result)))
  *     )
  *     // Register resources
  *     .resources(
- *         new McpServerFeatures.AsyncResourceRegistration(fileResource,
- *             req -> Mono.just(new ReadResourceResult(readFile(req)))),
- *         new McpServerFeatures.AsyncResourceRegistration(dbResource,
- *             req -> Mono.just(new ReadResourceResult(queryDb(req))))
+ *         new McpServerFeatures.AsyncResourceSpecification(fileResource,
+ *             (exchange, req) -> Mono.fromSupplier(() -> readFile(req))
+ *                 .map(ReadResourceResult::new)),
+ *         new McpServerFeatures.AsyncResourceSpecification(dbResource,
+ *             (exchange, req) -> Mono.fromSupplier(() -> queryDb(req))
+ *                 .map(ReadResourceResult::new))
  *     )
  *     // Add resource templates
  *     .resourceTemplates(
@@ -102,10 +106,12 @@ import reactor.core.publisher.Mono;
  *     )
  *     // Register prompts
  *     .prompts(
- *         new McpServerFeatures.AsyncPromptRegistration(analysisPrompt,
- *             req -> Mono.just(new GetPromptResult(generateAnalysisPrompt(req)))),
+ *         new McpServerFeatures.AsyncPromptSpecification(analysisPrompt,
+ *             (exchange, req) -> Mono.fromSupplier(() -> generateAnalysisPrompt(req))
+ *                 .map(GetPromptResult::new)),
  *         new McpServerFeatures.AsyncPromptRegistration(summaryPrompt,
- *             req -> Mono.just(new GetPromptResult(generateSummaryPrompt(req))))
+ *             (exchange, req) -> Mono.fromSupplier(() -> generateSummaryPrompt(req))
+ *                 .map(GetPromptResult::new))
  *     )
  *     .build();
  * }</pre>
@@ -114,15 +120,27 @@ import reactor.core.publisher.Mono;
  * @author Dariusz Jędrzejczyk
  * @see McpAsyncServer
  * @see McpSyncServer
- * @see McpTransport
+ * @see McpServerTransportProvider
  */
 public interface McpServer {
 
 	/**
 	 * Starts building a synchronous MCP server that provides blocking operations.
-	 * Synchronous servers process each request to completion before handling the next
-	 * one, making them simpler to implement but potentially less performant for
-	 * concurrent operations.
+	 * Synchronous servers block the current Thread's execution upon each request before
+	 * giving the control back to the caller, making them simpler to implement but
+	 * potentially less scalable for concurrent operations.
+	 * @param transportProvider The transport layer implementation for MCP communication.
+	 * @return A new instance of {@link SyncSpecification} for configuring the server.
+	 */
+	static SyncSpecification sync(McpServerTransportProvider transportProvider) {
+		return new SyncSpecification(transportProvider);
+	}
+
+	/**
+	 * Starts building a synchronous MCP server that provides blocking operations.
+	 * Synchronous servers block the current Thread's execution upon each request before
+	 * giving the control back to the caller, making them simpler to implement but
+	 * potentially less scalable for concurrent operations.
 	 * @param transport The transport layer implementation for MCP communication
 	 * @return A new instance of {@link SyncSpec} for configuring the server.
 	 * @deprecated This method will be removed in 0.9.0. Use
@@ -133,15 +151,23 @@ public interface McpServer {
 		return new SyncSpec(transport);
 	}
 
-	static SyncSpecification sync(McpServerTransportProvider transportProvider) {
-		return new SyncSpecification(transportProvider);
+	/**
+	 * Starts building an asynchronous MCP server that provides non-blocking operations.
+	 * Asynchronous servers can handle multiple requests concurrently on a single Thread
+	 * using a functional paradigm with non-blocking server transports, making them more
+	 * scalable for high-concurrency scenarios but more complex to implement.
+	 * @param transportProvider The transport layer implementation for MCP communication.
+	 * @return A new instance of {@link AsyncSpecification} for configuring the server.
+	 */
+	static AsyncSpecification async(McpServerTransportProvider transportProvider) {
+		return new AsyncSpecification(transportProvider);
 	}
 
 	/**
-	 * Starts building an asynchronous MCP server that provides blocking operations.
-	 * Asynchronous servers can handle multiple requests concurrently using a functional
-	 * paradigm with non-blocking server transports, making them more efficient for
-	 * high-concurrency scenarios but more complex to implement.
+	 * Starts building an asynchronous MCP server that provides non-blocking operations.
+	 * Asynchronous servers can handle multiple requests concurrently on a single Thread
+	 * using a functional paradigm with non-blocking server transports, making them more
+	 * scalable for high-concurrency scenarios but more complex to implement.
 	 * @param transport The transport layer implementation for MCP communication
 	 * @return A new instance of {@link AsyncSpec} for configuring the server.
 	 * @deprecated This method will be removed in 0.9.0. Use
@@ -150,10 +176,6 @@ public interface McpServer {
 	@Deprecated
 	static AsyncSpec async(ServerMcpTransport transport) {
 		return new AsyncSpec(transport);
-	}
-
-	static AsyncSpecification async(McpServerTransportProvider transportProvider) {
-		return new AsyncSpecification(transportProvider);
 	}
 
 	/**
@@ -248,8 +270,6 @@ public interface McpServer {
 		 * <li>Tool execution
 		 * <li>Resource access
 		 * <li>Prompt handling
-		 * <li>Streaming responses
-		 * <li>Batch operations
 		 * </ul>
 		 * @param serverCapabilities The server capabilities configuration. Must not be
 		 * null.
@@ -257,6 +277,7 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if serverCapabilities is null
 		 */
 		public AsyncSpecification capabilities(McpSchema.ServerCapabilities serverCapabilities) {
+			Assert.notNull(serverCapabilities, "Server capabilities must not be null");
 			this.serverCapabilities = serverCapabilities;
 			return this;
 		}
@@ -270,12 +291,16 @@ public interface McpServer {
 		 * Example usage: <pre>{@code
 		 * .tool(
 		 *     new Tool("calculator", "Performs calculations", schema),
-		 *     args -> Mono.just(new CallToolResult("Result: " + calculate(args)))
+		 *     (exchange, args) -> Mono.fromSupplier(() -> calculate(args))
+		 *         .map(result -> new CallToolResult("Result: " + result))
 		 * )
 		 * }</pre>
 		 * @param tool The tool definition including name, description, and schema. Must
 		 * not be null.
 		 * @param handler The function that implements the tool's logic. Must not be null.
+		 * The function's first argument is an {@link McpAsyncServerExchange} upon which
+		 * the server can interact with the connected client. The second argument is the
+		 * map of arguments passed to the tool.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
@@ -323,6 +348,7 @@ public interface McpServer {
 		 * @see #tools(List)
 		 */
 		public AsyncSpecification tools(McpServerFeatures.AsyncToolSpecification... toolSpecifications) {
+			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 			for (McpServerFeatures.AsyncToolSpecification tool : toolSpecifications) {
 				this.tools.add(tool);
 			}
@@ -402,9 +428,11 @@ public interface McpServer {
 		 * @param resourceTemplates List of resource templates. If null, clears existing
 		 * templates.
 		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
 		public AsyncSpecification resourceTemplates(List<ResourceTemplate> resourceTemplates) {
+			Assert.notNull(resourceTemplates, "Resource templates must not be null");
 			this.resourceTemplates.addAll(resourceTemplates);
 			return this;
 		}
@@ -414,9 +442,11 @@ public interface McpServer {
 		 * alternative to {@link #resourceTemplates(List)}.
 		 * @param resourceTemplates The resource templates to set.
 		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(List)
 		 */
 		public AsyncSpecification resourceTemplates(ResourceTemplate... resourceTemplates) {
+			Assert.notNull(resourceTemplates, "Resource templates must not be null");
 			for (ResourceTemplate resourceTemplate : resourceTemplates) {
 				this.resourceTemplates.add(resourceTemplate);
 			}
@@ -432,7 +462,8 @@ public interface McpServer {
 		 * Example usage: <pre>{@code
 		 * .prompts(Map.of("analysis", new McpServerFeatures.AsyncPromptSpecification(
 		 *     new Prompt("analysis", "Code analysis template"),
-		 *     request -> Mono.just(new GetPromptResult(generateAnalysisPrompt(request)))
+		 *     request -> Mono.fromSupplier(() -> generateAnalysisPrompt(request))
+		 *         .map(GetPromptResult::new)
 		 * )));
 		 * }</pre>
 		 * @param prompts Map of prompt name to specification. Must not be null.
@@ -440,6 +471,7 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if prompts is null
 		 */
 		public AsyncSpecification prompts(Map<String, McpServerFeatures.AsyncPromptSpecification> prompts) {
+			Assert.notNull(prompts, "Prompts map must not be null");
 			this.prompts.putAll(prompts);
 			return this;
 		}
@@ -453,6 +485,7 @@ public interface McpServer {
 		 * @see #prompts(McpServerFeatures.AsyncPromptSpecification...)
 		 */
 		public AsyncSpecification prompts(List<McpServerFeatures.AsyncPromptSpecification> prompts) {
+			Assert.notNull(prompts, "Prompts list must not be null");
 			for (McpServerFeatures.AsyncPromptSpecification prompt : prompts) {
 				this.prompts.put(prompt.prompt().name(), prompt);
 			}
@@ -476,6 +509,7 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if prompts is null
 		 */
 		public AsyncSpecification prompts(McpServerFeatures.AsyncPromptSpecification... prompts) {
+			Assert.notNull(prompts, "Prompts list must not be null");
 			for (McpServerFeatures.AsyncPromptSpecification prompt : prompts) {
 				this.prompts.put(prompt.prompt().name(), prompt);
 			}
@@ -486,7 +520,9 @@ public interface McpServer {
 		 * Registers a consumer that will be notified when the list of roots changes. This
 		 * is useful for updating resource availability dynamically, such as when new
 		 * files are added or removed.
-		 * @param handler The handler to register. Must not be null.
+		 * @param handler The handler to register. Must not be null. The function's first
+		 * argument is an {@link McpAsyncServerExchange} upon which the server can
+		 * interact with the connected client. The second argument is the list of roots.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumer is null
 		 */
@@ -504,6 +540,7 @@ public interface McpServer {
 		 * @param handlers The list of handlers to register. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumers is null
+		 * @see #rootsChangeHandler(BiFunction)
 		 */
 		public AsyncSpecification rootsChangeHandlers(
 				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> handlers) {
@@ -519,13 +556,22 @@ public interface McpServer {
 		 * @param handlers The handlers to register. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumers is null
+		 * @see #rootsChangeHandlers(List)
 		 */
 		public AsyncSpecification rootsChangeHandlers(
 				@SuppressWarnings("unchecked") BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>... handlers) {
+			Assert.notNull(handlers, "Handlers list must not be null");
 			return this.rootsChangeHandlers(Arrays.asList(handlers));
 		}
 
+		/**
+		 * Sets the object mapper to use for serializing and deserializing JSON messages.
+		 * @param objectMapper the instance to use. Must not be null.
+		 * @return This builder instance for method chaining.
+		 * @throws IllegalArgumentException if objectMapper is null
+		 */
 		public AsyncSpecification objectMapper(ObjectMapper objectMapper) {
+			Assert.notNull(objectMapper, "ObjectMapper must not be null");
 			this.objectMapper = objectMapper;
 			return this;
 		}
@@ -533,7 +579,7 @@ public interface McpServer {
 		/**
 		 * Builds an asynchronous MCP server that provides non-blocking operations.
 		 * @return A new instance of {@link McpAsyncServer} configured with this builder's
-		 * settings
+		 * settings.
 		 */
 		public McpAsyncServer build() {
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
@@ -636,8 +682,6 @@ public interface McpServer {
 		 * <li>Tool execution
 		 * <li>Resource access
 		 * <li>Prompt handling
-		 * <li>Streaming responses
-		 * <li>Batch operations
 		 * </ul>
 		 * @param serverCapabilities The server capabilities configuration. Must not be
 		 * null.
@@ -645,6 +689,7 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if serverCapabilities is null
 		 */
 		public SyncSpecification capabilities(McpSchema.ServerCapabilities serverCapabilities) {
+			Assert.notNull(serverCapabilities, "Server capabilities must not be null");
 			this.serverCapabilities = serverCapabilities;
 			return this;
 		}
@@ -658,12 +703,15 @@ public interface McpServer {
 		 * Example usage: <pre>{@code
 		 * .tool(
 		 *     new Tool("calculator", "Performs calculations", schema),
-		 *     args -> new CallToolResult("Result: " + calculate(args))
+		 *     (exchange, args) -> new CallToolResult("Result: " + calculate(args))
 		 * )
 		 * }</pre>
 		 * @param tool The tool definition including name, description, and schema. Must
 		 * not be null.
 		 * @param handler The function that implements the tool's logic. Must not be null.
+		 * The function's first argument is an {@link McpSyncServerExchange} upon which
+		 * the server can interact with the connected client. The second argument is the
+		 * list of arguments passed to the tool.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
@@ -711,6 +759,7 @@ public interface McpServer {
 		 * @see #tools(List)
 		 */
 		public SyncSpecification tools(McpServerFeatures.SyncToolSpecification... toolSpecifications) {
+			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 			for (McpServerFeatures.SyncToolSpecification tool : toolSpecifications) {
 				this.tools.add(tool);
 			}
@@ -790,9 +839,11 @@ public interface McpServer {
 		 * @param resourceTemplates List of resource templates. If null, clears existing
 		 * templates.
 		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
 		public SyncSpecification resourceTemplates(List<ResourceTemplate> resourceTemplates) {
+			Assert.notNull(resourceTemplates, "Resource templates must not be null");
 			this.resourceTemplates.addAll(resourceTemplates);
 			return this;
 		}
@@ -802,9 +853,11 @@ public interface McpServer {
 		 * alternative to {@link #resourceTemplates(List)}.
 		 * @param resourceTemplates The resource templates to set.
 		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if resourceTemplates is null
 		 * @see #resourceTemplates(List)
 		 */
 		public SyncSpecification resourceTemplates(ResourceTemplate... resourceTemplates) {
+			Assert.notNull(resourceTemplates, "Resource templates must not be null");
 			for (ResourceTemplate resourceTemplate : resourceTemplates) {
 				this.resourceTemplates.add(resourceTemplate);
 			}
@@ -821,7 +874,7 @@ public interface McpServer {
 		 * Map<String, PromptSpecification> prompts = new HashMap<>();
 		 * prompts.put("analysis", new PromptSpecification(
 		 *     new Prompt("analysis", "Code analysis template"),
-		 *     request -> new GetPromptResult(generateAnalysisPrompt(request))
+		 *     (exchange, request) -> new GetPromptResult(generateAnalysisPrompt(request))
 		 * ));
 		 * .prompts(prompts)
 		 * }</pre>
@@ -830,6 +883,7 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if prompts is null
 		 */
 		public SyncSpecification prompts(Map<String, McpServerFeatures.SyncPromptSpecification> prompts) {
+			Assert.notNull(prompts, "Prompts map must not be null");
 			this.prompts.putAll(prompts);
 			return this;
 		}
@@ -843,6 +897,7 @@ public interface McpServer {
 		 * @see #prompts(McpServerFeatures.SyncPromptSpecification...)
 		 */
 		public SyncSpecification prompts(List<McpServerFeatures.SyncPromptSpecification> prompts) {
+			Assert.notNull(prompts, "Prompts list must not be null");
 			for (McpServerFeatures.SyncPromptSpecification prompt : prompts) {
 				this.prompts.put(prompt.prompt().name(), prompt);
 			}
@@ -866,6 +921,7 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if prompts is null
 		 */
 		public SyncSpecification prompts(McpServerFeatures.SyncPromptSpecification... prompts) {
+			Assert.notNull(prompts, "Prompts list must not be null");
 			for (McpServerFeatures.SyncPromptSpecification prompt : prompts) {
 				this.prompts.put(prompt.prompt().name(), prompt);
 			}
@@ -876,7 +932,9 @@ public interface McpServer {
 		 * Registers a consumer that will be notified when the list of roots changes. This
 		 * is useful for updating resource availability dynamically, such as when new
 		 * files are added or removed.
-		 * @param handler The handler to register. Must not be null.
+		 * @param handler The handler to register. Must not be null. The function's first
+		 * argument is an {@link McpSyncServerExchange} upon which the server can interact
+		 * with the connected client. The second argument is the list of roots.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumer is null
 		 */
@@ -893,6 +951,7 @@ public interface McpServer {
 		 * @param handlers The list of handlers to register. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumers is null
+		 * @see #rootsChangeHandler(BiConsumer)
 		 */
 		public SyncSpecification rootsChangeHandlers(
 				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> handlers) {
@@ -908,15 +967,22 @@ public interface McpServer {
 		 * @param handlers The handlers to register. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumers is null
-		 * @deprecated This method will * be removed in 0.9.0. Use
-		 * {@link #rootsChangeHandlers(BiConsumer[])}.
+		 * @see #rootsChangeHandlers(List)
 		 */
 		public SyncSpecification rootsChangeHandlers(
 				BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>... handlers) {
+			Assert.notNull(handlers, "Handlers list must not be null");
 			return this.rootsChangeHandlers(List.of(handlers));
 		}
 
+		/**
+		 * Sets the object mapper to use for serializing and deserializing JSON messages.
+		 * @param objectMapper the instance to use. Must not be null.
+		 * @return This builder instance for method chaining.
+		 * @throws IllegalArgumentException if objectMapper is null
+		 */
 		public SyncSpecification objectMapper(ObjectMapper objectMapper) {
+			Assert.notNull(objectMapper, "ObjectMapper must not be null");
 			this.objectMapper = objectMapper;
 			return this;
 		}
@@ -924,7 +990,7 @@ public interface McpServer {
 		/**
 		 * Builds a synchronous MCP server that provides blocking operations.
 		 * @return A new instance of {@link McpSyncServer} configured with this builder's
-		 * settings
+		 * settings.
 		 */
 		public McpSyncServer build() {
 			McpServerFeatures.Sync syncFeatures = new McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,

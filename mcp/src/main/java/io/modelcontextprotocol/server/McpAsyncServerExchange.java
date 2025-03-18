@@ -6,6 +6,12 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import reactor.core.publisher.Mono;
 
+/**
+ * Represents an asynchronous exchange with a Model Context Protocol (MCP) client. The
+ * exchange provides methods to interact with the client and query its capabilities.
+ *
+ * @author Dariusz Jędrzejczyk
+ */
 public class McpAsyncServerExchange {
 
 	private final McpServerSession session;
@@ -14,6 +20,19 @@ public class McpAsyncServerExchange {
 
 	private final McpSchema.Implementation clientInfo;
 
+	private static final TypeReference<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeReference<>() {
+	};
+
+	private static final TypeReference<McpSchema.ListRootsResult> LIST_ROOTS_RESULT_TYPE_REF = new TypeReference<>() {
+	};
+
+	/**
+	 * Create a new asynchronous exchange with the client.
+	 * @param session The server session representing a 1-1 interaction.
+	 * @param clientCapabilities The client capabilities that define the supported
+	 * features and functionality.
+	 * @param clientInfo The client implementation information.
+	 */
 	public McpAsyncServerExchange(McpServerSession session, McpSchema.ClientCapabilities clientCapabilities,
 			McpSchema.Implementation clientInfo) {
 		this.session = session;
@@ -21,8 +40,21 @@ public class McpAsyncServerExchange {
 		this.clientInfo = clientInfo;
 	}
 
-	private static final TypeReference<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeReference<>() {
-	};
+	/**
+	 * Get the client capabilities that define the supported features and functionality.
+	 * @return The client capabilities
+	 */
+	public McpSchema.ClientCapabilities getClientCapabilities() {
+		return this.clientCapabilities;
+	}
+
+	/**
+	 * Get the client implementation information.
+	 * @return The client implementation details
+	 */
+	public McpSchema.Implementation getClientInfo() {
+		return this.clientInfo;
+	}
 
 	/**
 	 * Create a new message using the sampling capabilities of the client. The Model
@@ -34,9 +66,6 @@ public class McpAsyncServerExchange {
 	 * include context from MCP servers in their prompts.
 	 * @param createMessageRequest The request to create a new message
 	 * @return A Mono that completes when the message has been created
-	 * @throws McpError if the client has not been initialized or does not support
-	 * sampling capabilities
-	 * @throws McpError if the client does not support the createMessage method
 	 * @see McpSchema.CreateMessageRequest
 	 * @see McpSchema.CreateMessageResult
 	 * @see <a href=
@@ -54,9 +83,6 @@ public class McpAsyncServerExchange {
 				CREATE_MESSAGE_RESULT_TYPE_REF);
 	}
 
-	private static final TypeReference<McpSchema.ListRootsResult> LIST_ROOTS_RESULT_TYPE_REF = new TypeReference<>() {
-	};
-
 	/**
 	 * Retrieves the list of all roots provided by the client.
 	 * @return A Mono that emits the list of roots result.
@@ -66,7 +92,7 @@ public class McpAsyncServerExchange {
 	}
 
 	/**
-	 * Retrieves a paginated list of roots provided by the server.
+	 * Retrieves a paginated list of roots provided by the client.
 	 * @param cursor Optional pagination cursor from a previous list request
 	 * @return A Mono that emits the list of roots result containing
 	 */

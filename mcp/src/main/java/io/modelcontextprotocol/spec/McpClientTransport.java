@@ -7,6 +7,12 @@ import java.util.function.Function;
 
 import reactor.core.publisher.Mono;
 
+/**
+ * Marker interface for the client-side MCP transport.
+ *
+ * @author Christian Tzolov
+ * @author Dariusz Jędrzejczyk
+ */
 public interface McpClientTransport extends ClientMcpTransport {
 
 	@Override

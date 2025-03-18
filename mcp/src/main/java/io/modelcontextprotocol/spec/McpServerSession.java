@@ -15,6 +15,10 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Sinks;
 
+/**
+ * Represents a Model Control Protocol (MCP) session on the server side. It manages
+ * bidirectional JSON-RPC communication with the client.
+ */
 public class McpServerSession implements McpSession {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpServerSession.class);
@@ -49,6 +53,18 @@ public class McpServerSession implements McpSession {
 
 	private final AtomicInteger state = new AtomicInteger(STATE_UNINITIALIZED);
 
+	/**
+	 * Creates a new server session with the given parameters and the transport to use.
+	 * @param id session id
+	 * @param transport the transport to use
+	 * @param initHandler called when a
+	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
+	 * server
+	 * @param initNotificationHandler called when a
+	 * {@link McpSchema.METHOD_NOTIFICATION_INITIALIZED} is received.
+	 * @param requestHandlers map of request handlers to use
+	 * @param notificationHandlers map of notification handlers to use
+	 */
 	public McpServerSession(String id, McpServerTransport transport, InitRequestHandler initHandler,
 			InitNotificationHandler initNotificationHandler, Map<String, RequestHandler<?>> requestHandlers,
 			Map<String, NotificationHandler> notificationHandlers) {
@@ -60,10 +76,24 @@ public class McpServerSession implements McpSession {
 		this.notificationHandlers = notificationHandlers;
 	}
 
+	/**
+	 * Retrieve the session id.
+	 * @return session id
+	 */
 	public String getId() {
 		return this.id;
 	}
 
+	/**
+	 * Called upon successful initialization sequence between the client and the server
+	 * with the client capabilities and information.
+	 *
+	 * <a href=
+	 * "https://github.com/modelcontextprotocol/specification/blob/main/docs/specification/basic/lifecycle.md#initialization">Initialization
+	 * Spec</a>
+	 * @param clientCapabilities the capabilities the connected client provides
+	 * @param clientInfo the information about the connected client
+	 */
 	public void init(McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo) {
 		this.clientCapabilities.lazySet(clientCapabilities);
 		this.clientInfo.lazySet(clientInfo);
@@ -73,6 +103,7 @@ public class McpServerSession implements McpSession {
 		return this.id + "-" + this.requestCounter.getAndIncrement();
 	}
 
+	@Override
 	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {
 		String requestId = this.generateRequestId();
 
@@ -107,6 +138,16 @@ public class McpServerSession implements McpSession {
 		return this.transport.sendMessage(jsonrpcNotification);
 	}
 
+	/**
+	 * Called by the {@link McpServerTransportProvider} once the session is determined.
+	 * The purpose of this method is to dispatch the message to an appropriate handler as
+	 * specified by the MCP server implementation
+	 * ({@link io.modelcontextprotocol.server.McpAsyncServer} or
+	 * {@link io.modelcontextprotocol.server.McpSyncServer}) via
+	 * {@link McpServerSession.Factory} that the server creates.
+	 * @param message the incoming JSON-RPC message
+	 * @return a Mono that completes when the message is processed
+	 */
 	public Mono<Void> handle(McpSchema.JSONRPCMessage message) {
 		return Mono.defer(() -> {
 			// TODO handle errors for communication to without initialization happening
@@ -232,33 +273,80 @@ public class McpServerSession implements McpSession {
 		this.transport.close();
 	}
 
+	/**
+	 * Request handler for the initialization request.
+	 */
 	public interface InitRequestHandler {
 
+		/**
+		 * Handles the initialization request.
+		 * @param initializeRequest the initialization request by the client
+		 * @return a Mono that will emit the result of the initialization
+		 */
 		Mono<McpSchema.InitializeResult> handle(McpSchema.InitializeRequest initializeRequest);
 
 	}
 
+	/**
+	 * Notification handler for the initialization notification from the client.
+	 */
 	public interface InitNotificationHandler {
 
+		/**
+		 * Specifies an action to take upon successful initialization.
+		 * @return a Mono that will complete when the initialization is acted upon.
+		 */
 		Mono<Void> handle();
 
 	}
 
+	/**
+	 * A handler for client-initiated notifications.
+	 */
 	public interface NotificationHandler {
 
+		/**
+		 * Handles a notification from the client.
+		 * @param exchange the exchange associated with the client that allows calling
+		 * back to the connected client or inspecting its capabilities.
+		 * @param params the parameters of the notification.
+		 * @return a Mono that completes once the notification is handled.
+		 */
 		Mono<Void> handle(McpAsyncServerExchange exchange, Object params);
 
 	}
 
+	/**
+	 * A handler for client-initiated requests.
+	 *
+	 * @param <T> the type of the response that is expected as a result of handling the
+	 * request.
+	 */
 	public interface RequestHandler<T> {
 
+		/**
+		 * Handles a request from the client.
+		 * @param exchange the exchange associated with the client that allows calling
+		 * back to the connected client or inspecting its capabilities.
+		 * @param params the parameters of the request.
+		 * @return a Mono that will emit the response to the request.
+		 */
 		Mono<T> handle(McpAsyncServerExchange exchange, Object params);
 
 	}
 
+	/**
+	 * Factory for creating server sessions which delegate to a provided 1:1 transport
+	 * with a connected client.
+	 */
 	@FunctionalInterface
 	public interface Factory {
 
+		/**
+		 * Creates a new 1:1 representation of the client-server interaction.
+		 * @param sessionTransport the transport to use for communication with the client.
+		 * @return a new server session.
+		 */
 		McpServerSession create(McpServerTransport sessionTransport);
 
 	}
