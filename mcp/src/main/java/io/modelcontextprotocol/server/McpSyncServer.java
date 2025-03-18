@@ -68,6 +68,8 @@ public class McpSyncServer {
 	/**
 	 * Retrieves the list of all roots provided by the client.
 	 * @return The list of roots
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link McpSyncServerExchange#listRoots()}.
 	 */
 	@Deprecated
 	public McpSchema.ListRootsResult listRoots() {
@@ -78,6 +80,8 @@ public class McpSyncServer {
 	 * Retrieves a paginated list of roots provided by the server.
 	 * @param cursor Optional pagination cursor from a previous list request
 	 * @return The list of roots
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link McpSyncServerExchange#listRoots(String)}.
 	 */
 	@Deprecated
 	public McpSchema.ListRootsResult listRoots(String cursor) {
@@ -191,6 +195,8 @@ public class McpSyncServer {
 	/**
 	 * Get the client capabilities that define the supported features and functionality.
 	 * @return The client capabilities
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link McpSyncServerExchange#getClientCapabilities()}.
 	 */
 	@Deprecated
 	public ClientCapabilities getClientCapabilities() {
@@ -200,6 +206,8 @@ public class McpSyncServer {
 	/**
 	 * Get the client implementation information.
 	 * @return The client implementation details
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link McpSyncServerExchange#getClientInfo()}.
 	 */
 	@Deprecated
 	public McpSchema.Implementation getClientInfo() {
@@ -274,6 +282,8 @@ public class McpSyncServer {
 	 * @see <a href=
 	 * "https://spec.modelcontextprotocol.io/specification/client/sampling/">Sampling
 	 * Specification</a>
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link McpSyncServerExchange#createMessage(McpSchema.CreateMessageRequest)}.
 	 */
 	@Deprecated
 	public McpSchema.CreateMessageResult createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
