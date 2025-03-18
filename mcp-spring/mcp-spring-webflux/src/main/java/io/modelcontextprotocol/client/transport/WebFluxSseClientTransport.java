@@ -9,7 +9,7 @@ import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.McpClientTransport;
+import io.modelcontextprotocol.spec.ClientMcpTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
@@ -58,7 +58,7 @@ import org.springframework.web.reactive.function.client.WebClient;
  * "https://spec.modelcontextprotocol.io/specification/basic/transports/#http-with-sse">MCP
  * HTTP with SSE Transport Specification</a>
  */
-public class WebFluxSseClientTransport implements McpClientTransport {
+public class WebFluxSseClientTransport implements ClientMcpTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebFluxSseClientTransport.class);
 

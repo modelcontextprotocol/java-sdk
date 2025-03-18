@@ -7,7 +7,7 @@ package io.modelcontextprotocol.client;
 import java.time.Duration;
 
 import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
-import io.modelcontextprotocol.spec.McpClientTransport;
+import io.modelcontextprotocol.spec.ClientMcpTransport;
 import org.junit.jupiter.api.Timeout;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -32,7 +32,7 @@ class WebFluxSseMcpAsyncClientTests extends AbstractMcpAsyncClientTests {
 		.waitingFor(Wait.forHttp("/").forStatusCode(404));
 
 	@Override
-	protected McpClientTransport createMcpTransport() {
+	protected ClientMcpTransport createMcpTransport() {
 		return new WebFluxSseClientTransport(WebClient.builder().baseUrl(host));
 	}
 
