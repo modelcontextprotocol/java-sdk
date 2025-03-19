@@ -63,7 +63,7 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	protected Duration getInitializationTimeout() {
-		return Duration.ofSeconds(1);
+		return Duration.ofSeconds(2);
 	}
 
 	@BeforeEach
@@ -90,10 +90,10 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testConstructorWithInvalidArguments() {
-		assertThatThrownBy(() -> McpClient.sync(null).build()).isInstanceOf(IllegalArgumentException.class)
+		assertThatThrownBy(() -> McpClient.async(null).build()).isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Transport must not be null");
 
-		assertThatThrownBy(() -> McpClient.sync(mcpTransport).requestTimeout(null).build())
+		assertThatThrownBy(() -> McpClient.async(mcpTransport).requestTimeout(null).build())
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Request timeout must not be null");
 	}

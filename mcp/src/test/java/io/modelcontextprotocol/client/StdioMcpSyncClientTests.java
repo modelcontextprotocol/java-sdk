@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.client;
 
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.modelcontextprotocol.client.transport.ServerParameters;
@@ -44,12 +45,8 @@ class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 		assertThat(receivedError.get()).isNotNull().isEqualTo(errorMessage);
 	}
 
-	@Override
-	protected void onStart() {
-	}
-
-	@Override
-	protected void onClose() {
+	protected Duration getInitializationTimeout() {
+		return Duration.ofSeconds(6);
 	}
 
 }

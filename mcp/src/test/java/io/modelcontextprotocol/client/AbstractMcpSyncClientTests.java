@@ -49,9 +49,11 @@ public abstract class AbstractMcpSyncClientTests {
 
 	abstract protected ClientMcpTransport createMcpTransport();
 
-	abstract protected void onStart();
+	protected void onStart() {
+	}
 
-	abstract protected void onClose();
+	protected void onClose() {
+	}
 
 	protected Duration getRequestTimeout() {
 		return Duration.ofSeconds(10);
