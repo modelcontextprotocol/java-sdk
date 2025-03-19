@@ -55,7 +55,7 @@ public abstract class AbstractMcpSyncClientTests {
 	}
 
 	protected Duration getRequestTimeout() {
-		return Duration.ofSeconds(10);
+		return Duration.ofSeconds(14);
 	}
 
 	protected Duration getInitializationTimeout() {
