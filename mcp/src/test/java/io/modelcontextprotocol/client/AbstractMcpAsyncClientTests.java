@@ -6,8 +6,12 @@ package io.modelcontextprotocol.client;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import io.modelcontextprotocol.spec.ClientMcpTransport;
 import io.modelcontextprotocol.spec.McpError;
@@ -45,10 +49,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 // KEEP IN SYNC with the class in mcp-test module
 public abstract class AbstractMcpAsyncClientTests {
 
-	private McpAsyncClient mcpAsyncClient;
-
-	protected ClientMcpTransport mcpTransport;
-
 	private static final String ECHO_TEST_MESSAGE = "Hello MCP Spring AI!";
 
 	abstract protected ClientMcpTransport createMcpTransport();
@@ -67,26 +67,59 @@ public abstract class AbstractMcpAsyncClientTests {
 		return Duration.ofSeconds(2);
 	}
 
+	McpAsyncClient client(ClientMcpTransport transport) {
+		return client(transport, Function.identity());
+	}
+
+	McpAsyncClient client(ClientMcpTransport transport, Function<McpClient.AsyncSpec, McpClient.AsyncSpec> customizer) {
+		AtomicReference<McpAsyncClient> client = new AtomicReference<>();
+
+		assertThatCode(() -> {
+			McpClient.AsyncSpec builder = McpClient.async(transport)
+				.requestTimeout(getRequestTimeout())
+				.initializationTimeout(getInitializationTimeout())
+				.capabilities(ClientCapabilities.builder().roots(true).build());
+			builder = customizer.apply(builder);
+			client.set(builder.build());
+		}).doesNotThrowAnyException();
+
+		return client.get();
+	}
+
+	void withClient(ClientMcpTransport transport, Consumer<McpAsyncClient> c) {
+		withClient(transport, Function.identity(), c);
+	}
+
+	void withClient(ClientMcpTransport transport, Function<McpClient.AsyncSpec, McpClient.AsyncSpec> customizer,
+			Consumer<McpAsyncClient> c) {
+		var client = client(transport, customizer);
+		try {
+			c.accept(client);
+		}
+		finally {
+			StepVerifier.create(client.closeGracefully()).expectComplete().verify(Duration.ofSeconds(10));
+		}
+	}
+
 	@BeforeEach
 	void setUp() {
 		onStart();
-		this.mcpTransport = createMcpTransport();
-
-		assertThatCode(() -> {
-			mcpAsyncClient = McpClient.async(mcpTransport)
-				.requestTimeout(getRequestTimeout())
-				.initializationTimeout(getInitializationTimeout())
-				.capabilities(ClientCapabilities.builder().roots(true).build())
-				.build();
-		}).doesNotThrowAnyException();
 	}
 
 	@AfterEach
 	void tearDown() {
-		if (mcpAsyncClient != null) {
-			StepVerifier.create(mcpAsyncClient.closeGracefully()).verifyComplete();
-		}
 		onClose();
+	}
+
+	<T> void verifyInitializationTimeout(Function<McpAsyncClient, Mono<T>> operation, String action) {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.withVirtualTime(() -> operation.apply(mcpAsyncClient))
+				.expectSubscription()
+				.thenAwait(getInitializationTimeout())
+				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
+					.hasMessage("Client must be initialized before " + action))
+				.verify();
+		});
 	}
 
 	@Test
@@ -94,258 +127,266 @@ public abstract class AbstractMcpAsyncClientTests {
 		assertThatThrownBy(() -> McpClient.async(null).build()).isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Transport must not be null");
 
-		assertThatThrownBy(() -> McpClient.async(mcpTransport).requestTimeout(null).build())
+		assertThatThrownBy(() -> McpClient.async(createMcpTransport()).requestTimeout(null).build())
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Request timeout must not be null");
 	}
 
 	@Test
 	void testListToolsWithoutInitialization() {
-		StepVerifier.create(mcpAsyncClient.listTools(null)).expectErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(McpError.class)
-				.hasMessage("Client must be initialized before listing tools");
-		}).verify();
+		verifyInitializationTimeout(client -> client.listTools(null), "listing tools");
 	}
 
 	@Test
 	void testListTools() {
-		StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listTools(null)))
-			.consumeNextWith(result -> {
-				assertThat(result.tools()).isNotNull().isNotEmpty();
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listTools(null)))
+				.consumeNextWith(result -> {
+					assertThat(result.tools()).isNotNull().isNotEmpty();
 
-				Tool firstTool = result.tools().get(0);
-				assertThat(firstTool.name()).isNotNull();
-				assertThat(firstTool.description()).isNotNull();
-			})
-			.verifyComplete();
+					Tool firstTool = result.tools().get(0);
+					assertThat(firstTool.name()).isNotNull();
+					assertThat(firstTool.description()).isNotNull();
+				})
+				.verifyComplete();
+		});
 	}
 
 	@Test
 	void testPingWithoutInitialization() {
-		StepVerifier.create(mcpAsyncClient.ping())
-			.expectErrorMatches(error -> error instanceof McpError
-					&& error.getMessage().equals("Client must be initialized before pinging the server"))
-			.verify();
+		verifyInitializationTimeout(client -> client.ping(), "pinging the server");
 	}
 
 	@Test
 	void testPing() {
-		StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.ping())).consumeNextWith(callToolResult -> {
-		}).verifyComplete();
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.ping()))
+				.expectNextCount(1)
+				.verifyComplete();
+		});
 	}
 
 	@Test
 	void testCallToolWithoutInitialization() {
 		CallToolRequest callToolRequest = new CallToolRequest("echo", Map.of("message", ECHO_TEST_MESSAGE));
-
-		StepVerifier.create(mcpAsyncClient.callTool(callToolRequest))
-			.expectErrorMatches(error -> error instanceof McpError
-					&& error.getMessage().equals("Client must be initialized before calling tools"))
-			.verify();
+		verifyInitializationTimeout(client -> client.callTool(callToolRequest), "calling tools");
 	}
 
 	@Test
 	void testCallTool() {
-		CallToolRequest callToolRequest = new CallToolRequest("echo", Map.of("message", ECHO_TEST_MESSAGE));
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			CallToolRequest callToolRequest = new CallToolRequest("echo", Map.of("message", ECHO_TEST_MESSAGE));
 
-		StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.callTool(callToolRequest)))
-			.consumeNextWith(callToolResult -> {
-				assertThat(callToolResult).isNotNull();
-				assertThat(callToolResult.content()).isNotNull();
-				assertThat(callToolResult.isError()).isNull();
-			})
-			.verifyComplete();
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.callTool(callToolRequest)))
+				.consumeNextWith(callToolResult -> {
+					assertThat(callToolResult).isNotNull().satisfies(result -> {
+						assertThat(result.content()).isNotNull();
+						assertThat(result.isError()).isNull();
+					});
+				})
+				.verifyComplete();
+		});
 	}
 
 	@Test
 	void testCallToolWithInvalidTool() {
-		CallToolRequest invalidRequest = new CallToolRequest("nonexistent_tool", Map.of("message", ECHO_TEST_MESSAGE));
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			CallToolRequest invalidRequest = new CallToolRequest("nonexistent_tool",
+					Map.of("message", ECHO_TEST_MESSAGE));
 
-		StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.callTool(invalidRequest)))
-			.expectError(Exception.class)
-			.verify();
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.callTool(invalidRequest)))
+				.consumeErrorWith(
+						e -> assertThat(e).isInstanceOf(McpError.class).hasMessage("Unknown tool: nonexistent_tool"))
+				.verify();
+		});
 	}
 
 	@Test
 	void testListResourcesWithoutInitialization() {
-		StepVerifier.create(mcpAsyncClient.listResources(null))
-			.expectErrorMatches(error -> error instanceof McpError
-					&& error.getMessage().equals("Client must be initialized before listing resources"))
-			.verify();
+		verifyInitializationTimeout(client -> client.listResources(null), "listing resources");
 	}
 
 	@Test
 	void testListResources() {
-		StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResources(null)))
-			.consumeNextWith(resources -> {
-				assertThat(resources).isNotNull().satisfies(result -> {
-					assertThat(result.resources()).isNotNull();
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResources(null)))
+				.consumeNextWith(resources -> {
+					assertThat(resources).isNotNull().satisfies(result -> {
+						assertThat(result.resources()).isNotNull();
 
-					if (!result.resources().isEmpty()) {
-						Resource firstResource = result.resources().get(0);
-						assertThat(firstResource.uri()).isNotNull();
-						assertThat(firstResource.name()).isNotNull();
-					}
-				});
-			})
-			.verifyComplete();
+						if (!result.resources().isEmpty()) {
+							Resource firstResource = result.resources().get(0);
+							assertThat(firstResource.uri()).isNotNull();
+							assertThat(firstResource.name()).isNotNull();
+						}
+					});
+				})
+				.verifyComplete();
+		});
 	}
 
 	@Test
 	void testMcpAsyncClientState() {
-		assertThat(mcpAsyncClient).isNotNull();
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			assertThat(mcpAsyncClient).isNotNull();
+		});
 	}
 
 	@Test
 	void testListPromptsWithoutInitialization() {
-		StepVerifier.create(mcpAsyncClient.listPrompts(null))
-			.expectErrorMatches(error -> error instanceof McpError
-					&& error.getMessage().equals("Client must be initialized before listing prompts"))
-			.verify();
+		verifyInitializationTimeout(client -> client.listPrompts(null), "listing " + "prompts");
 	}
 
 	@Test
 	void testListPrompts() {
-		StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listPrompts(null)))
-			.consumeNextWith(prompts -> {
-				assertThat(prompts).isNotNull().satisfies(result -> {
-					assertThat(result.prompts()).isNotNull();
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listPrompts(null)))
+				.consumeNextWith(prompts -> {
+					assertThat(prompts).isNotNull().satisfies(result -> {
+						assertThat(result.prompts()).isNotNull();
 
-					if (!result.prompts().isEmpty()) {
-						Prompt firstPrompt = result.prompts().get(0);
-						assertThat(firstPrompt.name()).isNotNull();
-						assertThat(firstPrompt.description()).isNotNull();
-					}
-				});
-			})
-			.verifyComplete();
+						if (!result.prompts().isEmpty()) {
+							Prompt firstPrompt = result.prompts().get(0);
+							assertThat(firstPrompt.name()).isNotNull();
+							assertThat(firstPrompt.description()).isNotNull();
+						}
+					});
+				})
+				.verifyComplete();
+		});
 	}
 
 	@Test
 	void testGetPromptWithoutInitialization() {
 		GetPromptRequest request = new GetPromptRequest("simple_prompt", Map.of());
-
-		StepVerifier.create(mcpAsyncClient.getPrompt(request))
-			.expectErrorMatches(error -> error instanceof McpError
-					&& error.getMessage().equals("Client must be initialized before getting prompts"))
-			.verify();
+		verifyInitializationTimeout(client -> client.getPrompt(request), "getting " + "prompts");
 	}
 
 	@Test
 	void testGetPrompt() {
-		GetPromptRequest request = new GetPromptRequest("simple_prompt", Map.of());
-
-		StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.getPrompt(request)))
-			.consumeNextWith(prompt -> {
-				assertThat(prompt).isNotNull().satisfies(result -> {
-					assertThat(result.messages()).isNotEmpty();
-					assertThat(result.messages()).hasSize(1);
-				});
-			})
-			.verifyComplete();
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier
+				.create(mcpAsyncClient.initialize()
+					.then(mcpAsyncClient.getPrompt(new GetPromptRequest("simple_prompt", Map.of()))))
+				.consumeNextWith(prompt -> {
+					assertThat(prompt).isNotNull().satisfies(result -> {
+						assertThat(result.messages()).isNotEmpty();
+						assertThat(result.messages()).hasSize(1);
+					});
+				})
+				.verifyComplete();
+		});
 	}
 
 	@Test
 	void testRootsListChangedWithoutInitialization() {
-		StepVerifier.create(mcpAsyncClient.rootsListChangedNotification())
-			.expectErrorMatches(error -> error instanceof McpError && error.getMessage()
-				.equals("Client must be initialized before sending roots list changed notification"))
-			.verify();
+		verifyInitializationTimeout(client -> client.rootsListChangedNotification(),
+				"sending roots list changed notification");
 	}
 
 	@Test
 	void testRootsListChanged() {
-		StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.rootsListChangedNotification()))
-			.verifyComplete();
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.rootsListChangedNotification()))
+				.verifyComplete();
+		});
 	}
 
 	@Test
 	void testInitializeWithRootsListProviders() {
-		var transport = createMcpTransport();
-
-		var client = McpClient.async(transport)
-			.requestTimeout(getRequestTimeout())
-			.roots(new Root("file:///test/path", "test-root"))
-			.build();
-
-		StepVerifier.create(client.initialize().then(client.closeGracefully())).verifyComplete();
+		withClient(createMcpTransport(), builder -> builder.roots(new Root("file:///test/path", "test-root")),
+				client -> {
+					StepVerifier.create(client.initialize().then(client.closeGracefully())).verifyComplete();
+				});
 	}
 
 	@Test
 	void testAddRoot() {
-		Root newRoot = new Root("file:///new/test/path", "new-test-root");
-
-		StepVerifier.create(mcpAsyncClient.addRoot(newRoot)).verifyComplete();
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			Root newRoot = new Root("file:///new/test/path", "new-test-root");
+			StepVerifier.create(mcpAsyncClient.addRoot(newRoot)).verifyComplete();
+		});
 	}
 
 	@Test
 	void testAddRootWithNullValue() {
-		StepVerifier.create(mcpAsyncClient.addRoot(null))
-			.expectErrorMatches(error -> error.getMessage().contains("Root must not be null"))
-			.verify();
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.addRoot(null))
+				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class).hasMessage("Root must not be null"))
+				.verify();
+		});
 	}
 
 	@Test
 	void testRemoveRoot() {
-		Root root = new Root("file:///test/path/to/remove", "root-to-remove");
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			Root root = new Root("file:///test/path/to/remove", "root-to-remove");
+			StepVerifier.create(mcpAsyncClient.addRoot(root)).verifyComplete();
 
-		StepVerifier.create(mcpAsyncClient.addRoot(root).then(mcpAsyncClient.removeRoot(root.uri()))).verifyComplete();
+			StepVerifier.create(mcpAsyncClient.removeRoot(root.uri())).verifyComplete();
+		});
 	}
 
 	@Test
 	void testRemoveNonExistentRoot() {
-		StepVerifier.create(mcpAsyncClient.removeRoot("nonexistent-uri"))
-			.expectErrorMatches(error -> error.getMessage().contains("Root with uri 'nonexistent-uri' not found"))
-			.verify();
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.removeRoot("nonexistent-uri"))
+				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
+					.hasMessage("Root with uri 'nonexistent-uri' not found"))
+				.verify();
+		});
 	}
 
 	@Test
 	@Disabled
 	void testReadResource() {
-		StepVerifier.create(mcpAsyncClient.listResources()).consumeNextWith(resources -> {
-			if (!resources.resources().isEmpty()) {
-				Resource firstResource = resources.resources().get(0);
-				StepVerifier.create(mcpAsyncClient.readResource(firstResource)).consumeNextWith(result -> {
-					assertThat(result).isNotNull();
-					assertThat(result.contents()).isNotNull();
-				}).verifyComplete();
-			}
-		}).verifyComplete();
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.listResources()).consumeNextWith(resources -> {
+				if (!resources.resources().isEmpty()) {
+					Resource firstResource = resources.resources().get(0);
+					StepVerifier.create(mcpAsyncClient.readResource(firstResource)).consumeNextWith(result -> {
+						assertThat(result).isNotNull();
+						assertThat(result.contents()).isNotNull();
+					}).verifyComplete();
+				}
+			}).verifyComplete();
+		});
 	}
 
 	@Test
 	void testListResourceTemplatesWithoutInitialization() {
-		StepVerifier.create(mcpAsyncClient.listResourceTemplates())
-			.expectErrorMatches(error -> error instanceof McpError
-					&& error.getMessage().equals("Client must be initialized before listing resource templates"))
-			.verify();
+		verifyInitializationTimeout(client -> client.listResourceTemplates(), "listing resource templates");
 	}
 
 	@Test
 	void testListResourceTemplates() {
-		StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResourceTemplates()))
-			.consumeNextWith(result -> {
-				assertThat(result).isNotNull();
-				assertThat(result.resourceTemplates()).isNotNull();
-			})
-			.verifyComplete();
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResourceTemplates()))
+				.consumeNextWith(result -> {
+					assertThat(result).isNotNull();
+					assertThat(result.resourceTemplates()).isNotNull();
+				})
+				.verifyComplete();
+		});
 	}
 
 	// @Test
 	void testResourceSubscription() {
-		StepVerifier.create(mcpAsyncClient.listResources()).consumeNextWith(resources -> {
-			if (!resources.resources().isEmpty()) {
-				Resource firstResource = resources.resources().get(0);
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.listResources()).consumeNextWith(resources -> {
+				if (!resources.resources().isEmpty()) {
+					Resource firstResource = resources.resources().get(0);
 
-				// Test subscribe
-				StepVerifier.create(mcpAsyncClient.subscribeResource(new SubscribeRequest(firstResource.uri())))
-					.verifyComplete();
+					// Test subscribe
+					StepVerifier.create(mcpAsyncClient.subscribeResource(new SubscribeRequest(firstResource.uri())))
+						.verifyComplete();
 
-				// Test unsubscribe
-				StepVerifier.create(mcpAsyncClient.unsubscribeResource(new UnsubscribeRequest(firstResource.uri())))
-					.verifyComplete();
-			}
-		}).verifyComplete();
+					// Test unsubscribe
+					StepVerifier.create(mcpAsyncClient.unsubscribeResource(new UnsubscribeRequest(firstResource.uri())))
+						.verifyComplete();
+				}
+			}).verifyComplete();
+		});
 	}
 
 	@Test
@@ -354,36 +395,44 @@ public abstract class AbstractMcpAsyncClientTests {
 		AtomicBoolean resourcesNotificationReceived = new AtomicBoolean(false);
 		AtomicBoolean promptsNotificationReceived = new AtomicBoolean(false);
 
-		var transport = createMcpTransport();
-		var client = McpClient.async(transport)
-			.requestTimeout(getRequestTimeout())
-			.toolsChangeConsumer(tools -> Mono.fromRunnable(() -> toolsNotificationReceived.set(true)))
-			.resourcesChangeConsumer(resources -> Mono.fromRunnable(() -> resourcesNotificationReceived.set(true)))
-			.promptsChangeConsumer(prompts -> Mono.fromRunnable(() -> promptsNotificationReceived.set(true)))
-			.build();
+		withClient(createMcpTransport(),
+				builder -> builder
+					.toolsChangeConsumer(tools -> Mono.fromRunnable(() -> toolsNotificationReceived.set(true)))
+					.resourcesChangeConsumer(
+							resources -> Mono.fromRunnable(() -> resourcesNotificationReceived.set(true)))
+					.promptsChangeConsumer(prompts -> Mono.fromRunnable(() -> promptsNotificationReceived.set(true))),
+				mcpAsyncClient -> {
 
-		StepVerifier.create(client.initialize().then(client.closeGracefully())).verifyComplete();
+					var transport = createMcpTransport();
+					var client = McpClient.async(transport)
+						.requestTimeout(getRequestTimeout())
+						.toolsChangeConsumer(tools -> Mono.fromRunnable(() -> toolsNotificationReceived.set(true)))
+						.resourcesChangeConsumer(
+								resources -> Mono.fromRunnable(() -> resourcesNotificationReceived.set(true)))
+						.promptsChangeConsumer(
+								prompts -> Mono.fromRunnable(() -> promptsNotificationReceived.set(true)))
+						.build();
+
+					StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
+				});
 	}
 
 	@Test
 	void testInitializeWithSamplingCapability() {
-		var transport = createMcpTransport();
-
-		var capabilities = ClientCapabilities.builder().sampling().build();
-
-		var client = McpClient.async(transport)
-			.requestTimeout(getRequestTimeout())
-			.capabilities(capabilities)
-			.sampling(request -> Mono.just(CreateMessageResult.builder().message("test").model("test-model").build()))
+		ClientCapabilities capabilities = ClientCapabilities.builder().sampling().build();
+		CreateMessageResult createMessageResult = CreateMessageResult.builder()
+			.message("test")
+			.model("test-model")
 			.build();
-
-		StepVerifier.create(client.initialize().then(client.closeGracefully())).verifyComplete();
+		withClient(createMcpTransport(),
+				builder -> builder.capabilities(capabilities).sampling(request -> Mono.just(createMessageResult)),
+				client -> {
+					StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
+				});
 	}
 
 	@Test
 	void testInitializeWithAllCapabilities() {
-		var transport = createMcpTransport();
-
 		var capabilities = ClientCapabilities.builder()
 			.experimental(Map.of("feature", "test"))
 			.roots(true)
@@ -392,18 +441,14 @@ public abstract class AbstractMcpAsyncClientTests {
 
 		Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler = request -> Mono
 			.just(CreateMessageResult.builder().message("test").model("test-model").build());
-		var client = McpClient.async(transport)
-			.requestTimeout(getRequestTimeout())
-			.capabilities(capabilities)
-			.sampling(samplingHandler)
-			.build();
 
-		StepVerifier.create(client.initialize()).consumeNextWith(result -> {
-			assertThat(result).isNotNull();
-			assertThat(result.capabilities()).isNotNull();
-		}).verifyComplete();
+		withClient(createMcpTransport(), builder -> builder.capabilities(capabilities).sampling(samplingHandler),
+				client ->
 
-		StepVerifier.create(client.closeGracefully()).verifyComplete();
+				StepVerifier.create(client.initialize()).assertNext(result -> {
+					assertThat(result).isNotNull();
+					assertThat(result.capabilities()).isNotNull();
+				}).verifyComplete());
 	}
 
 	// ---------------------------------------
@@ -412,43 +457,46 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testLoggingLevelsWithoutInitialization() {
-		StepVerifier.create(mcpAsyncClient.setLoggingLevel(McpSchema.LoggingLevel.DEBUG))
-			.expectErrorMatches(error -> error instanceof McpError
-					&& error.getMessage().equals("Client must be initialized before setting logging level"))
-			.verify();
+		verifyInitializationTimeout(client -> client.setLoggingLevel(McpSchema.LoggingLevel.DEBUG),
+				"setting logging level");
 	}
 
 	@Test
 	void testLoggingLevels() {
-		Mono<Void> testAllLevels = mcpAsyncClient.initialize().then(Mono.defer(() -> {
-			Mono<Void> chain = Mono.empty();
-			for (McpSchema.LoggingLevel level : McpSchema.LoggingLevel.values()) {
-				chain = chain.then(mcpAsyncClient.setLoggingLevel(level));
-			}
-			return chain;
-		}));
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			Mono<Void> testAllLevels = mcpAsyncClient.initialize().then(Mono.defer(() -> {
+				Mono<Void> chain = Mono.empty();
+				for (McpSchema.LoggingLevel level : McpSchema.LoggingLevel.values()) {
+					chain = chain.then(mcpAsyncClient.setLoggingLevel(level));
+				}
+				return chain;
+			}));
 
-		StepVerifier.create(testAllLevels).verifyComplete();
+			StepVerifier.create(testAllLevels).verifyComplete();
+		});
 	}
 
 	@Test
 	void testLoggingConsumer() {
 		AtomicBoolean logReceived = new AtomicBoolean(false);
-		var transport = createMcpTransport();
 
-		var client = McpClient.async(transport)
-			.requestTimeout(getRequestTimeout())
-			.loggingConsumer(notification -> Mono.fromRunnable(() -> logReceived.set(true)))
-			.build();
+		withClient(createMcpTransport(),
+				builder -> builder.loggingConsumer(notification -> Mono.fromRunnable(() -> logReceived.set(true))),
+				client -> {
+					StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
+					StepVerifier.create(client.closeGracefully()).verifyComplete();
 
-		StepVerifier.create(client.initialize().then(client.closeGracefully())).verifyComplete();
+				});
+
 	}
 
 	@Test
 	void testLoggingWithNullNotification() {
-		StepVerifier.create(mcpAsyncClient.setLoggingLevel(null))
-			.expectErrorMatches(error -> error.getMessage().contains("Logging level must not be null"))
-			.verify();
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.setLoggingLevel(null))
+				.expectErrorMatches(error -> error.getMessage().contains("Logging level must not be null"))
+				.verify();
+		});
 	}
 
 }
