@@ -369,13 +369,12 @@ public class McpAsyncClient {
 
 	/**
 	 * Sends a ping request to the server.
-	 * @return A Mono that completes when the server responds to the ping
+	 * @return A Mono that completes with the server's ping response
 	 */
-	public Mono<Void> ping() {
+	public Mono<Object> ping() {
 		return this.withInitializationCheck("pinging the server", initializedResult -> this.mcpSession
 			.sendRequest(McpSchema.METHOD_PING, null, new TypeReference<Object>() {
-			})
-			.then());
+			}));
 	}
 
 	// --------------------------

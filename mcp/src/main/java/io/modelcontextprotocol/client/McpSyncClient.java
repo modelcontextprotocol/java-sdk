@@ -179,10 +179,11 @@ public class McpSyncClient implements AutoCloseable {
 	}
 
 	/**
-	 * Send a synchronous ping request to the server.
+	 * Send a synchronous ping request.
+	 * @return
 	 */
-	public void ping() {
-		this.delegate.ping().block();
+	public Object ping() {
+		return this.delegate.ping().block();
 	}
 
 	// --------------------------

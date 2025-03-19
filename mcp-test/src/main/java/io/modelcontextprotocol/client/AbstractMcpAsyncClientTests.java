@@ -129,7 +129,8 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testPing() {
-		StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.ping())).verifyComplete();
+		StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.ping())).consumeNextWith(callToolResult -> {
+		}).verifyComplete();
 	}
 
 	@Test

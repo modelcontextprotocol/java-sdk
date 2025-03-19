@@ -12,6 +12,7 @@ import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.spec.ClientMcpTransport;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import reactor.core.publisher.Sinks;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -40,7 +41,7 @@ class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 		((StdioClientTransport) mcpTransport).setStdErrorHandler(error -> receivedError.set(error));
 
 		String errorMessage = "Test error";
-		((StdioClientTransport) mcpTransport).getErrorSink().emitNext(errorMessage, null);
+		((StdioClientTransport) mcpTransport).getErrorSink().emitNext(errorMessage, Sinks.EmitFailureHandler.FAIL_FAST);
 
 		assertThat(receivedError.get()).isNotNull().isEqualTo(errorMessage);
 	}
