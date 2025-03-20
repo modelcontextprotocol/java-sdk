@@ -2,7 +2,9 @@
 
 This document outlines the breaking changes and provides guidance on how to migrate your code from version 0.7.0 to 0.8.0.
 
-The 0.8.0 refactoring introduces a robust session-based architecture for server-side MCP implementations, to improve the SDK's ability to handle multiple concurrent client connections and provide a more consistent API. The main changes include:
+The 0.8.0 refactoring introduces a session-based architecture for server-side MCP implementations.
+It improves the SDK's ability to handle multiple concurrent client connections and provides an API better aligned with the MCP specification.
+The main changes include:
 
 1. Introduction of a session-based architecture
 2. New transport provider abstraction
