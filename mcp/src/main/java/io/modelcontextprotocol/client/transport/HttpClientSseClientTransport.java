@@ -18,7 +18,7 @@ import java.util.function.Function;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.transport.FlowSseClient.SseEvent;
-import io.modelcontextprotocol.spec.ClientMcpTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
@@ -52,9 +52,9 @@ import reactor.core.publisher.Mono;
  *
  * @author Christian Tzolov
  * @see io.modelcontextprotocol.spec.McpTransport
- * @see io.modelcontextprotocol.spec.ClientMcpTransport
+ * @see io.modelcontextprotocol.spec.McpClientTransport
  */
-public class HttpClientSseClientTransport implements ClientMcpTransport {
+public class HttpClientSseClientTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(HttpClientSseClientTransport.class);
 

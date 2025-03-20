@@ -33,7 +33,7 @@ import reactor.core.scheduler.Schedulers;
  * over stdin/stdout, with errors and debug information sent to stderr.
  *
  * @author Christian Tzolov
- * @deprecated Use
+ * @deprecated This method will be removed in 0.9.0. Use
  * {@link io.modelcontextprotocol.server.transport.StdioServerTransportProvider} instead.
  */
 @Deprecated

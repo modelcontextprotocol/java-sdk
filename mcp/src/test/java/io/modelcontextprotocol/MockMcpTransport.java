@@ -11,7 +11,7 @@ import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.ClientMcpTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.ServerMcpTransport;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCNotification;
@@ -20,10 +20,10 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 
 /**
- * A mock implementation of the {@link ClientMcpTransport} and {@link ServerMcpTransport}
+ * A mock implementation of the {@link McpClientTransport} and {@link ServerMcpTransport}
  * interfaces.
  */
-public class MockMcpTransport implements ClientMcpTransport, ServerMcpTransport {
+public class MockMcpTransport implements McpClientTransport, ServerMcpTransport {
 
 	private final Sinks.Many<McpSchema.JSONRPCMessage> inbound = Sinks.many().unicast().onBackpressureBuffer();
 

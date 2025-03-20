@@ -13,6 +13,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import io.modelcontextprotocol.spec.ClientMcpTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransport;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
@@ -113,8 +114,28 @@ public interface McpClient {
 	 * and {@code SseClientTransport} for SSE-based communication.
 	 * @return A new builder instance for configuring the client
 	 * @throws IllegalArgumentException if transport is null
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link #sync(McpClientTransport)}
 	 */
+	@Deprecated
 	static SyncSpec sync(ClientMcpTransport transport) {
+		return new SyncSpec(transport);
+	}
+
+	/**
+	 * Start building a synchronous MCP client with the specified transport layer. The
+	 * synchronous MCP client provides blocking operations. Synchronous clients wait for
+	 * each operation to complete before returning, making them simpler to use but
+	 * potentially less performant for concurrent operations. The transport layer handles
+	 * the low-level communication between client and server using protocols like stdio or
+	 * Server-Sent Events (SSE).
+	 * @param transport The transport layer implementation for MCP communication. Common
+	 * implementations include {@code StdioClientTransport} for stdio-based communication
+	 * and {@code SseClientTransport} for SSE-based communication.
+	 * @return A new builder instance for configuring the client
+	 * @throws IllegalArgumentException if transport is null
+	 */
+	static SyncSpec sync(McpClientTransport transport) {
 		return new SyncSpec(transport);
 	}
 
@@ -130,8 +151,28 @@ public interface McpClient {
 	 * and {@code SseClientTransport} for SSE-based communication.
 	 * @return A new builder instance for configuring the client
 	 * @throws IllegalArgumentException if transport is null
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link #async(McpClientTransport)}
 	 */
+	@Deprecated
 	static AsyncSpec async(ClientMcpTransport transport) {
+		return new AsyncSpec(transport);
+	}
+
+	/**
+	 * Start building an asynchronous MCP client with the specified transport layer. The
+	 * asynchronous MCP client provides non-blocking operations. Asynchronous clients
+	 * return reactive primitives (Mono/Flux) immediately, allowing for concurrent
+	 * operations and reactive programming patterns. The transport layer handles the
+	 * low-level communication between client and server using protocols like stdio or
+	 * Server-Sent Events (SSE).
+	 * @param transport The transport layer implementation for MCP communication. Common
+	 * implementations include {@code StdioClientTransport} for stdio-based communication
+	 * and {@code SseClientTransport} for SSE-based communication.
+	 * @return A new builder instance for configuring the client
+	 * @throws IllegalArgumentException if transport is null
+	 */
+	static AsyncSpec async(McpClientTransport transport) {
 		return new AsyncSpec(transport);
 	}
 

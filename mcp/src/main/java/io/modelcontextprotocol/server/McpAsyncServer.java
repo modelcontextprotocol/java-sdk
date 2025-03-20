@@ -17,7 +17,7 @@ import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.DefaultMcpSession;
+import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
@@ -73,7 +73,7 @@ import reactor.core.publisher.Mono;
  * @author Dariusz Jędrzejczyk
  * @see McpServer
  * @see McpSchema
- * @see DefaultMcpSession
+ * @see McpClientSession
  */
 public class McpAsyncServer {
 
@@ -876,7 +876,7 @@ public class McpAsyncServer {
 		 * The MCP session implementation that manages bidirectional JSON-RPC
 		 * communication between clients and servers.
 		 */
-		private final DefaultMcpSession mcpSession;
+		private final McpClientSession mcpSession;
 
 		private final ServerMcpTransport transport;
 
@@ -920,7 +920,7 @@ public class McpAsyncServer {
 			this.resourceTemplates.addAll(features.resourceTemplates());
 			this.prompts.putAll(features.prompts());
 
-			Map<String, DefaultMcpSession.RequestHandler<?>> requestHandlers = new HashMap<>();
+			Map<String, McpClientSession.RequestHandler<?>> requestHandlers = new HashMap<>();
 
 			// Initialize request handlers for standard MCP methods
 			requestHandlers.put(McpSchema.METHOD_INITIALIZE, asyncInitializeRequestHandler());
@@ -952,7 +952,7 @@ public class McpAsyncServer {
 				requestHandlers.put(McpSchema.METHOD_LOGGING_SET_LEVEL, setLoggerRequestHandler());
 			}
 
-			Map<String, DefaultMcpSession.NotificationHandler> notificationHandlers = new HashMap<>();
+			Map<String, McpClientSession.NotificationHandler> notificationHandlers = new HashMap<>();
 
 			notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_INITIALIZED, (params) -> Mono.empty());
 
@@ -972,7 +972,7 @@ public class McpAsyncServer {
 					asyncRootsListChangedNotificationHandler(rootsChangeConsumers));
 
 			this.transport = mcpTransport;
-			this.mcpSession = new DefaultMcpSession(Duration.ofSeconds(10), mcpTransport, requestHandlers,
+			this.mcpSession = new McpClientSession(Duration.ofSeconds(10), mcpTransport, requestHandlers,
 					notificationHandlers);
 		}
 
@@ -997,7 +997,7 @@ public class McpAsyncServer {
 		// ---------------------------------------
 		// Lifecycle Management
 		// ---------------------------------------
-		private DefaultMcpSession.RequestHandler<McpSchema.InitializeResult> asyncInitializeRequestHandler() {
+		private McpClientSession.RequestHandler<McpSchema.InitializeResult> asyncInitializeRequestHandler() {
 			return params -> {
 				McpSchema.InitializeRequest initializeRequest = transport.unmarshalFrom(params,
 						new TypeReference<McpSchema.InitializeRequest>() {
@@ -1100,7 +1100,7 @@ public class McpAsyncServer {
 					LIST_ROOTS_RESULT_TYPE_REF);
 		}
 
-		private DefaultMcpSession.NotificationHandler asyncRootsListChangedNotificationHandler(
+		private McpClientSession.NotificationHandler asyncRootsListChangedNotificationHandler(
 				List<Function<List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
 			return params -> listRoots().flatMap(listRootsResult -> Flux.fromIterable(rootsChangeConsumers)
 				.flatMap(consumer -> consumer.apply(listRootsResult.roots()))
@@ -1187,7 +1187,7 @@ public class McpAsyncServer {
 			return this.mcpSession.sendNotification(McpSchema.METHOD_NOTIFICATION_TOOLS_LIST_CHANGED, null);
 		}
 
-		private DefaultMcpSession.RequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
+		private McpClientSession.RequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
 			return params -> {
 				List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList();
 
@@ -1195,7 +1195,7 @@ public class McpAsyncServer {
 			};
 		}
 
-		private DefaultMcpSession.RequestHandler<CallToolResult> toolsCallRequestHandler() {
+		private McpClientSession.RequestHandler<CallToolResult> toolsCallRequestHandler() {
 			return params -> {
 				McpSchema.CallToolRequest callToolRequest = transport.unmarshalFrom(params,
 						new TypeReference<McpSchema.CallToolRequest>() {
@@ -1281,7 +1281,7 @@ public class McpAsyncServer {
 			return this.mcpSession.sendNotification(McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED, null);
 		}
 
-		private DefaultMcpSession.RequestHandler<McpSchema.ListResourcesResult> resourcesListRequestHandler() {
+		private McpClientSession.RequestHandler<McpSchema.ListResourcesResult> resourcesListRequestHandler() {
 			return params -> {
 				var resourceList = this.resources.values()
 					.stream()
@@ -1291,12 +1291,12 @@ public class McpAsyncServer {
 			};
 		}
 
-		private DefaultMcpSession.RequestHandler<McpSchema.ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
+		private McpClientSession.RequestHandler<McpSchema.ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
 			return params -> Mono.just(new McpSchema.ListResourceTemplatesResult(this.resourceTemplates, null));
 
 		}
 
-		private DefaultMcpSession.RequestHandler<McpSchema.ReadResourceResult> resourcesReadRequestHandler() {
+		private McpClientSession.RequestHandler<McpSchema.ReadResourceResult> resourcesReadRequestHandler() {
 			return params -> {
 				McpSchema.ReadResourceRequest resourceRequest = transport.unmarshalFrom(params,
 						new TypeReference<McpSchema.ReadResourceRequest>() {
@@ -1385,7 +1385,7 @@ public class McpAsyncServer {
 			return this.mcpSession.sendNotification(McpSchema.METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED, null);
 		}
 
-		private DefaultMcpSession.RequestHandler<McpSchema.ListPromptsResult> promptsListRequestHandler() {
+		private McpClientSession.RequestHandler<McpSchema.ListPromptsResult> promptsListRequestHandler() {
 			return params -> {
 				// TODO: Implement pagination
 				// McpSchema.PaginatedRequest request = transport.unmarshalFrom(params,
@@ -1401,7 +1401,7 @@ public class McpAsyncServer {
 			};
 		}
 
-		private DefaultMcpSession.RequestHandler<McpSchema.GetPromptResult> promptsGetRequestHandler() {
+		private McpClientSession.RequestHandler<McpSchema.GetPromptResult> promptsGetRequestHandler() {
 			return params -> {
 				McpSchema.GetPromptRequest promptRequest = transport.unmarshalFrom(params,
 						new TypeReference<McpSchema.GetPromptRequest>() {
@@ -1449,7 +1449,7 @@ public class McpAsyncServer {
 		 * will not be sent.
 		 * @return A handler that processes logging level change requests
 		 */
-		private DefaultMcpSession.RequestHandler<Void> setLoggerRequestHandler() {
+		private McpClientSession.RequestHandler<Void> setLoggerRequestHandler() {
 			return params -> {
 				this.minLoggingLevel = transport.unmarshalFrom(params, new TypeReference<LoggingLevel>() {
 				});
