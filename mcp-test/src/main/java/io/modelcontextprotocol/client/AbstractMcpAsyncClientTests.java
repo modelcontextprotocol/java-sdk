@@ -446,18 +446,9 @@ public abstract class AbstractMcpAsyncClientTests {
 							resources -> Mono.fromRunnable(() -> resourcesNotificationReceived.set(true)))
 					.promptsChangeConsumer(prompts -> Mono.fromRunnable(() -> promptsNotificationReceived.set(true))),
 				mcpAsyncClient -> {
-
-					var transport = createMcpTransport();
-					var client = McpClient.async(transport)
-						.requestTimeout(getRequestTimeout())
-						.toolsChangeConsumer(tools -> Mono.fromRunnable(() -> toolsNotificationReceived.set(true)))
-						.resourcesChangeConsumer(
-								resources -> Mono.fromRunnable(() -> resourcesNotificationReceived.set(true)))
-						.promptsChangeConsumer(
-								prompts -> Mono.fromRunnable(() -> promptsNotificationReceived.set(true)))
-						.build();
-
-					StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
+					StepVerifier.create(mcpAsyncClient.initialize())
+						.expectNextMatches(Objects::nonNull)
+						.verifyComplete();
 				});
 	}
 
