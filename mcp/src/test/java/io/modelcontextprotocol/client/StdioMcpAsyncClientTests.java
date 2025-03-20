@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol.client;
 
+import java.time.Duration;
+
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.spec.ClientMcpTransport;
@@ -24,6 +26,10 @@ class StdioMcpAsyncClientTests extends AbstractMcpAsyncClientTests {
 			.args("-y", "@modelcontextprotocol/server-everything", "dir")
 			.build();
 		return new StdioClientTransport(stdioParams);
+	}
+
+	protected Duration getInitializationTimeout() {
+		return Duration.ofSeconds(6);
 	}
 
 }

@@ -7,6 +7,9 @@ package io.modelcontextprotocol.client;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 import io.modelcontextprotocol.spec.ClientMcpTransport;
 import io.modelcontextprotocol.spec.McpError;
@@ -27,6 +30,10 @@ import io.modelcontextprotocol.spec.McpSchema.UnsubscribeRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
+import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -40,41 +47,94 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 public abstract class AbstractMcpSyncClientTests {
 
-	private McpSyncClient mcpSyncClient;
-
 	private static final String TEST_MESSAGE = "Hello MCP Spring AI!";
-
-	protected ClientMcpTransport mcpTransport;
 
 	abstract protected ClientMcpTransport createMcpTransport();
 
-	abstract protected void onStart();
+	protected void onStart() {
+	}
 
-	abstract protected void onClose();
+	protected void onClose() {
+	}
 
-	protected Duration getTimeoutDuration() {
+	protected Duration getRequestTimeout() {
+		return Duration.ofSeconds(14);
+	}
+
+	protected Duration getInitializationTimeout() {
 		return Duration.ofSeconds(2);
+	}
+
+	McpSyncClient client(ClientMcpTransport transport) {
+		return client(transport, Function.identity());
+	}
+
+	McpSyncClient client(ClientMcpTransport transport, Function<McpClient.SyncSpec, McpClient.SyncSpec> customizer) {
+		AtomicReference<McpSyncClient> client = new AtomicReference<>();
+
+		assertThatCode(() -> {
+			McpClient.SyncSpec builder = McpClient.sync(transport)
+				.requestTimeout(getRequestTimeout())
+				.initializationTimeout(getInitializationTimeout())
+				.capabilities(ClientCapabilities.builder().roots(true).build());
+			builder = customizer.apply(builder);
+			client.set(builder.build());
+		}).doesNotThrowAnyException();
+
+		return client.get();
+	}
+
+	void withClient(ClientMcpTransport transport, Consumer<McpSyncClient> c) {
+		withClient(transport, Function.identity(), c);
+	}
+
+	void withClient(ClientMcpTransport transport, Function<McpClient.SyncSpec, McpClient.SyncSpec> customizer,
+			Consumer<McpSyncClient> c) {
+		var client = client(transport, customizer);
+		try {
+			c.accept(client);
+		}
+		finally {
+			assertThat(client.closeGracefully()).isTrue();
+		}
 	}
 
 	@BeforeEach
 	void setUp() {
 		onStart();
-		this.mcpTransport = createMcpTransport();
 
-		assertThatCode(() -> {
-			mcpSyncClient = McpClient.sync(mcpTransport)
-				.requestTimeout(getTimeoutDuration())
-				.capabilities(ClientCapabilities.builder().roots(true).build())
-				.build();
-		}).doesNotThrowAnyException();
 	}
 
 	@AfterEach
 	void tearDown() {
-		if (mcpSyncClient != null) {
-			assertThatCode(() -> mcpSyncClient.close()).doesNotThrowAnyException();
-		}
 		onClose();
+	}
+
+	static final Object DUMMY_RETURN_VALUE = new Object();
+
+	<T> void verifyNotificationTimesOut(Consumer<McpSyncClient> operation, String action) {
+		verifyCallTimesOut(client -> {
+			operation.accept(client);
+			return DUMMY_RETURN_VALUE;
+		}, action);
+	}
+
+	<T> void verifyCallTimesOut(Function<McpSyncClient, T> operation, String action) {
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			// This scheduler is not replaced by virtual time scheduler
+			Scheduler customScheduler = Schedulers.newBoundedElastic(1, 1, "actualBoundedElastic");
+
+			StepVerifier.withVirtualTime(() -> Mono.fromSupplier(() -> operation.apply(mcpSyncClient))
+				// offload the blocking call to the real scheduler
+				.subscribeOn(customScheduler))
+				.expectSubscription()
+				.thenAwait(getInitializationTimeout())
+				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
+					.hasMessage("Client must be initialized before " + action))
+				.verify();
+
+			customScheduler.dispose();
+		});
 	}
 
 	@Test
@@ -82,227 +142,245 @@ public abstract class AbstractMcpSyncClientTests {
 		assertThatThrownBy(() -> McpClient.sync(null).build()).isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Transport must not be null");
 
-		assertThatThrownBy(() -> McpClient.sync(mcpTransport).requestTimeout(null).build())
+		assertThatThrownBy(() -> McpClient.sync(createMcpTransport()).requestTimeout(null).build())
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Request timeout must not be null");
 	}
 
 	@Test
 	void testListToolsWithoutInitialization() {
-		assertThatThrownBy(() -> mcpSyncClient.listTools(null)).isInstanceOf(McpError.class)
-			.hasMessage("Client must be initialized before listing tools");
+		verifyCallTimesOut(client -> client.listTools(null), "listing tools");
 	}
 
 	@Test
 	void testListTools() {
-		mcpSyncClient.initialize();
-		ListToolsResult tools = mcpSyncClient.listTools(null);
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			ListToolsResult tools = mcpSyncClient.listTools(null);
 
-		assertThat(tools).isNotNull().satisfies(result -> {
-			assertThat(result.tools()).isNotNull().isNotEmpty();
+			assertThat(tools).isNotNull().satisfies(result -> {
+				assertThat(result.tools()).isNotNull().isNotEmpty();
 
-			Tool firstTool = result.tools().get(0);
-			assertThat(firstTool.name()).isNotNull();
-			assertThat(firstTool.description()).isNotNull();
+				Tool firstTool = result.tools().get(0);
+				assertThat(firstTool.name()).isNotNull();
+				assertThat(firstTool.description()).isNotNull();
+			});
 		});
 	}
 
 	@Test
 	void testCallToolsWithoutInitialization() {
-		assertThatThrownBy(() -> mcpSyncClient.callTool(new CallToolRequest("add", Map.of("a", 3, "b", 4))))
-			.isInstanceOf(McpError.class)
-			.hasMessage("Client must be initialized before calling tools");
+		verifyCallTimesOut(client -> client.callTool(new CallToolRequest("add", Map.of("a", 3, "b", 4))),
+				"calling tools");
 	}
 
 	@Test
 	void testCallTools() {
-		mcpSyncClient.initialize();
-		CallToolResult toolResult = mcpSyncClient.callTool(new CallToolRequest("add", Map.of("a", 3, "b", 4)));
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			CallToolResult toolResult = mcpSyncClient.callTool(new CallToolRequest("add", Map.of("a", 3, "b", 4)));
 
-		assertThat(toolResult).isNotNull().satisfies(result -> {
+			assertThat(toolResult).isNotNull().satisfies(result -> {
 
-			assertThat(result.content()).hasSize(1);
+				assertThat(result.content()).hasSize(1);
 
-			TextContent content = (TextContent) result.content().get(0);
+				TextContent content = (TextContent) result.content().get(0);
 
-			assertThat(content).isNotNull();
-			assertThat(content.text()).isNotNull();
-			assertThat(content.text()).contains("7");
+				assertThat(content).isNotNull();
+				assertThat(content.text()).isNotNull();
+				assertThat(content.text()).contains("7");
+			});
 		});
 	}
 
 	@Test
 	void testPingWithoutInitialization() {
-		assertThatThrownBy(() -> mcpSyncClient.ping()).isInstanceOf(McpError.class)
-			.hasMessage("Client must be initialized before pinging the server");
+		verifyCallTimesOut(client -> client.ping(), "pinging the server");
 	}
 
 	@Test
 	void testPing() {
-		mcpSyncClient.initialize();
-		assertThatCode(() -> mcpSyncClient.ping()).doesNotThrowAnyException();
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			assertThatCode(() -> mcpSyncClient.ping()).doesNotThrowAnyException();
+		});
 	}
 
 	@Test
 	void testCallToolWithoutInitialization() {
 		CallToolRequest callToolRequest = new CallToolRequest("echo", Map.of("message", TEST_MESSAGE));
-
-		assertThatThrownBy(() -> mcpSyncClient.callTool(callToolRequest)).isInstanceOf(McpError.class)
-			.hasMessage("Client must be initialized before calling tools");
+		verifyCallTimesOut(client -> client.callTool(callToolRequest), "calling tools");
 	}
 
 	@Test
 	void testCallTool() {
-		mcpSyncClient.initialize();
-		CallToolRequest callToolRequest = new CallToolRequest("echo", Map.of("message", TEST_MESSAGE));
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			CallToolRequest callToolRequest = new CallToolRequest("echo", Map.of("message", TEST_MESSAGE));
 
-		CallToolResult callToolResult = mcpSyncClient.callTool(callToolRequest);
+			CallToolResult callToolResult = mcpSyncClient.callTool(callToolRequest);
 
-		assertThat(callToolResult).isNotNull().satisfies(result -> {
-			assertThat(result.content()).isNotNull();
-			assertThat(result.isError()).isNull();
+			assertThat(callToolResult).isNotNull().satisfies(result -> {
+				assertThat(result.content()).isNotNull();
+				assertThat(result.isError()).isNull();
+			});
 		});
 	}
 
 	@Test
 	void testCallToolWithInvalidTool() {
-		CallToolRequest invalidRequest = new CallToolRequest("nonexistent_tool", Map.of("message", TEST_MESSAGE));
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			CallToolRequest invalidRequest = new CallToolRequest("nonexistent_tool", Map.of("message", TEST_MESSAGE));
 
-		assertThatThrownBy(() -> mcpSyncClient.callTool(invalidRequest)).isInstanceOf(Exception.class);
+			assertThatThrownBy(() -> mcpSyncClient.callTool(invalidRequest)).isInstanceOf(Exception.class);
+		});
 	}
 
 	@Test
 	void testRootsListChangedWithoutInitialization() {
-		assertThatThrownBy(() -> mcpSyncClient.rootsListChangedNotification()).isInstanceOf(McpError.class)
-			.hasMessage("Client must be initialized before sending roots list changed notification");
+		verifyNotificationTimesOut(client -> client.rootsListChangedNotification(),
+				"sending roots list changed notification");
 	}
 
 	@Test
 	void testRootsListChanged() {
-		mcpSyncClient.initialize();
-		assertThatCode(() -> mcpSyncClient.rootsListChangedNotification()).doesNotThrowAnyException();
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			assertThatCode(() -> mcpSyncClient.rootsListChangedNotification()).doesNotThrowAnyException();
+		});
 	}
 
 	@Test
 	void testListResourcesWithoutInitialization() {
-		assertThatThrownBy(() -> mcpSyncClient.listResources(null)).isInstanceOf(McpError.class)
-			.hasMessage("Client must be initialized before listing resources");
+		verifyCallTimesOut(client -> client.listResources(null), "listing resources");
 	}
 
 	@Test
 	void testListResources() {
-		mcpSyncClient.initialize();
-		ListResourcesResult resources = mcpSyncClient.listResources(null);
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			ListResourcesResult resources = mcpSyncClient.listResources(null);
 
-		assertThat(resources).isNotNull().satisfies(result -> {
-			assertThat(result.resources()).isNotNull();
+			assertThat(resources).isNotNull().satisfies(result -> {
+				assertThat(result.resources()).isNotNull();
 
-			if (!result.resources().isEmpty()) {
-				Resource firstResource = result.resources().get(0);
-				assertThat(firstResource.uri()).isNotNull();
-				assertThat(firstResource.name()).isNotNull();
-			}
+				if (!result.resources().isEmpty()) {
+					Resource firstResource = result.resources().get(0);
+					assertThat(firstResource.uri()).isNotNull();
+					assertThat(firstResource.name()).isNotNull();
+				}
+			});
 		});
 	}
 
 	@Test
 	void testClientSessionState() {
-		assertThat(mcpSyncClient).isNotNull();
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			assertThat(mcpSyncClient).isNotNull();
+		});
 	}
 
 	@Test
 	void testInitializeWithRootsListProviders() {
-		var transport = createMcpTransport();
+		withClient(createMcpTransport(), builder -> builder.roots(new Root("file:///test/path", "test-root")),
+				mcpSyncClient -> {
 
-		var client = McpClient.sync(transport)
-			.requestTimeout(getTimeoutDuration())
-			.roots(new Root("file:///test/path", "test-root"))
-			.build();
-
-		assertThatCode(() -> {
-			client.initialize();
-			client.close();
-		}).doesNotThrowAnyException();
+					assertThatCode(() -> {
+						mcpSyncClient.initialize();
+						mcpSyncClient.close();
+					}).doesNotThrowAnyException();
+				});
 	}
 
 	@Test
 	void testAddRoot() {
-		Root newRoot = new Root("file:///new/test/path", "new-test-root");
-		assertThatCode(() -> mcpSyncClient.addRoot(newRoot)).doesNotThrowAnyException();
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			Root newRoot = new Root("file:///new/test/path", "new-test-root");
+			assertThatCode(() -> mcpSyncClient.addRoot(newRoot)).doesNotThrowAnyException();
+		});
 	}
 
 	@Test
 	void testAddRootWithNullValue() {
-		assertThatThrownBy(() -> mcpSyncClient.addRoot(null)).hasMessageContaining("Root must not be null");
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			assertThatThrownBy(() -> mcpSyncClient.addRoot(null)).hasMessageContaining("Root must not be null");
+		});
 	}
 
 	@Test
 	void testRemoveRoot() {
-		Root root = new Root("file:///test/path/to/remove", "root-to-remove");
-		assertThatCode(() -> {
-			mcpSyncClient.addRoot(root);
-			mcpSyncClient.removeRoot(root.uri());
-		}).doesNotThrowAnyException();
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			Root root = new Root("file:///test/path/to/remove", "root-to-remove");
+			assertThatCode(() -> {
+				mcpSyncClient.addRoot(root);
+				mcpSyncClient.removeRoot(root.uri());
+			}).doesNotThrowAnyException();
+		});
 	}
 
 	@Test
 	void testRemoveNonExistentRoot() {
-		assertThatThrownBy(() -> mcpSyncClient.removeRoot("nonexistent-uri"))
-			.hasMessageContaining("Root with uri 'nonexistent-uri' not found");
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			assertThatThrownBy(() -> mcpSyncClient.removeRoot("nonexistent-uri"))
+				.hasMessageContaining("Root with uri 'nonexistent-uri' not found");
+		});
 	}
 
 	@Test
 	void testReadResourceWithoutInitialization() {
-		assertThatThrownBy(() -> {
-			Resource resource = new Resource("test://uri", "Test Resource", null, null, null);
-			mcpSyncClient.readResource(resource);
-		}).isInstanceOf(McpError.class).hasMessage("Client must be initialized before reading resources");
+		Resource resource = new Resource("test://uri", "Test Resource", null, null, null);
+		verifyCallTimesOut(client -> client.readResource(resource), "reading resources");
 	}
 
 	@Test
 	void testReadResource() {
-		mcpSyncClient.initialize();
-		ListResourcesResult resources = mcpSyncClient.listResources(null);
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			ListResourcesResult resources = mcpSyncClient.listResources(null);
 
-		if (!resources.resources().isEmpty()) {
-			Resource firstResource = resources.resources().get(0);
-			ReadResourceResult result = mcpSyncClient.readResource(firstResource);
+			if (!resources.resources().isEmpty()) {
+				Resource firstResource = resources.resources().get(0);
+				ReadResourceResult result = mcpSyncClient.readResource(firstResource);
 
-			assertThat(result).isNotNull();
-			assertThat(result.contents()).isNotNull();
-		}
+				assertThat(result).isNotNull();
+				assertThat(result.contents()).isNotNull();
+			}
+		});
 	}
 
 	@Test
 	void testListResourceTemplatesWithoutInitialization() {
-		assertThatThrownBy(() -> mcpSyncClient.listResourceTemplates(null)).isInstanceOf(McpError.class)
-			.hasMessage("Client must be initialized before listing resource templates");
+		verifyCallTimesOut(client -> client.listResourceTemplates(null), "listing resource templates");
 	}
 
 	@Test
 	void testListResourceTemplates() {
-		mcpSyncClient.initialize();
-		ListResourceTemplatesResult result = mcpSyncClient.listResourceTemplates(null);
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			ListResourceTemplatesResult result = mcpSyncClient.listResourceTemplates(null);
 
-		assertThat(result).isNotNull();
-		assertThat(result.resourceTemplates()).isNotNull();
+			assertThat(result).isNotNull();
+			assertThat(result.resourceTemplates()).isNotNull();
+		});
 	}
 
 	// @Test
 	void testResourceSubscription() {
-		ListResourcesResult resources = mcpSyncClient.listResources(null);
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			ListResourcesResult resources = mcpSyncClient.listResources(null);
 
-		if (!resources.resources().isEmpty()) {
-			Resource firstResource = resources.resources().get(0);
+			if (!resources.resources().isEmpty()) {
+				Resource firstResource = resources.resources().get(0);
 
-			// Test subscribe
-			assertThatCode(() -> mcpSyncClient.subscribeResource(new SubscribeRequest(firstResource.uri())))
-				.doesNotThrowAnyException();
+				// Test subscribe
+				assertThatCode(() -> mcpSyncClient.subscribeResource(new SubscribeRequest(firstResource.uri())))
+					.doesNotThrowAnyException();
 
-			// Test unsubscribe
-			assertThatCode(() -> mcpSyncClient.unsubscribeResource(new UnsubscribeRequest(firstResource.uri())))
-				.doesNotThrowAnyException();
-		}
+				// Test unsubscribe
+				assertThatCode(() -> mcpSyncClient.unsubscribeResource(new UnsubscribeRequest(firstResource.uri())))
+					.doesNotThrowAnyException();
+			}
+		});
 	}
 
 	@Test
@@ -311,18 +389,17 @@ public abstract class AbstractMcpSyncClientTests {
 		AtomicBoolean resourcesNotificationReceived = new AtomicBoolean(false);
 		AtomicBoolean promptsNotificationReceived = new AtomicBoolean(false);
 
-		var transport = createMcpTransport();
-		var client = McpClient.sync(transport)
-			.requestTimeout(getTimeoutDuration())
-			.toolsChangeConsumer(tools -> toolsNotificationReceived.set(true))
-			.resourcesChangeConsumer(resources -> resourcesNotificationReceived.set(true))
-			.promptsChangeConsumer(prompts -> promptsNotificationReceived.set(true))
-			.build();
+		withClient(createMcpTransport(),
+				builder -> builder.toolsChangeConsumer(tools -> toolsNotificationReceived.set(true))
+					.resourcesChangeConsumer(resources -> resourcesNotificationReceived.set(true))
+					.promptsChangeConsumer(prompts -> promptsNotificationReceived.set(true)),
+				client -> {
 
-		assertThatCode(() -> {
-			client.initialize();
-			client.close();
-		}).doesNotThrowAnyException();
+					assertThatCode(() -> {
+						client.initialize();
+						client.close();
+					}).doesNotThrowAnyException();
+				});
 	}
 
 	// ---------------------------------------
@@ -331,40 +408,37 @@ public abstract class AbstractMcpSyncClientTests {
 
 	@Test
 	void testLoggingLevelsWithoutInitialization() {
-		assertThatThrownBy(() -> mcpSyncClient.setLoggingLevel(McpSchema.LoggingLevel.DEBUG))
-			.isInstanceOf(McpError.class)
-			.hasMessage("Client must be initialized before setting logging level");
+		verifyNotificationTimesOut(client -> client.setLoggingLevel(McpSchema.LoggingLevel.DEBUG),
+				"setting logging level");
 	}
 
 	@Test
 	void testLoggingLevels() {
-		mcpSyncClient.initialize();
-		// Test all logging levels
-		for (McpSchema.LoggingLevel level : McpSchema.LoggingLevel.values()) {
-			assertThatCode(() -> mcpSyncClient.setLoggingLevel(level)).doesNotThrowAnyException();
-		}
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			// Test all logging levels
+			for (McpSchema.LoggingLevel level : McpSchema.LoggingLevel.values()) {
+				assertThatCode(() -> mcpSyncClient.setLoggingLevel(level)).doesNotThrowAnyException();
+			}
+		});
 	}
 
 	@Test
 	void testLoggingConsumer() {
 		AtomicBoolean logReceived = new AtomicBoolean(false);
-		var transport = createMcpTransport();
-
-		var client = McpClient.sync(transport)
-			.requestTimeout(getTimeoutDuration())
-			.loggingConsumer(notification -> logReceived.set(true))
-			.build();
-
-		assertThatCode(() -> {
-			client.initialize();
-			client.close();
-		}).doesNotThrowAnyException();
+		withClient(createMcpTransport(), builder -> builder.requestTimeout(getRequestTimeout())
+			.loggingConsumer(notification -> logReceived.set(true)), client -> {
+				assertThatCode(() -> {
+					client.initialize();
+					client.close();
+				}).doesNotThrowAnyException();
+			});
 	}
 
 	@Test
 	void testLoggingWithNullNotification() {
-		assertThatThrownBy(() -> mcpSyncClient.setLoggingLevel(null))
-			.hasMessageContaining("Logging level must not be null");
+		withClient(createMcpTransport(), mcpSyncClient -> assertThatThrownBy(() -> mcpSyncClient.setLoggingLevel(null))
+			.hasMessageContaining("Logging level must not be null"));
 	}
 
 }

@@ -88,7 +88,6 @@ public class McpAsyncClient {
 
 	/**
 	 * The max timeout to await for the client-server connection to be initialized.
-	 * Usually x2 the request timeout. // TODO should we make it configurable?
 	 */
 	private final Duration initializationTimeout;
 
@@ -151,18 +150,21 @@ public class McpAsyncClient {
 	 * timeout.
 	 * @param transport the transport to use.
 	 * @param requestTimeout the session request-response timeout.
+	 * @param initializationTimeout the max timeout to await for the client-server
 	 * @param features the MCP Client supported features.
 	 */
-	McpAsyncClient(ClientMcpTransport transport, Duration requestTimeout, McpClientFeatures.Async features) {
+	McpAsyncClient(ClientMcpTransport transport, Duration requestTimeout, Duration initializationTimeout,
+			McpClientFeatures.Async features) {
 
 		Assert.notNull(transport, "Transport must not be null");
 		Assert.notNull(requestTimeout, "Request timeout must not be null");
+		Assert.notNull(initializationTimeout, "Initialization timeout must not be null");
 
 		this.clientInfo = features.clientInfo();
 		this.clientCapabilities = features.clientCapabilities();
 		this.transport = transport;
 		this.roots = new ConcurrentHashMap<>(features.roots());
-		this.initializationTimeout = requestTimeout.multipliedBy(2);
+		this.initializationTimeout = initializationTimeout;
 
 		// Request Handlers
 		Map<String, RequestHandler<?>> requestHandlers = new HashMap<>();
@@ -771,7 +773,9 @@ public class McpAsyncClient {
 	 * @see McpSchema.LoggingLevel
 	 */
 	public Mono<Void> setLoggingLevel(LoggingLevel loggingLevel) {
-		Assert.notNull(loggingLevel, "Logging level must not be null");
+		if (loggingLevel == null) {
+			return Mono.error(new McpError("Logging level must not be null"));
+		}
 
 		return this.withInitializationCheck("setting logging level", initializedResult -> {
 			String levelName = this.transport.unmarshalFrom(loggingLevel, new TypeReference<String>() {

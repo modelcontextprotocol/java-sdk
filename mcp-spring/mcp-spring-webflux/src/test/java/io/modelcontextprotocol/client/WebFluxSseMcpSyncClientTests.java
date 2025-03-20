@@ -48,9 +48,8 @@ class WebFluxSseMcpSyncClientTests extends AbstractMcpSyncClientTests {
 		container.stop();
 	}
 
-	@Override
-	protected Duration getTimeoutDuration() {
-		return Duration.ofMillis(300);
+	protected Duration getInitializationTimeout() {
+		return Duration.ofSeconds(1);
 	}
 
 }

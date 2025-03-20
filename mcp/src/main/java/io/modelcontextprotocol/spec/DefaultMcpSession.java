@@ -270,8 +270,10 @@ public class DefaultMcpSession implements McpSession {
 	 */
 	@Override
 	public Mono<Void> closeGracefully() {
-		this.connection.dispose();
-		return transport.closeGracefully();
+		return Mono.defer(() -> {
+			this.connection.dispose();
+			return transport.closeGracefully();
+		});
 	}
 
 	/**

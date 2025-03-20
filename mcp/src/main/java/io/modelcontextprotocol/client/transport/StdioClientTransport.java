@@ -353,14 +353,15 @@ public class StdioClientTransport implements ClientMcpTransport {
 
 			// Give a short time for any pending messages to be processed
 			return Mono.delay(Duration.ofMillis(100));
-		})).then(Mono.fromFuture(() -> {
+		})).then(Mono.defer(() -> {
 			logger.debug("Sending TERM to process");
 			if (this.process != null) {
 				this.process.destroy();
-				return process.onExit();
+				return Mono.fromFuture(process.onExit());
 			}
 			else {
-				return CompletableFuture.failedFuture(new RuntimeException("Process not started"));
+				logger.warn("Process not started");
+				return Mono.empty();
 			}
 		})).doOnNext(process -> {
 			if (process.exitValue() != 0) {
