@@ -127,7 +127,7 @@ public class DefaultMcpSession implements McpSession {
 				logger.debug("Received Response: {}", response);
 				var sink = pendingResponses.remove(response.id());
 				if (sink == null) {
-					logger.warn("Unexpected response for unkown id {}", response.id());
+					logger.warn("Unexpected response for unknown id {}", response.id());
 				}
 				else {
 					sink.success(response);
