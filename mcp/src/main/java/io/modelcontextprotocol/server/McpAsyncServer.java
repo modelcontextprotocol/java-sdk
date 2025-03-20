@@ -96,7 +96,7 @@ public class McpAsyncServer {
 	 */
 	private final CopyOnWriteArrayList<McpServerFeatures.AsyncToolRegistration> tools = new CopyOnWriteArrayList<>();
 
-	private final CopyOnWriteArrayList<McpSchema.ResourceTemplate> resourceTemplates = new CopyOnWriteArrayList<>();
+	private final ConcurrentHashMap<String, McpServerFeatures.AsyncResourceTemplateRegistration> resourceTemplates = new ConcurrentHashMap<>();
 
 	private final ConcurrentHashMap<String, McpServerFeatures.AsyncResourceRegistration> resources = new ConcurrentHashMap<>();
 
@@ -120,7 +120,7 @@ public class McpAsyncServer {
 		this.serverCapabilities = features.serverCapabilities();
 		this.tools.addAll(features.tools());
 		this.resources.putAll(features.resources());
-		this.resourceTemplates.addAll(features.resourceTemplates());
+		this.resourceTemplates.putAll(features.resourceTemplates());
 		this.prompts.putAll(features.prompts());
 
 		Map<String, DefaultMcpSession.RequestHandler<?>> requestHandlers = new HashMap<>();
@@ -446,6 +446,59 @@ public class McpAsyncServer {
 	}
 
 	/**
+	 * Add a new resource handler at runtime.
+	 * @param resourceHandler The resource handler to add
+	 * @return Mono that completes when clients have been notified of the change
+	 */
+	public Mono<Void> addResourceTemplate(McpServerFeatures.AsyncResourceTemplateRegistration resourceHandler) {
+		if (resourceHandler == null || resourceHandler.resource() == null) {
+			return Mono.error(new McpError("Resource must not be null"));
+		}
+
+		if (this.serverCapabilities.resources() == null) {
+			return Mono.error(new McpError("Server must be configured with resource capabilities"));
+		}
+
+		return Mono.defer(() -> {
+			if (this.resourceTemplates.putIfAbsent(resourceHandler.resource().uriTemplate(), resourceHandler) != null) {
+				return Mono.error(new McpError(
+						"Resource with URI '" + resourceHandler.resource().uriTemplate() + "' already exists"));
+			}
+			logger.debug("Added resource handler: {}", resourceHandler.resource().uriTemplate());
+			if (this.serverCapabilities.resources().listChanged()) {
+				return notifyResourcesListChanged();
+			}
+			return Mono.empty();
+		});
+	}
+
+	/**
+	 * Remove a resource handler at runtime.
+	 * @param resourceUri The URI of the resource handler to remove
+	 * @return Mono that completes when clients have been notified of the change
+	 */
+	public Mono<Void> removeResourceTemplate(String resourceUri) {
+		if (resourceUri == null) {
+			return Mono.error(new McpError("Resource URI must not be null"));
+		}
+		if (this.serverCapabilities.resources() == null) {
+			return Mono.error(new McpError("Server must be configured with resource capabilities"));
+		}
+
+		return Mono.defer(() -> {
+			McpServerFeatures.AsyncResourceTemplateRegistration removed = this.resourceTemplates.remove(resourceUri);
+			if (removed != null) {
+				logger.debug("Removed resource handler: {}", resourceUri);
+				if (this.serverCapabilities.resources().listChanged()) {
+					return notifyResourcesListChanged();
+				}
+				return Mono.empty();
+			}
+			return Mono.error(new McpError("Resource with URI '" + resourceUri + "' not found"));
+		});
+	}
+
+	/**
 	 * Notifies clients that the list of available resources has changed.
 	 * @return A Mono that completes when all clients have been notified
 	 */
@@ -464,20 +517,33 @@ public class McpAsyncServer {
 	}
 
 	private DefaultMcpSession.RequestHandler<McpSchema.ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
-		return params -> Mono.just(new McpSchema.ListResourceTemplatesResult(this.resourceTemplates, null));
+		return params -> {
+			var resourceList = this.resourceTemplates.values()
+				.stream()
+				.map(McpServerFeatures.AsyncResourceTemplateRegistration::resource)
+				.toList();
 
+			return Mono.just(new McpSchema.ListResourceTemplatesResult(resourceList, null));
+		};
 	}
 
 	private DefaultMcpSession.RequestHandler<McpSchema.ReadResourceResult> resourcesReadRequestHandler() {
 		return params -> {
-			McpSchema.ReadResourceRequest resourceRequest = transport.unmarshalFrom(params,
-					new TypeReference<McpSchema.ReadResourceRequest>() {
-					});
+			McpSchema.ReadResourceRequest resourceRequest = transport.unmarshalFrom(params, new TypeReference<>() {
+			});
 			var resourceUri = resourceRequest.uri();
 			McpServerFeatures.AsyncResourceRegistration registration = this.resources.get(resourceUri);
 			if (registration != null) {
 				return registration.readHandler().apply(resourceRequest);
 			}
+
+			// Check the resource templates
+			for (var templateRegistration : this.resourceTemplates.values()) {
+				if (templateRegistration.uriTemplate().isMatching(resourceUri)) {
+					return templateRegistration.readHandler().apply(resourceRequest);
+				}
+			}
+
 			return Mono.error(new McpError("Resource not found: " + resourceUri));
 		};
 	}
