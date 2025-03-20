@@ -109,6 +109,17 @@ public abstract class AbstractMcpAsyncClientTests {
 		onClose();
 	}
 
+	<T> void verifyInitializationTimeout(Function<McpAsyncClient, Mono<T>> operation, String action) {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.withVirtualTime(() -> operation.apply(mcpAsyncClient))
+				.expectSubscription()
+				.thenAwait(getInitializationTimeout())
+				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
+					.hasMessage("Client must be initialized before " + action))
+				.verify();
+		});
+	}
+
 	@Test
 	void testConstructorWithInvalidArguments() {
 		assertThatThrownBy(() -> McpClient.async(null).build()).isInstanceOf(IllegalArgumentException.class)
@@ -121,14 +132,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListToolsWithoutInitialization() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.withVirtualTime(() -> mcpAsyncClient.listTools(null))
-				.expectSubscription()
-				.thenAwait(getInitializationTimeout())
-				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
-					.hasMessage("Client must be initialized before listing tools"))
-				.verify();
-		});
+		verifyInitializationTimeout(client -> client.listTools(null), "listing tools");
 	}
 
 	@Test
@@ -148,14 +152,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testPingWithoutInitialization() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.withVirtualTime(() -> mcpAsyncClient.ping())
-				.expectSubscription()
-				.thenAwait(getInitializationTimeout())
-				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
-					.hasMessage("Client must be initialized before pinging the " + "server"))
-				.verify();
-		});
+		verifyInitializationTimeout(client -> client.ping(), "pinging the server");
 	}
 
 	@Test
@@ -169,16 +166,8 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testCallToolWithoutInitialization() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
-			CallToolRequest callToolRequest = new CallToolRequest("echo", Map.of("message", ECHO_TEST_MESSAGE));
-
-			StepVerifier.withVirtualTime(() -> mcpAsyncClient.callTool(callToolRequest))
-				.expectSubscription()
-				.thenAwait(getInitializationTimeout())
-				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
-					.hasMessage("Client must be initialized before calling tools"))
-				.verify();
-		});
+		CallToolRequest callToolRequest = new CallToolRequest("echo", Map.of("message", ECHO_TEST_MESSAGE));
+		verifyInitializationTimeout(client -> client.callTool(callToolRequest), "calling tools");
 	}
 
 	@Test
@@ -212,14 +201,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListResourcesWithoutInitialization() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.withVirtualTime(() -> mcpAsyncClient.listResources(null))
-				.expectSubscription()
-				.thenAwait(getInitializationTimeout())
-				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
-					.hasMessage("Client must be initialized before listing resources"))
-				.verify();
-		});
+		verifyInitializationTimeout(client -> client.listResources(null), "listing resources");
 	}
 
 	@Test
@@ -250,14 +232,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListPromptsWithoutInitialization() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.withVirtualTime(() -> mcpAsyncClient.listPrompts(null))
-				.expectSubscription()
-				.thenAwait(getInitializationTimeout())
-				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
-					.hasMessage("Client must be initialized before listing prompts"))
-				.verify();
-		});
+		verifyInitializationTimeout(client -> client.listPrompts(null), "listing " + "prompts");
 	}
 
 	@Test
@@ -281,16 +256,8 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testGetPromptWithoutInitialization() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
-			GetPromptRequest request = new GetPromptRequest("simple_prompt", Map.of());
-
-			StepVerifier.withVirtualTime(() -> mcpAsyncClient.getPrompt(request))
-				.expectSubscription()
-				.thenAwait(getInitializationTimeout())
-				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
-					.hasMessage("Client must be initialized before getting prompts"))
-				.verify();
-		});
+		GetPromptRequest request = new GetPromptRequest("simple_prompt", Map.of());
+		verifyInitializationTimeout(client -> client.getPrompt(request), "getting " + "prompts");
 	}
 
 	@Test
@@ -311,14 +278,8 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testRootsListChangedWithoutInitialization() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.withVirtualTime(() -> mcpAsyncClient.rootsListChangedNotification())
-				.expectSubscription()
-				.thenAwait(getInitializationTimeout())
-				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
-					.hasMessage("Client must be initialized before sending roots list changed notification"))
-				.verify();
-		});
+		verifyInitializationTimeout(client -> client.rootsListChangedNotification(),
+				"sending roots list changed notification");
 	}
 
 	@Test
@@ -392,14 +353,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListResourceTemplatesWithoutInitialization() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.withVirtualTime(() -> mcpAsyncClient.listResourceTemplates())
-				.expectSubscription()
-				.thenAwait(getInitializationTimeout())
-				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
-					.hasMessage("Client must be initialized before listing resource templates"))
-				.verify();
-		});
+		verifyInitializationTimeout(client -> client.listResourceTemplates(), "listing resource templates");
 	}
 
 	@Test
@@ -446,18 +400,9 @@ public abstract class AbstractMcpAsyncClientTests {
 							resources -> Mono.fromRunnable(() -> resourcesNotificationReceived.set(true)))
 					.promptsChangeConsumer(prompts -> Mono.fromRunnable(() -> promptsNotificationReceived.set(true))),
 				mcpAsyncClient -> {
-
-					var transport = createMcpTransport();
-					var client = McpClient.async(transport)
-						.requestTimeout(getRequestTimeout())
-						.toolsChangeConsumer(tools -> Mono.fromRunnable(() -> toolsNotificationReceived.set(true)))
-						.resourcesChangeConsumer(
-								resources -> Mono.fromRunnable(() -> resourcesNotificationReceived.set(true)))
-						.promptsChangeConsumer(
-								prompts -> Mono.fromRunnable(() -> promptsNotificationReceived.set(true)))
-						.build();
-
-					StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
+					StepVerifier.create(mcpAsyncClient.initialize())
+						.expectNextMatches(Objects::nonNull)
+						.verifyComplete();
 				});
 	}
 
@@ -501,14 +446,8 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testLoggingLevelsWithoutInitialization() {
-		withClient(createMcpTransport(),
-				mcpAsyncClient -> StepVerifier
-					.withVirtualTime(() -> mcpAsyncClient.setLoggingLevel(McpSchema.LoggingLevel.DEBUG))
-					.expectSubscription()
-					.thenAwait(getInitializationTimeout())
-					.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
-						.hasMessage("Client must be initialized before setting logging level"))
-					.verify());
+		verifyInitializationTimeout(client -> client.setLoggingLevel(McpSchema.LoggingLevel.DEBUG),
+				"setting logging level");
 	}
 
 	@Test
