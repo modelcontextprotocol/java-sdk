@@ -33,6 +33,9 @@ import org.springframework.web.servlet.function.ServerResponse.SseBuilder;
  * a bridge between synchronous WebMVC operations and reactive programming patterns to
  * maintain compatibility with the reactive transport interface.
  *
+ * @deprecated This class will be removed in 0.9.0. Use
+ * {@link WebMvcSseServerTransportProvider}.
+ *
  * <p>
  * Key features:
  * <ul>
@@ -57,12 +60,12 @@ import org.springframework.web.servlet.function.ServerResponse.SseBuilder;
  * This implementation uses {@link ConcurrentHashMap} to safely manage multiple client
  * sessions in a thread-safe manner. Each client session is assigned a unique ID and
  * maintains its own SSE connection.
- *
  * @author Christian Tzolov
  * @author Alexandros Pappas
  * @see ServerMcpTransport
  * @see RouterFunction
  */
+@Deprecated
 public class WebMvcSseServerTransport implements ServerMcpTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebMvcSseServerTransport.class);

@@ -34,7 +34,10 @@ import reactor.core.publisher.MonoSink;
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @deprecated This method will be removed in 0.9.0. Use {@link McpClientSession} instead
  */
+@Deprecated
+
 public class DefaultMcpSession implements McpSession {
 
 	/** Logger for this class */

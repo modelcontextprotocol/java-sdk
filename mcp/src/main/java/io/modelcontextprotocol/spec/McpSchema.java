@@ -796,8 +796,8 @@ public final class McpSchema {
 
 		public enum ContextInclusionStrategy {
 			@JsonProperty("none") NONE,
-			@JsonProperty("this_server") THIS_SERVER,
-			@JsonProperty("all_server") ALL_SERVERS
+			@JsonProperty("thisServer") THIS_SERVER,
+			@JsonProperty("allServers") ALL_SERVERS
 		}
 	}// @formatter:on
 
@@ -810,9 +810,9 @@ public final class McpSchema {
 		@JsonProperty("stopReason") StopReason stopReason) {
 		
 		public enum StopReason {
-			@JsonProperty("end_turn") END_TURN,
-			@JsonProperty("stop_sequence") STOP_SEQUENCE,
-			@JsonProperty("max_tokens") MAX_TOKENS
+			@JsonProperty("endTurn") END_TURN,
+			@JsonProperty("stopSequence") STOP_SEQUENCE,
+			@JsonProperty("maxTokens") MAX_TOKENS
 		}
 
 		public static Builder builder() {

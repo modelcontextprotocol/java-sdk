@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
-import io.modelcontextprotocol.spec.ClientMcpTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import reactor.core.publisher.Sinks;
@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 
 	@Override
-	protected ClientMcpTransport createMcpTransport() {
+	protected McpClientTransport createMcpTransport() {
 		ServerParameters stdioParams = ServerParameters.builder("npx")
 			.args("-y", "@modelcontextprotocol/server-everything", "dir")
 			.build();
@@ -42,7 +42,7 @@ class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 		CountDownLatch latch = new CountDownLatch(1);
 		AtomicReference<String> receivedError = new AtomicReference<>();
 
-		ClientMcpTransport transport = createMcpTransport();
+		McpClientTransport transport = createMcpTransport();
 		StepVerifier.create(transport.connect(msg -> msg)).verifyComplete();
 
 		((StdioClientTransport) transport).setStdErrorHandler(error -> {

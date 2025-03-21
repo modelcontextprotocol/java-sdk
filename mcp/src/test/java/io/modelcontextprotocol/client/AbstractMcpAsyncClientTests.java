@@ -11,9 +11,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
-import io.modelcontextprotocol.spec.ClientMcpTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
@@ -51,7 +50,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	private static final String ECHO_TEST_MESSAGE = "Hello MCP Spring AI!";
 
-	abstract protected ClientMcpTransport createMcpTransport();
+	abstract protected McpClientTransport createMcpTransport();
 
 	protected void onStart() {
 	}
@@ -67,11 +66,11 @@ public abstract class AbstractMcpAsyncClientTests {
 		return Duration.ofSeconds(2);
 	}
 
-	McpAsyncClient client(ClientMcpTransport transport) {
+	McpAsyncClient client(McpClientTransport transport) {
 		return client(transport, Function.identity());
 	}
 
-	McpAsyncClient client(ClientMcpTransport transport, Function<McpClient.AsyncSpec, McpClient.AsyncSpec> customizer) {
+	McpAsyncClient client(McpClientTransport transport, Function<McpClient.AsyncSpec, McpClient.AsyncSpec> customizer) {
 		AtomicReference<McpAsyncClient> client = new AtomicReference<>();
 
 		assertThatCode(() -> {
@@ -86,11 +85,11 @@ public abstract class AbstractMcpAsyncClientTests {
 		return client.get();
 	}
 
-	void withClient(ClientMcpTransport transport, Consumer<McpAsyncClient> c) {
+	void withClient(McpClientTransport transport, Consumer<McpAsyncClient> c) {
 		withClient(transport, Function.identity(), c);
 	}
 
-	void withClient(ClientMcpTransport transport, Function<McpClient.AsyncSpec, McpClient.AsyncSpec> customizer,
+	void withClient(McpClientTransport transport, Function<McpClient.AsyncSpec, McpClient.AsyncSpec> customizer,
 			Consumer<McpAsyncClient> c) {
 		var client = client(transport, customizer);
 		try {
@@ -402,18 +401,9 @@ public abstract class AbstractMcpAsyncClientTests {
 							resources -> Mono.fromRunnable(() -> resourcesNotificationReceived.set(true)))
 					.promptsChangeConsumer(prompts -> Mono.fromRunnable(() -> promptsNotificationReceived.set(true))),
 				mcpAsyncClient -> {
-
-					var transport = createMcpTransport();
-					var client = McpClient.async(transport)
-						.requestTimeout(getRequestTimeout())
-						.toolsChangeConsumer(tools -> Mono.fromRunnable(() -> toolsNotificationReceived.set(true)))
-						.resourcesChangeConsumer(
-								resources -> Mono.fromRunnable(() -> resourcesNotificationReceived.set(true)))
-						.promptsChangeConsumer(
-								prompts -> Mono.fromRunnable(() -> promptsNotificationReceived.set(true)))
-						.build();
-
-					StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
+					StepVerifier.create(mcpAsyncClient.initialize())
+						.expectNextMatches(Objects::nonNull)
+						.verifyComplete();
 				});
 	}
 

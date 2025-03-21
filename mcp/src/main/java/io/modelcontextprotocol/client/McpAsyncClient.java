@@ -15,9 +15,9 @@ import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.spec.ClientMcpTransport;
-import io.modelcontextprotocol.spec.DefaultMcpSession;
-import io.modelcontextprotocol.spec.DefaultMcpSession.NotificationHandler;
-import io.modelcontextprotocol.spec.DefaultMcpSession.RequestHandler;
+import io.modelcontextprotocol.spec.McpClientSession;
+import io.modelcontextprotocol.spec.McpClientSession.NotificationHandler;
+import io.modelcontextprotocol.spec.McpClientSession.RequestHandler;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
@@ -73,7 +73,7 @@ import reactor.core.publisher.Sinks;
  * @author Christian Tzolov
  * @see McpClient
  * @see McpSchema
- * @see DefaultMcpSession
+ * @see McpClientSession
  */
 public class McpAsyncClient {
 
@@ -95,7 +95,7 @@ public class McpAsyncClient {
 	 * The MCP session implementation that manages bidirectional JSON-RPC communication
 	 * between clients and servers.
 	 */
-	private final DefaultMcpSession mcpSession;
+	private final McpClientSession mcpSession;
 
 	/**
 	 * Client capabilities.
@@ -228,7 +228,7 @@ public class McpAsyncClient {
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_MESSAGE,
 				asyncLoggingNotificationHandler(loggingConsumersFinal));
 
-		this.mcpSession = new DefaultMcpSession(requestTimeout, transport, requestHandlers, notificationHandlers);
+		this.mcpSession = new McpClientSession(requestTimeout, transport, requestHandlers, notificationHandlers);
 
 	}
 

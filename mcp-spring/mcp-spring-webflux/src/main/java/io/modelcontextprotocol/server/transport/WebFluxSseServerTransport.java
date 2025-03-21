@@ -60,7 +60,10 @@ import org.springframework.web.reactive.function.server.ServerResponse;
  * @author Alexandros Pappas
  * @see ServerMcpTransport
  * @see ServerSentEvent
+ * @deprecated This class will be removed in 0.9.0. Use
+ * {@link WebFluxSseServerTransportProvider}.
  */
+@Deprecated
 public class WebFluxSseServerTransport implements ServerMcpTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebFluxSseServerTransport.class);
@@ -182,16 +185,16 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 			try {// @formatter:off
 				String jsonText = objectMapper.writeValueAsString(message);
 				ServerSentEvent<Object> event = ServerSentEvent.builder()
-					.event(MESSAGE_EVENT_TYPE)
-					.data(jsonText)
-					.build();
+				                                               .event(MESSAGE_EVENT_TYPE)
+				                                               .data(jsonText)
+				                                               .build();
 
 				logger.debug("Attempting to broadcast message to {} active sessions", sessions.size());
 
 				List<String> failedSessions = sessions.values().stream()
-					.filter(session -> session.messageSink.tryEmitNext(event).isFailure())
-					.map(session -> session.id)
-					.toList();
+				                                      .filter(session -> session.messageSink.tryEmitNext(event).isFailure())
+				                                      .map(session -> session.id)
+				                                      .toList();
 
 				if (failedSessions.isEmpty()) {
 					logger.debug("Successfully broadcast message to all sessions");

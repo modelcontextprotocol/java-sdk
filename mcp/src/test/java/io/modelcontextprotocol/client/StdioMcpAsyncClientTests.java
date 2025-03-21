@@ -8,7 +8,7 @@ import java.time.Duration;
 
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
-import io.modelcontextprotocol.spec.ClientMcpTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import org.junit.jupiter.api.Timeout;
 
 /**
@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Timeout;
 class StdioMcpAsyncClientTests extends AbstractMcpAsyncClientTests {
 
 	@Override
-	protected ClientMcpTransport createMcpTransport() {
+	protected McpClientTransport createMcpTransport() {
 		ServerParameters stdioParams = ServerParameters.builder("npx")
 			.args("-y", "@modelcontextprotocol/server-everything", "dir")
 			.build();

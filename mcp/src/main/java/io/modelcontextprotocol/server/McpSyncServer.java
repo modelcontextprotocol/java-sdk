@@ -68,7 +68,10 @@ public class McpSyncServer {
 	/**
 	 * Retrieves the list of all roots provided by the client.
 	 * @return The list of roots
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link McpSyncServerExchange#listRoots()}.
 	 */
+	@Deprecated
 	public McpSchema.ListRootsResult listRoots() {
 		return this.listRoots(null);
 	}
@@ -77,7 +80,10 @@ public class McpSyncServer {
 	 * Retrieves a paginated list of roots provided by the server.
 	 * @param cursor Optional pagination cursor from a previous list request
 	 * @return The list of roots
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link McpSyncServerExchange#listRoots(String)}.
 	 */
+	@Deprecated
 	public McpSchema.ListRootsResult listRoots(String cursor) {
 		return this.asyncServer.listRoots(cursor).block();
 	}
@@ -85,9 +91,20 @@ public class McpSyncServer {
 	/**
 	 * Add a new tool handler.
 	 * @param toolHandler The tool handler to add
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link #addTool(McpServerFeatures.SyncToolSpecification)}.
 	 */
+	@Deprecated
 	public void addTool(McpServerFeatures.SyncToolRegistration toolHandler) {
 		this.asyncServer.addTool(McpServerFeatures.AsyncToolRegistration.fromSync(toolHandler)).block();
+	}
+
+	/**
+	 * Add a new tool handler.
+	 * @param toolHandler The tool handler to add
+	 */
+	public void addTool(McpServerFeatures.SyncToolSpecification toolHandler) {
+		this.asyncServer.addTool(McpServerFeatures.AsyncToolSpecification.fromSync(toolHandler)).block();
 	}
 
 	/**
@@ -101,9 +118,20 @@ public class McpSyncServer {
 	/**
 	 * Add a new resource handler.
 	 * @param resourceHandler The resource handler to add
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link #addResource(McpServerFeatures.SyncResourceSpecification)}.
 	 */
+	@Deprecated
 	public void addResource(McpServerFeatures.SyncResourceRegistration resourceHandler) {
 		this.asyncServer.addResource(McpServerFeatures.AsyncResourceRegistration.fromSync(resourceHandler)).block();
+	}
+
+	/**
+	 * Add a new resource handler.
+	 * @param resourceHandler The resource handler to add
+	 */
+	public void addResource(McpServerFeatures.SyncResourceSpecification resourceHandler) {
+		this.asyncServer.addResource(McpServerFeatures.AsyncResourceSpecification.fromSync(resourceHandler)).block();
 	}
 
 	/**
@@ -117,9 +145,20 @@ public class McpSyncServer {
 	/**
 	 * Add a new prompt handler.
 	 * @param promptRegistration The prompt registration to add
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link #addPrompt(McpServerFeatures.SyncPromptSpecification)}.
 	 */
+	@Deprecated
 	public void addPrompt(McpServerFeatures.SyncPromptRegistration promptRegistration) {
 		this.asyncServer.addPrompt(McpServerFeatures.AsyncPromptRegistration.fromSync(promptRegistration)).block();
+	}
+
+	/**
+	 * Add a new prompt handler.
+	 * @param promptSpecification The prompt specification to add
+	 */
+	public void addPrompt(McpServerFeatures.SyncPromptSpecification promptSpecification) {
+		this.asyncServer.addPrompt(McpServerFeatures.AsyncPromptSpecification.fromSync(promptSpecification)).block();
 	}
 
 	/**
@@ -156,7 +195,10 @@ public class McpSyncServer {
 	/**
 	 * Get the client capabilities that define the supported features and functionality.
 	 * @return The client capabilities
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link McpSyncServerExchange#getClientCapabilities()}.
 	 */
+	@Deprecated
 	public ClientCapabilities getClientCapabilities() {
 		return this.asyncServer.getClientCapabilities();
 	}
@@ -164,7 +206,10 @@ public class McpSyncServer {
 	/**
 	 * Get the client implementation information.
 	 * @return The client implementation details
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link McpSyncServerExchange#getClientInfo()}.
 	 */
+	@Deprecated
 	public McpSchema.Implementation getClientInfo() {
 		return this.asyncServer.getClientInfo();
 	}
@@ -237,7 +282,10 @@ public class McpSyncServer {
 	 * @see <a href=
 	 * "https://spec.modelcontextprotocol.io/specification/client/sampling/">Sampling
 	 * Specification</a>
+	 * @deprecated This method will be removed in 0.9.0. Use
+	 * {@link McpSyncServerExchange#createMessage(McpSchema.CreateMessageRequest)}.
 	 */
+	@Deprecated
 	public McpSchema.CreateMessageResult createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
 		return this.asyncServer.createMessage(createMessageRequest).block();
 	}

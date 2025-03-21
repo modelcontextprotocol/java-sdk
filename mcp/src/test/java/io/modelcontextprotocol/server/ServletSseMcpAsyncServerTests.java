@@ -5,12 +5,12 @@
 package io.modelcontextprotocol.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.server.transport.HttpServletSseServerTransport;
-import io.modelcontextprotocol.spec.ServerMcpTransport;
+import io.modelcontextprotocol.server.transport.HttpServletSseServerTransportProvider;
+import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.junit.jupiter.api.Timeout;
 
 /**
- * Tests for {@link McpAsyncServer} using {@link HttpServletSseServerTransport}.
+ * Tests for {@link McpAsyncServer} using {@link HttpServletSseServerTransportProvider}.
  *
  * @author Christian Tzolov
  */
@@ -18,8 +18,8 @@ import org.junit.jupiter.api.Timeout;
 class ServletSseMcpAsyncServerTests extends AbstractMcpAsyncServerTests {
 
 	@Override
-	protected ServerMcpTransport createMcpTransport() {
-		return new HttpServletSseServerTransport(new ObjectMapper(), "/mcp/message");
+	protected McpServerTransportProvider createMcpTransportProvider() {
+		return new HttpServletSseServerTransportProvider(new ObjectMapper(), "/mcp/message");
 	}
 
 }

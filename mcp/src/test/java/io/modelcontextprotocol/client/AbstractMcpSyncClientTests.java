@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import io.modelcontextprotocol.spec.ClientMcpTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
@@ -50,7 +50,7 @@ public abstract class AbstractMcpSyncClientTests {
 
 	private static final String TEST_MESSAGE = "Hello MCP Spring AI!";
 
-	abstract protected ClientMcpTransport createMcpTransport();
+	abstract protected McpClientTransport createMcpTransport();
 
 	protected void onStart() {
 	}
@@ -66,11 +66,11 @@ public abstract class AbstractMcpSyncClientTests {
 		return Duration.ofSeconds(2);
 	}
 
-	McpSyncClient client(ClientMcpTransport transport) {
+	McpSyncClient client(McpClientTransport transport) {
 		return client(transport, Function.identity());
 	}
 
-	McpSyncClient client(ClientMcpTransport transport, Function<McpClient.SyncSpec, McpClient.SyncSpec> customizer) {
+	McpSyncClient client(McpClientTransport transport, Function<McpClient.SyncSpec, McpClient.SyncSpec> customizer) {
 		AtomicReference<McpSyncClient> client = new AtomicReference<>();
 
 		assertThatCode(() -> {
@@ -85,11 +85,11 @@ public abstract class AbstractMcpSyncClientTests {
 		return client.get();
 	}
 
-	void withClient(ClientMcpTransport transport, Consumer<McpSyncClient> c) {
+	void withClient(McpClientTransport transport, Consumer<McpSyncClient> c) {
 		withClient(transport, Function.identity(), c);
 	}
 
-	void withClient(ClientMcpTransport transport, Function<McpClient.SyncSpec, McpClient.SyncSpec> customizer,
+	void withClient(McpClientTransport transport, Function<McpClient.SyncSpec, McpClient.SyncSpec> customizer,
 			Consumer<McpSyncClient> c) {
 		var client = client(transport, customizer);
 		try {
@@ -120,15 +120,20 @@ public abstract class AbstractMcpSyncClientTests {
 		}, action);
 	}
 
-	<T> void verifyCallTimesOut(Function<McpSyncClient, T> operation, String action) {
+	<T> void verifyCallTimesOut(Function<McpSyncClient, T> blockingOperation, String action) {
 		withClient(createMcpTransport(), mcpSyncClient -> {
 			// This scheduler is not replaced by virtual time scheduler
 			Scheduler customScheduler = Schedulers.newBoundedElastic(1, 1, "actualBoundedElastic");
 
-			StepVerifier.withVirtualTime(() -> Mono.fromSupplier(() -> operation.apply(mcpSyncClient))
-				// offload the blocking call to the real scheduler
+			StepVerifier.withVirtualTime(() -> Mono.fromSupplier(() -> blockingOperation.apply(mcpSyncClient))
+				// Offload the blocking call to the real scheduler
 				.subscribeOn(customScheduler))
 				.expectSubscription()
+				// This works without actually waiting but executes all the
+				// tasks pending execution on the VirtualTimeScheduler.
+				// It is possible to execute the blocking code from the operation
+				// because it is blocked on a dedicated Scheduler and the main
+				// flow is not blocked and uses the VirtualTimeScheduler.
 				.thenAwait(getInitializationTimeout())
 				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
 					.hasMessage("Client must be initialized before " + action))
