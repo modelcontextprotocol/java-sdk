@@ -799,6 +799,66 @@ public final class McpSchema {
 			@JsonProperty("thisServer") THIS_SERVER,
 			@JsonProperty("allServers") ALL_SERVERS
 		}
+		
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private List<SamplingMessage> messages;
+			private ModelPreferences modelPreferences;
+			private String systemPrompt;
+			private ContextInclusionStrategy includeContext;
+			private Double temperature;
+			private int maxTokens;
+			private List<String> stopSequences;
+			private Map<String, Object> metadata;
+
+			public Builder messages(List<SamplingMessage> messages) {
+				this.messages = messages;
+				return this;
+			}
+
+			public Builder modelPreferences(ModelPreferences modelPreferences) {
+				this.modelPreferences = modelPreferences;
+				return this;
+			}
+
+			public Builder systemPrompt(String systemPrompt) {
+				this.systemPrompt = systemPrompt;
+				return this;
+			}
+
+			public Builder includeContext(ContextInclusionStrategy includeContext) {
+				this.includeContext = includeContext;
+				return this;
+			}
+
+			public Builder temperature(Double temperature) {
+				this.temperature = temperature;
+				return this;
+			}
+
+			public Builder maxTokens(int maxTokens) {
+				this.maxTokens = maxTokens;
+				return this;
+			}
+
+			public Builder stopSequences(List<String> stopSequences) {
+				this.stopSequences = stopSequences;
+				return this;
+			}
+
+			public Builder metadata(Map<String, Object> metadata) {
+				this.metadata = metadata;
+				return this;
+			}
+
+			public CreateMessageRequest build() {
+				return new CreateMessageRequest(messages, modelPreferences, systemPrompt, 
+					includeContext, temperature, maxTokens, stopSequences, metadata);
+			}
+		}
 	}// @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
