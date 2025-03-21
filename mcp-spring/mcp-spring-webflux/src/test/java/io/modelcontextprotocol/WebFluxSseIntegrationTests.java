@@ -24,6 +24,7 @@ import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
+import io.modelcontextprotocol.spec.McpSchema.ModelPreferences;
 import io.modelcontextprotocol.spec.McpSchema.Role;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
@@ -45,6 +46,7 @@ import org.springframework.web.reactive.function.server.RouterFunctions;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.junit.Assert.assertThat;
 import static org.mockito.Mockito.mock;
 
 public class WebFluxSseIntegrationTests {
@@ -142,13 +144,16 @@ public class WebFluxSseIntegrationTests {
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
 				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
 
-					var messages = List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
-							new McpSchema.TextContent("Test message")));
-					var modelPrefs = new McpSchema.ModelPreferences(List.of(), 1.0, 1.0, 1.0);
-
-					var craeteMessageRequest = new McpSchema.CreateMessageRequest(messages, modelPrefs, null,
-							McpSchema.CreateMessageRequest.ContextInclusionStrategy.NONE, null, 100, List.of(),
-							Map.of());
+					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
+						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
+								new McpSchema.TextContent("Test message"))))
+						.modelPreferences(ModelPreferences.builder()
+							.hints(List.of())
+							.costPriority(1.0)
+							.speedPriority(1.0)
+							.intelligencePriority(1.0)
+							.build())
+						.build();
 
 					StepVerifier.create(exchange.createMessage(craeteMessageRequest)).consumeNextWith(result -> {
 						assertThat(result).isNotNull();
