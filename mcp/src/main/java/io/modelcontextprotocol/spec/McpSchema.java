@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.spec;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -763,15 +764,61 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ModelPreferences(// @formatter:off
-		@JsonProperty("hints") List<ModelHint> hints,
-		@JsonProperty("costPriority") Double costPriority,
-		@JsonProperty("speedPriority") Double speedPriority,
-		@JsonProperty("intelligencePriority") Double intelligencePriority) {
-	} // @formatter:on
+	@JsonProperty("hints") List<ModelHint> hints,
+	@JsonProperty("costPriority") Double costPriority,
+	@JsonProperty("speedPriority") Double speedPriority,
+	@JsonProperty("intelligencePriority") Double intelligencePriority) {
+	
+	public static Builder builder() {
+		return new Builder();
+	}
+
+	public static class Builder {
+		private List<ModelHint> hints;
+		private Double costPriority;
+		private Double speedPriority;
+		private Double intelligencePriority;
+
+		public Builder hints(List<ModelHint> hints) {
+			this.hints = hints;
+			return this;
+		}
+
+		public Builder addHint(String name) {
+			if (this.hints == null) {
+				this.hints = new ArrayList<>();
+			}
+			this.hints.add(new ModelHint(name));
+			return this;
+		}
+
+		public Builder costPriority(Double costPriority) {
+			this.costPriority = costPriority;
+			return this;
+		}
+
+		public Builder speedPriority(Double speedPriority) {
+			this.speedPriority = speedPriority;
+			return this;
+		}
+
+		public Builder intelligencePriority(Double intelligencePriority) {
+			this.intelligencePriority = intelligencePriority;
+			return this;
+		}
+
+		public ModelPreferences build() {
+			return new ModelPreferences(hints, costPriority, speedPriority, intelligencePriority);
+		}
+	}
+} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ModelHint(@JsonProperty("name") String name) {
+		public static ModelHint of(String name) {
+			return new ModelHint(name);
+		}
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -855,7 +902,7 @@ public final class McpSchema {
 			}
 
 			public CreateMessageRequest build() {
-				return new CreateMessageRequest(messages, modelPreferences, systemPrompt, 
+				return new CreateMessageRequest(messages, modelPreferences, systemPrompt,
 					includeContext, temperature, maxTokens, stopSequences, metadata);
 			}
 		}
