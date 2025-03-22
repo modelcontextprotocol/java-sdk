@@ -71,7 +71,7 @@ public class McpSyncClient implements AutoCloseable {
 	 */
 	@Deprecated
 	// TODO make the constructor package private post-deprecation
-	public McpSyncClient(McpAsyncClient delegate) {
+	McpSyncClient(McpAsyncClient delegate) {
 		Assert.notNull(delegate, "The delegate can not be null");
 		this.delegate = delegate;
 	}
