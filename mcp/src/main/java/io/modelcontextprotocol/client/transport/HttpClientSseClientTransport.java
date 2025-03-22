@@ -66,7 +66,10 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 
 	/** Default SSE endpoint path */
 	private static final String SSE_ENDPOINT = "/sse";
-
+	/**
+	 * Custom sseEndPoint
+	 */
+        private final String sseEndPoint;
 	/** Base URI for the MCP server */
 	private final String baseUri;
 
@@ -110,15 +113,32 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 * @throws IllegalArgumentException if objectMapper or clientBuilder is null
 	 */
 	public HttpClientSseClientTransport(HttpClient.Builder clientBuilder, String baseUri, ObjectMapper objectMapper) {
-		Assert.notNull(objectMapper, "ObjectMapper must not be null");
-		Assert.hasText(baseUri, "baseUri must not be empty");
-		Assert.notNull(clientBuilder, "clientBuilder must not be null");
-		this.baseUri = baseUri;
-		this.objectMapper = objectMapper;
-		this.httpClient = clientBuilder.connectTimeout(Duration.ofSeconds(10)).build();
-		this.sseClient = new FlowSseClient(this.httpClient);
+	    this(clientBuilder, baseUri, SSE_ENDPOINT, objectMapper);
 	}
 
+	 /**
+     * Creates a new transport instance with custom HTTP client builder and object mapper.
+     *
+     * @param clientBuilder the HTTP client builder to use
+     * @param baseUri       the base URI of the MCP server
+     * @param objectMapper  the object mapper for JSON serialization/deserialization
+     * @param clientBuilder the HTTP client builder to use
+     * @param baseUri the base URI of the MCP server
+     * @param sseEndPoint Custom sseEndPoint
+     * @param objectMapper the object mapper for JSON serialization/deserialization
+     * @throws IllegalArgumentException if objectMapper or clientBuilder is null
+     */
+    public HttpClientSseClientTransport(HttpClient.Builder clientBuilder, String baseUri, String sseEndPoint, ObjectMapper objectMapper) {
+        Assert.notNull(objectMapper, "ObjectMapper must not be null");
+        Assert.hasText(baseUri, "baseUri must not be empty");
+        Assert.notNull(clientBuilder, "clientBuilder must not be null");
+        Assert.notNull(sseEndPoint, "sseEndPoint must not be null");
+        this.baseUri = baseUri;
+        this.objectMapper = objectMapper;
+        this.httpClient = clientBuilder.connectTimeout(Duration.ofSeconds(10)).build();
+        this.sseClient = new FlowSseClient(this.httpClient);
+        this.sseEndPoint = sseEndPoint;
+    }
 	/**
 	 * Establishes the SSE connection with the server and sets up message handling.
 	 *
