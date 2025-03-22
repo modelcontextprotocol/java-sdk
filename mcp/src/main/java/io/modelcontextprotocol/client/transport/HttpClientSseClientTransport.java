@@ -69,7 +69,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	/**
 	 * Custom sseEndPoint
 	 */
-        private final String sseEndPoint;
+        private final String sseEndpoint;
 	/** Base URI for the MCP server */
 	private final String baseUri;
 
@@ -124,20 +124,20 @@ public class HttpClientSseClientTransport implements McpClientTransport {
      * @param objectMapper  the object mapper for JSON serialization/deserialization
      * @param clientBuilder the HTTP client builder to use
      * @param baseUri the base URI of the MCP server
-     * @param sseEndPoint Custom sseEndPoint
+     * @param sseEndpoint Custom sseEndPoint
      * @param objectMapper the object mapper for JSON serialization/deserialization
      * @throws IllegalArgumentException if objectMapper or clientBuilder is null
      */
-    public HttpClientSseClientTransport(HttpClient.Builder clientBuilder, String baseUri, String sseEndPoint, ObjectMapper objectMapper) {
+    public HttpClientSseClientTransport(HttpClient.Builder clientBuilder, String baseUri, String sseEndpoint, ObjectMapper objectMapper) {
         Assert.notNull(objectMapper, "ObjectMapper must not be null");
         Assert.hasText(baseUri, "baseUri must not be empty");
         Assert.notNull(clientBuilder, "clientBuilder must not be null");
-        Assert.notNull(sseEndPoint, "sseEndPoint must not be null");
+        Assert.notNull(sseEndpoint, "sseEndPoint must not be null");
         this.baseUri = baseUri;
         this.objectMapper = objectMapper;
         this.httpClient = clientBuilder.connectTimeout(Duration.ofSeconds(10)).build();
         this.sseClient = new FlowSseClient(this.httpClient);
-        this.sseEndPoint = sseEndPoint;
+        this.sseEndpoint = sseEndpoint;
     }
 	/**
 	 * Establishes the SSE connection with the server and sets up message handling.
@@ -157,7 +157,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		CompletableFuture<Void> future = new CompletableFuture<>();
 		connectionFuture.set(future);
 
-		sseClient.subscribe(this.baseUri + SSE_ENDPOINT, new FlowSseClient.SseEventHandler() {
+		sseClient.subscribe(this.baseUri + this.sseEndpoint, new FlowSseClient.SseEventHandler() {
 			@Override
 			public void onEvent(SseEvent event) {
 				if (isClosing) {
