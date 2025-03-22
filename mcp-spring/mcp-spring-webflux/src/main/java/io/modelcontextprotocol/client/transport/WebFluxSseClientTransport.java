@@ -80,7 +80,10 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 * endpoint is used to establish the SSE connection with the server.
 	 */
 	private static final String SSE_ENDPOINT = "/sse";
-
+	/**
+	 * Custom sseEndpoint
+	 */
+	private final String sseEndpoint;
 	/**
 	 * Type reference for parsing SSE events containing string data.
 	 */
@@ -137,13 +140,17 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
 	public WebFluxSseClientTransport(WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
+	    this(webClientBuilder,objectMapper,SSE_ENDPOINT);
+	}
+	public WebFluxSseClientTransport(WebClient.Builder webClientBuilder, ObjectMapper objectMapper,String sseEndpoint) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(webClientBuilder, "WebClient.Builder must not be null");
+		Assert.notNull(sseEndpoint, "sseEndpoint must not be null");
 
 		this.objectMapper = objectMapper;
 		this.webClient = webClientBuilder.build();
+		this.sseEndpoint=sseEndpoint;
 	}
-
 	/**
 	 * Establishes a connection to the MCP server using Server-Sent Events (SSE). This
 	 * method initiates the SSE connection and sets up the message processing pipeline.
@@ -254,7 +261,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	protected Flux<ServerSentEvent<String>> eventStream() {// @formatter:off
 		return this.webClient
 			.get()
-			.uri(SSE_ENDPOINT)
+			.uri(this.sseEndpoint)
 			.accept(MediaType.TEXT_EVENT_STREAM)
 			.retrieve()
 			.bodyToFlux(SSE_TYPE)
