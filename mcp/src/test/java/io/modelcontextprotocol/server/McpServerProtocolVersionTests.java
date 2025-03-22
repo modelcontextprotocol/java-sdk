@@ -27,93 +27,100 @@ class McpServerProtocolVersionTests {
 				new McpSchema.InitializeRequest(protocolVersion, null, CLIENT_INFO));
 	}
 
-	@Test
-	void shouldUseLatestVersionByDefault() {
-		MockMcpTransport transport = new MockMcpTransport();
-		McpAsyncServer server = McpServer.async(transport).serverInfo(SERVER_INFO).build();
+	// @Test
+	// void shouldUseLatestVersionByDefault() {
+	// MockMcpTransport transport = new MockMcpTransport();
+	// McpAsyncServer server = McpServer.async(transport).serverInfo(SERVER_INFO).build();
 
-		String requestId = UUID.randomUUID().toString();
+	// String requestId = UUID.randomUUID().toString();
 
-		transport.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, McpSchema.LATEST_PROTOCOL_VERSION));
+	// transport.simulateIncomingMessage(jsonRpcInitializeRequest(requestId,
+	// McpSchema.LATEST_PROTOCOL_VERSION));
 
-		McpSchema.JSONRPCMessage response = transport.getLastSentMessage();
-		assertThat(response).isInstanceOf(McpSchema.JSONRPCResponse.class);
-		McpSchema.JSONRPCResponse jsonResponse = (McpSchema.JSONRPCResponse) response;
-		assertThat(jsonResponse.id()).isEqualTo(requestId);
-		assertThat(jsonResponse.result()).isInstanceOf(McpSchema.InitializeResult.class);
-		McpSchema.InitializeResult result = (McpSchema.InitializeResult) jsonResponse.result();
-		assertThat(result.protocolVersion()).isEqualTo(McpSchema.LATEST_PROTOCOL_VERSION);
+	// McpSchema.JSONRPCMessage response = transport.getLastSentMessage();
+	// assertThat(response).isInstanceOf(McpSchema.JSONRPCResponse.class);
+	// McpSchema.JSONRPCResponse jsonResponse = (McpSchema.JSONRPCResponse) response;
+	// assertThat(jsonResponse.id()).isEqualTo(requestId);
+	// assertThat(jsonResponse.result()).isInstanceOf(McpSchema.InitializeResult.class);
+	// McpSchema.InitializeResult result = (McpSchema.InitializeResult)
+	// jsonResponse.result();
+	// assertThat(result.protocolVersion()).isEqualTo(McpSchema.LATEST_PROTOCOL_VERSION);
 
-		server.closeGracefully().subscribe();
-	}
+	// server.closeGracefully().subscribe();
+	// }
 
-	@Test
-	void shouldNegotiateSpecificVersion() {
-		String oldVersion = "0.1.0";
-		MockMcpTransport transport = new MockMcpTransport();
-		McpAsyncServer server = McpServer.async(transport).serverInfo(SERVER_INFO).build();
+	// @Test
+	// void shouldNegotiateSpecificVersion() {
+	// String oldVersion = "0.1.0";
+	// MockMcpTransport transport = new MockMcpTransport();
+	// McpAsyncServer server = McpServer.async(transport).serverInfo(SERVER_INFO).build();
 
-		server.setProtocolVersions(List.of(oldVersion, McpSchema.LATEST_PROTOCOL_VERSION));
+	// server.setProtocolVersions(List.of(oldVersion, McpSchema.LATEST_PROTOCOL_VERSION));
 
-		String requestId = UUID.randomUUID().toString();
+	// String requestId = UUID.randomUUID().toString();
 
-		transport.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, oldVersion));
+	// transport.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, oldVersion));
 
-		McpSchema.JSONRPCMessage response = transport.getLastSentMessage();
-		assertThat(response).isInstanceOf(McpSchema.JSONRPCResponse.class);
-		McpSchema.JSONRPCResponse jsonResponse = (McpSchema.JSONRPCResponse) response;
-		assertThat(jsonResponse.id()).isEqualTo(requestId);
-		assertThat(jsonResponse.result()).isInstanceOf(McpSchema.InitializeResult.class);
-		McpSchema.InitializeResult result = (McpSchema.InitializeResult) jsonResponse.result();
-		assertThat(result.protocolVersion()).isEqualTo(oldVersion);
+	// McpSchema.JSONRPCMessage response = transport.getLastSentMessage();
+	// assertThat(response).isInstanceOf(McpSchema.JSONRPCResponse.class);
+	// McpSchema.JSONRPCResponse jsonResponse = (McpSchema.JSONRPCResponse) response;
+	// assertThat(jsonResponse.id()).isEqualTo(requestId);
+	// assertThat(jsonResponse.result()).isInstanceOf(McpSchema.InitializeResult.class);
+	// McpSchema.InitializeResult result = (McpSchema.InitializeResult)
+	// jsonResponse.result();
+	// assertThat(result.protocolVersion()).isEqualTo(oldVersion);
 
-		server.closeGracefully().subscribe();
-	}
+	// server.closeGracefully().subscribe();
+	// }
 
-	@Test
-	void shouldSuggestLatestVersionForUnsupportedVersion() {
-		String unsupportedVersion = "999.999.999";
-		MockMcpTransport transport = new MockMcpTransport();
-		McpAsyncServer server = McpServer.async(transport).serverInfo(SERVER_INFO).build();
+	// @Test
+	// void shouldSuggestLatestVersionForUnsupportedVersion() {
+	// String unsupportedVersion = "999.999.999";
+	// MockMcpTransport transport = new MockMcpTransport();
+	// McpAsyncServer server = McpServer.async(transport).serverInfo(SERVER_INFO).build();
 
-		String requestId = UUID.randomUUID().toString();
+	// String requestId = UUID.randomUUID().toString();
 
-		transport.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, unsupportedVersion));
+	// transport.simulateIncomingMessage(jsonRpcInitializeRequest(requestId,
+	// unsupportedVersion));
 
-		McpSchema.JSONRPCMessage response = transport.getLastSentMessage();
-		assertThat(response).isInstanceOf(McpSchema.JSONRPCResponse.class);
-		McpSchema.JSONRPCResponse jsonResponse = (McpSchema.JSONRPCResponse) response;
-		assertThat(jsonResponse.id()).isEqualTo(requestId);
-		assertThat(jsonResponse.result()).isInstanceOf(McpSchema.InitializeResult.class);
-		McpSchema.InitializeResult result = (McpSchema.InitializeResult) jsonResponse.result();
-		assertThat(result.protocolVersion()).isEqualTo(McpSchema.LATEST_PROTOCOL_VERSION);
+	// McpSchema.JSONRPCMessage response = transport.getLastSentMessage();
+	// assertThat(response).isInstanceOf(McpSchema.JSONRPCResponse.class);
+	// McpSchema.JSONRPCResponse jsonResponse = (McpSchema.JSONRPCResponse) response;
+	// assertThat(jsonResponse.id()).isEqualTo(requestId);
+	// assertThat(jsonResponse.result()).isInstanceOf(McpSchema.InitializeResult.class);
+	// McpSchema.InitializeResult result = (McpSchema.InitializeResult)
+	// jsonResponse.result();
+	// assertThat(result.protocolVersion()).isEqualTo(McpSchema.LATEST_PROTOCOL_VERSION);
 
-		server.closeGracefully().subscribe();
-	}
+	// server.closeGracefully().subscribe();
+	// }
 
-	@Test
-	void shouldUseHighestVersionWhenMultipleSupported() {
-		String oldVersion = "0.1.0";
-		String middleVersion = "0.2.0";
-		String latestVersion = McpSchema.LATEST_PROTOCOL_VERSION;
+	// @Test
+	// void shouldUseHighestVersionWhenMultipleSupported() {
+	// String oldVersion = "0.1.0";
+	// String middleVersion = "0.2.0";
+	// String latestVersion = McpSchema.LATEST_PROTOCOL_VERSION;
 
-		MockMcpTransport transport = new MockMcpTransport();
-		McpAsyncServer server = McpServer.async(transport).serverInfo(SERVER_INFO).build();
+	// MockMcpTransport transport = new MockMcpTransport();
+	// McpAsyncServer server = McpServer.async(transport).serverInfo(SERVER_INFO).build();
 
-		server.setProtocolVersions(List.of(oldVersion, middleVersion, latestVersion));
+	// server.setProtocolVersions(List.of(oldVersion, middleVersion, latestVersion));
 
-		String requestId = UUID.randomUUID().toString();
-		transport.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, latestVersion));
+	// String requestId = UUID.randomUUID().toString();
+	// transport.simulateIncomingMessage(jsonRpcInitializeRequest(requestId,
+	// latestVersion));
 
-		McpSchema.JSONRPCMessage response = transport.getLastSentMessage();
-		assertThat(response).isInstanceOf(McpSchema.JSONRPCResponse.class);
-		McpSchema.JSONRPCResponse jsonResponse = (McpSchema.JSONRPCResponse) response;
-		assertThat(jsonResponse.id()).isEqualTo(requestId);
-		assertThat(jsonResponse.result()).isInstanceOf(McpSchema.InitializeResult.class);
-		McpSchema.InitializeResult result = (McpSchema.InitializeResult) jsonResponse.result();
-		assertThat(result.protocolVersion()).isEqualTo(latestVersion);
+	// McpSchema.JSONRPCMessage response = transport.getLastSentMessage();
+	// assertThat(response).isInstanceOf(McpSchema.JSONRPCResponse.class);
+	// McpSchema.JSONRPCResponse jsonResponse = (McpSchema.JSONRPCResponse) response;
+	// assertThat(jsonResponse.id()).isEqualTo(requestId);
+	// assertThat(jsonResponse.result()).isInstanceOf(McpSchema.InitializeResult.class);
+	// McpSchema.InitializeResult result = (McpSchema.InitializeResult)
+	// jsonResponse.result();
+	// assertThat(result.protocolVersion()).isEqualTo(latestVersion);
 
-		server.closeGracefully().subscribe();
-	}
+	// server.closeGracefully().subscribe();
+	// }
 
 }

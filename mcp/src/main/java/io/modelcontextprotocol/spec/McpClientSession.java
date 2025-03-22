@@ -44,7 +44,7 @@ public class McpClientSession implements McpSession {
 	private final Duration requestTimeout;
 
 	/** Transport layer implementation for message exchange */
-	private final McpTransport transport;
+	private final McpClientTransport transport;
 
 	/** Map of pending responses keyed by request ID */
 	private final ConcurrentHashMap<Object, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
@@ -104,7 +104,7 @@ public class McpClientSession implements McpSession {
 	 * @param requestHandlers Map of method names to request handlers
 	 * @param notificationHandlers Map of method names to notification handlers
 	 */
-	public McpClientSession(Duration requestTimeout, McpTransport transport,
+	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
 			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
 
 		Assert.notNull(requestTimeout, "The requstTimeout can not be null");

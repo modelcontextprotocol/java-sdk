@@ -14,10 +14,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import io.modelcontextprotocol.spec.ClientMcpTransport;
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpClientSession.NotificationHandler;
 import io.modelcontextprotocol.spec.McpClientSession.RequestHandler;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
@@ -153,7 +153,7 @@ public class McpAsyncClient {
 	 * @param initializationTimeout the max timeout to await for the client-server
 	 * @param features the MCP Client supported features.
 	 */
-	McpAsyncClient(ClientMcpTransport transport, Duration requestTimeout, Duration initializationTimeout,
+	McpAsyncClient(McpClientTransport transport, Duration requestTimeout, Duration initializationTimeout,
 			McpClientFeatures.Async features) {
 
 		Assert.notNull(transport, "Transport must not be null");
