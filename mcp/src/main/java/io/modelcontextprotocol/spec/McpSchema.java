@@ -24,7 +24,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Based on the <a href="http://www.jsonrpc.org/specification">JSON-RPC 2.0
  * specification</a> and the <a href=
- * "https://github.com/modelcontextprotocol/specification/blob/main/schema/schema.ts">Model
+ * "https://github.com/modelcontextprotocol/specification/blob/main/schema/2024-11-05/schema.ts">Model
  * Context Protocol Schema</a>.
  *
  * @author Christian Tzolov
