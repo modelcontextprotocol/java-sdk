@@ -170,8 +170,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	protected void doGet(HttpServletRequest request, HttpServletResponse response)
 			throws ServletException, IOException {
 
-		String pathInfo = request.getPathInfo();
-		if (!sseEndpoint.equals(pathInfo)) {
+		String requestURI = request.getRequestURI();
+		if (!sseEndpoint.equals(requestURI)) {
 			response.sendError(HttpServletResponse.SC_NOT_FOUND);
 			return;
 		}
@@ -225,8 +225,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			return;
 		}
 
-		String pathInfo = request.getPathInfo();
-		if (!messageEndpoint.equals(pathInfo)) {
+		String requestURI = request.getRequestURI();
+		if (!messageEndpoint.equals(requestURI)) {
 			response.sendError(HttpServletResponse.SC_NOT_FOUND);
 			return;
 		}
