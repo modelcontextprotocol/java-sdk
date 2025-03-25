@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.spec;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -763,15 +764,61 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ModelPreferences(// @formatter:off
-		@JsonProperty("hints") List<ModelHint> hints,
-		@JsonProperty("costPriority") Double costPriority,
-		@JsonProperty("speedPriority") Double speedPriority,
-		@JsonProperty("intelligencePriority") Double intelligencePriority) {
-	} // @formatter:on
+	@JsonProperty("hints") List<ModelHint> hints,
+	@JsonProperty("costPriority") Double costPriority,
+	@JsonProperty("speedPriority") Double speedPriority,
+	@JsonProperty("intelligencePriority") Double intelligencePriority) {
+	
+	public static Builder builder() {
+		return new Builder();
+	}
+
+	public static class Builder {
+		private List<ModelHint> hints;
+		private Double costPriority;
+		private Double speedPriority;
+		private Double intelligencePriority;
+
+		public Builder hints(List<ModelHint> hints) {
+			this.hints = hints;
+			return this;
+		}
+
+		public Builder addHint(String name) {
+			if (this.hints == null) {
+				this.hints = new ArrayList<>();
+			}
+			this.hints.add(new ModelHint(name));
+			return this;
+		}
+
+		public Builder costPriority(Double costPriority) {
+			this.costPriority = costPriority;
+			return this;
+		}
+
+		public Builder speedPriority(Double speedPriority) {
+			this.speedPriority = speedPriority;
+			return this;
+		}
+
+		public Builder intelligencePriority(Double intelligencePriority) {
+			this.intelligencePriority = intelligencePriority;
+			return this;
+		}
+
+		public ModelPreferences build() {
+			return new ModelPreferences(hints, costPriority, speedPriority, intelligencePriority);
+		}
+	}
+} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ModelHint(@JsonProperty("name") String name) {
+		public static ModelHint of(String name) {
+			return new ModelHint(name);
+		}
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -798,6 +845,66 @@ public final class McpSchema {
 			@JsonProperty("none") NONE,
 			@JsonProperty("thisServer") THIS_SERVER,
 			@JsonProperty("allServers") ALL_SERVERS
+		}
+		
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private List<SamplingMessage> messages;
+			private ModelPreferences modelPreferences;
+			private String systemPrompt;
+			private ContextInclusionStrategy includeContext;
+			private Double temperature;
+			private int maxTokens;
+			private List<String> stopSequences;
+			private Map<String, Object> metadata;
+
+			public Builder messages(List<SamplingMessage> messages) {
+				this.messages = messages;
+				return this;
+			}
+
+			public Builder modelPreferences(ModelPreferences modelPreferences) {
+				this.modelPreferences = modelPreferences;
+				return this;
+			}
+
+			public Builder systemPrompt(String systemPrompt) {
+				this.systemPrompt = systemPrompt;
+				return this;
+			}
+
+			public Builder includeContext(ContextInclusionStrategy includeContext) {
+				this.includeContext = includeContext;
+				return this;
+			}
+
+			public Builder temperature(Double temperature) {
+				this.temperature = temperature;
+				return this;
+			}
+
+			public Builder maxTokens(int maxTokens) {
+				this.maxTokens = maxTokens;
+				return this;
+			}
+
+			public Builder stopSequences(List<String> stopSequences) {
+				this.stopSequences = stopSequences;
+				return this;
+			}
+
+			public Builder metadata(Map<String, Object> metadata) {
+				this.metadata = metadata;
+				return this;
+			}
+
+			public CreateMessageRequest build() {
+				return new CreateMessageRequest(messages, modelPreferences, systemPrompt,
+					includeContext, temperature, maxTokens, stopSequences, metadata);
+			}
 		}
 	}// @formatter:on
 
