@@ -55,9 +55,7 @@ public class MockMcpServerTransport implements McpServerTransport {
 
 	@Override
 	public Mono<Void> closeGracefully() {
-		return Mono.defer(() -> {
-			return Mono.empty();
-		});
+		return Mono.empty();
 	}
 
 	@Override

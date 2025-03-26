@@ -66,11 +66,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * Create a new McpSyncClient with the given delegate.
 	 * @param delegate the asynchronous kernel on top of which this synchronous client
 	 * provides a blocking API.
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link McpClient#sync(McpClientTransport)} to obtain an instance.
 	 */
-	@Deprecated
-	// TODO make the constructor package private post-deprecation
 	McpSyncClient(McpAsyncClient delegate) {
 		Assert.notNull(delegate, "The delegate can not be null");
 		this.delegate = delegate;
