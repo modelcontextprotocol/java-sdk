@@ -4,7 +4,6 @@
 
 package io.modelcontextprotocol.server;
 
-import io.modelcontextprotocol.server.transport.StdioServerTransport;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.junit.jupiter.api.Timeout;

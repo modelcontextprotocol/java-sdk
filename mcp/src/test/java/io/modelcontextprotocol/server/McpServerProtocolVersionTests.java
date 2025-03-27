@@ -7,7 +7,8 @@ package io.modelcontextprotocol.server;
 import java.util.List;
 import java.util.UUID;
 
-import io.modelcontextprotocol.MockMcpTransport;
+import io.modelcontextprotocol.MockMcpServerTransport;
+import io.modelcontextprotocol.MockMcpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.Test;
 
@@ -29,14 +30,16 @@ class McpServerProtocolVersionTests {
 
 	@Test
 	void shouldUseLatestVersionByDefault() {
-		MockMcpTransport transport = new MockMcpTransport();
-		McpAsyncServer server = McpServer.async(transport).serverInfo(SERVER_INFO).build();
+		MockMcpServerTransport serverTransport = new MockMcpServerTransport();
+		var transportProvider = new MockMcpServerTransportProvider(serverTransport);
+		McpAsyncServer server = McpServer.async(transportProvider).serverInfo(SERVER_INFO).build();
 
 		String requestId = UUID.randomUUID().toString();
 
-		transport.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, McpSchema.LATEST_PROTOCOL_VERSION));
+		transportProvider
+			.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, McpSchema.LATEST_PROTOCOL_VERSION));
 
-		McpSchema.JSONRPCMessage response = transport.getLastSentMessage();
+		McpSchema.JSONRPCMessage response = serverTransport.getLastSentMessage();
 		assertThat(response).isInstanceOf(McpSchema.JSONRPCResponse.class);
 		McpSchema.JSONRPCResponse jsonResponse = (McpSchema.JSONRPCResponse) response;
 		assertThat(jsonResponse.id()).isEqualTo(requestId);
@@ -50,16 +53,18 @@ class McpServerProtocolVersionTests {
 	@Test
 	void shouldNegotiateSpecificVersion() {
 		String oldVersion = "0.1.0";
-		MockMcpTransport transport = new MockMcpTransport();
-		McpAsyncServer server = McpServer.async(transport).serverInfo(SERVER_INFO).build();
+		MockMcpServerTransport serverTransport = new MockMcpServerTransport();
+		var transportProvider = new MockMcpServerTransportProvider(serverTransport);
+
+		McpAsyncServer server = McpServer.async(transportProvider).serverInfo(SERVER_INFO).build();
 
 		server.setProtocolVersions(List.of(oldVersion, McpSchema.LATEST_PROTOCOL_VERSION));
 
 		String requestId = UUID.randomUUID().toString();
 
-		transport.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, oldVersion));
+		transportProvider.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, oldVersion));
 
-		McpSchema.JSONRPCMessage response = transport.getLastSentMessage();
+		McpSchema.JSONRPCMessage response = serverTransport.getLastSentMessage();
 		assertThat(response).isInstanceOf(McpSchema.JSONRPCResponse.class);
 		McpSchema.JSONRPCResponse jsonResponse = (McpSchema.JSONRPCResponse) response;
 		assertThat(jsonResponse.id()).isEqualTo(requestId);
@@ -73,14 +78,16 @@ class McpServerProtocolVersionTests {
 	@Test
 	void shouldSuggestLatestVersionForUnsupportedVersion() {
 		String unsupportedVersion = "999.999.999";
-		MockMcpTransport transport = new MockMcpTransport();
-		McpAsyncServer server = McpServer.async(transport).serverInfo(SERVER_INFO).build();
+		MockMcpServerTransport serverTransport = new MockMcpServerTransport();
+		var transportProvider = new MockMcpServerTransportProvider(serverTransport);
+
+		McpAsyncServer server = McpServer.async(transportProvider).serverInfo(SERVER_INFO).build();
 
 		String requestId = UUID.randomUUID().toString();
 
-		transport.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, unsupportedVersion));
+		transportProvider.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, unsupportedVersion));
 
-		McpSchema.JSONRPCMessage response = transport.getLastSentMessage();
+		McpSchema.JSONRPCMessage response = serverTransport.getLastSentMessage();
 		assertThat(response).isInstanceOf(McpSchema.JSONRPCResponse.class);
 		McpSchema.JSONRPCResponse jsonResponse = (McpSchema.JSONRPCResponse) response;
 		assertThat(jsonResponse.id()).isEqualTo(requestId);
@@ -97,15 +104,17 @@ class McpServerProtocolVersionTests {
 		String middleVersion = "0.2.0";
 		String latestVersion = McpSchema.LATEST_PROTOCOL_VERSION;
 
-		MockMcpTransport transport = new MockMcpTransport();
-		McpAsyncServer server = McpServer.async(transport).serverInfo(SERVER_INFO).build();
+		MockMcpServerTransport serverTransport = new MockMcpServerTransport();
+		var transportProvider = new MockMcpServerTransportProvider(serverTransport);
+
+		McpAsyncServer server = McpServer.async(transportProvider).serverInfo(SERVER_INFO).build();
 
 		server.setProtocolVersions(List.of(oldVersion, middleVersion, latestVersion));
 
 		String requestId = UUID.randomUUID().toString();
-		transport.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, latestVersion));
+		transportProvider.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, latestVersion));
 
-		McpSchema.JSONRPCMessage response = transport.getLastSentMessage();
+		McpSchema.JSONRPCMessage response = serverTransport.getLastSentMessage();
 		assertThat(response).isInstanceOf(McpSchema.JSONRPCResponse.class);
 		McpSchema.JSONRPCResponse jsonResponse = (McpSchema.JSONRPCResponse) response;
 		assertThat(jsonResponse.id()).isEqualTo(requestId);

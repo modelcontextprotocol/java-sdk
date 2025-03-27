@@ -66,40 +66,6 @@ public class McpSyncServer {
 	}
 
 	/**
-	 * Retrieves the list of all roots provided by the client.
-	 * @return The list of roots
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link McpSyncServerExchange#listRoots()}.
-	 */
-	@Deprecated
-	public McpSchema.ListRootsResult listRoots() {
-		return this.listRoots(null);
-	}
-
-	/**
-	 * Retrieves a paginated list of roots provided by the server.
-	 * @param cursor Optional pagination cursor from a previous list request
-	 * @return The list of roots
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link McpSyncServerExchange#listRoots(String)}.
-	 */
-	@Deprecated
-	public McpSchema.ListRootsResult listRoots(String cursor) {
-		return this.asyncServer.listRoots(cursor).block();
-	}
-
-	/**
-	 * Add a new tool handler.
-	 * @param toolHandler The tool handler to add
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link #addTool(McpServerFeatures.SyncToolSpecification)}.
-	 */
-	@Deprecated
-	public void addTool(McpServerFeatures.SyncToolRegistration toolHandler) {
-		this.asyncServer.addTool(McpServerFeatures.AsyncToolRegistration.fromSync(toolHandler)).block();
-	}
-
-	/**
 	 * Add a new tool handler.
 	 * @param toolHandler The tool handler to add
 	 */
@@ -118,17 +84,6 @@ public class McpSyncServer {
 	/**
 	 * Add a new resource handler.
 	 * @param resourceHandler The resource handler to add
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link #addResource(McpServerFeatures.SyncResourceSpecification)}.
-	 */
-	@Deprecated
-	public void addResource(McpServerFeatures.SyncResourceRegistration resourceHandler) {
-		this.asyncServer.addResource(McpServerFeatures.AsyncResourceRegistration.fromSync(resourceHandler)).block();
-	}
-
-	/**
-	 * Add a new resource handler.
-	 * @param resourceHandler The resource handler to add
 	 */
 	public void addResource(McpServerFeatures.SyncResourceSpecification resourceHandler) {
 		this.asyncServer.addResource(McpServerFeatures.AsyncResourceSpecification.fromSync(resourceHandler)).block();
@@ -140,17 +95,6 @@ public class McpSyncServer {
 	 */
 	public void removeResource(String resourceUri) {
 		this.asyncServer.removeResource(resourceUri).block();
-	}
-
-	/**
-	 * Add a new prompt handler.
-	 * @param promptRegistration The prompt registration to add
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link #addPrompt(McpServerFeatures.SyncPromptSpecification)}.
-	 */
-	@Deprecated
-	public void addPrompt(McpServerFeatures.SyncPromptRegistration promptRegistration) {
-		this.asyncServer.addPrompt(McpServerFeatures.AsyncPromptRegistration.fromSync(promptRegistration)).block();
 	}
 
 	/**
@@ -190,28 +134,6 @@ public class McpSyncServer {
 	 */
 	public McpSchema.Implementation getServerInfo() {
 		return this.asyncServer.getServerInfo();
-	}
-
-	/**
-	 * Get the client capabilities that define the supported features and functionality.
-	 * @return The client capabilities
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link McpSyncServerExchange#getClientCapabilities()}.
-	 */
-	@Deprecated
-	public ClientCapabilities getClientCapabilities() {
-		return this.asyncServer.getClientCapabilities();
-	}
-
-	/**
-	 * Get the client implementation information.
-	 * @return The client implementation details
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link McpSyncServerExchange#getClientInfo()}.
-	 */
-	@Deprecated
-	public McpSchema.Implementation getClientInfo() {
-		return this.asyncServer.getClientInfo();
 	}
 
 	/**
@@ -256,38 +178,6 @@ public class McpSyncServer {
 	 */
 	public McpAsyncServer getAsyncServer() {
 		return this.asyncServer;
-	}
-
-	/**
-	 * Create a new message using the sampling capabilities of the client. The Model
-	 * Context Protocol (MCP) provides a standardized way for servers to request LLM
-	 * sampling ("completions" or "generations") from language models via clients.
-	 *
-	 * <p>
-	 * This flow allows clients to maintain control over model access, selection, and
-	 * permissions while enabling servers to leverage AI capabilities—with no server API
-	 * keys necessary. Servers can request text or image-based interactions and optionally
-	 * include context from MCP servers in their prompts.
-	 *
-	 * <p>
-	 * Unlike its async counterpart, this method blocks until the message creation is
-	 * complete, making it easier to use in synchronous code paths.
-	 * @param createMessageRequest The request to create a new message
-	 * @return The result of the message creation
-	 * @throws McpError if the client has not been initialized or does not support
-	 * sampling capabilities
-	 * @throws McpError if the client does not support the createMessage method
-	 * @see McpSchema.CreateMessageRequest
-	 * @see McpSchema.CreateMessageResult
-	 * @see <a href=
-	 * "https://spec.modelcontextprotocol.io/specification/client/sampling/">Sampling
-	 * Specification</a>
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link McpSyncServerExchange#createMessage(McpSchema.CreateMessageRequest)}.
-	 */
-	@Deprecated
-	public McpSchema.CreateMessageResult createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
-		return this.asyncServer.createMessage(createMessageRequest).block();
 	}
 
 }
