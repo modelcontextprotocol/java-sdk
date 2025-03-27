@@ -91,6 +91,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 
 	private final String sseEndpoint;
 
+	private final String publishedMessageEndpoint;
+
 	private final RouterFunction<ServerResponse> routerFunction;
 
 	private McpServerSession.Factory sessionFactory;
@@ -104,6 +106,36 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * Flag indicating if the transport is shutting down.
 	 */
 	private volatile boolean isClosing = false;
+
+	/**
+	 * Constructs a new WebMvcSseServerTransportProvider instance.
+	 *
+	 * @param objectMapper             The ObjectMapper to use for JSON serialization/deserialization
+	 *                                 of messages.
+	 * @param messageEndpoint          The endpoint URI where clients should send their JSON-RPC
+	 *                                 messages via HTTP POST. This endpoint will be communicated to clients through the
+	 *                                 SSE connection's initial endpoint event.
+	 * @param publishedMessageEndpoint The published endpoint URI that will be sent to clients
+	 *                                 (might differ from the actual messageEndpoint in case of proxies, load balancers, etc.)
+	 * @param sseEndpoint              The endpoint URI where clients establish their SSE connections.
+	 * @throws IllegalArgumentException if any parameter is null
+	 */
+	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint,
+											String publishedMessageEndpoint, String sseEndpoint) {
+		Assert.notNull(objectMapper, "ObjectMapper must not be null");
+		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
+		Assert.notNull(publishedMessageEndpoint, "Published message endpoint must not be null");
+		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
+
+		this.objectMapper = objectMapper;
+		this.messageEndpoint = messageEndpoint;
+		this.publishedMessageEndpoint = publishedMessageEndpoint;
+		this.sseEndpoint = sseEndpoint;
+		this.routerFunction = RouterFunctions.route()
+				.GET(this.sseEndpoint, this::handleSseConnection)
+				.POST(this.messageEndpoint, this::handleMessage)
+				.build();
+	}
 
 	/**
 	 * Constructs a new WebMvcSseServerTransportProvider instance.
@@ -122,6 +154,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 
 		this.objectMapper = objectMapper;
 		this.messageEndpoint = messageEndpoint;
+		this.publishedMessageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
 		this.routerFunction = RouterFunctions.route()
 			.GET(this.sseEndpoint, this::handleSseConnection)
@@ -248,7 +281,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				try {
 					sseBuilder.id(sessionId)
 						.event(ENDPOINT_EVENT_TYPE)
-						.data(messageEndpoint + "?sessionId=" + sessionId);
+						.data(publishedMessageEndpoint + "?sessionId=" + sessionId);
 				}
 				catch (Exception e) {
 					logger.error("Failed to send initial endpoint event: {}", e.getMessage());
