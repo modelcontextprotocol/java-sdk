@@ -25,7 +25,11 @@ class StdioMcpAsyncClientTests extends AbstractMcpAsyncClientTests {
 		ServerParameters stdioParams = ServerParameters.builder("npx")
 			.args("-y", "@modelcontextprotocol/server-everything", "dir")
 			.build();
-		return new StdioClientTransport(stdioParams);
+		ServerParameters windowsStdioParams = ServerParameters.builder("cmd.exe")
+			.args("/c", "npx.cmd", "-y", "@modelcontextprotocol/server-everything", "dir")
+			.build();
+		boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+		return new StdioClientTransport(isWindows ? windowsStdioParams : stdioParams);
 	}
 
 	protected Duration getInitializationTimeout() {
