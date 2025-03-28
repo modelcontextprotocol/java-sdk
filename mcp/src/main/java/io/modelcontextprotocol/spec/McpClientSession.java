@@ -41,6 +41,10 @@ public class McpClientSession implements McpSession {
 	/** Logger for this class */
 	private static final Logger logger = LoggerFactory.getLogger(McpClientSession.class);
 
+	private String id;
+
+	private static final String DEFAULT_SESSION_ID = "-1";
+
 	/** Duration to wait for request responses before timing out */
 	private final Duration requestTimeout;
 
@@ -98,21 +102,30 @@ public class McpClientSession implements McpSession {
 
 	}
 
+	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
+			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
+
+		this(DEFAULT_SESSION_ID, requestTimeout, transport, requestHandlers, notificationHandlers);
+	}
+
 	/**
 	 * Creates a new McpClientSession with the specified configuration and handlers.
+	 * @param id Unique identifier for the session
 	 * @param requestTimeout Duration to wait for responses
 	 * @param transport Transport implementation for message exchange
 	 * @param requestHandlers Map of method names to request handlers
 	 * @param notificationHandlers Map of method names to notification handlers
 	 */
-	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
+	public McpClientSession(String id, Duration requestTimeout, McpClientTransport transport,
 			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
 
-		Assert.notNull(requestTimeout, "The requstTimeout can not be null");
+		Assert.notNull(id, "The id can not be null");
+		Assert.notNull(requestTimeout, "The requestTimeout can not be null");
 		Assert.notNull(transport, "The transport can not be null");
 		Assert.notNull(requestHandlers, "The requestHandlers can not be null");
 		Assert.notNull(notificationHandlers, "The notificationHandlers can not be null");
 
+		this.id = id;
 		this.requestTimeout = requestTimeout;
 		this.transport = transport;
 		this.requestHandlers.putAll(requestHandlers);
@@ -123,33 +136,41 @@ public class McpClientSession implements McpSession {
 		// Observation associated with the individual message - it can be used to
 		// create child Observation and emit it together with the message to the
 		// consumer
-		this.connection = this.transport.connect(mono -> mono.doOnNext(message -> {
+		this.connection = this.transport.connect().subscribe();
+	}
+
+	public Mono<Void> handle(McpSchema.JSONRPCMessage message) {
+		return Mono.defer(() -> {
 			if (message instanceof McpSchema.JSONRPCResponse response) {
 				logger.debug("Received Response: {}", response);
 				var sink = pendingResponses.remove(response.id());
 				if (sink == null) {
-					logger.warn("Unexpected response for unkown id {}", response.id());
+					logger.warn("Unexpected response for unknown id {}", response.id());
 				}
 				else {
 					sink.success(response);
 				}
+				return Mono.empty();
 			}
 			else if (message instanceof McpSchema.JSONRPCRequest request) {
 				logger.debug("Received request: {}", request);
-				handleIncomingRequest(request).flatMap(transport::sendMessage).onErrorResume(error -> {
+				return handleIncomingRequest(request).onErrorResume(error -> {
 					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
 							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 									error.getMessage(), null));
-					return transport.sendMessage(errorResponse);
-				}).subscribe();
-
+					return this.transport.sendMessage(errorResponse).then(Mono.empty());
+				}).flatMap(this.transport::sendMessage);
 			}
 			else if (message instanceof McpSchema.JSONRPCNotification notification) {
 				logger.debug("Received notification: {}", notification);
-				handleIncomingNotification(notification).subscribe(null,
-						error -> logger.error("Error handling notification: {}", error.getMessage()));
+				return handleIncomingNotification(notification)
+					.doOnError(error -> logger.error("Error handling notification: {}", error.getMessage()));
 			}
-		})).subscribe();
+			else {
+				logger.warn("Received unknown message type: {}", message);
+				return Mono.empty();
+			}
+		});
 	}
 
 	/**
@@ -284,6 +305,34 @@ public class McpClientSession implements McpSession {
 	public void close() {
 		this.connection.dispose();
 		transport.close();
+	}
+
+	public String getId() {
+		return id;
+	}
+
+	public void setId(String id) {
+		this.id = id;
+	}
+
+	public McpClientTransport getTransport() {
+		return transport;
+	}
+
+	/**
+	 * Factory for creating client sessions which delegate to a provided 1:1 transport
+	 * with a connected client.
+	 */
+	@FunctionalInterface
+	public interface Factory {
+
+		/**
+		 * Creates a new 1:1 representation of the client-server interaction.
+		 * @param sessionTransport the transport to use for communication with the server.
+		 * @return a new client session.
+		 */
+		McpClientSession create(McpClientTransport sessionTransport);
+
 	}
 
 }

@@ -4,14 +4,15 @@
 
 package io.modelcontextprotocol.client;
 
-import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
-import io.modelcontextprotocol.spec.McpClientTransport;
+import io.modelcontextprotocol.client.transport.HttpClientSseClientTransportProvider;
+import io.modelcontextprotocol.spec.McpClientTransportProvider;
 import org.junit.jupiter.api.Timeout;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 
 /**
- * Tests for the {@link McpSyncClient} with {@link HttpClientSseClientTransport}.
+ * Tests for the {@link McpSyncClient} with
+ * {@link HttpClientSseClientTransportProvider.HttpClientSseClientTransport}.
  *
  * @author Christian Tzolov
  */
@@ -28,8 +29,8 @@ class HttpSseMcpSyncClientTests extends AbstractMcpSyncClientTests {
 		.waitingFor(Wait.forHttp("/").forStatusCode(404));
 
 	@Override
-	protected McpClientTransport createMcpTransport() {
-		return new HttpClientSseClientTransport(host);
+	protected McpClientTransportProvider createMcpClientTransportProvider() {
+		return new HttpClientSseClientTransportProvider(host);
 	}
 
 	@Override

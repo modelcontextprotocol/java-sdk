@@ -4,15 +4,7 @@
 
 package io.modelcontextprotocol.client;
 
-import java.time.Duration;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
-import java.util.function.Function;
-
-import io.modelcontextprotocol.spec.McpClientTransport;
+import io.modelcontextprotocol.spec.McpClientTransportProvider;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
@@ -34,6 +26,14 @@ import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import java.time.Duration;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
+import java.util.function.Function;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -50,7 +50,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	private static final String ECHO_TEST_MESSAGE = "Hello MCP Spring AI!";
 
-	abstract protected McpClientTransport createMcpTransport();
+	abstract protected McpClientTransportProvider createMcpClientTransportProvider();
 
 	protected void onStart() {
 	}
@@ -66,15 +66,16 @@ public abstract class AbstractMcpAsyncClientTests {
 		return Duration.ofSeconds(2);
 	}
 
-	McpAsyncClient client(McpClientTransport transport) {
-		return client(transport, Function.identity());
+	McpAsyncClient client(McpClientTransportProvider transportProvider) {
+		return client(transportProvider, Function.identity());
 	}
 
-	McpAsyncClient client(McpClientTransport transport, Function<McpClient.AsyncSpec, McpClient.AsyncSpec> customizer) {
+	McpAsyncClient client(McpClientTransportProvider transportProvider,
+			Function<McpClient.AsyncSpec, McpClient.AsyncSpec> customizer) {
 		AtomicReference<McpAsyncClient> client = new AtomicReference<>();
 
 		assertThatCode(() -> {
-			McpClient.AsyncSpec builder = McpClient.async(transport)
+			McpClient.AsyncSpec builder = McpClient.async(transportProvider)
 				.requestTimeout(getRequestTimeout())
 				.initializationTimeout(getInitializationTimeout())
 				.capabilities(ClientCapabilities.builder().roots(true).build());
@@ -85,13 +86,13 @@ public abstract class AbstractMcpAsyncClientTests {
 		return client.get();
 	}
 
-	void withClient(McpClientTransport transport, Consumer<McpAsyncClient> c) {
-		withClient(transport, Function.identity(), c);
+	void withClient(McpClientTransportProvider transportProvider, Consumer<McpAsyncClient> c) {
+		withClient(transportProvider, Function.identity(), c);
 	}
 
-	void withClient(McpClientTransport transport, Function<McpClient.AsyncSpec, McpClient.AsyncSpec> customizer,
-			Consumer<McpAsyncClient> c) {
-		var client = client(transport, customizer);
+	void withClient(McpClientTransportProvider transportProvider,
+			Function<McpClient.AsyncSpec, McpClient.AsyncSpec> customizer, Consumer<McpAsyncClient> c) {
+		var client = client(transportProvider, customizer);
 		try {
 			c.accept(client);
 		}
@@ -111,7 +112,7 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	<T> void verifyInitializationTimeout(Function<McpAsyncClient, Mono<T>> operation, String action) {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			StepVerifier.withVirtualTime(() -> operation.apply(mcpAsyncClient))
 				.expectSubscription()
 				.thenAwait(getInitializationTimeout())
@@ -126,7 +127,7 @@ public abstract class AbstractMcpAsyncClientTests {
 		assertThatThrownBy(() -> McpClient.async(null).build()).isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Transport must not be null");
 
-		assertThatThrownBy(() -> McpClient.async(createMcpTransport()).requestTimeout(null).build())
+		assertThatThrownBy(() -> McpClient.async(createMcpClientTransportProvider()).requestTimeout(null).build())
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Request timeout must not be null");
 	}
@@ -138,7 +139,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListTools() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listTools(null)))
 				.consumeNextWith(result -> {
 					assertThat(result.tools()).isNotNull().isNotEmpty();
@@ -158,7 +159,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testPing() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.ping()))
 				.expectNextCount(1)
 				.verifyComplete();
@@ -173,7 +174,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testCallTool() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			CallToolRequest callToolRequest = new CallToolRequest("echo", Map.of("message", ECHO_TEST_MESSAGE));
 
 			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.callTool(callToolRequest)))
@@ -189,7 +190,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testCallToolWithInvalidTool() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			CallToolRequest invalidRequest = new CallToolRequest("nonexistent_tool",
 					Map.of("message", ECHO_TEST_MESSAGE));
 
@@ -207,7 +208,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListResources() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResources(null)))
 				.consumeNextWith(resources -> {
 					assertThat(resources).isNotNull().satisfies(result -> {
@@ -226,7 +227,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testMcpAsyncClientState() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			assertThat(mcpAsyncClient).isNotNull();
 		});
 	}
@@ -238,7 +239,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListPrompts() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listPrompts(null)))
 				.consumeNextWith(prompts -> {
 					assertThat(prompts).isNotNull().satisfies(result -> {
@@ -263,7 +264,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testGetPrompt() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			StepVerifier
 				.create(mcpAsyncClient.initialize()
 					.then(mcpAsyncClient.getPrompt(new GetPromptRequest("simple_prompt", Map.of()))))
@@ -285,7 +286,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testRootsListChanged() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.rootsListChangedNotification()))
 				.verifyComplete();
 		});
@@ -293,15 +294,15 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testInitializeWithRootsListProviders() {
-		withClient(createMcpTransport(), builder -> builder.roots(new Root("file:///test/path", "test-root")),
-				client -> {
+		withClient(createMcpClientTransportProvider(),
+				builder -> builder.roots(new Root("file:///test/path", "test-root")), client -> {
 					StepVerifier.create(client.initialize().then(client.closeGracefully())).verifyComplete();
 				});
 	}
 
 	@Test
 	void testAddRoot() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			Root newRoot = new Root("file:///new/test/path", "new-test-root");
 			StepVerifier.create(mcpAsyncClient.addRoot(newRoot)).verifyComplete();
 		});
@@ -309,7 +310,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testAddRootWithNullValue() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.addRoot(null))
 				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class).hasMessage("Root must not be null"))
 				.verify();
@@ -318,7 +319,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testRemoveRoot() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			Root root = new Root("file:///test/path/to/remove", "root-to-remove");
 			StepVerifier.create(mcpAsyncClient.addRoot(root)).verifyComplete();
 
@@ -328,7 +329,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testRemoveNonExistentRoot() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.removeRoot("nonexistent-uri"))
 				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
 					.hasMessage("Root with uri 'nonexistent-uri' not found"))
@@ -339,7 +340,7 @@ public abstract class AbstractMcpAsyncClientTests {
 	@Test
 	@Disabled
 	void testReadResource() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.listResources()).consumeNextWith(resources -> {
 				if (!resources.resources().isEmpty()) {
 					Resource firstResource = resources.resources().get(0);
@@ -359,7 +360,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListResourceTemplates() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResourceTemplates()))
 				.consumeNextWith(result -> {
 					assertThat(result).isNotNull();
@@ -371,7 +372,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	// @Test
 	void testResourceSubscription() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.listResources()).consumeNextWith(resources -> {
 				if (!resources.resources().isEmpty()) {
 					Resource firstResource = resources.resources().get(0);
@@ -394,7 +395,7 @@ public abstract class AbstractMcpAsyncClientTests {
 		AtomicBoolean resourcesNotificationReceived = new AtomicBoolean(false);
 		AtomicBoolean promptsNotificationReceived = new AtomicBoolean(false);
 
-		withClient(createMcpTransport(),
+		withClient(createMcpClientTransportProvider(),
 				builder -> builder
 					.toolsChangeConsumer(tools -> Mono.fromRunnable(() -> toolsNotificationReceived.set(true)))
 					.resourcesChangeConsumer(
@@ -414,7 +415,7 @@ public abstract class AbstractMcpAsyncClientTests {
 			.message("test")
 			.model("test-model")
 			.build();
-		withClient(createMcpTransport(),
+		withClient(createMcpClientTransportProvider(),
 				builder -> builder.capabilities(capabilities).sampling(request -> Mono.just(createMessageResult)),
 				client -> {
 					StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
@@ -432,8 +433,8 @@ public abstract class AbstractMcpAsyncClientTests {
 		Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler = request -> Mono
 			.just(CreateMessageResult.builder().message("test").model("test-model").build());
 
-		withClient(createMcpTransport(), builder -> builder.capabilities(capabilities).sampling(samplingHandler),
-				client ->
+		withClient(createMcpClientTransportProvider(),
+				builder -> builder.capabilities(capabilities).sampling(samplingHandler), client ->
 
 				StepVerifier.create(client.initialize()).assertNext(result -> {
 					assertThat(result).isNotNull();
@@ -453,7 +454,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testLoggingLevels() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			Mono<Void> testAllLevels = mcpAsyncClient.initialize().then(Mono.defer(() -> {
 				Mono<Void> chain = Mono.empty();
 				for (McpSchema.LoggingLevel level : McpSchema.LoggingLevel.values()) {
@@ -470,7 +471,7 @@ public abstract class AbstractMcpAsyncClientTests {
 	void testLoggingConsumer() {
 		AtomicBoolean logReceived = new AtomicBoolean(false);
 
-		withClient(createMcpTransport(),
+		withClient(createMcpClientTransportProvider(),
 				builder -> builder.loggingConsumer(notification -> Mono.fromRunnable(() -> logReceived.set(true))),
 				client -> {
 					StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
@@ -482,7 +483,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testLoggingWithNullNotification() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
+		withClient(createMcpClientTransportProvider(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.setLoggingLevel(null))
 				.expectErrorMatches(error -> error.getMessage().contains("Logging level must not be null"))
 				.verify();

@@ -9,6 +9,9 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.spec.McpClientSession;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
 import org.junit.jupiter.api.AfterEach;
@@ -27,7 +30,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
- * Tests for the {@link HttpClientSseClientTransport} class.
+ * Tests for the {@link HttpClientSseClientTransportProvider.HttpClientSseClientTransport}
+ * class.
  *
  * @author Christian Tzolov
  */
@@ -45,14 +49,16 @@ class HttpClientSseClientTransportTests {
 	private TestHttpClientSseClientTransport transport;
 
 	// Test class to access protected methods
-	static class TestHttpClientSseClientTransport extends HttpClientSseClientTransport {
+	static class TestHttpClientSseClientTransport implements McpClientTransport {
+
+		McpClientTransport delegate;
 
 		private final AtomicInteger inboundMessageCount = new AtomicInteger(0);
 
 		private Sinks.Many<ServerSentEvent<String>> events = Sinks.many().unicast().onBackpressureBuffer();
 
-		public TestHttpClientSseClientTransport(String baseUri) {
-			super(baseUri);
+		public TestHttpClientSseClientTransport(McpClientTransport transport) {
+			this.delegate = transport;
 		}
 
 		public int getInboundMessageCount() {
@@ -69,6 +75,31 @@ class HttpClientSseClientTransportTests {
 			inboundMessageCount.incrementAndGet();
 		}
 
+		@Override
+		public Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
+			return delegate.connect(handler);
+		}
+
+		@Override
+		public Mono<Void> connect() {
+			return delegate.connect();
+		}
+
+		@Override
+		public Mono<Void> closeGracefully() {
+			return delegate.closeGracefully();
+		}
+
+		@Override
+		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+			return delegate.sendMessage(message);
+		}
+
+		@Override
+		public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
+			return delegate.unmarshalFrom(data, typeRef);
+		}
+
 	}
 
 	void startContainer() {
@@ -80,7 +111,10 @@ class HttpClientSseClientTransportTests {
 	@BeforeEach
 	void setUp() {
 		startContainer();
-		transport = new TestHttpClientSseClientTransport(host);
+		HttpClientSseClientTransportProvider transportProvider = new HttpClientSseClientTransportProvider(host);
+		transportProvider.setSessionFactory(
+				(transport) -> new McpClientSession(Duration.ofSeconds(5), transport, Map.of(), Map.of()));
+		transport = new TestHttpClientSseClientTransport(transportProvider.getSession().getTransport());
 		transport.connect(Function.identity()).block();
 	}
 
@@ -197,13 +231,16 @@ class HttpClientSseClientTransportTests {
 	@Test
 	void testRetryBehavior() {
 		// Create a client that simulates connection failures
-		HttpClientSseClientTransport failingTransport = new HttpClientSseClientTransport("http://non-existent-host");
-
+		HttpClientSseClientTransportProvider failingTransportProvider = new HttpClientSseClientTransportProvider(
+				"http://non-existent-host");
+		failingTransportProvider.setSessionFactory(
+				(transport) -> new McpClientSession(Duration.ofSeconds(5), transport, Map.of(), Map.of()));
+		failingTransportProvider.getSession();
 		// Verify that the transport attempts to reconnect
 		StepVerifier.create(Mono.delay(Duration.ofSeconds(2))).expectNextCount(1).verifyComplete();
 
 		// Clean up
-		failingTransport.closeGracefully().block();
+		failingTransportProvider.closeGracefully().block();
 	}
 
 	@Test

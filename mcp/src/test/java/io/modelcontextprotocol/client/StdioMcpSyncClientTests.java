@@ -10,8 +10,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.modelcontextprotocol.client.transport.ServerParameters;
-import io.modelcontextprotocol.client.transport.StdioClientTransport;
+import io.modelcontextprotocol.client.transport.StdioClientTransportProvider;
 import io.modelcontextprotocol.spec.McpClientTransport;
+import io.modelcontextprotocol.spec.McpClientTransportProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import reactor.core.publisher.Sinks;
@@ -20,8 +21,6 @@ import reactor.test.StepVerifier;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Tests for the {@link McpSyncClient} with {@link StdioClientTransport}.
- *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
  */
@@ -29,12 +28,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 
 	@Override
-	protected McpClientTransport createMcpTransport() {
+	protected McpClientTransportProvider createMcpClientTransportProvider() {
 		ServerParameters stdioParams = ServerParameters.builder("npx")
 			.args("-y", "@modelcontextprotocol/server-everything", "dir")
 			.build();
 
-		return new StdioClientTransport(stdioParams);
+		return new StdioClientTransportProvider(stdioParams);
 	}
 
 	@Test
@@ -42,16 +41,18 @@ class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 		CountDownLatch latch = new CountDownLatch(1);
 		AtomicReference<String> receivedError = new AtomicReference<>();
 
-		McpClientTransport transport = createMcpTransport();
+		McpClientTransportProvider transportProvider = createMcpClientTransportProvider();
+		McpClientTransport transport = transportProvider.getSession().getTransport();
 		StepVerifier.create(transport.connect(msg -> msg)).verifyComplete();
 
-		((StdioClientTransport) transport).setStdErrorHandler(error -> {
+		((StdioClientTransportProvider) transportProvider).setStdErrorHandler(error -> {
 			receivedError.set(error);
 			latch.countDown();
 		});
 
 		String errorMessage = "Test error";
-		((StdioClientTransport) transport).getErrorSink().emitNext(errorMessage, Sinks.EmitFailureHandler.FAIL_FAST);
+		((StdioClientTransportProvider) transportProvider).getErrorSink()
+			.emitNext(errorMessage, Sinks.EmitFailureHandler.FAIL_FAST);
 
 		assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
 
