@@ -11,14 +11,13 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.ClientMcpTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
@@ -38,7 +37,7 @@ import reactor.core.scheduler.Schedulers;
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
  */
-public class StdioClientTransport implements ClientMcpTransport {
+public class StdioClientTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(StdioClientTransport.class);
 
@@ -353,14 +352,15 @@ public class StdioClientTransport implements ClientMcpTransport {
 
 			// Give a short time for any pending messages to be processed
 			return Mono.delay(Duration.ofMillis(100));
-		})).then(Mono.fromFuture(() -> {
+		})).then(Mono.defer(() -> {
 			logger.debug("Sending TERM to process");
 			if (this.process != null) {
 				this.process.destroy();
-				return process.onExit();
+				return Mono.fromFuture(process.onExit());
 			}
 			else {
-				return CompletableFuture.failedFuture(new RuntimeException("Process not started"));
+				logger.warn("Process not started");
+				return Mono.empty();
 			}
 		})).doOnNext(process -> {
 			if (process.exitValue() != 0) {

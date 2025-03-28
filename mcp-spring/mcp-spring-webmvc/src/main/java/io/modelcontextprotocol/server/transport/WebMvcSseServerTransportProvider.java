@@ -6,18 +6,21 @@ package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.ServerMcpTransport;
+import io.modelcontextprotocol.spec.McpServerTransport;
+import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import org.springframework.http.HttpStatus;
@@ -60,12 +63,12 @@ import org.springframework.web.servlet.function.ServerResponse.SseBuilder;
  *
  * @author Christian Tzolov
  * @author Alexandros Pappas
- * @see ServerMcpTransport
+ * @see McpServerTransportProvider
  * @see RouterFunction
  */
-public class WebMvcSseServerTransport implements ServerMcpTransport {
+public class WebMvcSseServerTransportProvider implements McpServerTransportProvider {
 
-	private static final Logger logger = LoggerFactory.getLogger(WebMvcSseServerTransport.class);
+	private static final Logger logger = LoggerFactory.getLogger(WebMvcSseServerTransportProvider.class);
 
 	/**
 	 * Event type for JSON-RPC messages sent through the SSE connection.
@@ -90,10 +93,12 @@ public class WebMvcSseServerTransport implements ServerMcpTransport {
 
 	private final RouterFunction<ServerResponse> routerFunction;
 
+	private McpServerSession.Factory sessionFactory;
+
 	/**
 	 * Map of active client sessions, keyed by session ID.
 	 */
-	private final ConcurrentHashMap<String, ClientSession> sessions = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<String, McpServerSession> sessions = new ConcurrentHashMap<>();
 
 	/**
 	 * Flag indicating if the transport is shutting down.
@@ -101,20 +106,16 @@ public class WebMvcSseServerTransport implements ServerMcpTransport {
 	private volatile boolean isClosing = false;
 
 	/**
-	 * The function to process incoming JSON-RPC messages and produce responses.
-	 */
-	private Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> connectHandler;
-
-	/**
-	 * Constructs a new WebMvcSseServerTransport instance.
+	 * Constructs a new WebMvcSseServerTransportProvider instance.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 * of messages.
 	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
 	 * messages via HTTP POST. This endpoint will be communicated to clients through the
 	 * SSE connection's initial endpoint event.
-	 * @throws IllegalArgumentException if either objectMapper or messageEndpoint is null
+	 * @param sseEndpoint The endpoint URI where clients establish their SSE connections.
+	 * @throws IllegalArgumentException if any parameter is null
 	 */
-	public WebMvcSseServerTransport(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
+	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
@@ -129,7 +130,8 @@ public class WebMvcSseServerTransport implements ServerMcpTransport {
 	}
 
 	/**
-	 * Constructs a new WebMvcSseServerTransport instance with the default SSE endpoint.
+	 * Constructs a new WebMvcSseServerTransportProvider instance with the default SSE
+	 * endpoint.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 * of messages.
 	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
@@ -137,60 +139,72 @@ public class WebMvcSseServerTransport implements ServerMcpTransport {
 	 * SSE connection's initial endpoint event.
 	 * @throws IllegalArgumentException if either objectMapper or messageEndpoint is null
 	 */
-	public WebMvcSseServerTransport(ObjectMapper objectMapper, String messageEndpoint) {
+	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint) {
 		this(objectMapper, messageEndpoint, DEFAULT_SSE_ENDPOINT);
 	}
 
-	/**
-	 * Sets up the message handler for this transport. In the WebMVC SSE implementation,
-	 * this method only stores the handler for later use, as connections are initiated by
-	 * clients rather than the server.
-	 * @param connectionHandler The function to process incoming JSON-RPC messages and
-	 * produce responses
-	 * @return An empty Mono since the server doesn't initiate connections
-	 */
 	@Override
-	public Mono<Void> connect(
-			Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> connectionHandler) {
-		this.connectHandler = connectionHandler;
-		// Server-side transport doesn't initiate connections
-		return Mono.empty();
+	public void setSessionFactory(McpServerSession.Factory sessionFactory) {
+		this.sessionFactory = sessionFactory;
 	}
 
 	/**
-	 * Broadcasts a message to all connected clients through their SSE connections. The
-	 * message is serialized to JSON and sent as an SSE event with type "message". If any
-	 * errors occur during sending to a particular client, they are logged but don't
+	 * Broadcasts a notification to all connected clients through their SSE connections.
+	 * The message is serialized to JSON and sent as an SSE event with type "message". If
+	 * any errors occur during sending to a particular client, they are logged but don't
 	 * prevent sending to other clients.
-	 * @param message The JSON-RPC message to broadcast to all connected clients
+	 * @param method The method name for the notification
+	 * @param params The parameters for the notification
 	 * @return A Mono that completes when the broadcast attempt is finished
 	 */
 	@Override
-	public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
-		return Mono.fromRunnable(() -> {
-			if (sessions.isEmpty()) {
-				logger.debug("No active sessions to broadcast message to");
-				return;
-			}
+	public Mono<Void> notifyClients(String method, Map<String, Object> params) {
+		if (sessions.isEmpty()) {
+			logger.debug("No active sessions to broadcast message to");
+			return Mono.empty();
+		}
 
-			try {
-				String jsonText = objectMapper.writeValueAsString(message);
-				logger.debug("Attempting to broadcast message to {} active sessions", sessions.size());
+		logger.debug("Attempting to broadcast message to {} active sessions", sessions.size());
 
-				sessions.values().forEach(session -> {
-					try {
-						session.sseBuilder.id(session.id).event(MESSAGE_EVENT_TYPE).data(jsonText);
-					}
-					catch (Exception e) {
-						logger.error("Failed to send message to session {}: {}", session.id, e.getMessage());
-						session.sseBuilder.error(e);
-					}
-				});
-			}
-			catch (IOException e) {
-				logger.error("Failed to serialize message: {}", e.getMessage());
-			}
-		});
+		return Flux.fromIterable(sessions.values())
+			.flatMap(session -> session.sendNotification(method, params)
+				.doOnError(
+						e -> logger.error("Failed to send message to session {}: {}", session.getId(), e.getMessage()))
+				.onErrorComplete())
+			.then();
+	}
+
+	/**
+	 * Initiates a graceful shutdown of the transport. This method:
+	 * <ul>
+	 * <li>Sets the closing flag to prevent new connections</li>
+	 * <li>Closes all active SSE connections</li>
+	 * <li>Removes all session records</li>
+	 * </ul>
+	 * @return A Mono that completes when all cleanup operations are finished
+	 */
+	@Override
+	public Mono<Void> closeGracefully() {
+		return Flux.fromIterable(sessions.values()).doFirst(() -> {
+			this.isClosing = true;
+			logger.debug("Initiating graceful shutdown with {} active sessions", sessions.size());
+		})
+			.flatMap(McpServerSession::closeGracefully)
+			.then()
+			.doOnSuccess(v -> logger.debug("Graceful shutdown completed"));
+	}
+
+	/**
+	 * Returns the RouterFunction that defines the HTTP endpoints for this transport. The
+	 * router function handles two endpoints:
+	 * <ul>
+	 * <li>GET /sse - For establishing SSE connections</li>
+	 * <li>POST [messageEndpoint] - For receiving JSON-RPC messages from clients</li>
+	 * </ul>
+	 * @return The configured RouterFunction for handling HTTP requests
+	 */
+	public RouterFunction<ServerResponse> getRouterFunction() {
+		return this.routerFunction;
 	}
 
 	/**
@@ -198,7 +212,7 @@ public class WebMvcSseServerTransport implements ServerMcpTransport {
 	 * establishing an SSE connection. This method:
 	 * <ul>
 	 * <li>Generates a unique session ID</li>
-	 * <li>Creates a new ClientSession with an SSE builder</li>
+	 * <li>Creates a new session with a WebMvcMcpSessionTransport</li>
 	 * <li>Sends an initial endpoint event to inform the client where to send
 	 * messages</li>
 	 * <li>Maintains the session in the sessions map</li>
@@ -227,14 +241,17 @@ public class WebMvcSseServerTransport implements ServerMcpTransport {
 					sessions.remove(sessionId);
 				});
 
-				ClientSession session = new ClientSession(sessionId, sseBuilder);
+				WebMvcMcpSessionTransport sessionTransport = new WebMvcMcpSessionTransport(sessionId, sseBuilder);
+				McpServerSession session = sessionFactory.create(sessionTransport);
 				this.sessions.put(sessionId, session);
 
 				try {
-					session.sseBuilder.id(session.id).event(ENDPOINT_EVENT_TYPE).data(messageEndpoint);
+					sseBuilder.id(sessionId)
+						.event(ENDPOINT_EVENT_TYPE)
+						.data(messageEndpoint + "?sessionId=" + sessionId);
 				}
 				catch (Exception e) {
-					logger.error("Failed to poll event from session queue: {}", e.getMessage());
+					logger.error("Failed to send initial endpoint event: {}", e.getMessage());
 					sseBuilder.error(e);
 				}
 			}, Duration.ZERO);
@@ -250,7 +267,7 @@ public class WebMvcSseServerTransport implements ServerMcpTransport {
 	 * Handles incoming JSON-RPC messages from clients. This method:
 	 * <ul>
 	 * <li>Deserializes the request body into a JSON-RPC message</li>
-	 * <li>Processes the message through the configured connect handler</li>
+	 * <li>Processes the message through the session's handle method</li>
 	 * <li>Returns appropriate HTTP responses based on the processing result</li>
 	 * </ul>
 	 * @param request The incoming server request containing the JSON-RPC message
@@ -262,14 +279,23 @@ public class WebMvcSseServerTransport implements ServerMcpTransport {
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
+		if (!request.param("sessionId").isPresent()) {
+			return ServerResponse.badRequest().body(new McpError("Session ID missing in message endpoint"));
+		}
+
+		String sessionId = request.param("sessionId").get();
+		McpServerSession session = sessions.get(sessionId);
+
+		if (session == null) {
+			return ServerResponse.status(HttpStatus.NOT_FOUND).body(new McpError("Session not found: " + sessionId));
+		}
+
 		try {
 			String body = request.body(String.class);
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
 
-			// Convert the message to a Mono, apply the handler, and block for the
-			// response
-			@SuppressWarnings("unused")
-			McpSchema.JSONRPCMessage response = Mono.just(message).transform(connectHandler).block();
+			// Process the message through the session's handle method
+			session.handle(message).block(); // Block for WebMVC compatibility
 
 			return ServerResponse.ok().build();
 		}
@@ -284,99 +310,90 @@ public class WebMvcSseServerTransport implements ServerMcpTransport {
 	}
 
 	/**
-	 * Represents an active client session with its associated SSE connection. Each
-	 * session maintains:
-	 * <ul>
-	 * <li>A unique session identifier</li>
-	 * <li>An SSE builder for sending server events to the client</li>
-	 * <li>Logging of session lifecycle events</li>
-	 * </ul>
+	 * Implementation of McpServerTransport for WebMVC SSE sessions. This class handles
+	 * the transport-level communication for a specific client session.
 	 */
-	private static class ClientSession {
+	private class WebMvcMcpSessionTransport implements McpServerTransport {
 
-		private final String id;
+		private final String sessionId;
 
 		private final SseBuilder sseBuilder;
 
 		/**
-		 * Creates a new client session with the specified ID and SSE builder.
-		 * @param id The unique identifier for this session
+		 * Creates a new session transport with the specified ID and SSE builder.
+		 * @param sessionId The unique identifier for this session
 		 * @param sseBuilder The SSE builder for sending server events to the client
 		 */
-		ClientSession(String id, SseBuilder sseBuilder) {
-			this.id = id;
+		WebMvcMcpSessionTransport(String sessionId, SseBuilder sseBuilder) {
+			this.sessionId = sessionId;
 			this.sseBuilder = sseBuilder;
-			logger.debug("Session {} initialized with SSE emitter", id);
+			logger.debug("Session transport {} initialized with SSE builder", sessionId);
 		}
 
 		/**
-		 * Closes this session by completing the SSE connection. Any errors during
-		 * completion are logged but do not prevent the session from being marked as
-		 * closed.
+		 * Sends a JSON-RPC message to the client through the SSE connection.
+		 * @param message The JSON-RPC message to send
+		 * @return A Mono that completes when the message has been sent
 		 */
-		void close() {
-			logger.debug("Closing session: {}", id);
+		@Override
+		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+			return Mono.fromRunnable(() -> {
+				try {
+					String jsonText = objectMapper.writeValueAsString(message);
+					sseBuilder.id(sessionId).event(MESSAGE_EVENT_TYPE).data(jsonText);
+					logger.debug("Message sent to session {}", sessionId);
+				}
+				catch (Exception e) {
+					logger.error("Failed to send message to session {}: {}", sessionId, e.getMessage());
+					sseBuilder.error(e);
+				}
+			});
+		}
+
+		/**
+		 * Converts data from one type to another using the configured ObjectMapper.
+		 * @param data The source data object to convert
+		 * @param typeRef The target type reference
+		 * @return The converted object of type T
+		 * @param <T> The target type
+		 */
+		@Override
+		public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
+			return objectMapper.convertValue(data, typeRef);
+		}
+
+		/**
+		 * Initiates a graceful shutdown of the transport.
+		 * @return A Mono that completes when the shutdown is complete
+		 */
+		@Override
+		public Mono<Void> closeGracefully() {
+			return Mono.fromRunnable(() -> {
+				logger.debug("Closing session transport: {}", sessionId);
+				try {
+					sseBuilder.complete();
+					logger.debug("Successfully completed SSE builder for session {}", sessionId);
+				}
+				catch (Exception e) {
+					logger.warn("Failed to complete SSE builder for session {}: {}", sessionId, e.getMessage());
+				}
+			});
+		}
+
+		/**
+		 * Closes the transport immediately.
+		 */
+		@Override
+		public void close() {
 			try {
 				sseBuilder.complete();
-				logger.debug("Successfully completed SSE emitter for session {}", id);
+				logger.debug("Successfully completed SSE builder for session {}", sessionId);
 			}
 			catch (Exception e) {
-				logger.warn("Failed to complete SSE emitter for session {}: {}", id, e.getMessage());
-				// sseBuilder.error(e);
+				logger.warn("Failed to complete SSE builder for session {}: {}", sessionId, e.getMessage());
 			}
 		}
 
-	}
-
-	/**
-	 * Converts data from one type to another using the configured ObjectMapper. This is
-	 * particularly useful for handling complex JSON-RPC parameter types.
-	 * @param data The source data object to convert
-	 * @param typeRef The target type reference
-	 * @return The converted object of type T
-	 * @param <T> The target type
-	 */
-	@Override
-	public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-		return this.objectMapper.convertValue(data, typeRef);
-	}
-
-	/**
-	 * Initiates a graceful shutdown of the transport. This method:
-	 * <ul>
-	 * <li>Sets the closing flag to prevent new connections</li>
-	 * <li>Closes all active SSE connections</li>
-	 * <li>Removes all session records</li>
-	 * </ul>
-	 * @return A Mono that completes when all cleanup operations are finished
-	 */
-	@Override
-	public Mono<Void> closeGracefully() {
-		return Mono.fromRunnable(() -> {
-			this.isClosing = true;
-			logger.debug("Initiating graceful shutdown with {} active sessions", sessions.size());
-
-			sessions.values().forEach(session -> {
-				String sessionId = session.id;
-				session.close();
-				sessions.remove(sessionId);
-			});
-
-			logger.debug("Graceful shutdown completed");
-		});
-	}
-
-	/**
-	 * Returns the RouterFunction that defines the HTTP endpoints for this transport. The
-	 * router function handles two endpoints:
-	 * <ul>
-	 * <li>GET /sse - For establishing SSE connections</li>
-	 * <li>POST [messageEndpoint] - For receiving JSON-RPC messages from clients</li>
-	 * </ul>
-	 * @return The configured RouterFunction for handling HTTP requests
-	 */
-	public RouterFunction<ServerResponse> getRouterFunction() {
-		return this.routerFunction;
 	}
 
 }

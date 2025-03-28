@@ -4,13 +4,18 @@
 
 package io.modelcontextprotocol.client;
 
+import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
-import io.modelcontextprotocol.spec.ClientMcpTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import reactor.core.publisher.Sinks;
+import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -24,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 
 	@Override
-	protected ClientMcpTransport createMcpTransport() {
+	protected McpClientTransport createMcpTransport() {
 		ServerParameters stdioParams = ServerParameters.builder("npx")
 			.args("-y", "@modelcontextprotocol/server-everything", "dir")
 			.build();
@@ -33,23 +38,30 @@ class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 	}
 
 	@Test
-	void customErrorHandlerShouldReceiveErrors() {
+	void customErrorHandlerShouldReceiveErrors() throws InterruptedException {
+		CountDownLatch latch = new CountDownLatch(1);
 		AtomicReference<String> receivedError = new AtomicReference<>();
 
-		((StdioClientTransport) mcpTransport).setStdErrorHandler(error -> receivedError.set(error));
+		McpClientTransport transport = createMcpTransport();
+		StepVerifier.create(transport.connect(msg -> msg)).verifyComplete();
+
+		((StdioClientTransport) transport).setStdErrorHandler(error -> {
+			receivedError.set(error);
+			latch.countDown();
+		});
 
 		String errorMessage = "Test error";
-		((StdioClientTransport) mcpTransport).getErrorSink().tryEmitNext(errorMessage);
+		((StdioClientTransport) transport).getErrorSink().emitNext(errorMessage, Sinks.EmitFailureHandler.FAIL_FAST);
+
+		assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
 
 		assertThat(receivedError.get()).isNotNull().isEqualTo(errorMessage);
+
+		StepVerifier.create(transport.closeGracefully()).expectComplete().verify(Duration.ofSeconds(5));
 	}
 
-	@Override
-	protected void onStart() {
-	}
-
-	@Override
-	protected void onClose() {
+	protected Duration getInitializationTimeout() {
+		return Duration.ofSeconds(6);
 	}
 
 }

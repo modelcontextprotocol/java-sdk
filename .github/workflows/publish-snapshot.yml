@@ -1,4 +1,4 @@
-name: CI/CD build
+name: Publish Snapshot
 
 on:
   push:

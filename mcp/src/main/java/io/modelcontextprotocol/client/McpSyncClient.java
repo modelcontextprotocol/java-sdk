@@ -6,7 +6,7 @@ package io.modelcontextprotocol.client;
 
 import java.time.Duration;
 
-import io.modelcontextprotocol.spec.ClientMcpTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
@@ -66,11 +66,8 @@ public class McpSyncClient implements AutoCloseable {
 	 * Create a new McpSyncClient with the given delegate.
 	 * @param delegate the asynchronous kernel on top of which this synchronous client
 	 * provides a blocking API.
-	 * @deprecated Use {@link McpClient#sync(ClientMcpTransport)} to obtain an instance.
 	 */
-	@Deprecated
-	// TODO make the constructor package private post-deprecation
-	public McpSyncClient(McpAsyncClient delegate) {
+	McpSyncClient(McpAsyncClient delegate) {
 		Assert.notNull(delegate, "The delegate can not be null");
 		this.delegate = delegate;
 	}

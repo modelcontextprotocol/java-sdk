@@ -36,16 +36,16 @@ import reactor.core.scheduler.Schedulers;
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
  */
-public class DefaultMcpSession implements McpSession {
+public class McpClientSession implements McpSession {
 
 	/** Logger for this class */
-	private static final Logger logger = LoggerFactory.getLogger(DefaultMcpSession.class);
+	private static final Logger logger = LoggerFactory.getLogger(McpClientSession.class);
 
 	/** Duration to wait for request responses before timing out */
 	private final Duration requestTimeout;
 
 	/** Transport layer implementation for message exchange */
-	private final McpTransport transport;
+	private final McpClientTransport transport;
 
 	/** Map of pending responses keyed by request ID */
 	private final ConcurrentHashMap<Object, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
@@ -99,13 +99,13 @@ public class DefaultMcpSession implements McpSession {
 	}
 
 	/**
-	 * Creates a new DefaultMcpSession with the specified configuration and handlers.
+	 * Creates a new McpClientSession with the specified configuration and handlers.
 	 * @param requestTimeout Duration to wait for responses
 	 * @param transport Transport implementation for message exchange
 	 * @param requestHandlers Map of method names to request handlers
 	 * @param notificationHandlers Map of method names to notification handlers
 	 */
-	public DefaultMcpSession(Duration requestTimeout, McpTransport transport,
+	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
 			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
 
 		Assert.notNull(requestTimeout, "The requstTimeout can not be null");
@@ -271,8 +271,10 @@ public class DefaultMcpSession implements McpSession {
 	 */
 	@Override
 	public Mono<Void> closeGracefully() {
-		this.connection.dispose();
-		return transport.closeGracefully();
+		return Mono.defer(() -> {
+			this.connection.dispose();
+			return transport.closeGracefully();
+		});
 	}
 
 	/**

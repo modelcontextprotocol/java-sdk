@@ -63,13 +63,6 @@ class WebFluxSseClientTransportTests {
 			super(webClientBuilder, objectMapper);
 		}
 
-		// @Override
-		// public Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>,
-		// Mono<McpSchema.JSONRPCMessage>> handler) {
-		// simulateEndpointEvent("https://localhost:3001");
-		// return super.connect(handler);
-		// }
-
 		@Override
 		protected Flux<ServerSentEvent<String>> eventStream() {
 			return super.eventStream().mergeWith(events.asFlux());
@@ -135,6 +128,33 @@ class WebFluxSseClientTransportTests {
 		assertThatThrownBy(() -> new WebFluxSseClientTransport(webClientBuilder, null))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("ObjectMapper must not be null");
+	}
+
+	@Test
+	void testBuilderPattern() {
+		// Test default builder
+		WebFluxSseClientTransport transport1 = WebFluxSseClientTransport.builder(webClientBuilder).build();
+		assertThatCode(() -> transport1.closeGracefully().block()).doesNotThrowAnyException();
+
+		// Test builder with custom ObjectMapper
+		ObjectMapper customMapper = new ObjectMapper();
+		WebFluxSseClientTransport transport2 = WebFluxSseClientTransport.builder(webClientBuilder)
+			.objectMapper(customMapper)
+			.build();
+		assertThatCode(() -> transport2.closeGracefully().block()).doesNotThrowAnyException();
+
+		// Test builder with custom SSE endpoint
+		WebFluxSseClientTransport transport3 = WebFluxSseClientTransport.builder(webClientBuilder)
+			.sseEndpoint("/custom-sse")
+			.build();
+		assertThatCode(() -> transport3.closeGracefully().block()).doesNotThrowAnyException();
+
+		// Test builder with all custom parameters
+		WebFluxSseClientTransport transport4 = WebFluxSseClientTransport.builder(webClientBuilder)
+			.objectMapper(customMapper)
+			.sseEndpoint("/custom-sse")
+			.build();
+		assertThatCode(() -> transport4.closeGracefully().block()).doesNotThrowAnyException();
 	}
 
 	@Test
@@ -240,7 +260,7 @@ class WebFluxSseClientTransportTests {
 		// Create a WebClient that simulates connection failures
 		WebClient.Builder failingWebClientBuilder = WebClient.builder().baseUrl("http://non-existent-host");
 
-		WebFluxSseClientTransport failingTransport = new WebFluxSseClientTransport(failingWebClientBuilder);
+		WebFluxSseClientTransport failingTransport = WebFluxSseClientTransport.builder(failingWebClientBuilder).build();
 
 		// Verify that the transport attempts to reconnect
 		StepVerifier.create(Mono.delay(Duration.ofSeconds(2))).expectNextCount(1).verifyComplete();

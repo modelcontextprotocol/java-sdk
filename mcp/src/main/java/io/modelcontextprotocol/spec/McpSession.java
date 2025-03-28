@@ -26,14 +26,15 @@ import reactor.core.publisher.Mono;
 public interface McpSession {
 
 	/**
-	 * Sends a request to the model server and expects a response of type T.
+	 * Sends a request to the model counterparty and expects a response of type T.
 	 *
 	 * <p>
 	 * This method handles the request-response pattern where a response is expected from
-	 * the server. The response type is determined by the provided TypeReference.
+	 * the client or server. The response type is determined by the provided
+	 * TypeReference.
 	 * </p>
 	 * @param <T> the type of the expected response
-	 * @param method the name of the method to be called on the server
+	 * @param method the name of the method to be called on the counterparty
 	 * @param requestParams the parameters to be sent with the request
 	 * @param typeRef the TypeReference describing the expected response type
 	 * @return a Mono that will emit the response when received
@@ -41,11 +42,11 @@ public interface McpSession {
 	<T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef);
 
 	/**
-	 * Sends a notification to the model server without parameters.
+	 * Sends a notification to the model client or server without parameters.
 	 *
 	 * <p>
 	 * This method implements the notification pattern where no response is expected from
-	 * the server. It's useful for fire-and-forget scenarios.
+	 * the counterparty. It's useful for fire-and-forget scenarios.
 	 * </p>
 	 * @param method the name of the notification method to be called on the server
 	 * @return a Mono that completes when the notification has been sent
@@ -55,13 +56,13 @@ public interface McpSession {
 	}
 
 	/**
-	 * Sends a notification to the model server with parameters.
+	 * Sends a notification to the model client or server with parameters.
 	 *
 	 * <p>
 	 * Similar to {@link #sendNotification(String)} but allows sending additional
 	 * parameters with the notification.
 	 * </p>
-	 * @param method the name of the notification method to be called on the server
+	 * @param method the name of the notification method to be sent to the counterparty
 	 * @param params a map of parameters to be sent with the notification
 	 * @return a Mono that completes when the notification has been sent
 	 */

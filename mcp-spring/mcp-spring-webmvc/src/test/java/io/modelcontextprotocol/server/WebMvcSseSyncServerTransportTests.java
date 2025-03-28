@@ -5,8 +5,7 @@
 package io.modelcontextprotocol.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.server.transport.WebMvcSseServerTransport;
-import io.modelcontextprotocol.spec.ServerMcpTransport;
+import io.modelcontextprotocol.server.transport.WebMvcSseServerTransportProvider;
 import org.apache.catalina.Context;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.startup.Tomcat;
@@ -29,20 +28,20 @@ class WebMvcSseSyncServerTransportTests extends AbstractMcpSyncServerTests {
 
 	private Tomcat tomcat;
 
-	private WebMvcSseServerTransport transport;
+	private WebMvcSseServerTransportProvider transportProvider;
 
 	@Configuration
 	@EnableWebMvc
 	static class TestConfig {
 
 		@Bean
-		public WebMvcSseServerTransport webMvcSseServerTransport() {
-			return new WebMvcSseServerTransport(new ObjectMapper(), MESSAGE_ENDPOINT);
+		public WebMvcSseServerTransportProvider webMvcSseServerTransportProvider() {
+			return new WebMvcSseServerTransportProvider(new ObjectMapper(), MESSAGE_ENDPOINT);
 		}
 
 		@Bean
-		public RouterFunction<ServerResponse> routerFunction(WebMvcSseServerTransport transport) {
-			return transport.getRouterFunction();
+		public RouterFunction<ServerResponse> routerFunction(WebMvcSseServerTransportProvider transportProvider) {
+			return transportProvider.getRouterFunction();
 		}
 
 	}
@@ -50,7 +49,7 @@ class WebMvcSseSyncServerTransportTests extends AbstractMcpSyncServerTests {
 	private AnnotationConfigWebApplicationContext appContext;
 
 	@Override
-	protected ServerMcpTransport createMcpTransport() {
+	protected WebMvcSseServerTransportProvider createMcpTransportProvider() {
 		// Set up Tomcat first
 		tomcat = new Tomcat();
 		tomcat.setPort(PORT);
@@ -69,7 +68,7 @@ class WebMvcSseSyncServerTransportTests extends AbstractMcpSyncServerTests {
 		appContext.refresh();
 
 		// Get the transport from Spring context
-		transport = appContext.getBean(WebMvcSseServerTransport.class);
+		transportProvider = appContext.getBean(WebMvcSseServerTransportProvider.class);
 
 		// Create DispatcherServlet with our Spring context
 		DispatcherServlet dispatcherServlet = new DispatcherServlet(appContext);
@@ -88,7 +87,7 @@ class WebMvcSseSyncServerTransportTests extends AbstractMcpSyncServerTests {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		return transport;
+		return transportProvider;
 	}
 
 	@Override
@@ -97,8 +96,8 @@ class WebMvcSseSyncServerTransportTests extends AbstractMcpSyncServerTests {
 
 	@Override
 	protected void onClose() {
-		if (transport != null) {
-			transport.closeGracefully().block();
+		if (transportProvider != null) {
+			transportProvider.closeGracefully().block();
 		}
 		if (appContext != null) {
 			appContext.close();

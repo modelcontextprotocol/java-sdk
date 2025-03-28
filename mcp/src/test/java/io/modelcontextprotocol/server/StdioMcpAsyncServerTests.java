@@ -4,8 +4,8 @@
 
 package io.modelcontextprotocol.server;
 
-import io.modelcontextprotocol.server.transport.StdioServerTransport;
-import io.modelcontextprotocol.spec.ServerMcpTransport;
+import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
+import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.junit.jupiter.api.Timeout;
 
 /**
@@ -17,8 +17,8 @@ import org.junit.jupiter.api.Timeout;
 class StdioMcpAsyncServerTests extends AbstractMcpAsyncServerTests {
 
 	@Override
-	protected ServerMcpTransport createMcpTransport() {
-		return new StdioServerTransport();
+	protected McpServerTransportProvider createMcpTransportProvider() {
+		return new StdioServerTransportProvider();
 	}
 
 }
