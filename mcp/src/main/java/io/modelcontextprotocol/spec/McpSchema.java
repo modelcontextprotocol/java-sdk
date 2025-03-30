@@ -756,6 +756,22 @@ public final class McpSchema {
 	public record CallToolResult( // @formatter:off
 		@JsonProperty("content") List<Content> content,
 		@JsonProperty("isError") Boolean isError) {
+
+		/**
+		 * Creates a new instance of {@link CallToolResult} with a string containing the
+		 * tool result.
+		 *
+		 * @param content The content of the tool result. This will be mapped to a one-sized list
+		 * 				  with a {@link TextContent} element.
+		 * @param isError If true, indicates that the tool execution failed and the content contains error information.
+		 *                If false or absent, indicates successful execution.
+		 */
+		public CallToolResult(String content, Boolean isError) {
+			this(
+					List.of(new TextContent(content)),
+					isError
+			);
+		}
 	} // @formatter:on
 
 	// ---------------------------
