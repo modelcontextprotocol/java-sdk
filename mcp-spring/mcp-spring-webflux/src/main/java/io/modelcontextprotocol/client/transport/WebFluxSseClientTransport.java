@@ -82,6 +82,12 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	private static final String SSE_ENDPOINT = "/sse";
 
 	/**
+	 * SSE endpoint path as specified by the MCP transport specification. This endpoint is
+	 * used to establish the SSE connection with the server.
+	 */
+	private final String sseEndpoint;
+
+	/**
 	 * Type reference for parsing SSE events containing string data.
 	 */
 	private static final ParameterizedTypeReference<ServerSentEvent<String>> SSE_TYPE = new ParameterizedTypeReference<>() {
@@ -132,16 +138,32 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 * Constructs a new SseClientTransport with the specified WebClient builder and
 	 * ObjectMapper. Initializes both inbound and outbound message processing pipelines.
 	 * @param webClientBuilder the WebClient.Builder to use for creating the WebClient
+	 * @param sseEndpoint the SSE endpoint path as specified by the MCP transport
+	 * specification. instance
+	 * @param objectMapper the ObjectMapper to use for JSON processing
+	 * @throws IllegalArgumentException if either parameter is null
+	 */
+	public WebFluxSseClientTransport(WebClient.Builder webClientBuilder, String sseEndpoint,
+			ObjectMapper objectMapper) {
+		Assert.notNull(objectMapper, "ObjectMapper must not be null");
+		Assert.notNull(webClientBuilder, "WebClient.Builder must not be null");
+		Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
+		this.sseEndpoint = sseEndpoint;
+		this.objectMapper = objectMapper;
+		this.webClient = webClientBuilder.build();
+	}
+
+	/**
+	 * Constructs a new SseClientTransport with the specified WebClient builder and
+	 * ObjectMapper. Initializes both inbound and outbound message processing pipelines.
+	 * @param webClientBuilder the WebClient.Builder to use for creating the WebClient
 	 * instance
 	 * @param objectMapper the ObjectMapper to use for JSON processing
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
 	public WebFluxSseClientTransport(WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
-		Assert.notNull(objectMapper, "ObjectMapper must not be null");
-		Assert.notNull(webClientBuilder, "WebClient.Builder must not be null");
+		this(webClientBuilder, SSE_ENDPOINT, objectMapper);
 
-		this.objectMapper = objectMapper;
-		this.webClient = webClientBuilder.build();
 	}
 
 	/**
@@ -254,7 +276,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	protected Flux<ServerSentEvent<String>> eventStream() {// @formatter:off
 		return this.webClient
 			.get()
-			.uri(SSE_ENDPOINT)
+			.uri(this.sseEndpoint)
 			.accept(MediaType.TEXT_EVENT_STREAM)
 			.retrieve()
 			.bodyToFlux(SSE_TYPE)
