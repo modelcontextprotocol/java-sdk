@@ -247,6 +247,8 @@ public class McpAsyncServer {
 
 		private final McpSchema.Implementation serverInfo;
 
+		private final String instructions;
+
 		private final CopyOnWriteArrayList<McpServerFeatures.AsyncToolSpecification> tools = new CopyOnWriteArrayList<>();
 
 		private final CopyOnWriteArrayList<McpSchema.ResourceTemplate> resourceTemplates = new CopyOnWriteArrayList<>();
@@ -265,6 +267,7 @@ public class McpAsyncServer {
 			this.objectMapper = objectMapper;
 			this.serverInfo = features.serverInfo();
 			this.serverCapabilities = features.serverCapabilities();
+			this.instructions = features.instructions();
 			this.tools.addAll(features.tools());
 			this.resources.putAll(features.resources());
 			this.resourceTemplates.addAll(features.resourceTemplates());
@@ -351,7 +354,7 @@ public class McpAsyncServer {
 				}
 
 				return Mono.just(new McpSchema.InitializeResult(serverProtocolVersion, this.serverCapabilities,
-						this.serverInfo, null));
+						this.serverInfo, this.instructions));
 			});
 		}
 
