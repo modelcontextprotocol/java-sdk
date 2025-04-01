@@ -46,7 +46,7 @@ public interface McpTransport {
 	 * </p>
 	 */
 	default void close() {
-		this.closeGracefully().subscribe();
+		this.closeGracefully().block();
 	}
 
 	/**
