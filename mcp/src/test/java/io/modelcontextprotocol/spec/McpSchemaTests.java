@@ -524,10 +524,16 @@ public class McpSchemaTests {
 		Map<String, Object> metadata = new HashMap<>();
 		metadata.put("session", "test-session");
 
-		McpSchema.CreateMessageRequest request = new McpSchema.CreateMessageRequest(Collections.singletonList(message),
-				preferences, "You are a helpful assistant",
-				McpSchema.CreateMessageRequest.ContextInclusionStrategy.THIS_SERVER, 0.7, 1000,
-				Arrays.asList("STOP", "END"), metadata);
+		McpSchema.CreateMessageRequest request = McpSchema.CreateMessageRequest.builder()
+			.messages(Collections.singletonList(message))
+			.modelPreferences(preferences)
+			.systemPrompt("You are a helpful assistant")
+			.includeContext(McpSchema.CreateMessageRequest.ContextInclusionStrategy.THIS_SERVER)
+			.temperature(0.7)
+			.maxTokens(1000)
+			.stopSequences(Arrays.asList("STOP", "END"))
+			.metadata(metadata)
+			.build();
 
 		String value = mapper.writeValueAsString(request);
 
@@ -536,15 +542,19 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"messages":[{"role":"user","content":{"type":"text","text":"User message"}}],"modelPreferences":{"hints":[{"name":"gpt-4"}],"costPriority":0.3,"speedPriority":0.7,"intelligencePriority":0.9},"systemPrompt":"You are a helpful assistant","includeContext":"this_server","temperature":0.7,"maxTokens":1000,"stopSequences":["STOP","END"],"metadata":{"session":"test-session"}}"""));
+							{"messages":[{"role":"user","content":{"type":"text","text":"User message"}}],"modelPreferences":{"hints":[{"name":"gpt-4"}],"costPriority":0.3,"speedPriority":0.7,"intelligencePriority":0.9},"systemPrompt":"You are a helpful assistant","includeContext":"thisServer","temperature":0.7,"maxTokens":1000,"stopSequences":["STOP","END"],"metadata":{"session":"test-session"}}"""));
 	}
 
 	@Test
 	void testCreateMessageResult() throws Exception {
 		McpSchema.TextContent content = new McpSchema.TextContent("Assistant response");
 
-		McpSchema.CreateMessageResult result = new McpSchema.CreateMessageResult(McpSchema.Role.ASSISTANT, content,
-				"gpt-4", McpSchema.CreateMessageResult.StopReason.END_TURN);
+		McpSchema.CreateMessageResult result = McpSchema.CreateMessageResult.builder()
+			.role(McpSchema.Role.ASSISTANT)
+			.content(content)
+			.model("gpt-4")
+			.stopReason(McpSchema.CreateMessageResult.StopReason.END_TURN)
+			.build();
 
 		String value = mapper.writeValueAsString(result);
 
@@ -553,7 +563,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"role":"assistant","content":{"type":"text","text":"Assistant response"},"model":"gpt-4","stopReason":"end_turn"}"""));
+							{"role":"assistant","content":{"type":"text","text":"Assistant response"},"model":"gpt-4","stopReason":"endTurn"}"""));
 	}
 
 	// Roots Tests

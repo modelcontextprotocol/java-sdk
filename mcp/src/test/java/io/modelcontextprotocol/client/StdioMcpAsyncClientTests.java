@@ -4,9 +4,11 @@
 
 package io.modelcontextprotocol.client;
 
+import java.time.Duration;
+
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
-import io.modelcontextprotocol.spec.ClientMcpTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import org.junit.jupiter.api.Timeout;
 
 /**
@@ -19,11 +21,23 @@ import org.junit.jupiter.api.Timeout;
 class StdioMcpAsyncClientTests extends AbstractMcpAsyncClientTests {
 
 	@Override
-	protected ClientMcpTransport createMcpTransport() {
-		ServerParameters stdioParams = ServerParameters.builder("npx")
-			.args("-y", "@modelcontextprotocol/server-everything", "dir")
-			.build();
+	protected McpClientTransport createMcpTransport() {
+		ServerParameters stdioParams;
+		if (System.getProperty("os.name").toLowerCase().contains("win")) {
+			stdioParams = ServerParameters.builder("cmd.exe")
+				.args("/c", "npx.cmd", "-y", "@modelcontextprotocol/server-everything", "dir")
+				.build();
+		}
+		else {
+			stdioParams = ServerParameters.builder("npx")
+				.args("-y", "@modelcontextprotocol/server-everything", "dir")
+				.build();
+		}
 		return new StdioClientTransport(stdioParams);
+	}
+
+	protected Duration getInitializationTimeout() {
+		return Duration.ofSeconds(6);
 	}
 
 }

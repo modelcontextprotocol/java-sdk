@@ -66,28 +66,11 @@ public class McpSyncServer {
 	}
 
 	/**
-	 * Retrieves the list of all roots provided by the client.
-	 * @return The list of roots
-	 */
-	public McpSchema.ListRootsResult listRoots() {
-		return this.listRoots(null);
-	}
-
-	/**
-	 * Retrieves a paginated list of roots provided by the server.
-	 * @param cursor Optional pagination cursor from a previous list request
-	 * @return The list of roots
-	 */
-	public McpSchema.ListRootsResult listRoots(String cursor) {
-		return this.asyncServer.listRoots(cursor).block();
-	}
-
-	/**
 	 * Add a new tool handler.
 	 * @param toolHandler The tool handler to add
 	 */
-	public void addTool(McpServerFeatures.SyncToolRegistration toolHandler) {
-		this.asyncServer.addTool(McpServerFeatures.AsyncToolRegistration.fromSync(toolHandler)).block();
+	public void addTool(McpServerFeatures.SyncToolSpecification toolHandler) {
+		this.asyncServer.addTool(McpServerFeatures.AsyncToolSpecification.fromSync(toolHandler)).block();
 	}
 
 	/**
@@ -102,8 +85,8 @@ public class McpSyncServer {
 	 * Add a new resource handler.
 	 * @param resourceHandler The resource handler to add
 	 */
-	public void addResource(McpServerFeatures.SyncResourceRegistration resourceHandler) {
-		this.asyncServer.addResource(McpServerFeatures.AsyncResourceRegistration.fromSync(resourceHandler)).block();
+	public void addResource(McpServerFeatures.SyncResourceSpecification resourceHandler) {
+		this.asyncServer.addResource(McpServerFeatures.AsyncResourceSpecification.fromSync(resourceHandler)).block();
 	}
 
 	/**
@@ -116,10 +99,10 @@ public class McpSyncServer {
 
 	/**
 	 * Add a new prompt handler.
-	 * @param promptRegistration The prompt registration to add
+	 * @param promptSpecification The prompt specification to add
 	 */
-	public void addPrompt(McpServerFeatures.SyncPromptRegistration promptRegistration) {
-		this.asyncServer.addPrompt(McpServerFeatures.AsyncPromptRegistration.fromSync(promptRegistration)).block();
+	public void addPrompt(McpServerFeatures.SyncPromptSpecification promptSpecification) {
+		this.asyncServer.addPrompt(McpServerFeatures.AsyncPromptSpecification.fromSync(promptSpecification)).block();
 	}
 
 	/**
@@ -151,22 +134,6 @@ public class McpSyncServer {
 	 */
 	public McpSchema.Implementation getServerInfo() {
 		return this.asyncServer.getServerInfo();
-	}
-
-	/**
-	 * Get the client capabilities that define the supported features and functionality.
-	 * @return The client capabilities
-	 */
-	public ClientCapabilities getClientCapabilities() {
-		return this.asyncServer.getClientCapabilities();
-	}
-
-	/**
-	 * Get the client implementation information.
-	 * @return The client implementation details
-	 */
-	public McpSchema.Implementation getClientInfo() {
-		return this.asyncServer.getClientInfo();
 	}
 
 	/**
@@ -211,35 +178,6 @@ public class McpSyncServer {
 	 */
 	public McpAsyncServer getAsyncServer() {
 		return this.asyncServer;
-	}
-
-	/**
-	 * Create a new message using the sampling capabilities of the client. The Model
-	 * Context Protocol (MCP) provides a standardized way for servers to request LLM
-	 * sampling ("completions" or "generations") from language models via clients.
-	 *
-	 * <p>
-	 * This flow allows clients to maintain control over model access, selection, and
-	 * permissions while enabling servers to leverage AI capabilities—with no server API
-	 * keys necessary. Servers can request text or image-based interactions and optionally
-	 * include context from MCP servers in their prompts.
-	 *
-	 * <p>
-	 * Unlike its async counterpart, this method blocks until the message creation is
-	 * complete, making it easier to use in synchronous code paths.
-	 * @param createMessageRequest The request to create a new message
-	 * @return The result of the message creation
-	 * @throws McpError if the client has not been initialized or does not support
-	 * sampling capabilities
-	 * @throws McpError if the client does not support the createMessage method
-	 * @see McpSchema.CreateMessageRequest
-	 * @see McpSchema.CreateMessageResult
-	 * @see <a href=
-	 * "https://spec.modelcontextprotocol.io/specification/client/sampling/">Sampling
-	 * Specification</a>
-	 */
-	public McpSchema.CreateMessageResult createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
-		return this.asyncServer.createMessage(createMessageRequest).block();
 	}
 
 }

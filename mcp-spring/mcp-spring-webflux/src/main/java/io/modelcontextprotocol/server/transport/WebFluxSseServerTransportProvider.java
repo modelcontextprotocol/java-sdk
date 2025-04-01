@@ -1,23 +1,23 @@
 package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
-import java.time.Duration;
-import java.util.List;
-import java.util.UUID;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.ServerMcpTransport;
+import io.modelcontextprotocol.spec.McpServerSession;
+import io.modelcontextprotocol.spec.McpServerTransport;
+import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.Exceptions;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.Sinks;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -36,8 +36,9 @@ import org.springframework.web.reactive.function.server.ServerResponse;
  * <p>
  * Key features:
  * <ul>
- * <li>Implements the {@link ServerMcpTransport} interface for MCP server transport
- * functionality</li>
+ * <li>Implements the {@link McpServerTransportProvider} interface that allows managing
+ * {@link McpServerSession} instances and enabling their communication with the
+ * {@link McpServerTransport} abstraction.</li>
  * <li>Uses WebFlux for non-blocking request handling and SSE support</li>
  * <li>Maintains client sessions for reliable message delivery</li>
  * <li>Supports graceful shutdown with session cleanup</li>
@@ -53,17 +54,18 @@ import org.springframework.web.reactive.function.server.ServerResponse;
  *
  * <p>
  * This implementation is thread-safe and can handle multiple concurrent client
- * connections. It uses {@link ConcurrentHashMap} for session management and Reactor's
- * {@link Sinks} for thread-safe message broadcasting.
+ * connections. It uses {@link ConcurrentHashMap} for session management and Project
+ * Reactor's non-blocking APIs for message processing and delivery.
  *
  * @author Christian Tzolov
  * @author Alexandros Pappas
- * @see ServerMcpTransport
+ * @author Dariusz Jędrzejczyk
+ * @see McpServerTransport
  * @see ServerSentEvent
  */
-public class WebFluxSseServerTransport implements ServerMcpTransport {
+public class WebFluxSseServerTransportProvider implements McpServerTransportProvider {
 
-	private static final Logger logger = LoggerFactory.getLogger(WebFluxSseServerTransport.class);
+	private static final Logger logger = LoggerFactory.getLogger(WebFluxSseServerTransportProvider.class);
 
 	/**
 	 * Event type for JSON-RPC messages sent through the SSE connection.
@@ -88,20 +90,20 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 
 	private final RouterFunction<?> routerFunction;
 
+	private McpServerSession.Factory sessionFactory;
+
 	/**
 	 * Map of active client sessions, keyed by session ID.
 	 */
-	private final ConcurrentHashMap<String, ClientSession> sessions = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<String, McpServerSession> sessions = new ConcurrentHashMap<>();
 
 	/**
 	 * Flag indicating if the transport is shutting down.
 	 */
 	private volatile boolean isClosing = false;
 
-	private Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> connectHandler;
-
 	/**
-	 * Constructs a new WebFlux SSE server transport instance.
+	 * Constructs a new WebFlux SSE server transport provider instance.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 * of MCP messages. Must not be null.
 	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
@@ -109,7 +111,7 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 	 * setup. Must not be null.
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
-	public WebFluxSseServerTransport(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
+	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
@@ -124,8 +126,8 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 	}
 
 	/**
-	 * Constructs a new WebFlux SSE server transport instance with the default SSE
-	 * endpoint.
+	 * Constructs a new WebFlux SSE server transport provider instance with the default
+	 * SSE endpoint.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 * of MCP messages. Must not be null.
 	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
@@ -133,25 +135,13 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 	 * setup. Must not be null.
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
-	public WebFluxSseServerTransport(ObjectMapper objectMapper, String messageEndpoint) {
+	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint) {
 		this(objectMapper, messageEndpoint, DEFAULT_SSE_ENDPOINT);
 	}
 
-	/**
-	 * Configures the message handler for this transport. In the WebFlux SSE
-	 * implementation, this method stores the handler for processing incoming messages but
-	 * doesn't establish any connections since the server accepts connections rather than
-	 * initiating them.
-	 * @param handler A function that processes incoming JSON-RPC messages and returns
-	 * responses. This handler will be called for each message received through the
-	 * message endpoint.
-	 * @return An empty Mono since the server doesn't initiate connections
-	 */
 	@Override
-	public Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
-		this.connectHandler = handler;
-		// Server-side transport doesn't initiate connections
-		return Mono.empty().then();
+	public void setSessionFactory(McpServerSession.Factory sessionFactory) {
+		this.sessionFactory = sessionFactory;
 	}
 
 	/**
@@ -167,66 +157,32 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 	 * <li>Attempts to send the event to all active sessions</li>
 	 * <li>Tracks and reports any delivery failures</li>
 	 * </ul>
-	 * @param message The JSON-RPC message to broadcast
+	 * @param method The JSON-RPC method to send to clients
+	 * @param params The method parameters to send to clients
 	 * @return A Mono that completes when the message has been sent to all sessions, or
 	 * errors if any session fails to receive the message
 	 */
 	@Override
-	public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+	public Mono<Void> notifyClients(String method, Map<String, Object> params) {
 		if (sessions.isEmpty()) {
 			logger.debug("No active sessions to broadcast message to");
 			return Mono.empty();
 		}
 
-		return Mono.<Void>create(sink -> {
-			try {// @formatter:off
-				String jsonText = objectMapper.writeValueAsString(message);
-				ServerSentEvent<Object> event = ServerSentEvent.builder()
-					.event(MESSAGE_EVENT_TYPE)
-					.data(jsonText)
-					.build();
+		logger.debug("Attempting to broadcast message to {} active sessions", sessions.size());
 
-				logger.debug("Attempting to broadcast message to {} active sessions", sessions.size());
-
-				List<String> failedSessions = sessions.values().stream()
-					.filter(session -> session.messageSink.tryEmitNext(event).isFailure())
-					.map(session -> session.id)
-					.toList();
-
-				if (failedSessions.isEmpty()) {
-					logger.debug("Successfully broadcast message to all sessions");
-					sink.success();
-				}
-				else {
-					String error = "Failed to broadcast message to sessions: " + String.join(", ", failedSessions);
-					logger.error(error);
-					sink.error(new RuntimeException(error));
-				} // @formatter:on
-			}
-			catch (IOException e) {
-				logger.error("Failed to serialize message: {}", e.getMessage());
-				sink.error(e);
-			}
-		});
+		return Flux.fromStream(sessions.values().stream())
+			.flatMap(session -> session.sendNotification(method, params)
+				.doOnError(e -> logger.error("Failed to " + "send message to session " + "{}: {}", session.getId(),
+						e.getMessage()))
+				.onErrorComplete())
+			.then();
 	}
 
+	// FIXME: This javadoc makes claims about using isClosing flag but it's not actually
+	// doing that.
 	/**
-	 * Converts data from one type to another using the configured ObjectMapper. This
-	 * method is primarily used for converting between different representations of
-	 * JSON-RPC message data.
-	 * @param <T> The target type to convert to
-	 * @param data The source data to convert
-	 * @param typeRef Type reference describing the target type
-	 * @return The converted data
-	 * @throws IllegalArgumentException if the conversion fails
-	 */
-	@Override
-	public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-		return this.objectMapper.convertValue(data, typeRef);
-	}
-
-	/**
-	 * Initiates a graceful shutdown of the transport. This method ensures all active
+	 * Initiates a graceful shutdown of all the sessions. This method ensures all active
 	 * sessions are properly closed and cleaned up.
 	 *
 	 * <p>
@@ -241,18 +197,10 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 	 */
 	@Override
 	public Mono<Void> closeGracefully() {
-		return Mono.fromRunnable(() -> {
-			isClosing = true;
-			logger.debug("Initiating graceful shutdown with {} active sessions", sessions.size());
-		}).then(Mono.when(sessions.values().stream().map(session -> {
-			String sessionId = session.id;
-			return Mono.fromRunnable(() -> session.close())
-				.then(Mono.delay(Duration.ofMillis(100)))
-				.then(Mono.fromRunnable(() -> sessions.remove(sessionId)));
-		}).toList()))
-			.timeout(Duration.ofSeconds(5))
-			.doOnSuccess(v -> logger.debug("Graceful shutdown completed"))
-			.doOnError(e -> logger.error("Error during graceful shutdown: {}", e.getMessage()));
+		return Flux.fromIterable(sessions.values())
+			.doFirst(() -> logger.debug("Initiating graceful shutdown with {} active sessions", sessions.size()))
+			.flatMap(McpServerSession::closeGracefully)
+			.then();
 	}
 
 	/**
@@ -274,55 +222,31 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 	/**
 	 * Handles new SSE connection requests from clients. Creates a new session for each
 	 * connection and sets up the SSE event stream.
-	 *
-	 * <p>
-	 * The handler performs the following steps:
-	 * <ul>
-	 * <li>Generates a unique session ID</li>
-	 * <li>Creates a new ClientSession instance</li>
-	 * <li>Sends the message endpoint URI as an initial event</li>
-	 * <li>Sets up message forwarding for the session</li>
-	 * <li>Handles connection cleanup on completion or errors</li>
-	 * </ul>
 	 * @param request The incoming server request
-	 * @return A response with the SSE event stream
+	 * @return A Mono which emits a response with the SSE event stream
 	 */
 	private Mono<ServerResponse> handleSseConnection(ServerRequest request) {
 		if (isClosing) {
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
 		}
-		String sessionId = UUID.randomUUID().toString();
-		logger.debug("Creating new SSE connection for session: {}", sessionId);
-		ClientSession session = new ClientSession(sessionId);
-		this.sessions.put(sessionId, session);
 
 		return ServerResponse.ok()
 			.contentType(MediaType.TEXT_EVENT_STREAM)
 			.body(Flux.<ServerSentEvent<?>>create(sink -> {
+				WebFluxMcpSessionTransport sessionTransport = new WebFluxMcpSessionTransport(sink);
+
+				McpServerSession session = sessionFactory.create(sessionTransport);
+				String sessionId = session.getId();
+
+				logger.debug("Created new SSE connection for session: {}", sessionId);
+				sessions.put(sessionId, session);
+
 				// Send initial endpoint event
 				logger.debug("Sending initial endpoint event to session: {}", sessionId);
-				sink.next(ServerSentEvent.builder().event(ENDPOINT_EVENT_TYPE).data(messageEndpoint).build());
-
-				// Subscribe to session messages
-				session.messageSink.asFlux()
-					.doOnSubscribe(s -> logger.debug("Session {} subscribed to message sink", sessionId))
-					.doOnComplete(() -> {
-						logger.debug("Session {} completed", sessionId);
-						sessions.remove(sessionId);
-					})
-					.doOnError(error -> {
-						logger.error("Error in session {}: {}", sessionId, error.getMessage());
-						sessions.remove(sessionId);
-					})
-					.doOnCancel(() -> {
-						logger.debug("Session {} cancelled", sessionId);
-						sessions.remove(sessionId);
-					})
-					.subscribe(event -> {
-						logger.debug("Forwarding event to session {}: {}", sessionId, event);
-						sink.next(event);
-					}, sink::error, sink::complete);
-
+				sink.next(ServerSentEvent.builder()
+					.event(ENDPOINT_EVENT_TYPE)
+					.data(messageEndpoint + "?sessionId=" + sessionId)
+					.build());
 				sink.onCancel(() -> {
 					logger.debug("Session {} cancelled", sessionId);
 					sessions.remove(sessionId);
@@ -343,24 +267,30 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 	 * <li>Handles various error conditions with appropriate error responses</li>
 	 * </ul>
 	 * @param request The incoming server request containing the JSON-RPC message
-	 * @return A response indicating the message processing result
+	 * @return A Mono emitting the response indicating the message processing result
 	 */
 	private Mono<ServerResponse> handleMessage(ServerRequest request) {
 		if (isClosing) {
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
 		}
 
+		if (request.queryParam("sessionId").isEmpty()) {
+			return ServerResponse.badRequest().bodyValue(new McpError("Session ID missing in message endpoint"));
+		}
+
+		McpServerSession session = sessions.get(request.queryParam("sessionId").get());
+
 		return request.bodyToMono(String.class).flatMap(body -> {
 			try {
 				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
-				return Mono.just(message)
-					.transform(this.connectHandler)
-					.flatMap(response -> ServerResponse.ok().build())
-					.onErrorResume(error -> {
-						logger.error("Error processing message: {}", error.getMessage());
-						return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
-							.bodyValue(new McpError(error.getMessage()));
-					});
+				return session.handle(message).flatMap(response -> ServerResponse.ok().build()).onErrorResume(error -> {
+					logger.error("Error processing  message: {}", error.getMessage());
+					// TODO: instead of signalling the error, just respond with 200 OK
+					// - the error is signalled on the SSE connection
+					// return ServerResponse.ok().build();
+					return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+						.bodyValue(new McpError(error.getMessage()));
+				});
 			}
 			catch (IllegalArgumentException | IOException e) {
 				logger.error("Failed to deserialize message: {}", e.getMessage());
@@ -369,40 +299,119 @@ public class WebFluxSseServerTransport implements ServerMcpTransport {
 		});
 	}
 
-	/**
-	 * Represents an active client SSE connection session. Manages the message sink for
-	 * sending events to the client and handles session lifecycle.
-	 *
-	 * <p>
-	 * Each session:
-	 * <ul>
-	 * <li>Has a unique identifier</li>
-	 * <li>Maintains its own message sink for event broadcasting</li>
-	 * <li>Supports clean shutdown through the close method</li>
-	 * </ul>
-	 */
-	private static class ClientSession {
+	private class WebFluxMcpSessionTransport implements McpServerTransport {
 
-		private final String id;
+		private final FluxSink<ServerSentEvent<?>> sink;
 
-		private final Sinks.Many<ServerSentEvent<?>> messageSink;
-
-		ClientSession(String id) {
-			this.id = id;
-			logger.debug("Creating new session: {}", id);
-			this.messageSink = Sinks.many().replay().latest();
-			logger.debug("Session {} initialized with replay sink", id);
+		public WebFluxMcpSessionTransport(FluxSink<ServerSentEvent<?>> sink) {
+			this.sink = sink;
 		}
 
-		void close() {
-			logger.debug("Closing session: {}", id);
-			Sinks.EmitResult result = messageSink.tryEmitComplete();
-			if (result.isFailure()) {
-				logger.warn("Failed to complete message sink for session {}: {}", id, result);
-			}
-			else {
-				logger.debug("Successfully completed message sink for session {}", id);
-			}
+		@Override
+		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+			return Mono.fromSupplier(() -> {
+				try {
+					return objectMapper.writeValueAsString(message);
+				}
+				catch (IOException e) {
+					throw Exceptions.propagate(e);
+				}
+			}).doOnNext(jsonText -> {
+				ServerSentEvent<Object> event = ServerSentEvent.builder()
+					.event(MESSAGE_EVENT_TYPE)
+					.data(jsonText)
+					.build();
+				sink.next(event);
+			}).doOnError(e -> {
+				// TODO log with sessionid
+				Throwable exception = Exceptions.unwrap(e);
+				sink.error(exception);
+			}).then();
+		}
+
+		@Override
+		public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
+			return objectMapper.convertValue(data, typeRef);
+		}
+
+		@Override
+		public Mono<Void> closeGracefully() {
+			return Mono.fromRunnable(sink::complete);
+		}
+
+		@Override
+		public void close() {
+			sink.complete();
+		}
+
+	}
+
+	public static Builder builder() {
+		return new Builder();
+	}
+
+	/**
+	 * Builder for creating instances of {@link WebFluxSseServerTransportProvider}.
+	 * <p>
+	 * This builder provides a fluent API for configuring and creating instances of
+	 * WebFluxSseServerTransportProvider with custom settings.
+	 */
+	public static class Builder {
+
+		private ObjectMapper objectMapper;
+
+		private String messageEndpoint;
+
+		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
+
+		/**
+		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
+		 * messages.
+		 * @param objectMapper The ObjectMapper instance. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if objectMapper is null
+		 */
+		public Builder objectMapper(ObjectMapper objectMapper) {
+			Assert.notNull(objectMapper, "ObjectMapper must not be null");
+			this.objectMapper = objectMapper;
+			return this;
+		}
+
+		/**
+		 * Sets the endpoint URI where clients should send their JSON-RPC messages.
+		 * @param messageEndpoint The message endpoint URI. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if messageEndpoint is null
+		 */
+		public Builder messageEndpoint(String messageEndpoint) {
+			Assert.notNull(messageEndpoint, "Message endpoint must not be null");
+			this.messageEndpoint = messageEndpoint;
+			return this;
+		}
+
+		/**
+		 * Sets the SSE endpoint path.
+		 * @param sseEndpoint The SSE endpoint path. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if sseEndpoint is null
+		 */
+		public Builder sseEndpoint(String sseEndpoint) {
+			Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
+			this.sseEndpoint = sseEndpoint;
+			return this;
+		}
+
+		/**
+		 * Builds a new instance of {@link WebFluxSseServerTransportProvider} with the
+		 * configured settings.
+		 * @return A new WebFluxSseServerTransportProvider instance
+		 * @throws IllegalStateException if required parameters are not set
+		 */
+		public WebFluxSseServerTransportProvider build() {
+			Assert.notNull(objectMapper, "ObjectMapper must be set");
+			Assert.notNull(messageEndpoint, "Message endpoint must be set");
+
+			return new WebFluxSseServerTransportProvider(objectMapper, messageEndpoint, sseEndpoint);
 		}
 
 	}

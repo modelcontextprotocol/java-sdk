@@ -4,8 +4,6 @@
 
 package io.modelcontextprotocol.spec;
 
-import java.util.function.Function;
-
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import reactor.core.publisher.Mono;
@@ -40,16 +38,6 @@ import reactor.core.publisher.Mono;
 public interface McpTransport {
 
 	/**
-	 * Initializes and starts the transport connection.
-	 *
-	 * <p>
-	 * This method should be called before any message exchange can occur. It sets up the
-	 * necessary resources and establishes the connection to the server.
-	 * </p>
-	 */
-	Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler);
-
-	/**
 	 * Closes the transport connection and releases any associated resources.
 	 *
 	 * <p>
@@ -69,7 +57,7 @@ public interface McpTransport {
 	Mono<Void> closeGracefully();
 
 	/**
-	 * Sends a message to the server asynchronously.
+	 * Sends a message to the peer asynchronously.
 	 *
 	 * <p>
 	 * This method handles the transmission of messages to the server in an asynchronous

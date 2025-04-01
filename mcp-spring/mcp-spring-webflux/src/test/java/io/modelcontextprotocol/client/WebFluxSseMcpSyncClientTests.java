@@ -4,8 +4,10 @@
 
 package io.modelcontextprotocol.client;
 
+import java.time.Duration;
+
 import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
-import io.modelcontextprotocol.spec.ClientMcpTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import org.junit.jupiter.api.Timeout;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -30,8 +32,8 @@ class WebFluxSseMcpSyncClientTests extends AbstractMcpSyncClientTests {
 		.waitingFor(Wait.forHttp("/").forStatusCode(404));
 
 	@Override
-	protected ClientMcpTransport createMcpTransport() {
-		return new WebFluxSseClientTransport(WebClient.builder().baseUrl(host));
+	protected McpClientTransport createMcpTransport() {
+		return WebFluxSseClientTransport.builder(WebClient.builder().baseUrl(host)).build();
 	}
 
 	@Override
@@ -44,6 +46,10 @@ class WebFluxSseMcpSyncClientTests extends AbstractMcpSyncClientTests {
 	@Override
 	protected void onClose() {
 		container.stop();
+	}
+
+	protected Duration getInitializationTimeout() {
+		return Duration.ofSeconds(1);
 	}
 
 }
