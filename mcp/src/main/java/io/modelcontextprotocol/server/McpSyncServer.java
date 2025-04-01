@@ -171,13 +171,6 @@ public class McpSyncServer {
 	}
 
 	/**
-	 * Close the server immediately.
-	 */
-	public void close() {
-		this.asyncServer.close();
-	}
-
-	/**
 	 * Get the underlying async server instance.
 	 * @return The wrapped async server
 	 */

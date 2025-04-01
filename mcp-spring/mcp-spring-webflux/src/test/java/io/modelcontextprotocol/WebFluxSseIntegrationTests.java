@@ -121,7 +121,7 @@ class WebFluxSseIntegrationTests {
 					.hasMessage("Client must be configured with sampling capabilities");
 			}
 		}
-		server.close();
+		server.closeGracefully().block();
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -189,7 +189,7 @@ class WebFluxSseIntegrationTests {
 				assertThat(result.stopReason()).isEqualTo(CreateMessageResult.StopReason.STOP_SEQUENCE);
 			});
 		}
-		mcpServer.closeGracefully().block();
+		mcpServer.closeGracefully();
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -267,7 +267,7 @@ class WebFluxSseIntegrationTests {
 			});
 		}
 
-		mcpServer.closeGracefully().block();
+		mcpServer.closeGracefully();
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -326,7 +326,7 @@ class WebFluxSseIntegrationTests {
 
 		}
 
-		mcpServer.closeGracefully().block();
+		mcpServer.closeGracefully();
 	}
 
 	// ---------------------------------------
@@ -376,7 +376,7 @@ class WebFluxSseIntegrationTests {
 			});
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -410,7 +410,7 @@ class WebFluxSseIntegrationTests {
 			}
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -437,7 +437,7 @@ class WebFluxSseIntegrationTests {
 			});
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -471,7 +471,7 @@ class WebFluxSseIntegrationTests {
 			});
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -502,7 +502,7 @@ class WebFluxSseIntegrationTests {
 			});
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	// ---------------------------------------
@@ -554,7 +554,7 @@ class WebFluxSseIntegrationTests {
 			assertThat(response).isEqualTo(callResponse);
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -626,7 +626,7 @@ class WebFluxSseIntegrationTests {
 			});
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -642,7 +642,7 @@ class WebFluxSseIntegrationTests {
 			assertThat(initResult).isNotNull();
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	// ---------------------------------------
@@ -750,7 +750,7 @@ class WebFluxSseIntegrationTests {
 				assertThat(notificationMap.get("Another error message").data()).isEqualTo("Another error message");
 			});
 		}
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	// ---------------------------------------
@@ -799,7 +799,7 @@ class WebFluxSseIntegrationTests {
 			assertThat(samplingRequest.get().ref().type()).isEqualTo("ref/prompt");
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 }

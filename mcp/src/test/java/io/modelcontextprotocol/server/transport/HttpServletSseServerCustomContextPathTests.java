@@ -84,7 +84,7 @@ class HttpServletSseServerCustomContextPathTests {
 
 			assertThat(client.initialize()).isNotNull();
 		}
-		server.close();
+		server.closeGracefully().block();
 	}
 
 }

@@ -23,7 +23,7 @@ import reactor.core.publisher.Mono;
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
  */
-public interface McpSession {
+public interface McpSession extends AsyncCloseable {
 
 	/**
 	 * Sends a request to the model counterparty and expects a response of type T.
@@ -72,11 +72,7 @@ public interface McpSession {
 	 * Closes the session and releases any associated resources asynchronously.
 	 * @return a {@link Mono<Void>} that completes when the session has been closed.
 	 */
+	@Override
 	Mono<Void> closeGracefully();
-
-	/**
-	 * Closes the session and releases any associated resources.
-	 */
-	void close();
 
 }

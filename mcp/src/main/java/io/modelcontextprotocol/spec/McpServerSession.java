@@ -272,11 +272,6 @@ public class McpServerSession implements McpSession {
 		return this.transport.closeGracefully();
 	}
 
-	@Override
-	public void close() {
-		this.transport.close();
-	}
-
 	/**
 	 * Request handler for the initialization request.
 	 */

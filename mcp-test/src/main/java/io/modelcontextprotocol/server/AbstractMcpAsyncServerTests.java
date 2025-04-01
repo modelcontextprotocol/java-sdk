@@ -87,7 +87,7 @@ public abstract class AbstractMcpAsyncServerTests {
 	void testImmediateClose() {
 		var mcpAsyncServer = McpServer.async(createMcpTransportProvider()).serverInfo("test-server", "1.0.0").build();
 
-		assertThatCode(() -> mcpAsyncServer.close()).doesNotThrowAnyException();
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block()).doesNotThrowAnyException();
 	}
 
 	// ---------------------------------------

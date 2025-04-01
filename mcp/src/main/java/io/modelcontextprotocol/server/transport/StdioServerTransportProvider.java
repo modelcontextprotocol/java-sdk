@@ -173,12 +173,6 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 			});
 		}
 
-		@Override
-		public void close() {
-			isClosing.set(true);
-			logger.debug("Session transport closed");
-		}
-
 		private void initProcessing() {
 			handleIncomingMessages();
 			startInboundProcessing();
@@ -239,7 +233,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 					finally {
 						isClosing.set(true);
 						if (session != null) {
-							session.close();
+							session.closeGracefully().block();
 						}
 						inboundSink.tryEmitComplete();
 					}

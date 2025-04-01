@@ -132,7 +132,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 					.hasMessage("Client must be configured with sampling capabilities");
 			}
 		}
-		server.close();
+		server.closeGracefully().block();
 	}
 
 	@Test
@@ -193,7 +193,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 			assertThat(response).isNotNull();
 			assertThat(response).isEqualTo(callResponse);
 		}
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@Test
@@ -265,7 +265,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 		assertThat(response).isEqualTo(callResponse);
 
 		mcpClient.close();
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@Test
@@ -336,7 +336,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 		}).withMessageContaining("Timeout");
 
 		mcpClient.close();
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	// ---------------------------------------
@@ -382,7 +382,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 				assertThat(rootsRef.get()).containsAll(List.of(roots.get(1), root3));
 			});
 
-			mcpServer.close();
+			mcpServer.closeGracefully();
 		}
 	}
 
@@ -413,7 +413,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 			}
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@Test
@@ -438,7 +438,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 			});
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@Test
@@ -467,7 +467,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 			});
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@Test
@@ -494,7 +494,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 			});
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	// ---------------------------------------
@@ -542,7 +542,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 			assertThat(response).isEqualTo(callResponse);
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@Test
@@ -611,7 +611,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 			});
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@Test
@@ -624,7 +624,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 			assertThat(initResult).isNotNull();
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	// ---------------------------------------
@@ -742,7 +742,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 				assertThat(notificationMap.get("Another error message").data()).isEqualTo("Another error message");
 			});
 		}
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 }
