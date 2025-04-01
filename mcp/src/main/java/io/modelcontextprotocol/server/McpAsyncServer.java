@@ -6,7 +6,6 @@ package io.modelcontextprotocol.server;
 
 import java.time.Duration;
 import java.util.HashMap;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -845,12 +844,13 @@ public class McpAsyncServer {
 			return this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_MESSAGE, params);
 		}
 
-		private McpServerSession.RequestHandler<Void> setLoggerRequestHandler() {
+		private McpServerSession.RequestHandler<Object> setLoggerRequestHandler() {
 			return (exchange, params) -> {
-				this.minLoggingLevel = objectMapper.convertValue(params, new TypeReference<LoggingLevel>() {
-				});
-
-				return Mono.empty();
+				this.minLoggingLevel = objectMapper
+					.convertValue(params, new TypeReference<McpSchema.SetLoggingLevelRequest>() {
+					})
+					.level();
+				return Mono.just(Map.of());
 			};
 		}
 

@@ -1032,6 +1032,10 @@ public final class McpSchema {
 		}
 	}// @formatter:on
 
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record SetLoggingLevelRequest(@JsonProperty("level") LoggingLevel level) {
+	}
+
 	public enum LoggingLevel {// @formatter:off
 		@JsonProperty("debug") DEBUG(0),
 		@JsonProperty("info") INFO(1),
