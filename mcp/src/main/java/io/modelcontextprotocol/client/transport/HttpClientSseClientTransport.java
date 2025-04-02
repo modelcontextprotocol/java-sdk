@@ -133,7 +133,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		this.baseUri = baseUri;
 		this.sseEndpoint = sseEndpoint;
 		this.objectMapper = objectMapper;
-		this.httpClient = clientBuilder.connectTimeout(Duration.ofSeconds(10)).build();
+		this.httpClient = clientBuilder.version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(10)).build();
 		this.sseClient = new FlowSseClient(this.httpClient);
 	}
 
