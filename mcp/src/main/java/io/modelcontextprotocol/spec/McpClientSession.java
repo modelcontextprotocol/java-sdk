@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * Default implementation of the MCP (Model Context Protocol) session that manages
@@ -107,7 +108,7 @@ public class McpClientSession implements McpSession {
 	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
 			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
 
-		Assert.notNull(requestTimeout, "The requstTimeout can not be null");
+		Assert.notNull(requestTimeout, "The requestTimeout can not be null");
 		Assert.notNull(transport, "The transport can not be null");
 		Assert.notNull(requestHandlers, "The requestHandlers can not be null");
 		Assert.notNull(notificationHandlers, "The notificationHandlers can not be null");
@@ -122,33 +123,41 @@ public class McpClientSession implements McpSession {
 		// Observation associated with the individual message - it can be used to
 		// create child Observation and emit it together with the message to the
 		// consumer
-		this.connection = this.transport.connect(mono -> mono.doOnNext(message -> {
+		this.connection = this.transport.connect(mono -> mono.doOnNext((msg) -> handle(msg).subscribe())).subscribe();
+	}
+
+	public Mono<Void> handle(McpSchema.JSONRPCMessage message) {
+		return Mono.defer(() -> {
 			if (message instanceof McpSchema.JSONRPCResponse response) {
 				logger.debug("Received Response: {}", response);
 				var sink = pendingResponses.remove(response.id());
 				if (sink == null) {
-					logger.warn("Unexpected response for unkown id {}", response.id());
+					logger.warn("Unexpected response for unknown id {}", response.id());
 				}
 				else {
 					sink.success(response);
 				}
+				return Mono.empty();
 			}
 			else if (message instanceof McpSchema.JSONRPCRequest request) {
 				logger.debug("Received request: {}", request);
-				handleIncomingRequest(request).subscribe(response -> transport.sendMessage(response).subscribe(),
-						error -> {
-							var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-									null, new McpSchema.JSONRPCResponse.JSONRPCError(
-											McpSchema.ErrorCodes.INTERNAL_ERROR, error.getMessage(), null));
-							transport.sendMessage(errorResponse).subscribe();
-						});
+				return handleIncomingRequest(request).onErrorResume(error -> {
+					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
+							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+									error.getMessage(), null));
+					return this.transport.sendMessage(errorResponse).then(Mono.empty());
+				}).flatMap(this.transport::sendMessage);
 			}
 			else if (message instanceof McpSchema.JSONRPCNotification notification) {
 				logger.debug("Received notification: {}", notification);
-				handleIncomingNotification(notification).subscribe(null,
-						error -> logger.error("Error handling notification: {}", error.getMessage()));
+				return handleIncomingNotification(notification)
+					.doOnError(error -> logger.error("Error handling notification: {}", error.getMessage()));
 			}
-		})).subscribe();
+			else {
+				logger.warn("Received unknown message type: {}", message);
+				return Mono.empty();
+			}
+		});
 	}
 
 	/**
