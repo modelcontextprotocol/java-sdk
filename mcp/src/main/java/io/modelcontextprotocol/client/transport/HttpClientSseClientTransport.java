@@ -343,7 +343,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	}
 
 	/**
-	 * Unmarshals data to the specified type using the configured object mapper.
+	 * Unmarshal data to the specified type using the configured object mapper.
 	 * @param data the data to unmarshal
 	 * @param typeRef the type reference for the target type
 	 * @param <T> the target type
