@@ -82,7 +82,14 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 */
 	public static final String DEFAULT_SSE_ENDPOINT = "/sse";
 
+	public static final String DEFAULT_BASE_PATH = "";
+
 	private final ObjectMapper objectMapper;
+
+	/**
+	 * the project base path
+	 */
+	private final String basePath;
 
 	private final String messageEndpoint;
 
@@ -102,6 +109,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 */
 	private volatile boolean isClosing = false;
 
+
 	/**
 	 * Constructs a new WebFlux SSE server transport provider instance.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
@@ -112,17 +120,33 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
 	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
+		this(objectMapper, DEFAULT_BASE_PATH, messageEndpoint, sseEndpoint);
+	}
+
+
+	/**
+	 * Constructs a new WebFlux SSE server transport provider instance.
+	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
+	 * of MCP messages. Must not be null.
+	 * @param basePath webflux base path
+	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
+	 * messages. This endpoint will be communicated to clients during SSE connection
+	 * setup. Must not be null.
+	 * @throws IllegalArgumentException if either parameter is null
+	 */
+	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String basePath, String messageEndpoint, String sseEndpoint) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
 
 		this.objectMapper = objectMapper;
+		this.basePath = basePath;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
 		this.routerFunction = RouterFunctions.route()
-			.GET(this.sseEndpoint, this::handleSseConnection)
-			.POST(this.messageEndpoint, this::handleMessage)
-			.build();
+				.GET(this.sseEndpoint, this::handleSseConnection)
+				.POST(this.messageEndpoint, this::handleMessage)
+				.build();
 	}
 
 	/**
@@ -245,7 +269,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 				logger.debug("Sending initial endpoint event to session: {}", sessionId);
 				sink.next(ServerSentEvent.builder()
 					.event(ENDPOINT_EVENT_TYPE)
-					.data(messageEndpoint + "?sessionId=" + sessionId)
+					.data(basePath + messageEndpoint + "?sessionId=" + sessionId)
 					.build());
 				sink.onCancel(() -> {
 					logger.debug("Session {} cancelled", sessionId);
@@ -360,6 +384,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 		private ObjectMapper objectMapper;
 
+		private String basePath = DEFAULT_BASE_PATH;
+
 		private String messageEndpoint;
 
 		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
@@ -374,6 +400,18 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		public Builder objectMapper(ObjectMapper objectMapper) {
 			Assert.notNull(objectMapper, "ObjectMapper must not be null");
 			this.objectMapper = objectMapper;
+			return this;
+		}
+
+		/**
+		 * Sets the project basePath as endpoint prefix where clients should send their JSON-RPC messages
+		 * @param basePath the project basePath . Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if basePath is null
+		 */
+		public Builder basePath(String basePath) {
+			Assert.notNull(basePath, "basePath must not be null");
+			this.basePath = basePath;
 			return this;
 		}
 
@@ -411,7 +449,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			Assert.notNull(objectMapper, "ObjectMapper must be set");
 			Assert.notNull(messageEndpoint, "Message endpoint must be set");
 
-			return new WebFluxSseServerTransportProvider(objectMapper, messageEndpoint, sseEndpoint);
+			return new WebFluxSseServerTransportProvider(objectMapper, basePath, messageEndpoint, sseEndpoint);
 		}
 
 	}
