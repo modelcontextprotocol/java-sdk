@@ -91,7 +91,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 
 	private final String sseEndpoint;
 
-	private final String messageBaseUrl;
+	private final String baseUrl;
 
 	private final RouterFunction<ServerResponse> routerFunction;
 
@@ -139,7 +139,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * Constructs a new WebMvcSseServerTransportProvider instance.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 * of messages.
-	 * @param messageBaseUrl The base URL for the message endpoint, used to construct the
+	 * @param baseUrl The base URL for the message endpoint, used to construct the
 	 * full endpoint URL for clients.
 	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
 	 * messages via HTTP POST. This endpoint will be communicated to clients through the
@@ -147,15 +147,15 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * @param sseEndpoint The endpoint URI where clients establish their SSE connections.
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
-	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String messageBaseUrl, String messageEndpoint,
+	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
-		Assert.notNull(messageBaseUrl, "Message base URL must not be null");
+		Assert.notNull(baseUrl, "Message base URL must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
 
 		this.objectMapper = objectMapper;
-		this.messageBaseUrl = messageBaseUrl;
+		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
 		this.routerFunction = RouterFunctions.route()
@@ -269,7 +269,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				try {
 					sseBuilder.id(sessionId)
 						.event(ENDPOINT_EVENT_TYPE)
-						.data(this.messageBaseUrl + this.messageEndpoint + "?sessionId=" + sessionId);
+						.data(this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId);
 				}
 				catch (Exception e) {
 					logger.error("Failed to send initial endpoint event: {}", e.getMessage());
