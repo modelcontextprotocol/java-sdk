@@ -35,12 +35,14 @@ public class McpServerFeatures {
 	 * @param prompts The map of prompt specifications
 	 * @param rootsChangeConsumers The list of consumers that will be notified when the
 	 * roots list changes
+	 * @param instructions The server instructions text
 	 */
 	record Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 			List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
 			List<McpSchema.ResourceTemplate> resourceTemplates,
 			Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
-			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
+			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
+			String instructions) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -52,12 +54,14 @@ public class McpServerFeatures {
 		 * @param prompts The map of prompt specifications
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
+		 * @param instructions The server instructions text
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
 				List<McpSchema.ResourceTemplate> resourceTemplates,
 				Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
-				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
+				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
+				String instructions) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -78,6 +82,7 @@ public class McpServerFeatures {
 			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : List.of();
 			this.prompts = (prompts != null) ? prompts : Map.of();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : List.of();
+			this.instructions = instructions;
 		}
 
 		/**
@@ -113,7 +118,7 @@ public class McpServerFeatures {
 			}
 
 			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources,
-					syncSpec.resourceTemplates(), prompts, rootChangeConsumers);
+					syncSpec.resourceTemplates(), prompts, rootChangeConsumers, syncSpec.instructions());
 		}
 	}
 
@@ -128,13 +133,14 @@ public class McpServerFeatures {
 	 * @param prompts The map of prompt specifications
 	 * @param rootsChangeConsumers The list of consumers that will be notified when the
 	 * roots list changes
+	 * @param instructions The server instructions text
 	 */
 	record Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 			List<McpServerFeatures.SyncToolSpecification> tools,
 			Map<String, McpServerFeatures.SyncResourceSpecification> resources,
 			List<McpSchema.ResourceTemplate> resourceTemplates,
 			Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
-			List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers) {
+			List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers, String instructions) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -146,13 +152,15 @@ public class McpServerFeatures {
 		 * @param prompts The map of prompt specifications
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
+		 * @param instructions The server instructions text
 		 */
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpServerFeatures.SyncToolSpecification> tools,
 				Map<String, McpServerFeatures.SyncResourceSpecification> resources,
 				List<McpSchema.ResourceTemplate> resourceTemplates,
 				Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
-				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers) {
+				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers,
+				String instructions) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -173,6 +181,7 @@ public class McpServerFeatures {
 			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : new ArrayList<>();
 			this.prompts = (prompts != null) ? prompts : new HashMap<>();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : new ArrayList<>();
+			this.instructions = instructions;
 		}
 
 	}

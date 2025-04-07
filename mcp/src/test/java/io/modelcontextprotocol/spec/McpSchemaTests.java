@@ -6,6 +6,7 @@ package io.modelcontextprotocol.spec;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -494,6 +495,25 @@ public class McpSchemaTests {
 	}
 
 	@Test
+	void testCallToolRequestJsonArguments() throws Exception {
+
+		McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("test-tool", """
+				{
+					"name": "test",
+					"value": 42
+				}
+				""");
+
+		String value = mapper.writeValueAsString(request);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"name":"test-tool","arguments":{"name":"test","value":42}}"""));
+	}
+
+	@Test
 	void testCallToolResult() throws Exception {
 		McpSchema.TextContent content = new McpSchema.TextContent("Tool execution result");
 
@@ -506,6 +526,98 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(json("""
 					{"content":[{"type":"text","text":"Tool execution result"}],"isError":false}"""));
+	}
+
+	@Test
+	void testCallToolResultBuilder() throws Exception {
+		McpSchema.CallToolResult result = McpSchema.CallToolResult.builder()
+			.addTextContent("Tool execution result")
+			.isError(false)
+			.build();
+
+		String value = mapper.writeValueAsString(result);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"content":[{"type":"text","text":"Tool execution result"}],"isError":false}"""));
+	}
+
+	@Test
+	void testCallToolResultBuilderWithMultipleContents() throws Exception {
+		McpSchema.TextContent textContent = new McpSchema.TextContent("Text result");
+		McpSchema.ImageContent imageContent = new McpSchema.ImageContent(null, null, "base64data", "image/png");
+
+		McpSchema.CallToolResult result = McpSchema.CallToolResult.builder()
+			.addContent(textContent)
+			.addContent(imageContent)
+			.isError(false)
+			.build();
+
+		String value = mapper.writeValueAsString(result);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"content":[{"type":"text","text":"Text result"},{"type":"image","data":"base64data","mimeType":"image/png"}],"isError":false}"""));
+	}
+
+	@Test
+	void testCallToolResultBuilderWithContentList() throws Exception {
+		McpSchema.TextContent textContent = new McpSchema.TextContent("Text result");
+		McpSchema.ImageContent imageContent = new McpSchema.ImageContent(null, null, "base64data", "image/png");
+		List<McpSchema.Content> contents = Arrays.asList(textContent, imageContent);
+
+		McpSchema.CallToolResult result = McpSchema.CallToolResult.builder().content(contents).isError(true).build();
+
+		String value = mapper.writeValueAsString(result);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"content":[{"type":"text","text":"Text result"},{"type":"image","data":"base64data","mimeType":"image/png"}],"isError":true}"""));
+	}
+
+	@Test
+	void testCallToolResultBuilderWithErrorResult() throws Exception {
+		McpSchema.CallToolResult result = McpSchema.CallToolResult.builder()
+			.addTextContent("Error: Operation failed")
+			.isError(true)
+			.build();
+
+		String value = mapper.writeValueAsString(result);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"content":[{"type":"text","text":"Error: Operation failed"}],"isError":true}"""));
+	}
+
+	@Test
+	void testCallToolResultStringConstructor() throws Exception {
+		// Test the existing string constructor alongside the builder
+		McpSchema.CallToolResult result1 = new McpSchema.CallToolResult("Simple result", false);
+		McpSchema.CallToolResult result2 = McpSchema.CallToolResult.builder()
+			.addTextContent("Simple result")
+			.isError(false)
+			.build();
+
+		String value1 = mapper.writeValueAsString(result1);
+		String value2 = mapper.writeValueAsString(result2);
+
+		// Both should produce the same JSON
+		assertThat(value1).isEqualTo(value2);
+		assertThatJson(value1).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"content":[{"type":"text","text":"Simple result"}],"isError":false}"""));
 	}
 
 	// Sampling Tests

@@ -25,10 +25,8 @@ import io.modelcontextprotocol.spec.McpSchema.Role;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
-import org.apache.catalina.Context;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
-import org.apache.catalina.startup.Tomcat;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,15 +36,12 @@ import reactor.test.StepVerifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.context.support.AnnotationConfigWebApplicationContext;
-import org.springframework.web.servlet.DispatcherServlet;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
-import static org.junit.Assert.assertThat;
 import static org.mockito.Mockito.mock;
 
 public class WebMvcSseIntegrationTests {
@@ -75,55 +70,26 @@ public class WebMvcSseIntegrationTests {
 
 	}
 
-	private Tomcat tomcat;
-
-	private AnnotationConfigWebApplicationContext appContext;
+	private TomcatTestUtil.TomcatServer tomcatServer;
 
 	@BeforeEach
 	public void before() {
 
-		// Set up Tomcat first
-		tomcat = new Tomcat();
-		tomcat.setPort(PORT);
-
-		// Set Tomcat base directory to java.io.tmpdir to avoid permission issues
-		String baseDir = System.getProperty("java.io.tmpdir");
-		tomcat.setBaseDir(baseDir);
-
-		// Use the same directory for document base
-		Context context = tomcat.addContext("", baseDir);
-
-		// Create and configure Spring WebMvc context
-		appContext = new AnnotationConfigWebApplicationContext();
-		appContext.register(TestConfig.class);
-		appContext.setServletContext(context.getServletContext());
-		appContext.refresh();
-
-		// Get the transport from Spring context
-		mcpServerTransportProvider = appContext.getBean(WebMvcSseServerTransportProvider.class);
-
-		// Create DispatcherServlet with our Spring context
-		DispatcherServlet dispatcherServlet = new DispatcherServlet(appContext);
-		// dispatcherServlet.setThrowExceptionIfNoHandlerFound(true);
-
-		// Add servlet to Tomcat and get the wrapper
-		var wrapper = Tomcat.addServlet(context, "dispatcherServlet", dispatcherServlet);
-		wrapper.setLoadOnStartup(1);
-		wrapper.setAsyncSupported(true);
-		context.addServletMappingDecoded("/*", "dispatcherServlet");
+		tomcatServer = new TomcatTestUtil().createTomcatServer("", PORT, TestConfig.class);
 
 		try {
-			// Configure and start the connector with async support
-			var connector = tomcat.getConnector();
-			connector.setAsyncTimeout(3000); // 3 seconds timeout for async requests
-			tomcat.start();
-			assertThat(tomcat.getServer().getState() == LifecycleState.STARTED);
+			tomcatServer.tomcat().start();
+			assertThat(tomcatServer.tomcat().getServer().getState() == LifecycleState.STARTED);
 		}
 		catch (Exception e) {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		this.clientBuilder = McpClient.sync(new HttpClientSseClientTransport("http://localhost:" + PORT));
+		clientBuilder = McpClient.sync(new HttpClientSseClientTransport("http://localhost:" + PORT));
+
+		// Get the transport from Spring context
+		mcpServerTransportProvider = tomcatServer.appContext().getBean(WebMvcSseServerTransportProvider.class);
+
 	}
 
 	@AfterEach
@@ -131,13 +97,13 @@ public class WebMvcSseIntegrationTests {
 		if (mcpServerTransportProvider != null) {
 			mcpServerTransportProvider.closeGracefully().block();
 		}
-		if (appContext != null) {
-			appContext.close();
+		if (tomcatServer.appContext() != null) {
+			tomcatServer.appContext().close();
 		}
-		if (tomcat != null) {
+		if (tomcatServer.tomcat() != null) {
 			try {
-				tomcat.stop();
-				tomcat.destroy();
+				tomcatServer.tomcat().stop();
+				tomcatServer.tomcat().destroy();
 			}
 			catch (LifecycleException e) {
 				throw new RuntimeException("Failed to stop Tomcat", e);

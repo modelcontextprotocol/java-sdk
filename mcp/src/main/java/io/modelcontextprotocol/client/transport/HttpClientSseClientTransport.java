@@ -82,6 +82,9 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 */
 	private final HttpClient httpClient;
 
+	/** HTTP request builder for building requests to send messages to the server */
+	private final HttpRequest.Builder requestBuilder;
+
 	/** JSON object mapper for message serialization/deserialization */
 	protected ObjectMapper objectMapper;
 
@@ -126,15 +129,32 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 */
 	public HttpClientSseClientTransport(HttpClient.Builder clientBuilder, String baseUri, String sseEndpoint,
 			ObjectMapper objectMapper) {
+		this(clientBuilder, HttpRequest.newBuilder(), baseUri, sseEndpoint, objectMapper);
+	}
+
+	/**
+	 * Creates a new transport instance with custom HTTP client builder, object mapper,
+	 * and headers.
+	 * @param clientBuilder the HTTP client builder to use
+	 * @param requestBuilder the HTTP request builder to use
+	 * @param baseUri the base URI of the MCP server
+	 * @param sseEndpoint the SSE endpoint path
+	 * @param objectMapper the object mapper for JSON serialization/deserialization
+	 * @throws IllegalArgumentException if objectMapper, clientBuilder, or headers is null
+	 */
+	public HttpClientSseClientTransport(HttpClient.Builder clientBuilder, HttpRequest.Builder requestBuilder,
+			String baseUri, String sseEndpoint, ObjectMapper objectMapper) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.hasText(baseUri, "baseUri must not be empty");
 		Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
 		Assert.notNull(clientBuilder, "clientBuilder must not be null");
+		Assert.notNull(requestBuilder, "requestBuilder must not be null");
 		this.baseUri = baseUri;
 		this.sseEndpoint = sseEndpoint;
 		this.objectMapper = objectMapper;
 		this.httpClient = clientBuilder.version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(10)).build();
-		this.sseClient = new FlowSseClient(this.httpClient);
+		this.requestBuilder = requestBuilder;
+		this.sseClient = new FlowSseClient(this.httpClient, requestBuilder);
 	}
 
 	/**
@@ -158,6 +178,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		private HttpClient.Builder clientBuilder = HttpClient.newBuilder();
 
 		private ObjectMapper objectMapper = new ObjectMapper();
+
+		private HttpRequest.Builder requestBuilder = HttpRequest.newBuilder();
 
 		/**
 		 * Creates a new builder with the specified base URI.
@@ -191,6 +213,17 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		}
 
 		/**
+		 * Sets the HTTP request builder.
+		 * @param requestBuilder the HTTP request builder
+		 * @return this builder
+		 */
+		public Builder requestBuilder(HttpRequest.Builder requestBuilder) {
+			Assert.notNull(requestBuilder, "requestBuilder must not be null");
+			this.requestBuilder = requestBuilder;
+			return this;
+		}
+
+		/**
 		 * Sets the object mapper for JSON serialization/deserialization.
 		 * @param objectMapper the object mapper
 		 * @return this builder
@@ -206,7 +239,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		 * @return a new transport instance
 		 */
 		public HttpClientSseClientTransport build() {
-			return new HttpClientSseClientTransport(clientBuilder, baseUri, sseEndpoint, objectMapper);
+			return new HttpClientSseClientTransport(clientBuilder, requestBuilder, baseUri, sseEndpoint, objectMapper);
 		}
 
 	}
@@ -301,8 +334,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 
 		try {
 			String jsonText = this.objectMapper.writeValueAsString(message);
-			HttpRequest request = HttpRequest.newBuilder()
-				.uri(URI.create(this.baseUri + endpoint))
+			HttpRequest request = this.requestBuilder.uri(URI.create(this.baseUri + endpoint))
 				.header("Content-Type", "application/json")
 				.POST(HttpRequest.BodyPublishers.ofString(jsonText))
 				.build();
@@ -343,7 +375,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	}
 
 	/**
-	 * Unmarshals data to the specified type using the configured object mapper.
+	 * Unmarshal data to the specified type using the configured object mapper.
 	 * @param data the data to unmarshal
 	 * @param typeRef the type reference for the target type
 	 * @param <T> the target type

@@ -80,8 +80,13 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	/** Event type for endpoint information */
 	public static final String ENDPOINT_EVENT_TYPE = "endpoint";
 
+	public static final String DEFAULT_BASE_URL = "";
+
 	/** JSON object mapper for serialization/deserialization */
 	private final ObjectMapper objectMapper;
+
+	/** Base URL for the server transport */
+	private final String baseUrl;
 
 	/** The endpoint path for handling client messages */
 	private final String messageEndpoint;
@@ -108,7 +113,22 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 */
 	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint,
 			String sseEndpoint) {
+		this(objectMapper, DEFAULT_BASE_URL, messageEndpoint, sseEndpoint);
+	}
+
+	/**
+	 * Creates a new HttpServletSseServerTransportProvider instance with a custom SSE
+	 * endpoint.
+	 * @param objectMapper The JSON object mapper to use for message
+	 * serialization/deserialization
+	 * @param baseUrl The base URL for the server transport
+	 * @param messageEndpoint The endpoint path where clients will send their messages
+	 * @param sseEndpoint The endpoint path where clients will establish SSE connections
+	 */
+	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+			String sseEndpoint) {
 		this.objectMapper = objectMapper;
+		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
 	}
@@ -203,7 +223,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		this.sessions.put(sessionId, session);
 
 		// Send initial endpoint event
-		this.sendEvent(writer, ENDPOINT_EVENT_TYPE, messageEndpoint + "?sessionId=" + sessionId);
+		this.sendEvent(writer, ENDPOINT_EVENT_TYPE, this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId);
 	}
 
 	/**
@@ -449,6 +469,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 
 		private ObjectMapper objectMapper = new ObjectMapper();
 
+		private String baseUrl = DEFAULT_BASE_URL;
+
 		private String messageEndpoint;
 
 		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
@@ -461,6 +483,17 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		public Builder objectMapper(ObjectMapper objectMapper) {
 			Assert.notNull(objectMapper, "ObjectMapper must not be null");
 			this.objectMapper = objectMapper;
+			return this;
+		}
+
+		/**
+		 * Sets the base URL for the server transport.
+		 * @param baseUrl The base URL to use
+		 * @return This builder instance for method chaining
+		 */
+		public Builder baseUrl(String baseUrl) {
+			Assert.notNull(baseUrl, "Base URL must not be null");
+			this.baseUrl = baseUrl;
 			return this;
 		}
 
@@ -502,7 +535,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			if (messageEndpoint == null) {
 				throw new IllegalStateException("MessageEndpoint must be set");
 			}
-			return new HttpServletSseServerTransportProvider(objectMapper, messageEndpoint, sseEndpoint);
+			return new HttpServletSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint);
 		}
 
 	}
