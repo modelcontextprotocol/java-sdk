@@ -12,7 +12,7 @@ import java.util.function.Function;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.MockMcpTransport;
+import io.modelcontextprotocol.MockMcpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
@@ -34,16 +34,16 @@ class McpAsyncClientResponseHandlerTests {
 		.resources(true, true) // Enable both resources and resource templates
 		.build();
 
-	private static MockMcpTransport initializationEnabledTransport() {
+	private static MockMcpClientTransport initializationEnabledTransport() {
 		return initializationEnabledTransport(SERVER_CAPABILITIES, SERVER_INFO);
 	}
 
-	private static MockMcpTransport initializationEnabledTransport(McpSchema.ServerCapabilities mockServerCapabilities,
-			McpSchema.Implementation mockServerInfo) {
+	private static MockMcpClientTransport initializationEnabledTransport(
+			McpSchema.ServerCapabilities mockServerCapabilities, McpSchema.Implementation mockServerInfo) {
 		McpSchema.InitializeResult mockInitResult = new McpSchema.InitializeResult(McpSchema.LATEST_PROTOCOL_VERSION,
 				mockServerCapabilities, mockServerInfo, "Test instructions");
 
-		return new MockMcpTransport((t, message) -> {
+		return new MockMcpClientTransport((t, message) -> {
 			if (message instanceof McpSchema.JSONRPCRequest r && METHOD_INITIALIZE.equals(r.method())) {
 				McpSchema.JSONRPCResponse initResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
 						r.id(), mockInitResult, null);
@@ -59,7 +59,7 @@ class McpAsyncClientResponseHandlerTests {
 			.tools(false)
 			.resources(true, true) // Enable both resources and resource templates
 			.build();
-		MockMcpTransport transport = initializationEnabledTransport(serverCapabilities, serverInfo);
+		MockMcpClientTransport transport = initializationEnabledTransport(serverCapabilities, serverInfo);
 		McpAsyncClient asyncMcpClient = McpClient.async(transport).build();
 
 		// Verify client is not initialized initially
@@ -91,7 +91,7 @@ class McpAsyncClientResponseHandlerTests {
 
 	@Test
 	void testToolsChangeNotificationHandling() throws JsonProcessingException {
-		MockMcpTransport transport = initializationEnabledTransport();
+		MockMcpClientTransport transport = initializationEnabledTransport();
 
 		// Create a list to store received tools for verification
 		List<McpSchema.Tool> receivedTools = new ArrayList<>();
@@ -134,7 +134,7 @@ class McpAsyncClientResponseHandlerTests {
 
 	@Test
 	void testRootsListRequestHandling() {
-		MockMcpTransport transport = initializationEnabledTransport();
+		MockMcpClientTransport transport = initializationEnabledTransport();
 
 		McpAsyncClient asyncMcpClient = McpClient.async(transport)
 			.roots(new Root("file:///test/path", "test-root"))
@@ -162,7 +162,7 @@ class McpAsyncClientResponseHandlerTests {
 
 	@Test
 	void testResourcesChangeNotificationHandling() {
-		MockMcpTransport transport = initializationEnabledTransport();
+		MockMcpClientTransport transport = initializationEnabledTransport();
 
 		// Create a list to store received resources for verification
 		List<McpSchema.Resource> receivedResources = new ArrayList<>();
@@ -208,7 +208,7 @@ class McpAsyncClientResponseHandlerTests {
 
 	@Test
 	void testPromptsChangeNotificationHandling() {
-		MockMcpTransport transport = initializationEnabledTransport();
+		MockMcpClientTransport transport = initializationEnabledTransport();
 
 		// Create a list to store received prompts for verification
 		List<McpSchema.Prompt> receivedPrompts = new ArrayList<>();
@@ -252,7 +252,7 @@ class McpAsyncClientResponseHandlerTests {
 
 	@Test
 	void testSamplingCreateMessageRequestHandling() {
-		MockMcpTransport transport = initializationEnabledTransport();
+		MockMcpClientTransport transport = initializationEnabledTransport();
 
 		// Create a test sampling handler that echoes back the input
 		Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler = request -> {
@@ -306,7 +306,7 @@ class McpAsyncClientResponseHandlerTests {
 
 	@Test
 	void testSamplingCreateMessageRequestHandlingWithoutCapability() {
-		MockMcpTransport transport = initializationEnabledTransport();
+		MockMcpClientTransport transport = initializationEnabledTransport();
 
 		// Create client without sampling capability
 		McpAsyncClient asyncMcpClient = McpClient.async(transport)
@@ -340,7 +340,7 @@ class McpAsyncClientResponseHandlerTests {
 
 	@Test
 	void testSamplingCreateMessageRequestHandlingWithNullHandler() {
-		MockMcpTransport transport = new MockMcpTransport();
+		MockMcpClientTransport transport = new MockMcpClientTransport();
 
 		// Create client with sampling capability but null handler
 		assertThatThrownBy(

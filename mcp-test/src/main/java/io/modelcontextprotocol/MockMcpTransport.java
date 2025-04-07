@@ -15,15 +15,18 @@ import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCNotification;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
-import io.modelcontextprotocol.spec.ServerMcpTransport;
+import io.modelcontextprotocol.spec.McpServerTransport;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 
 /**
- * A mock implementation of the {@link McpClientTransport} and {@link ServerMcpTransport}
+ * A mock implementation of the {@link McpClientTransport} and {@link McpServerTransport}
  * interfaces.
+ *
+ * @deprecated not used. to be removed in the future.
  */
-public class MockMcpTransport implements McpClientTransport, ServerMcpTransport {
+@Deprecated
+public class MockMcpTransport implements McpClientTransport, McpServerTransport {
 
 	private final Sinks.Many<McpSchema.JSONRPCMessage> inbound = Sinks.many().unicast().onBackpressureBuffer();
 

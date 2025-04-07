@@ -26,7 +26,6 @@ import io.modelcontextprotocol.spec.McpSchema.Role;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
-import org.apache.catalina.Context;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
@@ -47,7 +46,9 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 
 	private static final int PORT = 8185;
 
-	private static final String MESSAGE_ENDPOINT = "/mcp/message";
+	private static final String CUSTOM_SSE_ENDPOINT = "/somePath/sse";
+
+	private static final String CUSTOM_MESSAGE_ENDPOINT = "/otherPath/mcp/message";
 
 	private HttpServletSseServerTransportProvider mcpServerTransportProvider;
 
@@ -57,29 +58,15 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 
 	@BeforeEach
 	public void before() {
-		tomcat = new Tomcat();
-		tomcat.setPort(PORT);
-
-		String baseDir = System.getProperty("java.io.tmpdir");
-		tomcat.setBaseDir(baseDir);
-
-		Context context = tomcat.addContext("", baseDir);
-
 		// Create and configure the transport provider
-		mcpServerTransportProvider = new HttpServletSseServerTransportProvider(new ObjectMapper(), MESSAGE_ENDPOINT);
+		mcpServerTransportProvider = HttpServletSseServerTransportProvider.builder()
+			.objectMapper(new ObjectMapper())
+			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
+			.sseEndpoint(CUSTOM_SSE_ENDPOINT)
+			.build();
 
-		// Add transport servlet to Tomcat
-		org.apache.catalina.Wrapper wrapper = context.createWrapper();
-		wrapper.setName("mcpServlet");
-		wrapper.setServlet(mcpServerTransportProvider);
-		wrapper.setLoadOnStartup(1);
-		wrapper.setAsyncSupported(true);
-		context.addChild(wrapper);
-		context.addServletMappingDecoded("/*", "mcpServlet");
-
+		tomcat = TomcatTestUtil.createTomcatServer("", PORT, mcpServerTransportProvider);
 		try {
-			var connector = tomcat.getConnector();
-			connector.setAsyncTimeout(3000);
 			tomcat.start();
 			assertThat(tomcat.getServer().getState() == LifecycleState.STARTED);
 		}
@@ -87,7 +74,9 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		this.clientBuilder = McpClient.sync(new HttpClientSseClientTransport("http://localhost:" + PORT));
+		this.clientBuilder = McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
+			.sseEndpoint(CUSTOM_SSE_ENDPOINT)
+			.build());
 	}
 
 	@AfterEach

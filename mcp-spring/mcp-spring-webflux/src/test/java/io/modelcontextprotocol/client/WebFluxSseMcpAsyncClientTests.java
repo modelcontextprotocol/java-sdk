@@ -33,7 +33,7 @@ class WebFluxSseMcpAsyncClientTests extends AbstractMcpAsyncClientTests {
 
 	@Override
 	protected McpClientTransport createMcpTransport() {
-		return new WebFluxSseClientTransport(WebClient.builder().baseUrl(host));
+		return WebFluxSseClientTransport.builder(WebClient.builder().baseUrl(host)).build();
 	}
 
 	@Override

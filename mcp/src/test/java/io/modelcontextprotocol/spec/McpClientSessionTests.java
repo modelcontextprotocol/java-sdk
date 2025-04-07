@@ -8,7 +8,7 @@ import java.time.Duration;
 import java.util.Map;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import io.modelcontextprotocol.MockMcpTransport;
+import io.modelcontextprotocol.MockMcpClientTransport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,11 +41,11 @@ class McpClientSessionTests {
 
 	private McpClientSession session;
 
-	private MockMcpTransport transport;
+	private MockMcpClientTransport transport;
 
 	@BeforeEach
 	void setUp() {
-		transport = new MockMcpTransport();
+		transport = new MockMcpClientTransport();
 		session = new McpClientSession(TIMEOUT, transport, Map.of(),
 				Map.of(TEST_NOTIFICATION, params -> Mono.fromRunnable(() -> logger.info("Status update: " + params))));
 	}
@@ -61,7 +61,7 @@ class McpClientSessionTests {
 	void testConstructorWithInvalidArguments() {
 		assertThatThrownBy(() -> new McpClientSession(null, transport, Map.of(), Map.of()))
 			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("requstTimeout can not be null");
+			.hasMessageContaining("The requestTimeout can not be null");
 
 		assertThatThrownBy(() -> new McpClientSession(TIMEOUT, null, Map.of(), Map.of()))
 			.isInstanceOf(IllegalArgumentException.class)
@@ -139,7 +139,7 @@ class McpClientSessionTests {
 		String echoMessage = "Hello MCP!";
 		Map<String, McpClientSession.RequestHandler<?>> requestHandlers = Map.of(ECHO_METHOD,
 				params -> Mono.just(params));
-		transport = new MockMcpTransport();
+		transport = new MockMcpClientTransport();
 		session = new McpClientSession(TIMEOUT, transport, requestHandlers, Map.of());
 
 		// Simulate incoming request
@@ -159,7 +159,7 @@ class McpClientSessionTests {
 	void testNotificationHandling() {
 		Sinks.One<Object> receivedParams = Sinks.one();
 
-		transport = new MockMcpTransport();
+		transport = new MockMcpClientTransport();
 		session = new McpClientSession(TIMEOUT, transport, Map.of(),
 				Map.of(TEST_NOTIFICATION, params -> Mono.fromRunnable(() -> receivedParams.tryEmitValue(params))));
 

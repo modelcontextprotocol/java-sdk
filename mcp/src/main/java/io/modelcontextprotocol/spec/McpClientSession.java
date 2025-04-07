@@ -44,7 +44,7 @@ public class McpClientSession implements McpSession {
 	private final Duration requestTimeout;
 
 	/** Transport layer implementation for message exchange */
-	private final McpTransport transport;
+	private final McpClientTransport transport;
 
 	/** Map of pending responses keyed by request ID */
 	private final ConcurrentHashMap<Object, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
@@ -104,10 +104,10 @@ public class McpClientSession implements McpSession {
 	 * @param requestHandlers Map of method names to request handlers
 	 * @param notificationHandlers Map of method names to notification handlers
 	 */
-	public McpClientSession(Duration requestTimeout, McpTransport transport,
+	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
 			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
 
-		Assert.notNull(requestTimeout, "The requstTimeout can not be null");
+		Assert.notNull(requestTimeout, "The requestTimeout can not be null");
 		Assert.notNull(transport, "The transport can not be null");
 		Assert.notNull(requestHandlers, "The requestHandlers can not be null");
 		Assert.notNull(notificationHandlers, "The notificationHandlers can not be null");
@@ -127,7 +127,7 @@ public class McpClientSession implements McpSession {
 				logger.debug("Received Response: {}", response);
 				var sink = pendingResponses.remove(response.id());
 				if (sink == null) {
-					logger.warn("Unexpected response for unkown id {}", response.id());
+					logger.warn("Unexpected response for unknown id {}", response.id());
 				}
 				else {
 					sink.success(response);
