@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol.client.transport;
 
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -25,6 +27,8 @@ import org.springframework.http.codec.ServerSentEvent;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Tests for the {@link HttpClientSseClientTransport} class.
@@ -51,8 +55,8 @@ class HttpClientSseClientTransportTests {
 
 		private Sinks.Many<ServerSentEvent<String>> events = Sinks.many().unicast().onBackpressureBuffer();
 
-		public TestHttpClientSseClientTransport(String baseUri) {
-			super(baseUri);
+		public TestHttpClientSseClientTransport(final String baseUri) {
+			super(HttpClient.newHttpClient(), HttpRequest.newBuilder(), baseUri, "/sse", new ObjectMapper());
 		}
 
 		public int getInboundMessageCount() {
@@ -191,13 +195,14 @@ class HttpClientSseClientTransportTests {
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 
 		// Message count should remain 0 after shutdown
-		assertThat(transport.getInboundMessageCount()).isEqualTo(0);
+		assertThat(transport.getInboundMessageCount()).isZero();
 	}
 
 	@Test
 	void testRetryBehavior() {
 		// Create a client that simulates connection failures
-		HttpClientSseClientTransport failingTransport = new HttpClientSseClientTransport("http://non-existent-host");
+		HttpClientSseClientTransport failingTransport = HttpClientSseClientTransport.builder("http://non-existent-host")
+			.build();
 
 		// Verify that the transport attempts to reconnect
 		StepVerifier.create(Mono.delay(Duration.ofSeconds(2))).expectNextCount(1).verifyComplete();

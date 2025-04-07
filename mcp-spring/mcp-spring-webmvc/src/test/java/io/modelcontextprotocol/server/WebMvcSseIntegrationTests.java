@@ -44,7 +44,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 
-public class WebMvcSseIntegrationTests {
+class WebMvcSseIntegrationTests {
 
 	private static final int PORT = 8183;
 
@@ -79,13 +79,13 @@ public class WebMvcSseIntegrationTests {
 
 		try {
 			tomcatServer.tomcat().start();
-			assertThat(tomcatServer.tomcat().getServer().getState() == LifecycleState.STARTED);
+			assertThat(tomcatServer.tomcat().getServer().getState()).isEqualTo(LifecycleState.STARTED);
 		}
 		catch (Exception e) {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		clientBuilder = McpClient.sync(new HttpClientSseClientTransport("http://localhost:" + PORT));
+		clientBuilder = McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT).build());
 
 		// Get the transport from Spring context
 		mcpServerTransportProvider = tomcatServer.appContext().getBean(WebMvcSseServerTransportProvider.class);
@@ -200,8 +200,7 @@ public class WebMvcSseIntegrationTests {
 
 		CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
 
-		assertThat(response).isNotNull();
-		assertThat(response).isEqualTo(callResponse);
+		assertThat(response).isNotNull().isEqualTo(callResponse);
 
 		mcpClient.close();
 		mcpServer.close();
@@ -410,8 +409,7 @@ public class WebMvcSseIntegrationTests {
 
 		CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
 
-		assertThat(response).isNotNull();
-		assertThat(response).isEqualTo(callResponse);
+		assertThat(response).isNotNull().isEqualTo(callResponse);
 
 		mcpClient.close();
 		mcpServer.close();
