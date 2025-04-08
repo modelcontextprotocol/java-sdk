@@ -217,7 +217,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		/**
 		 * Creates a new builder instance.
 		 */
-		public Builder() {
+		Builder() {
 			// Default constructor
 		}
 
