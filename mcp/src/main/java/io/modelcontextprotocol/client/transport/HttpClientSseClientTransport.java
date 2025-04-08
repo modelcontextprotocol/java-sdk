@@ -157,18 +157,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	@Deprecated(forRemoval = true)
 	public HttpClientSseClientTransport(HttpClient.Builder clientBuilder, HttpRequest.Builder requestBuilder,
 			String baseUri, String sseEndpoint, ObjectMapper objectMapper) {
-		Assert.notNull(objectMapper, "ObjectMapper must not be null");
-		Assert.hasText(baseUri, "baseUri must not be empty");
-		Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
-		Assert.notNull(clientBuilder, "clientBuilder must not be null");
-		Assert.notNull(requestBuilder, "requestBuilder must not be null");
-		this.baseUri = baseUri;
-		this.sseEndpoint = sseEndpoint;
-		this.objectMapper = objectMapper;
-		this.httpClient = clientBuilder.connectTimeout(Duration.ofSeconds(10)).build();
-		this.requestBuilder = requestBuilder;
-
-		this.sseClient = new FlowSseClient(this.httpClient, requestBuilder);
+		this(clientBuilder.connectTimeout(Duration.ofSeconds(10)).build(), requestBuilder, baseUri, sseEndpoint,
+				objectMapper);
 	}
 
 	/**
