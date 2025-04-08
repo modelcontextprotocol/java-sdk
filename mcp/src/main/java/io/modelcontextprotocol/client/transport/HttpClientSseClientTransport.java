@@ -9,9 +9,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -28,6 +25,8 @@ import io.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.MonoSink;
+import reactor.util.retry.Retry;
 
 /**
  * Server-Sent Events (SSE) implementation of the
@@ -90,17 +89,11 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	/** JSON object mapper for message serialization/deserialization */
 	protected ObjectMapper objectMapper;
 
-	/** Flag indicating if the transport is in closing state */
-	private volatile boolean isClosing = false;
-
-	/** Latch for coordinating endpoint discovery */
-	private final CountDownLatch closeLatch = new CountDownLatch(1);
+	/** Enum indicating the transport state */
+	private final AtomicReference<TransportState> state = new AtomicReference<>(TransportState.DISCONNECTED);
 
 	/** Holds the discovered message endpoint URL */
 	private final AtomicReference<String> messageEndpoint = new AtomicReference<>();
-
-	/** Holds the SSE connection future */
-	private final AtomicReference<CompletableFuture<Void>> connectionFuture = new AtomicReference<>();
 
 	/**
 	 * Creates a new transport instance with default HTTP client and object mapper.
@@ -338,48 +331,51 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 */
 	@Override
 	public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
-		CompletableFuture<Void> future = new CompletableFuture<>();
-		connectionFuture.set(future);
+		state.set(TransportState.CONNECTING);
+		return Mono.<Void>create(sink -> subscribeSse(handler, sink))
+			.timeout(Duration.ofSeconds(10))
+			.retryWhen(Retry.backoff(3, Duration.ofSeconds(1)).maxBackoff(Duration.ofSeconds(5)))
+			.doOnError(err -> logger.error("Error during connection", err));
 
-		URI clientUri = Utils.resolveUri(this.baseUri, this.sseEndpoint);
-		sseClient.subscribe(clientUri.toString(), new FlowSseClient.SseEventHandler() {
+	}
+
+	private void subscribeSse(final Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler, MonoSink<Void> sink) {
+      final URI clientUri = Utils.resolveUri(this.baseUri, this.sseEndpoint);
+      sseClient.subscribe(clientUri.toString(), new FlowSseClient.SseEventHandler() {
 			@Override
 			public void onEvent(SseEvent event) {
-				if (isClosing) {
+				if (state.get() == TransportState.CLOSING || state.get() == TransportState.DISCONNECTED) {
 					return;
 				}
 
 				try {
-					if (ENDPOINT_EVENT_TYPE.equals(event.type())) {
-						String endpoint = event.data();
-						messageEndpoint.set(endpoint);
-						closeLatch.countDown();
-						future.complete(null);
-					}
-					else if (MESSAGE_EVENT_TYPE.equals(event.type())) {
-						JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, event.data());
-						handler.apply(Mono.just(message)).subscribe();
-					}
-					else {
-						logger.error("Received unrecognized SSE event type: {}", event.type());
+					switch (event.type()) {
+						case ENDPOINT_EVENT_TYPE -> {
+							messageEndpoint.set(event.data());
+							state.set(TransportState.CONNECTED);
+							sink.success();
+						}
+						case MESSAGE_EVENT_TYPE -> {
+							JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, event.data());
+							handler.apply(Mono.just(message)).subscribe();
+						}
+						default -> logger.error("Received unrecognized SSE event type: {}", event.type());
 					}
 				}
-				catch (IOException e) {
+				catch (Exception e) {
 					logger.error("Error processing SSE event", e);
-					future.completeExceptionally(e);
+					sink.error(new McpError("Error processing SSE event"));
 				}
 			}
 
 			@Override
 			public void onError(Throwable error) {
-				if (!isClosing) {
+				if (state.get() != TransportState.CLOSING) {
 					logger.error("SSE connection error", error);
-					future.completeExceptionally(error);
+					sink.error(error);
 				}
 			}
 		});
-
-		return Mono.fromFuture(future);
 	}
 
 	/**
@@ -394,44 +390,44 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 */
 	@Override
 	public Mono<Void> sendMessage(JSONRPCMessage message) {
-		if (isClosing) {
+		if (state.get() == TransportState.CLOSING || state.get() == TransportState.DISCONNECTED) {
 			return Mono.empty();
 		}
-
-		try {
-			if (!closeLatch.await(10, TimeUnit.SECONDS)) {
-				return Mono.error(new McpError("Failed to wait for the message endpoint"));
+		return Mono.defer(() -> {
+			if (messageEndpoint.get() == null) {
+				return Mono.error(new McpError("No message endpoint available"));
 			}
-		}
-		catch (InterruptedException e) {
-			return Mono.error(new McpError("Failed to wait for the message endpoint"));
-		}
 
-		String endpoint = messageEndpoint.get();
-		if (endpoint == null) {
-			return Mono.error(new McpError("No message endpoint available"));
-		}
+			return serializeMessage(message).flatMap(body -> sendHttpPost(messageEndpoint.get(), body))
+				.doOnNext(this::logIfNotOk)
+				.doOnError(err -> logger.error("Error sending message", err))
+				.then();
 
+		}).retryWhen(Retry.fixedDelay(3, Duration.ofSeconds(3)).filter(err -> messageEndpoint.get() == null));
+	}
+
+	private Mono<String> serializeMessage(final JSONRPCMessage message) {
 		try {
-			String jsonText = this.objectMapper.writeValueAsString(message);
-			URI requestUri = Utils.resolveUri(baseUri, endpoint);
-			HttpRequest request = this.requestBuilder.uri(requestUri)
-				.POST(HttpRequest.BodyPublishers.ofString(jsonText))
-				.build();
-
-			return Mono.fromFuture(
-					httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding()).thenAccept(response -> {
-						if (response.statusCode() != 200 && response.statusCode() != 201 && response.statusCode() != 202
-								&& response.statusCode() != 206) {
-							logger.error("Error sending message: {}", response.statusCode());
-						}
-					}));
+			return Mono.just(objectMapper.writeValueAsString(message));
 		}
 		catch (IOException e) {
-			if (!isClosing) {
-				return Mono.error(new RuntimeException("Failed to serialize message", e));
-			}
-			return Mono.empty();
+			return Mono.error(new McpError("Failed to serialize message"));
+		}
+	}
+
+	private Mono<HttpResponse<Void>> sendHttpPost(final String endpoint, final String body) {
+      final URI requestUri = Utils.resolveUri(baseUri, endpoint);
+		final HttpRequest request = requestBuilder.uri(requestUri)
+			.POST(HttpRequest.BodyPublishers.ofString(body))
+			.build();
+
+		return Mono.fromFuture(httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding()));
+	}
+
+	private void logIfNotOk(final HttpResponse<?> response) {
+		if (response.statusCode() != 200 && response.statusCode() != 201 && response.statusCode() != 202
+				&& response.statusCode() != 206) {
+			logger.error("Error sending message: {}", response.statusCode());
 		}
 	}
 
@@ -445,12 +441,10 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 */
 	@Override
 	public Mono<Void> closeGracefully() {
+		state.set(TransportState.CLOSING);
 		return Mono.fromRunnable(() -> {
-			isClosing = true;
-			CompletableFuture<Void> future = connectionFuture.get();
-			if (future != null && !future.isDone()) {
-				future.cancel(true);
-			}
+			sseClient.close();
+			state.set(TransportState.DISCONNECTED);
 		});
 	}
 
@@ -464,6 +458,21 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	@Override
 	public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
 		return this.objectMapper.convertValue(data, typeRef);
+	}
+
+	/**
+	 * Get the current transport state.
+	 * @return the current transport state
+	 */
+	public TransportState getState() {
+		return state.get();
+	}
+
+	// Enum to manage transport states
+	public enum TransportState {
+
+		DISCONNECTED, CONNECTING, CONNECTED, CLOSING
+
 	}
 
 }
