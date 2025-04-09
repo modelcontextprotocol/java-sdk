@@ -48,9 +48,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 
-public class WebFluxSseIntegrationTests {
+class WebFluxSseIntegrationTests {
 
-	private static final int PORT = 8182;
+	private static final int PORT = TestUtil.findAvailablePort();
 
 	private static final String CUSTOM_SSE_ENDPOINT = "/somePath/sse";
 
@@ -129,7 +129,7 @@ public class WebFluxSseIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
-	void testCreateMessageSuccess(String clientType) throws InterruptedException {
+	void testCreateMessageSuccess(String clientType) {
 
 		// Client
 		var clientBuilder = clientBuilders.get(clientType);
@@ -188,8 +188,7 @@ public class WebFluxSseIntegrationTests {
 
 		CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
 
-		assertThat(response).isNotNull();
-		assertThat(response).isEqualTo(callResponse);
+		assertThat(response).isNotNull().isEqualTo(callResponse);
 
 		mcpClient.close();
 		mcpServer.close();
@@ -417,8 +416,7 @@ public class WebFluxSseIntegrationTests {
 
 		CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
 
-		assertThat(response).isNotNull();
-		assertThat(response).isEqualTo(callResponse);
+		assertThat(response).isNotNull().isEqualTo(callResponse);
 
 		mcpClient.close();
 		mcpServer.close();

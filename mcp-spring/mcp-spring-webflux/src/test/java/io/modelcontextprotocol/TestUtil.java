@@ -1,7 +1,7 @@
 /*
 * Copyright 2025 - 2025 the original author or authors.
 */
-package io.modelcontextprotocol.server;
+package io.modelcontextprotocol;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
