@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpClient;
@@ -30,6 +31,8 @@ import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities.CompletionCapab
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import reactor.netty.DisposableServer;
 import reactor.netty.http.server.HttpServer;
@@ -40,9 +43,8 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
-import static org.assertj.core.api.Assertions.assertWith;
+import static io.modelcontextprotocol.spec.McpSchema.ErrorCodes.INVALID_PARAMS;
+import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 
@@ -797,6 +799,101 @@ class WebFluxSseIntegrationTests {
 			assertThat(samplingRequest.get().argument().name()).isEqualTo("language");
 			assertThat(samplingRequest.get().argument().value()).isEqualTo("py");
 			assertThat(samplingRequest.get().ref().type()).isEqualTo("ref/prompt");
+		}
+
+		mcpServer.close();
+	}
+
+	// ---------------------------------------
+	// Prompt List Tests
+	// ---------------------------------------
+
+	static Stream<Arguments> providePaginationTestParams() {
+		return Stream.of(Arguments.of("httpclient", 0), Arguments.of("httpclient", 1), Arguments.of("httpclient", 21),
+				Arguments.of("webflux", 0), Arguments.of("webflux", 1), Arguments.of("webflux", 21));
+	}
+
+	@ParameterizedTest(name = "{0} ({1}) : {displayName} ")
+	@MethodSource("providePaginationTestParams")
+	void testListPromptSuccess(String clientType, int availablePrompts) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Setup list of prompts
+		List<McpServerFeatures.SyncPromptSpecification> prompts = new ArrayList<>();
+
+		for (int i = 0; i < availablePrompts; i++) {
+			McpSchema.Prompt mockPrompt = new McpSchema.Prompt("test-prompt-" + i, "Test Prompt Description",
+					List.of(new McpSchema.PromptArgument("arg1", "Test argument", true)));
+
+			var promptSpec = new McpServerFeatures.SyncPromptSpecification(mockPrompt, null);
+
+			prompts.add(promptSpec);
+		}
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().prompts(true).build())
+			.prompts(prompts)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Iterate through list
+			var returnedPromptsSum = 0;
+
+			var hasEntries = true;
+			String nextCursor = null;
+
+			while (hasEntries) {
+				var res = mcpClient.listPrompts(nextCursor);
+				returnedPromptsSum += res.prompts().size();
+
+				nextCursor = res.nextCursor();
+
+				if (nextCursor == null) {
+					hasEntries = false;
+				}
+			}
+
+			assertThat(returnedPromptsSum).isEqualTo(availablePrompts);
+
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testListPromptInvalidCursor(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		McpSchema.Prompt mockPrompt = new McpSchema.Prompt("test-prompt", "Test Prompt Description",
+				List.of(new McpSchema.PromptArgument("arg1", "Test argument", true)));
+
+		var promptSpec = new McpServerFeatures.SyncPromptSpecification(mockPrompt, null);
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().prompts(true).build())
+			.prompts(promptSpec)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThatThrownBy(() -> mcpClient.listPrompts("INVALID")).isInstanceOf(McpError.class)
+				.hasMessage("Invalid cursor")
+				.satisfies(exception -> {
+					var error = (McpError) exception;
+					assertThat(error.getJsonRpcError().code()).isEqualTo(INVALID_PARAMS);
+					assertThat(error.getJsonRpcError().message()).isEqualTo("Invalid cursor");
+				});
+
 		}
 
 		mcpServer.close();
