@@ -46,7 +46,7 @@ import static org.mockito.Mockito.mock;
 
 class WebMvcSseIntegrationTests {
 
-	private static final int PORT = 8183;
+	private static final int PORT = TomcatTestUtil.findAvailablePort();
 
 	private static final String MESSAGE_ENDPOINT = "/mcp/message";
 
@@ -75,7 +75,7 @@ class WebMvcSseIntegrationTests {
 	@BeforeEach
 	public void before() {
 
-		tomcatServer = new TomcatTestUtil().createTomcatServer("", PORT, TestConfig.class);
+		tomcatServer = TomcatTestUtil.createTomcatServer("", PORT, TestConfig.class);
 
 		try {
 			tomcatServer.tomcat().start();
@@ -142,7 +142,7 @@ class WebMvcSseIntegrationTests {
 	}
 
 	@Test
-	void testCreateMessageSuccess() throws InterruptedException {
+	void testCreateMessageSuccess() {
 
 		// Client
 
