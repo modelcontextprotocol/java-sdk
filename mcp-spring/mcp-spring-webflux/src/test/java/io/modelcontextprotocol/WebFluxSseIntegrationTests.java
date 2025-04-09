@@ -344,8 +344,8 @@ public class WebFluxSseIntegrationTests {
 		mcpServer.close();
 	}
 
-	// @ParameterizedTest(name = "{0} : {displayName} ")
-	// @ValueSource(strings = { "httpclient", "webflux" })
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
 	void testRootsServerCloseWithActiveSubscription(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -380,7 +380,7 @@ public class WebFluxSseIntegrationTests {
 
 	String emptyJsonSchema = """
 			{
-			"": "http://json-schema.org/draft-07/schema#",
+			"$schema": "http://json-schema.org/draft-07/schema#",
 			"type": "object",
 			"properties": {}
 			}

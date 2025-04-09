@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
+import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -54,7 +55,7 @@ public class McpServerSession implements McpSession {
 
 	private final AtomicInteger state = new AtomicInteger(STATE_UNINITIALIZED);
 
-	private final AtomicReference<LoggingLevel> minLoggingLevel = new AtomicReference<>(LoggingLevel.INFO);
+	private volatile LoggingLevel minLoggingLevel = LoggingLevel.INFO;
 
 	/**
 	 * Creates a new server session with the given parameters and the transport to use.
@@ -87,12 +88,21 @@ public class McpServerSession implements McpSession {
 		return this.id;
 	}
 
-	public LoggingLevel getMinLoggingLevel() {
-		return this.minLoggingLevel.get();
+	/**
+	 * Checks if the logging level bigger or equal to the minimum set logging level.
+	 * @return true if the logging level is enabled, false otherwise
+	 */
+	public boolean isLoingLevelEnabled(LoggingLevel loggingLevel) {
+		return loggingLevel.level() >= this.minLoggingLevel.level();
 	}
 
+	/**
+	 * Set the minimum logging level for this session.
+	 * @param minLoggingLevel the minimum logging level
+	 */
 	public void setMinLoggingLevel(LoggingLevel minLoggingLevel) {
-		this.minLoggingLevel.set(minLoggingLevel);
+		Assert.notNull(minLoggingLevel, "minLoggingLevel can't be null");
+		this.minLoggingLevel = minLoggingLevel;
 	}
 
 	/**
@@ -149,6 +159,10 @@ public class McpServerSession implements McpSession {
 		return this.transport.sendMessage(jsonrpcNotification);
 	}
 
+	// NOTE: This is a workaround for the fact that the {@link #sendNotification(String,
+	// Map)} method doesn't accept types like LoggingMessageNotification
+	// TODO investigate if this method can replace the {@link #sendNotification(String,
+	// Map)} - Breaking change.
 	public Mono<Void> sendNotification(String method, Object params) {
 		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
 				method, this.transport.unmarshalFrom(params, new TypeReference<Map<String, Object>>() {

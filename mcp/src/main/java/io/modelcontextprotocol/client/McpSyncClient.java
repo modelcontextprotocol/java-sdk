@@ -6,7 +6,6 @@ package io.modelcontextprotocol.client;
 
 import java.time.Duration;
 
-import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
@@ -321,6 +320,7 @@ public class McpSyncClient implements AutoCloseable {
 	/**
 	 * Client can set the minimum logging level it wants to receive from the server.
 	 * @param loggingLevel the min logging level
+	 * @return empty response
 	 */
 	public Object setLoggingLevel(McpSchema.LoggingLevel loggingLevel) {
 		return this.delegate.setLoggingLevel(loggingLevel).block();

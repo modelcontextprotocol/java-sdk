@@ -122,7 +122,7 @@ public class McpAsyncServerExchange {
 		}
 
 		return Mono.defer(() -> {
-			if (loggingMessageNotification.level().level() < this.session.getMinLoggingLevel().level()) {
+			if (!this.session.isLoingLevelEnabled(loggingMessageNotification.level())) {
 				return Mono.empty();
 			}
 
@@ -130,6 +130,11 @@ public class McpAsyncServerExchange {
 		});
 	}
 
+	/**
+	 * Set the minimum logging level for the client. Messages below this level will be
+	 * filtered out.
+	 * @param minLoggingLevel The minimum logging level
+	 */
 	public void setMinLoggingLevel(LoggingLevel minLoggingLevel) {
 		Assert.notNull(minLoggingLevel, "minLoggingLevel must not be null");
 		this.session.setMinLoggingLevel(minLoggingLevel);
