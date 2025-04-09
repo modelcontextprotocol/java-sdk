@@ -26,7 +26,6 @@ import io.modelcontextprotocol.spec.McpSchema.Role;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
-import org.apache.catalina.Context;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
@@ -59,14 +58,6 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 
 	@BeforeEach
 	public void before() {
-		tomcat = new Tomcat();
-		tomcat.setPort(PORT);
-
-		String baseDir = System.getProperty("java.io.tmpdir");
-		tomcat.setBaseDir(baseDir);
-
-		Context context = tomcat.addContext("", baseDir);
-
 		// Create and configure the transport provider
 		mcpServerTransportProvider = HttpServletSseServerTransportProvider.builder()
 			.objectMapper(new ObjectMapper())
@@ -74,18 +65,8 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 			.sseEndpoint(CUSTOM_SSE_ENDPOINT)
 			.build();
 
-		// Add transport servlet to Tomcat
-		org.apache.catalina.Wrapper wrapper = context.createWrapper();
-		wrapper.setName("mcpServlet");
-		wrapper.setServlet(mcpServerTransportProvider);
-		wrapper.setLoadOnStartup(1);
-		wrapper.setAsyncSupported(true);
-		context.addChild(wrapper);
-		context.addServletMappingDecoded("/*", "mcpServlet");
-
+		tomcat = TomcatTestUtil.createTomcatServer("", PORT, mcpServerTransportProvider);
 		try {
-			var connector = tomcat.getConnector();
-			connector.setAsyncTimeout(3000);
 			tomcat.start();
 			assertThat(tomcat.getServer().getState() == LifecycleState.STARTED);
 		}
@@ -396,7 +377,7 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
-						.uri("https://github.com/modelcontextprotocol/specification/blob/main/README.md")
+						.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
 						.retrieve()
 						.body(String.class);
 					assertThat(response).isNotBlank();
@@ -433,7 +414,7 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
-						.uri("https://github.com/modelcontextprotocol/specification/blob/main/README.md")
+						.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
 						.retrieve()
 						.body(String.class);
 					assertThat(response).isNotBlank();
@@ -450,7 +431,7 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 			// perform a blocking call to a remote service
 			String response = RestClient.create()
 				.get()
-				.uri("https://github.com/modelcontextprotocol/specification/blob/main/README.md")
+				.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
 				.retrieve()
 				.body(String.class);
 			assertThat(response).isNotBlank();

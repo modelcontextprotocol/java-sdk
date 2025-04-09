@@ -52,8 +52,6 @@ public class WebFluxSseIntegrationTests {
 
 	private static final int PORT = 8182;
 
-	// private static final String MESSAGE_ENDPOINT = "/mcp/message";
-
 	private static final String CUSTOM_SSE_ENDPOINT = "/somePath/sse";
 
 	private static final String CUSTOM_MESSAGE_ENDPOINT = "/otherPath/mcp/message";
@@ -62,7 +60,7 @@ public class WebFluxSseIntegrationTests {
 
 	private WebFluxSseServerTransportProvider mcpServerTransportProvider;
 
-	ConcurrentHashMap<String, McpClient.SyncSpec> clientBulders = new ConcurrentHashMap<>();
+	ConcurrentHashMap<String, McpClient.SyncSpec> clientBuilders = new ConcurrentHashMap<>();
 
 	@BeforeEach
 	public void before() {
@@ -103,7 +101,7 @@ public class WebFluxSseIntegrationTests {
 	@ValueSource(strings = { "httpclient", "webflux" })
 	void testCreateMessageWithoutSamplingCapabilities(String clientType) {
 
-		var clientBuilder = clientBulders.get(clientType);
+		var clientBuilder = clientBuilders.get(clientType);
 
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
 				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
@@ -134,7 +132,7 @@ public class WebFluxSseIntegrationTests {
 	void testCreateMessageSuccess(String clientType) throws InterruptedException {
 
 		// Client
-		var clientBuilder = clientBulders.get(clientType);
+		var clientBuilder = clientBuilders.get(clientType);
 
 		Function<CreateMessageRequest, CreateMessageResult> samplingHandler = request -> {
 			assertThat(request.messages()).hasSize(1);
@@ -203,7 +201,7 @@ public class WebFluxSseIntegrationTests {
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
 	void testRootsSuccess(String clientType) {
-		var clientBuilder = clientBulders.get(clientType);
+		var clientBuilder = clientBuilders.get(clientType);
 
 		List<Root> roots = List.of(new Root("uri1://", "root1"), new Root("uri2://", "root2"));
 
@@ -250,7 +248,7 @@ public class WebFluxSseIntegrationTests {
 	@ValueSource(strings = { "httpclient", "webflux" })
 	void testRootsWithoutCapability(String clientType) {
 
-		var clientBuilder = clientBulders.get(clientType);
+		var clientBuilder = clientBuilders.get(clientType);
 
 		McpServerFeatures.SyncToolSpecification tool = new McpServerFeatures.SyncToolSpecification(
 				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
@@ -284,7 +282,7 @@ public class WebFluxSseIntegrationTests {
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
 	void testRootsNotifciationWithEmptyRootsList(String clientType) {
-		var clientBuilder = clientBulders.get(clientType);
+		var clientBuilder = clientBuilders.get(clientType);
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
@@ -311,7 +309,7 @@ public class WebFluxSseIntegrationTests {
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
 	void testRootsWithMultipleHandlers(String clientType) {
-		var clientBuilder = clientBulders.get(clientType);
+		var clientBuilder = clientBuilders.get(clientType);
 
 		List<Root> roots = List.of(new Root("uri1://", "root1"));
 
@@ -345,7 +343,7 @@ public class WebFluxSseIntegrationTests {
 	@ValueSource(strings = { "httpclient", "webflux" })
 	void testRootsServerCloseWithActiveSubscription(String clientType) {
 
-		var clientBuilder = clientBulders.get(clientType);
+		var clientBuilder = clientBuilders.get(clientType);
 
 		List<Root> roots = List.of(new Root("uri1://", "root1"));
 
@@ -390,7 +388,7 @@ public class WebFluxSseIntegrationTests {
 	@ValueSource(strings = { "httpclient", "webflux" })
 	void testToolCallSuccess(String clientType) {
 
-		var clientBuilder = clientBulders.get(clientType);
+		var clientBuilder = clientBuilders.get(clientType);
 
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
@@ -398,7 +396,7 @@ public class WebFluxSseIntegrationTests {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
-						.uri("https://github.com/modelcontextprotocol/specification/blob/main/README.md")
+						.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
 						.retrieve()
 						.body(String.class);
 					assertThat(response).isNotBlank();
@@ -430,7 +428,7 @@ public class WebFluxSseIntegrationTests {
 	@ValueSource(strings = { "httpclient", "webflux" })
 	void testToolListChangeHandlingSuccess(String clientType) {
 
-		var clientBuilder = clientBulders.get(clientType);
+		var clientBuilder = clientBuilders.get(clientType);
 
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
@@ -438,7 +436,7 @@ public class WebFluxSseIntegrationTests {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
-						.uri("https://github.com/modelcontextprotocol/specification/blob/main/README.md")
+						.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
 						.retrieve()
 						.body(String.class);
 					assertThat(response).isNotBlank();
@@ -455,7 +453,7 @@ public class WebFluxSseIntegrationTests {
 			// perform a blocking call to a remote service
 			String response = RestClient.create()
 				.get()
-				.uri("https://github.com/modelcontextprotocol/specification/blob/main/README.md")
+				.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
 				.retrieve()
 				.body(String.class);
 			assertThat(response).isNotBlank();
@@ -500,7 +498,7 @@ public class WebFluxSseIntegrationTests {
 	@ValueSource(strings = { "httpclient", "webflux" })
 	void testInitialize(String clientType) {
 
-		var clientBuilder = clientBulders.get(clientType);
+		var clientBuilder = clientBuilders.get(clientType);
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider).build();
 

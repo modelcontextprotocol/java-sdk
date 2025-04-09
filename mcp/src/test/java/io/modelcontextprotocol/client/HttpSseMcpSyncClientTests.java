@@ -11,9 +11,6 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 
 /**
- * Tests for the {@link McpSyncClient} with
- * {@link HttpClientSseClientTransportProvider.HttpClientSseClientTransport}.
- *
  * @author Christian Tzolov
  */
 @Timeout(15) // Giving extra time beyond the client timeout
@@ -30,7 +27,7 @@ class HttpSseMcpSyncClientTests extends AbstractMcpSyncClientTests {
 
 	@Override
 	protected McpClientTransportProvider createMcpClientTransportProvider() {
-		return new HttpClientSseClientTransportProvider(host);
+		return HttpClientSseClientTransportProvider.builder(host).build();
 	}
 
 	@Override

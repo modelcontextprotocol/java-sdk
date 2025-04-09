@@ -160,6 +160,8 @@ public interface McpServer {
 
 		private McpSchema.ServerCapabilities serverCapabilities;
 
+		private String instructions;
+
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
 		 * invoked by language models. Tools enable models to interact with external
@@ -225,6 +227,18 @@ public interface McpServer {
 			Assert.hasText(name, "Name must not be null or empty");
 			Assert.hasText(version, "Version must not be null or empty");
 			this.serverInfo = new McpSchema.Implementation(name, version);
+			return this;
+		}
+
+		/**
+		 * Sets the server instructions that will be shared with clients during connection
+		 * initialization. These instructions provide guidance to the client on how to
+		 * interact with this server.
+		 * @param instructions The instructions text. Can be null or empty.
+		 * @return This builder instance for method chaining
+		 */
+		public AsyncSpecification instructions(String instructions) {
+			this.instructions = instructions;
 			return this;
 		}
 
@@ -549,7 +563,7 @@ public interface McpServer {
 		 */
 		public McpAsyncServer build() {
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
-					this.resources, this.resourceTemplates, this.prompts, this.rootsChangeHandlers);
+					this.resources, this.resourceTemplates, this.prompts, this.rootsChangeHandlers, this.instructions);
 			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
 			return new McpAsyncServer(this.transportProvider, mapper, features);
 		}
@@ -571,6 +585,8 @@ public interface McpServer {
 		private McpSchema.Implementation serverInfo = DEFAULT_SERVER_INFO;
 
 		private McpSchema.ServerCapabilities serverCapabilities;
+
+		private String instructions;
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -637,6 +653,18 @@ public interface McpServer {
 			Assert.hasText(name, "Name must not be null or empty");
 			Assert.hasText(version, "Version must not be null or empty");
 			this.serverInfo = new McpSchema.Implementation(name, version);
+			return this;
+		}
+
+		/**
+		 * Sets the server instructions that will be shared with clients during connection
+		 * initialization. These instructions provide guidance to the client on how to
+		 * interact with this server.
+		 * @param instructions The instructions text. Can be null or empty.
+		 * @return This builder instance for method chaining
+		 */
+		public SyncSpecification instructions(String instructions) {
+			this.instructions = instructions;
 			return this;
 		}
 
@@ -960,7 +988,8 @@ public interface McpServer {
 		 */
 		public McpSyncServer build() {
 			McpServerFeatures.Sync syncFeatures = new McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,
-					this.tools, this.resources, this.resourceTemplates, this.prompts, this.rootsChangeHandlers);
+					this.tools, this.resources, this.resourceTemplates, this.prompts, this.rootsChangeHandlers,
+					this.instructions);
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures);
 			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
 			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures);

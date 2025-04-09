@@ -12,11 +12,10 @@ import org.testcontainers.containers.wait.strategy.Wait;
 
 /**
  * Tests for the {@link McpSyncClient} with
- * {@link HttpClientSseClientTransportProvider.HttpClientSseClientTransport}.
  *
  * @author Christian Tzolov
  */
-@Timeout(15) // Giving extra time beyond the client timeout
+@Timeout(15)
 class HttpSseMcpAsyncClientTests extends AbstractMcpAsyncClientTests {
 
 	String host = "http://localhost:3004";
@@ -30,7 +29,7 @@ class HttpSseMcpAsyncClientTests extends AbstractMcpAsyncClientTests {
 
 	@Override
 	protected McpClientTransportProvider createMcpClientTransportProvider() {
-		return new HttpClientSseClientTransportProvider(host);
+		return HttpClientSseClientTransportProvider.builder(host).build();
 	}
 
 	@Override

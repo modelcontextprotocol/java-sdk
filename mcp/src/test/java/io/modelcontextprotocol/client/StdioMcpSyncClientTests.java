@@ -29,10 +29,17 @@ class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 
 	@Override
 	protected McpClientTransportProvider createMcpClientTransportProvider() {
-		ServerParameters stdioParams = ServerParameters.builder("npx")
-			.args("-y", "@modelcontextprotocol/server-everything", "dir")
-			.build();
-
+		ServerParameters stdioParams;
+		if (System.getProperty("os.name").toLowerCase().contains("win")) {
+			stdioParams = ServerParameters.builder("cmd.exe")
+				.args("/c", "npx.cmd", "-y", "@modelcontextprotocol/server-everything", "dir")
+				.build();
+		}
+		else {
+			stdioParams = ServerParameters.builder("npx")
+				.args("-y", "@modelcontextprotocol/server-everything", "dir")
+				.build();
+		}
 		return new StdioClientTransportProvider(stdioParams);
 	}
 

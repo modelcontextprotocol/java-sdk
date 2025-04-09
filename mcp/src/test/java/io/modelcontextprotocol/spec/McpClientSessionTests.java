@@ -61,7 +61,7 @@ class McpClientSessionTests {
 	void testConstructorWithInvalidArguments() {
 		assertThatThrownBy(() -> new McpClientSession(null, transport, Map.of(), Map.of()))
 			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("requestTimeout can not be null");
+			.hasMessageContaining("The requestTimeout can not be null");
 
 		assertThatThrownBy(() -> new McpClientSession(TIMEOUT, null, Map.of(), Map.of()))
 			.isInstanceOf(IllegalArgumentException.class)
