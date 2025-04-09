@@ -322,8 +322,8 @@ public class McpSyncClient implements AutoCloseable {
 	 * Client can set the minimum logging level it wants to receive from the server.
 	 * @param loggingLevel the min logging level
 	 */
-	public void setLoggingLevel(McpSchema.LoggingLevel loggingLevel) {
-		this.delegate.setLoggingLevel(loggingLevel).block();
+	public Object setLoggingLevel(McpSchema.LoggingLevel loggingLevel) {
+		return this.delegate.setLoggingLevel(loggingLevel).block();
 	}
 
 }

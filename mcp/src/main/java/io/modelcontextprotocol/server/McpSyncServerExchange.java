@@ -1,13 +1,20 @@
+/*
+ * Copyright 2024-2024 the original author or authors.
+ */
+
 package io.modelcontextprotocol.server;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
+import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
+import reactor.core.publisher.Mono;
 
 /**
  * Represents a synchronous exchange with a Model Context Protocol (MCP) client. The
  * exchange provides methods to interact with the client and query its capabilities.
  *
  * @author Dariusz Jędrzejczyk
+ * @author Christian Tzolov
  */
 public class McpSyncServerExchange {
 
@@ -73,6 +80,20 @@ public class McpSyncServerExchange {
 	 */
 	public McpSchema.ListRootsResult listRoots(String cursor) {
 		return this.exchange.listRoots(cursor).block();
+	}
+
+	/**
+	 * Send a logging message notification to all connected clients. Messages below the
+	 * current minimum logging level will be filtered out.
+	 * @param loggingMessageNotification The logging message to send
+	 * @return A Mono that completes when the notification has been sent
+	 */
+	public Mono<Void> loggingNotification(LoggingMessageNotification loggingMessageNotification) {
+		return this.exchange.loggingNotification(loggingMessageNotification);
+	}
+
+	void setMinLoggingLevel(LoggingLevel minLoggingLevel) {
+		this.exchange.setMinLoggingLevel(minLoggingLevel);
 	}
 
 }

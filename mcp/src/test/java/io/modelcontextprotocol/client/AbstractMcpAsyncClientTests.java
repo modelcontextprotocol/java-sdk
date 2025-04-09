@@ -454,15 +454,15 @@ public abstract class AbstractMcpAsyncClientTests {
 	@Test
 	void testLoggingLevels() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
-			Mono<Void> testAllLevels = mcpAsyncClient.initialize().then(Mono.defer(() -> {
-				Mono<Void> chain = Mono.empty();
+			Mono<Object> testAllLevels = mcpAsyncClient.initialize().then(Mono.defer(() -> {
+				Mono<Object> chain = Mono.empty();
 				for (McpSchema.LoggingLevel level : McpSchema.LoggingLevel.values()) {
 					chain = chain.then(mcpAsyncClient.setLoggingLevel(level));
 				}
 				return chain;
 			}));
 
-			StepVerifier.create(testAllLevels).verifyComplete();
+			StepVerifier.create(testAllLevels).expectNextCount(1).verifyComplete();
 		});
 	}
 

@@ -4,10 +4,7 @@
 
 package io.modelcontextprotocol.server;
 
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.util.Assert;
 
 /**
@@ -148,14 +145,6 @@ public class McpSyncServer {
 	 */
 	public void notifyPromptsListChanged() {
 		this.asyncServer.notifyPromptsListChanged().block();
-	}
-
-	/**
-	 * Send a logging message notification to all clients.
-	 * @param loggingMessageNotification The logging message notification to send
-	 */
-	public void loggingNotification(LoggingMessageNotification loggingMessageNotification) {
-		this.asyncServer.loggingNotification(loggingMessageNotification).block();
 	}
 
 	/**

@@ -4,6 +4,7 @@
 package io.modelcontextprotocol.server.transport;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -44,7 +45,7 @@ import static org.mockito.Mockito.mock;
 
 public class HttpServletSseServerTransportProviderIntegrationTests {
 
-	private static final int PORT = 8185;
+	private static final int PORT = 8189;
 
 	private static final String CUSTOM_SSE_ENDPOINT = "/somePath/sse";
 
@@ -478,6 +479,121 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 
 		InitializeResult initResult = mcpClient.initialize();
 		assertThat(initResult).isNotNull();
+
+		mcpClient.close();
+		mcpServer.close();
+	}
+
+	// ---------------------------------------
+	// Logging Tests
+	// ---------------------------------------
+	@Test
+	void testLoggingNotification() {
+		// Create a list to store received logging notifications
+		List<McpSchema.LoggingMessageNotification> receivedNotifications = new ArrayList<>();
+
+		// Create server with a tool that sends logging notifications
+		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("logging-test", "Test logging notifications", emptyJsonSchema),
+				(exchange, request) -> {
+
+					// Create and send notifications with different levels
+
+					// This should be filtered out (DEBUG < NOTICE)
+					exchange
+						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+							.level(McpSchema.LoggingLevel.DEBUG)
+							.logger("test-logger")
+							.data("Debug message")
+							.build())
+						.block();
+
+					// This should be sent (NOTICE >= NOTICE)
+					exchange
+						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+							.level(McpSchema.LoggingLevel.NOTICE)
+							.logger("test-logger")
+							.data("Notice message")
+							.build())
+						.block();
+
+					// This should be sent (ERROR > NOTICE)
+					exchange
+						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+							.level(McpSchema.LoggingLevel.ERROR)
+							.logger("test-logger")
+							.data("Error message")
+							.build())
+						.block();
+
+					// This should be filtered out (INFO < NOTICE)
+					exchange
+						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+							.level(McpSchema.LoggingLevel.INFO)
+							.logger("test-logger")
+							.data("Another info message")
+							.build())
+						.block();
+
+					// This should be sent (ERROR >= NOTICE)
+					exchange
+						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+							.level(McpSchema.LoggingLevel.ERROR)
+							.logger("test-logger")
+							.data("Another error message")
+							.build())
+						.block();
+
+					return Mono.just(new CallToolResult("Logging test completed", false));
+				});
+
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().logging().tools(true).build())
+			.tools(tool)
+			.build();
+
+		// Create client with logging notification handler
+		var mcpClient = clientBuilder.loggingConsumer(notification -> {
+			receivedNotifications.add(notification);
+		}).build();
+
+		// Initialize client
+		InitializeResult initResult = mcpClient.initialize();
+		assertThat(initResult).isNotNull();
+
+		// Set minimum logging level to NOTICE
+		mcpClient.setLoggingLevel(McpSchema.LoggingLevel.NOTICE);
+
+		// Call the tool that sends logging notifications
+		CallToolResult result = mcpClient.callTool(new McpSchema.CallToolRequest("logging-test", Map.of()));
+		assertThat(result).isNotNull();
+		assertThat(result.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
+		assertThat(((McpSchema.TextContent) result.content().get(0)).text()).isEqualTo("Logging test completed");
+
+		// Wait for notifications to be processed
+		await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+
+			System.out.println("Received notifications: " + receivedNotifications);
+
+			// Should have received 3 notifications (1 NOTICE and 2 ERROR)
+			assertThat(receivedNotifications).hasSize(3);
+
+			// First notification should be NOTICE level
+			assertThat(receivedNotifications.get(0).level()).isEqualTo(McpSchema.LoggingLevel.NOTICE);
+			assertThat(receivedNotifications.get(0).logger()).isEqualTo("test-logger");
+			assertThat(receivedNotifications.get(0).data()).isEqualTo("Notice message");
+
+			// Second notification should be ERROR level
+			assertThat(receivedNotifications.get(1).level()).isEqualTo(McpSchema.LoggingLevel.ERROR);
+			assertThat(receivedNotifications.get(1).logger()).isEqualTo("test-logger");
+			assertThat(receivedNotifications.get(1).data()).isEqualTo("Error message");
+
+			// Third notification should be ERROR level
+			assertThat(receivedNotifications.get(2).level()).isEqualTo(McpSchema.LoggingLevel.ERROR);
+			assertThat(receivedNotifications.get(2).logger()).isEqualTo("test-logger");
+			assertThat(receivedNotifications.get(2).data()).isEqualTo("Another error message");
+		});
 
 		mcpClient.close();
 		mcpServer.close();

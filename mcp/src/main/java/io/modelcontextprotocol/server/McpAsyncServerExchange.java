@@ -1,9 +1,16 @@
+/*
+ * Copyright 2024-2024 the original author or authors.
+ */
+
 package io.modelcontextprotocol.server;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
+import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpServerSession;
+import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
 
 /**
@@ -11,6 +18,7 @@ import reactor.core.publisher.Mono;
  * exchange provides methods to interact with the client and query its capabilities.
  *
  * @author Dariusz Jędrzejczyk
+ * @author Christian Tzolov
  */
 public class McpAsyncServerExchange {
 
@@ -99,6 +107,32 @@ public class McpAsyncServerExchange {
 	public Mono<McpSchema.ListRootsResult> listRoots(String cursor) {
 		return this.session.sendRequest(McpSchema.METHOD_ROOTS_LIST, new McpSchema.PaginatedRequest(cursor),
 				LIST_ROOTS_RESULT_TYPE_REF);
+	}
+
+	/**
+	 * Send a logging message notification to all connected clients. Messages below the
+	 * current minimum logging level will be filtered out.
+	 * @param loggingMessageNotification The logging message to send
+	 * @return A Mono that completes when the notification has been sent
+	 */
+	public Mono<Void> loggingNotification(LoggingMessageNotification loggingMessageNotification) {
+
+		if (loggingMessageNotification == null) {
+			return Mono.error(new McpError("Logging message must not be null"));
+		}
+
+		return Mono.defer(() -> {
+			if (loggingMessageNotification.level().level() < this.session.getMinLoggingLevel().level()) {
+				return Mono.empty();
+			}
+
+			return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_MESSAGE, loggingMessageNotification);
+		});
+	}
+
+	public void setMinLoggingLevel(LoggingLevel minLoggingLevel) {
+		Assert.notNull(minLoggingLevel, "minLoggingLevel must not be null");
+		this.session.setMinLoggingLevel(minLoggingLevel);
 	}
 
 }

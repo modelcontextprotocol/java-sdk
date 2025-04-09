@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
+import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -53,6 +54,8 @@ public class McpServerSession implements McpSession {
 
 	private final AtomicInteger state = new AtomicInteger(STATE_UNINITIALIZED);
 
+	private final AtomicReference<LoggingLevel> minLoggingLevel = new AtomicReference<>(LoggingLevel.INFO);
+
 	/**
 	 * Creates a new server session with the given parameters and the transport to use.
 	 * @param id session id
@@ -82,6 +85,14 @@ public class McpServerSession implements McpSession {
 	 */
 	public String getId() {
 		return this.id;
+	}
+
+	public LoggingLevel getMinLoggingLevel() {
+		return this.minLoggingLevel.get();
+	}
+
+	public void setMinLoggingLevel(LoggingLevel minLoggingLevel) {
+		this.minLoggingLevel.set(minLoggingLevel);
 	}
 
 	/**
@@ -135,6 +146,13 @@ public class McpServerSession implements McpSession {
 	public Mono<Void> sendNotification(String method, Object params) {
 		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
 				method, params);
+		return this.transport.sendMessage(jsonrpcNotification);
+	}
+
+	public Mono<Void> sendNotification(String method, Object params) {
+		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
+				method, this.transport.unmarshalFrom(params, new TypeReference<Map<String, Object>>() {
+				}));
 		return this.transport.sendMessage(jsonrpcNotification);
 	}
 

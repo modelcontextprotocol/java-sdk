@@ -780,16 +780,15 @@ public class McpAsyncClient {
 	 * @return A Mono that completes when the logging level is set.
 	 * @see McpSchema.LoggingLevel
 	 */
-	public Mono<Void> setLoggingLevel(LoggingLevel loggingLevel) {
+	public Mono<Object> setLoggingLevel(LoggingLevel loggingLevel) {
 		if (loggingLevel == null) {
 			return Mono.error(new McpError("Logging level must not be null"));
 		}
 
 		return this.withInitializationCheck("setting logging level", initializedResult -> {
-			String levelName = this.transport.unmarshalFrom(loggingLevel, new TypeReference<String>() {
+			var params = new McpSchema.SetLevelRequest(loggingLevel);
+			return this.mcpSession.sendRequest(McpSchema.METHOD_LOGGING_SET_LEVEL, params, new TypeReference<Object>() {
 			});
-			Map<String, Object> params = Map.of("level", levelName);
-			return this.mcpSession.sendNotification(McpSchema.METHOD_LOGGING_SET_LEVEL, params);
 		});
 	}
 
