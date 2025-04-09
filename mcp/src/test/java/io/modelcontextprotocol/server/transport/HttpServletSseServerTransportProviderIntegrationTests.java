@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.server.McpServer;
@@ -42,9 +43,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 
-public class HttpServletSseServerTransportProviderIntegrationTests {
+class HttpServletSseServerTransportProviderIntegrationTests {
 
-	private static final int PORT = 8185;
+	private static final int PORT = TomcatTestUtil.findAvailablePort();
 
 	private static final String CUSTOM_SSE_ENDPOINT = "/somePath/sse";
 
@@ -68,7 +69,7 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 		tomcat = TomcatTestUtil.createTomcatServer("", PORT, mcpServerTransportProvider);
 		try {
 			tomcat.start();
-			assertThat(tomcat.getServer().getState() == LifecycleState.STARTED);
+			assertThat(tomcat.getServer().getState()).isEqualTo(LifecycleState.STARTED);
 		}
 		catch (Exception e) {
 			throw new RuntimeException("Failed to start Tomcat", e);
@@ -127,7 +128,7 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 	}
 
 	@Test
-	void testCreateMessageSuccess() throws InterruptedException {
+	void testCreateMessageSuccess() {
 
 		// Client
 
@@ -185,8 +186,7 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 
 		CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
 
-		assertThat(response).isNotNull();
-		assertThat(response).isEqualTo(callResponse);
+		assertThat(response).isNotNull().isEqualTo(callResponse);
 
 		mcpClient.close();
 		mcpServer.close();
@@ -395,8 +395,7 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 
 		CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
 
-		assertThat(response).isNotNull();
-		assertThat(response).isEqualTo(callResponse);
+		assertThat(response).isNotNull().isEqualTo(callResponse);
 
 		mcpClient.close();
 		mcpServer.close();
