@@ -12,9 +12,14 @@ import reactor.core.publisher.Mono;
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @author Jermaine Hua
  */
 public interface McpClientTransport extends McpTransport {
 
 	Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler);
+
+	default Mono<Void> connect() {
+		return connect(mono -> mono);
+	};
 
 }
