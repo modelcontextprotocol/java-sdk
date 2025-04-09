@@ -333,8 +333,6 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
 		state.set(TransportState.CONNECTING);
 		return Mono.<Void>create(sink -> subscribeSse(handler, sink))
-			.timeout(Duration.ofSeconds(10))
-			.retryWhen(Retry.backoff(3, Duration.ofSeconds(1)).maxBackoff(Duration.ofSeconds(5)))
 			.doOnError(err -> logger.error("Error during connection", err));
 
 	}
@@ -347,13 +345,12 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 				if (state.get() == TransportState.CLOSING || state.get() == TransportState.DISCONNECTED) {
 					return;
 				}
-
+				sink.success();
 				try {
 					switch (event.type()) {
 						case ENDPOINT_EVENT_TYPE -> {
 							messageEndpoint.set(event.data());
 							state.set(TransportState.CONNECTED);
-							sink.success();
 						}
 						case MESSAGE_EVENT_TYPE -> {
 							JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, event.data());
