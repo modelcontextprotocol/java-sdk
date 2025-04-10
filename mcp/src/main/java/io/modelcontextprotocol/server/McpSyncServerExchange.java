@@ -7,7 +7,6 @@ package io.modelcontextprotocol.server;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
-import reactor.core.publisher.Mono;
 
 /**
  * Represents a synchronous exchange with a Model Context Protocol (MCP) client. The
@@ -86,19 +85,8 @@ public class McpSyncServerExchange {
 	 * Send a logging message notification to all connected clients. Messages below the
 	 * current minimum logging level will be filtered out.
 	 * @param loggingMessageNotification The logging message to send
-	 * @return A Mono that completes when the notification has been sent
 	 */
-	public Mono<Void> loggingNotification(LoggingMessageNotification loggingMessageNotification) {
-		return this.exchange.loggingNotification(loggingMessageNotification);
+	public void loggingNotification(LoggingMessageNotification loggingMessageNotification) {
+		this.exchange.loggingNotification(loggingMessageNotification).block();
 	}
-
-	/**
-	 * Set the minimum logging level for the client. Messages below this level will be
-	 * filtered out.
-	 * @param minLoggingLevel The minimum logging level
-	 */
-	void setMinLoggingLevel(LoggingLevel minLoggingLevel) {
-		this.exchange.setMinLoggingLevel(minLoggingLevel);
-	}
-
 }

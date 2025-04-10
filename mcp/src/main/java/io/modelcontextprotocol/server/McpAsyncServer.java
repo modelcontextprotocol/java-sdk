@@ -217,11 +217,17 @@ public class McpAsyncServer {
 	// ---------------------------------------
 
 	/**
-	 * Send a logging message notification to all connected clients. Messages below the
-	 * current minimum logging level will be filtered out.
+	 * This implementation would, incorrectly, broadcast the logging message to all
+	 * connected clients, using a single minLoggingLevel for all of them. Similar to
+	 * the sampling and roots, the logging level should be set per client session and
+	 * use the ServerExchange to send the logging message to the right client.
 	 * @param loggingMessageNotification The logging message to send
 	 * @return A Mono that completes when the notification has been sent
+	 * @deprecated Use
+	 * {@link McpAsyncServerExchange#loggingNotification(LoggingMessageNotification)}
+	 * instead.
 	 */
+	@Deprecated
 	public Mono<Void> loggingNotification(LoggingMessageNotification loggingMessageNotification) {
 		return this.delegate.loggingNotification(loggingMessageNotification);
 	}
@@ -258,9 +264,8 @@ public class McpAsyncServer {
 
 		private final ConcurrentHashMap<String, McpServerFeatures.AsyncPromptSpecification> prompts = new ConcurrentHashMap<>();
 
-		// TODO: this field is deprecated and should be remvoed together with the
+		// FIXME: this field is deprecated and should be remvoed together with the
 		// broadcasting loggingNotification.
-		@Deprecated
 		private LoggingLevel minLoggingLevel = LoggingLevel.DEBUG;
 
 		private List<String> protocolVersions = List.of(McpSchema.LATEST_PROTOCOL_VERSION);
@@ -666,17 +671,7 @@ public class McpAsyncServer {
 		// Logging Management
 		// ---------------------------------------
 
-		/**
-		 * This implementation would, incorrectly, broadcast the logging message to all
-		 * connected clients, using a single minLoggingLevel for all of them. Similar to
-		 * the sampling and roots, the logging level should be set per client session and
-		 * use the ServerExchange to send the logging message to the right client.
-		 * @deprecated Use
-		 * {@link McpAsyncServerExchange#loggingNotification(LoggingMessageNotification)}
-		 * instead.
-		 */
 		@Override
-		@Deprecated
 		public Mono<Void> loggingNotification(LoggingMessageNotification loggingMessageNotification) {
 
 			if (loggingMessageNotification == null) {
@@ -701,9 +696,8 @@ public class McpAsyncServer {
 
 					exchange.setMinLoggingLevel(newMinLoggingLevel.level());
 
-					// TODO: this field is deprecated and should be remvoed together with
-					// the
-					// broadcasting loggingNotification.
+					// FIXME: this field is deprecated and should be removed together
+					//  with the broadcasting loggingNotification.
 					this.minLoggingLevel = newMinLoggingLevel.level();
 
 					return Mono.just(Map.of());

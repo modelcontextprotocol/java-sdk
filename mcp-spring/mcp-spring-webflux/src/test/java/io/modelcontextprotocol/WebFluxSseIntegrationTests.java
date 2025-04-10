@@ -112,15 +112,13 @@ public class WebFluxSseIntegrationTests {
 					return Mono.just(mock(CallToolResult.class));
 				});
 
-		//@formatter:off
 		var server = McpServer.async(
 			mcpServerTransportProvider) 
 			.serverInfo("test-server", "1.0.0")
 			.tools(tool)
 			.build();
 	
-		try (
-			var client = clientBuilder
+		try (var client = clientBuilder
 				.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
 				.build();) {
 
@@ -133,7 +131,7 @@ public class WebFluxSseIntegrationTests {
 				assertThat(e).isInstanceOf(McpError.class)
 					.hasMessage("Client must be configured with sampling capabilities");
 			}
-		} //@formatter:on
+		}
 		server.close();
 	}
 
@@ -180,7 +178,6 @@ public class WebFluxSseIntegrationTests {
 					return Mono.just(callResponse);
 				});
 
-		//@formatter:off
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
 			.tools(tool)
@@ -190,7 +187,7 @@ public class WebFluxSseIntegrationTests {
 			var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
 				.capabilities(ClientCapabilities.builder().sampling().build())
 				.sampling(samplingHandler)
-				.build()) {// @formatter:on
+				.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -215,14 +212,13 @@ public class WebFluxSseIntegrationTests {
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
-		try (// @formatter:off
-			var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		                         .rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
+		                         .build();
 
-			var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
+		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
 				.roots(roots)
-				.build()) { // @formatter:on
+				.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -250,6 +246,8 @@ public class WebFluxSseIntegrationTests {
 				assertThat(rootsRef.get()).containsAll(List.of(roots.get(1), root3));
 			});
 		}
+
+		mcpServer.close();
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -266,16 +264,16 @@ public class WebFluxSseIntegrationTests {
 					return mock(CallToolResult.class);
 				});
 
-		try (// @formatter:off
-			var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.rootsChangeHandler((exchange, rootsUpdate) -> {})
-				.tools(tool)
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		                         .rootsChangeHandler((exchange, rootsUpdate) -> {})
+		                         .tools(tool)
+		                         .build();
 
+		try (
 			// Create client without roots capability
 			var mcpClient = clientBuilder
 				.capabilities(ClientCapabilities.builder().build())
-				.build()) { // @formatter:on}
+				.build()) {
 
 			assertThat(mcpClient.initialize()).isNotNull();
 
@@ -287,6 +285,8 @@ public class WebFluxSseIntegrationTests {
 				assertThat(e).isInstanceOf(McpError.class).hasMessage("Roots not supported");
 			}
 		}
+
+		mcpServer.close();
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -296,14 +296,13 @@ public class WebFluxSseIntegrationTests {
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
-		try ( //@formatter:off
-			var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		                         .rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
+		                         .build();
 
-			var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
+		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
 				.roots(List.of()) // Empty roots list
-				.build()) { // @formatter:on
+				.build()) {
 
 			assertThat(mcpClient.initialize()).isNotNull();
 
@@ -313,6 +312,8 @@ public class WebFluxSseIntegrationTests {
 				assertThat(rootsRef.get()).isEmpty();
 			});
 		}
+
+		mcpServer.close();
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -326,15 +327,14 @@ public class WebFluxSseIntegrationTests {
 		AtomicReference<List<Root>> rootsRef1 = new AtomicReference<>();
 		AtomicReference<List<Root>> rootsRef2 = new AtomicReference<>();
 
-		try ( //@formatter:off
-			var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef1.set(rootsUpdate))
-				.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef2.set(rootsUpdate))
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		                         .rootsChangeHandler((exchange, rootsUpdate) -> rootsRef1.set(rootsUpdate))
+		                         .rootsChangeHandler((exchange, rootsUpdate) -> rootsRef2.set(rootsUpdate))
+		                         .build();
 
-			var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
+		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
 				.roots(roots)
-				.build()) { // @formatter:on
+				.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -346,6 +346,8 @@ public class WebFluxSseIntegrationTests {
 				assertThat(rootsRef2.get()).containsAll(roots);
 			});
 		}
+
+		mcpServer.close();
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -358,14 +360,13 @@ public class WebFluxSseIntegrationTests {
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
-		try ( //@formatter:off
-			var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		                         .rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
+		                         .build();
 
-			var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
+		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
 				.roots(roots)
-				.build()) { // @formatter:on
+				.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -376,6 +377,8 @@ public class WebFluxSseIntegrationTests {
 				assertThat(rootsRef.get()).containsAll(roots);
 			});
 		}
+
+		mcpServer.close();
 	}
 
 	// ---------------------------------------
@@ -409,13 +412,12 @@ public class WebFluxSseIntegrationTests {
 					return callResponse;
 				});
 
-		try ( //@formatter:off
-			var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.capabilities(ServerCapabilities.builder().tools(true).build())
-				.tools(tool1)
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		                         .capabilities(ServerCapabilities.builder().tools(true).build())
+		                         .tools(tool1)
+		                         .build();
 
-			var mcpClient = clientBuilder.build()) { // @formatter:on
+		try (var mcpClient = clientBuilder.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -427,6 +429,8 @@ public class WebFluxSseIntegrationTests {
 			assertThat(response).isNotNull();
 			assertThat(response).isEqualTo(callResponse);
 		}
+
+		mcpServer.close();
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -450,12 +454,12 @@ public class WebFluxSseIntegrationTests {
 
 		AtomicReference<List<Tool>> rootsRef = new AtomicReference<>();
 
-		try ( //@formatter:off
-			var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.capabilities(ServerCapabilities.builder().tools(true).build())
-				.tools(tool1)
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		                         .capabilities(ServerCapabilities.builder().tools(true).build())
+		                         .tools(tool1)
+		                         .build();
 
+		try (
 			var mcpClient = clientBuilder.toolsChangeConsumer(toolsUpdate -> {
 				// perform a blocking call to a remote service
 				String response = RestClient.create()
@@ -465,7 +469,7 @@ public class WebFluxSseIntegrationTests {
 					.body(String.class);
 				assertThat(response).isNotBlank();
 				rootsRef.set(toolsUpdate);
-			}).build()) { // @formatter:on
+			}).build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -498,6 +502,8 @@ public class WebFluxSseIntegrationTests {
 				assertThat(rootsRef.get()).containsAll(List.of(tool2.tool()));
 			});
 		}
+
+		mcpServer.close();
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -506,13 +512,14 @@ public class WebFluxSseIntegrationTests {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
-		try (// @formatter:off
-			var mcpServer = McpServer.sync(mcpServerTransportProvider).build();
-			var mcpClient = clientBuilder.build()) { // @formatter:on
+		var mcpServer = McpServer.sync(mcpServerTransportProvider).build();
 
+		try (var mcpClient = clientBuilder.build()) {
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
 		}
+
+		mcpServer.close();
 	}
 
 	// ---------------------------------------
@@ -569,7 +576,6 @@ public class WebFluxSseIntegrationTests {
 					//@formatter:on
 				});
 
-		//@formatter:off
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().logging().tools(true).build())
@@ -577,11 +583,10 @@ public class WebFluxSseIntegrationTests {
 			.build();
 
 		try (
-
 			// Create client with logging notification handler
 			var mcpClient = clientBuilder
 				.loggingConsumer(notification -> { receivedNotifications.add(notification); })
-				.build()) { // @formatter:on
+				.build()) {
 
 			// Initialize client
 			InitializeResult initResult = mcpClient.initialize();

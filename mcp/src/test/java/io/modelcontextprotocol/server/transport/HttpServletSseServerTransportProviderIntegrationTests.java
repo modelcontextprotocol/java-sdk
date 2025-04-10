@@ -112,17 +112,16 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 					return Mono.just(mock(CallToolResult.class));
 				});
 
-		//@formatter:off
 		var server = McpServer.async(mcpServerTransportProvider)
 				.serverInfo("test-server", "1.0.0")
 				.tools(tool)
 				.build();
-		
-		try (			
+
+		try (
 			// Create client without sampling capabilities
 			var client = clientBuilder
 				.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
-				.build()) {//@formatter:on
+				.build()) {
 
 			assertThat(client.initialize()).isNotNull();
 
@@ -177,17 +176,15 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 					return Mono.just(callResponse);
 				});
 
-		//@formatter:off
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
 				.serverInfo("test-server", "1.0.0")
 				.tools(tool)
 				.build();
 
-		try (
-			var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
 				.capabilities(ClientCapabilities.builder().sampling().build())
 				.sampling(samplingHandler)
-				.build()) {//@formatter:on
+				.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -209,14 +206,14 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
-		//@formatter:off	
-		try (var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
 				.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
 				.build();
 
-			var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
+		try (var mcpClient =
+					clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
 				.roots(roots)
-				.build()) {//@formatter:on
+				.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -243,6 +240,8 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
 				assertThat(rootsRef.get()).containsAll(List.of(roots.get(1), root3));
 			});
+
+			mcpServer.close();
 		}
 	}
 
@@ -257,16 +256,14 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 					return mock(CallToolResult.class);
 				});
 
-		//@formatter:off
-		try (var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.rootsChangeHandler((exchange, rootsUpdate) -> {})
-				.tools(tool)
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		                         .rootsChangeHandler((exchange, rootsUpdate) -> {})
+		                         .tools(tool)
+		                         .build();
 
-			// Create client without roots capability
-			var mcpClient = clientBuilder
+		try (var mcpClient = clientBuilder
 				.capabilities(ClientCapabilities.builder().build())
-				.build()) {//@formatter:on
+				.build()) {
 
 			assertThat(mcpClient.initialize()).isNotNull();
 
@@ -278,20 +275,21 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 				assertThat(e).isInstanceOf(McpError.class).hasMessage("Roots not supported");
 			}
 		}
+
+		mcpServer.close();
 	}
 
 	@Test
 	void testRootsNotifciationWithEmptyRootsList() {
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
-		//@formatter:off
-		try (var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		                         .rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
+		                         .build();
 
-			var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
+		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
 				.roots(List.of()) // Empty roots list
-				.build()) {//@formatter:on
+				.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -302,6 +300,8 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 				assertThat(rootsRef.get()).isEmpty();
 			});
 		}
+
+		mcpServer.close();
 	}
 
 	@Test
@@ -311,15 +311,14 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 		AtomicReference<List<Root>> rootsRef1 = new AtomicReference<>();
 		AtomicReference<List<Root>> rootsRef2 = new AtomicReference<>();
 
-		//@formatter:off
-		try (var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef1.set(rootsUpdate))
-				.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef2.set(rootsUpdate))
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		                         .rootsChangeHandler((exchange, rootsUpdate) -> rootsRef1.set(rootsUpdate))
+		                         .rootsChangeHandler((exchange, rootsUpdate) -> rootsRef2.set(rootsUpdate))
+		                         .build();
 
-			var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
+		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
 				.roots(roots)
-				.build()) {//@formatter:on
+				.build()) {
 
 			assertThat(mcpClient.initialize()).isNotNull();
 
@@ -330,6 +329,8 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 				assertThat(rootsRef2.get()).containsAll(roots);
 			});
 		}
+
+		mcpServer.close();
 	}
 
 	@Test
@@ -338,14 +339,13 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
-		//@formatter:off
-		try (var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		                         .rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
+		                         .build();
 
-			var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
+		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
 				.roots(roots)
-				.build()) {//@formatter:on
+				.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -356,6 +356,8 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 				assertThat(rootsRef.get()).containsAll(roots);
 			});
 		}
+
+		mcpServer.close();
 	}
 
 	// ---------------------------------------
@@ -386,14 +388,12 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 					return callResponse;
 				});
 
-		//@formatter:off
-		try (var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.capabilities(ServerCapabilities.builder().tools(true).build())
-				.tools(tool1)
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		                         .capabilities(ServerCapabilities.builder().tools(true).build())
+		                         .tools(tool1)
+		                         .build();
 
-			var mcpClient = clientBuilder.build()) {//@formatter:on
-
+		try (var mcpClient = clientBuilder.build()) {
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
 
@@ -404,6 +404,8 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 			assertThat(response).isNotNull();
 			assertThat(response).isEqualTo(callResponse);
 		}
+
+		mcpServer.close();
 	}
 
 	@Test
@@ -424,13 +426,12 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 
 		AtomicReference<List<Tool>> rootsRef = new AtomicReference<>();
 
-		//@formatter:off
-		try (var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.capabilities(ServerCapabilities.builder().tools(true).build())
-				.tools(tool1)
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		                         .capabilities(ServerCapabilities.builder().tools(true).build())
+		                         .tools(tool1)
+		                         .build();
 
-			var mcpClient = clientBuilder.toolsChangeConsumer(toolsUpdate -> {
+		try (var mcpClient = clientBuilder.toolsChangeConsumer(toolsUpdate -> {
 				// perform a blocking call to a remote service
 				String response = RestClient.create()
 					.get()
@@ -439,7 +440,7 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 					.body(String.class);
 				assertThat(response).isNotBlank();
 				rootsRef.set(toolsUpdate);
-			}).build()) {//@formatter:on
+			}).build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -472,17 +473,21 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 				assertThat(rootsRef.get()).containsAll(List.of(tool2.tool()));
 			});
 		}
+
+		mcpServer.close();
 	}
 
 	@Test
 	void testInitialize() {
+		var mcpServer = McpServer.sync(mcpServerTransportProvider).build();
 
-		try (var mcpServer = McpServer.sync(mcpServerTransportProvider).build();
-				var mcpClient = clientBuilder.build()) {
+		try (var mcpClient = clientBuilder.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
 		}
+
+		mcpServer.close();
 	}
 
 	// ---------------------------------------
@@ -548,7 +553,6 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 					return Mono.just(new CallToolResult("Logging test completed", false));
 				});
 
-		//@formatter:off				
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
 				.serverInfo("test-server", "1.0.0")
 				.capabilities(ServerCapabilities.builder().logging().tools(true).build())
@@ -558,7 +562,7 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 			// Create client with logging notification handler
 			var mcpClient = clientBuilder.loggingConsumer(notification -> {
 				receivedNotifications.add(notification);
-			}).build()) {//@formatter:on
+			}).build()) {
 
 			// Initialize client
 			InitializeResult initResult = mcpClient.initialize();

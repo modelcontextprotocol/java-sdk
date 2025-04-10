@@ -141,10 +141,6 @@ public class McpAsyncServerExchange {
 		this.minLoggingLevel = minLoggingLevel;
 	}
 
-	/**
-	 * Checks if the logging level bigger or equal to the minimum set logging level.
-	 * @return true if the logging level is enabled, false otherwise
-	 */
 	private boolean isNotificationForLevelAllowed(LoggingLevel loggingLevel) {
 		return loggingLevel.level() >= this.minLoggingLevel.level();
 	}
