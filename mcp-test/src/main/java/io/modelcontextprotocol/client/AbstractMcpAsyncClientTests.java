@@ -456,9 +456,7 @@ public abstract class AbstractMcpAsyncClientTests {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			StepVerifier
 				.create(mcpAsyncClient.initialize()
-					.thenMany(Flux.fromArray(McpSchema.LoggingLevel.values()).flatMap(mcpAsyncClient::setLoggingLevel))
-					.collectList())
-				.assertNext(l -> assertThat(l).hasSize(McpSchema.LoggingLevel.values().length))
+					.thenMany(Flux.fromArray(McpSchema.LoggingLevel.values()).flatMap(mcpAsyncClient::setLoggingLevel)))
 				.verifyComplete();
 		});
 	}

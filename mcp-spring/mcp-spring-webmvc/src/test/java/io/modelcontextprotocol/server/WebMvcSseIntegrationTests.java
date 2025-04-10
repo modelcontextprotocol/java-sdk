@@ -222,14 +222,13 @@ class WebMvcSseIntegrationTests {
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
-		//@formatter:off
-		try (var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
+			.build();
 
-			var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
-				.roots(roots)
-				.build()) {//@formatter:on
+		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
+			.roots(roots)
+			.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -257,6 +256,8 @@ class WebMvcSseIntegrationTests {
 				assertThat(rootsRef.get()).containsAll(List.of(roots.get(1), root3));
 			});
 		}
+
+		mcpServer.close();
 	}
 
 	@Test
@@ -270,17 +271,13 @@ class WebMvcSseIntegrationTests {
 					return mock(CallToolResult.class);
 				});
 
-		//@formatter:off				
-		try (var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.rootsChangeHandler((exchange, rootsUpdate) -> {})
-				.tools(tool)
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider).rootsChangeHandler((exchange, rootsUpdate) -> {
+		}).tools(tool).build();
 
-			// Create client without roots capability
-			// No roots capability
-			var mcpClient = clientBuilder
-				.capabilities(ClientCapabilities.builder().build())
-				.build()) {//@formatter:on
+		try (
+				// Create client without roots capability
+				// No roots capability
+				var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().build()).build()) {
 
 			assertThat(mcpClient.initialize()).isNotNull();
 
@@ -292,20 +289,21 @@ class WebMvcSseIntegrationTests {
 				assertThat(e).isInstanceOf(McpError.class).hasMessage("Roots not supported");
 			}
 		}
+
+		mcpServer.close();
 	}
 
 	@Test
 	void testRootsNotifciationWithEmptyRootsList() {
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
-		//@formatter:off
-		try (var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
+			.build();
 
-			var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
-				.roots(List.of()) // Empty roots list
-				.build()) {//@formatter:on
+		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
+			.roots(List.of()) // Empty roots list
+			.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -316,6 +314,8 @@ class WebMvcSseIntegrationTests {
 				assertThat(rootsRef.get()).isEmpty();
 			});
 		}
+
+		mcpServer.close();
 	}
 
 	@Test
@@ -325,15 +325,14 @@ class WebMvcSseIntegrationTests {
 		AtomicReference<List<Root>> rootsRef1 = new AtomicReference<>();
 		AtomicReference<List<Root>> rootsRef2 = new AtomicReference<>();
 
-		//@formatter:off
-		try (var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef1.set(rootsUpdate))
-				.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef2.set(rootsUpdate))
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef1.set(rootsUpdate))
+			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef2.set(rootsUpdate))
+			.build();
 
-			var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
-				.roots(roots)
-				.build()) {//@formatter:on
+		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
+			.roots(roots)
+			.build()) {
 
 			assertThat(mcpClient.initialize()).isNotNull();
 
@@ -344,6 +343,8 @@ class WebMvcSseIntegrationTests {
 				assertThat(rootsRef2.get()).containsAll(roots);
 			});
 		}
+
+		mcpServer.close();
 	}
 
 	@Test
@@ -352,14 +353,13 @@ class WebMvcSseIntegrationTests {
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
-		//@formatter:off
-		try (var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
+			.build();
 
-			var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
-				.roots(roots)
-				.build()) {//@formatter:on
+		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
+			.roots(roots)
+			.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -370,6 +370,8 @@ class WebMvcSseIntegrationTests {
 				assertThat(rootsRef.get()).containsAll(roots);
 			});
 		}
+
+		mcpServer.close();
 	}
 
 	// ---------------------------------------
@@ -400,13 +402,12 @@ class WebMvcSseIntegrationTests {
 					return callResponse;
 				});
 
-		//@formatter:off
-		try (var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.capabilities(ServerCapabilities.builder().tools(true).build())
-				.tools(tool1)
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool1)
+			.build();
 
-			var mcpClient = clientBuilder.build()) {//@formatter:on
+		try (var mcpClient = clientBuilder.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -417,6 +418,8 @@ class WebMvcSseIntegrationTests {
 
 			assertThat(response).isNotNull().isEqualTo(callResponse);
 		}
+
+		mcpServer.close();
 	}
 
 	@Test
@@ -437,22 +440,21 @@ class WebMvcSseIntegrationTests {
 
 		AtomicReference<List<Tool>> rootsRef = new AtomicReference<>();
 
-		//@formatter:off
-		try (var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.capabilities(ServerCapabilities.builder().tools(true).build())
-				.tools(tool1)
-				.build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool1)
+			.build();
 
-			var mcpClient = clientBuilder.toolsChangeConsumer(toolsUpdate -> {
-				// perform a blocking call to a remote service
-				String response = RestClient.create()
-					.get()
-					.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
-					.retrieve()
-					.body(String.class);
-				assertThat(response).isNotBlank();
-				rootsRef.set(toolsUpdate);
-			}).build()) {//@formatter:on
+		try (var mcpClient = clientBuilder.toolsChangeConsumer(toolsUpdate -> {
+			// perform a blocking call to a remote service
+			String response = RestClient.create()
+				.get()
+				.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
+				.retrieve()
+				.body(String.class);
+			assertThat(response).isNotBlank();
+			rootsRef.set(toolsUpdate);
+		}).build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -485,18 +487,22 @@ class WebMvcSseIntegrationTests {
 				assertThat(rootsRef.get()).containsAll(List.of(tool2.tool()));
 			});
 		}
+
+		mcpServer.close();
 	}
 
 	@Test
 	void testInitialize() {
 
-		//@formatter:off
-		try (var mcpServer = McpServer.sync(mcpServerTransportProvider).build();
-			var mcpClient = clientBuilder.build()) {//@formatter:on
+		var mcpServer = McpServer.sync(mcpServerTransportProvider).build();
+
+		try (var mcpClient = clientBuilder.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
 		}
+
+		mcpServer.close();
 	}
 
 }
