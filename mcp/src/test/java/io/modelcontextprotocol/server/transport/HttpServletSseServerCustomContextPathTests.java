@@ -78,9 +78,13 @@ class HttpServletSseServerCustomContextPathTests {
 
 	@Test
 	void testCustomContextPath() {
-		McpServer.async(mcpServerTransportProvider).serverInfo("test-server", "1.0.0").build();
-		var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0")).build();
-		assertThat(client.initialize()).isNotNull();
+		var server = McpServer.async(mcpServerTransportProvider).serverInfo("test-server", "1.0.0").build();
+		try (//@formatter:off
+			var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0")) .build()) { //@formatter:on
+
+			assertThat(client.initialize()).isNotNull();
+		}
+		server.close();
 	}
 
 }
