@@ -188,7 +188,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 * errors if any session fails to receive the message
 	 */
 	@Override
-	public Mono<Void> notifyClients(String method, Map<String, Object> params) {
+	public Mono<Void> notifyClients(String method, Object params) {
 		if (sessions.isEmpty()) {
 			logger.debug("No active sessions to broadcast message to");
 			return Mono.empty();
@@ -305,6 +305,11 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		}
 
 		McpServerSession session = sessions.get(request.queryParam("sessionId").get());
+
+		if (session == null) {
+			return ServerResponse.status(HttpStatus.NOT_FOUND)
+				.bodyValue(new McpError("Session not found: " + request.queryParam("sessionId").get()));
+		}
 
 		return request.bodyToMono(String.class).flatMap(body -> {
 			try {
