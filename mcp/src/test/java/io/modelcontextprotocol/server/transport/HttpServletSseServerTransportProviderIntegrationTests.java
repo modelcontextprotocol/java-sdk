@@ -112,16 +112,12 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 					return Mono.just(mock(CallToolResult.class));
 				});
 
-		var server = McpServer.async(mcpServerTransportProvider)
-				.serverInfo("test-server", "1.0.0")
-				.tools(tool)
-				.build();
+		var server = McpServer.async(mcpServerTransportProvider).serverInfo("test-server", "1.0.0").tools(tool).build();
 
 		try (
-			// Create client without sampling capabilities
-			var client = clientBuilder
-				.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
-				.build()) {
+				// Create client without sampling capabilities
+				var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
+					.build()) {
 
 			assertThat(client.initialize()).isNotNull();
 
@@ -177,14 +173,14 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 				});
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
-				.serverInfo("test-server", "1.0.0")
-				.tools(tool)
-				.build();
+			.serverInfo("test-server", "1.0.0")
+			.tools(tool)
+			.build();
 
 		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
-				.capabilities(ClientCapabilities.builder().sampling().build())
-				.sampling(samplingHandler)
-				.build()) {
+			.capabilities(ClientCapabilities.builder().sampling().build())
+			.sampling(samplingHandler)
+			.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -207,13 +203,12 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
-				.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
-				.build();
+			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
+			.build();
 
-		try (var mcpClient =
-					clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
-				.roots(roots)
-				.build()) {
+		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
+			.roots(roots)
+			.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -256,14 +251,10 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 					return mock(CallToolResult.class);
 				});
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
-		                         .rootsChangeHandler((exchange, rootsUpdate) -> {})
-		                         .tools(tool)
-		                         .build();
+		var mcpServer = McpServer.sync(mcpServerTransportProvider).rootsChangeHandler((exchange, rootsUpdate) -> {
+		}).tools(tool).build();
 
-		try (var mcpClient = clientBuilder
-				.capabilities(ClientCapabilities.builder().build())
-				.build()) {
+		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().build()).build()) {
 
 			assertThat(mcpClient.initialize()).isNotNull();
 
@@ -284,12 +275,12 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
-		                         .rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
-		                         .build();
+			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
+			.build();
 
 		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
-				.roots(List.of()) // Empty roots list
-				.build()) {
+			.roots(List.of()) // Empty roots list
+			.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -312,13 +303,13 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 		AtomicReference<List<Root>> rootsRef2 = new AtomicReference<>();
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
-		                         .rootsChangeHandler((exchange, rootsUpdate) -> rootsRef1.set(rootsUpdate))
-		                         .rootsChangeHandler((exchange, rootsUpdate) -> rootsRef2.set(rootsUpdate))
-		                         .build();
+			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef1.set(rootsUpdate))
+			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef2.set(rootsUpdate))
+			.build();
 
 		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
-				.roots(roots)
-				.build()) {
+			.roots(roots)
+			.build()) {
 
 			assertThat(mcpClient.initialize()).isNotNull();
 
@@ -340,12 +331,12 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
-		                         .rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
-		                         .build();
+			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
+			.build();
 
 		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().roots(true).build())
-				.roots(roots)
-				.build()) {
+			.roots(roots)
+			.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -389,9 +380,9 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 				});
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
-		                         .capabilities(ServerCapabilities.builder().tools(true).build())
-		                         .tools(tool1)
-		                         .build();
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool1)
+			.build();
 
 		try (var mcpClient = clientBuilder.build()) {
 			InitializeResult initResult = mcpClient.initialize();
@@ -427,20 +418,20 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 		AtomicReference<List<Tool>> rootsRef = new AtomicReference<>();
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
-		                         .capabilities(ServerCapabilities.builder().tools(true).build())
-		                         .tools(tool1)
-		                         .build();
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool1)
+			.build();
 
 		try (var mcpClient = clientBuilder.toolsChangeConsumer(toolsUpdate -> {
-				// perform a blocking call to a remote service
-				String response = RestClient.create()
-					.get()
-					.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
-					.retrieve()
-					.body(String.class);
-				assertThat(response).isNotBlank();
-				rootsRef.set(toolsUpdate);
-			}).build()) {
+			// perform a blocking call to a remote service
+			String response = RestClient.create()
+				.get()
+				.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
+				.retrieve()
+				.body(String.class);
+			assertThat(response).isNotBlank();
+			rootsRef.set(toolsUpdate);
+		}).build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
@@ -554,15 +545,15 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 				});
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
-				.serverInfo("test-server", "1.0.0")
-				.capabilities(ServerCapabilities.builder().logging().tools(true).build())
-				.tools(tool)
-				.build();
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().logging().tools(true).build())
+			.tools(tool)
+			.build();
 		try (
-			// Create client with logging notification handler
-			var mcpClient = clientBuilder.loggingConsumer(notification -> {
-				receivedNotifications.add(notification);
-			}).build()) {
+				// Create client with logging notification handler
+				var mcpClient = clientBuilder.loggingConsumer(notification -> {
+					receivedNotifications.add(notification);
+				}).build()) {
 
 			// Initialize client
 			InitializeResult initResult = mcpClient.initialize();

@@ -89,4 +89,5 @@ public class McpSyncServerExchange {
 	public void loggingNotification(LoggingMessageNotification loggingMessageNotification) {
 		this.exchange.loggingNotification(loggingMessageNotification).block();
 	}
+
 }

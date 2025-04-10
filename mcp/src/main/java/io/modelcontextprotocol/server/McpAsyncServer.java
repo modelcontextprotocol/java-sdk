@@ -218,9 +218,9 @@ public class McpAsyncServer {
 
 	/**
 	 * This implementation would, incorrectly, broadcast the logging message to all
-	 * connected clients, using a single minLoggingLevel for all of them. Similar to
-	 * the sampling and roots, the logging level should be set per client session and
-	 * use the ServerExchange to send the logging message to the right client.
+	 * connected clients, using a single minLoggingLevel for all of them. Similar to the
+	 * sampling and roots, the logging level should be set per client session and use the
+	 * ServerExchange to send the logging message to the right client.
 	 * @param loggingMessageNotification The logging message to send
 	 * @return A Mono that completes when the notification has been sent
 	 * @deprecated Use
@@ -697,7 +697,7 @@ public class McpAsyncServer {
 					exchange.setMinLoggingLevel(newMinLoggingLevel.level());
 
 					// FIXME: this field is deprecated and should be removed together
-					//  with the broadcasting loggingNotification.
+					// with the broadcasting loggingNotification.
 					this.minLoggingLevel = newMinLoggingLevel.level();
 
 					return Mono.just(Map.of());
