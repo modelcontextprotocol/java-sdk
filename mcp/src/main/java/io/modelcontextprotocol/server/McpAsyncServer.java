@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Base64;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
@@ -17,6 +18,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.spec.McpParamsValidationError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
@@ -263,6 +265,8 @@ public class McpAsyncServer {
 		private final ConcurrentHashMap<String, McpServerFeatures.AsyncResourceSpecification> resources = new ConcurrentHashMap<>();
 
 		private final ConcurrentHashMap<String, McpServerFeatures.AsyncPromptSpecification> prompts = new ConcurrentHashMap<>();
+
+		private static final int PAGE_SIZE = 10;
 
 		// FIXME: this field is deprecated and should be remvoed together with the
 		// broadcasting loggingNotification.
@@ -637,18 +641,65 @@ public class McpAsyncServer {
 
 		private McpServerSession.RequestHandler<McpSchema.ListPromptsResult> promptsListRequestHandler() {
 			return (exchange, params) -> {
-				// TODO: Implement pagination
-				// McpSchema.PaginatedRequest request = objectMapper.convertValue(params,
-				// new TypeReference<McpSchema.PaginatedRequest>() {
-				// });
+				McpSchema.PaginatedRequest request = objectMapper.convertValue(params,
+						new TypeReference<McpSchema.PaginatedRequest>() {
+						});
+
+				if (!isCursorValid(request.cursor(), this.prompts.size())) {
+					return Mono.error(new McpParamsValidationError("Invalid cursor"));
+				}
+
+				int requestedStartIndex = 0;
+
+				if (request.cursor() != null) {
+					requestedStartIndex = decodeCursor(request.cursor());
+				}
+
+				int endIndex = Math.min(requestedStartIndex + PAGE_SIZE, this.prompts.size());
 
 				var promptList = this.prompts.values()
 					.stream()
+					.skip(requestedStartIndex)
+					.limit(endIndex - requestedStartIndex)
 					.map(McpServerFeatures.AsyncPromptSpecification::prompt)
 					.toList();
 
-				return Mono.just(new McpSchema.ListPromptsResult(promptList, null));
+				String nextCursor = null;
+
+				if (endIndex < this.prompts.size()) {
+					nextCursor = encodeCursor(endIndex);
+				}
+
+				return Mono.just(new McpSchema.ListPromptsResult(promptList, nextCursor));
 			};
+		}
+
+		private boolean isCursorValid(String cursor, int maxPageSize) {
+			if (cursor == null) {
+				return true;
+			}
+
+			try {
+				var decoded = decodeCursor(cursor);
+
+				if (decoded < 0 || decoded > maxPageSize) {
+					return false;
+				}
+
+				return true;
+			}
+			catch (NumberFormatException e) {
+				return false;
+			}
+		}
+
+		private String encodeCursor(int index) {
+			return Base64.getEncoder().encodeToString(String.valueOf(index).getBytes());
+		}
+
+		private int decodeCursor(String cursor) {
+			String decoded = new String(Base64.getDecoder().decode(cursor));
+			return Integer.parseInt(decoded);
 		}
 
 		private McpServerSession.RequestHandler<McpSchema.GetPromptResult> promptsGetRequestHandler() {
