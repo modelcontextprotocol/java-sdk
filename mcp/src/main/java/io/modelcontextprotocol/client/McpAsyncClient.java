@@ -75,7 +75,7 @@ import reactor.core.publisher.Sinks;
  * @see McpSchema
  * @see McpClientSession
  */
-public class McpAsyncClient implements AutoCloseable {
+public class McpAsyncClient {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpAsyncClient.class);
 
@@ -275,7 +275,6 @@ public class McpAsyncClient implements AutoCloseable {
 	/**
 	 * Closes the client connection immediately.
 	 */
-	@Override
 	public void close() {
 		this.mcpSession.close();
 	}

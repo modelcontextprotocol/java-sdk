@@ -30,6 +30,7 @@ import org.apache.catalina.LifecycleState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.testcontainers.shaded.org.checkerframework.checker.units.qual.s;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -126,11 +127,12 @@ class WebMvcSseIntegrationTests {
 				});
 
 		//@formatter:off
-		try (var server = McpServer.async(mcpServerTransportProvider)
+		var server = McpServer.async(mcpServerTransportProvider)
 				.serverInfo("test-server", "1.0.0")
 				.tools(tool)
 				.build();
-			
+		
+		try (
 			// Create client without sampling capabilities
 			var client = clientBuilder
 				.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
@@ -146,6 +148,7 @@ class WebMvcSseIntegrationTests {
 					.hasMessage("Client must be configured with sampling capabilities");
 			}
 		}
+		server.close();
 	}
 
 	@Test
@@ -189,11 +192,12 @@ class WebMvcSseIntegrationTests {
 				});
 
 		//@formatter:off		
-		try (var mcpServer = McpServer.async(mcpServerTransportProvider)
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
 				.serverInfo("test-server", "1.0.0")
 				.tools(tool)
 				.build();
 
+		try (
 			var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
 				.capabilities(ClientCapabilities.builder().sampling().build())
 				.sampling(samplingHandler)
@@ -206,6 +210,7 @@ class WebMvcSseIntegrationTests {
 
 			assertThat(response).isNotNull().isEqualTo(callResponse);
 		}
+		mcpServer.close();
 	}
 
 	// ---------------------------------------

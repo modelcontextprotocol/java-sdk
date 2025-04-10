@@ -72,7 +72,7 @@ import reactor.core.publisher.Mono;
  * @see McpSchema
  * @see McpClientSession
  */
-public class McpAsyncServer implements AutoCloseable {
+public class McpAsyncServer {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpAsyncServer.class);
 
@@ -121,7 +121,6 @@ public class McpAsyncServer implements AutoCloseable {
 	/**
 	 * Close the server immediately.
 	 */
-	@Override
 	public void close() {
 		this.delegate.close();
 	}

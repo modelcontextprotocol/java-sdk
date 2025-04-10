@@ -112,13 +112,14 @@ public class WebFluxSseIntegrationTests {
 					return Mono.just(mock(CallToolResult.class));
 				});
 
-		try (//@formatter:off
-			var server = McpServer.async(
-				mcpServerTransportProvider) 
-				.serverInfo("test-server", "1.0.0")
-				.tools(tool)
-				.build();
-
+		//@formatter:off
+		var server = McpServer.async(
+			mcpServerTransportProvider) 
+			.serverInfo("test-server", "1.0.0")
+			.tools(tool)
+			.build();
+	
+		try (
 			var client = clientBuilder
 				.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
 				.build();) {
@@ -132,7 +133,8 @@ public class WebFluxSseIntegrationTests {
 				assertThat(e).isInstanceOf(McpError.class)
 					.hasMessage("Client must be configured with sampling capabilities");
 			}
-		} //@formatter:on		
+		} //@formatter:on
+		server.close();
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -178,13 +180,13 @@ public class WebFluxSseIntegrationTests {
 					return Mono.just(callResponse);
 				});
 
-		try (var mcpServer = McpServer
-			.async(//@formatter:off
-				mcpServerTransportProvider)
-				.serverInfo("test-server", "1.0.0")
-				.tools(tool)
-				.build();
-
+		//@formatter:off
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.tools(tool)
+			.build();
+	
+		try (
 			var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
 				.capabilities(ClientCapabilities.builder().sampling().build())
 				.sampling(samplingHandler)
@@ -198,6 +200,7 @@ public class WebFluxSseIntegrationTests {
 			assertThat(response).isNotNull();
 			assertThat(response).isEqualTo(callResponse);
 		}
+		mcpServer.close();
 	}
 
 	// ---------------------------------------
@@ -566,12 +569,14 @@ public class WebFluxSseIntegrationTests {
 					//@formatter:on
 				});
 
-		try ( //@formatter:off
-			var mcpServer = McpServer.async(mcpServerTransportProvider)
-				.serverInfo("test-server", "1.0.0")
-				.capabilities(ServerCapabilities.builder().logging().tools(true).build())
-				.tools(tool)
-				.build();
+		//@formatter:off
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().logging().tools(true).build())
+			.tools(tool)
+			.build();
+
+		try (
 
 			// Create client with logging notification handler
 			var mcpClient = clientBuilder
@@ -613,6 +618,7 @@ public class WebFluxSseIntegrationTests {
 				assertThat(receivedNotifications.get(2).data()).isEqualTo("Another error message");
 			});
 		}
+		mcpServer.close();
 	}
 
 }

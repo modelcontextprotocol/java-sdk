@@ -34,6 +34,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.testcontainers.shaded.org.checkerframework.checker.units.qual.m;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -112,11 +113,12 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 				});
 
 		//@formatter:off
-		try (var server = McpServer.async(mcpServerTransportProvider)
+		var server = McpServer.async(mcpServerTransportProvider)
 				.serverInfo("test-server", "1.0.0")
 				.tools(tool)
 				.build();
-			
+		
+		try (			
 			// Create client without sampling capabilities
 			var client = clientBuilder
 				.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
@@ -132,6 +134,7 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 					.hasMessage("Client must be configured with sampling capabilities");
 			}
 		}
+		server.close();
 	}
 
 	@Test
@@ -175,11 +178,12 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 				});
 
 		//@formatter:off
-		try (var mcpServer = McpServer.async(mcpServerTransportProvider)
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
 				.serverInfo("test-server", "1.0.0")
 				.tools(tool)
 				.build();
 
+		try (
 			var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
 				.capabilities(ClientCapabilities.builder().sampling().build())
 				.sampling(samplingHandler)
@@ -193,6 +197,7 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 			assertThat(response).isNotNull();
 			assertThat(response).isEqualTo(callResponse);
 		}
+		mcpServer.close();
 	}
 
 	// ---------------------------------------
@@ -544,12 +549,12 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 				});
 
 		//@formatter:off				
-		try (var mcpServer = McpServer.async(mcpServerTransportProvider)
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
 				.serverInfo("test-server", "1.0.0")
 				.capabilities(ServerCapabilities.builder().logging().tools(true).build())
 				.tools(tool)
 				.build();
-
+		try (
 			// Create client with logging notification handler
 			var mcpClient = clientBuilder.loggingConsumer(notification -> {
 				receivedNotifications.add(notification);
@@ -592,6 +597,7 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 				assertThat(receivedNotifications.get(2).data()).isEqualTo("Another error message");
 			});
 		}
+		mcpServer.close();
 	}
 
 }
