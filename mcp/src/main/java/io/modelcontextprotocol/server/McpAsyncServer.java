@@ -669,11 +669,6 @@ public class McpAsyncServer {
 				return Mono.error(new McpError("Logging message must not be null"));
 			}
 
-			// Map<String, Object> params =
-			// this.objectMapper.convertValue(loggingMessageNotification,
-			// new TypeReference<Map<String, Object>>() {
-			// });
-
 			if (loggingMessageNotification.level().level() < minLoggingLevel.level()) {
 				return Mono.empty();
 			}
