@@ -135,7 +135,7 @@ public class McpAsyncServerExchange {
 	 * filtered out.
 	 * @param minLoggingLevel The minimum logging level
 	 */
-	public void setMinLoggingLevel(LoggingLevel minLoggingLevel) {
+	void setMinLoggingLevel(LoggingLevel minLoggingLevel) {
 		Assert.notNull(minLoggingLevel, "minLoggingLevel must not be null");
 		this.session.setMinLoggingLevel(minLoggingLevel);
 	}

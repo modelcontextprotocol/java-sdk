@@ -92,6 +92,11 @@ public class McpSyncServerExchange {
 		return this.exchange.loggingNotification(loggingMessageNotification);
 	}
 
+	/**
+	 * Set the minimum logging level for the client. Messages below this level will be
+	 * filtered out.
+	 * @param minLoggingLevel The minimum logging level
+	 */
 	void setMinLoggingLevel(LoggingLevel minLoggingLevel) {
 		this.exchange.setMinLoggingLevel(minLoggingLevel);
 	}
