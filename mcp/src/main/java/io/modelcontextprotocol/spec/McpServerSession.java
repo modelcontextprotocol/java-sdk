@@ -132,7 +132,7 @@ public class McpServerSession implements McpSession {
 	}
 
 	@Override
-	public Mono<Void> sendNotification(String method, Map<String, Object> params) {
+	public Mono<Void> sendNotification(String method, Object params) {
 		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
 				method, params);
 		return this.transport.sendMessage(jsonrpcNotification);
