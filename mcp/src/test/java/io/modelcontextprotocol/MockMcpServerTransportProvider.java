@@ -47,7 +47,7 @@ public class MockMcpServerTransportProvider implements McpServerTransportProvide
 	}
 
 	@Override
-	public Mono<Void> notifyClients(String method, Map<String, Object> params) {
+	public Mono<Void> notifyClients(String method, Object params) {
 		return session.sendNotification(method, params);
 	}
 

@@ -160,7 +160,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 * @return A Mono that completes when the broadcast attempt is finished
 	 */
 	@Override
-	public Mono<Void> notifyClients(String method, Map<String, Object> params) {
+	public Mono<Void> notifyClients(String method, Object params) {
 		if (sessions.isEmpty()) {
 			logger.debug("No active sessions to broadcast message to");
 			return Mono.empty();

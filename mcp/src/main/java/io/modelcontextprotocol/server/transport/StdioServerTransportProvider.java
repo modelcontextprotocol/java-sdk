@@ -99,7 +99,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	}
 
 	@Override
-	public Mono<Void> notifyClients(String method, Map<String, Object> params) {
+	public Mono<Void> notifyClients(String method, Object params) {
 		if (this.session == null) {
 			return Mono.error(new McpError("No session to close"));
 		}

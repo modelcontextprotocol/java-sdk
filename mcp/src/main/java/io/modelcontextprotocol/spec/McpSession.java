@@ -63,10 +63,10 @@ public interface McpSession {
 	 * parameters with the notification.
 	 * </p>
 	 * @param method the name of the notification method to be sent to the counterparty
-	 * @param params a map of parameters to be sent with the notification
+	 * @param params parameters to be sent with the notification
 	 * @return a Mono that completes when the notification has been sent
 	 */
-	Mono<Void> sendNotification(String method, Map<String, Object> params);
+	Mono<Void> sendNotification(String method, Object params);
 
 	/**
 	 * Closes the session and releases any associated resources asynchronously.
