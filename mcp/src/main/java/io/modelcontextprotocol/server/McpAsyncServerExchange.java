@@ -28,6 +28,8 @@ public class McpAsyncServerExchange {
 
 	private final McpSchema.Implementation clientInfo;
 
+	private volatile LoggingLevel minLoggingLevel = LoggingLevel.INFO;
+
 	private static final TypeReference<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeReference<>() {
 	};
 
@@ -122,11 +124,10 @@ public class McpAsyncServerExchange {
 		}
 
 		return Mono.defer(() -> {
-			if (!this.session.isLoingLevelEnabled(loggingMessageNotification.level())) {
-				return Mono.empty();
+			if (this.isNotificationForLevelAllowed(loggingMessageNotification.level())) {
+				return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_MESSAGE, loggingMessageNotification);
 			}
-
-			return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_MESSAGE, loggingMessageNotification);
+			return Mono.empty();
 		});
 	}
 
@@ -137,7 +138,15 @@ public class McpAsyncServerExchange {
 	 */
 	void setMinLoggingLevel(LoggingLevel minLoggingLevel) {
 		Assert.notNull(minLoggingLevel, "minLoggingLevel must not be null");
-		this.session.setMinLoggingLevel(minLoggingLevel);
+		this.minLoggingLevel = minLoggingLevel;
+	}
+
+	/**
+	 * Checks if the logging level bigger or equal to the minimum set logging level.
+	 * @return true if the logging level is enabled, false otherwise
+	 */
+	private boolean isNotificationForLevelAllowed(LoggingLevel loggingLevel) {
+		return loggingLevel.level() >= this.minLoggingLevel.level();
 	}
 
 }
