@@ -15,6 +15,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.spec.McpClientSession;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
 import org.junit.jupiter.api.AfterEach;
@@ -35,7 +38,8 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * Tests for the {@link HttpClientSseClientTransport} class.
+ * Tests for the {@link HttpClientSseClientTransportProvider.HttpClientSseClientTransport}
+ * class.
  *
  * @author Christian Tzolov
  */
@@ -53,14 +57,16 @@ class HttpClientSseClientTransportTests {
 	private TestHttpClientSseClientTransport transport;
 
 	// Test class to access protected methods
-	static class TestHttpClientSseClientTransport extends HttpClientSseClientTransport {
+	static class TestHttpClientSseClientTransport implements McpClientTransport {
+
+		McpClientTransport delegate;
 
 		private final AtomicInteger inboundMessageCount = new AtomicInteger(0);
 
 		private Sinks.Many<ServerSentEvent<String>> events = Sinks.many().unicast().onBackpressureBuffer();
 
-		public TestHttpClientSseClientTransport(final String baseUri) {
-			super(HttpClient.newHttpClient(), HttpRequest.newBuilder(), baseUri, "/sse", new ObjectMapper());
+		public TestHttpClientSseClientTransport(McpClientTransport transport) {
+			this.delegate = transport;
 		}
 
 		public int getInboundMessageCount() {
@@ -77,6 +83,31 @@ class HttpClientSseClientTransportTests {
 			inboundMessageCount.incrementAndGet();
 		}
 
+		@Override
+		public Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
+			return delegate.connect(handler);
+		}
+
+		@Override
+		public Mono<Void> connect() {
+			return delegate.connect();
+		}
+
+		@Override
+		public Mono<Void> closeGracefully() {
+			return delegate.closeGracefully();
+		}
+
+		@Override
+		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+			return delegate.sendMessage(message);
+		}
+
+		@Override
+		public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
+			return delegate.unmarshalFrom(data, typeRef);
+		}
+
 	}
 
 	void startContainer() {
@@ -88,7 +119,11 @@ class HttpClientSseClientTransportTests {
 	@BeforeEach
 	void setUp() {
 		startContainer();
-		transport = new TestHttpClientSseClientTransport(host);
+		HttpClientSseClientTransportProvider transportProvider = HttpClientSseClientTransportProvider.builder(host)
+			.build();
+		transportProvider.setSessionFactory(
+				(transport) -> new McpClientSession(Duration.ofSeconds(5), transport, Map.of(), Map.of()));
+		transport = new TestHttpClientSseClientTransport(transportProvider.getSession().getTransport());
 		transport.connect(Function.identity()).block();
 	}
 
@@ -205,14 +240,17 @@ class HttpClientSseClientTransportTests {
 	@Test
 	void testRetryBehavior() {
 		// Create a client that simulates connection failures
-		HttpClientSseClientTransport failingTransport = HttpClientSseClientTransport.builder("http://non-existent-host")
+		HttpClientSseClientTransportProvider failingTransportProvider = HttpClientSseClientTransportProvider
+			.builder("http://non-existent-host")
 			.build();
-
+		failingTransportProvider.setSessionFactory(
+				(transport) -> new McpClientSession(Duration.ofSeconds(5), transport, Map.of(), Map.of()));
+		failingTransportProvider.getSession();
 		// Verify that the transport attempts to reconnect
 		StepVerifier.create(Mono.delay(Duration.ofSeconds(2))).expectNextCount(1).verifyComplete();
 
 		// Clean up
-		failingTransport.closeGracefully().block();
+		failingTransportProvider.closeGracefully().block();
 	}
 
 	@Test
@@ -290,7 +328,7 @@ class HttpClientSseClientTransportTests {
 		AtomicBoolean customizerCalled = new AtomicBoolean(false);
 
 		// Create a transport with the customizer
-		HttpClientSseClientTransport customizedTransport = HttpClientSseClientTransport.builder(host)
+		HttpClientSseClientTransportProvider customizedTransport = HttpClientSseClientTransportProvider.builder(host)
 			.customizeClient(builder -> {
 				builder.version(HttpClient.Version.HTTP_2);
 				customizerCalled.set(true);
@@ -314,7 +352,7 @@ class HttpClientSseClientTransportTests {
 		AtomicReference<String> headerValue = new AtomicReference<>();
 
 		// Create a transport with the customizer
-		HttpClientSseClientTransport customizedTransport = HttpClientSseClientTransport.builder(host)
+		HttpClientSseClientTransportProvider customizedTransport = HttpClientSseClientTransportProvider.builder(host)
 			// Create a request customizer that adds a custom header
 			.customizeRequest(builder -> {
 				builder.header("X-Custom-Header", "test-value");
@@ -345,7 +383,7 @@ class HttpClientSseClientTransportTests {
 		AtomicBoolean requestCustomizerCalled = new AtomicBoolean(false);
 
 		// Create a transport with both customizers chained
-		HttpClientSseClientTransport customizedTransport = HttpClientSseClientTransport.builder(host)
+		HttpClientSseClientTransportProvider customizedTransport = HttpClientSseClientTransportProvider.builder(host)
 			.customizeClient(builder -> {
 				builder.connectTimeout(Duration.ofSeconds(30));
 				clientCustomizerCalled.set(true);

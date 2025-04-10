@@ -5,7 +5,7 @@ package io.modelcontextprotocol.server.transport;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpClient;
-import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
+import io.modelcontextprotocol.client.transport.HttpClientSseClientTransportProvider;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.apache.catalina.LifecycleException;
@@ -54,7 +54,7 @@ public class HttpServletSseServerCustomContextPathTests {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		this.clientBuilder = McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
+		this.clientBuilder = McpClient.sync(HttpClientSseClientTransportProvider.builder("http://localhost:" + PORT)
 			.sseEndpoint(CUSTOM_CONTEXT_PATH + CUSTOM_SSE_ENDPOINT)
 			.build());
 	}

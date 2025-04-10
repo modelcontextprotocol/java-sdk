@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.util.List;
 
 import io.modelcontextprotocol.MockMcpClientTransport;
+import io.modelcontextprotocol.MockMcpClientTransportProvider;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
@@ -28,8 +29,9 @@ class McpClientProtocolVersionTests {
 
 	@Test
 	void shouldUseLatestVersionByDefault() {
-		MockMcpClientTransport transport = new MockMcpClientTransport();
-		McpAsyncClient client = McpClient.async(transport)
+		MockMcpClientTransportProvider transportProvider = new MockMcpClientTransportProvider();
+		MockMcpClientTransportProvider.MockMcpClientTransport transport = transportProvider.getTransport();
+		McpAsyncClient client = McpClient.async(transportProvider)
 			.clientInfo(CLIENT_INFO)
 			.requestTimeout(REQUEST_TIMEOUT)
 			.build();
@@ -61,8 +63,9 @@ class McpClientProtocolVersionTests {
 	@Test
 	void shouldNegotiateSpecificVersion() {
 		String oldVersion = "0.1.0";
-		MockMcpClientTransport transport = new MockMcpClientTransport();
-		McpAsyncClient client = McpClient.async(transport)
+		MockMcpClientTransportProvider transportProvider = new MockMcpClientTransportProvider();
+		MockMcpClientTransportProvider.MockMcpClientTransport transport = transportProvider.getTransport();
+		McpAsyncClient client = McpClient.async(transportProvider)
 			.clientInfo(CLIENT_INFO)
 			.requestTimeout(REQUEST_TIMEOUT)
 			.build();
@@ -94,8 +97,9 @@ class McpClientProtocolVersionTests {
 	@Test
 	void shouldFailForUnsupportedVersion() {
 		String unsupportedVersion = "999.999.999";
-		MockMcpClientTransport transport = new MockMcpClientTransport();
-		McpAsyncClient client = McpClient.async(transport)
+		MockMcpClientTransportProvider transportProvider = new MockMcpClientTransportProvider();
+		MockMcpClientTransportProvider.MockMcpClientTransport transport = transportProvider.getTransport();
+		McpAsyncClient client = McpClient.async(transportProvider)
 			.clientInfo(CLIENT_INFO)
 			.requestTimeout(REQUEST_TIMEOUT)
 			.build();
@@ -124,8 +128,9 @@ class McpClientProtocolVersionTests {
 		String middleVersion = "0.2.0";
 		String latestVersion = McpSchema.LATEST_PROTOCOL_VERSION;
 
-		MockMcpClientTransport transport = new MockMcpClientTransport();
-		McpAsyncClient client = McpClient.async(transport)
+		MockMcpClientTransportProvider transportProvider = new MockMcpClientTransportProvider();
+		MockMcpClientTransportProvider.MockMcpClientTransport transport = transportProvider.getTransport();
+		McpAsyncClient client = McpClient.async(transportProvider)
 			.clientInfo(CLIENT_INFO)
 			.requestTimeout(REQUEST_TIMEOUT)
 			.build();

@@ -12,7 +12,9 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpClientTransport;
+import io.modelcontextprotocol.spec.McpClientTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransport;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
@@ -52,7 +54,7 @@ import reactor.core.publisher.Mono;
  *     .requestTimeout(Duration.ofSeconds(5))
  *     .build();
  * }</pre>
- *
+ * <p>
  * Example of creating a basic asynchronous client: <pre>{@code
  * McpClient.async(transport)
  *     .requestTimeout(Duration.ofSeconds(5))
@@ -114,7 +116,7 @@ public interface McpClient {
 	 * @return A new builder instance for configuring the client
 	 * @throws IllegalArgumentException if transport is null
 	 */
-	static SyncSpec sync(McpClientTransport transport) {
+	static SyncSpec sync(McpClientTransportProvider transport) {
 		return new SyncSpec(transport);
 	}
 
@@ -131,7 +133,7 @@ public interface McpClient {
 	 * @return A new builder instance for configuring the client
 	 * @throws IllegalArgumentException if transport is null
 	 */
-	static AsyncSpec async(McpClientTransport transport) {
+	static AsyncSpec async(McpClientTransportProvider transport) {
 		return new AsyncSpec(transport);
 	}
 
@@ -153,7 +155,9 @@ public interface McpClient {
 	 */
 	class SyncSpec {
 
-		private final McpClientTransport transport;
+		private final McpClientTransportProvider transportProvider;
+
+		private ObjectMapper objectMapper;
 
 		private Duration requestTimeout = Duration.ofSeconds(20); // Default timeout
 
@@ -175,9 +179,9 @@ public interface McpClient {
 
 		private Function<CreateMessageRequest, CreateMessageResult> samplingHandler;
 
-		private SyncSpec(McpClientTransport transport) {
-			Assert.notNull(transport, "Transport must not be null");
-			this.transport = transport;
+		private SyncSpec(McpClientTransportProvider transportProvider) {
+			Assert.notNull(transportProvider, "Transport must not be null");
+			this.transportProvider = transportProvider;
 		}
 
 		/**
@@ -367,9 +371,10 @@ public interface McpClient {
 					this.loggingConsumers, this.samplingHandler);
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
+			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
 
-			return new McpSyncClient(
-					new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout, asyncFeatures));
+			return new McpSyncClient(new McpAsyncClient(this.transportProvider, this.requestTimeout,
+					this.initializationTimeout, asyncFeatures, mapper));
 		}
 
 	}
@@ -392,7 +397,9 @@ public interface McpClient {
 	 */
 	class AsyncSpec {
 
-		private final McpClientTransport transport;
+		private final McpClientTransportProvider transportProvider;
+
+		private ObjectMapper objectMapper;
 
 		private Duration requestTimeout = Duration.ofSeconds(20); // Default timeout
 
@@ -414,9 +421,9 @@ public interface McpClient {
 
 		private Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler;
 
-		private AsyncSpec(McpClientTransport transport) {
-			Assert.notNull(transport, "Transport must not be null");
-			this.transport = transport;
+		private AsyncSpec(McpClientTransportProvider transportProvider) {
+			Assert.notNull(transportProvider, "Transport must not be null");
+			this.transportProvider = transportProvider;
 		}
 
 		/**
@@ -603,10 +610,12 @@ public interface McpClient {
 		 * @return a new instance of {@link McpAsyncClient}.
 		 */
 		public McpAsyncClient build() {
-			return new McpAsyncClient(this.transport, this.requestTimeout, this.initializationTimeout,
+			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
+			return new McpAsyncClient(this.transportProvider, this.requestTimeout, this.initializationTimeout,
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
 							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.promptsChangeConsumers,
-							this.loggingConsumers, this.samplingHandler));
+							this.loggingConsumers, this.samplingHandler),
+					mapper);
 		}
 
 	}

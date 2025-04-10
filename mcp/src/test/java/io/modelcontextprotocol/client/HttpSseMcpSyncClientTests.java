@@ -4,15 +4,13 @@
 
 package io.modelcontextprotocol.client;
 
-import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
-import io.modelcontextprotocol.spec.McpClientTransport;
+import io.modelcontextprotocol.client.transport.HttpClientSseClientTransportProvider;
+import io.modelcontextprotocol.spec.McpClientTransportProvider;
 import org.junit.jupiter.api.Timeout;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 
 /**
- * Tests for the {@link McpSyncClient} with {@link HttpClientSseClientTransport}.
- *
  * @author Christian Tzolov
  */
 @Timeout(15) // Giving extra time beyond the client timeout
@@ -28,8 +26,8 @@ class HttpSseMcpSyncClientTests extends AbstractMcpSyncClientTests {
 		.waitingFor(Wait.forHttp("/").forStatusCode(404));
 
 	@Override
-	protected McpClientTransport createMcpTransport() {
-		return HttpClientSseClientTransport.builder(host).build();
+	protected McpClientTransportProvider createMcpClientTransportProvider() {
+		return HttpClientSseClientTransportProvider.builder(host).build();
 	}
 
 	@Override

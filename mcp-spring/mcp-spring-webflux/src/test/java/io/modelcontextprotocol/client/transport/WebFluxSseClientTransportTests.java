@@ -9,7 +9,10 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.spec.McpClientSession;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
 import org.junit.jupiter.api.AfterEach;
@@ -31,8 +34,6 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Tests for the {@link WebFluxSseClientTransport} class.
- *
  * @author Christian Tzolov
  */
 @Timeout(15)
@@ -46,20 +47,22 @@ class WebFluxSseClientTransportTests {
 		.withExposedPorts(3001)
 		.waitingFor(Wait.forHttp("/").forStatusCode(404));
 
-	private TestSseClientTransport transport;
+	private TestSseClientTransportProvider transportProvider;
+
+	private McpClientTransport transport;
 
 	private WebClient.Builder webClientBuilder;
 
 	private ObjectMapper objectMapper;
 
 	// Test class to access protected methods
-	static class TestSseClientTransport extends WebFluxSseClientTransport {
+	static class TestSseClientTransportProvider extends WebFluxSseClientTransportProvider {
 
 		private final AtomicInteger inboundMessageCount = new AtomicInteger(0);
 
 		private Sinks.Many<ServerSentEvent<String>> events = Sinks.many().unicast().onBackpressureBuffer();
 
-		public TestSseClientTransport(WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
+		public TestSseClientTransportProvider(WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
 			super(webClientBuilder, objectMapper);
 		}
 
@@ -69,7 +72,7 @@ class WebFluxSseClientTransportTests {
 		}
 
 		public String getLastEndpoint() {
-			return messageEndpointSink.asMono().block();
+			return ((WebFluxSseClientTransport) getSession().getTransport()).messageEndpointSink.asMono().block();
 		}
 
 		public int getInboundMessageCount() {
@@ -99,7 +102,10 @@ class WebFluxSseClientTransportTests {
 		startContainer();
 		webClientBuilder = WebClient.builder().baseUrl(host);
 		objectMapper = new ObjectMapper();
-		transport = new TestSseClientTransport(webClientBuilder, objectMapper);
+		transportProvider = new TestSseClientTransportProvider(webClientBuilder, objectMapper);
+		transportProvider.setSessionFactory(
+				(transport) -> new McpClientSession(Duration.ofSeconds(5), transport, Map.of(), Map.of()));
+		transport = transportProvider.getSession().getTransport();
 		transport.connect(Function.identity()).block();
 	}
 
@@ -117,15 +123,16 @@ class WebFluxSseClientTransportTests {
 
 	@Test
 	void testEndpointEventHandling() {
-		assertThat(transport.getLastEndpoint()).startsWith("/message?");
+		assertThat(transportProvider.getLastEndpoint()).startsWith("/message?");
 	}
 
 	@Test
 	void constructorValidation() {
-		assertThatThrownBy(() -> new WebFluxSseClientTransport(null)).isInstanceOf(IllegalArgumentException.class)
+		assertThatThrownBy(() -> new WebFluxSseClientTransportProvider(null))
+			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("WebClient.Builder must not be null");
 
-		assertThatThrownBy(() -> new WebFluxSseClientTransport(webClientBuilder, null))
+		assertThatThrownBy(() -> new WebFluxSseClientTransportProvider(webClientBuilder, null))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("ObjectMapper must not be null");
 	}
@@ -133,28 +140,45 @@ class WebFluxSseClientTransportTests {
 	@Test
 	void testBuilderPattern() {
 		// Test default builder
-		WebFluxSseClientTransport transport1 = WebFluxSseClientTransport.builder(webClientBuilder).build();
-		assertThatCode(() -> transport1.closeGracefully().block()).doesNotThrowAnyException();
+		WebFluxSseClientTransportProvider transportProvider1 = WebFluxSseClientTransportProvider
+			.builder(webClientBuilder)
+			.build();
+		transportProvider1.setSessionFactory(
+				(transport) -> new McpClientSession(Duration.ofSeconds(5), transport, Map.of(), Map.of()));
+		transportProvider1.getSession();
+		assertThatCode(() -> transportProvider1.closeGracefully().block()).doesNotThrowAnyException();
 
 		// Test builder with custom ObjectMapper
 		ObjectMapper customMapper = new ObjectMapper();
-		WebFluxSseClientTransport transport2 = WebFluxSseClientTransport.builder(webClientBuilder)
+		WebFluxSseClientTransportProvider transportProvider2 = WebFluxSseClientTransportProvider
+			.builder(webClientBuilder)
 			.objectMapper(customMapper)
 			.build();
-		assertThatCode(() -> transport2.closeGracefully().block()).doesNotThrowAnyException();
+		transportProvider2.setSessionFactory(
+				(transport) -> new McpClientSession(Duration.ofSeconds(5), transport, Map.of(), Map.of()));
+		transportProvider2.getSession();
+		assertThatCode(() -> transportProvider2.closeGracefully().block()).doesNotThrowAnyException();
 
 		// Test builder with custom SSE endpoint
-		WebFluxSseClientTransport transport3 = WebFluxSseClientTransport.builder(webClientBuilder)
+		WebFluxSseClientTransportProvider transportProvider3 = WebFluxSseClientTransportProvider
+			.builder(webClientBuilder)
 			.sseEndpoint("/custom-sse")
 			.build();
-		assertThatCode(() -> transport3.closeGracefully().block()).doesNotThrowAnyException();
+		transportProvider3.setSessionFactory(
+				(transport) -> new McpClientSession(Duration.ofSeconds(5), transport, Map.of(), Map.of()));
+		transportProvider3.getSession();
+		assertThatCode(() -> transportProvider3.closeGracefully().block()).doesNotThrowAnyException();
 
 		// Test builder with all custom parameters
-		WebFluxSseClientTransport transport4 = WebFluxSseClientTransport.builder(webClientBuilder)
+		WebFluxSseClientTransportProvider transportProvider4 = WebFluxSseClientTransportProvider
+			.builder(webClientBuilder)
 			.objectMapper(customMapper)
 			.sseEndpoint("/custom-sse")
 			.build();
-		assertThatCode(() -> transport4.closeGracefully().block()).doesNotThrowAnyException();
+		transportProvider4.setSessionFactory(
+				(transport) -> new McpClientSession(Duration.ofSeconds(5), transport, Map.of(), Map.of()));
+		transportProvider4.getSession();
+		assertThatCode(() -> transportProvider4.closeGracefully().block()).doesNotThrowAnyException();
 	}
 
 	@Test
@@ -164,7 +188,7 @@ class WebFluxSseClientTransportTests {
 				Map.of("key", "value"));
 
 		// Simulate receiving the message
-		transport.simulateMessageEvent("""
+		transportProvider.simulateMessageEvent("""
 				{
 				    "jsonrpc": "2.0",
 				    "method": "test-method",
@@ -176,13 +200,13 @@ class WebFluxSseClientTransportTests {
 		// Subscribe to messages and verify
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 
-		assertThat(transport.getInboundMessageCount()).isEqualTo(1);
+		assertThat(transportProvider.getInboundMessageCount()).isEqualTo(1);
 	}
 
 	@Test
 	void testResponseMessageProcessing() {
 		// Simulate receiving a response message
-		transport.simulateMessageEvent("""
+		transportProvider.simulateMessageEvent("""
 				{
 				    "jsonrpc": "2.0",
 				    "id": "test-id",
@@ -197,13 +221,13 @@ class WebFluxSseClientTransportTests {
 		// Verify message handling
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 
-		assertThat(transport.getInboundMessageCount()).isEqualTo(1);
+		assertThat(transportProvider.getInboundMessageCount()).isEqualTo(1);
 	}
 
 	@Test
 	void testErrorMessageProcessing() {
 		// Simulate receiving an error message
-		transport.simulateMessageEvent("""
+		transportProvider.simulateMessageEvent("""
 				{
 				    "jsonrpc": "2.0",
 				    "id": "test-id",
@@ -221,13 +245,13 @@ class WebFluxSseClientTransportTests {
 		// Verify message handling
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 
-		assertThat(transport.getInboundMessageCount()).isEqualTo(1);
+		assertThat(transportProvider.getInboundMessageCount()).isEqualTo(1);
 	}
 
 	@Test
 	void testNotificationMessageProcessing() {
 		// Simulate receiving a notification message (no id)
-		transport.simulateMessageEvent("""
+		transportProvider.simulateMessageEvent("""
 				{
 				    "jsonrpc": "2.0",
 				    "method": "update",
@@ -236,7 +260,7 @@ class WebFluxSseClientTransportTests {
 				""");
 
 		// Verify the notification was processed
-		assertThat(transport.getInboundMessageCount()).isEqualTo(1);
+		assertThat(transportProvider.getInboundMessageCount()).isEqualTo(1);
 	}
 
 	@Test
@@ -252,7 +276,7 @@ class WebFluxSseClientTransportTests {
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 
 		// Message count should remain 0 after shutdown
-		assertThat(transport.getInboundMessageCount()).isEqualTo(0);
+		assertThat(transportProvider.getInboundMessageCount()).isEqualTo(0);
 	}
 
 	@Test
@@ -260,19 +284,23 @@ class WebFluxSseClientTransportTests {
 		// Create a WebClient that simulates connection failures
 		WebClient.Builder failingWebClientBuilder = WebClient.builder().baseUrl("http://non-existent-host");
 
-		WebFluxSseClientTransport failingTransport = WebFluxSseClientTransport.builder(failingWebClientBuilder).build();
+		WebFluxSseClientTransportProvider failingTransportProvider = WebFluxSseClientTransportProvider
+			.builder(failingWebClientBuilder)
+			.build();
+		failingTransportProvider.setSessionFactory(
+				(transport) -> new McpClientSession(Duration.ofSeconds(5), transport, Map.of(), Map.of()));
 
 		// Verify that the transport attempts to reconnect
 		StepVerifier.create(Mono.delay(Duration.ofSeconds(2))).expectNextCount(1).verifyComplete();
 
 		// Clean up
-		failingTransport.closeGracefully().block();
+		failingTransportProvider.getSession().getTransport().closeGracefully().block();
 	}
 
 	@Test
 	void testMultipleMessageProcessing() {
 		// Simulate receiving multiple messages in sequence
-		transport.simulateMessageEvent("""
+		transportProvider.simulateMessageEvent("""
 				{
 				    "jsonrpc": "2.0",
 				    "method": "method1",
@@ -281,7 +309,7 @@ class WebFluxSseClientTransportTests {
 				}
 				""");
 
-		transport.simulateMessageEvent("""
+		transportProvider.simulateMessageEvent("""
 				{
 				    "jsonrpc": "2.0",
 				    "method": "method2",
@@ -301,13 +329,13 @@ class WebFluxSseClientTransportTests {
 		StepVerifier.create(transport.sendMessage(message1).then(transport.sendMessage(message2))).verifyComplete();
 
 		// Verify message count
-		assertThat(transport.getInboundMessageCount()).isEqualTo(2);
+		assertThat(transportProvider.getInboundMessageCount()).isEqualTo(2);
 	}
 
 	@Test
 	void testMessageOrderPreservation() {
 		// Simulate receiving messages in a specific order
-		transport.simulateMessageEvent("""
+		transportProvider.simulateMessageEvent("""
 				{
 				    "jsonrpc": "2.0",
 				    "method": "first",
@@ -316,7 +344,7 @@ class WebFluxSseClientTransportTests {
 				}
 				""");
 
-		transport.simulateMessageEvent("""
+		transportProvider.simulateMessageEvent("""
 				{
 				    "jsonrpc": "2.0",
 				    "method": "second",
@@ -325,7 +353,7 @@ class WebFluxSseClientTransportTests {
 				}
 				""");
 
-		transport.simulateMessageEvent("""
+		transportProvider.simulateMessageEvent("""
 				{
 				    "jsonrpc": "2.0",
 				    "method": "third",
@@ -335,7 +363,7 @@ class WebFluxSseClientTransportTests {
 				""");
 
 		// Verify message count and order
-		assertThat(transport.getInboundMessageCount()).isEqualTo(3);
+		assertThat(transportProvider.getInboundMessageCount()).isEqualTo(3);
 	}
 
 }

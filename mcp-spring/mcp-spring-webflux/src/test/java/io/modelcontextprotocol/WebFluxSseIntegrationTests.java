@@ -14,8 +14,8 @@ import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpClient;
-import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
-import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
+import io.modelcontextprotocol.client.transport.HttpClientSseClientTransportProvider;
+import io.modelcontextprotocol.client.transport.WebFluxSseClientTransportProvider;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvider;
@@ -78,14 +78,14 @@ public class WebFluxSseIntegrationTests {
 		this.httpServer = HttpServer.create().port(PORT).handle(adapter).bindNow();
 
 		clientBuilders.put("httpclient",
-				McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
+				McpClient.sync(HttpClientSseClientTransportProvider.builder("http://localhost:" + PORT)
 					.sseEndpoint(CUSTOM_SSE_ENDPOINT)
 					.build()));
 		clientBuilders.put("webflux",
-				McpClient
-					.sync(WebFluxSseClientTransport.builder(WebClient.builder().baseUrl("http://localhost:" + PORT))
-						.sseEndpoint(CUSTOM_SSE_ENDPOINT)
-						.build()));
+				McpClient.sync(WebFluxSseClientTransportProvider
+					.builder(WebClient.builder().baseUrl("http://localhost:" + PORT))
+					.sseEndpoint(CUSTOM_SSE_ENDPOINT)
+					.build()));
 
 	}
 
