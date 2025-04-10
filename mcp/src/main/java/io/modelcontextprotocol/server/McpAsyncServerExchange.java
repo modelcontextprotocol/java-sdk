@@ -1,9 +1,16 @@
+/*
+ * Copyright 2024-2024 the original author or authors.
+ */
+
 package io.modelcontextprotocol.server;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
+import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpServerSession;
+import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
 
 /**
@@ -11,6 +18,7 @@ import reactor.core.publisher.Mono;
  * exchange provides methods to interact with the client and query its capabilities.
  *
  * @author Dariusz Jędrzejczyk
+ * @author Christian Tzolov
  */
 public class McpAsyncServerExchange {
 
@@ -19,6 +27,8 @@ public class McpAsyncServerExchange {
 	private final McpSchema.ClientCapabilities clientCapabilities;
 
 	private final McpSchema.Implementation clientInfo;
+
+	private volatile LoggingLevel minLoggingLevel = LoggingLevel.INFO;
 
 	private static final TypeReference<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeReference<>() {
 	};
@@ -99,6 +109,40 @@ public class McpAsyncServerExchange {
 	public Mono<McpSchema.ListRootsResult> listRoots(String cursor) {
 		return this.session.sendRequest(McpSchema.METHOD_ROOTS_LIST, new McpSchema.PaginatedRequest(cursor),
 				LIST_ROOTS_RESULT_TYPE_REF);
+	}
+
+	/**
+	 * Send a logging message notification to all connected clients. Messages below the
+	 * current minimum logging level will be filtered out.
+	 * @param loggingMessageNotification The logging message to send
+	 * @return A Mono that completes when the notification has been sent
+	 */
+	public Mono<Void> loggingNotification(LoggingMessageNotification loggingMessageNotification) {
+
+		if (loggingMessageNotification == null) {
+			return Mono.error(new McpError("Logging message must not be null"));
+		}
+
+		return Mono.defer(() -> {
+			if (this.isNotificationForLevelAllowed(loggingMessageNotification.level())) {
+				return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_MESSAGE, loggingMessageNotification);
+			}
+			return Mono.empty();
+		});
+	}
+
+	/**
+	 * Set the minimum logging level for the client. Messages below this level will be
+	 * filtered out.
+	 * @param minLoggingLevel The minimum logging level
+	 */
+	void setMinLoggingLevel(LoggingLevel minLoggingLevel) {
+		Assert.notNull(minLoggingLevel, "minLoggingLevel must not be null");
+		this.minLoggingLevel = minLoggingLevel;
+	}
+
+	private boolean isNotificationForLevelAllowed(LoggingLevel loggingLevel) {
+		return loggingLevel.level() >= this.minLoggingLevel.level();
 	}
 
 }

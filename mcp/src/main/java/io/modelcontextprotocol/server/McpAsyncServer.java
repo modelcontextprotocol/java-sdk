@@ -21,6 +21,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
+import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
@@ -216,11 +217,17 @@ public class McpAsyncServer {
 	// ---------------------------------------
 
 	/**
-	 * Send a logging message notification to all connected clients. Messages below the
-	 * current minimum logging level will be filtered out.
+	 * This implementation would, incorrectly, broadcast the logging message to all
+	 * connected clients, using a single minLoggingLevel for all of them. Similar to the
+	 * sampling and roots, the logging level should be set per client session and use the
+	 * ServerExchange to send the logging message to the right client.
 	 * @param loggingMessageNotification The logging message to send
 	 * @return A Mono that completes when the notification has been sent
+	 * @deprecated Use
+	 * {@link McpAsyncServerExchange#loggingNotification(LoggingMessageNotification)}
+	 * instead.
 	 */
+	@Deprecated
 	public Mono<Void> loggingNotification(LoggingMessageNotification loggingMessageNotification) {
 		return this.delegate.loggingNotification(loggingMessageNotification);
 	}
@@ -257,6 +264,8 @@ public class McpAsyncServer {
 
 		private final ConcurrentHashMap<String, McpServerFeatures.AsyncPromptSpecification> prompts = new ConcurrentHashMap<>();
 
+		// FIXME: this field is deprecated and should be remvoed together with the
+		// broadcasting loggingNotification.
 		private LoggingLevel minLoggingLevel = LoggingLevel.DEBUG;
 
 		private List<String> protocolVersions = List.of(McpSchema.LATEST_PROTOCOL_VERSION);
@@ -677,12 +686,22 @@ public class McpAsyncServer {
 					loggingMessageNotification);
 		}
 
-		private McpServerSession.RequestHandler<Void> setLoggerRequestHandler() {
+		private McpServerSession.RequestHandler<Object> setLoggerRequestHandler() {
 			return (exchange, params) -> {
-				this.minLoggingLevel = objectMapper.convertValue(params, new TypeReference<LoggingLevel>() {
-				});
+				return Mono.defer(() -> {
 
-				return Mono.empty();
+					SetLevelRequest newMinLoggingLevel = objectMapper.convertValue(params,
+							new TypeReference<SetLevelRequest>() {
+							});
+
+					exchange.setMinLoggingLevel(newMinLoggingLevel.level());
+
+					// FIXME: this field is deprecated and should be removed together
+					// with the broadcasting loggingNotification.
+					this.minLoggingLevel = newMinLoggingLevel.level();
+
+					return Mono.just(Map.of());
+				});
 			};
 		}
 

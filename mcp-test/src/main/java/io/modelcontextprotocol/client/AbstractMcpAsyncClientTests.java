@@ -31,6 +31,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -453,15 +454,10 @@ public abstract class AbstractMcpAsyncClientTests {
 	@Test
 	void testLoggingLevels() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
-			Mono<Void> testAllLevels = mcpAsyncClient.initialize().then(Mono.defer(() -> {
-				Mono<Void> chain = Mono.empty();
-				for (McpSchema.LoggingLevel level : McpSchema.LoggingLevel.values()) {
-					chain = chain.then(mcpAsyncClient.setLoggingLevel(level));
-				}
-				return chain;
-			}));
-
-			StepVerifier.create(testAllLevels).verifyComplete();
+			StepVerifier
+				.create(mcpAsyncClient.initialize()
+					.thenMany(Flux.fromArray(McpSchema.LoggingLevel.values()).flatMap(mcpAsyncClient::setLoggingLevel)))
+				.verifyComplete();
 		});
 	}
 

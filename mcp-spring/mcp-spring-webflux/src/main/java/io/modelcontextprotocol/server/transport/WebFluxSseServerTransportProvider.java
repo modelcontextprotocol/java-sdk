@@ -306,6 +306,11 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 		McpServerSession session = sessions.get(request.queryParam("sessionId").get());
 
+		if (session == null) {
+			return ServerResponse.status(HttpStatus.NOT_FOUND)
+				.bodyValue(new McpError("Session not found: " + request.queryParam("sessionId").get()));
+		}
+
 		return request.bodyToMono(String.class).flatMap(body -> {
 			try {
 				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
