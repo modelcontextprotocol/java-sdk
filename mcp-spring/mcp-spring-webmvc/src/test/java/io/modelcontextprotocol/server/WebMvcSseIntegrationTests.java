@@ -46,7 +46,7 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 
-public class WebMvcSseIntegrationTests {
+class WebMvcSseIntegrationTests {
 
 	private static final int PORT = 8183;
 
@@ -81,13 +81,13 @@ public class WebMvcSseIntegrationTests {
 
 		try {
 			tomcatServer.tomcat().start();
-			assertThat(tomcatServer.tomcat().getServer().getState() == LifecycleState.STARTED);
+			assertThat(tomcatServer.tomcat().getServer().getState()).isEqualTo(LifecycleState.STARTED);
 		}
 		catch (Exception e) {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		clientBuilder = McpClient.sync(new HttpClientSseClientTransport("http://localhost:" + PORT));
+		clientBuilder = McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT).build());
 
 		// Get the transport from Spring context
 		mcpServerTransportProvider = tomcatServer.appContext().getBean(WebMvcSseServerTransportProvider.class);
@@ -202,8 +202,7 @@ public class WebMvcSseIntegrationTests {
 
 		CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
 
-		assertThat(response).isNotNull();
-		assertThat(response).isEqualTo(callResponse);
+		assertThat(response).isNotNull().isEqualTo(callResponse);
 
 		mcpClient.close();
 		mcpServer.close();
@@ -534,7 +533,7 @@ public class WebMvcSseIntegrationTests {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
-						.uri("https://github.com/modelcontextprotocol/specification/blob/main/README.md")
+						.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
 						.retrieve()
 						.body(String.class);
 					assertThat(response).isNotBlank();
@@ -555,8 +554,7 @@ public class WebMvcSseIntegrationTests {
 
 		CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
 
-		assertThat(response).isNotNull();
-		assertThat(response).isEqualTo(callResponse);
+		assertThat(response).isNotNull().isEqualTo(callResponse);
 
 		mcpClient.close();
 		mcpServer.close();
@@ -571,7 +569,7 @@ public class WebMvcSseIntegrationTests {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
-						.uri("https://github.com/modelcontextprotocol/specification/blob/main/README.md")
+						.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
 						.retrieve()
 						.body(String.class);
 					assertThat(response).isNotBlank();
@@ -588,7 +586,7 @@ public class WebMvcSseIntegrationTests {
 			// perform a blocking call to a remote service
 			String response = RestClient.create()
 				.get()
-				.uri("https://github.com/modelcontextprotocol/specification/blob/main/README.md")
+				.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
 				.retrieve()
 				.body(String.class);
 			assertThat(response).isNotBlank();
