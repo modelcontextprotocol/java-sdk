@@ -5,6 +5,8 @@
 package io.modelcontextprotocol.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.modelcontextprotocol.TestUtil;
 import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.junit.jupiter.api.Timeout;
@@ -23,7 +25,7 @@ import org.springframework.web.reactive.function.server.RouterFunctions;
 @Timeout(15) // Giving extra time beyond the client timeout
 class WebFluxSseMcpAsyncServerTests extends AbstractMcpAsyncServerTests {
 
-	private static final int PORT = 8181;
+	private static final int PORT = TestUtil.findAvailablePort();
 
 	private static final String MESSAGE_ENDPOINT = "/mcp/message";
 

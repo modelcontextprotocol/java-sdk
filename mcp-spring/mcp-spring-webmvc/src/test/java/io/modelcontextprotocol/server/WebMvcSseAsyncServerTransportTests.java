@@ -25,7 +25,7 @@ class WebMvcSseAsyncServerTransportTests extends AbstractMcpAsyncServerTests {
 
 	private static final String MESSAGE_ENDPOINT = "/mcp/message";
 
-	private static final int PORT = 8181;
+	private static final int PORT = TomcatTestUtil.findAvailablePort();
 
 	private Tomcat tomcat;
 
@@ -73,7 +73,6 @@ class WebMvcSseAsyncServerTransportTests extends AbstractMcpAsyncServerTests {
 
 		// Create DispatcherServlet with our Spring context
 		DispatcherServlet dispatcherServlet = new DispatcherServlet(appContext);
-		// dispatcherServlet.setThrowExceptionIfNoHandlerFound(true);
 
 		// Add servlet to Tomcat and get the wrapper
 		var wrapper = Tomcat.addServlet(context, "dispatcherServlet", dispatcherServlet);
