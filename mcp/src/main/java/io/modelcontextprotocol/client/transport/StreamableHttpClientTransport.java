@@ -14,6 +14,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -195,10 +196,43 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 
 		try {
 			String json = objectMapper.writeValueAsString(message);
-			HttpRequest request = requestBuilder.copy().POST(HttpRequest.BodyPublishers.ofString(json)).build();
-			return Mono.fromFuture(httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream()))
-				.flatMap(response -> handleStreamingResponse(msg -> msg, response))
-				.then();
+			return sentPost(json);
+		}
+		catch (Exception e) {
+			return Mono.error(e);
+		}
+	}
+
+	/**
+	 * Sends a list of messages to the server.
+	 * @param messages the list of messages to send
+	 * @return a Mono that completes when all messages have been sent
+	 */
+	public Mono<Void> sendMessages(final List<McpSchema.JSONRPCMessage> messages) {
+		if (state.get() == TransportState.CLOSED) {
+			return Mono.empty();
+		}
+
+		if (fallbackToSse.get()) {
+			return Flux.fromIterable(messages).flatMap(this::sendMessage).then();
+		}
+
+		if (state.get() == TransportState.DISCONNECTED) {
+			state.set(TransportState.CONNECTING);
+
+			return sendInitialHandshake().doOnSuccess(v -> state.set(TransportState.CONNECTED)).onErrorResume(e -> {
+				if (e instanceof UnsupportedOperationException) {
+					LOGGER.warn("Streamable transport failed, falling back to SSE.", e);
+					fallbackToSse.set(true);
+					return Mono.empty();
+				}
+				return Mono.error(e);
+			}).then(sendMessages(messages));
+		}
+
+		try {
+			String json = objectMapper.writeValueAsString(messages);
+			return sentPost(json);
 		}
 		catch (Exception e) {
 			return Mono.error(e);
@@ -227,6 +261,13 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 		catch (IOException e) {
 			return Mono.error(e);
 		}
+	}
+
+	private Mono<Void> sentPost(String json) {
+		HttpRequest request = requestBuilder.copy().POST(HttpRequest.BodyPublishers.ofString(json)).build();
+		return Mono.fromFuture(httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream()))
+			.flatMap(response -> handleStreamingResponse(msg -> msg, response))
+			.then();
 	}
 
 	private Mono<Void> handleStreamingResponse(
