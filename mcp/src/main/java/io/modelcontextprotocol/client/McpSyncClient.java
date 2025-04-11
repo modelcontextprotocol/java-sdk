@@ -326,6 +326,12 @@ public class McpSyncClient implements AutoCloseable {
 		this.delegate.setLoggingLevel(loggingLevel).block();
 	}
 
+	/**
+	 * Send a completion/complete request.
+	 * @param completeRequest the completion request contains the prompt or resource
+	 * reference and arguments for generating suggestions.
+	 * @return the completion result containing suggested values.
+	 */
 	public McpSchema.CompleteResult completeCompletion(McpSchema.CompleteRequest completeRequest) {
 		return this.delegate.completeCompletion(completeRequest).block();
 	}

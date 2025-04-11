@@ -728,6 +728,7 @@ public class McpAsyncServer {
 
 				String type = request.ref().type();
 
+				// check if the referenced resource exists
 				if (type.equals("ref/prompt")
 						&& request.ref() instanceof McpSchema.CompleteRequest.PromptReference promptReference) {
 					McpServerFeatures.AsyncPromptSpecification prompt = this.prompts.get(promptReference.name());
@@ -755,6 +756,19 @@ public class McpAsyncServer {
 			};
 		}
 
+		/**
+		 * Parses the raw JSON-RPC request parameters into a
+		 * {@link McpSchema.CompleteRequest} object.
+		 * <p>
+		 * This method manually extracts the `ref` and `argument` fields from the input
+		 * map, determines the correct reference type (either prompt or resource), and
+		 * constructs a fully-typed {@code CompleteRequest} instance.
+		 * @param object the raw request parameters, expected to be a Map containing "ref"
+		 * and "argument" entries.
+		 * @return a {@link McpSchema.CompleteRequest} representing the structured
+		 * completion request.
+		 * @throws IllegalArgumentException if the "ref" type is not recognized.
+		 */
 		@SuppressWarnings("unchecked")
 		private McpSchema.CompleteRequest parseCompletionParams(Object object) {
 			Map<String, Object> params = (Map<String, Object>) object;

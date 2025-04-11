@@ -928,6 +928,14 @@ public interface McpServer {
 			return this;
 		}
 
+		/**
+		 * Registers multiple completions with their handlers using a List. This method is
+		 * useful when completions need to be added in bulk from a collection.
+		 * @param completions List of completion specifications. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if completions is null
+		 * @see #completions(McpServerFeatures.SyncCompletionSpecification...)
+		 */
 		public SyncSpecification completions(List<McpServerFeatures.SyncCompletionSpecification> completions) {
 			Assert.notNull(completions, "Completions list must not be null");
 			for (McpServerFeatures.SyncCompletionSpecification completion : completions) {
@@ -936,6 +944,13 @@ public interface McpServer {
 			return this;
 		}
 
+		/**
+		 * Registers multiple completions with their handlers using varargs. This method
+		 * is useful when completions are defined inline and added directly.
+		 * @param completions Array of completion specifications. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if completions is null
+		 */
 		public SyncSpecification completions(McpServerFeatures.SyncCompletionSpecification... completions) {
 			Assert.notNull(completions, "Completions list must not be null");
 			for (McpServerFeatures.SyncCompletionSpecification completion : completions) {
