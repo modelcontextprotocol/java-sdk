@@ -46,6 +46,7 @@ import org.slf4j.LoggerFactory;
  *
  * @author Dariusz Jędrzejczyk
  * @author Christian Tzolov
+ * @author Jihoon Kim
  * @see McpClient
  * @see McpAsyncClient
  * @see McpSchema
@@ -323,6 +324,10 @@ public class McpSyncClient implements AutoCloseable {
 	 */
 	public void setLoggingLevel(McpSchema.LoggingLevel loggingLevel) {
 		this.delegate.setLoggingLevel(loggingLevel).block();
+	}
+
+	public McpSchema.CompleteResult completeCompletion(McpSchema.CompleteRequest completeRequest) {
+		return this.delegate.completeCompletion(completeRequest).block();
 	}
 
 }

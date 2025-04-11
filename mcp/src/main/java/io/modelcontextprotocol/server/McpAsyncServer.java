@@ -716,7 +716,7 @@ public class McpAsyncServer {
 
 		private McpServerSession.RequestHandler<McpSchema.CompleteResult> completionCompleteRequestHandler() {
 			return (exchange, params) -> {
-				McpSchema.CompleteRequest request = objectMapper.convertValue(params, McpSchema.CompleteRequest.class);
+				McpSchema.CompleteRequest request = parseCompletionParams(params);
 
 				if (request.ref() == null) {
 					return Mono.error(new McpError("ref must not be null"));
@@ -753,6 +753,30 @@ public class McpAsyncServer {
 
 				return specification.completionHandler().apply(exchange, request);
 			};
+		}
+
+		@SuppressWarnings("unchecked")
+		private McpSchema.CompleteRequest parseCompletionParams(Object object) {
+			Map<String, Object> params = (Map<String, Object>) object;
+			Map<String, Object> refMap = (Map<String, Object>) params.get("ref");
+			Map<String, Object> argMap = (Map<String, Object>) params.get("argument");
+
+			String refType = (String) refMap.get("type");
+
+			McpSchema.CompleteRequest.PromptOrResourceReference ref = switch (refType) {
+				case "ref/prompt" ->
+					new McpSchema.CompleteRequest.PromptReference(refType, (String) refMap.get("name"));
+				case "ref/resource" ->
+					new McpSchema.CompleteRequest.ResourceReference(refType, (String) refMap.get("uri"));
+				default -> throw new IllegalArgumentException("Invalid ref type: " + refType);
+			};
+
+			String argName = (String) argMap.get("name");
+			String argValue = (String) argMap.get("value");
+			McpSchema.CompleteRequest.CompleteArgument argument = new McpSchema.CompleteRequest.CompleteArgument(
+					argName, argValue);
+
+			return new McpSchema.CompleteRequest(ref, argument);
 		}
 
 		// ---------------------------------------
