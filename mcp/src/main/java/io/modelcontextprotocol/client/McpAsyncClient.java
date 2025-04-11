@@ -786,10 +786,9 @@ public class McpAsyncClient {
 		}
 
 		return this.withInitializationCheck("setting logging level", initializedResult -> {
-			String levelName = this.transport.unmarshalFrom(loggingLevel, new TypeReference<String>() {
-			});
-			Map<String, Object> params = Map.of("level", levelName);
-			return this.mcpSession.sendNotification(McpSchema.METHOD_LOGGING_SET_LEVEL, params);
+			var params = new McpSchema.SetLevelRequest(loggingLevel);
+			return this.mcpSession.sendRequest(McpSchema.METHOD_LOGGING_SET_LEVEL, params, new TypeReference<Object>() {
+			}).then();
 		});
 	}
 

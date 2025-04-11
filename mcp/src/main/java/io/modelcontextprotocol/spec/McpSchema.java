@@ -1177,6 +1177,11 @@ public final class McpSchema {
 
 	} // @formatter:on
 
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record SetLevelRequest(@JsonProperty("level") LoggingLevel level) {
+	}
+
 	// ---------------------------
 	// Autocomplete
 	// ---------------------------
