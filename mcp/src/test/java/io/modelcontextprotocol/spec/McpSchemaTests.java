@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
 import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
@@ -450,6 +451,106 @@ public class McpSchemaTests {
 	// Tool Tests
 
 	@Test
+	void testJsonSchema() throws Exception {
+		String schemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"name": {
+							"type": "string"
+						},
+						"address": {
+							"$ref": "#/$defs/Address"
+						}
+					},
+					"required": ["name"],
+					"$defs": {
+						"Address": {
+							"type": "object",
+							"properties": {
+								"street": {"type": "string"},
+								"city": {"type": "string"}
+							},
+							"required": ["street", "city"]
+						}
+					}
+				}
+				""";
+
+		McpSchema.JsonSchema schema = mapper.readValue(schemaJson, McpSchema.JsonSchema.class);
+
+		assertThat(schema.type()).isEqualTo("object");
+		assertThat(schema.properties()).containsKeys("name", "address");
+		assertThat(schema.required()).containsExactly("name");
+		assertThat(schema.defs()).isNotNull();
+		assertThat(schema.defs()).containsKey("Address");
+
+		String value = mapper.writeValueAsString(schema);
+
+		// Convert to map for easier assertions
+		Map<String, Object> jsonMap = mapper.readValue(value, new TypeReference<HashMap<String, Object>>() {
+		});
+		Map<String, Object> defs = (Map<String, Object>) jsonMap.get("$defs");
+		Map<String, Object> address = (Map<String, Object>) defs.get("Address");
+
+		assertThat(address).containsEntry("type", "object");
+		assertThat(((Map<String, Object>) ((Map<String, Object>) address.get("properties")).get("street")).get("type"))
+			.isEqualTo("string");
+		assertThat(((Map<String, Object>) ((Map<String, Object>) address.get("properties")).get("city")).get("type"))
+			.isEqualTo("string");
+	}
+
+	@Test
+	void testJsonSchemaWithDefinitions() throws Exception {
+		String schemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"name": {
+							"type": "string"
+						},
+						"address": {
+							"$ref": "#/definitions/Address"
+						}
+					},
+					"required": ["name"],
+					"definitions": {
+						"Address": {
+							"type": "object",
+							"properties": {
+								"street": {"type": "string"},
+								"city": {"type": "string"}
+							},
+							"required": ["street", "city"]
+						}
+					}
+				}
+				""";
+
+		McpSchema.JsonSchema schema = mapper.readValue(schemaJson, McpSchema.JsonSchema.class);
+
+		assertThat(schema.type()).isEqualTo("object");
+		assertThat(schema.properties()).containsKeys("name", "address");
+		assertThat(schema.required()).containsExactly("name");
+		assertThat(schema.definitions()).isNotNull();
+		assertThat(schema.definitions()).containsKey("Address");
+
+		String value = mapper.writeValueAsString(schema);
+
+		// Convert to map for easier assertions
+		Map<String, Object> jsonMap = mapper.readValue(value, new TypeReference<HashMap<String, Object>>() {
+		});
+		Map<String, Object> definitions = (Map<String, Object>) jsonMap.get("definitions");
+		Map<String, Object> address = (Map<String, Object>) definitions.get("Address");
+
+		assertThat(address).containsEntry("type", "object");
+		assertThat(((Map<String, Object>) ((Map<String, Object>) address.get("properties")).get("street")).get("type"))
+			.isEqualTo("string");
+		assertThat(((Map<String, Object>) ((Map<String, Object>) address.get("properties")).get("city")).get("type"))
+			.isEqualTo("string");
+	}
+
+	@Test
 	void testTool() throws Exception {
 		String schemaJson = """
 				{
@@ -475,6 +576,50 @@ public class McpSchemaTests {
 			.isEqualTo(
 					json("""
 							{"name":"test-tool","description":"A test tool","inputSchema":{"type":"object","properties":{"name":{"type":"string"},"value":{"type":"number"}},"required":["name"]}}"""));
+	}
+
+	@Test
+	void testToolWithComplexSchema() throws Exception {
+		String complexSchemaJson = """
+				{
+					"type": "object",
+					"$defs": {
+						"Address": {
+							"type": "object",
+							"properties": {
+								"street": {"type": "string"},
+								"city": {"type": "string"}
+							},
+							"required": ["street", "city"]
+						}
+					},
+					"properties": {
+						"name": {"type": "string"},
+						"shippingAddress": {"$ref": "#/$defs/Address"}
+					},
+					"required": ["name", "shippingAddress"]
+				}
+				""";
+
+		McpSchema.Tool tool = new McpSchema.Tool("addressTool", "Handles addresses", complexSchemaJson);
+
+		// Verify the schema was properly parsed and stored with $defs
+		assertThat(tool.inputSchema().defs()).isNotNull();
+		assertThat(tool.inputSchema().defs()).containsKey("Address");
+
+		String value = mapper.writeValueAsString(tool);
+
+		// Convert to map for easier assertions
+		Map<String, Object> jsonMap = mapper.readValue(value, new TypeReference<HashMap<String, Object>>() {
+		});
+		Map<String, Object> inputSchema = (Map<String, Object>) jsonMap.get("inputSchema");
+		Map<String, Object> defs = (Map<String, Object>) inputSchema.get("$defs");
+		Map<String, Object> address = (Map<String, Object>) defs.get("Address");
+		Map<String, Object> properties = (Map<String, Object>) inputSchema.get("properties");
+		Map<String, Object> shippingAddress = (Map<String, Object>) properties.get("shippingAddress");
+
+		assertThat(address).containsEntry("type", "object");
+		assertThat(shippingAddress).containsEntry("$ref", "#/$defs/Address");
 	}
 
 	@Test
