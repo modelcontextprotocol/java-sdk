@@ -79,6 +79,8 @@ public final class McpSchema {
 
 	public static final String METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED = "notifications/prompts/list_changed";
 
+	public static final String METHOD_COMPLETION_COMPLETE = "completions/complete";
+
 	// Logging Methods
 	public static final String METHOD_LOGGING_SET_LEVEL = "logging/setLevel";
 
@@ -314,12 +316,16 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ServerCapabilities( // @formatter:off
+	    @JsonProperty("completions") CompletionCapabilities completions,
 		@JsonProperty("experimental") Map<String, Object> experimental,
 		@JsonProperty("logging") LoggingCapabilities logging,
 		@JsonProperty("prompts") PromptCapabilities prompts,
 		@JsonProperty("resources") ResourceCapabilities resources,
 		@JsonProperty("tools") ToolCapabilities tools) {
 
+		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		public record CompletionCapabilities() {
+		}
 			
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record LoggingCapabilities() {
@@ -347,11 +353,17 @@ public final class McpSchema {
 
 		public static class Builder {
 
+			private CompletionCapabilities completions;
 			private Map<String, Object> experimental;
 			private LoggingCapabilities logging = new LoggingCapabilities();
 			private PromptCapabilities prompts;
 			private ResourceCapabilities resources;
 			private ToolCapabilities tools;
+
+			public Builder completions(CompletionCapabilities completions) {
+				this.completions = completions;
+				return this;
+			}
 
 			public Builder experimental(Map<String, Object> experimental) {
 				this.experimental = experimental;
@@ -379,7 +391,7 @@ public final class McpSchema {
 			}
 
 			public ServerCapabilities build() {
-				return new ServerCapabilities(experimental, logging, prompts, resources, tools);
+				return new ServerCapabilities(completions, experimental, logging, prompts, resources, tools);
 			}
 		}
 	} // @formatter:on

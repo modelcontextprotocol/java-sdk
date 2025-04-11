@@ -67,6 +67,7 @@ import reactor.core.publisher.Mono;
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @author Jihoon Kim
  * @see McpServer
  * @see McpSchema
  * @see McpClientSession
@@ -257,6 +258,8 @@ public class McpAsyncServer {
 
 		private final ConcurrentHashMap<String, McpServerFeatures.AsyncPromptSpecification> prompts = new ConcurrentHashMap<>();
 
+		private final ConcurrentHashMap<McpServerFeatures.CompletionRefKey, McpServerFeatures.AsyncCompletionSpecification> completions = new ConcurrentHashMap<>();
+
 		private LoggingLevel minLoggingLevel = LoggingLevel.DEBUG;
 
 		private List<String> protocolVersions = List.of(McpSchema.LATEST_PROTOCOL_VERSION);
@@ -272,6 +275,7 @@ public class McpAsyncServer {
 			this.resources.putAll(features.resources());
 			this.resourceTemplates.addAll(features.resourceTemplates());
 			this.prompts.putAll(features.prompts());
+			this.completions.putAll(features.completions());
 
 			Map<String, McpServerSession.RequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -302,6 +306,11 @@ public class McpAsyncServer {
 			// Add logging API handlers if the logging capability is enabled
 			if (this.serverCapabilities.logging() != null) {
 				requestHandlers.put(McpSchema.METHOD_LOGGING_SET_LEVEL, setLoggerRequestHandler());
+			}
+
+			// Add completion API handlers if the completion capability is enabled
+			if (this.serverCapabilities.completions() != null) {
+				requestHandlers.put(McpSchema.METHOD_COMPLETION_COMPLETE, completionCompleteRequestHandler());
 			}
 
 			Map<String, McpServerSession.NotificationHandler> notificationHandlers = new HashMap<>();
@@ -683,6 +692,47 @@ public class McpAsyncServer {
 				});
 
 				return Mono.empty();
+			};
+		}
+
+		private McpServerSession.RequestHandler<McpSchema.CompleteResult> completionCompleteRequestHandler() {
+			return (exchange, params) -> {
+				McpSchema.CompleteRequest request = objectMapper.convertValue(params, McpSchema.CompleteRequest.class);
+
+				if (request.ref() == null) {
+					return Mono.error(new McpError("ref must not be null"));
+				}
+
+				if (request.ref().type() == null) {
+					return Mono.error(new McpError("type must not be null"));
+				}
+
+				String type = request.ref().type();
+
+				if (type.equals("ref/prompt")
+						&& request.ref() instanceof McpSchema.CompleteRequest.PromptReference promptReference) {
+					McpServerFeatures.AsyncPromptSpecification prompt = this.prompts.get(promptReference.name());
+					if (prompt == null) {
+						return Mono.error(new McpError("Prompt not found: " + promptReference.name()));
+					}
+				}
+
+				if (type.equals("ref/resource")
+						&& request.ref() instanceof McpSchema.CompleteRequest.ResourceReference resourceReference) {
+					McpServerFeatures.AsyncResourceSpecification resource = this.resources.get(resourceReference.uri());
+					if (resource == null) {
+						return Mono.error(new McpError("Resource not found: " + resourceReference.uri()));
+					}
+				}
+
+				McpServerFeatures.CompletionRefKey key = McpServerFeatures.CompletionRefKey.from(request);
+				McpServerFeatures.AsyncCompletionSpecification specification = this.completions.get(key);
+
+				if (specification == null) {
+					return Mono.error(new McpError("AsyncCompletionSpecification not found: " + key));
+				}
+
+				return specification.completionHandler().apply(exchange, request);
 			};
 		}
 

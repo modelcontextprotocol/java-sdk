@@ -114,6 +114,7 @@ import reactor.core.publisher.Mono;
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @author Jihoon Kim
  * @see McpAsyncServer
  * @see McpSyncServer
  * @see McpServerTransportProvider
@@ -190,6 +191,8 @@ public interface McpServer {
 		 * customize them.
 		 */
 		private final Map<String, McpServerFeatures.AsyncPromptSpecification> prompts = new HashMap<>();
+
+		private final Map<McpServerFeatures.CompletionRefKey, McpServerFeatures.AsyncCompletionSpecification> completions = new HashMap<>();
 
 		private final List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeHandlers = new ArrayList<>();
 
@@ -563,7 +566,8 @@ public interface McpServer {
 		 */
 		public McpAsyncServer build() {
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
-					this.resources, this.resourceTemplates, this.prompts, this.rootsChangeHandlers, this.instructions);
+					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
+					this.instructions);
 			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
 			return new McpAsyncServer(this.transportProvider, mapper, features);
 		}
@@ -616,6 +620,8 @@ public interface McpServer {
 		 * customize them.
 		 */
 		private final Map<String, McpServerFeatures.SyncPromptSpecification> prompts = new HashMap<>();
+
+		private final Map<McpServerFeatures.CompletionRefKey, McpServerFeatures.SyncCompletionSpecification> completions = new HashMap<>();
 
 		private final List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeHandlers = new ArrayList<>();
 
@@ -922,6 +928,22 @@ public interface McpServer {
 			return this;
 		}
 
+		public SyncSpecification completions(List<McpServerFeatures.SyncCompletionSpecification> completions) {
+			Assert.notNull(completions, "Completions list must not be null");
+			for (McpServerFeatures.SyncCompletionSpecification completion : completions) {
+				this.completions.put(completion.referenceKey(), completion);
+			}
+			return this;
+		}
+
+		public SyncSpecification completions(McpServerFeatures.SyncCompletionSpecification... completions) {
+			Assert.notNull(completions, "Completions list must not be null");
+			for (McpServerFeatures.SyncCompletionSpecification completion : completions) {
+				this.completions.put(completion.referenceKey(), completion);
+			}
+			return this;
+		}
+
 		/**
 		 * Registers a consumer that will be notified when the list of roots changes. This
 		 * is useful for updating resource availability dynamically, such as when new
@@ -988,8 +1010,8 @@ public interface McpServer {
 		 */
 		public McpSyncServer build() {
 			McpServerFeatures.Sync syncFeatures = new McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,
-					this.tools, this.resources, this.resourceTemplates, this.prompts, this.rootsChangeHandlers,
-					this.instructions);
+					this.tools, this.resources, this.resourceTemplates, this.prompts, this.completions,
+					this.rootsChangeHandlers, this.instructions);
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures);
 			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
 			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures);

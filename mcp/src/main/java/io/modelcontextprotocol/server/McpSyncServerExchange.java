@@ -1,6 +1,5 @@
 package io.modelcontextprotocol.server;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.spec.McpSchema;
 
 /**
