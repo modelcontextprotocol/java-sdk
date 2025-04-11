@@ -282,7 +282,7 @@ public class WebFluxSseIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
-	void testRootsNotifciationWithEmptyRootsList(String clientType) {
+	void testRootsNotificationWithEmptyRootsList(String clientType) {
 		var clientBuilder = clientBuilders.get(clientType);
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
