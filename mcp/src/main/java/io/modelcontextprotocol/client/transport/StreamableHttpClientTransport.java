@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.modelcontextprotocol.spec.McpClientTransport;
@@ -314,17 +315,25 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 	private Mono<Void> handleSseStream(final HttpResponse<InputStream> response,
 			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
 		return Flux.fromStream(new BufferedReader(new InputStreamReader(response.body())).lines())
-			.scan(new FlowSseClient.SseEvent("", "", ""), (acc, line) -> {
-				String event = acc.type();
-				String data = acc.data();
-				String id = acc.id();
+			.map(String::trim)
+			.bufferUntil(String::isEmpty)
+			.map(eventLines -> {
+				String event = "";
+				String data = "";
+				String id = "";
 
-				if (line.startsWith("event: "))
-					event = line.substring(7).trim();
-				else if (line.startsWith("data: "))
-					data = line.substring(6).trim();
-				else if (line.startsWith("id: "))
-					id = line.substring(4).trim();
+				for (String line : eventLines) {
+					if (line.startsWith("event: "))
+						event = line.substring(7).trim();
+					else if (line.startsWith("data: "))
+						data += line.substring(6).trim() + "\n";
+					else if (line.startsWith("id: "))
+						id = line.substring(4).trim();
+				}
+
+				if (data.endsWith("\n")) {
+					data = data.substring(0, data.length() - 1);
+				}
 
 				return new FlowSseClient.SseEvent(event, data, id);
 			})
@@ -332,11 +341,28 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 			.doOnNext(sseEvent -> {
 				lastEventId.set(sseEvent.id());
 				try {
-					McpSchema.JSONRPCMessage msg = McpSchema.deserializeJsonRpcMessage(objectMapper, sseEvent.data());
-					handler.apply(Mono.just(msg)).subscribe();
+					String rawData = sseEvent.data().trim();
+					JsonNode node = objectMapper.readTree(rawData);
+
+					if (node.isArray()) {
+						for (JsonNode item : node) {
+							String rawMessage = objectMapper.writeValueAsString(item);
+							McpSchema.JSONRPCMessage msg = McpSchema.deserializeJsonRpcMessage(objectMapper,
+									rawMessage);
+							handler.apply(Mono.just(msg)).subscribe();
+						}
+					}
+					else if (node.isObject()) {
+						String rawMessage = objectMapper.writeValueAsString(node);
+						McpSchema.JSONRPCMessage msg = McpSchema.deserializeJsonRpcMessage(objectMapper, rawMessage);
+						handler.apply(Mono.just(msg)).subscribe();
+					}
+					else {
+						LOGGER.warn("Unexpected JSON in SSE data: {}", rawData);
+					}
 				}
 				catch (IOException e) {
-					LOGGER.error("Error processing SSE event", e);
+					LOGGER.error("Error processing SSE event: {}", sseEvent.data(), e);
 				}
 			})
 			.then();
