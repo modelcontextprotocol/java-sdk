@@ -21,6 +21,7 @@ import reactor.core.scheduler.Schedulers;
  * MCP server features specification that a particular server can choose to support.
  *
  * @author Dariusz Jędrzejczyk
+ * @author Jihoon Kim
  */
 public class McpServerFeatures {
 
@@ -41,6 +42,7 @@ public class McpServerFeatures {
 			List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
 			List<McpSchema.ResourceTemplate> resourceTemplates,
 			Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
+			Map<CompletionRefKey, McpServerFeatures.AsyncCompletionSpecification> completions,
 			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
 			String instructions) {
 
@@ -60,6 +62,7 @@ public class McpServerFeatures {
 				List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
 				List<McpSchema.ResourceTemplate> resourceTemplates,
 				Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
+				Map<CompletionRefKey, McpServerFeatures.AsyncCompletionSpecification> completions,
 				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
 				String instructions) {
 
@@ -67,7 +70,8 @@ public class McpServerFeatures {
 
 			this.serverInfo = serverInfo;
 			this.serverCapabilities = (serverCapabilities != null) ? serverCapabilities
-					: new McpSchema.ServerCapabilities(null, // experimental
+					: new McpSchema.ServerCapabilities(null, // completions
+							null, // experimental
 							new McpSchema.ServerCapabilities.LoggingCapabilities(), // Enable
 																					// logging
 																					// by
@@ -81,6 +85,7 @@ public class McpServerFeatures {
 			this.resources = (resources != null) ? resources : Map.of();
 			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : List.of();
 			this.prompts = (prompts != null) ? prompts : Map.of();
+			this.completions = (completions != null) ? completions : Map.of();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : List.of();
 			this.instructions = instructions;
 		}
@@ -109,6 +114,11 @@ public class McpServerFeatures {
 				prompts.put(key, AsyncPromptSpecification.fromSync(prompt));
 			});
 
+			Map<CompletionRefKey, McpServerFeatures.AsyncCompletionSpecification> completions = new HashMap<>();
+			syncSpec.completions().forEach((key, completion) -> {
+				completions.put(key, AsyncCompletionSpecification.fromSync(completion));
+			});
+
 			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootChangeConsumers = new ArrayList<>();
 
 			for (var rootChangeConsumer : syncSpec.rootsChangeConsumers()) {
@@ -118,7 +128,7 @@ public class McpServerFeatures {
 			}
 
 			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources,
-					syncSpec.resourceTemplates(), prompts, rootChangeConsumers, syncSpec.instructions());
+					syncSpec.resourceTemplates(), prompts, completions, rootChangeConsumers, syncSpec.instructions());
 		}
 	}
 
@@ -140,6 +150,7 @@ public class McpServerFeatures {
 			Map<String, McpServerFeatures.SyncResourceSpecification> resources,
 			List<McpSchema.ResourceTemplate> resourceTemplates,
 			Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
+			Map<CompletionRefKey, McpServerFeatures.SyncCompletionSpecification> completions,
 			List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers, String instructions) {
 
 		/**
@@ -159,6 +170,7 @@ public class McpServerFeatures {
 				Map<String, McpServerFeatures.SyncResourceSpecification> resources,
 				List<McpSchema.ResourceTemplate> resourceTemplates,
 				Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
+				Map<CompletionRefKey, McpServerFeatures.SyncCompletionSpecification> completions,
 				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers,
 				String instructions) {
 
@@ -166,7 +178,8 @@ public class McpServerFeatures {
 
 			this.serverInfo = serverInfo;
 			this.serverCapabilities = (serverCapabilities != null) ? serverCapabilities
-					: new McpSchema.ServerCapabilities(null, // experimental
+					: new McpSchema.ServerCapabilities(null, // completions
+							null, // experimental
 							new McpSchema.ServerCapabilities.LoggingCapabilities(), // Enable
 																					// logging
 																					// by
@@ -180,6 +193,7 @@ public class McpServerFeatures {
 			this.resources = (resources != null) ? resources : new HashMap<>();
 			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : new ArrayList<>();
 			this.prompts = (prompts != null) ? prompts : new HashMap<>();
+			this.completions = (completions != null) ? completions : new HashMap<>();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : new ArrayList<>();
 			this.instructions = instructions;
 		}
@@ -326,6 +340,61 @@ public class McpServerFeatures {
 	}
 
 	/**
+	 * Specification of a completion handler function with asynchronous execution support.
+	 * Completions generate AI model outputs based on prompt or resource references and
+	 * user-provided arguments. This abstraction enables:
+	 * <ul>
+	 * <li>Customizable response generation logic
+	 * <li>Parameter-driven template expansion
+	 * <li>Dynamic interaction with connected clients
+	 * </ul>
+	 *
+	 * <p>
+	 * Example completion specification: <pre>{@code
+	 * new McpServerFeatures.AsyncCompletionSpecification(
+	 *     (exchange, request) -> {
+	 *     	   String name = request.argument().name(); // e.g., "language"
+	 *         String language = request.argument().value(); // e.g., "py"
+	 *         List<String> suggestions = List.of(
+	 *         	   "python",
+	 *         	   "pytorch",
+	 *         	   "pyside"
+	 *         );
+	 *         CompleteResult.CompleteCompletion completion = new CompleteResult.CompleteCompletion(
+	 *             suggestions, suggestions.size(), false
+	 *         );
+	 *         return Mono.just(new CompleteResult(completion));
+	 *     }
+	 * )
+	 * }</pre>
+	 *
+	 * @param completionHandler The asynchronous function that processes completion
+	 * requests and returns results. The first argument is an
+	 * {@link McpAsyncServerExchange} used to interact with the client. The second
+	 * argument is a {@link io.modelcontextprotocol.spec.McpSchema.CompleteRequest}.
+	 */
+	public record AsyncCompletionSpecification(
+			BiFunction<McpAsyncServerExchange, McpSchema.CompleteRequest, Mono<McpSchema.CompleteResult>> completionHandler) {
+
+		/**
+		 * Converts a synchronous {@link SyncCompletionSpecification} into an
+		 * {@link AsyncCompletionSpecification} by wrapping the handler in a bounded
+		 * elastic scheduler for safe non-blocking execution.
+		 * @param completion the synchronous completion specification
+		 * @return an asynchronous wrapper of the provided sync specification, or
+		 * {@code null} if input is null
+		 */
+		static AsyncCompletionSpecification fromSync(SyncCompletionSpecification completion) {
+			if (completion == null) {
+				return null;
+			}
+			return new AsyncCompletionSpecification((exchange, request) -> Mono
+				.fromCallable(() -> completion.completionHandler().apply(new McpSyncServerExchange(exchange), request))
+				.subscribeOn(Schedulers.boundedElastic()));
+		}
+	}
+
+	/**
 	 * Specification of a tool with its synchronous handler function. Tools are the
 	 * primary way for MCP servers to expose functionality to AI models. Each tool
 	 * represents a specific capability, such as:
@@ -429,6 +498,48 @@ public class McpServerFeatures {
 	 */
 	public record SyncPromptSpecification(McpSchema.Prompt prompt,
 			BiFunction<McpSyncServerExchange, McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler) {
+	}
+
+	public record SyncCompletionSpecification(CompletionRefKey referenceKey,
+			BiFunction<McpSyncServerExchange, McpSchema.CompleteRequest, McpSchema.CompleteResult> completionHandler) {
+	}
+
+	/**
+	 * A unique key representing a completion reference, composed of its type and
+	 * identifier. This key is used to look up asynchronous completion specifications in a
+	 * map-like structure.
+	 *
+	 * <p>
+	 * The {@code type} typically corresponds to the kind of reference, such as
+	 * {@code "ref/prompt"} or {@code "ref/resource"}, while the {@code identifier} is the
+	 * name or URI associated with the specific reference.
+	 *
+	 * @param type the reference type (e.g., "ref/prompt", "ref/resource")
+	 * @param identifier the reference identifier (e.g., prompt name or resource URI)
+	 */
+	public record CompletionRefKey(String type, String identifier) {
+
+		/**
+		 * Creates a {@code CompletionRefKey} from a {@link McpSchema.CompleteRequest}.
+		 * The key is derived from the request's reference type and its associated name or
+		 * URI.
+		 * @param request the {@code CompleteRequest} containing a prompt or resource
+		 * reference
+		 * @return a unique key based on the request's reference
+		 * @throws IllegalArgumentException if the reference type is unsupported
+		 */
+		public static CompletionRefKey from(McpSchema.CompleteRequest request) {
+			var ref = request.ref();
+			if (ref instanceof McpSchema.CompleteRequest.PromptReference pr) {
+				return new CompletionRefKey(ref.type(), pr.name());
+			}
+			else if (ref instanceof McpSchema.CompleteRequest.ResourceReference rr) {
+				return new CompletionRefKey(ref.type(), rr.uri());
+			}
+			else {
+				throw new IllegalArgumentException("Unsupported reference type: " + ref);
+			}
+		}
 	}
 
 }

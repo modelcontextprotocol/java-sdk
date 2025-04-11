@@ -68,6 +68,7 @@ import reactor.core.publisher.Mono;
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @author Jihoon Kim
  * @see McpServer
  * @see McpSchema
  * @see McpClientSession
@@ -264,6 +265,8 @@ public class McpAsyncServer {
 
 		private final ConcurrentHashMap<String, McpServerFeatures.AsyncPromptSpecification> prompts = new ConcurrentHashMap<>();
 
+		private final ConcurrentHashMap<McpServerFeatures.CompletionRefKey, McpServerFeatures.AsyncCompletionSpecification> completions = new ConcurrentHashMap<>();
+
 		// FIXME: this field is deprecated and should be remvoed together with the
 		// broadcasting loggingNotification.
 		private LoggingLevel minLoggingLevel = LoggingLevel.DEBUG;
@@ -281,6 +284,7 @@ public class McpAsyncServer {
 			this.resources.putAll(features.resources());
 			this.resourceTemplates.addAll(features.resourceTemplates());
 			this.prompts.putAll(features.prompts());
+			this.completions.putAll(features.completions());
 
 			Map<String, McpServerSession.RequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -311,6 +315,11 @@ public class McpAsyncServer {
 			// Add logging API handlers if the logging capability is enabled
 			if (this.serverCapabilities.logging() != null) {
 				requestHandlers.put(McpSchema.METHOD_LOGGING_SET_LEVEL, setLoggerRequestHandler());
+			}
+
+			// Add completion API handlers if the completion capability is enabled
+			if (this.serverCapabilities.completions() != null) {
+				requestHandlers.put(McpSchema.METHOD_COMPLETION_COMPLETE, completionCompleteRequestHandler());
 			}
 
 			Map<String, McpServerSession.NotificationHandler> notificationHandlers = new HashMap<>();
@@ -703,6 +712,85 @@ public class McpAsyncServer {
 					return Mono.just(Map.of());
 				});
 			};
+		}
+
+		private McpServerSession.RequestHandler<McpSchema.CompleteResult> completionCompleteRequestHandler() {
+			return (exchange, params) -> {
+				McpSchema.CompleteRequest request = parseCompletionParams(params);
+
+				if (request.ref() == null) {
+					return Mono.error(new McpError("ref must not be null"));
+				}
+
+				if (request.ref().type() == null) {
+					return Mono.error(new McpError("type must not be null"));
+				}
+
+				String type = request.ref().type();
+
+				// check if the referenced resource exists
+				if (type.equals("ref/prompt")
+						&& request.ref() instanceof McpSchema.CompleteRequest.PromptReference promptReference) {
+					McpServerFeatures.AsyncPromptSpecification prompt = this.prompts.get(promptReference.name());
+					if (prompt == null) {
+						return Mono.error(new McpError("Prompt not found: " + promptReference.name()));
+					}
+				}
+
+				if (type.equals("ref/resource")
+						&& request.ref() instanceof McpSchema.CompleteRequest.ResourceReference resourceReference) {
+					McpServerFeatures.AsyncResourceSpecification resource = this.resources.get(resourceReference.uri());
+					if (resource == null) {
+						return Mono.error(new McpError("Resource not found: " + resourceReference.uri()));
+					}
+				}
+
+				McpServerFeatures.CompletionRefKey key = McpServerFeatures.CompletionRefKey.from(request);
+				McpServerFeatures.AsyncCompletionSpecification specification = this.completions.get(key);
+
+				if (specification == null) {
+					return Mono.error(new McpError("AsyncCompletionSpecification not found: " + key));
+				}
+
+				return specification.completionHandler().apply(exchange, request);
+			};
+		}
+
+		/**
+		 * Parses the raw JSON-RPC request parameters into a
+		 * {@link McpSchema.CompleteRequest} object.
+		 * <p>
+		 * This method manually extracts the `ref` and `argument` fields from the input
+		 * map, determines the correct reference type (either prompt or resource), and
+		 * constructs a fully-typed {@code CompleteRequest} instance.
+		 * @param object the raw request parameters, expected to be a Map containing "ref"
+		 * and "argument" entries.
+		 * @return a {@link McpSchema.CompleteRequest} representing the structured
+		 * completion request.
+		 * @throws IllegalArgumentException if the "ref" type is not recognized.
+		 */
+		@SuppressWarnings("unchecked")
+		private McpSchema.CompleteRequest parseCompletionParams(Object object) {
+			Map<String, Object> params = (Map<String, Object>) object;
+			Map<String, Object> refMap = (Map<String, Object>) params.get("ref");
+			Map<String, Object> argMap = (Map<String, Object>) params.get("argument");
+
+			String refType = (String) refMap.get("type");
+
+			McpSchema.CompleteRequest.PromptOrResourceReference ref = switch (refType) {
+				case "ref/prompt" ->
+					new McpSchema.CompleteRequest.PromptReference(refType, (String) refMap.get("name"));
+				case "ref/resource" ->
+					new McpSchema.CompleteRequest.ResourceReference(refType, (String) refMap.get("uri"));
+				default -> throw new IllegalArgumentException("Invalid ref type: " + refType);
+			};
+
+			String argName = (String) argMap.get("name");
+			String argValue = (String) argMap.get("value");
+			McpSchema.CompleteRequest.CompleteArgument argument = new McpSchema.CompleteRequest.CompleteArgument(
+					argName, argValue);
+
+			return new McpSchema.CompleteRequest(ref, argument);
 		}
 
 		// ---------------------------------------
