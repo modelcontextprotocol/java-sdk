@@ -29,6 +29,7 @@ import org.slf4j.LoggerFactory;
  * Context Protocol Schema</a>.
  *
  * @author Christian Tzolov
+ * @author Jermaine Hua
  */
 public final class McpSchema {
 
@@ -49,6 +50,8 @@ public final class McpSchema {
 	public static final String METHOD_INITIALIZE = "initialize";
 
 	public static final String METHOD_NOTIFICATION_INITIALIZED = "notifications/initialized";
+
+	public static final String METHOD_NOTIFICATION_CANCELLED = "notifications/cancelled";
 
 	public static final String METHOD_PING = "ping";
 
@@ -210,6 +213,16 @@ public final class McpSchema {
 			@JsonProperty("data") Object data) {
 		}
 	}// @formatter:on
+
+	// ---------------------------
+	// Cancellation Message Notification
+	// ---------------------------
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record CancellationMessageNotification( // @formatter:off
+		@JsonProperty("requestId") String requestId,
+		@JsonProperty("reason") String reason){
+	} // @formatter:on
 
 	// ---------------------------
 	// Initialization

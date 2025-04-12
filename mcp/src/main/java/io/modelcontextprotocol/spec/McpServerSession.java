@@ -54,6 +54,11 @@ public class McpServerSession implements McpSession {
 	private final AtomicInteger state = new AtomicInteger(STATE_UNINITIALIZED);
 
 	/**
+	 * keyed by request ID, value is true if the request is being cancelled.
+	 */
+	private final Map<Object, Boolean> requestCancellation = new ConcurrentHashMap<>();
+
+	/**
 	 * Creates a new server session with the given parameters and the transport to use.
 	 * @param id session id
 	 * @param transport the transport to use
@@ -165,13 +170,18 @@ public class McpServerSession implements McpSession {
 			}
 			else if (message instanceof McpSchema.JSONRPCRequest request) {
 				logger.debug("Received request: {}", request);
+				requestCancellation.put(request.id(), false);
 				return handleIncomingRequest(request).onErrorResume(error -> {
 					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
 							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 									error.getMessage(), null));
 					// TODO: Should the error go to SSE or back as POST return?
-					return this.transport.sendMessage(errorResponse).then(Mono.empty());
-				}).flatMap(this.transport::sendMessage);
+					return this.transport.sendMessage(errorResponse)
+						.doFinally(signal -> requestCancellation.remove(request.id()))
+						.then(Mono.empty());
+				})
+					.flatMap(response -> this.transport.sendMessage(response)
+						.doFinally(signal -> requestCancellation.remove(request.id())));
 			}
 			else if (message instanceof McpSchema.JSONRPCNotification notification) {
 				// TODO handle errors for communication to without initialization
@@ -207,6 +217,11 @@ public class McpServerSession implements McpSession {
 				resultMono = this.initRequestHandler.handle(initializeRequest);
 			}
 			else {
+				// cancellation request
+				if (requestCancellation.get(request.id())) {
+					requestCancellation.remove(request.id());
+					return Mono.empty();
+				}
 				// TODO handle errors for communication to this session without
 				// initialization happening first
 				var handler = this.requestHandlers.get(request.method());
@@ -217,14 +232,32 @@ public class McpServerSession implements McpSession {
 									error.message(), error.data())));
 				}
 
-				resultMono = this.exchangeSink.asMono().flatMap(exchange -> handler.handle(exchange, request.params()));
+				resultMono = this.exchangeSink.asMono()
+					.flatMap(exchange -> handler.handle(exchange, request.params()).flatMap(result -> {
+						if (requestCancellation.get(request.id())) {
+							requestCancellation.remove(request.id());
+							return Mono.empty();
+						}
+						else {
+							return Mono.just(result);
+						}
+					}).doOnCancel(() -> requestCancellation.remove(request.id())));
+
 			}
 			return resultMono
 				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
-				.onErrorResume(error -> Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-						null, new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-								error.getMessage(), null)))); // TODO: add error message
-																// through the data field
+				.onErrorResume(error -> {
+					if (requestCancellation.get(request.id())) {
+						requestCancellation.remove(request.id());
+						return Mono.empty();
+					}
+					else {
+						return Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
+								new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+										error.getMessage(), null)));
+					}
+				}); // TODO: add error message
+					// through the data field
 		});
 	}
 
@@ -239,6 +272,17 @@ public class McpServerSession implements McpSession {
 				this.state.lazySet(STATE_INITIALIZED);
 				exchangeSink.tryEmitValue(new McpAsyncServerExchange(this, clientCapabilities.get(), clientInfo.get()));
 				return this.initNotificationHandler.handle();
+			}
+			else if (McpSchema.METHOD_NOTIFICATION_CANCELLED.equals(notification.method())) {
+				McpSchema.CancellationMessageNotification cancellationMessageNotification = transport
+					.unmarshalFrom(notification.params(), new TypeReference<>() {
+					});
+				if (requestCancellation.containsKey(cancellationMessageNotification.requestId())) {
+					logger.warn("Received cancellation notification for request {}, cancellation reason is {}",
+							cancellationMessageNotification.requestId(), cancellationMessageNotification.reason());
+					requestCancellation.put(cancellationMessageNotification.requestId(), true);
+				}
+				return Mono.empty();
 			}
 
 			var handler = notificationHandlers.get(notification.method());

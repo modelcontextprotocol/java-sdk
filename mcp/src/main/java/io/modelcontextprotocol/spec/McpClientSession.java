@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -236,7 +237,18 @@ public class McpClientSession implements McpSession {
 					this.pendingResponses.remove(requestId);
 					sink.error(error);
 				});
-		}).timeout(this.requestTimeout).handle((jsonRpcResponse, sink) -> {
+		}).timeout(this.requestTimeout).onErrorResume(e -> {
+			if (e instanceof TimeoutException) {
+				return Mono.fromRunnable(() -> {
+					this.pendingResponses.remove(requestId);
+					McpSchema.CancellationMessageNotification cancellationMessageNotification = new McpSchema.CancellationMessageNotification(
+							requestId, "The request times out, timeout: " + requestTimeout.toMillis() + " ms");
+					sendNotification(McpSchema.METHOD_NOTIFICATION_CANCELLED, cancellationMessageNotification)
+						.subscribe();
+				}).then(Mono.error(e));
+			}
+			return Mono.error(e);
+		}).handle((jsonRpcResponse, sink) -> {
 			if (jsonRpcResponse.error() != null) {
 				sink.error(new McpError(jsonRpcResponse.error()));
 			}
