@@ -61,7 +61,8 @@ public class McpServerSession implements McpSession {
 	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
 	 * server
 	 * @param initNotificationHandler called when a
-	 * {@link McpSchema.METHOD_NOTIFICATION_INITIALIZED} is received.
+	 * {@link io.modelcontextprotocol.spec.McpSchema#METHOD_NOTIFICATION_INITIALIZED} is
+	 * received.
 	 * @param requestHandlers map of request handlers to use
 	 * @param notificationHandlers map of notification handlers to use
 	 */

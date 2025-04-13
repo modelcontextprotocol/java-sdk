@@ -302,9 +302,9 @@ public class McpAsyncClient {
 	 * The client MUST initiate this phase by sending an initialize request containing:
 	 * The protocol version the client supports, client's capabilities and clients
 	 * implementation information.
-	 * <p/>
+	 * <p>
 	 * The server MUST respond with its own capabilities and information.
-	 * <p/>
+	 * </p>
 	 * After successful initialization, the client MUST send an initialized notification
 	 * to indicate it is ready to begin normal operations.
 	 * @return the initialize result.

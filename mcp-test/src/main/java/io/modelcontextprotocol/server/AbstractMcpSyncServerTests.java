@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Test suite for the {@link McpSyncServer} that can be used with different
- * {@link McpTransportProvider} implementations.
+ * {@link io.modelcontextprotocol.spec.McpServerTransportProvider} implementations.
  *
  * @author Christian Tzolov
  */
