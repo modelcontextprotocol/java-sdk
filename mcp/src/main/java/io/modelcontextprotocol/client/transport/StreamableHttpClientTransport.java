@@ -60,12 +60,13 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 	private final AtomicBoolean fallbackToSse = new AtomicBoolean(false);
 
 	StreamableHttpClientTransport(final HttpClient httpClient, final HttpRequest.Builder requestBuilder,
-			final ObjectMapper objectMapper, final String baseUri, final String endpoint) {
+			final ObjectMapper objectMapper, final String baseUri, final String endpoint,
+			final HttpClientSseClientTransport sseClientTransport) {
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
 		this.objectMapper = objectMapper;
 		this.uri = URI.create(baseUri + endpoint);
-		this.sseClientTransport = HttpClientSseClientTransport.builder(baseUri).build();
+		this.sseClientTransport = sseClientTransport;
 	}
 
 	/**
@@ -98,21 +99,27 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 		private final HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
 			.header("Accept", "application/json, text/event-stream");
 
-		private ObjectMapper objectMapper;
+		private ObjectMapper objectMapper = new ObjectMapper();
 
 		private String baseUri;
 
 		private String endpoint = "/mcp";
 
+		private Consumer<HttpClient.Builder> clientCustomizer;
+
+		private Consumer<HttpRequest.Builder> requestCustomizer;
+
 		public Builder withCustomizeClient(final Consumer<HttpClient.Builder> clientCustomizer) {
 			Assert.notNull(clientCustomizer, "clientCustomizer must not be null");
 			clientCustomizer.accept(clientBuilder);
+			this.clientCustomizer = clientCustomizer;
 			return this;
 		}
 
 		public Builder withCustomizeRequest(final Consumer<HttpRequest.Builder> requestCustomizer) {
 			Assert.notNull(requestCustomizer, "requestCustomizer must not be null");
 			requestCustomizer.accept(requestBuilder);
+			this.requestCustomizer = requestCustomizer;
 			return this;
 		}
 
@@ -135,8 +142,22 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 		}
 
 		public StreamableHttpClientTransport build() {
+			final HttpClientSseClientTransport.Builder builder = HttpClientSseClientTransport.builder(baseUri)
+				.objectMapper(objectMapper);
+			if (clientCustomizer != null) {
+				builder.customizeClient(clientCustomizer);
+			}
+
+			if (requestCustomizer != null) {
+				builder.customizeRequest(requestCustomizer);
+			}
+
+			if (!endpoint.equals("/mcp")) {
+				builder.sseEndpoint(endpoint);
+			}
+
 			return new StreamableHttpClientTransport(clientBuilder.build(), requestBuilder, objectMapper, baseUri,
-					endpoint);
+					endpoint, builder.build());
 		}
 
 	}
@@ -151,57 +172,44 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 			return Mono.error(new IllegalStateException("Already connected or connecting"));
 		}
 
-		return sendInitialHandshake().then(Mono.defer(() -> Mono
-			.fromFuture(() -> httpClient.sendAsync(requestBuilder.build(), HttpResponse.BodyHandlers.ofInputStream()))
-			.flatMap(response -> handleStreamingResponse(handler, response))
+		return Mono.defer(() -> Mono.fromFuture(() -> {
+			final HttpRequest.Builder builder = requestBuilder.copy().GET().uri(uri);
+			final String lastId = lastEventId.get();
+			if (lastId != null) {
+				builder.header("Last-Event-ID", lastId);
+			}
+			return httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofInputStream());
+		}).flatMap(response -> {
+			if (response.statusCode() == 405 || response.statusCode() == 404) {
+				LOGGER.warn("Operation not allowed, falling back to SSE");
+				fallbackToSse.set(true);
+				return sseClientTransport.connect(handler);
+			}
+			return handleStreamingResponse(handler, response);
+		})
 			.retryWhen(Retry.backoff(3, Duration.ofSeconds(3)).filter(err -> err instanceof IllegalStateException))
 			.doOnSuccess(v -> state.set(TransportState.CONNECTED))
 			.doOnTerminate(() -> state.set(TransportState.CLOSED))
 			.onErrorResume(e -> {
-				state.set(TransportState.DISCONNECTED);
-				LOGGER.error("Failed to connect", e);
+				LOGGER.error("Streamable transport connection error", e);
 				return Mono.error(e);
-			}))).onErrorResume(e -> {
-				if (e instanceof UnsupportedOperationException) {
-					LOGGER.warn("Streamable transport failed, falling back to SSE.", e);
-					fallbackToSse.set(true);
-					return sseClientTransport.connect(handler);
-				}
-				return Mono.error(e);
-			});
-
+			}));
 	}
 
 	@Override
 	public Mono<Void> sendMessage(final McpSchema.JSONRPCMessage message) {
-		if (state.get() == TransportState.CLOSED) {
-			return Mono.empty();
-		}
-
 		if (fallbackToSse.get()) {
 			return sseClientTransport.sendMessage(message);
 		}
 
-		if (state.get() == TransportState.DISCONNECTED) {
-			state.set(TransportState.CONNECTING);
-
-			return sendInitialHandshake().doOnSuccess(v -> state.set(TransportState.CONNECTED)).onErrorResume(e -> {
-				if (e instanceof UnsupportedOperationException) {
-					LOGGER.warn("Streamable transport failed, falling back to SSE.", e);
-					fallbackToSse.set(true);
-					return Mono.empty();
-				}
-				return Mono.error(e);
-			}).then(sendMessage(message));
+		if (state.get() == TransportState.CLOSED) {
+			return Mono.empty();
 		}
 
-		try {
-			String json = objectMapper.writeValueAsString(message);
-			return sentPost(json);
-		}
-		catch (Exception e) {
+		return sentPost(message).onErrorResume(e -> {
+			LOGGER.error("Streamable transport sendMessage error", e);
 			return Mono.error(e);
-		}
+		});
 	}
 
 	/**
@@ -210,71 +218,78 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 	 * @return a Mono that completes when all messages have been sent
 	 */
 	public Mono<Void> sendMessages(final List<McpSchema.JSONRPCMessage> messages) {
-		if (state.get() == TransportState.CLOSED) {
-			return Mono.empty();
-		}
-
 		if (fallbackToSse.get()) {
 			return Flux.fromIterable(messages).flatMap(this::sendMessage).then();
 		}
 
-		if (state.get() == TransportState.DISCONNECTED) {
-			state.set(TransportState.CONNECTING);
-
-			return sendInitialHandshake().doOnSuccess(v -> state.set(TransportState.CONNECTED)).onErrorResume(e -> {
-				if (e instanceof UnsupportedOperationException) {
-					LOGGER.warn("Streamable transport failed, falling back to SSE.", e);
-					fallbackToSse.set(true);
-					return Mono.empty();
-				}
-				return Mono.error(e);
-			}).then(sendMessages(messages));
+		if (state.get() == TransportState.CLOSED) {
+			return Mono.empty();
 		}
 
-		try {
-			String json = objectMapper.writeValueAsString(messages);
-			return sentPost(json);
-		}
-		catch (Exception e) {
+		return sentPost(messages).onErrorResume(e -> {
+			LOGGER.error("Streamable transport sendMessages error", e);
 			return Mono.error(e);
-		}
+		});
 	}
 
-	private Mono<Void> sendInitialHandshake() {
-		try {
-			String json = objectMapper.writeValueAsString(new McpSchema.InitializeRequest("2025-03-26", null, null));
-			HttpRequest req = requestBuilder.copy().uri(uri).POST(HttpRequest.BodyPublishers.ofString(json)).build();
-			return Mono.fromFuture(httpClient.sendAsync(req, HttpResponse.BodyHandlers.discarding()))
+	private Mono<Void> sentPost(final Object msg) {
+		return serializeJson(msg).flatMap(json -> {
+			final HttpRequest request = requestBuilder.copy()
+				.POST(HttpRequest.BodyPublishers.ofString(json))
+				.uri(uri)
+				.build();
+			return Mono.fromFuture(httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream()))
 				.flatMap(response -> {
-					int code = response.statusCode();
-					if (code == 200) {
+
+					// If the response is 202 Accepted, there's no body to process
+					if (response.statusCode() == 202) {
 						return Mono.empty();
 					}
-					else if (code >= 400 && code < 500) {
-						return Mono.error(new UnsupportedOperationException("Client error: " + code));
+
+					if (response.statusCode() == 405 || response.statusCode() == 404) {
+						LOGGER.warn("Operation not allowed, falling back to SSE");
+						fallbackToSse.set(true);
+						if (msg instanceof McpSchema.JSONRPCMessage message) {
+							return sseClientTransport.sendMessage(message);
+						}
+
+						if (msg instanceof List<?> list) {
+							@SuppressWarnings("unchecked")
+							final List<McpSchema.JSONRPCMessage> messages = (List<McpSchema.JSONRPCMessage>) list;
+							return Flux.fromIterable(messages).flatMap(this::sendMessage).then();
+						}
 					}
-					else {
-						return Mono.error(new IOException("Unexpected status code: " + code));
+
+					if (response.statusCode() >= 400) {
+						return Mono
+							.error(new IllegalArgumentException("Unexpected status code: " + response.statusCode()));
 					}
-				})
-				.then();
-		}
-		catch (IOException e) {
-			return Mono.error(e);
-		}
+
+					return handleStreamingResponse(it -> it, response);
+				});
+		});
+
 	}
 
-	private Mono<Void> sentPost(String json) {
-		HttpRequest request = requestBuilder.copy().POST(HttpRequest.BodyPublishers.ofString(json)).build();
-		return Mono.fromFuture(httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream()))
-			.flatMap(response -> handleStreamingResponse(msg -> msg, response))
-			.then();
+	private Mono<String> serializeJson(final Object input) {
+		try {
+			if (input instanceof McpSchema.JSONRPCMessage || input instanceof List) {
+				return Mono.just(objectMapper.writeValueAsString(input));
+			}
+			else {
+				return Mono.error(new IllegalArgumentException("Unsupported message type for serialization"));
+			}
+		}
+		catch (IOException e) {
+			LOGGER.error("Error serializing JSON-RPC message", e);
+			return Mono.error(e);
+		}
 	}
 
 	private Mono<Void> handleStreamingResponse(
 			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler,
 			final HttpResponse<InputStream> response) {
-		String contentType = response.headers().firstValue("Content-Type").orElse("");
+		final String contentType = response.headers().firstValue("Content-Type").orElse("");
 		if (contentType.contains("application/json-seq")) {
 			return handleJsonStream(response, handler);
 		}
@@ -292,7 +307,7 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 	private Mono<Void> handleSingleJson(final HttpResponse<InputStream> response,
 			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
 		return Mono.fromCallable(() -> {
-			McpSchema.JSONRPCMessage msg = McpSchema.deserializeJsonRpcMessage(objectMapper,
+			final McpSchema.JSONRPCMessage msg = McpSchema.deserializeJsonRpcMessage(objectMapper,
 					new String(response.body().readAllBytes(), StandardCharsets.UTF_8));
 			return handler.apply(Mono.just(msg));
 		}).flatMap(Function.identity()).then();
@@ -302,7 +317,7 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
 		return Flux.fromStream(new BufferedReader(new InputStreamReader(response.body())).lines()).flatMap(jsonLine -> {
 			try {
-				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, jsonLine);
+				final McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, jsonLine);
 				return handler.apply(Mono.just(message));
 			}
 			catch (IOException e) {
