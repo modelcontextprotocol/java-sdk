@@ -185,7 +185,7 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 				fallbackToSse.set(true);
 				return sseClientTransport.connect(handler);
 			}
-			return handleStreamingResponse(handler, response);
+			return handleStreamingResponse(response, handler);
 		})
 			.retryWhen(Retry.backoff(3, Duration.ofSeconds(3)).filter(err -> err instanceof IllegalStateException))
 			.doOnSuccess(v -> state.set(TransportState.CONNECTED))
@@ -198,6 +198,11 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 
 	@Override
 	public Mono<Void> sendMessage(final McpSchema.JSONRPCMessage message) {
+		return sendMessage(message, msg -> msg);
+	}
+
+	public Mono<Void> sendMessage(final McpSchema.JSONRPCMessage message,
+			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
 		if (fallbackToSse.get()) {
 			return sseClientTransport.sendMessage(message);
 		}
@@ -206,7 +211,7 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 			return Mono.empty();
 		}
 
-		return sentPost(message).onErrorResume(e -> {
+		return sentPost(message, handler).onErrorResume(e -> {
 			LOGGER.error("Streamable transport sendMessage error", e);
 			return Mono.error(e);
 		});
@@ -217,7 +222,8 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 	 * @param messages the list of messages to send
 	 * @return a Mono that completes when all messages have been sent
 	 */
-	public Mono<Void> sendMessages(final List<McpSchema.JSONRPCMessage> messages) {
+	public Mono<Void> sendMessages(final List<McpSchema.JSONRPCMessage> messages,
+			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
 		if (fallbackToSse.get()) {
 			return Flux.fromIterable(messages).flatMap(this::sendMessage).then();
 		}
@@ -226,13 +232,14 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 			return Mono.empty();
 		}
 
-		return sentPost(messages).onErrorResume(e -> {
+		return sentPost(messages, handler).onErrorResume(e -> {
 			LOGGER.error("Streamable transport sendMessages error", e);
 			return Mono.error(e);
 		});
 	}
 
-	private Mono<Void> sentPost(final Object msg) {
+	private Mono<Void> sentPost(final Object msg,
+			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
 		return serializeJson(msg).flatMap(json -> {
 			final HttpRequest request = requestBuilder.copy()
 				.POST(HttpRequest.BodyPublishers.ofString(json))
@@ -265,7 +272,7 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 							.error(new IllegalArgumentException("Unexpected status code: " + response.statusCode()));
 					}
 
-					return handleStreamingResponse(it -> it, response);
+					return handleStreamingResponse(response, handler);
 				});
 		});
 
@@ -286,9 +293,8 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 		}
 	}
 
-	private Mono<Void> handleStreamingResponse(
-			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler,
-			final HttpResponse<InputStream> response) {
+	private Mono<Void> handleStreamingResponse(final HttpResponse<InputStream> response,
+			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
 		final String contentType = response.headers().firstValue("Content-Type").orElse("");
 		if (contentType.contains("application/json-seq")) {
 			return handleJsonStream(response, handler);
@@ -386,6 +392,9 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 	@Override
 	public Mono<Void> closeGracefully() {
 		state.set(TransportState.CLOSED);
+		if (fallbackToSse.get()) {
+			return sseClientTransport.closeGracefully();
+		}
 		return Mono.empty();
 	}
 
