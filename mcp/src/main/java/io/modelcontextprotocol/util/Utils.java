@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol.util;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Collection;
 import java.util.Map;
 
@@ -50,6 +52,70 @@ public final class Utils {
 	 */
 	public static boolean isEmpty(@Nullable Map<?, ?> map) {
 		return (map == null || map.isEmpty());
+	}
+
+	/**
+	 * Resolves the given endpoint URL against the base URL.
+	 * <ul>
+	 * <li>If the endpoint URL is relative, it will be resolved against the base URL.</li>
+	 * <li>If the endpoint URL is absolute, it will be validated to ensure it matches the
+	 * base URL's scheme, authority, and path prefix.</li>
+	 * <li>If validation fails for an absolute URL, an {@link IllegalArgumentException} is
+	 * thrown.</li>
+	 * </ul>
+	 * @param baseUrl The base URL (must be absolute)
+	 * @param endpointUrl The endpoint URL (can be relative or absolute)
+	 * @return The resolved endpoint URL as a string
+	 * @throws IllegalArgumentException If the absolute endpoint URL does not match the
+	 * base URL or URI is malformed
+	 */
+	public static String resolveUri(String baseUrl, String endpointUrl) {
+		try {
+			URI baseUri = new URI(baseUrl);
+			URI endpointUri = new URI(endpointUrl);
+			if (!endpointUri.isAbsolute()) {
+				URI resolvedUri = baseUri.resolve(endpointUri);
+				return resolvedUri.toString();
+			}
+			else {
+				if (isUnderBaseUri(baseUri, endpointUri)) {
+					return endpointUri.toString();
+				}
+				else {
+					throw new IllegalArgumentException("Absolute endpoint URL does not match the base URL.");
+				}
+			}
+		}
+		catch (URISyntaxException e) {
+			throw new IllegalArgumentException("Cannot resolve URI: " + e.getMessage(), e);
+		}
+	}
+
+	/**
+	 * Checks if the given absolute endpoint URI falls under the base URI. It validates
+	 * the scheme, authority (host and port), and ensures that the base path is a prefix
+	 * of the endpoint path.
+	 * @param baseUri The base URI
+	 * @param endpointUri The endpoint URI to check
+	 * @return true if endpointUri is within baseUri's hierarchy, false otherwise
+	 */
+	private static boolean isUnderBaseUri(URI baseUri, URI endpointUri) {
+		if (!baseUri.getScheme().equals(endpointUri.getScheme())
+				|| !baseUri.getAuthority().equals(endpointUri.getAuthority())) {
+			return false;
+		}
+
+		URI normalizedBase = baseUri.normalize();
+		URI normalizedEndpoint = endpointUri.normalize();
+
+		String basePath = normalizedBase.getPath();
+		String endpointPath = normalizedEndpoint.getPath();
+
+		if (basePath.endsWith("/")) {
+			basePath = basePath.substring(0, basePath.length() - 1);
+		}
+
+		return endpointPath.startsWith(basePath);
 	}
 
 }
