@@ -191,7 +191,7 @@ public final class McpSchema {
 	public record JSONRPCNotification( // @formatter:off
 			@JsonProperty("jsonrpc") String jsonrpc,
 			@JsonProperty("method") String method,
-			@JsonProperty("params") Map<String, Object> params) implements JSONRPCMessage {
+			@JsonProperty("params") Object params) implements JSONRPCMessage {
 	} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -1164,6 +1164,11 @@ public final class McpSchema {
 		}
 
 	} // @formatter:on
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record SetLevelRequest(@JsonProperty("level") LoggingLevel level) {
+	}
 
 	// ---------------------------
 	// Autocomplete
