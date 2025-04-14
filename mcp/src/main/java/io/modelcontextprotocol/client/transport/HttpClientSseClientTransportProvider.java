@@ -381,6 +381,11 @@ public class HttpClientSseClientTransportProvider implements McpClientTransportP
 		 */
 		@Override
 		public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
+			return connect();
+		}
+
+		@Override
+		public Mono<Void> connect() {
 			CompletableFuture<Void> future = new CompletableFuture<>();
 			connectionFuture.set(future);
 			sseClient.subscribe(baseUri + sseEndpoint, new FlowSseClient.SseEventHandler() {
@@ -394,7 +399,6 @@ public class HttpClientSseClientTransportProvider implements McpClientTransportP
 						if (ENDPOINT_EVENT_TYPE.equals(event.type())) {
 							String endpoint = event.data();
 							messageEndpoint.set(endpoint);
-							session.setId(getSessionIdFromUrl(endpoint));
 							closeLatch.countDown();
 							future.complete(null);
 						}

@@ -124,7 +124,7 @@ class HttpClientSseClientTransportTests {
 		transportProvider.setSessionFactory(
 				(transport) -> new McpClientSession(Duration.ofSeconds(5), transport, Map.of(), Map.of()));
 		transport = new TestHttpClientSseClientTransport(transportProvider.getSession().getTransport());
-		transport.connect(Function.identity()).block();
+		transport.connect().block();
 	}
 
 	@AfterEach
@@ -334,6 +334,9 @@ class HttpClientSseClientTransportTests {
 				customizerCalled.set(true);
 			})
 			.build();
+		customizedTransport.setSessionFactory(
+				(transport) -> new McpClientSession(Duration.ofSeconds(5), transport, Map.of(), Map.of()));
+		customizedTransport.getSession();
 
 		// Verify the customizer was called
 		assertThat(customizerCalled.get()).isTrue();
@@ -364,6 +367,9 @@ class HttpClientSseClientTransportTests {
 				headerValue.set(request.headers().firstValue("X-Custom-Header").orElse(null));
 			})
 			.build();
+		customizedTransport.setSessionFactory(
+				(transport) -> new McpClientSession(Duration.ofSeconds(5), transport, Map.of(), Map.of()));
+		customizedTransport.getSession();
 
 		// Verify the customizer was called
 		assertThat(customizerCalled.get()).isTrue();
@@ -393,6 +399,9 @@ class HttpClientSseClientTransportTests {
 				requestCustomizerCalled.set(true);
 			})
 			.build();
+		customizedTransport.setSessionFactory(
+				(transport) -> new McpClientSession(Duration.ofSeconds(5), transport, Map.of(), Map.of()));
+		customizedTransport.getSession();
 
 		// Verify both customizers were called
 		assertThat(clientCustomizerCalled.get()).isTrue();

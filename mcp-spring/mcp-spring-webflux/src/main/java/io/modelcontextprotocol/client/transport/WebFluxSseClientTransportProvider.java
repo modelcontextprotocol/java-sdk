@@ -263,39 +263,7 @@ public class WebFluxSseClientTransportProvider implements McpClientTransportProv
 		 */
 		@Override
 		public Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
-			Flux<ServerSentEvent<String>> events = eventStream();
-			inboundSubscription = events
-				.concatMap(event -> Mono.just(event).<McpSchema.JSONRPCMessage>handle((e, s) -> {
-					if (ENDPOINT_EVENT_TYPE.equals(event.event())) {
-						String messageEndpointUri = event.data();
-						if (messageEndpointSink.tryEmitValue(messageEndpointUri).isSuccess()) {
-							session.setId(event.id());
-							s.complete();
-						}
-						else {
-							// TODO: clarify with the spec if multiple events can be
-							// received
-							s.error(new McpError("Failed to handle SSE endpoint event"));
-						}
-					}
-					else if (MESSAGE_EVENT_TYPE.equals(event.event())) {
-						try {
-							McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper,
-									event.data());
-							s.next(message);
-						}
-						catch (IOException ioException) {
-							s.error(ioException);
-						}
-					}
-					else {
-						s.error(new McpError("Received unrecognized SSE event type: " + event.event()));
-					}
-				}).flatMap(message -> session.handle(message)))
-				.subscribe();
-
-			// The connection is established once the server sends the endpoint event
-			return messageEndpointSink.asMono().then();
+			return connect();
 		}
 
 		@Override

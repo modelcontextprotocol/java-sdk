@@ -5,12 +5,14 @@
 package io.modelcontextprotocol.client;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransportProvider;
+import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpClientTransportProvider;
 import org.junit.jupiter.api.Test;
@@ -49,6 +51,8 @@ class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 		AtomicReference<String> receivedError = new AtomicReference<>();
 
 		McpClientTransportProvider transportProvider = createMcpClientTransportProvider();
+		transportProvider.setSessionFactory(
+				(transport) -> new McpClientSession(Duration.ofSeconds(5), transport, Map.of(), Map.of()));
 		McpClientTransport transport = transportProvider.getSession().getTransport();
 		StepVerifier.create(transport.connect(msg -> msg)).verifyComplete();
 

@@ -179,38 +179,7 @@ public class StdioClientTransportProvider implements McpClientTransportProvider 
 		 */
 		@Override
 		public Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
-			return Mono.<Void>fromRunnable(() -> {
-				handleIncomingMessages(handler);
-				handleIncomingErrors();
-
-				// Prepare command and environment
-				List<String> fullCommand = new ArrayList<>();
-				fullCommand.add(params.getCommand());
-				fullCommand.addAll(params.getArgs());
-
-				ProcessBuilder processBuilder = this.getProcessBuilder();
-				processBuilder.command(fullCommand);
-				processBuilder.environment().putAll(params.getEnv());
-
-				// Start the process
-				try {
-					this.process = processBuilder.start();
-				}
-				catch (IOException e) {
-					throw new RuntimeException("Failed to start process with command: " + fullCommand, e);
-				}
-
-				// Validate process streams
-				if (this.process.getInputStream() == null || process.getOutputStream() == null) {
-					this.process.destroy();
-					throw new RuntimeException("Process input or output stream is null");
-				}
-
-				// Start threads
-				startInboundProcessing();
-				startOutboundProcessing();
-				startErrorProcessing();
-			}).subscribeOn(Schedulers.boundedElastic());
+			return connect();
 		}
 
 		@Override
