@@ -14,6 +14,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -192,6 +193,7 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 			.doOnTerminate(() -> state.set(TransportState.CLOSED))
 			.onErrorResume(e -> {
 				LOGGER.error("Streamable transport connection error", e);
+				state.set(TransportState.DISCONNECTED);
 				return Mono.error(e);
 			}));
 	}
@@ -204,43 +206,14 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 	public Mono<Void> sendMessage(final McpSchema.JSONRPCMessage message,
 			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
 		if (fallbackToSse.get()) {
-			return sseClientTransport.sendMessage(message);
+			return fallbackToSse(message);
 		}
 
 		if (state.get() == TransportState.CLOSED) {
 			return Mono.empty();
 		}
 
-		return sentPost(message, handler).onErrorResume(e -> {
-			LOGGER.error("Streamable transport sendMessage error", e);
-			return Mono.error(e);
-		});
-	}
-
-	/**
-	 * Sends a list of messages to the server.
-	 * @param messages the list of messages to send
-	 * @return a Mono that completes when all messages have been sent
-	 */
-	public Mono<Void> sendMessages(final List<McpSchema.JSONRPCMessage> messages,
-			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
-		if (fallbackToSse.get()) {
-			return Flux.fromIterable(messages).flatMap(this::sendMessage).then();
-		}
-
-		if (state.get() == TransportState.CLOSED) {
-			return Mono.empty();
-		}
-
-		return sentPost(messages, handler).onErrorResume(e -> {
-			LOGGER.error("Streamable transport sendMessages error", e);
-			return Mono.error(e);
-		});
-	}
-
-	private Mono<Void> sentPost(final Object msg,
-			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
-		return serializeJson(msg).flatMap(json -> {
+		return serializeJson(message).flatMap(json -> {
 			final HttpRequest request = requestBuilder.copy()
 				.POST(HttpRequest.BodyPublishers.ofString(json))
 				.uri(uri)
@@ -256,15 +229,7 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 					if (response.statusCode() == 405 || response.statusCode() == 404) {
 						LOGGER.warn("Operation not allowed, falling back to SSE");
 						fallbackToSse.set(true);
-						if (msg instanceof McpSchema.JSONRPCMessage message) {
-							return sseClientTransport.sendMessage(message);
-						}
-
-						if (msg instanceof List<?> list) {
-							@SuppressWarnings("unchecked")
-							final List<McpSchema.JSONRPCMessage> messages = (List<McpSchema.JSONRPCMessage>) list;
-							return Flux.fromIterable(messages).flatMap(this::sendMessage).then();
-						}
+						return fallbackToSse(message);
 					}
 
 					if (response.statusCode() >= 400) {
@@ -274,18 +239,28 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 
 					return handleStreamingResponse(response, handler);
 				});
+		}).onErrorResume(e -> {
+			LOGGER.error("Streamable transport sendMessages error", e);
+			return Mono.error(e);
 		});
 
 	}
 
-	private Mono<String> serializeJson(final Object input) {
+	private Mono<Void> fallbackToSse(final McpSchema.JSONRPCMessage msg) {
+		if (msg instanceof McpSchema.JSONRPCBatchRequest batch) {
+			return Flux.fromIterable(batch.items()).flatMap(sseClientTransport::sendMessage).then();
+		}
+
+		if (msg instanceof McpSchema.JSONRPCBatchResponse batch) {
+			return Flux.fromIterable(batch.items()).flatMap(sseClientTransport::sendMessage).then();
+		}
+
+		return sseClientTransport.sendMessage(msg);
+	}
+
+	private Mono<String> serializeJson(final McpSchema.JSONRPCMessage msg) {
 		try {
-			if (input instanceof McpSchema.JSONRPCMessage || input instanceof List) {
-				return Mono.just(objectMapper.writeValueAsString(input));
-			}
-			else {
-				return Mono.error(new IllegalArgumentException("Unsupported message type for serialization"));
-			}
+			return Mono.just(objectMapper.writeValueAsString(msg));
 		}
 		catch (IOException e) {
 			LOGGER.error("Error serializing JSON-RPC message", e);
@@ -313,9 +288,15 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 	private Mono<Void> handleSingleJson(final HttpResponse<InputStream> response,
 			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
 		return Mono.fromCallable(() -> {
+			try {
 			final McpSchema.JSONRPCMessage msg = McpSchema.deserializeJsonRpcMessage(objectMapper,
 					new String(response.body().readAllBytes(), StandardCharsets.UTF_8));
 			return handler.apply(Mono.just(msg));
+			}
+			catch (IOException e) {
+				LOGGER.error("Error processing JSON response", e);
+				return Mono.error(e);
+			}
 		}).flatMap(Function.identity()).then();
 	}
 
@@ -328,7 +309,7 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 			}
 			catch (IOException e) {
 				LOGGER.error("Error processing JSON line", e);
-				return Mono.empty();
+				return Mono.error(e);
 			}
 		}).then();
 	}
@@ -347,7 +328,7 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 					if (line.startsWith("event: "))
 						event = line.substring(7).trim();
 					else if (line.startsWith("data: "))
-						data += line.substring(6).trim() + "\n";
+						data += line.substring(6) + "\n";
 					else if (line.startsWith("id: "))
 						id = line.substring(4).trim();
 				}
@@ -359,34 +340,35 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 				return new FlowSseClient.SseEvent(event, data, id);
 			})
 			.filter(sseEvent -> "message".equals(sseEvent.type()))
-			.doOnNext(sseEvent -> {
-				lastEventId.set(sseEvent.id());
+			.concatMap(sseEvent -> {
+				String rawData = sseEvent.data().trim();
 				try {
-					String rawData = sseEvent.data().trim();
 					JsonNode node = objectMapper.readTree(rawData);
-
+					List<McpSchema.JSONRPCMessage> messages = new ArrayList<>();
 					if (node.isArray()) {
 						for (JsonNode item : node) {
-							String rawMessage = objectMapper.writeValueAsString(item);
-							McpSchema.JSONRPCMessage msg = McpSchema.deserializeJsonRpcMessage(objectMapper,
-									rawMessage);
-							handler.apply(Mono.just(msg)).subscribe();
+							messages.add(McpSchema.deserializeJsonRpcMessage(objectMapper, item.toString()));
 						}
-					}
-					else if (node.isObject()) {
-						String rawMessage = objectMapper.writeValueAsString(node);
-						McpSchema.JSONRPCMessage msg = McpSchema.deserializeJsonRpcMessage(objectMapper, rawMessage);
-						handler.apply(Mono.just(msg)).subscribe();
-					}
-					else {
+					} else if (node.isObject()) {
+						messages.add(McpSchema.deserializeJsonRpcMessage(objectMapper, node.toString()));
+					} else {
+						String warning = "Unexpected JSON in SSE data: " + rawData;
 						LOGGER.warn("Unexpected JSON in SSE data: {}", rawData);
+						return Mono.error(new IllegalArgumentException(warning));
 					}
+
+					return Flux.fromIterable(messages)
+							.concatMap(msg -> handler.apply(Mono.just(msg)))
+							.then(Mono.fromRunnable(() -> {
+								if (!sseEvent.id().isEmpty()) {
+									lastEventId.set(sseEvent.id());
+								}
+							}));
+				} catch (IOException e) {
+					LOGGER.error("Error parsing SSE JSON: {}", rawData, e);
+					return Mono.error(e);
 				}
-				catch (IOException e) {
-					LOGGER.error("Error processing SSE event: {}", sseEvent.data(), e);
-				}
-			})
-			.then();
+			}).then();
 	}
 
 	@Override
