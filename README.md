@@ -33,8 +33,9 @@ To run the tests you have to pre-install `Docker` and `npx`.
 Contributions are welcome! Please:
 
 1. Fork the repository
-2. Create a feature branch
-3. Submit a Pull Request
+2. Clone your forked repository
+3. Create a feature branch
+4. Submit a Pull Request
 
 ## Team
 
