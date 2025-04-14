@@ -225,18 +225,19 @@ public class McpClientSession implements McpSession {
 	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {
 		String requestId = this.generateRequestId();
 
-		return Mono.<McpSchema.JSONRPCResponse>create(sink -> {
+		return Mono.deferContextual(ctx -> Mono.<McpSchema.JSONRPCResponse>create(sink -> {
 			this.pendingResponses.put(requestId, sink);
 			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, method,
 					requestId, requestParams);
 			this.transport.sendMessage(jsonrpcRequest)
+				.contextWrite(ctx)
 				// TODO: It's most efficient to create a dedicated Subscriber here
 				.subscribe(v -> {
 				}, error -> {
 					this.pendingResponses.remove(requestId);
 					sink.error(error);
 				});
-		}).timeout(this.requestTimeout).handle((jsonRpcResponse, sink) -> {
+		})).timeout(this.requestTimeout).handle((jsonRpcResponse, sink) -> {
 			if (jsonRpcResponse.error() != null) {
 				sink.error(new McpError(jsonRpcResponse.error()));
 			}
