@@ -6,6 +6,7 @@ package io.modelcontextprotocol.server.transport;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.io.UncheckedIOException;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -240,18 +241,15 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	@Override
 	protected void doPost(HttpServletRequest request, HttpServletResponse response)
 			throws ServletException, IOException {
-
 		if (isClosing.get()) {
 			response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Server is shutting down");
 			return;
 		}
-
 		String requestURI = request.getRequestURI();
 		if (!requestURI.endsWith(messageEndpoint)) {
 			response.sendError(HttpServletResponse.SC_NOT_FOUND);
 			return;
 		}
-
 		// Get the session ID from the request parameter
 		String sessionId = request.getParameter("sessionId");
 		if (sessionId == null) {
@@ -277,24 +275,29 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			writer.flush();
 			return;
 		}
-
 		try {
-			BufferedReader reader = request.getReader();
-			StringBuilder body = new StringBuilder();
-			String line;
-			while ((line = reader.readLine()) != null) {
-				body.append(line);
-			}
-
-			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body.toString());
-
-			// Process the message through the session's handle method
+			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, request.getReader());
 			session.handle(message).block(); // Block for Servlet compatibility
-
 			response.setStatus(HttpServletResponse.SC_OK);
 		}
+		catch (IllegalArgumentException | UncheckedIOException ex) {
+			try {
+				McpError mcpError = new McpError(ex.getMessage());
+				response.setContentType(APPLICATION_JSON);
+				response.setCharacterEncoding(UTF_8);
+				response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+				String jsonError = objectMapper.writeValueAsString(mcpError);
+				PrintWriter writer = response.getWriter();
+				writer.write(jsonError);
+				writer.flush();
+			}
+			catch (IOException ex2) {
+				logger.error(FAILED_TO_SEND_ERROR_RESPONSE, ex2.getMessage());
+				response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error processing message");
+			}
+		}
 		catch (Exception e) {
-			logger.error("Error processing message: {}", e.getMessage());
+			logger.error("Error processing message", e);
 			try {
 				McpError mcpError = new McpError(e.getMessage());
 				response.setContentType(APPLICATION_JSON);

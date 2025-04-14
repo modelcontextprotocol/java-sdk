@@ -265,7 +265,7 @@ public class McpAsyncServer {
 
 		private final ConcurrentHashMap<String, McpServerFeatures.AsyncPromptSpecification> prompts = new ConcurrentHashMap<>();
 
-		// FIXME: this field is deprecated and should be remvoed together with the
+		// FIXME: this field is deprecated and should be removed together with the
 		// broadcasting loggingNotification.
 		private LoggingLevel minLoggingLevel = LoggingLevel.DEBUG;
 
@@ -334,6 +334,7 @@ public class McpAsyncServer {
 			mcpTransportProvider.setSessionFactory(
 					transport -> new McpServerSession(UUID.randomUUID().toString(), requestTimeout, transport,
 							this::asyncInitializeRequestHandler, Mono::empty, requestHandlers, notificationHandlers));
+
 		}
 
 		// ---------------------------------------
