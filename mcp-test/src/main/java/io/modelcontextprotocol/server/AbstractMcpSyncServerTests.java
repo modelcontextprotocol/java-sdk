@@ -340,7 +340,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 		var singleConsumerServer = McpServer.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
-			.rootsChangeHandlers(List.of((exchage, roots) -> {
+			.rootsChangeHandlers(List.of((exchange, roots) -> {
 				consumerCalled[0] = true;
 				if (!roots.isEmpty()) {
 					rootsReceived[0] = roots.get(0);
