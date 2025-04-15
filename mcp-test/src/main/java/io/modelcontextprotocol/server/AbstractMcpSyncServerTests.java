@@ -77,14 +77,14 @@ public abstract class AbstractMcpSyncServerTests {
 	void testGracefulShutdown() {
 		var mcpSyncServer = McpServer.sync(createMcpTransportProvider()).serverInfo("test-server", "1.0.0").build();
 
-		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
 	}
 
 	@Test
 	void testImmediateClose() {
 		var mcpSyncServer = McpServer.sync(createMcpTransportProvider()).serverInfo("test-server", "1.0.0").build();
 
-		assertThatCode(() -> mcpSyncServer.close()).doesNotThrowAnyException();
+		assertThatCode(mcpSyncServer::close).doesNotThrowAnyException();
 	}
 
 	@Test
@@ -93,7 +93,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 		assertThat(mcpSyncServer.getAsyncServer()).isNotNull();
 
-		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
 	}
 
 	// ---------------------------------------
@@ -138,7 +138,7 @@ public abstract class AbstractMcpSyncServerTests {
 			.isInstanceOf(McpError.class)
 			.hasMessage("Tool with name '" + TEST_TOOL_NAME + "' already exists");
 
-		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
 	}
 
 	@Test
@@ -153,7 +153,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 		assertThatCode(() -> mcpSyncServer.removeTool(TEST_TOOL_NAME)).doesNotThrowAnyException();
 
-		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
 	}
 
 	@Test
@@ -173,9 +173,9 @@ public abstract class AbstractMcpSyncServerTests {
 	void testNotifyToolsListChanged() {
 		var mcpSyncServer = McpServer.sync(createMcpTransportProvider()).serverInfo("test-server", "1.0.0").build();
 
-		assertThatCode(() -> mcpSyncServer.notifyToolsListChanged()).doesNotThrowAnyException();
+		assertThatCode(mcpSyncServer::notifyToolsListChanged).doesNotThrowAnyException();
 
-		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
 	}
 
 	// ---------------------------------------
@@ -186,9 +186,9 @@ public abstract class AbstractMcpSyncServerTests {
 	void testNotifyResourcesListChanged() {
 		var mcpSyncServer = McpServer.sync(createMcpTransportProvider()).serverInfo("test-server", "1.0.0").build();
 
-		assertThatCode(() -> mcpSyncServer.notifyResourcesListChanged()).doesNotThrowAnyException();
+		assertThatCode(mcpSyncServer::notifyResourcesListChanged).doesNotThrowAnyException();
 
-		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
 	}
 
 	@Test
@@ -219,7 +219,7 @@ public abstract class AbstractMcpSyncServerTests {
 			.isInstanceOf(McpError.class)
 			.hasMessage("Resource must not be null");
 
-		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
 	}
 
 	@Test
@@ -312,7 +312,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 		assertThatCode(() -> mcpSyncServer.removePrompt(TEST_PROMPT_NAME)).doesNotThrowAnyException();
 
-		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
 	}
 
 	@Test
@@ -325,7 +325,7 @@ public abstract class AbstractMcpSyncServerTests {
 		assertThatThrownBy(() -> mcpSyncServer.removePrompt("nonexistent-prompt")).isInstanceOf(McpError.class)
 			.hasMessage("Prompt with name 'nonexistent-prompt' not found");
 
-		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
 	}
 
 	// ---------------------------------------
@@ -366,7 +366,7 @@ public abstract class AbstractMcpSyncServerTests {
 			.build();
 
 		assertThat(multipleConsumersServer).isNotNull();
-		assertThatCode(() -> multipleConsumersServer.closeGracefully()).doesNotThrowAnyException();
+		assertThatCode(multipleConsumersServer::closeGracefully).doesNotThrowAnyException();
 		onClose();
 
 		// Test error handling
@@ -378,14 +378,14 @@ public abstract class AbstractMcpSyncServerTests {
 			.build();
 
 		assertThat(errorHandlingServer).isNotNull();
-		assertThatCode(() -> errorHandlingServer.closeGracefully()).doesNotThrowAnyException();
+		assertThatCode(errorHandlingServer::closeGracefully).doesNotThrowAnyException();
 		onClose();
 
 		// Test without consumers
 		var noConsumersServer = McpServer.sync(createMcpTransportProvider()).serverInfo("test-server", "1.0.0").build();
 
 		assertThat(noConsumersServer).isNotNull();
-		assertThatCode(() -> noConsumersServer.closeGracefully()).doesNotThrowAnyException();
+		assertThatCode(noConsumersServer::closeGracefully).doesNotThrowAnyException();
 	}
 
 }

@@ -90,10 +90,6 @@ class WebMvcSseSyncServerTransportTests extends AbstractMcpSyncServerTests {
 	}
 
 	@Override
-	protected void onStart() {
-	}
-
-	@Override
 	protected void onClose() {
 		if (transportProvider != null) {
 			transportProvider.closeGracefully().block();

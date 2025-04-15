@@ -91,10 +91,6 @@ class WebMvcSseAsyncServerTransportTests extends AbstractMcpAsyncServerTests {
 	}
 
 	@Override
-	protected void onStart() {
-	}
-
-	@Override
 	protected void onClose() {
 		if (transportProvider != null) {
 			transportProvider.closeGracefully().block();
