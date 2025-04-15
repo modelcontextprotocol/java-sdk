@@ -358,7 +358,7 @@ public class McpAsyncServer {
 				}
 				else {
 					logger.warn(
-							"Client requested unsupported protocol version: {}, so the server will sugggest the {} version instead",
+							"Client requested unsupported protocol version: {}, so the server will suggest the {} version instead",
 							initializeRequest.protocolVersion(), serverProtocolVersion);
 				}
 
