@@ -271,7 +271,7 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 	}
 
 	@Test
-	void testRootsNotifciationWithEmptyRootsList() {
+	void testRootsNotificationWithEmptyRootsList() {
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
