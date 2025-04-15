@@ -337,7 +337,7 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 					data = data.substring(0, data.length() - 1);
 				}
 
-				return new FlowSseClient.SseEvent(event, data, id);
+				return new FlowSseClient.SseEvent(id, event, data);
 			})
 			.filter(sseEvent -> "message".equals(sseEvent.type()))
 			.concatMap(sseEvent -> {
