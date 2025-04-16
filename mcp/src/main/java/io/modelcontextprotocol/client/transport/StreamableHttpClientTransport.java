@@ -72,8 +72,6 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 
 	private final URI uri;
 
-	private final AtomicReference<TransportState> state = new AtomicReference<>(TransportState.DISCONNECTED);
-
 	private final AtomicReference<String> lastEventId = new AtomicReference<>();
 
 	private final AtomicReference<String> mcpSessionId = new AtomicReference<>();
@@ -97,15 +95,6 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 	 */
 	public static Builder builder(final String uri) {
 		return new Builder().withBaseUri(uri);
-	}
-
-	/**
-	 * The state of the Transport connection.
-	 */
-	public enum TransportState {
-
-		DISCONNECTED, CONNECTING, CONNECTED, CLOSED
-
 	}
 
 	/**
@@ -188,10 +177,6 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 			return sseClientTransport.connect(handler);
 		}
 
-		if (!state.compareAndSet(TransportState.DISCONNECTED, TransportState.CONNECTING)) {
-			return Mono.error(new IllegalStateException("Already connected or connecting"));
-		}
-
 		return Mono.defer(() -> Mono.fromFuture(() -> {
 			final HttpRequest.Builder request = requestBuilder.copy().GET().header(ACCEPT, TEXT_EVENT_STREAM).uri(uri);
 			final String lastId = lastEventId.get();
@@ -219,13 +204,10 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 			return handleStreamingResponse(response, handler);
 		})
 			.retryWhen(Retry.backoff(3, Duration.ofSeconds(3)).filter(err -> err instanceof IllegalStateException))
-			.doOnSuccess(v -> state.set(TransportState.CONNECTED))
-			.doOnTerminate(() -> state.set(TransportState.CLOSED))
 			.onErrorResume(e -> {
 				LOGGER.error("Streamable transport connection error", e);
-				state.set(TransportState.DISCONNECTED);
 				return Mono.error(e);
-			}));
+			})).doOnTerminate(this::closeGracefully);
 	}
 
 	@Override
@@ -237,10 +219,6 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
 		if (fallbackToSse.get()) {
 			return fallbackToSse(message);
-		}
-
-		if (state.get() == TransportState.CLOSED) {
-			return Mono.empty();
 		}
 
 		return serializeJson(message).flatMap(json -> {
@@ -427,7 +405,8 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 
 	@Override
 	public Mono<Void> closeGracefully() {
-		state.set(TransportState.CLOSED);
+		mcpSessionId.set(null);
+		lastEventId.set(null);
 		if (fallbackToSse.get()) {
 			return sseClientTransport.closeGracefully();
 		}
@@ -437,10 +416,6 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 	@Override
 	public <T> T unmarshalFrom(final Object data, final TypeReference<T> typeRef) {
 		return objectMapper.convertValue(data, typeRef);
-	}
-
-	public TransportState getState() {
-		return state.get();
 	}
 
 }

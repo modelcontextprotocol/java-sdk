@@ -48,6 +48,7 @@ class McpClientSessionTests {
 		transport = new MockMcpClientTransport();
 		session = new McpClientSession(TIMEOUT, transport, Map.of(),
 				Map.of(TEST_NOTIFICATION, params -> Mono.fromRunnable(() -> logger.info("Status update: " + params))));
+		session.openSSE();
 	}
 
 	@AfterEach
@@ -141,6 +142,7 @@ class McpClientSessionTests {
 				params -> Mono.just(params));
 		transport = new MockMcpClientTransport();
 		session = new McpClientSession(TIMEOUT, transport, requestHandlers, Map.of());
+		session.openSSE();
 
 		// Simulate incoming request
 		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, ECHO_METHOD,
@@ -162,7 +164,7 @@ class McpClientSessionTests {
 		transport = new MockMcpClientTransport();
 		session = new McpClientSession(TIMEOUT, transport, Map.of(),
 				Map.of(TEST_NOTIFICATION, params -> Mono.fromRunnable(() -> receivedParams.tryEmitValue(params))));
-
+		session.openSSE();
 		// Simulate incoming notification from the server
 		Map<String, Object> notificationParams = Map.of("status", "ready");
 

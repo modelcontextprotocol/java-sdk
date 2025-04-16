@@ -137,6 +137,18 @@ public class McpSyncClient implements AutoCloseable {
 		return true;
 	}
 
+	// ---------------------------
+	// open an SSE stream
+	// ---------------------------
+	/**
+	 * The client may issue an HTTP GET to the MCP endpoint. This can be used to open an
+	 * SSE stream, allowing the server to communicate to the client, without the client
+	 * first sending data via HTTP POST.
+	 */
+	public void openSSE() {
+		this.delegate.openSSE();
+	}
+
 	/**
 	 * The initialization phase MUST be the first interaction between client and server.
 	 * During this phase, the client and server:
@@ -156,9 +168,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * The server MUST respond with its own capabilities and information:
 	 * {@link McpSchema.ServerCapabilities}. <br/>
 	 * After successful initialization, the client MUST send an initialized notification
-	 * to indicate it is ready to begin normal operations.
-	 *
-	 * <br/>
+	 * to indicate it is ready to begin normal operations. <br/>
 	 *
 	 * <a href=
 	 * "https://github.com/modelcontextprotocol/specification/blob/main/docs/specification/basic/lifecycle.md#initialization">Initialization
@@ -280,9 +290,8 @@ public class McpSyncClient implements AutoCloseable {
 
 	/**
 	 * Resource templates allow servers to expose parameterized resources using URI
-	 * templates. Arguments may be auto-completed through the completion API.
-	 *
-	 * Request a list of resource templates the server has.
+	 * templates. Arguments may be auto-completed through the completion API. Request a
+	 * list of resource templates the server has.
 	 * @param cursor the cursor
 	 * @return the list of resource templates result.
 	 */
@@ -301,9 +310,7 @@ public class McpSyncClient implements AutoCloseable {
 	/**
 	 * Subscriptions. The protocol supports optional subscriptions to resource changes.
 	 * Clients can subscribe to specific resources and receive notifications when they
-	 * change.
-	 *
-	 * Send a resources/subscribe request.
+	 * change. Send a resources/subscribe request.
 	 * @param subscribeRequest the subscribe request contains the uri of the resource to
 	 * subscribe to.
 	 */
