@@ -97,8 +97,7 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 			.version(HttpClient.Version.HTTP_1_1)
 			.connectTimeout(Duration.ofSeconds(10));
 
-		private final HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-			.header("Accept", "application/json, text/event-stream");
+		private final HttpRequest.Builder requestBuilder = HttpRequest.newBuilder();
 
 		private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -174,7 +173,10 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 		}
 
 		return Mono.defer(() -> Mono.fromFuture(() -> {
-			final HttpRequest.Builder builder = requestBuilder.copy().GET().uri(uri);
+			final HttpRequest.Builder builder = requestBuilder.copy()
+				.GET()
+				.header("Accept", "text/event-stream")
+				.uri(uri);
 			final String lastId = lastEventId.get();
 			if (lastId != null) {
 				builder.header("Last-Event-ID", lastId);
@@ -216,6 +218,8 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 		return serializeJson(message).flatMap(json -> {
 			final HttpRequest request = requestBuilder.copy()
 				.POST(HttpRequest.BodyPublishers.ofString(json))
+				.header("Accept", "application/json, text/event-stream")
+				.header("Content-Type", "application/json")
 				.uri(uri)
 				.build();
 			return Mono.fromFuture(httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream()))
