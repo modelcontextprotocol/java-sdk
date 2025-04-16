@@ -44,7 +44,23 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(StreamableHttpClientTransport.class);
 
+	private static final String DEFAULT_MCP_ENDPOINT = "/mcp";
+
 	private static final String MCP_SESSION_ID = "Mcp-Session-Id";
+
+	private static final String LAST_EVENT_ID = "Last-Event-ID";
+
+	private static final String ACCEPT = "Accept";
+
+	private static final String CONTENT_TYPE = "Content-Type";
+
+	private static final String APPLICATION_JSON = "application/json";
+
+	private static final String TEXT_EVENT_STREAM = "text/event-stream";
+
+	private static final String APPLICATION_JSON_SEQ = "application/json-seq";
+
+	private static final String DEFAULT_ACCEPT_VALUES = "%s, %s".formatted(APPLICATION_JSON, TEXT_EVENT_STREAM);
 
 	private final HttpClientSseClientTransport sseClientTransport;
 
@@ -107,7 +123,7 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 
 		private String baseUri;
 
-		private String endpoint = "/mcp";
+		private String endpoint = DEFAULT_MCP_ENDPOINT;
 
 		private Consumer<HttpClient.Builder> clientCustomizer;
 
@@ -156,7 +172,7 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 				builder.customizeRequest(requestCustomizer);
 			}
 
-			if (!endpoint.equals("/mcp")) {
+			if (!endpoint.equals(DEFAULT_MCP_ENDPOINT)) {
 				builder.sseEndpoint(endpoint);
 			}
 
@@ -177,13 +193,10 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 		}
 
 		return Mono.defer(() -> Mono.fromFuture(() -> {
-			final HttpRequest.Builder request = requestBuilder.copy()
-				.GET()
-				.header("Accept", "text/event-stream")
-				.uri(uri);
+			final HttpRequest.Builder request = requestBuilder.copy().GET().header(ACCEPT, TEXT_EVENT_STREAM).uri(uri);
 			final String lastId = lastEventId.get();
 			if (lastId != null) {
-				request.header("Last-Event-ID", lastId);
+				request.header(LAST_EVENT_ID, lastId);
 			}
 			if (mcpSessionId.get() != null) {
 				request.header(MCP_SESSION_ID, mcpSessionId.get());
@@ -191,6 +204,13 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 
 			return httpClient.sendAsync(request.build(), HttpResponse.BodyHandlers.ofInputStream());
 		}).flatMap(response -> {
+			// must like server terminate session and the client need to start a
+			// new session by sending a new `InitializeRequest` without a session
+			// ID attached.
+			if (mcpSessionId.get() != null && response.statusCode() == 404) {
+				mcpSessionId.set(null);
+			}
+
 			if (response.statusCode() == 405 || response.statusCode() == 404) {
 				LOGGER.warn("Operation not allowed, falling back to SSE");
 				fallbackToSse.set(true);
@@ -226,8 +246,8 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 		return serializeJson(message).flatMap(json -> {
 			final HttpRequest.Builder request = requestBuilder.copy()
 				.POST(HttpRequest.BodyPublishers.ofString(json))
-				.header("Accept", "application/json, text/event-stream")
-				.header("Content-Type", "application/json")
+				.header(ACCEPT, DEFAULT_ACCEPT_VALUES)
+				.header(CONTENT_TYPE, APPLICATION_JSON)
 				.uri(uri);
 			if (mcpSessionId.get() != null) {
 				request.header(MCP_SESSION_ID, mcpSessionId.get());
@@ -238,7 +258,13 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 
 					// server may assign a session ID at initialization time, if yes we
 					// have to use it for any subsequent requests
-					response.headers().firstValue(MCP_SESSION_ID).map(String::trim).ifPresent(this.mcpSessionId::set);
+					if (message instanceof McpSchema.JSONRPCRequest
+							&& ((McpSchema.JSONRPCRequest) message).method().equals(McpSchema.METHOD_INITIALIZE)) {
+						response.headers()
+							.firstValue(MCP_SESSION_ID)
+							.map(String::trim)
+							.ifPresent(this.mcpSessionId::set);
+					}
 
 					// If the response is 202 Accepted, there's no body to process
 					if (response.statusCode() == 202) {
@@ -296,19 +322,17 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 
 	private Mono<Void> handleStreamingResponse(final HttpResponse<InputStream> response,
 			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
-		final String contentType = response.headers().firstValue("Content-Type").orElse("");
-		if (contentType.contains("application/json-seq")) {
+		final String contentType = response.headers().firstValue(CONTENT_TYPE).orElse("");
+		if (contentType.contains(APPLICATION_JSON_SEQ)) {
 			return handleJsonStream(response, handler);
 		}
-		else if (contentType.contains("text/event-stream")) {
+		else if (contentType.contains(TEXT_EVENT_STREAM)) {
 			return handleSseStream(response, handler);
 		}
-		else if (contentType.contains("application/json")) {
+		else if (contentType.contains(APPLICATION_JSON)) {
 			return handleSingleJson(response, handler);
 		}
-		else {
-			return Mono.error(new UnsupportedOperationException("Unsupported Content-Type: " + contentType));
-		}
+		return Mono.error(new UnsupportedOperationException("Unsupported Content-Type: " + contentType));
 	}
 
 	private Mono<Void> handleSingleJson(final HttpResponse<InputStream> response,
@@ -381,7 +405,7 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 					}
 					else {
 						String warning = "Unexpected JSON in SSE data: " + rawData;
-						LOGGER.warn("Unexpected JSON in SSE data: {}", rawData);
+						LOGGER.warn(warning);
 						return Mono.error(new IllegalArgumentException(warning));
 					}
 
