@@ -96,6 +96,24 @@ public class McpSyncServer {
 	}
 
 	/**
+	 * Add a new resource template handler.
+	 * @param resourceHandler The resource handler to add
+	 */
+	public void addResourceTemplate(McpServerFeatures.SyncResourceTemplateSpecification resourceHandler) {
+		this.asyncServer
+			.addResourceTemplate(McpServerFeatures.AsyncResourceTemplateSpecification.fromSync(resourceHandler))
+			.block();
+	}
+
+	/**
+	 * Remove a resource template handler.
+	 * @param resourceUri The URI of the resource template handler to remove
+	 */
+	public void removeResourceTemplate(String resourceUri) {
+		this.asyncServer.removeResourceTemplate(resourceUri).block();
+	}
+
+	/**
 	 * Add a new prompt handler.
 	 * @param promptSpecification The prompt specification to add
 	 */

@@ -37,6 +37,8 @@ public abstract class AbstractMcpSyncServerTests {
 
 	private static final String TEST_RESOURCE_URI = "test://resource";
 
+	private static final String TEST_RESOURCE_TEMPLATE_URI = "test://resource/{path}";
+
 	private static final String TEST_PROMPT_NAME = "test-prompt";
 
 	abstract protected McpServerTransportProvider createMcpTransportProvider();
@@ -243,6 +245,66 @@ public abstract class AbstractMcpSyncServerTests {
 			.build();
 
 		assertThatThrownBy(() -> serverWithoutResources.removeResource(TEST_RESOURCE_URI)).isInstanceOf(McpError.class)
+			.hasMessage("Server must be configured with resource capabilities");
+	}
+
+	// ---------------------------------------
+	// Resources Template Tests
+	// ---------------------------------------
+
+	@Test
+	void testAddResourceTemplate() {
+		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(true, false).build())
+			.build();
+
+		McpSchema.ResourceTemplate resource = new McpSchema.ResourceTemplate(TEST_RESOURCE_TEMPLATE_URI,
+				"Test Template Resource", "text/plain", "Test resource description", null);
+		McpServerFeatures.SyncResourceTemplateSpecification specification = new McpServerFeatures.SyncResourceTemplateSpecification(
+				resource, (exchange, req) -> new ReadResourceResult(List.of()));
+
+		assertThatCode(() -> mcpSyncServer.addResourceTemplate(specification)).doesNotThrowAnyException();
+
+		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testAddResourceTemplateWithNullSpecifiation() {
+		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(true, false).build())
+			.build();
+
+		assertThatThrownBy(() -> mcpSyncServer.addResourceTemplate(null)).isInstanceOf(McpError.class)
+			.hasMessage("Resource template must not be null");
+
+		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testAddResourceTemplateWithoutCapability() {
+		var serverWithoutResources = McpServer.sync(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.build();
+
+		McpSchema.ResourceTemplate resource = new McpSchema.ResourceTemplate(TEST_RESOURCE_TEMPLATE_URI,
+				"Test Template Resource", "text/plain", "Test resource description", null);
+		McpServerFeatures.SyncResourceTemplateSpecification specification = new McpServerFeatures.SyncResourceTemplateSpecification(
+				resource, (exchange, req) -> new ReadResourceResult(List.of()));
+
+		assertThatThrownBy(() -> serverWithoutResources.addResourceTemplate(specification)).isInstanceOf(McpError.class)
+			.hasMessage("Server must be configured with resource capabilities");
+	}
+
+	@Test
+	void testRemoveResourceTemplateWithoutCapability() {
+		var serverWithoutResources = McpServer.sync(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.build();
+
+		assertThatThrownBy(() -> serverWithoutResources.removeResourceTemplate(TEST_RESOURCE_TEMPLATE_URI))
+			.isInstanceOf(McpError.class)
 			.hasMessage("Server must be configured with resource capabilities");
 	}
 

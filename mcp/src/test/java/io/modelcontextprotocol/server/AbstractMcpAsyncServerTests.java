@@ -40,6 +40,8 @@ public abstract class AbstractMcpAsyncServerTests {
 
 	private static final String TEST_RESOURCE_URI = "test://resource";
 
+	private static final String TEST_RESOURCE_TEMPLATE_URI = "test://resource/{path}";
+
 	private static final String TEST_PROMPT_NAME = "test-prompt";
 
 	abstract protected McpServerTransportProvider createMcpTransportProvider();
@@ -254,6 +256,91 @@ public abstract class AbstractMcpAsyncServerTests {
 			assertThat(error).isInstanceOf(McpError.class)
 				.hasMessage("Server must be configured with resource capabilities");
 		});
+	}
+
+	// ---------------------------------------
+	// Resources Template Tests
+	// ---------------------------------------
+
+	@Test
+	void testAddResourceTemplate() {
+		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(true, false).build())
+			.build();
+
+		McpSchema.ResourceTemplate resource = new McpSchema.ResourceTemplate(TEST_RESOURCE_TEMPLATE_URI,
+				"Test Resource", "text/plain", "Test resource description", null);
+		McpServerFeatures.AsyncResourceTemplateSpecification specification = new McpServerFeatures.AsyncResourceTemplateSpecification(
+				resource, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
+
+		StepVerifier.create(mcpAsyncServer.addResourceTemplate(specification)).verifyComplete();
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testAddResourceAndRemoveTemplate() {
+		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(true, false).build())
+			.build();
+
+		McpSchema.ResourceTemplate resource = new McpSchema.ResourceTemplate(TEST_RESOURCE_TEMPLATE_URI,
+				"Test Resource", "text/plain", "Test resource description", null);
+		McpServerFeatures.AsyncResourceTemplateSpecification specification = new McpServerFeatures.AsyncResourceTemplateSpecification(
+				resource, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
+
+		StepVerifier.create(mcpAsyncServer.addResourceTemplate(specification)).verifyComplete();
+		StepVerifier.create(mcpAsyncServer.removeResourceTemplate(TEST_RESOURCE_TEMPLATE_URI)).verifyComplete();
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testAddResourceTemplateWithNullSpecification() {
+		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(true, false).build())
+			.build();
+
+		StepVerifier.create(mcpAsyncServer.addResourceTemplate(null)).verifyErrorSatisfies(error -> {
+			assertThat(error).isInstanceOf(McpError.class).hasMessage("Resource template must not be null");
+		});
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testAddResourceTemplateWithoutCapability() {
+		// Create a server without resource capabilities
+		McpAsyncServer serverWithoutResources = McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.build();
+
+		McpSchema.ResourceTemplate resource = new McpSchema.ResourceTemplate(TEST_RESOURCE_TEMPLATE_URI,
+				"Test Resource", "text/plain", "Test resource description", null);
+		McpServerFeatures.AsyncResourceTemplateSpecification specification = new McpServerFeatures.AsyncResourceTemplateSpecification(
+				resource, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
+
+		StepVerifier.create(serverWithoutResources.addResourceTemplate(specification)).verifyErrorSatisfies(error -> {
+			assertThat(error).isInstanceOf(McpError.class)
+				.hasMessage("Server must be configured with resource capabilities");
+		});
+	}
+
+	@Test
+	void testRemoveResourceTemplateWithoutCapability() {
+		// Create a server without resource capabilities
+		McpAsyncServer serverWithoutResources = McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.build();
+
+		StepVerifier.create(serverWithoutResources.removeResourceTemplate(TEST_RESOURCE_TEMPLATE_URI))
+			.verifyErrorSatisfies(error -> {
+				assertThat(error).isInstanceOf(McpError.class)
+					.hasMessage("Server must be configured with resource capabilities");
+			});
 	}
 
 	// ---------------------------------------
