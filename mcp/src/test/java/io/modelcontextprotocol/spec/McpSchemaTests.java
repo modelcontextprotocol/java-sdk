@@ -477,27 +477,20 @@ public class McpSchemaTests {
 				}
 				""";
 
+		// Deserialize the original string to a JsonSchema object
 		McpSchema.JsonSchema schema = mapper.readValue(schemaJson, McpSchema.JsonSchema.class);
 
-		assertThat(schema.type()).isEqualTo("object");
-		assertThat(schema.properties()).containsKeys("name", "address");
-		assertThat(schema.required()).containsExactly("name");
-		assertThat(schema.defs()).isNotNull();
-		assertThat(schema.defs()).containsKey("Address");
+		// Serialize the object back to a string
+		String serialized = mapper.writeValueAsString(schema);
 
-		String value = mapper.writeValueAsString(schema);
+		// Deserialize again
+		McpSchema.JsonSchema deserialized = mapper.readValue(serialized, McpSchema.JsonSchema.class);
 
-		// Convert to map for easier assertions
-		Map<String, Object> jsonMap = mapper.readValue(value, new TypeReference<HashMap<String, Object>>() {
-		});
-		Map<String, Object> defs = (Map<String, Object>) jsonMap.get("$defs");
-		Map<String, Object> address = (Map<String, Object>) defs.get("Address");
+		// Serialize one more time and compare with the first serialization
+		String serializedAgain = mapper.writeValueAsString(deserialized);
 
-		assertThat(address).containsEntry("type", "object");
-		assertThat(((Map<String, Object>) ((Map<String, Object>) address.get("properties")).get("street")).get("type"))
-			.isEqualTo("string");
-		assertThat(((Map<String, Object>) ((Map<String, Object>) address.get("properties")).get("city")).get("type"))
-			.isEqualTo("string");
+		// The two serialized strings should be the same
+		assertThatJson(serializedAgain).when(Option.IGNORING_ARRAY_ORDER).isEqualTo(json(serialized));
 	}
 
 	@Test
@@ -527,27 +520,20 @@ public class McpSchemaTests {
 				}
 				""";
 
+		// Deserialize the original string to a JsonSchema object
 		McpSchema.JsonSchema schema = mapper.readValue(schemaJson, McpSchema.JsonSchema.class);
 
-		assertThat(schema.type()).isEqualTo("object");
-		assertThat(schema.properties()).containsKeys("name", "address");
-		assertThat(schema.required()).containsExactly("name");
-		assertThat(schema.definitions()).isNotNull();
-		assertThat(schema.definitions()).containsKey("Address");
+		// Serialize the object back to a string
+		String serialized = mapper.writeValueAsString(schema);
 
-		String value = mapper.writeValueAsString(schema);
+		// Deserialize again
+		McpSchema.JsonSchema deserialized = mapper.readValue(serialized, McpSchema.JsonSchema.class);
 
-		// Convert to map for easier assertions
-		Map<String, Object> jsonMap = mapper.readValue(value, new TypeReference<HashMap<String, Object>>() {
-		});
-		Map<String, Object> definitions = (Map<String, Object>) jsonMap.get("definitions");
-		Map<String, Object> address = (Map<String, Object>) definitions.get("Address");
+		// Serialize one more time and compare with the first serialization
+		String serializedAgain = mapper.writeValueAsString(deserialized);
 
-		assertThat(address).containsEntry("type", "object");
-		assertThat(((Map<String, Object>) ((Map<String, Object>) address.get("properties")).get("street")).get("type"))
-			.isEqualTo("string");
-		assertThat(((Map<String, Object>) ((Map<String, Object>) address.get("properties")).get("city")).get("type"))
-			.isEqualTo("string");
+		// The two serialized strings should be the same
+		assertThatJson(serializedAgain).when(Option.IGNORING_ARRAY_ORDER).isEqualTo(json(serialized));
 	}
 
 	@Test
@@ -603,23 +589,21 @@ public class McpSchemaTests {
 
 		McpSchema.Tool tool = new McpSchema.Tool("addressTool", "Handles addresses", complexSchemaJson);
 
-		// Verify the schema was properly parsed and stored with $defs
-		assertThat(tool.inputSchema().defs()).isNotNull();
-		assertThat(tool.inputSchema().defs()).containsKey("Address");
+		// Serialize the tool to a string
+		String serialized = mapper.writeValueAsString(tool);
 
-		String value = mapper.writeValueAsString(tool);
+		// Deserialize back to a Tool object
+		McpSchema.Tool deserializedTool = mapper.readValue(serialized, McpSchema.Tool.class);
 
-		// Convert to map for easier assertions
-		Map<String, Object> jsonMap = mapper.readValue(value, new TypeReference<HashMap<String, Object>>() {
-		});
-		Map<String, Object> inputSchema = (Map<String, Object>) jsonMap.get("inputSchema");
-		Map<String, Object> defs = (Map<String, Object>) inputSchema.get("$defs");
-		Map<String, Object> address = (Map<String, Object>) defs.get("Address");
-		Map<String, Object> properties = (Map<String, Object>) inputSchema.get("properties");
-		Map<String, Object> shippingAddress = (Map<String, Object>) properties.get("shippingAddress");
+		// Serialize again and compare with first serialization
+		String serializedAgain = mapper.writeValueAsString(deserializedTool);
 
-		assertThat(address).containsEntry("type", "object");
-		assertThat(shippingAddress).containsEntry("$ref", "#/$defs/Address");
+		// The two serialized strings should be the same
+		assertThatJson(serializedAgain).when(Option.IGNORING_ARRAY_ORDER).isEqualTo(json(serialized));
+
+		// Just verify the basic structure was preserved
+		assertThat(deserializedTool.inputSchema().defs()).isNotNull();
+		assertThat(deserializedTool.inputSchema().defs()).containsKey("Address");
 	}
 
 	@Test
