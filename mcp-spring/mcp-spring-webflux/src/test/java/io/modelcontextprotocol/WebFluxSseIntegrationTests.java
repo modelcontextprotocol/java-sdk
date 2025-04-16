@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -18,6 +19,7 @@ import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
+import io.modelcontextprotocol.server.TestUtil;
 import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -35,10 +37,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import reactor.core.publisher.Mono;
 import reactor.netty.DisposableServer;
 import reactor.netty.http.server.HttpServer;
-import reactor.test.StepVerifier;
 
 import org.springframework.http.server.reactive.HttpHandler;
 import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
@@ -47,12 +47,14 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.assertWith;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 
-public class WebFluxSseIntegrationTests {
+class WebFluxSseIntegrationTests {
 
-	private static final int PORT = 8182;
+	private static final int PORT = TestUtil.findAvailablePort();
 
 	private static final String CUSTOM_SSE_ENDPOINT = "/somePath/sse";
 
@@ -106,12 +108,9 @@ public class WebFluxSseIntegrationTests {
 		var clientBuilder = clientBuilders.get(clientType);
 
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
-
-					exchange.createMessage(mock(McpSchema.CreateMessageRequest.class)).block();
-
-					return Mono.just(mock(CallToolResult.class));
-				});
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema),
+				(exchange, request) -> exchange.createMessage(mock(CreateMessageRequest.class))
+					.thenReturn(mock(CallToolResult.class)));
 
 		var server = McpServer.async(mcpServerTransportProvider).serverInfo("test-server", "1.0.0").tools(tool).build();
 
@@ -133,7 +132,7 @@ public class WebFluxSseIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
-	void testCreateMessageSuccess(String clientType) throws InterruptedException {
+	void testCreateMessageSuccess(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
@@ -148,10 +147,12 @@ public class WebFluxSseIntegrationTests {
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
 
+		AtomicReference<CreateMessageResult> samplingResult = new AtomicReference<>();
+
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
 				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
 
-					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
+					var createMessageRequest = McpSchema.CreateMessageRequest.builder()
 						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
 								new McpSchema.TextContent("Test message"))))
 						.modelPreferences(ModelPreferences.builder()
@@ -162,16 +163,9 @@ public class WebFluxSseIntegrationTests {
 							.build())
 						.build();
 
-					StepVerifier.create(exchange.createMessage(craeteMessageRequest)).consumeNextWith(result -> {
-						assertThat(result).isNotNull();
-						assertThat(result.role()).isEqualTo(Role.USER);
-						assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
-						assertThat(((McpSchema.TextContent) result.content()).text()).isEqualTo("Test message");
-						assertThat(result.model()).isEqualTo("MockModelName");
-						assertThat(result.stopReason()).isEqualTo(CreateMessageResult.StopReason.STOP_SEQUENCE);
-					}).verifyComplete();
-
-					return Mono.just(callResponse);
+					return exchange.createMessage(createMessageRequest)
+						.doOnNext(samplingResult::set)
+						.thenReturn(callResponse);
 				});
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
@@ -191,8 +185,154 @@ public class WebFluxSseIntegrationTests {
 
 			assertThat(response).isNotNull();
 			assertThat(response).isEqualTo(callResponse);
+
+			assertWith(samplingResult.get(), result -> {
+				assertThat(result).isNotNull();
+				assertThat(result.role()).isEqualTo(Role.USER);
+				assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
+				assertThat(((McpSchema.TextContent) result.content()).text()).isEqualTo("Test message");
+				assertThat(result.model()).isEqualTo("MockModelName");
+				assertThat(result.stopReason()).isEqualTo(CreateMessageResult.StopReason.STOP_SEQUENCE);
+			});
 		}
-		mcpServer.close();
+		mcpServer.closeGracefully().block();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testCreateMessageWithRequestTimeoutSuccess(String clientType) throws InterruptedException {
+
+		// Client
+		var clientBuilder = clientBuilders.get(clientType);
+
+		Function<CreateMessageRequest, CreateMessageResult> samplingHandler = request -> {
+			assertThat(request.messages()).hasSize(1);
+			assertThat(request.messages().get(0).content()).isInstanceOf(McpSchema.TextContent.class);
+			try {
+				TimeUnit.SECONDS.sleep(2);
+			}
+			catch (InterruptedException e) {
+				throw new RuntimeException(e);
+			}
+			return new CreateMessageResult(Role.USER, new McpSchema.TextContent("Test message"), "MockModelName",
+					CreateMessageResult.StopReason.STOP_SEQUENCE);
+		};
+
+		// Server
+
+		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
+				null);
+
+		AtomicReference<CreateMessageResult> samplingResult = new AtomicReference<>();
+
+		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+
+					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
+						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
+								new McpSchema.TextContent("Test message"))))
+						.modelPreferences(ModelPreferences.builder()
+							.hints(List.of())
+							.costPriority(1.0)
+							.speedPriority(1.0)
+							.intelligencePriority(1.0)
+							.build())
+						.build();
+
+					return exchange.createMessage(craeteMessageRequest)
+						.doOnNext(samplingResult::set)
+						.thenReturn(callResponse);
+				});
+
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.requestTimeout(Duration.ofSeconds(4))
+			.serverInfo("test-server", "1.0.0")
+			.tools(tool)
+			.build();
+
+		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+			.capabilities(ClientCapabilities.builder().sampling().build())
+			.sampling(samplingHandler)
+			.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+
+			assertThat(response).isNotNull();
+			assertThat(response).isEqualTo(callResponse);
+
+			assertWith(samplingResult.get(), result -> {
+				assertThat(result).isNotNull();
+				assertThat(result.role()).isEqualTo(Role.USER);
+				assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
+				assertThat(((McpSchema.TextContent) result.content()).text()).isEqualTo("Test message");
+				assertThat(result.model()).isEqualTo("MockModelName");
+				assertThat(result.stopReason()).isEqualTo(CreateMessageResult.StopReason.STOP_SEQUENCE);
+			});
+		}
+
+		mcpServer.closeGracefully().block();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testCreateMessageWithRequestTimeoutFail(String clientType) throws InterruptedException {
+
+		// Client
+		var clientBuilder = clientBuilders.get(clientType);
+
+		Function<CreateMessageRequest, CreateMessageResult> samplingHandler = request -> {
+			assertThat(request.messages()).hasSize(1);
+			assertThat(request.messages().get(0).content()).isInstanceOf(McpSchema.TextContent.class);
+			try {
+				TimeUnit.SECONDS.sleep(2);
+			}
+			catch (InterruptedException e) {
+				throw new RuntimeException(e);
+			}
+			return new CreateMessageResult(Role.USER, new McpSchema.TextContent("Test message"), "MockModelName",
+					CreateMessageResult.StopReason.STOP_SEQUENCE);
+		};
+
+		// Server
+
+		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
+				null);
+
+		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+
+					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
+						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
+								new McpSchema.TextContent("Test message"))))
+						.build();
+
+					return exchange.createMessage(craeteMessageRequest).thenReturn(callResponse);
+				});
+
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.requestTimeout(Duration.ofSeconds(1))
+			.serverInfo("test-server", "1.0.0")
+			.tools(tool)
+			.build();
+
+		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+			.capabilities(ClientCapabilities.builder().sampling().build())
+			.sampling(samplingHandler)
+			.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThatExceptionOfType(McpError.class).isThrownBy(() -> {
+				mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+			}).withMessageContaining("within 1000ms");
+
+		}
+
+		mcpServer.closeGracefully().block();
 	}
 
 	// ---------------------------------------
@@ -262,9 +402,8 @@ public class WebFluxSseIntegrationTests {
 		var mcpServer = McpServer.sync(mcpServerTransportProvider).rootsChangeHandler((exchange, rootsUpdate) -> {
 		}).tools(tool).build();
 
-		try (
-				// Create client without roots capability
-				var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().build()).build()) {
+		// Create client without roots capability
+		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().build()).build()) {
 
 			assertThat(mcpClient.initialize()).isNotNull();
 
@@ -282,7 +421,7 @@ public class WebFluxSseIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
-	void testRootsNotifciationWithEmptyRootsList(String clientType) {
+	void testRootsNotificationWithEmptyRootsList(String clientType) {
 		var clientBuilder = clientBuilders.get(clientType);
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();

@@ -80,6 +80,15 @@ public class McpSyncClient implements AutoCloseable {
 	}
 
 	/**
+	 * Get the server instructions that provide guidance to the client on how to interact
+	 * with this server.
+	 * @return The instructions
+	 */
+	public String getServerInstructions() {
+		return this.delegate.getServerInstructions();
+	}
+
+	/**
 	 * Get the server implementation information.
 	 * @return The server implementation details
 	 */

@@ -3,6 +3,10 @@
 */
 package io.modelcontextprotocol.server;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+
 import org.apache.catalina.Context;
 import org.apache.catalina.startup.Tomcat;
 
@@ -14,10 +18,14 @@ import org.springframework.web.servlet.DispatcherServlet;
  */
 public class TomcatTestUtil {
 
+	TomcatTestUtil() {
+		// Prevent instantiation
+	}
+
 	public record TomcatServer(Tomcat tomcat, AnnotationConfigWebApplicationContext appContext) {
 	}
 
-	public TomcatServer createTomcatServer(String contextPath, int port, Class<?> componentClass) {
+	public static TomcatServer createTomcatServer(String contextPath, int port, Class<?> componentClass) {
 
 		// Set up Tomcat first
 		var tomcat = new Tomcat();

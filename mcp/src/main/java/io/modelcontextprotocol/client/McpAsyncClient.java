@@ -113,6 +113,11 @@ public class McpAsyncClient {
 	private McpSchema.ServerCapabilities serverCapabilities;
 
 	/**
+	 * Server instructions.
+	 */
+	private String serverInstructions;
+
+	/**
 	 * Server implementation information.
 	 */
 	private McpSchema.Implementation serverInfo;
@@ -241,6 +246,15 @@ public class McpAsyncClient {
 	}
 
 	/**
+	 * Get the server instructions that provide guidance to the client on how to interact
+	 * with this server.
+	 * @return The server instructions
+	 */
+	public String getServerInstructions() {
+		return this.serverInstructions;
+	}
+
+	/**
 	 * Get the server implementation information.
 	 * @return The server implementation details
 	 */
@@ -328,6 +342,7 @@ public class McpAsyncClient {
 		return result.flatMap(initializeResult -> {
 
 			this.serverCapabilities = initializeResult.capabilities();
+			this.serverInstructions = initializeResult.instructions();
 			this.serverInfo = initializeResult.serverInfo();
 
 			logger.info("Server response with Protocol: {}, Capabilities: {}, Info: {} and Instructions {}",

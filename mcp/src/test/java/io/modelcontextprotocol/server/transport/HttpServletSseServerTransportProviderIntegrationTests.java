@@ -7,11 +7,13 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.server.McpServer;
@@ -41,12 +43,13 @@ import reactor.test.StepVerifier;
 import org.springframework.web.client.RestClient;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 
-public class HttpServletSseServerTransportProviderIntegrationTests {
+class HttpServletSseServerTransportProviderIntegrationTests {
 
-	private static final int PORT = 8189;
+	private static final int PORT = TomcatTestUtil.findAvailablePort();
 
 	private static final String CUSTOM_SSE_ENDPOINT = "/somePath/sse";
 
@@ -70,7 +73,7 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 		tomcat = TomcatTestUtil.createTomcatServer("", PORT, mcpServerTransportProvider);
 		try {
 			tomcat.start();
-			assertThat(tomcat.getServer().getState() == LifecycleState.STARTED);
+			assertThat(tomcat.getServer().getState()).isEqualTo(LifecycleState.STARTED);
 		}
 		catch (Exception e) {
 			throw new RuntimeException("Failed to start Tomcat", e);
@@ -133,7 +136,7 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 	}
 
 	@Test
-	void testCreateMessageSuccess() throws InterruptedException {
+	void testCreateMessageSuccess() {
 
 		Function<CreateMessageRequest, CreateMessageResult> samplingHandler = request -> {
 			assertThat(request.messages()).hasSize(1);
@@ -142,6 +145,81 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 			return new CreateMessageResult(Role.USER, new McpSchema.TextContent("Test message"), "MockModelName",
 					CreateMessageResult.StopReason.STOP_SEQUENCE);
 		};
+
+		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
+				null);
+
+		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+
+					var createMessageRequest = McpSchema.CreateMessageRequest.builder()
+						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
+								new McpSchema.TextContent("Test message"))))
+						.modelPreferences(ModelPreferences.builder()
+							.hints(List.of())
+							.costPriority(1.0)
+							.speedPriority(1.0)
+							.intelligencePriority(1.0)
+							.build())
+						.build();
+
+					StepVerifier.create(exchange.createMessage(createMessageRequest)).consumeNextWith(result -> {
+						assertThat(result).isNotNull();
+						assertThat(result.role()).isEqualTo(Role.USER);
+						assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
+						assertThat(((McpSchema.TextContent) result.content()).text()).isEqualTo("Test message");
+						assertThat(result.model()).isEqualTo("MockModelName");
+						assertThat(result.stopReason()).isEqualTo(CreateMessageResult.StopReason.STOP_SEQUENCE);
+					}).verifyComplete();
+
+					return Mono.just(callResponse);
+				});
+
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.tools(tool)
+			.build();
+
+		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+			.capabilities(ClientCapabilities.builder().sampling().build())
+			.sampling(samplingHandler)
+			.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+
+			assertThat(response).isNotNull();
+			assertThat(response).isEqualTo(callResponse);
+		}
+		mcpServer.close();
+	}
+
+	@Test
+	void testCreateMessageWithRequestTimeoutSuccess() throws InterruptedException {
+
+		// Client
+
+		Function<CreateMessageRequest, CreateMessageResult> samplingHandler = request -> {
+			assertThat(request.messages()).hasSize(1);
+			assertThat(request.messages().get(0).content()).isInstanceOf(McpSchema.TextContent.class);
+			try {
+				TimeUnit.SECONDS.sleep(2);
+			}
+			catch (InterruptedException e) {
+				throw new RuntimeException(e);
+			}
+			return new CreateMessageResult(Role.USER, new McpSchema.TextContent("Test message"), "MockModelName",
+					CreateMessageResult.StopReason.STOP_SEQUENCE);
+		};
+
+		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+			.capabilities(ClientCapabilities.builder().sampling().build())
+			.sampling(samplingHandler)
+			.build();
+
+		// Server
 
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
@@ -174,22 +252,90 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
+			.requestTimeout(Duration.ofSeconds(3))
 			.tools(tool)
 			.build();
 
-		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+		InitializeResult initResult = mcpClient.initialize();
+		assertThat(initResult).isNotNull();
+
+		CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+
+		assertThat(response).isNotNull();
+		assertThat(response).isEqualTo(callResponse);
+
+		mcpClient.close();
+		mcpServer.close();
+	}
+
+	@Test
+	void testCreateMessageWithRequestTimeoutFail() throws InterruptedException {
+
+		// Client
+
+		Function<CreateMessageRequest, CreateMessageResult> samplingHandler = request -> {
+			assertThat(request.messages()).hasSize(1);
+			assertThat(request.messages().get(0).content()).isInstanceOf(McpSchema.TextContent.class);
+			try {
+				TimeUnit.SECONDS.sleep(2);
+			}
+			catch (InterruptedException e) {
+				throw new RuntimeException(e);
+			}
+			return new CreateMessageResult(Role.USER, new McpSchema.TextContent("Test message"), "MockModelName",
+					CreateMessageResult.StopReason.STOP_SEQUENCE);
+		};
+
+		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
 			.capabilities(ClientCapabilities.builder().sampling().build())
 			.sampling(samplingHandler)
-			.build()) {
+			.build();
 
-			InitializeResult initResult = mcpClient.initialize();
-			assertThat(initResult).isNotNull();
+		// Server
 
-			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
+				null);
 
-			assertThat(response).isNotNull();
-			assertThat(response).isEqualTo(callResponse);
-		}
+		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+
+					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
+						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
+								new McpSchema.TextContent("Test message"))))
+						.modelPreferences(ModelPreferences.builder()
+							.hints(List.of())
+							.costPriority(1.0)
+							.speedPriority(1.0)
+							.intelligencePriority(1.0)
+							.build())
+						.build();
+
+					StepVerifier.create(exchange.createMessage(craeteMessageRequest)).consumeNextWith(result -> {
+						assertThat(result).isNotNull();
+						assertThat(result.role()).isEqualTo(Role.USER);
+						assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
+						assertThat(((McpSchema.TextContent) result.content()).text()).isEqualTo("Test message");
+						assertThat(result.model()).isEqualTo("MockModelName");
+						assertThat(result.stopReason()).isEqualTo(CreateMessageResult.StopReason.STOP_SEQUENCE);
+					}).verifyComplete();
+
+					return Mono.just(callResponse);
+				});
+
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.requestTimeout(Duration.ofSeconds(1))
+			.tools(tool)
+			.build();
+
+		InitializeResult initResult = mcpClient.initialize();
+		assertThat(initResult).isNotNull();
+
+		assertThatExceptionOfType(McpError.class).isThrownBy(() -> {
+			mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+		}).withMessageContaining("Timeout");
+
+		mcpClient.close();
 		mcpServer.close();
 	}
 
@@ -271,7 +417,7 @@ public class HttpServletSseServerTransportProviderIntegrationTests {
 	}
 
 	@Test
-	void testRootsNotifciationWithEmptyRootsList() {
+	void testRootsNotificationWithEmptyRootsList() {
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
