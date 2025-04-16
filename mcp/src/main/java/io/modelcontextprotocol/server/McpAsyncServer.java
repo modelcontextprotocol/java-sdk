@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.server;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -90,8 +91,8 @@ public class McpAsyncServer {
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 */
 	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
-			McpServerFeatures.Async features) {
-		this.delegate = new AsyncServerImpl(mcpTransportProvider, objectMapper, features);
+			McpServerFeatures.Async features, Duration requestTimeout) {
+		this.delegate = new AsyncServerImpl(mcpTransportProvider, objectMapper, requestTimeout, features);
 	}
 
 	/**
@@ -271,7 +272,7 @@ public class McpAsyncServer {
 		private List<String> protocolVersions = List.of(McpSchema.LATEST_PROTOCOL_VERSION);
 
 		AsyncServerImpl(McpServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
-				McpServerFeatures.Async features) {
+				Duration requestTimeout, McpServerFeatures.Async features) {
 			this.mcpTransportProvider = mcpTransportProvider;
 			this.objectMapper = objectMapper;
 			this.serverInfo = features.serverInfo();
@@ -330,9 +331,9 @@ public class McpAsyncServer {
 			notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED,
 					asyncRootsListChangedNotificationHandler(rootsChangeConsumers));
 
-			mcpTransportProvider
-				.setSessionFactory(transport -> new McpServerSession(UUID.randomUUID().toString(), transport,
-						this::asyncInitializeRequestHandler, Mono::empty, requestHandlers, notificationHandlers));
+			mcpTransportProvider.setSessionFactory(
+					transport -> new McpServerSession(UUID.randomUUID().toString(), requestTimeout, transport,
+							this::asyncInitializeRequestHandler, Mono::empty, requestHandlers, notificationHandlers));
 		}
 
 		// ---------------------------------------
