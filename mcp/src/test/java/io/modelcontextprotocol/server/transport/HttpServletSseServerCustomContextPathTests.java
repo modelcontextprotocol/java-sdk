@@ -4,6 +4,7 @@
 package io.modelcontextprotocol.server.transport;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.server.McpServer;
@@ -17,9 +18,9 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class HttpServletSseServerCustomContextPathTests {
+class HttpServletSseServerCustomContextPathTests {
 
-	private static final int PORT = 8195;
+	private static final int PORT = TomcatTestUtil.findAvailablePort();
 
 	private static final String CUSTOM_CONTEXT_PATH = "/api/v1";
 
@@ -48,7 +49,7 @@ public class HttpServletSseServerCustomContextPathTests {
 
 		try {
 			tomcat.start();
-			assertThat(tomcat.getServer().getState() == LifecycleState.STARTED);
+			assertThat(tomcat.getServer().getState()).isEqualTo(LifecycleState.STARTED);
 		}
 		catch (Exception e) {
 			throw new RuntimeException("Failed to start Tomcat", e);

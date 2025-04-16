@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.server;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -193,9 +194,26 @@ public interface McpServer {
 
 		private final List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeHandlers = new ArrayList<>();
 
+		private Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
+
 		private AsyncSpecification(McpServerTransportProvider transportProvider) {
 			Assert.notNull(transportProvider, "Transport provider must not be null");
 			this.transportProvider = transportProvider;
+		}
+
+		/**
+		 * Sets the duration to wait for server responses before timing out requests. This
+		 * timeout applies to all requests made through the client, including tool calls,
+		 * resource access, and prompt operations.
+		 * @param requestTimeout The duration to wait before timing out requests. Must not
+		 * be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if requestTimeout is null
+		 */
+		public AsyncSpecification requestTimeout(Duration requestTimeout) {
+			Assert.notNull(requestTimeout, "Request timeout must not be null");
+			this.requestTimeout = requestTimeout;
+			return this;
 		}
 
 		/**
@@ -565,7 +583,7 @@ public interface McpServer {
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.rootsChangeHandlers, this.instructions);
 			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
-			return new McpAsyncServer(this.transportProvider, mapper, features);
+			return new McpAsyncServer(this.transportProvider, mapper, features, this.requestTimeout);
 		}
 
 	}
@@ -619,9 +637,26 @@ public interface McpServer {
 
 		private final List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeHandlers = new ArrayList<>();
 
+		private Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
+
 		private SyncSpecification(McpServerTransportProvider transportProvider) {
 			Assert.notNull(transportProvider, "Transport provider must not be null");
 			this.transportProvider = transportProvider;
+		}
+
+		/**
+		 * Sets the duration to wait for server responses before timing out requests. This
+		 * timeout applies to all requests made through the client, including tool calls,
+		 * resource access, and prompt operations.
+		 * @param requestTimeout The duration to wait before timing out requests. Must not
+		 * be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if requestTimeout is null
+		 */
+		public SyncSpecification requestTimeout(Duration requestTimeout) {
+			Assert.notNull(requestTimeout, "Request timeout must not be null");
+			this.requestTimeout = requestTimeout;
+			return this;
 		}
 
 		/**
@@ -992,7 +1027,7 @@ public interface McpServer {
 					this.instructions);
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures);
 			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
-			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures);
+			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures, this.requestTimeout);
 
 			return new McpSyncServer(asyncServer);
 		}

@@ -1103,7 +1103,7 @@ public final class McpSchema {
 	 * setting minimum log levels, with servers sending notifications containing severity
 	 * levels, optional logger names, and arbitrary JSON-serializable data.
 	 *
-	 * @param level The severity levels. The mimimum log level is set by the client.
+	 * @param level The severity levels. The minimum log level is set by the client.
 	 * @param logger The logger that generated the message.
 	 * @param data JSON-serializable logging data.
 	 */

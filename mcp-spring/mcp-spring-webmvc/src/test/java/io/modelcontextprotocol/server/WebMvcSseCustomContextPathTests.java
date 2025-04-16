@@ -22,11 +22,11 @@ import org.springframework.web.servlet.function.ServerResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class WebMvcSseCustomContextPathTests {
+class WebMvcSseCustomContextPathTests {
 
 	private static final String CUSTOM_CONTEXT_PATH = "/app/1";
 
-	private static final int PORT = 8183;
+	private static final int PORT = TestUtil.findAvailablePort();
 
 	private static final String MESSAGE_ENDPOINT = "/mcp/message";
 
@@ -39,11 +39,11 @@ public class WebMvcSseCustomContextPathTests {
 	@BeforeEach
 	public void before() {
 
-		tomcatServer = new TomcatTestUtil().createTomcatServer(CUSTOM_CONTEXT_PATH, PORT, TestConfig.class);
+		tomcatServer = TomcatTestUtil.createTomcatServer(CUSTOM_CONTEXT_PATH, PORT, TestConfig.class);
 
 		try {
 			tomcatServer.tomcat().start();
-			assertThat(tomcatServer.tomcat().getServer().getState() == LifecycleState.STARTED);
+			assertThat(tomcatServer.tomcat().getServer().getState()).isEqualTo(LifecycleState.STARTED);
 		}
 		catch (Exception e) {
 			throw new RuntimeException("Failed to start Tomcat", e);
