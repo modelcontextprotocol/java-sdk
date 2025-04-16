@@ -44,6 +44,8 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(StreamableHttpClientTransport.class);
 
+	private static final String MCP_SESSION_ID = "Mcp-Session-Id";
+
 	private final HttpClientSseClientTransport sseClientTransport;
 
 	private final HttpClient httpClient;
@@ -57,6 +59,8 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 	private final AtomicReference<TransportState> state = new AtomicReference<>(TransportState.DISCONNECTED);
 
 	private final AtomicReference<String> lastEventId = new AtomicReference<>();
+
+	private final AtomicReference<String> mcpSessionId = new AtomicReference<>();
 
 	private final AtomicBoolean fallbackToSse = new AtomicBoolean(false);
 
@@ -173,15 +177,19 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 		}
 
 		return Mono.defer(() -> Mono.fromFuture(() -> {
-			final HttpRequest.Builder builder = requestBuilder.copy()
+			final HttpRequest.Builder request = requestBuilder.copy()
 				.GET()
 				.header("Accept", "text/event-stream")
 				.uri(uri);
 			final String lastId = lastEventId.get();
 			if (lastId != null) {
-				builder.header("Last-Event-ID", lastId);
+				request.header("Last-Event-ID", lastId);
 			}
-			return httpClient.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofInputStream());
+			if (mcpSessionId.get() != null) {
+				request.header(MCP_SESSION_ID, mcpSessionId.get());
+			}
+
+			return httpClient.sendAsync(request.build(), HttpResponse.BodyHandlers.ofInputStream());
 		}).flatMap(response -> {
 			if (response.statusCode() == 405 || response.statusCode() == 404) {
 				LOGGER.warn("Operation not allowed, falling back to SSE");
@@ -216,18 +224,32 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 		}
 
 		return serializeJson(message).flatMap(json -> {
-			final HttpRequest request = requestBuilder.copy()
+			final HttpRequest.Builder request = requestBuilder.copy()
 				.POST(HttpRequest.BodyPublishers.ofString(json))
 				.header("Accept", "application/json, text/event-stream")
 				.header("Content-Type", "application/json")
-				.uri(uri)
-				.build();
-			return Mono.fromFuture(httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream()))
+				.uri(uri);
+			if (mcpSessionId.get() != null) {
+				request.header(MCP_SESSION_ID, mcpSessionId.get());
+			}
+
+			return Mono.fromFuture(httpClient.sendAsync(request.build(), HttpResponse.BodyHandlers.ofInputStream()))
 				.flatMap(response -> {
+
+					// server may assign a session ID at initialization time, if yes we
+					// have to use it for any subsequent requests
+					response.headers().firstValue(MCP_SESSION_ID).map(String::trim).ifPresent(this.mcpSessionId::set);
 
 					// If the response is 202 Accepted, there's no body to process
 					if (response.statusCode() == 202) {
 						return Mono.empty();
+					}
+
+					// must like server terminate session and the client need to start a
+					// new session by sending a new `InitializeRequest` without a session
+					// ID attached.
+					if (mcpSessionId.get() != null && response.statusCode() == 404) {
+						mcpSessionId.set(null);
 					}
 
 					if (response.statusCode() == 405 || response.statusCode() == 404) {
