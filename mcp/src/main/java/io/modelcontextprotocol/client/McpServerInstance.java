@@ -2,7 +2,7 @@ package io.modelcontextprotocol.client;
 
 import java.util.HashMap;
 
-public class McpServer {
+public class McpServerInstance {
         private String name;
         private String url;
 

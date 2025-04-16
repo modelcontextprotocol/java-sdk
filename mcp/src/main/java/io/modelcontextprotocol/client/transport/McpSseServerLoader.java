@@ -3,20 +3,22 @@ package io.modelcontextprotocol.client.transport;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import java.util.*;
-import io.modelcontextprotocol.client.McpServer;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+import io.modelcontextprotocol.client.McpServerInstance;
 
 
-public class McpSsseServerLoader {
+public class McpSseServerLoader {
 
-    public List<McpSyncClient> initServers(List<McpServer> servers) {
+    public List<McpSyncClient> initServers(List<McpServerInstance> servers) {
 
-		List<McpSyncClient> connectedClients = new ArrayList<>();
+		List<McpSyncClient> connectedClients = new CopyOnWriteArrayList<>();
 
 		if (servers.isEmpty()) {
 			throw new IllegalArgumentException("No servers found to initialize.");
 		}
 
-		for (McpServer server : servers) {
+		for (McpServerInstance server : servers) {
 
 				String serverUrl = server.getUrl();
 				if (serverUrl == null || serverUrl.isEmpty()) {
