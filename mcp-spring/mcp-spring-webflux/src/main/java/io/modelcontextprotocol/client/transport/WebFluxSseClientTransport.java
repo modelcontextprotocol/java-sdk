@@ -5,6 +5,7 @@ package io.modelcontextprotocol.client.transport;
 
 import java.io.IOException;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -16,6 +17,7 @@ import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -235,6 +237,24 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 */
 	@Override
 	public Mono<Void> sendMessage(JSONRPCMessage message) {
+		return sendMessage(message, httpHeaders -> {
+		});
+	}
+
+	/**
+	 * Sends a JSON-RPC message to the server using the endpoint provided during
+	 * connection.
+	 *
+	 * <p>
+	 * Messages are sent via HTTP POST requests to the server-provided endpoint URI. The
+	 * message is serialized to JSON before transmission. If the transport is in the
+	 * process of closing, the message send operation is skipped gracefully.
+	 * @param message the JSON-RPC message to send
+	 * @param modifiableHeaders a consumer that allows modifying the HTTP headers
+	 * @return a Mono that completes when the message has been sent successfully
+	 * @throws RuntimeException if message serialization fails
+	 */
+	public Mono<Void> sendMessage(JSONRPCMessage message, Consumer<HttpHeaders> modifiableHeaders) {
 		// The messageEndpoint is the endpoint URI to send the messages
 		// It is provided by the server as part of the endpoint event
 		return messageEndpointSink.asMono().flatMap(messageEndpointUri -> {
@@ -245,6 +265,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 				String jsonText = this.objectMapper.writeValueAsString(message);
 				return webClient.post()
 					.uri(messageEndpointUri)
+					.headers(modifiableHeaders)
 					.contentType(MediaType.APPLICATION_JSON)
 					.bodyValue(jsonText)
 					.retrieve()
