@@ -218,7 +218,7 @@ class StdioServerTransportProviderTests {
 		transportProvider.setSessionFactory(sessionFactory);
 
 		// Close the transport provider
-		transportProvider.close();
+		transportProvider.closeGracefully().block();
 
 		// Verify session was closed
 		verify(mockSession).closeGracefully();

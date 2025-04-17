@@ -288,13 +288,6 @@ public class McpAsyncClient {
 	}
 
 	/**
-	 * Closes the client connection immediately.
-	 */
-	public void close() {
-		this.mcpSession.close();
-	}
-
-	/**
 	 * Gracefully closes the client connection.
 	 * @return A Mono that completes when the connection is closed
 	 */

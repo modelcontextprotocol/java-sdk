@@ -149,7 +149,7 @@ class WebMvcSseIntegrationTests {
 					.hasMessage("Client must be configured with sampling capabilities");
 			}
 		}
-		server.close();
+		server.closeGracefully().block();
 	}
 
 	@Test
@@ -211,7 +211,7 @@ class WebMvcSseIntegrationTests {
 
 			assertThat(response).isNotNull().isEqualTo(callResponse);
 		}
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@Test
@@ -283,7 +283,7 @@ class WebMvcSseIntegrationTests {
 		assertThat(response).isEqualTo(callResponse);
 
 		mcpClient.close();
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@Test
@@ -354,7 +354,7 @@ class WebMvcSseIntegrationTests {
 		}).withMessageContaining("Timeout");
 
 		mcpClient.close();
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	// ---------------------------------------
@@ -401,7 +401,7 @@ class WebMvcSseIntegrationTests {
 			});
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@Test
@@ -434,7 +434,7 @@ class WebMvcSseIntegrationTests {
 			}
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@Test
@@ -459,7 +459,7 @@ class WebMvcSseIntegrationTests {
 			});
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@Test
@@ -488,7 +488,7 @@ class WebMvcSseIntegrationTests {
 			});
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@Test
@@ -515,7 +515,7 @@ class WebMvcSseIntegrationTests {
 			});
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	// ---------------------------------------
@@ -563,7 +563,7 @@ class WebMvcSseIntegrationTests {
 			assertThat(response).isNotNull().isEqualTo(callResponse);
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@Test
@@ -632,7 +632,7 @@ class WebMvcSseIntegrationTests {
 			});
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 	@Test
@@ -646,7 +646,7 @@ class WebMvcSseIntegrationTests {
 			assertThat(initResult).isNotNull();
 		}
 
-		mcpServer.close();
+		mcpServer.closeGracefully();
 	}
 
 }

@@ -84,7 +84,7 @@ public abstract class AbstractMcpSyncServerTests {
 	void testImmediateClose() {
 		var mcpSyncServer = McpServer.sync(createMcpTransportProvider()).serverInfo("test-server", "1.0.0").build();
 
-		assertThatCode(() -> mcpSyncServer.close()).doesNotThrowAnyException();
+		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
 	}
 
 	@Test

@@ -115,7 +115,7 @@ public class McpSyncClient implements AutoCloseable {
 
 	@Override
 	public void close() {
-		this.delegate.close();
+		this.closeGracefully();
 	}
 
 	public boolean closeGracefully() {

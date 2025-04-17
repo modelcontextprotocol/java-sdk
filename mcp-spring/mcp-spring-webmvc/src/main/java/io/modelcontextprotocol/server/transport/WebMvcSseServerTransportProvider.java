@@ -401,20 +401,6 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			});
 		}
 
-		/**
-		 * Closes the transport immediately.
-		 */
-		@Override
-		public void close() {
-			try {
-				sseBuilder.complete();
-				logger.debug("Successfully completed SSE builder for session {}", sessionId);
-			}
-			catch (Exception e) {
-				logger.warn("Failed to complete SSE builder for session {}: {}", sessionId, e.getMessage());
-			}
-		}
-
 	}
 
 }

@@ -35,25 +35,14 @@ import reactor.core.publisher.Mono;
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
  */
-public interface McpTransport {
-
-	/**
-	 * Closes the transport connection and releases any associated resources.
-	 *
-	 * <p>
-	 * This method ensures proper cleanup of resources when the transport is no longer
-	 * needed. It should handle the graceful shutdown of any active connections.
-	 * </p>
-	 */
-	default void close() {
-		this.closeGracefully().subscribe();
-	}
+public interface McpTransport extends AsyncCloseable {
 
 	/**
 	 * Closes the transport connection and releases any associated resources
 	 * asynchronously.
 	 * @return a {@link Mono<Void>} that completes when the connection has been closed.
 	 */
+	@Override
 	Mono<Void> closeGracefully();
 
 	/**

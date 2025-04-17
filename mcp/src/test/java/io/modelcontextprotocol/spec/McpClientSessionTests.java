@@ -53,7 +53,7 @@ class McpClientSessionTests {
 	@AfterEach
 	void tearDown() {
 		if (session != null) {
-			session.close();
+			session.closeGracefully().block();
 		}
 	}
 
