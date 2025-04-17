@@ -61,6 +61,9 @@ public class McpClientSession implements McpSession {
 	/** Atomic counter for generating unique request IDs */
 	private final AtomicLong requestCounter = new AtomicLong(0);
 
+	/** To record the last request timestamp */
+	private final AtomicLong lastRequestTs = new AtomicLong(System.currentTimeMillis());
+
 	private final Disposable connection;
 
 	/**
@@ -135,6 +138,7 @@ public class McpClientSession implements McpSession {
 			}
 			else if (message instanceof McpSchema.JSONRPCRequest request) {
 				logger.debug("Received request: {}", request);
+				lastRequestTs.set(System.currentTimeMillis());
 				handleIncomingRequest(request).subscribe(response -> transport.sendMessage(response).subscribe(),
 						error -> {
 							var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
@@ -284,6 +288,11 @@ public class McpClientSession implements McpSession {
 	public void close() {
 		this.connection.dispose();
 		transport.close();
+	}
+
+	@Override
+	public long lastRequestTimestamp() {
+		return this.lastRequestTs.get();
 	}
 
 }
