@@ -120,7 +120,7 @@ class WebMvcSseIntegrationTests {
 	void testCreateMessageWithoutSamplingCapabilities() {
 
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request, context) -> {
 
 					exchange.createMessage(mock(McpSchema.CreateMessageRequest.class)).block();
 
@@ -167,7 +167,7 @@ class WebMvcSseIntegrationTests {
 				null);
 
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request, context) -> {
 
 					var createMessageRequest = McpSchema.CreateMessageRequest.builder()
 						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -243,7 +243,7 @@ class WebMvcSseIntegrationTests {
 				null);
 
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request, context) -> {
 
 					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
 						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -315,7 +315,7 @@ class WebMvcSseIntegrationTests {
 				null);
 
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request, context) -> {
 
 					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
 						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -408,7 +408,7 @@ class WebMvcSseIntegrationTests {
 	void testRootsWithoutCapability() {
 
 		McpServerFeatures.SyncToolSpecification tool = new McpServerFeatures.SyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request, context) -> {
 
 					exchange.listRoots(); // try to list roots
 
@@ -535,7 +535,7 @@ class WebMvcSseIntegrationTests {
 
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request, context) -> {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
@@ -571,7 +571,7 @@ class WebMvcSseIntegrationTests {
 
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request, context) -> {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
@@ -623,7 +623,7 @@ class WebMvcSseIntegrationTests {
 			// Add a new tool
 			McpServerFeatures.SyncToolSpecification tool2 = new McpServerFeatures.SyncToolSpecification(
 					new McpSchema.Tool("tool2", "tool2 description", emptyJsonSchema),
-					(exchange, request) -> callResponse);
+					(exchange, request, context) -> callResponse);
 
 			mcpServer.addTool(tool2);
 

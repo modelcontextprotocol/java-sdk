@@ -1,6 +1,7 @@
 package io.modelcontextprotocol.spec;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -150,9 +151,10 @@ public class McpServerSession implements McpSession {
 	 * {@link io.modelcontextprotocol.server.McpSyncServer}) via
 	 * {@link McpServerSession.Factory} that the server creates.
 	 * @param message the incoming JSON-RPC message
+	 * @param originalRequest the original request that triggered this message
 	 * @return a Mono that completes when the message is processed
 	 */
-	public Mono<Void> handle(McpSchema.JSONRPCMessage message) {
+	public Mono<Void> handle(Object originalRequest, McpSchema.JSONRPCMessage message) {
 		return Mono.defer(() -> {
 			// TODO handle errors for communication to without initialization happening
 			// first
@@ -169,7 +171,7 @@ public class McpServerSession implements McpSession {
 			}
 			else if (message instanceof McpSchema.JSONRPCRequest request) {
 				logger.debug("Received request: {}", request);
-				return handleIncomingRequest(request).onErrorResume(error -> {
+				return handleIncomingRequest(originalRequest, request).onErrorResume(error -> {
 					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
 							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 									error.getMessage(), null));
@@ -195,9 +197,11 @@ public class McpServerSession implements McpSession {
 	/**
 	 * Handles an incoming JSON-RPC request by routing it to the appropriate handler.
 	 * @param request The incoming JSON-RPC request
+	 * @param originalRequest the original request that triggered this message
 	 * @return A Mono containing the JSON-RPC response
 	 */
-	private Mono<McpSchema.JSONRPCResponse> handleIncomingRequest(McpSchema.JSONRPCRequest request) {
+	private Mono<McpSchema.JSONRPCResponse> handleIncomingRequest(Object originalRequest,
+			McpSchema.JSONRPCRequest request) {
 		return Mono.defer(() -> {
 			Mono<?> resultMono;
 			if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
@@ -220,8 +224,12 @@ public class McpServerSession implements McpSession {
 							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
 									error.message(), error.data())));
 				}
-
-				resultMono = this.exchangeSink.asMono().flatMap(exchange -> handler.handle(exchange, request.params()));
+				Map<String, Object> context = new HashMap<>();
+				context.put("sessionId", this.id);
+				RequestContext requestContext = new RequestContext(context);
+				requestContext.setRequest(originalRequest);
+				resultMono = this.exchangeSink.asMono()
+					.flatMap(exchange -> handler.handle(exchange, request.params(), requestContext));
 			}
 			return resultMono
 				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
@@ -333,9 +341,10 @@ public class McpServerSession implements McpSession {
 		 * @param exchange the exchange associated with the client that allows calling
 		 * back to the connected client or inspecting its capabilities.
 		 * @param params the parameters of the request.
+		 * @param context the request context
 		 * @return a Mono that will emit the response to the request.
 		 */
-		Mono<T> handle(McpAsyncServerExchange exchange, Object params);
+		Mono<T> handle(McpAsyncServerExchange exchange, Object params, RequestContext context);
 
 	}
 

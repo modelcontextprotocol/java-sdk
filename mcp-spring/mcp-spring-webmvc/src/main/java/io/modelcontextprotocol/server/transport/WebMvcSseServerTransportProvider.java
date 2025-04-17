@@ -316,7 +316,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
 
 			// Process the message through the session's handle method
-			session.handle(message).block(); // Block for WebMVC compatibility
+			session.handle(request, message).block(); // Block for WebMVC compatibility
 
 			return ServerResponse.ok().build();
 		}

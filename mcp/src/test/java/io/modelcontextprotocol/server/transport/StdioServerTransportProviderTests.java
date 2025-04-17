@@ -112,7 +112,7 @@ class StdioServerTransportProviderTests {
 
 		McpServerSession.Factory realSessionFactory = transport -> {
 			McpServerSession session = mock(McpServerSession.class);
-			when(session.handle(any())).thenAnswer(invocation -> {
+			when(session.handle(any(), any())).thenAnswer(invocation -> {
 				capturedMessage.set(invocation.getArgument(0));
 				messageLatch.countDown();
 				return Mono.empty();
