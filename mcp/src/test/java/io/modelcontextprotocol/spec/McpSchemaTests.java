@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
 import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
@@ -450,6 +451,92 @@ public class McpSchemaTests {
 	// Tool Tests
 
 	@Test
+	void testJsonSchema() throws Exception {
+		String schemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"name": {
+							"type": "string"
+						},
+						"address": {
+							"$ref": "#/$defs/Address"
+						}
+					},
+					"required": ["name"],
+					"$defs": {
+						"Address": {
+							"type": "object",
+							"properties": {
+								"street": {"type": "string"},
+								"city": {"type": "string"}
+							},
+							"required": ["street", "city"]
+						}
+					}
+				}
+				""";
+
+		// Deserialize the original string to a JsonSchema object
+		McpSchema.JsonSchema schema = mapper.readValue(schemaJson, McpSchema.JsonSchema.class);
+
+		// Serialize the object back to a string
+		String serialized = mapper.writeValueAsString(schema);
+
+		// Deserialize again
+		McpSchema.JsonSchema deserialized = mapper.readValue(serialized, McpSchema.JsonSchema.class);
+
+		// Serialize one more time and compare with the first serialization
+		String serializedAgain = mapper.writeValueAsString(deserialized);
+
+		// The two serialized strings should be the same
+		assertThatJson(serializedAgain).when(Option.IGNORING_ARRAY_ORDER).isEqualTo(json(serialized));
+	}
+
+	@Test
+	void testJsonSchemaWithDefinitions() throws Exception {
+		String schemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"name": {
+							"type": "string"
+						},
+						"address": {
+							"$ref": "#/definitions/Address"
+						}
+					},
+					"required": ["name"],
+					"definitions": {
+						"Address": {
+							"type": "object",
+							"properties": {
+								"street": {"type": "string"},
+								"city": {"type": "string"}
+							},
+							"required": ["street", "city"]
+						}
+					}
+				}
+				""";
+
+		// Deserialize the original string to a JsonSchema object
+		McpSchema.JsonSchema schema = mapper.readValue(schemaJson, McpSchema.JsonSchema.class);
+
+		// Serialize the object back to a string
+		String serialized = mapper.writeValueAsString(schema);
+
+		// Deserialize again
+		McpSchema.JsonSchema deserialized = mapper.readValue(serialized, McpSchema.JsonSchema.class);
+
+		// Serialize one more time and compare with the first serialization
+		String serializedAgain = mapper.writeValueAsString(deserialized);
+
+		// The two serialized strings should be the same
+		assertThatJson(serializedAgain).when(Option.IGNORING_ARRAY_ORDER).isEqualTo(json(serialized));
+	}
+
+	@Test
 	void testTool() throws Exception {
 		String schemaJson = """
 				{
@@ -475,6 +562,48 @@ public class McpSchemaTests {
 			.isEqualTo(
 					json("""
 							{"name":"test-tool","description":"A test tool","inputSchema":{"type":"object","properties":{"name":{"type":"string"},"value":{"type":"number"}},"required":["name"]}}"""));
+	}
+
+	@Test
+	void testToolWithComplexSchema() throws Exception {
+		String complexSchemaJson = """
+				{
+					"type": "object",
+					"$defs": {
+						"Address": {
+							"type": "object",
+							"properties": {
+								"street": {"type": "string"},
+								"city": {"type": "string"}
+							},
+							"required": ["street", "city"]
+						}
+					},
+					"properties": {
+						"name": {"type": "string"},
+						"shippingAddress": {"$ref": "#/$defs/Address"}
+					},
+					"required": ["name", "shippingAddress"]
+				}
+				""";
+
+		McpSchema.Tool tool = new McpSchema.Tool("addressTool", "Handles addresses", complexSchemaJson);
+
+		// Serialize the tool to a string
+		String serialized = mapper.writeValueAsString(tool);
+
+		// Deserialize back to a Tool object
+		McpSchema.Tool deserializedTool = mapper.readValue(serialized, McpSchema.Tool.class);
+
+		// Serialize again and compare with first serialization
+		String serializedAgain = mapper.writeValueAsString(deserializedTool);
+
+		// The two serialized strings should be the same
+		assertThatJson(serializedAgain).when(Option.IGNORING_ARRAY_ORDER).isEqualTo(json(serialized));
+
+		// Just verify the basic structure was preserved
+		assertThat(deserializedTool.inputSchema().defs()).isNotNull();
+		assertThat(deserializedTool.inputSchema().defs()).containsKey("Address");
 	}
 
 	@Test
