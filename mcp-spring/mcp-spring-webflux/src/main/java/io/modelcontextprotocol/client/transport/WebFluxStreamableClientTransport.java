@@ -34,45 +34,71 @@ public class WebFluxStreamableClientTransport implements McpClientTransport {
     private static final Logger logger = LoggerFactory.getLogger(WebFluxStreamableClientTransport.class);
 
     private static final String MESSAGE_EVENT_TYPE = "message";
+
     private static final String ENDPOINT_EVENT_TYPE = "endpoint";
-    private static final String MESSAGE_ENDPOINT = "/message";
+
+    private static final String DEFAULT_MCP_ENDPOINT = "/message";
+
+    private static final String MCP_SESSION_ID = "Mcp-Session-Id";
+
+    private static final String LAST_EVENT_ID = "Last-Event-ID";
 
     private static final ParameterizedTypeReference<ServerSentEvent<String>> SSE_TYPE = new ParameterizedTypeReference<>() {
     };
 
     private final WebClient webClient;
-    private final ObjectMapper objectMapper;
+
+    protected ObjectMapper objectMapper;
+
     private Disposable inboundSubscription;
+
     private volatile boolean isClosing = false;
+
     private final Sinks.One<String> messageEndpointSink = Sinks.one();
+
     private final Sinks.Many<ServerSentEvent<String>> sseSink = Sinks.many().multicast().onBackpressureBuffer();
 
     private final AtomicReference<String> sessionId = new AtomicReference<>();
+
     private final AtomicReference<String> lastEventId = new AtomicReference<>();
+
     private Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler;
+
+    private final String endpoint;
 
     public WebFluxStreamableClientTransport(WebClient.Builder webClientBuilder) {
         this(webClientBuilder, new ObjectMapper());
     }
 
     public WebFluxStreamableClientTransport(WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
+        this(webClientBuilder, objectMapper, DEFAULT_MCP_ENDPOINT);
+    }
+
+    public WebFluxStreamableClientTransport(WebClient.Builder webClientBuilder, ObjectMapper objectMapper,
+                                            String sseEndpoint) {
         Assert.notNull(objectMapper, "ObjectMapper must not be null");
         Assert.notNull(webClientBuilder, "WebClient.Builder must not be null");
+        Assert.hasText(sseEndpoint, "SSE endpoint must not be null or empty");
 
         this.objectMapper = objectMapper;
         this.webClient = webClientBuilder.build();
+        this.endpoint = sseEndpoint;
     }
 
     @Override
     public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
         sessionId.set(null);
         lastEventId.set(null);
-        logger.debug("Initializing session for {}", MESSAGE_ENDPOINT);
         this.handler = handler;
-
         WebClient.RequestBodySpec request = webClient.post()
-                .uri(MESSAGE_ENDPOINT)
+                .uri(endpoint)
                 .contentType(MediaType.APPLICATION_JSON);
+        if (lastEventId.get() != null) {
+            request.header(LAST_EVENT_ID, lastEventId.get());
+        }
+        if (sessionId.get() != null) {
+            request.header(MCP_SESSION_ID, sessionId.get());
+        }
 
         return request
                 .exchangeToMono(response -> {
@@ -80,17 +106,7 @@ public class WebFluxStreamableClientTransport implements McpClientTransport {
                         logger.error("Session initialization failed with status: {}", response.statusCode());
                         return response.createException().flatMap(Mono::error);
                     }
-
-                    String newSessionId = response.headers().header("Mcp-Session-Id").stream()
-                            .filter(s -> !s.trim().isEmpty())
-                            .findFirst()
-                            .orElse(null);
-                    if (newSessionId != null) {
-                        sessionId.set(newSessionId);
-                        logger.debug("Session initialized with sessionId: {}", newSessionId);
-                    } else {
-                        logger.warn("No session ID returned from server");
-                    }
+                    setSessionId(response);
 
                     return response.bodyToMono(String.class);
                 })
@@ -112,17 +128,15 @@ public class WebFluxStreamableClientTransport implements McpClientTransport {
         try {
             String jsonText = objectMapper.writeValueAsString(message);
             WebClient.RequestBodySpec request = webClient.post()
-                    .uri(MESSAGE_ENDPOINT)
+                    .uri(endpoint)
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.APPLICATION_JSON, MediaType.TEXT_EVENT_STREAM, new MediaType("application", "json-seq"));
 
-            String currentSessionId = sessionId.get();
-            if (currentSessionId != null) {
-                request.header("Mcp-Session-Id", currentSessionId);
+            if (lastEventId.get() != null) {
+                request.header(LAST_EVENT_ID, lastEventId.get());
             }
-            String currentLastEventId = lastEventId.get();
-            if (currentLastEventId != null) {
-                request.header("Mcp-Last-Event-Id", currentLastEventId);
+            if (sessionId.get() != null) {
+                request.header(MCP_SESSION_ID, sessionId.get());
             }
             return request
                     .bodyValue(jsonText)
@@ -131,14 +145,7 @@ public class WebFluxStreamableClientTransport implements McpClientTransport {
                             logger.error("Connect request failed with status: {}", response.statusCode());
                             return response.createException().flatMap(Mono::error);
                         }
-
-                        String sessionIdHeader = response.headers().header("Mcp-Session-Id").stream().findFirst().orElse(null);
-                        if (sessionIdHeader != null && !sessionIdHeader.trim().isEmpty()) {
-                            sessionId.set(sessionIdHeader);
-                            logger.debug("Received and stored sessionId: {}", sessionIdHeader);
-                        } else {
-                            logger.debug("No Mcp-Session-Id header in connect response");
-                        }
+                        setSessionId(response);
 
                         var contentType = response.headers().contentType().orElse(MediaType.APPLICATION_JSON);
                         if (contentType.isCompatibleWith(MediaType.TEXT_EVENT_STREAM)) {
@@ -154,7 +161,6 @@ public class WebFluxStreamableClientTransport implements McpClientTransport {
                     .retryWhen(Retry.backoff(3, Duration.ofSeconds(3))
                             .filter(err -> err instanceof IOException || isServerError(err))
                             .doAfterRetry(signal -> logger.debug("Retrying message send: {}", signal.totalRetries())))
-                    .doOnSuccess(v -> logger.debug("Message sent successfully"))
                     .doOnError(error -> {
                         if (!isClosing) {
                             logger.error("Error sending message: {}", error.getMessage());
@@ -166,6 +172,14 @@ public class WebFluxStreamableClientTransport implements McpClientTransport {
                 return Mono.error(new RuntimeException("Failed to serialize message", e));
             }
             return Mono.empty();
+        }
+    }
+
+    private void setSessionId(ClientResponse response) {
+        String sessionIdHeader = response.headers().header(MCP_SESSION_ID).stream().findFirst().orElse(null);
+        if (sessionIdHeader != null && !sessionIdHeader.trim().isEmpty()) {
+            sessionId.set(sessionIdHeader);
+            logger.debug("Received and stored sessionId: {}", sessionIdHeader);
         }
     }
 
@@ -232,7 +246,7 @@ public class WebFluxStreamableClientTransport implements McpClientTransport {
         sessionId.set(null);
         Flux<ServerSentEvent<String>> getSseFlux = this.webClient
                 .get()
-                .uri(MESSAGE_ENDPOINT)
+                .uri(endpoint)
                 .accept(MediaType.TEXT_EVENT_STREAM)
                 .retrieve()
                 .bodyToFlux(SSE_TYPE)
@@ -279,13 +293,27 @@ public class WebFluxStreamableClientTransport implements McpClientTransport {
         return this.objectMapper.convertValue(data, typeRef);
     }
 
+    public static Builder builder(WebClient.Builder webClientBuilder) {
+        return new Builder(webClientBuilder);
+    }
+
     public static class Builder {
+
         private final WebClient.Builder webClientBuilder;
+
+        private String endpoint = DEFAULT_MCP_ENDPOINT;
+
         private ObjectMapper objectMapper = new ObjectMapper();
 
         public Builder(WebClient.Builder webClientBuilder) {
             Assert.notNull(webClientBuilder, "WebClient.Builder must not be null");
             this.webClientBuilder = webClientBuilder;
+        }
+
+        public Builder sseEndpoint(String sseEndpoint) {
+            Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
+            this.endpoint = sseEndpoint;
+            return this;
         }
 
         public Builder objectMapper(ObjectMapper objectMapper) {
@@ -295,7 +323,8 @@ public class WebFluxStreamableClientTransport implements McpClientTransport {
         }
 
         public WebFluxStreamableClientTransport build() {
-            return new WebFluxStreamableClientTransport(webClientBuilder, objectMapper);
+            return new WebFluxStreamableClientTransport(webClientBuilder, objectMapper, endpoint);
         }
+
     }
 }
