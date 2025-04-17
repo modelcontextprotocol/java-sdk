@@ -71,6 +71,7 @@ import reactor.core.publisher.Sinks;
  *
  * @author Dariusz Jędrzejczyk
  * @author Christian Tzolov
+ * @author Jihoon Kim
  * @see McpClient
  * @see McpSchema
  * @see McpClientSession
@@ -111,6 +112,11 @@ public class McpAsyncClient {
 	 * Server capabilities.
 	 */
 	private McpSchema.ServerCapabilities serverCapabilities;
+
+	/**
+	 * Server instructions.
+	 */
+	private String serverInstructions;
 
 	/**
 	 * Server implementation information.
@@ -241,6 +247,15 @@ public class McpAsyncClient {
 	}
 
 	/**
+	 * Get the server instructions that provide guidance to the client on how to interact
+	 * with this server.
+	 * @return The server instructions
+	 */
+	public String getServerInstructions() {
+		return this.serverInstructions;
+	}
+
+	/**
 	 * Get the server implementation information.
 	 * @return The server implementation details
 	 */
@@ -328,6 +343,7 @@ public class McpAsyncClient {
 		return result.flatMap(initializeResult -> {
 
 			this.serverCapabilities = initializeResult.capabilities();
+			this.serverInstructions = initializeResult.instructions();
 			this.serverInfo = initializeResult.serverInfo();
 
 			logger.info("Server response with Protocol: {}, Capabilities: {}, Info: {} and Instructions {}",
@@ -799,6 +815,27 @@ public class McpAsyncClient {
 	 */
 	void setProtocolVersions(List<String> protocolVersions) {
 		this.protocolVersions = protocolVersions;
+	}
+
+	// --------------------------
+	// Completions
+	// --------------------------
+	private static final TypeReference<McpSchema.CompleteResult> COMPLETION_COMPLETE_RESULT_TYPE_REF = new TypeReference<>() {
+	};
+
+	/**
+	 * Sends a completion/complete request to generate value suggestions based on a given
+	 * reference and argument. This is typically used to provide auto-completion options
+	 * for user input fields.
+	 * @param completeRequest The request containing the prompt or resource reference and
+	 * argument for which to generate completions.
+	 * @return A Mono that completes with the result containing completion suggestions.
+	 * @see McpSchema.CompleteRequest
+	 * @see McpSchema.CompleteResult
+	 */
+	public Mono<McpSchema.CompleteResult> completeCompletion(McpSchema.CompleteRequest completeRequest) {
+		return this.withInitializationCheck("complete completions", initializedResult -> this.mcpSession
+			.sendRequest(McpSchema.METHOD_COMPLETION_COMPLETE, completeRequest, COMPLETION_COMPLETE_RESULT_TYPE_REF));
 	}
 
 }

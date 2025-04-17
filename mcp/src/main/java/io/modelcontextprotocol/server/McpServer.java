@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.server;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -114,6 +115,7 @@ import reactor.core.publisher.Mono;
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @author Jihoon Kim
  * @see McpAsyncServer
  * @see McpSyncServer
  * @see McpServerTransportProvider
@@ -191,11 +193,30 @@ public interface McpServer {
 		 */
 		private final Map<String, McpServerFeatures.AsyncPromptSpecification> prompts = new HashMap<>();
 
+		private final Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions = new HashMap<>();
+
 		private final List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeHandlers = new ArrayList<>();
+
+		private Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
 
 		private AsyncSpecification(McpServerTransportProvider transportProvider) {
 			Assert.notNull(transportProvider, "Transport provider must not be null");
 			this.transportProvider = transportProvider;
+		}
+
+		/**
+		 * Sets the duration to wait for server responses before timing out requests. This
+		 * timeout applies to all requests made through the client, including tool calls,
+		 * resource access, and prompt operations.
+		 * @param requestTimeout The duration to wait before timing out requests. Must not
+		 * be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if requestTimeout is null
+		 */
+		public AsyncSpecification requestTimeout(Duration requestTimeout) {
+			Assert.notNull(requestTimeout, "Request timeout must not be null");
+			this.requestTimeout = requestTimeout;
+			return this;
 		}
 
 		/**
@@ -563,9 +584,10 @@ public interface McpServer {
 		 */
 		public McpAsyncServer build() {
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
-					this.resources, this.resourceTemplates, this.prompts, this.rootsChangeHandlers, this.instructions);
+					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
+					this.instructions);
 			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
-			return new McpAsyncServer(this.transportProvider, mapper, features);
+			return new McpAsyncServer(this.transportProvider, mapper, features, this.requestTimeout);
 		}
 
 	}
@@ -617,11 +639,30 @@ public interface McpServer {
 		 */
 		private final Map<String, McpServerFeatures.SyncPromptSpecification> prompts = new HashMap<>();
 
+		private final Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions = new HashMap<>();
+
 		private final List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeHandlers = new ArrayList<>();
+
+		private Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
 
 		private SyncSpecification(McpServerTransportProvider transportProvider) {
 			Assert.notNull(transportProvider, "Transport provider must not be null");
 			this.transportProvider = transportProvider;
+		}
+
+		/**
+		 * Sets the duration to wait for server responses before timing out requests. This
+		 * timeout applies to all requests made through the client, including tool calls,
+		 * resource access, and prompt operations.
+		 * @param requestTimeout The duration to wait before timing out requests. Must not
+		 * be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if requestTimeout is null
+		 */
+		public SyncSpecification requestTimeout(Duration requestTimeout) {
+			Assert.notNull(requestTimeout, "Request timeout must not be null");
+			this.requestTimeout = requestTimeout;
+			return this;
 		}
 
 		/**
@@ -923,6 +964,37 @@ public interface McpServer {
 		}
 
 		/**
+		 * Registers multiple completions with their handlers using a List. This method is
+		 * useful when completions need to be added in bulk from a collection.
+		 * @param completions List of completion specifications. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if completions is null
+		 * @see #completions(McpServerFeatures.SyncCompletionSpecification...)
+		 */
+		public SyncSpecification completions(List<McpServerFeatures.SyncCompletionSpecification> completions) {
+			Assert.notNull(completions, "Completions list must not be null");
+			for (McpServerFeatures.SyncCompletionSpecification completion : completions) {
+				this.completions.put(completion.referenceKey(), completion);
+			}
+			return this;
+		}
+
+		/**
+		 * Registers multiple completions with their handlers using varargs. This method
+		 * is useful when completions are defined inline and added directly.
+		 * @param completions Array of completion specifications. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if completions is null
+		 */
+		public SyncSpecification completions(McpServerFeatures.SyncCompletionSpecification... completions) {
+			Assert.notNull(completions, "Completions list must not be null");
+			for (McpServerFeatures.SyncCompletionSpecification completion : completions) {
+				this.completions.put(completion.referenceKey(), completion);
+			}
+			return this;
+		}
+
+		/**
 		 * Registers a consumer that will be notified when the list of roots changes. This
 		 * is useful for updating resource availability dynamically, such as when new
 		 * files are added or removed.
@@ -988,11 +1060,11 @@ public interface McpServer {
 		 */
 		public McpSyncServer build() {
 			McpServerFeatures.Sync syncFeatures = new McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,
-					this.tools, this.resources, this.resourceTemplates, this.prompts, this.rootsChangeHandlers,
-					this.instructions);
+					this.tools, this.resources, this.resourceTemplates, this.prompts, this.completions,
+					this.rootsChangeHandlers, this.instructions);
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures);
 			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
-			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures);
+			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures, this.requestTimeout);
 
 			return new McpSyncServer(asyncServer);
 		}

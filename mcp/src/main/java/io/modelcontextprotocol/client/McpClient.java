@@ -196,7 +196,7 @@ public interface McpClient {
 		}
 
 		/**
-		 * @param initializationTimeout The duration to wait for the initializaiton
+		 * @param initializationTimeout The duration to wait for the initialization
 		 * lifecycle step to complete.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if initializationTimeout is null
@@ -435,7 +435,7 @@ public interface McpClient {
 		}
 
 		/**
-		 * @param initializationTimeout The duration to wait for the initializaiton
+		 * @param initializationTimeout The duration to wait for the initialization
 		 * lifecycle step to complete.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if initializationTimeout is null

@@ -141,7 +141,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 * Constructs a new WebFlux SSE server transport provider instance.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 * of MCP messages. Must not be null.
-	 * @param baseUrl webflux messag base path
+	 * @param baseUrl webflux message base path
 	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
 	 * messages. This endpoint will be communicated to clients during SSE connection
 	 * setup. Must not be null.

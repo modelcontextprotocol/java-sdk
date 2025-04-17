@@ -238,6 +238,7 @@ public class McpClientSession implements McpSession {
 				});
 		}).timeout(this.requestTimeout).handle((jsonRpcResponse, sink) -> {
 			if (jsonRpcResponse.error() != null) {
+				logger.error("Error handling request: {}", jsonRpcResponse.error());
 				sink.error(new McpError(jsonRpcResponse.error()));
 			}
 			else {
