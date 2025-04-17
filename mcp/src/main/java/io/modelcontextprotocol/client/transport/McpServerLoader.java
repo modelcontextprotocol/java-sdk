@@ -11,7 +11,7 @@ import io.modelcontextprotocol.client.SseServerInstance;
 import io.modelcontextprotocol.client.StdioServerInstance;
 
 
-public class McpSseServerLoader {
+public class McpServerLoader {
 
     public CompletableFuture<List<McpSyncClient>> initServersAsync(List<SseServerInstance> sseServerInstances, List<StdioServerInstance> stdioServerInstances) {
         if (sseServerInstances.isEmpty() && stdioServerInstances.isEmpty()) {
