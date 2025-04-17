@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -20,19 +21,12 @@ import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.TestUtil;
+import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
-import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
-import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
-import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
-import io.modelcontextprotocol.spec.McpSchema.ModelPreferences;
-import io.modelcontextprotocol.spec.McpSchema.Role;
-import io.modelcontextprotocol.spec.McpSchema.Root;
-import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
+import io.modelcontextprotocol.spec.McpSchema.*;
+import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities.CompletionCapabilities;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -756,6 +750,55 @@ class WebFluxSseIntegrationTests {
 				assertThat(notificationMap.get("Another error message").data()).isEqualTo("Another error message");
 			});
 		}
+		mcpServer.close();
+	}
+
+	// ---------------------------------------
+	// Completion Tests
+	// ---------------------------------------
+	@ParameterizedTest(name = "{0} : Completion call")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testCompletionShouldReturnExpectedSuggestions(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		var expectedValues = List.of("python", "pytorch", "pyside");
+		var completionResponse = new McpSchema.CompleteResult(new CompleteResult.CompleteCompletion(expectedValues, 10, // total
+				true // hasMore
+		));
+
+		AtomicReference<CompleteRequest> samplingRequest = new AtomicReference<>();
+		BiFunction<McpSyncServerExchange, CompleteRequest, CompleteResult> completionHandler = (mcpSyncServerExchange,
+				request) -> {
+			samplingRequest.set(request);
+			return completionResponse;
+		};
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.prompts(new McpServerFeatures.SyncPromptSpecification(
+					new Prompt("code_review", "this is code review prompt", List.of()),
+					(mcpSyncServerExchange, getPromptRequest) -> null))
+			.completions(new McpServerFeatures.SyncCompletionSpecification(
+					new McpSchema.PromptReference("ref/prompt", "code_review"), completionHandler))
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = new CompleteRequest(new PromptReference("ref/prompt", "code_review"),
+					new CompleteRequest.CompleteArgument("language", "py"));
+
+			CompleteResult result = mcpClient.completeCompletion(request);
+
+			assertThat(result).isNotNull();
+
+			assertThat(samplingRequest.get().argument().name()).isEqualTo("language");
+			assertThat(samplingRequest.get().argument().value()).isEqualTo("py");
+			assertThat(samplingRequest.get().ref().type()).isEqualTo("ref/prompt");
+		}
+
 		mcpServer.close();
 	}
 
