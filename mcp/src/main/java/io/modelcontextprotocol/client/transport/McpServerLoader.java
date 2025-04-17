@@ -9,6 +9,7 @@ import java.util.stream.Collectors;
 
 import io.modelcontextprotocol.client.SseServerInstance;
 import io.modelcontextprotocol.client.StdioServerInstance;
+import io.modelcontextprotocol.util.Assert;
 
 
 public class McpServerLoader {
@@ -22,6 +23,7 @@ public class McpServerLoader {
 
         // Initialize SSE servers asynchronously
         for (SseServerInstance server : sseServerInstances) {
+            Assert.notNull(server.getUrl(), "URL is required");
             CompletableFuture<McpSyncClient> future = CompletableFuture.supplyAsync(() -> {
                 String serverUrl = server.getUrl();
                 if (serverUrl == null || serverUrl.isEmpty()) {
@@ -46,6 +48,9 @@ public class McpServerLoader {
 
         // Initialize STDIO servers asynchronously
         for (StdioServerInstance server : stdioServerInstances) {
+            Assert.notNull(server.getCommand(), "Command is required");
+            Assert.notNull(server.getArgs(), "Args is required");
+            Assert.notNull(server.getEnv(), "Env is required");
             CompletableFuture<McpSyncClient> future = CompletableFuture.supplyAsync(() -> {
                 try {
                     System.out.println("\nInitializing STDIO connection for: " + server.getName());
