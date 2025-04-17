@@ -4,12 +4,11 @@
 
 package io.modelcontextprotocol.util;
 
+import reactor.util.annotation.Nullable;
+
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.Collection;
 import java.util.Map;
-
-import reactor.util.annotation.Nullable;
 
 /**
  * Miscellaneous utility methods.
@@ -65,29 +64,17 @@ public final class Utils {
 	 * </ul>
 	 * @param baseUrl The base URL (must be absolute)
 	 * @param endpointUrl The endpoint URL (can be relative or absolute)
-	 * @return The resolved endpoint URL as a string
+	 * @return The resolved endpoint URI
 	 * @throws IllegalArgumentException If the absolute endpoint URL does not match the
 	 * base URL or URI is malformed
 	 */
-	public static String resolveUri(String baseUrl, String endpointUrl) {
-		try {
-			URI baseUri = new URI(baseUrl);
-			URI endpointUri = new URI(endpointUrl);
-			if (!endpointUri.isAbsolute()) {
-				URI resolvedUri = baseUri.resolve(endpointUri);
-				return resolvedUri.toString();
-			}
-			else {
-				if (isUnderBaseUri(baseUri, endpointUri)) {
-					return endpointUri.toString();
-				}
-				else {
-					throw new IllegalArgumentException("Absolute endpoint URL does not match the base URL.");
-				}
-			}
+	public static URI resolveUri(URI baseUrl, String endpointUrl) {
+		URI endpointUri = URI.create(endpointUrl);
+		if (endpointUri.isAbsolute() && !isUnderBaseUri(baseUrl, endpointUri)) {
+			throw new IllegalArgumentException("Absolute endpoint URL does not match the base URL.");
 		}
-		catch (URISyntaxException e) {
-			throw new IllegalArgumentException("Cannot resolve URI: " + e.getMessage(), e);
+		else {
+			return baseUrl.resolve(endpointUri);
 		}
 	}
 
@@ -114,7 +101,6 @@ public final class Utils {
 		if (basePath.endsWith("/")) {
 			basePath = basePath.substring(0, basePath.length() - 1);
 		}
-
 		return endpointPath.startsWith(basePath);
 	}
 

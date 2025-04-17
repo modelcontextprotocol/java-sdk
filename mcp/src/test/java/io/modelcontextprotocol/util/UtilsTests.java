@@ -6,6 +6,7 @@ package io.modelcontextprotocol.util;
 
 import org.junit.jupiter.api.Test;
 
+import java.net.URI;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -51,8 +52,8 @@ class UtilsTests {
 			"http://localhost:8080/root, http://localhost:8080/root/api/v1, http://localhost:8080/root/api/v1",
 			"http://localhost:8080/root, http://localhost:8080/root, http://localhost:8080/root" })
 	void testValidUriResolution(String baseUrl, String endpoint, String expectedResult) {
-		String result = Utils.resolveUri(baseUrl, endpoint);
-		assertThat(result).isEqualTo(expectedResult);
+		URI result = Utils.resolveUri(URI.create(baseUrl), endpoint);
+		assertThat(result.toString()).isEqualTo(expectedResult);
 	}
 
 	@ParameterizedTest
@@ -60,15 +61,9 @@ class UtilsTests {
 			"http://localhost:8080/root, http://otherhost/api",
 			"http://localhost:8080/root, http://localhost:9090/root/api" })
 	void testAbsoluteUriNotMatchingBase(String baseUrl, String endpoint) {
-		assertThatThrownBy(() -> Utils.resolveUri(baseUrl, endpoint)).isInstanceOf(IllegalArgumentException.class)
+		assertThatThrownBy(() -> Utils.resolveUri(URI.create(baseUrl), endpoint))
+			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("does not match the base URL");
-	}
-
-	@ParameterizedTest
-	@CsvSource({ "http://localhost:8080/<>root", "http://localhost:8080/ root", "http://localhost:8080/root}" })
-	void testInvalidUri(String baseUrl) {
-		assertThatThrownBy(() -> Utils.resolveUri(baseUrl, "")).isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("Cannot resolve URI");
 	}
 
 }
