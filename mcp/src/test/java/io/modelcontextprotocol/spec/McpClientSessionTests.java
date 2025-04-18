@@ -18,6 +18,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
 
+import static io.modelcontextprotocol.spec.McpSchema.METHOD_NOTIFICATION_CANCELLED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -117,6 +118,25 @@ class McpClientSessionTests {
 		StepVerifier.create(responseMono)
 			.expectError(java.util.concurrent.TimeoutException.class)
 			.verify(TIMEOUT.plusSeconds(1));
+	}
+
+	@Test
+	void testCancellationMessageNotificationForRequestTimeout() {
+		Mono<String> responseMono = session.sendRequest(TEST_METHOD, "test", responseType);
+
+		StepVerifier.create(responseMono)
+			.expectError(java.util.concurrent.TimeoutException.class)
+			.verify(TIMEOUT.plusSeconds(1));
+
+		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
+		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCNotification.class);
+		McpSchema.JSONRPCNotification notification = (McpSchema.JSONRPCNotification) sentMessage;
+		assertThat(notification.method()).isEqualTo(METHOD_NOTIFICATION_CANCELLED);
+		McpSchema.CancellationMessageNotification cancellationMessageNotification = transport
+			.unmarshalFrom(notification.params(), new TypeReference<>() {
+			});
+		assertThat(cancellationMessageNotification.reason()
+			.contains("The request times out, timeout: " + TIMEOUT.toMillis() + " ms")).isTrue();
 	}
 
 	@Test
