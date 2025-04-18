@@ -14,6 +14,7 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.spec.McpRequest;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
@@ -307,7 +308,7 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
 		public AsyncSpecification tool(McpSchema.Tool tool,
-				TriFunction<McpAsyncServerExchange, Map<String, Object>, RequestContext, Mono<CallToolResult>> handler) {
+				BiFunction<McpAsyncServerExchange, McpRequest, Mono<CallToolResult>> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
 
@@ -752,7 +753,7 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
 		public SyncSpecification tool(McpSchema.Tool tool,
-				TriFunction<McpSyncServerExchange, Map<String, Object>, RequestContext, McpSchema.CallToolResult> handler) {
+				BiFunction<McpSyncServerExchange, McpRequest, McpSchema.CallToolResult> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
 

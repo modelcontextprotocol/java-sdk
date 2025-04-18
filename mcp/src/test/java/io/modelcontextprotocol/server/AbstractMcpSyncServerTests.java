@@ -116,7 +116,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 		Tool newTool = new McpSchema.Tool("new-tool", "New test tool", emptyJsonSchema);
 		assertThatCode(() -> mcpSyncServer.addTool(new McpServerFeatures.SyncToolSpecification(newTool,
-				(exchange, args, requestContext) -> new CallToolResult(List.of(), false))))
+				(exchange, request) -> new CallToolResult(List.of(), false))))
 			.doesNotThrowAnyException();
 
 		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
@@ -129,11 +129,11 @@ public abstract class AbstractMcpSyncServerTests {
 		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
-			.tool(duplicateTool, (exchange, args, requestContext) -> new CallToolResult(List.of(), false))
+			.tool(duplicateTool, (exchange, request) -> new CallToolResult(List.of(), false))
 			.build();
 
 		assertThatThrownBy(() -> mcpSyncServer.addTool(new McpServerFeatures.SyncToolSpecification(duplicateTool,
-				(exchange, args, requestContext) -> new CallToolResult(List.of(), false))))
+				(exchange, request) -> new CallToolResult(List.of(), false))))
 			.isInstanceOf(McpError.class)
 			.hasMessage("Tool with name '" + TEST_TOOL_NAME + "' already exists");
 
@@ -147,7 +147,7 @@ public abstract class AbstractMcpSyncServerTests {
 		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
-			.tool(tool, (exchange, args, requestContext) -> new CallToolResult(List.of(), false))
+			.tool(tool, (exchange, request) -> new CallToolResult(List.of(), false))
 			.build();
 
 		assertThatCode(() -> mcpSyncServer.removeTool(TEST_TOOL_NAME)).doesNotThrowAnyException();

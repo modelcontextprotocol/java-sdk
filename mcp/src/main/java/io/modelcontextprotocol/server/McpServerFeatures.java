@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.server;
 
+import io.modelcontextprotocol.spec.McpRequest;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.RequestContext;
 import io.modelcontextprotocol.util.Assert;
@@ -238,7 +239,7 @@ public class McpServerFeatures {
 	 * connected client. The second arguments is a map of tool arguments.
 	 */
 	public record AsyncToolSpecification(McpSchema.Tool tool,
-			TriFunction<McpAsyncServerExchange, Map<String, Object>, RequestContext, Mono<McpSchema.CallToolResult>> call) {
+			BiFunction<McpAsyncServerExchange, McpRequest, Mono<McpSchema.CallToolResult>> call) {
 
 		static AsyncToolSpecification fromSync(SyncToolSpecification tool) {
 			// FIXME: This is temporary, proper validation should be implemented
@@ -246,8 +247,8 @@ public class McpServerFeatures {
 				return null;
 			}
 			return new AsyncToolSpecification(tool.tool(),
-					(exchange, map, context) -> Mono
-						.fromCallable(() -> tool.call().apply(new McpSyncServerExchange(exchange), map, context))
+					(exchange, request) -> Mono
+						.fromCallable(() -> tool.call().apply(new McpSyncServerExchange(exchange), request))
 						.subscribeOn(Schedulers.boundedElastic()));
 		}
 	}
@@ -414,7 +415,7 @@ public class McpServerFeatures {
 	 * client. The second arguments is a map of arguments passed to the tool.
 	 */
 	public record SyncToolSpecification(McpSchema.Tool tool,
-			TriFunction<McpSyncServerExchange, Map<String, Object>, RequestContext, McpSchema.CallToolResult> call) {
+			BiFunction<McpSyncServerExchange, McpRequest, McpSchema.CallToolResult> call) {
 
 	}
 

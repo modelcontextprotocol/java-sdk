@@ -229,7 +229,7 @@ public class McpServerSession implements McpSession {
 				RequestContext requestContext = new RequestContext(context);
 				requestContext.setRequest(originalRequest);
 				resultMono = this.exchangeSink.asMono()
-					.flatMap(exchange -> handler.handle(exchange, request.params(), requestContext));
+					.flatMap(exchange -> handler.handle(exchange, new McpRequest(request.params(), requestContext)));
 			}
 			return resultMono
 				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
@@ -340,11 +340,10 @@ public class McpServerSession implements McpSession {
 		 * Handles a request from the client.
 		 * @param exchange the exchange associated with the client that allows calling
 		 * back to the connected client or inspecting its capabilities.
-		 * @param params the parameters of the request.
-		 * @param context the request context
+		 * @param request the parameters of the request with context
 		 * @return a Mono that will emit the response to the request.
 		 */
-		Mono<T> handle(McpAsyncServerExchange exchange, Object params, RequestContext context);
+		Mono<T> handle(McpAsyncServerExchange exchange, McpRequest request);
 
 	}
 

@@ -108,7 +108,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 	void testCreateMessageWithoutSamplingCapabilities() {
 
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request, context) -> {
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
 
 					exchange.createMessage(mock(McpSchema.CreateMessageRequest.class)).block();
 
@@ -150,7 +150,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 				null);
 
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request, context) -> {
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
 
 					var createMessageRequest = McpSchema.CreateMessageRequest.builder()
 						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -225,7 +225,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 				null);
 
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request, context) -> {
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
 
 					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
 						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -297,7 +297,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 				null);
 
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request, context) -> {
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
 
 					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
 						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -390,7 +390,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 	void testRootsWithoutCapability() {
 
 		McpServerFeatures.SyncToolSpecification tool = new McpServerFeatures.SyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request, context) -> {
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
 
 					exchange.listRoots(); // try to list roots
 
@@ -514,7 +514,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request, context) -> {
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
@@ -550,7 +550,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request, context) -> {
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
@@ -602,7 +602,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 			// Add a new tool
 			McpServerFeatures.SyncToolSpecification tool2 = new McpServerFeatures.SyncToolSpecification(
 					new McpSchema.Tool("tool2", "tool2 description", emptyJsonSchema),
-					(exchange, request, context) -> callResponse);
+					(exchange, request) -> callResponse);
 
 			mcpServer.addTool(tool2);
 
@@ -638,7 +638,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 		// Create server with a tool that sends logging notifications
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
 				new McpSchema.Tool("logging-test", "Test logging notifications", emptyJsonSchema),
-				(exchange, request, context) -> {
+				(exchange, request) -> {
 
 					// Create and send notifications with different levels
 
