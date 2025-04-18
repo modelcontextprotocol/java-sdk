@@ -1239,7 +1239,7 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record CompleteResult(@JsonProperty("values") CompleteCompletion completion) { // @formatter:off
+	public record CompleteResult(@JsonProperty("completion") CompleteCompletion completion) { // @formatter:off
 			
 		public record CompleteCompletion(
 			@JsonProperty("values") List<String> values,
