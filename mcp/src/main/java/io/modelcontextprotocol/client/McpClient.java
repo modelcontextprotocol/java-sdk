@@ -157,11 +157,13 @@ public interface McpClient {
 
 		private Duration requestTimeout = Duration.ofSeconds(20); // Default timeout
 
+		private boolean connectOnInit = true; // Default true, for backward compatibility
+
 		private Duration initializationTimeout = Duration.ofSeconds(20);
 
 		private ClientCapabilities capabilities;
 
-		private Implementation clientInfo = new Implementation("Java SDK MCP Client", "1.0.0");
+		private Implementation clientInfo = new Implementation("Java SDK MCP Sync Client", "0.10.0");
 
 		private final Map<String, Root> roots = new HashMap<>();
 
@@ -192,6 +194,17 @@ public interface McpClient {
 		public SyncSpec requestTimeout(Duration requestTimeout) {
 			Assert.notNull(requestTimeout, "Request timeout must not be null");
 			this.requestTimeout = requestTimeout;
+			return this;
+		}
+
+		/**
+		 * Sets whether to connect to the server during the initialization phase (open an
+		 * SSE stream).
+		 * @param connectOnInit true to open an SSE stream during the initialization
+		 * @return This builder instance for method chaining
+		 */
+		public SyncSpec withConnectOnInit(final boolean connectOnInit) {
+			this.connectOnInit = connectOnInit;
 			return this;
 		}
 
@@ -368,8 +381,8 @@ public interface McpClient {
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
-			return new McpSyncClient(
-					new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout, asyncFeatures));
+			return new McpSyncClient(new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout,
+					asyncFeatures, this.connectOnInit));
 		}
 
 	}
@@ -396,11 +409,13 @@ public interface McpClient {
 
 		private Duration requestTimeout = Duration.ofSeconds(20); // Default timeout
 
+		private boolean connectOnInit = true; // Default true, for backward compatibility
+
 		private Duration initializationTimeout = Duration.ofSeconds(20);
 
 		private ClientCapabilities capabilities;
 
-		private Implementation clientInfo = new Implementation("Spring AI MCP Client", "0.3.1");
+		private Implementation clientInfo = new Implementation("Java SDK MCP Async Client", "0.10.0");
 
 		private final Map<String, Root> roots = new HashMap<>();
 
@@ -431,6 +446,17 @@ public interface McpClient {
 		public AsyncSpec requestTimeout(Duration requestTimeout) {
 			Assert.notNull(requestTimeout, "Request timeout must not be null");
 			this.requestTimeout = requestTimeout;
+			return this;
+		}
+
+		/**
+		 * Sets whether to connect to the server during the initialization phase (open an
+		 * SSE stream).
+		 * @param connectOnInit true to open an SSE stream during the initialization
+		 * @return This builder instance for method chaining
+		 */
+		public AsyncSpec withConnectOnInit(final boolean connectOnInit) {
+			this.connectOnInit = connectOnInit;
 			return this;
 		}
 
@@ -606,7 +632,8 @@ public interface McpClient {
 			return new McpAsyncClient(this.transport, this.requestTimeout, this.initializationTimeout,
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
 							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.promptsChangeConsumers,
-							this.loggingConsumers, this.samplingHandler));
+							this.loggingConsumers, this.samplingHandler),
+					this.connectOnInit);
 		}
 
 	}
