@@ -10,8 +10,8 @@
 	</parent>
 	<artifactId>mcp</artifactId>
 	<packaging>jar</packaging>
-	<name>Java MCP SDK</name>
-	<description>Java SDK implementation of the Model Context Protocol, enabling seamless integration with language models and AI tools</description>
+	<name>Java MCP SDK (based on io.projectreactor)</name>
+	<description>Java SDK / io.projectreactor implementation of the Model Context Protocol, enabling seamless integration with language models and AI tools</description>
 	<url>https://github.com/modelcontextprotocol/java-sdk</url>
 
 	<scm>
