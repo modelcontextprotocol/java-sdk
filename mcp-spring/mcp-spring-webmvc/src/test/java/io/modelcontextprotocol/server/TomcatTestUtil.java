@@ -3,10 +3,6 @@
 */
 package io.modelcontextprotocol.server;
 
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-
 import org.apache.catalina.Context;
 import org.apache.catalina.startup.Tomcat;
 
@@ -53,15 +49,8 @@ public class TomcatTestUtil {
 		wrapper.setAsyncSupported(true);
 		context.addServletMappingDecoded("/*", "dispatcherServlet");
 
-		try {
-			// Configure and start the connector with async support
-			var connector = tomcat.getConnector();
-			connector.setAsyncTimeout(3000); // 3 seconds timeout for async requests
-		}
-		catch (Exception e) {
-			throw new RuntimeException("Failed to start Tomcat", e);
-		}
-
+		var connector = tomcat.getConnector();
+		connector.setAsyncTimeout(3000); // 3 seconds timeout for async requests
 		return new TomcatServer(tomcat, appContext);
 	}
 

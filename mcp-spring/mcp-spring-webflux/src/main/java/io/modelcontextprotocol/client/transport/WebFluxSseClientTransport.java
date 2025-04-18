@@ -208,8 +208,8 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 					JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.objectMapper, event.data());
 					s.next(message);
 				}
-				catch (IOException ioException) {
-					s.error(ioException);
+				catch (RuntimeException ioOrIllegalException) {
+					s.error(ioOrIllegalException);
 				}
 			}
 			else {

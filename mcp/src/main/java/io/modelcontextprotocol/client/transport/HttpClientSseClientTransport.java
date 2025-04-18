@@ -364,7 +364,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 						logger.error("Received unrecognized SSE event type: {}", event.type());
 					}
 				}
-				catch (IOException e) {
+				catch (RuntimeException e) {
 					logger.error("Error processing SSE event", e);
 					future.completeExceptionally(e);
 				}

@@ -4,7 +4,10 @@
 
 package io.modelcontextprotocol.spec;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.Reader;
+import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -142,32 +145,36 @@ public final class McpSchema {
 	/**
 	 * Deserializes a JSON string into a JSONRPCMessage object.
 	 * @param objectMapper The ObjectMapper instance to use for deserialization
-	 * @param jsonText The JSON string to deserialize
+	 * @param inputStream The JSON string to deserialize
 	 * @return A JSONRPCMessage instance using either the {@link JSONRPCRequest},
 	 * {@link JSONRPCNotification}, or {@link JSONRPCResponse} classes.
-	 * @throws IOException If there's an error during deserialization
 	 * @throws IllegalArgumentException If the JSON structure doesn't match any known
 	 * message type
 	 */
-	public static JSONRPCMessage deserializeJsonRpcMessage(ObjectMapper objectMapper, String jsonText)
-			throws IOException {
-
-		logger.debug("Received JSON message: {}", jsonText);
-
-		var map = objectMapper.readValue(jsonText, MAP_TYPE_REF);
-
-		// Determine message type based on specific JSON structure
-		if (map.containsKey("method") && map.containsKey("id")) {
-			return objectMapper.convertValue(map, JSONRPCRequest.class);
+	public static JSONRPCMessage deserializeJsonRpcMessage(ObjectMapper objectMapper, BufferedReader inputStream) {
+		try {
+			var map = objectMapper.readValue(inputStream, MAP_TYPE_REF);
+			// Determine message type based on specific JSON structure
+			if (map.containsKey("method") && map.containsKey("id")) {
+				return objectMapper.convertValue(map, JSONRPCRequest.class);
+			}
+			else if (map.containsKey("method") && !map.containsKey("id")) {
+				return objectMapper.convertValue(map, JSONRPCNotification.class);
+			}
+			else if (map.containsKey("result") || map.containsKey("error")) {
+				return objectMapper.convertValue(map, JSONRPCResponse.class);
+			}
+			throw new IllegalArgumentException("Cannot deserialize JSONRPCMessage: " + map);
 		}
-		else if (map.containsKey("method") && !map.containsKey("id")) {
-			return objectMapper.convertValue(map, JSONRPCNotification.class);
+		catch (IOException e) {
+			throw new java.io.UncheckedIOException(e);
 		}
-		else if (map.containsKey("result") || map.containsKey("error")) {
-			return objectMapper.convertValue(map, JSONRPCResponse.class);
-		}
+	}
 
-		throw new IllegalArgumentException("Cannot deserialize JSONRPCMessage: " + jsonText);
+	public static JSONRPCMessage deserializeJsonRpcMessage(ObjectMapper objectMapper, String input) {
+		Reader inputString = new StringReader(input);
+		BufferedReader reader = new BufferedReader(inputString);
+		return deserializeJsonRpcMessage(objectMapper, reader);
 	}
 
 	// ---------------------------

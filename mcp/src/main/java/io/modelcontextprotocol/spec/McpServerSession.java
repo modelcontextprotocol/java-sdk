@@ -63,14 +63,15 @@ public class McpServerSession implements McpSession {
 	 * @param initHandler called when a
 	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
 	 * server
-	 * @param initNotificationHandler called when a
-	 * {@link McpSchema.METHOD_NOTIFICATION_INITIALIZED} is received.
+	 * @param initNotificationHandler called when a {@link McpSchema.METHOD_INITIALIZE }
+	 * is received.
 	 * @param requestHandlers map of request handlers to use
 	 * @param notificationHandlers map of notification handlers to use
 	 */
 	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
 			InitRequestHandler initHandler, InitNotificationHandler initNotificationHandler,
 			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
+
 		this.id = id;
 		this.requestTimeout = requestTimeout;
 		this.transport = transport;
@@ -201,6 +202,7 @@ public class McpServerSession implements McpSession {
 		return Mono.defer(() -> {
 			Mono<?> resultMono;
 			if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
+
 				// TODO handle situation where already initialized!
 				McpSchema.InitializeRequest initializeRequest = transport.unmarshalFrom(request.params(),
 						new TypeReference<McpSchema.InitializeRequest>() {
@@ -258,13 +260,11 @@ public class McpServerSession implements McpSession {
 	}
 
 	static MethodNotFoundError getMethodNotFoundError(String method) {
-		switch (method) {
-			case McpSchema.METHOD_ROOTS_LIST:
-				return new MethodNotFoundError(method, "Roots not supported",
-						Map.of("reason", "Client does not have roots capability"));
-			default:
-				return new MethodNotFoundError(method, "Method not found: " + method, null);
+		if (method.equals(McpSchema.METHOD_ROOTS_LIST)) {
+			return new MethodNotFoundError(method, "Roots not supported",
+					Map.of("reason", "Client does not have roots capability"));
 		}
+		return new MethodNotFoundError(method, "Method not found: " + method, null);
 	}
 
 	@Override

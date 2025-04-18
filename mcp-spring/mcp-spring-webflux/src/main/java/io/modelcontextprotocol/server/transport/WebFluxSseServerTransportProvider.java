@@ -1,6 +1,7 @@
 package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -323,8 +324,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 						.bodyValue(new McpError(error.getMessage()));
 				});
 			}
-			catch (IllegalArgumentException | IOException e) {
-				logger.error("Failed to deserialize message: {}", e.getMessage());
+			catch (IllegalArgumentException | UncheckedIOException e) {
+				logger.error("Failed to deserialize message", e);
 				return ServerResponse.badRequest().bodyValue(new McpError("Invalid message format"));
 			}
 		});
