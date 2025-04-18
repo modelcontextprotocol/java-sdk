@@ -25,10 +25,29 @@ import reactor.util.retry.Retry;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
+
+/**
+ * <p>
+ * The connection process follows these steps:
+ * <ol>
+ * <li>The client sends an initialization POST request to the message endpoint,
+ * and the server may optionally generate and return a session ID to the client.
+ * This process is not required, only for stateful connections</li>
+ *
+ * <li>All messages are sent via HTTP POST requests to the message endpoint.
+ * If a session ID exists, it MUST be included in the request </li>
+ *
+ * <li>The client handles responses from the server accordingly based on the protocol specifications.</li>
+ * </ol>
+ *
+ * This implementation uses {@link WebClient} for HTTP communications
+ * @author Yeaury
+ */
 public class WebFluxStreamableClientTransport implements McpClientTransport {
 
     private static final Logger logger = LoggerFactory.getLogger(WebFluxStreamableClientTransport.class);
@@ -46,6 +65,8 @@ public class WebFluxStreamableClientTransport implements McpClientTransport {
     private static final ParameterizedTypeReference<ServerSentEvent<String>> SSE_TYPE = new ParameterizedTypeReference<>() {
     };
 
+    private final WebFluxSseClientTransport sseClientTransport;
+
     private final WebClient webClient;
 
     protected ObjectMapper objectMapper;
@@ -54,16 +75,22 @@ public class WebFluxStreamableClientTransport implements McpClientTransport {
 
     private volatile boolean isClosing = false;
 
-    private final Sinks.One<String> messageEndpointSink = Sinks.one();
+    protected final Sinks.One<String> messageEndpointSink = Sinks.one();
 
     private final Sinks.Many<ServerSentEvent<String>> sseSink = Sinks.many().multicast().onBackpressureBuffer();
 
-    private final AtomicReference<String> sessionId = new AtomicReference<>();
+    private final AtomicReference<String> sessionId = new AtomicReference<>(null);
 
-    private final AtomicReference<String> lastEventId = new AtomicReference<>();
+    private final AtomicReference<String> lastEventId = new AtomicReference<>(null);
+
+    private final AtomicBoolean fallbackToSse = new AtomicBoolean(false);
 
     private Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler;
 
+    /**
+     * The endpoint URI provided by the server.
+     * Used to send outbound messages via HTTP POST requests, and is also used when initializing a connection.
+     */
     private final String endpoint;
 
     public WebFluxStreamableClientTransport(WebClient.Builder webClientBuilder) {
@@ -74,47 +101,73 @@ public class WebFluxStreamableClientTransport implements McpClientTransport {
         this(webClientBuilder, objectMapper, DEFAULT_MCP_ENDPOINT);
     }
 
+    public WebFluxStreamableClientTransport(WebClient.Builder webClientBuilder, ObjectMapper objectMapper, String defaultMcpEndpoint) {
+        this(webClientBuilder, objectMapper, defaultMcpEndpoint, Function.identity(), WebFluxSseClientTransport.builder(webClientBuilder).objectMapper(objectMapper).build());
+    }
+
     public WebFluxStreamableClientTransport(WebClient.Builder webClientBuilder, ObjectMapper objectMapper,
-                                            String sseEndpoint) {
+                                            String sseEndpoint, Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler,
+                                            WebFluxSseClientTransport sseClientTransport) {
         Assert.notNull(objectMapper, "ObjectMapper must not be null");
         Assert.notNull(webClientBuilder, "WebClient.Builder must not be null");
         Assert.hasText(sseEndpoint, "SSE endpoint must not be null or empty");
+        Assert.notNull(handler, "Handler must not be null");
 
         this.objectMapper = objectMapper;
         this.webClient = webClientBuilder.build();
         this.endpoint = sseEndpoint;
+        this.handler = handler;
+        this.sseClientTransport = sseClientTransport;
     }
 
+    /**
+     * Connect to the MCP server using the WebClient.
+     *
+     * <p>
+     * The connection is only used as an initialization operation, and the Mcp-Session-ID and Last-Event-ID are set.
+     * <p>
+     * The initialization process is not required in Streamable HTTP, only when stateful management is implemented,
+     * and after Initializated, all subsequent requests need to be accompanied by the mcp-session-id.
+     */
     @Override
     public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
-        sessionId.set(null);
-        lastEventId.set(null);
+        if (fallbackToSse.get()) {
+            return sseClientTransport.connect(handler);
+        }
         this.handler = handler;
+
         WebClient.RequestBodySpec request = webClient.post()
                 .uri(endpoint)
-                .contentType(MediaType.APPLICATION_JSON);
-        if (lastEventId.get() != null) {
-            request.header(LAST_EVENT_ID, lastEventId.get());
-        }
-        if (sessionId.get() != null) {
-            request.header(MCP_SESSION_ID, sessionId.get());
-        }
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Last-Event-ID", lastEventId.get() != null ? lastEventId.get() : null)
+                .header("MCP-SESSION-ID", sessionId.get() != null ? sessionId.get() : null);
 
         return request
                 .exchangeToMono(response -> {
+                    if (response.statusCode().value() == 405 || response.statusCode().value() == 404) {
+                        fallbackToSse.set(true);
+                        return Mono.error(new IllegalStateException("Operation not allowed, falling back to SSE"));
+                    }
                     if (!response.statusCode().is2xxSuccessful()) {
                         logger.error("Session initialization failed with status: {}", response.statusCode());
                         return response.createException().flatMap(Mono::error);
                     }
                     setSessionId(response);
 
-                    return response.bodyToMono(String.class);
+                    return response.bodyToMono(Void.class)
+                            .onErrorResume(e -> Mono.empty());
                 })
                 .retryWhen(Retry.backoff(3, Duration.ofSeconds(3))
                         .filter(err -> err instanceof IOException || isServerError(err))
                         .doAfterRetry(signal -> logger.debug("Retrying session initialization: {}", signal.totalRetries())))
-                .doOnSuccess(v -> logger.debug("Session initialized successfully"))
                 .doOnError(error -> logger.error("Error initializing session: {}", error.getMessage()))
+                .onErrorResume(e -> {
+                    logger.error("WebClient transport connection error", e);
+                    if (fallbackToSse.get()) {
+                        return sseClientTransport.connect(handler);
+                    }
+                    return Mono.empty();
+                })
                 .then()
                 .subscribeOn(Schedulers.boundedElastic());
     }
@@ -241,7 +294,9 @@ public class WebFluxStreamableClientTransport implements McpClientTransport {
                 });
     }
 
-
+    /**
+     * It is used for the client to actively establish a SSE connection with the server
+     */
     public Mono<Void> connectWithGet(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
         sessionId.set(null);
         Flux<ServerSentEvent<String>> getSseFlux = this.webClient
@@ -257,7 +312,8 @@ public class WebFluxStreamableClientTransport implements McpClientTransport {
     }
 
     private boolean isServerError(Throwable err) {
-        return err instanceof WebClientResponseException && ((WebClientResponseException) err).getStatusCode().is5xxServerError();
+        return err instanceof WebClientResponseException
+                && ((WebClientResponseException) err).getStatusCode().is5xxServerError();
     }
 
     private BiConsumer<Retry.RetrySignal, SynchronousSink<Object>> inboundRetryHandler = (retrySpec, sink) -> {
@@ -305,6 +361,8 @@ public class WebFluxStreamableClientTransport implements McpClientTransport {
 
         private ObjectMapper objectMapper = new ObjectMapper();
 
+        private Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler = Function.identity();
+
         public Builder(WebClient.Builder webClientBuilder) {
             Assert.notNull(webClientBuilder, "WebClient.Builder must not be null");
             this.webClientBuilder = webClientBuilder;
@@ -322,8 +380,22 @@ public class WebFluxStreamableClientTransport implements McpClientTransport {
             return this;
         }
 
+        public Builder handler(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
+            Assert.notNull(handler, "handler must not be null");
+            this.handler = handler;
+            return this;
+        }
+
         public WebFluxStreamableClientTransport build() {
-            return new WebFluxStreamableClientTransport(webClientBuilder, objectMapper, endpoint);
+            final WebFluxSseClientTransport.Builder builder = WebFluxSseClientTransport.builder(webClientBuilder)
+                    .objectMapper(objectMapper);
+
+            if (!endpoint.equals(DEFAULT_MCP_ENDPOINT)) {
+                builder.sseEndpoint(endpoint);
+            }
+
+            return new WebFluxStreamableClientTransport(webClientBuilder, objectMapper, endpoint,
+                    handler, builder.build());
         }
 
     }
