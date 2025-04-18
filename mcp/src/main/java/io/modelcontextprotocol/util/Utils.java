@@ -4,7 +4,11 @@
 
 package io.modelcontextprotocol.util;
 
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URLDecoder;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 
 import reactor.util.annotation.Nullable;
@@ -50,6 +54,29 @@ public final class Utils {
 	 */
 	public static boolean isEmpty(@Nullable Map<?, ?> map) {
 		return (map == null || map.isEmpty());
+	}
+
+	public static String getSessionIdFromUrl(String urlStr) {
+		URI uri;
+		try {
+			uri = new URI(urlStr);
+		}
+		catch (URISyntaxException e) {
+			return null;
+		}
+		String query = uri.getQuery();
+		if (query == null) {
+			return null;
+		}
+		Map<String, String> params = new HashMap<>();
+		String[] pairs = query.split("&");
+		for (String pair : pairs) {
+			int idx = pair.indexOf("=");
+			String key = (idx > 0) ? pair.substring(0, idx) : pair;
+			String value = (idx > 0 && pair.length() > idx + 1) ? pair.substring(idx + 1) : null;
+			params.put(key, value);
+		}
+		return params.get("sessionId");
 	}
 
 }

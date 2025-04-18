@@ -5,7 +5,7 @@ package io.modelcontextprotocol.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpClient;
-import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
+import io.modelcontextprotocol.client.transport.HttpClientSseClientTransportProvider;
 import io.modelcontextprotocol.server.transport.WebMvcSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.apache.catalina.LifecycleException;
@@ -49,7 +49,7 @@ class WebMvcSseCustomContextPathTests {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		var clientTransport = HttpClientSseClientTransport.builder("http://localhost:" + PORT)
+		var clientTransport = HttpClientSseClientTransportProvider.builder("http://localhost:" + PORT)
 			.sseEndpoint(CUSTOM_CONTEXT_PATH + WebMvcSseServerTransportProvider.DEFAULT_SSE_ENDPOINT)
 			.build();
 

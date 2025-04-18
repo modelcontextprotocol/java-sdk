@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.modelcontextprotocol.client.McpClient;
-import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
+import io.modelcontextprotocol.client.transport.HttpClientSseClientTransportProvider;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.spec.McpError;
@@ -79,9 +79,12 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		this.clientBuilder = McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
+		HttpClientSseClientTransportProvider transportProvider = HttpClientSseClientTransportProvider
+			.builder("http://localhost:" + PORT)
 			.sseEndpoint(CUSTOM_SSE_ENDPOINT)
-			.build());
+			.objectMapper(new ObjectMapper())
+			.build();
+		this.clientBuilder = McpClient.sync(transportProvider);
 	}
 
 	@AfterEach

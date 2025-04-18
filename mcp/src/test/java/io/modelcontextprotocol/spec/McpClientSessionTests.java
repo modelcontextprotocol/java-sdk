@@ -9,6 +9,7 @@ import java.util.Map;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.MockMcpClientTransport;
+import io.modelcontextprotocol.MockMcpClientTransportProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,13 +42,18 @@ class McpClientSessionTests {
 
 	private McpClientSession session;
 
-	private MockMcpClientTransport transport;
+	private MockMcpClientTransportProvider.MockMcpClientTransport transport;
+
+	private MockMcpClientTransportProvider transportProvider;
 
 	@BeforeEach
 	void setUp() {
-		transport = new MockMcpClientTransport();
-		session = new McpClientSession(TIMEOUT, transport, Map.of(),
-				Map.of(TEST_NOTIFICATION, params -> Mono.fromRunnable(() -> logger.info("Status update: " + params))));
+		transportProvider = new MockMcpClientTransportProvider();
+		transportProvider.setSessionFactory((transport) -> new McpClientSession(TIMEOUT, transport, Map.of(),
+				Map.of(TEST_NOTIFICATION, params -> Mono.fromRunnable(() -> logger.info("Status update: " + params)))));
+		session = transportProvider.getSession();
+		transport = transportProvider.getTransport();
+
 	}
 
 	@AfterEach
@@ -139,8 +145,11 @@ class McpClientSessionTests {
 		String echoMessage = "Hello MCP!";
 		Map<String, McpClientSession.RequestHandler<?>> requestHandlers = Map.of(ECHO_METHOD,
 				params -> Mono.just(params));
-		transport = new MockMcpClientTransport();
-		session = new McpClientSession(TIMEOUT, transport, requestHandlers, Map.of());
+		transportProvider = new MockMcpClientTransportProvider();
+		transportProvider
+			.setSessionFactory((transport) -> new McpClientSession(TIMEOUT, transport, requestHandlers, Map.of()));
+		session = transportProvider.getSession();
+		transport = transportProvider.getTransport();
 
 		// Simulate incoming request
 		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, ECHO_METHOD,
@@ -159,9 +168,11 @@ class McpClientSessionTests {
 	void testNotificationHandling() {
 		Sinks.One<Object> receivedParams = Sinks.one();
 
-		transport = new MockMcpClientTransport();
-		session = new McpClientSession(TIMEOUT, transport, Map.of(),
-				Map.of(TEST_NOTIFICATION, params -> Mono.fromRunnable(() -> receivedParams.tryEmitValue(params))));
+		transportProvider = new MockMcpClientTransportProvider();
+		transportProvider.setSessionFactory((transport) -> new McpClientSession(TIMEOUT, transport, Map.of(),
+				Map.of(TEST_NOTIFICATION, params -> Mono.fromRunnable(() -> receivedParams.tryEmitValue(params)))));
+		session = transportProvider.getSession();
+		transport = transportProvider.getTransport();
 
 		// Simulate incoming notification from the server
 		Map<String, Object> notificationParams = Map.of("status", "ready");

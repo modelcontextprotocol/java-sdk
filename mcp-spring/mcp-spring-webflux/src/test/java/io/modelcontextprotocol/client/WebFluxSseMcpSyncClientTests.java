@@ -6,8 +6,8 @@ package io.modelcontextprotocol.client;
 
 import java.time.Duration;
 
-import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
-import io.modelcontextprotocol.spec.McpClientTransport;
+import io.modelcontextprotocol.client.transport.WebFluxSseClientTransportProvider;
+import io.modelcontextprotocol.spec.McpClientTransportProvider;
 import org.junit.jupiter.api.Timeout;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -15,8 +15,6 @@ import org.testcontainers.containers.wait.strategy.Wait;
 import org.springframework.web.reactive.function.client.WebClient;
 
 /**
- * Tests for the {@link McpSyncClient} with {@link WebFluxSseClientTransport}.
- *
  * @author Christian Tzolov
  */
 @Timeout(15) // Giving extra time beyond the client timeout
@@ -32,8 +30,8 @@ class WebFluxSseMcpSyncClientTests extends AbstractMcpSyncClientTests {
 		.waitingFor(Wait.forHttp("/").forStatusCode(404));
 
 	@Override
-	protected McpClientTransport createMcpTransport() {
-		return WebFluxSseClientTransport.builder(WebClient.builder().baseUrl(host)).build();
+	protected McpClientTransportProvider createMcpClientTransportProvider() {
+		return new WebFluxSseClientTransportProvider(WebClient.builder().baseUrl(host));
 	}
 
 	@Override
