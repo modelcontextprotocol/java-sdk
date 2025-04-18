@@ -290,5 +290,105 @@ class WebFluxStreamableClientTransportTests {
         assertThat(transport.getInboundMessageCount()).isEqualTo(3);
     }
 
+    @Test
+    void testSendMessageWithSseResponse() {
+        // the mock server returns an sse flow response
+        McpSchema.JSONRPCRequest testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
+                "test-method", "test-id", Map.of("key", "value"));
+
+        transport.simulateMessageEvent("""
+        {
+            "jsonrpc": "2.0",
+            "method": "test-method",
+            "id": "test-id",
+            "params": {"key": "value"}
+        }
+        """);
+
+        // send a message and verify processing
+        StepVerifier.create(transport.sendMessage(testMessage))
+                .expectComplete()
+                .verify(Duration.ofSeconds(5));
+
+        assertThat(transport.getInboundMessageCount()).isEqualTo(1);
+    }
+
+    @Test
+    void testSendMessageWithJsonSeqResponse() {
+        // Simulate a JSON-seq response with multiple rows of data
+        McpSchema.JSONRPCRequest testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
+                "test-method", "test-id", Map.of("key", "value"));
+
+        // Here you need to simulate a ClientResponse to return type application/json-seq and contain multiple lines of JSON
+        // Let's say that when JSON-seq is processed in TestStreamableClientTransport,
+        // the handler is called to process each JSON line
+        // Here, the processing of multiple rows of data is simulated by calling handler.apply directly
+        StepVerifier.create(transport.sendMessage(testMessage))
+                .then(() -> {
+                    transport.simulateMessageEvent("""
+                        {
+                            "jsonrpc": "2.0",
+                            "result": "ok",
+                            "id": "1"
+                        }
+                        """);
+
+                    transport.simulateMessageEvent("""
+                        {
+                            "jsonrpc": "2.0",
+                            "result": "done",
+                            "id": "2"
+                        }
+                        """);
+
+                })
+                .expectComplete()
+                .verify(Duration.ofSeconds(5));
+
+        assertThat(transport.getInboundMessageCount()).isEqualTo(2);
+    }
+
+    @Test
+    void testSendMessageWithHttpResponse() {
+        // simulate a normal http json response
+        McpSchema.JSONRPCRequest testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
+                "test-method", "test-id", Map.of("key", "value"));
+
+        // Let's say the server returns a single JSON response
+        transport.simulateMessageEvent("""
+        {
+            "jsonrpc": "2.0",
+            "result": "success",
+            "id": "test-id"
+        }
+        """);
+
+        StepVerifier.create(transport.sendMessage(testMessage))
+                .expectComplete()
+                .verify(Duration.ofSeconds(5));
+
+        assertThat(transport.getInboundMessageCount()).isEqualTo(1);
+    }
+
+
+
+    @Test
+    void testConnectWithGetSuccessfully() {
+        // Test connectWithGet to successfully establish an SSE connection and process events
+        transport.simulateMessageEvent("""
+        {
+            "jsonrpc": "2.0",
+            "result": "update"
+        }
+        """);
+
+        StepVerifier.create(transport.connectWithGet(msg -> Mono.empty()))
+                .expectComplete()
+                .verify(Duration.ofSeconds(5));
+
+        assertThat(transport.getLastEndpoint()).isEqualTo("http://new-endpoint");
+        assertThat(transport.getInboundMessageCount()).isEqualTo(2);
+    }
+
 
 }
