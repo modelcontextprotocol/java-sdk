@@ -18,6 +18,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.spec.McpRequest;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
@@ -292,7 +293,7 @@ public class McpAsyncServer {
 			// Initialize request handlers for standard MCP methods
 
 			// Ping MUST respond with an empty data, but not NULL response.
-			requestHandlers.put(McpSchema.METHOD_PING, (exchange, params) -> Mono.just(Map.of()));
+			requestHandlers.put(McpSchema.METHOD_PING, (exchange, request) -> Mono.just(Map.of()));
 
 			// Add tools API handlers if the tool capability is enabled
 			if (this.serverCapabilities.tools() != null) {
@@ -472,7 +473,7 @@ public class McpAsyncServer {
 		}
 
 		private McpServerSession.RequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
-			return (exchange, params) -> {
+			return (exchange, request) -> {
 				List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList();
 
 				return Mono.just(new McpSchema.ListToolsResult(tools, null));
@@ -480,9 +481,9 @@ public class McpAsyncServer {
 		}
 
 		private McpServerSession.RequestHandler<CallToolResult> toolsCallRequestHandler() {
-			return (exchange, params) -> {
-				McpSchema.CallToolRequest callToolRequest = objectMapper.convertValue(params,
-						new TypeReference<McpSchema.CallToolRequest>() {
+			return (exchange, request) -> {
+				McpSchema.CallToolRequest callToolRequest = objectMapper.convertValue(request.params(),
+						new TypeReference<>() {
 						});
 
 				Optional<McpServerFeatures.AsyncToolSpecification> toolSpecification = this.tools.stream()
@@ -493,7 +494,9 @@ public class McpAsyncServer {
 					return Mono.error(new McpError("Tool not found: " + callToolRequest.name()));
 				}
 
-				return toolSpecification.map(tool -> tool.call().apply(exchange, callToolRequest.arguments()))
+				return toolSpecification
+					.map(tool -> tool.call()
+						.apply(exchange, new McpRequest(callToolRequest.arguments(), request.context())))
 					.orElse(Mono.error(new McpError("Tool not found: " + callToolRequest.name())));
 			};
 		}
@@ -553,7 +556,7 @@ public class McpAsyncServer {
 		}
 
 		private McpServerSession.RequestHandler<McpSchema.ListResourcesResult> resourcesListRequestHandler() {
-			return (exchange, params) -> {
+			return (exchange, request) -> {
 				var resourceList = this.resources.values()
 					.stream()
 					.map(McpServerFeatures.AsyncResourceSpecification::resource)
@@ -563,14 +566,14 @@ public class McpAsyncServer {
 		}
 
 		private McpServerSession.RequestHandler<McpSchema.ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
-			return (exchange, params) -> Mono
+			return (exchange, request) -> Mono
 				.just(new McpSchema.ListResourceTemplatesResult(this.resourceTemplates, null));
 
 		}
 
 		private McpServerSession.RequestHandler<McpSchema.ReadResourceResult> resourcesReadRequestHandler() {
-			return (exchange, params) -> {
-				McpSchema.ReadResourceRequest resourceRequest = objectMapper.convertValue(params,
+			return (exchange, request) -> {
+				McpSchema.ReadResourceRequest resourceRequest = objectMapper.convertValue(request.params(),
 						new TypeReference<McpSchema.ReadResourceRequest>() {
 						});
 				var resourceUri = resourceRequest.uri();
@@ -646,7 +649,7 @@ public class McpAsyncServer {
 		}
 
 		private McpServerSession.RequestHandler<McpSchema.ListPromptsResult> promptsListRequestHandler() {
-			return (exchange, params) -> {
+			return (exchange, request) -> {
 				// TODO: Implement pagination
 				// McpSchema.PaginatedRequest request = objectMapper.convertValue(params,
 				// new TypeReference<McpSchema.PaginatedRequest>() {
@@ -662,8 +665,8 @@ public class McpAsyncServer {
 		}
 
 		private McpServerSession.RequestHandler<McpSchema.GetPromptResult> promptsGetRequestHandler() {
-			return (exchange, params) -> {
-				McpSchema.GetPromptRequest promptRequest = objectMapper.convertValue(params,
+			return (exchange, request) -> {
+				McpSchema.GetPromptRequest promptRequest = objectMapper.convertValue(request.params(),
 						new TypeReference<McpSchema.GetPromptRequest>() {
 						});
 
@@ -697,10 +700,10 @@ public class McpAsyncServer {
 		}
 
 		private McpServerSession.RequestHandler<Object> setLoggerRequestHandler() {
-			return (exchange, params) -> {
+			return (exchange, request) -> {
 				return Mono.defer(() -> {
 
-					SetLevelRequest newMinLoggingLevel = objectMapper.convertValue(params,
+					SetLevelRequest newMinLoggingLevel = objectMapper.convertValue(request.params(),
 							new TypeReference<SetLevelRequest>() {
 							});
 
@@ -716,8 +719,8 @@ public class McpAsyncServer {
 		}
 
 		private McpServerSession.RequestHandler<McpSchema.CompleteResult> completionCompleteRequestHandler() {
-			return (exchange, params) -> {
-				McpSchema.CompleteRequest request = parseCompletionParams(params);
+			return (exchange, req) -> {
+				McpSchema.CompleteRequest request = parseCompletionParams(req.params());
 
 				if (request.ref() == null) {
 					return Mono.error(new McpError("ref must not be null"));
