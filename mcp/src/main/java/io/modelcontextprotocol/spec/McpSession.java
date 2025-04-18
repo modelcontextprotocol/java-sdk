@@ -79,4 +79,9 @@ public interface McpSession {
 	 */
 	void close();
 
+	/**
+	 * @return get the timestamp of the last request the session received.
+	 */
+	long lastRequestTimestamp();
+
 }

@@ -56,6 +56,9 @@ public class McpServerSession implements McpSession {
 
 	private final AtomicInteger state = new AtomicInteger(STATE_UNINITIALIZED);
 
+	/** To record the last request timestamp */
+	private final AtomicLong lastRequestTs = new AtomicLong(System.currentTimeMillis());
+
 	/**
 	 * Creates a new server session with the given parameters and the transport to use.
 	 * @param id session id
@@ -169,6 +172,7 @@ public class McpServerSession implements McpSession {
 			}
 			else if (message instanceof McpSchema.JSONRPCRequest request) {
 				logger.debug("Received request: {}", request);
+				lastRequestTs.set(System.currentTimeMillis());
 				return handleIncomingRequest(request).onErrorResume(error -> {
 					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
 							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
@@ -269,6 +273,11 @@ public class McpServerSession implements McpSession {
 	@Override
 	public void close() {
 		this.transport.close();
+	}
+
+	@Override
+	public long lastRequestTimestamp() {
+		return lastRequestTs.get();
 	}
 
 	/**

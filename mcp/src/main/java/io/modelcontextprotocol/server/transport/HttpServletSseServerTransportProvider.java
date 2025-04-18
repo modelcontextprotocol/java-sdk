@@ -6,9 +6,14 @@ package io.modelcontextprotocol.server.transport;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -102,6 +107,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 
 	/** Session factory for creating new sessions */
 	private McpServerSession.Factory sessionFactory;
+	private ScheduledFuture<?> removeSessionsDeprecarted;
 
 	/**
 	 * Creates a new HttpServletSseServerTransportProvider instance with a custom SSE
@@ -131,6 +137,18 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
+		this.removeSessionsDeprecarted = Executors.newScheduledThreadPool(1)
+				.scheduleAtFixedRate(() -> new ArrayList<>(sessions.values())
+						.forEach(session -> {
+							if (TimeUnit.MINUTES.convert(Duration.ofMillis(System.currentTimeMillis() - session.lastRequestTimestamp())) > 30L) {
+								// close the session if it has not received a request in the last 30 minutes
+								session.closeGracefully()
+										.doOnError(error ->
+												logger.warn("Failed to gracefully close the session {} while it has not received any request in the last 30 minutes." +
+														"Here is the following error msg: {}", session.getId(), error.getMessage()))
+										.subscribe();
+							}
+						}), 0, 1, TimeUnit.MINUTES);
 	}
 
 	/**
@@ -323,8 +341,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	public Mono<Void> closeGracefully() {
 		isClosing.set(true);
 		logger.debug("Initiating graceful shutdown with {} active sessions", sessions.size());
-
-		return Flux.fromIterable(sessions.values()).flatMap(McpServerSession::closeGracefully).then();
+		return Flux.fromIterable(sessions.values()).flatMap(McpServerSession::closeGracefully)
+				.doOnTerminate(() -> this.removeSessionsDeprecarted.cancel(true)).then();
 	}
 
 	/**
