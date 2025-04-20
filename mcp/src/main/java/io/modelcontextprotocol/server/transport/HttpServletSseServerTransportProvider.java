@@ -219,7 +219,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 				writer);
 
 		// Create a new session using the session factory
-		McpServerSession session = sessionFactory.create(sessionTransport);
+		McpServerSession session = sessionFactory.create(sessionId, sessionTransport);
 		this.sessions.put(sessionId, session);
 
 		// Send initial endpoint event

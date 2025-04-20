@@ -16,6 +16,7 @@
 package io.modelcontextprotocol;
 
 import java.util.Map;
+import java.util.UUID;
 
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
@@ -43,7 +44,8 @@ public class MockMcpServerTransportProvider implements McpServerTransportProvide
 	@Override
 	public void setSessionFactory(Factory sessionFactory) {
 
-		session = sessionFactory.create(transport);
+		String sessionId = UUID.randomUUID().toString();
+		session = sessionFactory.create(sessionId, transport);
 	}
 
 	@Override

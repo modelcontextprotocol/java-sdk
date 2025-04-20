@@ -12,6 +12,7 @@ import java.io.OutputStream;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
@@ -94,7 +95,8 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	public void setSessionFactory(McpServerSession.Factory sessionFactory) {
 		// Create a single session for the stdio connection
 		var transport = new StdioMcpSessionTransport();
-		this.session = sessionFactory.create(transport);
+		String sessionId = UUID.randomUUID().toString();
+		this.session = sessionFactory.create(sessionId, transport);
 		transport.initProcessing();
 	}
 

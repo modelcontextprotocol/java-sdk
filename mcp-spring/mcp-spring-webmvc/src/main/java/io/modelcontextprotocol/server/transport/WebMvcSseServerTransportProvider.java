@@ -263,7 +263,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				});
 
 				WebMvcMcpSessionTransport sessionTransport = new WebMvcMcpSessionTransport(sessionId, sseBuilder);
-				McpServerSession session = sessionFactory.create(sessionTransport);
+				McpServerSession session = sessionFactory.create(sessionId, sessionTransport);
 				this.sessions.put(sessionId, session);
 
 				try {

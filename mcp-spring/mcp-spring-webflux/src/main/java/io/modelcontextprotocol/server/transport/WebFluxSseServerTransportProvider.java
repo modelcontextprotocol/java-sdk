@@ -2,6 +2,7 @@ package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -261,8 +262,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			.body(Flux.<ServerSentEvent<?>>create(sink -> {
 				WebFluxMcpSessionTransport sessionTransport = new WebFluxMcpSessionTransport(sink);
 
-				McpServerSession session = sessionFactory.create(sessionTransport);
-				String sessionId = session.getId();
+				String sessionId = UUID.randomUUID().toString();
+				McpServerSession session = sessionFactory.create(sessionId, sessionTransport);
 
 				logger.debug("Created new SSE connection for session: {}", sessionId);
 				sessions.put(sessionId, session);

@@ -342,10 +342,11 @@ public class McpServerSession implements McpSession {
 
 		/**
 		 * Creates a new 1:1 representation of the client-server interaction.
+		 * @param sessionId the id of the session.
 		 * @param sessionTransport the transport to use for communication with the client.
 		 * @return a new server session.
 		 */
-		McpServerSession create(McpServerTransport sessionTransport);
+		McpServerSession create(String sessionId, McpServerTransport sessionTransport);
 
 	}
 
