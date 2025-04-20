@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.server;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,10 +23,13 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
+import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
+import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,8 +96,10 @@ public class McpAsyncServer {
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 */
 	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
-			McpServerFeatures.Async features, Duration requestTimeout) {
-		this.delegate = new AsyncServerImpl(mcpTransportProvider, objectMapper, requestTimeout, features);
+			McpServerFeatures.Async features, Duration requestTimeout,
+			McpUriTemplateManagerFactory uriTemplateManagerFactory) {
+		this.delegate = new AsyncServerImpl(mcpTransportProvider, objectMapper, requestTimeout, features,
+				uriTemplateManagerFactory);
 	}
 
 	/**
@@ -274,8 +280,11 @@ public class McpAsyncServer {
 
 		private List<String> protocolVersions = List.of(McpSchema.LATEST_PROTOCOL_VERSION);
 
+		private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
+
 		AsyncServerImpl(McpServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
-				Duration requestTimeout, McpServerFeatures.Async features) {
+				Duration requestTimeout, McpServerFeatures.Async features,
+				McpUriTemplateManagerFactory uriTemplateManagerFactory) {
 			this.mcpTransportProvider = mcpTransportProvider;
 			this.objectMapper = objectMapper;
 			this.serverInfo = features.serverInfo();
@@ -286,6 +295,7 @@ public class McpAsyncServer {
 			this.resourceTemplates.addAll(features.resourceTemplates());
 			this.prompts.putAll(features.prompts());
 			this.completions.putAll(features.completions());
+			this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 
 			Map<String, McpServerSession.RequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -564,8 +574,26 @@ public class McpAsyncServer {
 
 		private McpServerSession.RequestHandler<McpSchema.ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
 			return (exchange, params) -> Mono
-				.just(new McpSchema.ListResourceTemplatesResult(this.resourceTemplates, null));
+				.just(new McpSchema.ListResourceTemplatesResult(this.getResourceTemplates(), null));
 
+		}
+
+		private List<McpSchema.ResourceTemplate> getResourceTemplates() {
+			var list = new ArrayList<>(this.resourceTemplates);
+			List<ResourceTemplate> resourceTemplates = this.resources.keySet()
+				.stream()
+				.filter(uri -> uri.contains("{"))
+				.map(uri -> {
+					var resource = this.resources.get(uri).resource();
+					var template = new McpSchema.ResourceTemplate(resource.uri(), resource.name(),
+							resource.description(), resource.mimeType(), resource.annotations());
+					return template;
+				})
+				.toList();
+
+			list.addAll(resourceTemplates);
+
+			return list;
 		}
 
 		private McpServerSession.RequestHandler<McpSchema.ReadResourceResult> resourcesReadRequestHandler() {
@@ -574,11 +602,16 @@ public class McpAsyncServer {
 						new TypeReference<McpSchema.ReadResourceRequest>() {
 						});
 				var resourceUri = resourceRequest.uri();
-				McpServerFeatures.AsyncResourceSpecification specification = this.resources.get(resourceUri);
-				if (specification != null) {
-					return specification.readHandler().apply(exchange, resourceRequest);
-				}
-				return Mono.error(new McpError("Resource not found: " + resourceUri));
+
+				McpServerFeatures.AsyncResourceSpecification specification = this.resources.values()
+					.stream()
+					.filter(resourceSpecification -> this.uriTemplateManagerFactory
+						.create(resourceSpecification.resource().uri())
+						.matches(resourceUri))
+					.findFirst()
+					.orElseThrow(() -> new McpError("Resource not found: " + resourceUri));
+
+				return specification.readHandler().apply(exchange, resourceRequest);
 			};
 		}
 
@@ -729,20 +762,38 @@ public class McpAsyncServer {
 
 				String type = request.ref().type();
 
+				String argumentName = request.argument().name();
+
 				// check if the referenced resource exists
 				if (type.equals("ref/prompt") && request.ref() instanceof McpSchema.PromptReference promptReference) {
-					McpServerFeatures.AsyncPromptSpecification prompt = this.prompts.get(promptReference.name());
-					if (prompt == null) {
+					McpServerFeatures.AsyncPromptSpecification promptSpec = this.prompts.get(promptReference.name());
+					if (promptSpec == null) {
 						return Mono.error(new McpError("Prompt not found: " + promptReference.name()));
+					}
+					if (!promptSpec.prompt()
+						.arguments()
+						.stream()
+						.filter(arg -> arg.name().equals(argumentName))
+						.findFirst()
+						.isPresent()) {
+
+						return Mono.error(new McpError("Argument not found: " + argumentName));
 					}
 				}
 
 				if (type.equals("ref/resource")
 						&& request.ref() instanceof McpSchema.ResourceReference resourceReference) {
-					McpServerFeatures.AsyncResourceSpecification resource = this.resources.get(resourceReference.uri());
-					if (resource == null) {
+					McpServerFeatures.AsyncResourceSpecification resourceSpec = this.resources
+						.get(resourceReference.uri());
+					if (resourceSpec == null) {
 						return Mono.error(new McpError("Resource not found: " + resourceReference.uri()));
 					}
+					if (!uriTemplateManagerFactory.create(resourceSpec.resource().uri())
+						.getVariableNames()
+						.contains(argumentName)) {
+						return Mono.error(new McpError("Argument not found: " + argumentName));
+					}
+
 				}
 
 				McpServerFeatures.AsyncCompletionSpecification specification = this.completions.get(request.ref());
