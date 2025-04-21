@@ -24,6 +24,7 @@ import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -69,7 +70,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	private static final String DEFAULT_SSE_ENDPOINT = "/sse";
 
 	/** Base URI for the MCP server */
-	private final String baseUri;
+	private final URI baseUri;
 
 	/** SSE endpoint path */
 	private final String sseEndpoint;
@@ -178,7 +179,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
 		Assert.notNull(httpClient, "httpClient must not be null");
 		Assert.notNull(requestBuilder, "requestBuilder must not be null");
-		this.baseUri = baseUri;
+		this.baseUri = URI.create(baseUri);
 		this.sseEndpoint = sseEndpoint;
 		this.objectMapper = objectMapper;
 		this.httpClient = httpClient;
@@ -340,7 +341,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		CompletableFuture<Void> future = new CompletableFuture<>();
 		connectionFuture.set(future);
 
-		sseClient.subscribe(this.baseUri + this.sseEndpoint, new FlowSseClient.SseEventHandler() {
+		URI clientUri = Utils.resolveUri(this.baseUri, this.sseEndpoint);
+		sseClient.subscribe(clientUri.toString(), new FlowSseClient.SseEventHandler() {
 			@Override
 			public void onEvent(SseEvent event) {
 				if (isClosing) {
@@ -412,7 +414,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 
 		try {
 			String jsonText = this.objectMapper.writeValueAsString(message);
-			HttpRequest request = this.requestBuilder.uri(URI.create(this.baseUri + endpoint))
+			URI requestUri = Utils.resolveUri(baseUri, endpoint);
+			HttpRequest request = this.requestBuilder.uri(requestUri)
 				.POST(HttpRequest.BodyPublishers.ofString(jsonText))
 				.build();
 
