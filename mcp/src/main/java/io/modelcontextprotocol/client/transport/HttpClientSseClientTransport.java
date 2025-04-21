@@ -338,8 +338,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	}
 
 	private void subscribeSse(final Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler, MonoSink<Void> sink) {
-      final URI clientUri = Utils.resolveUri(this.baseUri, this.sseEndpoint);
-      sseClient.subscribe(clientUri.toString(), new FlowSseClient.SseEventHandler() {
+		final URI clientUri = Utils.resolveUri(this.baseUri, this.sseEndpoint);
+		sseClient.subscribe(clientUri.toString(), new FlowSseClient.SseEventHandler() {
 			@Override
 			public void onEvent(SseEvent event) {
 				if (state.get() == TransportState.CLOSING || state.get() == TransportState.DISCONNECTED) {
@@ -413,7 +413,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	}
 
 	private Mono<HttpResponse<Void>> sendHttpPost(final String endpoint, final String body) {
-      final URI requestUri = Utils.resolveUri(baseUri, endpoint);
+		final URI requestUri = Utils.resolveUri(baseUri, endpoint);
 		final HttpRequest request = requestBuilder.uri(requestUri)
 			.POST(HttpRequest.BodyPublishers.ofString(body))
 			.build();
