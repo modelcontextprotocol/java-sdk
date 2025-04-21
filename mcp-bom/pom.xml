@@ -26,10 +26,17 @@
 
     <dependencyManagement>
         <dependencies>
-            <!-- Core MCP -->
+            <!-- MCP Spec -->
             <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
-                <artifactId>mcp</artifactId>
+                <artifactId>mcp-reactor</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- MCP Reactor -->
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-reactor</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

@@ -6,7 +6,7 @@ package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -16,10 +16,12 @@ import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
-import io.modelcontextprotocol.spec.McpServerSession;
+import io.modelcontextprotocol.session.McpServerSession;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.modelcontextprotocol.spec.ServerSessionFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -95,7 +97,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 
 	private final RouterFunction<ServerResponse> routerFunction;
 
-	private McpServerSession.Factory sessionFactory;
+	private ServerSessionFactory sessionFactory;
 
 	/**
 	 * Map of active client sessions, keyed by session ID.
@@ -165,7 +167,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	}
 
 	@Override
-	public void setSessionFactory(McpServerSession.Factory sessionFactory) {
+	public void setSessionFactory(ServerSessionFactory sessionFactory) {
 		this.sessionFactory = sessionFactory;
 	}
 
@@ -193,6 +195,11 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 						e -> logger.error("Failed to send message to session {}: {}", session.getId(), e.getMessage()))
 				.onErrorComplete())
 			.then();
+	}
+
+	@Override
+	public void close() {
+		this.closeGracefully().subscribe();
 	}
 
 	/**
@@ -263,7 +270,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				});
 
 				WebMvcMcpSessionTransport sessionTransport = new WebMvcMcpSessionTransport(sessionId, sseBuilder);
-				McpServerSession session = sessionFactory.create(sessionTransport);
+				McpServerSession session = (McpServerSession) sessionFactory.create(sessionTransport);
 				this.sessions.put(sessionId, session);
 
 				try {
@@ -300,15 +307,15 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
-		if (request.param("sessionId").isEmpty()) {
+		Optional<String> sessionId = request.param("sessionId");
+		if (sessionId.isEmpty()) {
 			return ServerResponse.badRequest().body(new McpError("Session ID missing in message endpoint"));
 		}
 
-		String sessionId = request.param("sessionId").get();
-		McpServerSession session = sessions.get(sessionId);
-
+		McpServerSession session = sessions.get(sessionId.get());
 		if (session == null) {
-			return ServerResponse.status(HttpStatus.NOT_FOUND).body(new McpError("Session not found: " + sessionId));
+			return ServerResponse.status(HttpStatus.NOT_FOUND)
+				.body(new McpError("Session not found: " + sessionId.get()));
 		}
 
 		try {

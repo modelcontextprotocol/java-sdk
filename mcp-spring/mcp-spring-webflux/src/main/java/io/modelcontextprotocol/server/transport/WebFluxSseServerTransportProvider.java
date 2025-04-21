@@ -1,19 +1,20 @@
 package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpServerSession;
+import io.modelcontextprotocol.session.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.modelcontextprotocol.spec.ServerSessionFactory;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
@@ -98,7 +99,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 	private final RouterFunction<?> routerFunction;
 
-	private McpServerSession.Factory sessionFactory;
+	private ServerSessionFactory sessionFactory;
 
 	/**
 	 * Map of active client sessions, keyed by session ID.
@@ -165,7 +166,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	}
 
 	@Override
-	public void setSessionFactory(McpServerSession.Factory sessionFactory) {
+	public void setSessionFactory(ServerSessionFactory sessionFactory) {
 		this.sessionFactory = sessionFactory;
 	}
 
@@ -202,6 +203,11 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 						e -> logger.error("Failed to send message to session {}: {}", session.getId(), e.getMessage()))
 				.onErrorComplete())
 			.then();
+	}
+
+	@Override
+	public void close() {
+		this.closeGracefully().subscribe();
 	}
 
 	// FIXME: This javadoc makes claims about using isClosing flag but it's not
@@ -261,7 +267,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			.body(Flux.<ServerSentEvent<?>>create(sink -> {
 				WebFluxMcpSessionTransport sessionTransport = new WebFluxMcpSessionTransport(sink);
 
-				McpServerSession session = sessionFactory.create(sessionTransport);
+				McpServerSession session = (McpServerSession) sessionFactory.create(sessionTransport);
 				String sessionId = session.getId();
 
 				logger.debug("Created new SSE connection for session: {}", sessionId);

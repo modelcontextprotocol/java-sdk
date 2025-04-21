@@ -14,6 +14,8 @@ import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
+
+import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Disposable;
@@ -189,7 +191,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 * event type is received
 	 */
 	@Override
-	public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
+	public Mono<Void> connect(Function<Publisher<JSONRPCMessage>, Publisher<JSONRPCMessage>> handler) {
 		Flux<ServerSentEvent<String>> events = eventStream();
 		this.inboundSubscription = events.concatMap(event -> Mono.just(event).<JSONRPCMessage>handle((e, s) -> {
 			if (ENDPOINT_EVENT_TYPE.equals(event.event())) {
@@ -301,6 +303,11 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 		logger.error("Fatal SSE error, not retrying: {}", retrySpec.failure().getMessage());
 		sink.error(retrySpec.failure());
 	};
+
+	@Override
+	public void close() {
+		this.closeGracefully().subscribe();
+	}
 
 	/**
 	 * Implements graceful shutdown of the transport. Cleans up all resources including
