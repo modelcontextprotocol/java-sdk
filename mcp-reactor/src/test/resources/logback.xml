@@ -9,16 +9,13 @@
     </appender>
 
     <!-- Main MCP package -->
-    <logger name="io.modelcontextprotocol" level="DEBUG"/>
+    <logger name="io.modelcontextprotocol.mcp" level="INFO"/>
 
     <!-- Client packages -->
-    <logger name="io.modelcontextprotocol.client" level="DEBUG"/>
-
-    <!-- Server transport package -->
-    <logger name="io.modelcontextprotocol.server.transport" level="DEBUG"/>
+    <logger name="io.modelcontextprotocol.client" level="INFO"/>
 
     <!-- Spec package -->
-    <logger name="session" level="DEBUG"/>
+    <logger name="session" level="INFO"/>
 
     <!-- Root logger -->
     <root level="INFO">

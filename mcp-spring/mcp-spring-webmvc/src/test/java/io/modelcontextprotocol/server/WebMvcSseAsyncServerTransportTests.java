@@ -7,6 +7,8 @@ package io.modelcontextprotocol.server;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.server.transport.WebMvcSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import reactor.core.publisher.Mono;
+
 import org.apache.catalina.Context;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.startup.Tomcat;
@@ -97,7 +99,7 @@ class WebMvcSseAsyncServerTransportTests extends AbstractMcpAsyncServerTests {
 	@Override
 	protected void onClose() {
 		if (transportProvider != null) {
-			transportProvider.closeGracefully().block();
+			Mono.from(transportProvider.closeGracefully()).block();
 		}
 		if (appContext != null) {
 			appContext.close();

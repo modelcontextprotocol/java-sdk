@@ -1,9 +1,10 @@
 # WebMVC SSE Server Transport
 
 ```xml
+
 <dependency>
-    <groupId>io.modelcontextprotocol.sdk</groupId>
-    <artifactId>mcp-spring-webmvc</artifactId>
+   <groupId>io.modelcontextprotocol.specio.modelcontextprotocol.spec</groupId>
+   <artifactId>mcp-spring-webmvc</artifactId>
 </dependency>
 ```
 
