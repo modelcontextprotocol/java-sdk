@@ -257,14 +257,8 @@ public class McpServerSession implements McpSession {
 	record MethodNotFoundError(String method, String message, Object data) {
 	}
 
-	static MethodNotFoundError getMethodNotFoundError(String method) {
-		switch (method) {
-			case McpSchema.METHOD_ROOTS_LIST:
-				return new MethodNotFoundError(method, "Roots not supported",
-						Map.of("reason", "Client does not have roots capability"));
-			default:
-				return new MethodNotFoundError(method, "Method not found: " + method, null);
-		}
+	private MethodNotFoundError getMethodNotFoundError(String method) {
+		return new MethodNotFoundError(method, "Method not found: " + method, null);
 	}
 
 	@Override
