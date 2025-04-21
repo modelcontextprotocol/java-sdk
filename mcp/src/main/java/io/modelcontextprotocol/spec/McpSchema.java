@@ -79,6 +79,8 @@ public final class McpSchema {
 
 	public static final String METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED = "notifications/prompts/list_changed";
 
+	public static final String METHOD_COMPLETION_COMPLETE = "completion/complete";
+
 	// Logging Methods
 	public static final String METHOD_LOGGING_SET_LEVEL = "logging/setLevel";
 
@@ -314,12 +316,16 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ServerCapabilities( // @formatter:off
+	    @JsonProperty("completions") CompletionCapabilities completions,
 		@JsonProperty("experimental") Map<String, Object> experimental,
 		@JsonProperty("logging") LoggingCapabilities logging,
 		@JsonProperty("prompts") PromptCapabilities prompts,
 		@JsonProperty("resources") ResourceCapabilities resources,
 		@JsonProperty("tools") ToolCapabilities tools) {
 
+		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		public record CompletionCapabilities() {
+		}
 			
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record LoggingCapabilities() {
@@ -347,11 +353,17 @@ public final class McpSchema {
 
 		public static class Builder {
 
+			private CompletionCapabilities completions;
 			private Map<String, Object> experimental;
 			private LoggingCapabilities logging = new LoggingCapabilities();
 			private PromptCapabilities prompts;
 			private ResourceCapabilities resources;
 			private ToolCapabilities tools;
+
+			public Builder completions() {
+				this.completions = new CompletionCapabilities();
+				return this;
+			}
 
 			public Builder experimental(Map<String, Object> experimental) {
 				this.experimental = experimental;
@@ -379,7 +391,7 @@ public final class McpSchema {
 			}
 
 			public ServerCapabilities build() {
-				return new ServerCapabilities(experimental, logging, prompts, resources, tools);
+				return new ServerCapabilities(completions, experimental, logging, prompts, resources, tools);
 			}
 		}
 	} // @formatter:on
@@ -1103,7 +1115,7 @@ public final class McpSchema {
 	 * setting minimum log levels, with servers sending notifications containing severity
 	 * levels, optional logger names, and arbitrary JSON-serializable data.
 	 *
-	 * @param level The severity levels. The mimimum log level is set by the client.
+	 * @param level The severity levels. The minimum log level is set by the client.
 	 * @param logger The logger that generated the message.
 	 * @param data JSON-serializable logging data.
 	 */
@@ -1173,31 +1185,63 @@ public final class McpSchema {
 	// ---------------------------
 	// Autocomplete
 	// ---------------------------
-	public record CompleteRequest(PromptOrResourceReference ref, CompleteArgument argument) implements Request {
-		public sealed interface PromptOrResourceReference permits PromptReference, ResourceReference {
+	public sealed interface CompleteReference permits PromptReference, ResourceReference {
 
-			String type();
+		String type();
 
+		String identifier();
+
+	}
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record PromptReference(// @formatter:off
+		@JsonProperty("type") String type,
+		@JsonProperty("name") String name) implements McpSchema.CompleteReference {
+
+		public PromptReference(String name) {
+			this("ref/prompt", name);
 		}
 
-		public record PromptReference(// @formatter:off
-			@JsonProperty("type") String type,
-			@JsonProperty("name") String name) implements PromptOrResourceReference {
-		}// @formatter:on
+		@Override
+		public String identifier() {
+			return name();
+		}
+	}// @formatter:on
 
-		public record ResourceReference(// @formatter:off
-			@JsonProperty("type") String type,
-			@JsonProperty("uri") String uri) implements PromptOrResourceReference {
-		}// @formatter:on
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ResourceReference(// @formatter:off
+		@JsonProperty("type") String type,
+		@JsonProperty("uri") String uri) implements McpSchema.CompleteReference {
 
-		public record CompleteArgument(// @formatter:off
+		public ResourceReference(String uri) {
+			this("ref/resource", uri);
+		}
+
+		@Override
+		public String identifier() {
+			return uri();
+		}
+	}// @formatter:on
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record CompleteRequest(// @formatter:off
+		@JsonProperty("ref") McpSchema.CompleteReference ref,
+		@JsonProperty("argument") CompleteArgument argument) implements Request {
+
+		public record CompleteArgument(
 			@JsonProperty("name") String name,
 			@JsonProperty("value") String value) {
 		}// @formatter:on
 	}
 
-	public record CompleteResult(CompleteCompletion completion) {
-		public record CompleteCompletion(// @formatter:off
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record CompleteResult(@JsonProperty("completion") CompleteCompletion completion) { // @formatter:off
+			
+		public record CompleteCompletion(
 			@JsonProperty("values") List<String> values,
 			@JsonProperty("total") Integer total,
 			@JsonProperty("hasMore") Boolean hasMore) {

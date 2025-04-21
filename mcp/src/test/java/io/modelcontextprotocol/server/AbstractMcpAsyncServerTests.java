@@ -109,7 +109,7 @@ public abstract class AbstractMcpAsyncServerTests {
 			.build();
 
 		StepVerifier.create(mcpAsyncServer.addTool(new McpServerFeatures.AsyncToolSpecification(newTool,
-				(excnage, args) -> Mono.just(new CallToolResult(List.of(), false)))))
+				(exchange, args) -> Mono.just(new CallToolResult(List.of(), false)))))
 			.verifyComplete();
 
 		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();

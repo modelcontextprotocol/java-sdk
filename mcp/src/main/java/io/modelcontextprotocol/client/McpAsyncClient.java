@@ -71,6 +71,7 @@ import reactor.core.publisher.Sinks;
  *
  * @author Dariusz Jędrzejczyk
  * @author Christian Tzolov
+ * @author Jihoon Kim
  * @see McpClient
  * @see McpSchema
  * @see McpClientSession
@@ -814,6 +815,27 @@ public class McpAsyncClient {
 	 */
 	void setProtocolVersions(List<String> protocolVersions) {
 		this.protocolVersions = protocolVersions;
+	}
+
+	// --------------------------
+	// Completions
+	// --------------------------
+	private static final TypeReference<McpSchema.CompleteResult> COMPLETION_COMPLETE_RESULT_TYPE_REF = new TypeReference<>() {
+	};
+
+	/**
+	 * Sends a completion/complete request to generate value suggestions based on a given
+	 * reference and argument. This is typically used to provide auto-completion options
+	 * for user input fields.
+	 * @param completeRequest The request containing the prompt or resource reference and
+	 * argument for which to generate completions.
+	 * @return A Mono that completes with the result containing completion suggestions.
+	 * @see McpSchema.CompleteRequest
+	 * @see McpSchema.CompleteResult
+	 */
+	public Mono<McpSchema.CompleteResult> completeCompletion(McpSchema.CompleteRequest completeRequest) {
+		return this.withInitializationCheck("complete completions", initializedResult -> this.mcpSession
+			.sendRequest(McpSchema.METHOD_COMPLETION_COMPLETE, completeRequest, COMPLETION_COMPLETE_RESULT_TYPE_REF));
 	}
 
 }

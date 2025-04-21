@@ -178,7 +178,7 @@ public class McpClientSession implements McpSession {
 	record MethodNotFoundError(String method, String message, Object data) {
 	}
 
-	public static MethodNotFoundError getMethodNotFoundError(String method) {
+	private MethodNotFoundError getMethodNotFoundError(String method) {
 		switch (method) {
 			case McpSchema.METHOD_ROOTS_LIST:
 				return new MethodNotFoundError(method, "Roots not supported",
@@ -238,6 +238,7 @@ public class McpClientSession implements McpSession {
 				});
 		}).timeout(this.requestTimeout).handle((jsonRpcResponse, sink) -> {
 			if (jsonRpcResponse.error() != null) {
+				logger.error("Error handling request: {}", jsonRpcResponse.error());
 				sink.error(new McpError(jsonRpcResponse.error()));
 			}
 			else {

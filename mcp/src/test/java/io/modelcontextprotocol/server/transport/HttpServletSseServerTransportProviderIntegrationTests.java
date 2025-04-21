@@ -152,7 +152,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
 				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
 
-					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
+					var createMessageRequest = McpSchema.CreateMessageRequest.builder()
 						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
 								new McpSchema.TextContent("Test message"))))
 						.modelPreferences(ModelPreferences.builder()
@@ -163,7 +163,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 							.build())
 						.build();
 
-					StepVerifier.create(exchange.createMessage(craeteMessageRequest)).consumeNextWith(result -> {
+					StepVerifier.create(exchange.createMessage(createMessageRequest)).consumeNextWith(result -> {
 						assertThat(result).isNotNull();
 						assertThat(result.role()).isEqualTo(Role.USER);
 						assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
@@ -417,7 +417,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 	}
 
 	@Test
-	void testRootsNotifciationWithEmptyRootsList() {
+	void testRootsNotificationWithEmptyRootsList() {
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
