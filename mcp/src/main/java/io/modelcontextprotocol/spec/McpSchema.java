@@ -750,16 +750,36 @@ public final class McpSchema {
 	 * @param inputSchema A JSON Schema object that describes the expected structure of
 	 * the arguments when calling this tool. This allows clients to validate tool
 	 * arguments before sending them to the server.
+	 * @param title A human-readable title for the tool. Intended for display purposes and
+	 * not guaranteed to reflect actual tool behavior.
+	 * @param readOnlyHint If true, the tool does not modify its environment. This is a
+	 * hint and may not reflect the tool's actual behavior.
+	 * @param destructiveHint If true, the tool may perform destructive updates to its
+	 * environment if false, it only performs additive updates. Applicable only when
+	 * {@code readOnlyHint == false}.
+	 * @param idempotentHint If true, repeated calls to the tool with the same arguments
+	 * have no additional effects. Applicable only when {@code readOnlyHint == false}.
+	 * @param openWorldHint If true, the tool interacts with an open world of external
+	 * entities (e.g., web search); if false, the domain is closed (e.g., memory tools).
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Tool( // @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("description") String description,
-		@JsonProperty("inputSchema") JsonSchema inputSchema) {
-
+		@JsonProperty("inputSchema") JsonSchema inputSchema,
+		@JsonProperty("title") String title,
+		@JsonProperty("readOnlyHint") Boolean readOnlyHint,
+		@JsonProperty("destructiveHint") Boolean destructiveHint,
+		@JsonProperty("idempotentHint") Boolean idempotentHint,
+		@JsonProperty("openWorldHint") Boolean openWorldHint) {
+	
 		public Tool(String name, String description, String schema) {
-			this(name, description, parseSchema(schema));
+			this(name, description, parseSchema(schema), null, null, null, null, null);
+		}
+
+		public Tool(String name, String description, String schema, String title, Boolean readOnlyHint, Boolean destructiveHint, Boolean idempotentHint, Boolean openWorldHint) {
+			this(name, description, parseSchema(schema), title, readOnlyHint, destructiveHint, idempotentHint, openWorldHint);
 		}
 
 	} // @formatter:on
