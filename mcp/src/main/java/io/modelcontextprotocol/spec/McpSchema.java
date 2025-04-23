@@ -706,6 +706,208 @@ public final class McpSchema {
 		@JsonProperty("additionalProperties") Boolean additionalProperties) {
 	} // @formatter:on
 
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public static final class RichJsonSchema {
+		private String type;
+		private String title;
+		private String description;
+		private Map<String, Object> properties;
+		private List<String> required;
+		private Boolean additionalProperties;
+		private Object defaultValue;
+		private List<String> enumValues;
+		private Integer maxLength;
+		private Integer minLength;
+		private String pattern;
+
+		@JsonProperty("type")
+		public String getType() {
+			return type;
+		}
+
+		@JsonProperty("title")
+		public String getTitle() {
+			return title;
+		}
+
+		@JsonProperty("description")
+		public String getDescription() {
+			return description;
+		}
+
+		@JsonProperty("properties")
+		public Map<String, Object> getProperties() {
+			return properties;
+		}
+
+		@JsonProperty("required")
+		public List<String> getRequired() {
+			return required;
+		}
+
+		@JsonProperty("additionalProperties")
+		public Boolean getAdditionalProperties() {
+			return additionalProperties;
+		}
+
+		@JsonProperty("default")
+		public Object getDefault() {
+			return defaultValue;
+		}
+
+		@JsonProperty("enum")
+		public List<String> getEnum() {
+			return enumValues;
+		}
+
+		@JsonProperty("maxLength")
+		public Integer getMaxLength() {
+			return maxLength;
+		}
+
+		@JsonProperty("minLength")
+		public Integer getMinLength() {
+			return minLength;
+		}
+
+		@JsonProperty("pattern")
+		public String getPattern() {
+			return pattern;
+		}
+
+		public static RichJsonSchema from(JsonSchema schema) {
+			Assert.notNull(schema, "schema");
+			return new RichJsonSchema.Builder(schema.type)
+					.properties(schema.properties)
+					.required(schema.required)
+					.build();
+		}
+
+		public static RichJsonSchema.Builder arrayBuilder() {
+			return new RichJsonSchema.Builder("array");
+		}
+
+		public static RichJsonSchema.Builder objectBuilder() {
+			return new RichJsonSchema.Builder("object");
+		}
+
+		public static RichJsonSchema.Builder numberBuilder() {
+			return new RichJsonSchema.Builder("number");
+		}
+
+		public static RichJsonSchema.Builder stringBuilder() {
+			return new RichJsonSchema.Builder("string");
+		}
+
+		public static RichJsonSchema.Builder booleanBuilder() {
+			return new RichJsonSchema.Builder("boolean");
+		}
+
+		public static class Builder {
+			private final RichJsonSchema schema = new RichJsonSchema();
+
+			private Builder() {}
+			private Builder(String type) {
+				this.schema.type = type;
+			}
+
+			public Builder title(String title) {
+				Assert.notNull(title, "title must not be null");
+				this.schema.title = title;
+				return this;
+			}
+
+			public Builder description(String description) {
+				Assert.notNull(description, "description must not be null");
+				this.schema.description = description;
+				return this;
+			}
+
+			public Builder properties(Map<String, Object> properties) {
+				Assert.notNull(properties, "properties must not be null");
+				this.schema.properties = properties;
+				return this;
+			}
+
+			public Builder addProperty(String name, Object value) {
+				Assert.notNull(name, "name must not be null");
+				Assert.notNull(value, "value must not be null");
+				addProperty(name, value, false);
+				return this;
+			}
+
+			public Builder addProperty(String name, Object value, Boolean required) {
+				Assert.notNull(name, "name must not be null");
+				Assert.notNull(value, "value must not be null");
+				Assert.notNull(required, "required must not be null");
+				if (this.schema.properties == null) {
+					this.schema.properties = new HashMap<>();
+				}
+				this.schema.properties.put(name, value);
+				if (required) {
+					addRequired(name);
+				}
+				return this;
+			}
+
+			public Builder required(List<String> required) {
+				Assert.notNull(required, "required must not be null");
+				this.schema.required = required;
+				return this;
+			}
+
+			public Builder addRequired(String required) {
+				Assert.notNull(required, "required must not be null");
+				if (this.schema.required == null) {
+					this.schema.required = new ArrayList<>();
+				}
+				this.schema.required.add(required);
+				return this;
+			}
+
+			public Builder additionalProperties(Boolean additionalProperties) {
+				Assert.notNull(additionalProperties, "additionalProperties must not be null");
+				this.schema.additionalProperties = additionalProperties;
+				return this;
+			}
+
+			public Builder defaultValue(Object defaultValue) {
+				Assert.notNull(defaultValue, "defaultValue must not be null");
+				this.schema.defaultValue = defaultValue;
+				return this;
+			}
+
+			public Builder enumValues(List<String> enumValues) {
+				Assert.notNull(enumValues, "enumValues must not be null");
+				this.schema.enumValues = enumValues;
+				return this;
+			}
+
+			public Builder maxLength(Integer maxLength) {
+				Assert.notNull(maxLength, "maxLength must not be null");
+				this.schema.maxLength = maxLength;
+				return this;
+			}
+
+			public Builder minLength(Integer minLength) {
+				Assert.notNull(minLength, "minLength must not be null");
+				this.schema.minLength = minLength;
+				return this;
+			}
+
+			public Builder pattern(String pattern) {
+				Assert.notNull(pattern, "pattern must not be null");
+				this.schema.pattern = pattern;
+				return this;
+			}
+
+			public RichJsonSchema build() {
+				return this.schema;
+			}
+		}
+	}
+
 	/**
 	 * Represents a tool that the server provides. Tools enable servers to expose
 	 * executable functionality to the system. Through these tools, you can interact with
@@ -724,12 +926,15 @@ public final class McpSchema {
 	public record Tool( // @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("description") String description,
-		@JsonProperty("inputSchema") JsonSchema inputSchema) {
+		@JsonProperty("inputSchema") RichJsonSchema inputSchema) {
 	
 		public Tool(String name, String description, String schema) {
 			this(name, description, parseSchema(schema));
 		}
-			
+
+		public Tool(String name, String description, JsonSchema inputSchema) {
+			this(name, description, RichJsonSchema.from(inputSchema));
+		}
 	} // @formatter:on
 
 	private static JsonSchema parseSchema(String schema) {
