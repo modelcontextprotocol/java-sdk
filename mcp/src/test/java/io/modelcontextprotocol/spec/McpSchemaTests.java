@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * @author Christian Tzolov
+ * @author Jihoon Kim
  */
 public class McpSchemaTests {
 
@@ -206,6 +207,152 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(json("""
 					{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"Invalid request"}}"""));
+	}
+
+	@Test
+	void testJSONRPCBatchRequest() throws Exception {
+		Map<String, Object> params1 = Map.of("key1", "value1");
+		Map<String, Object> params2 = Map.of("key2", "value2");
+
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, "method1", 1,
+				params1);
+		McpSchema.JSONRPCNotification notification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
+				"method2", params2);
+
+		// Serialize the request and notification to JSON
+		String batchRequestJson = mapper.writeValueAsString(List.of(request, notification));
+
+		// Use the deserializeJsonRpcMessage method
+		McpSchema.JSONRPCBatchRequest batchRequest = (McpSchema.JSONRPCBatchRequest) McpSchema
+			.deserializeJsonRpcMessage(mapper, batchRequestJson);
+
+		// Assertions
+		assertThat(batchRequest.messages()).hasSize(2);
+		assertThat(batchRequest.messages().get(0)).isInstanceOf(McpSchema.JSONRPCRequest.class);
+		assertThat(batchRequest.messages().get(1)).isInstanceOf(McpSchema.JSONRPCNotification.class);
+	}
+
+	@Test
+	void testJSONRPCBatchResponse() throws Exception {
+		// The JSON string for batch response containing both results and errors
+		String batchResponseJson = """
+				    [
+				        {"jsonrpc": "2.0", "result": 7, "id": "1"},
+				        {"jsonrpc": "2.0", "result": 19, "id": "2"},
+				        {"jsonrpc": "2.0", "result": ["hello", 5], "id": "9"}
+				    ]
+				""";
+
+		// Deserialize the batch response JSON string
+		McpSchema.JSONRPCBatchResponse batchResponse = (McpSchema.JSONRPCBatchResponse) McpSchema
+			.deserializeJsonRpcMessage(mapper, batchResponseJson);
+
+		// Assertions
+		assertThat(batchResponse.responses()).hasSize(3);
+		assertThat(batchResponse.responses().get(0)).isInstanceOf(McpSchema.JSONRPCResponse.class);
+		assertThat(batchResponse.responses().get(1)).isInstanceOf(McpSchema.JSONRPCResponse.class);
+		assertThat(batchResponse.responses().get(2)).isInstanceOf(McpSchema.JSONRPCResponse.class);
+	}
+
+	@Test
+	void testJSONRPCBatchResponseWithError() throws Exception {
+		// The JSON string for batch response containing both results and errors
+		String batchResponseJson = """
+				    [
+				        {"jsonrpc": "2.0", "result": 7, "id": "1"},
+				        {"jsonrpc": "2.0", "result": 19, "id": "2"},
+				        {"jsonrpc": "2.0", "error": {"code": -32600, "message": "Invalid Request"}, "id": null},
+				        {"jsonrpc": "2.0", "error": {"code": -32601, "message": "Method not found"}, "id": "5"},
+				        {"jsonrpc": "2.0", "result": ["hello", 5], "id": "9"}
+				    ]
+				""";
+
+		// Deserialize the batch response JSON string
+		McpSchema.JSONRPCBatchResponse batchResponse = (McpSchema.JSONRPCBatchResponse) McpSchema
+			.deserializeJsonRpcMessage(mapper, batchResponseJson);
+
+		// Assertions
+		assertThat(batchResponse.responses()).hasSize(5);
+
+		// Check the first response (id: "1") with result
+		McpSchema.JSONRPCResponse firstResponse = (McpSchema.JSONRPCResponse) batchResponse.responses().get(0);
+		assertThat(firstResponse.error()).isNull(); // Ensure error is null
+		assertThat(firstResponse.result()).isEqualTo(7);
+
+		// Check the second response (id: "2") with result
+		McpSchema.JSONRPCResponse secondResponse = (McpSchema.JSONRPCResponse) batchResponse.responses().get(1);
+		assertThat(secondResponse.error()).isNull(); // Ensure error is null
+		assertThat(secondResponse.result()).isEqualTo(19);
+
+		// Check the third response (id: null) with error
+		McpSchema.JSONRPCResponse thirdResponse = (McpSchema.JSONRPCResponse) batchResponse.responses().get(2);
+		assertThat(thirdResponse.result()).isNull(); // Ensure result is null
+		assertThat(thirdResponse.error()).isNotNull(); // Ensure error is not null
+		assertThat(thirdResponse.error().code()).isEqualTo(-32600);
+		assertThat(thirdResponse.error().message()).isEqualTo("Invalid Request");
+
+		// Check the fourth response (id: "5") with error
+		McpSchema.JSONRPCResponse fourthResponse = (McpSchema.JSONRPCResponse) batchResponse.responses().get(3);
+		assertThat(fourthResponse.result()).isNull(); // Ensure result is null
+		assertThat(fourthResponse.error()).isNotNull(); // Ensure error is not null
+		assertThat(fourthResponse.error().code()).isEqualTo(-32601);
+		assertThat(fourthResponse.error().message()).isEqualTo("Method not found");
+
+		// Check the fifth response (id: "9") with result
+		McpSchema.JSONRPCResponse fifthResponse = (McpSchema.JSONRPCResponse) batchResponse.responses().get(4);
+		assertThat(fifthResponse.error()).isNull(); // Ensure error is null
+		assertThat(fifthResponse.result()).isEqualTo(List.of("hello", 5)); // Ensure
+																			// result
+																			// matches
+	}
+
+	@Test
+	void testValidJSONRPCBatchRequest() {
+		// Create valid messages: JSONRPCRequest and JSONRPCNotification
+		McpSchema.JSONRPCRequest validRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, "method_name",
+				1, Map.of("key", "value"));
+		McpSchema.JSONRPCNotification validNotification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
+				"notification_method", Map.of("key", "value"));
+
+		// Create a valid batch request
+		McpSchema.JSONRPCBatchRequest validBatchRequest = new McpSchema.JSONRPCBatchRequest(
+				List.of(validRequest, validNotification));
+	}
+
+	@Test
+	void testInvalidJSONRPCBatchRequest() {
+		// Create an invalid message: a JSONRPCResponse which is not allowed in a request
+		McpSchema.JSONRPCResponse invalidResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, 1,
+				Map.of("result", "value"), null);
+
+		// Test that an exception is thrown when trying to create a batch request with
+		// invalid messages
+		assertThatThrownBy(() -> new McpSchema.JSONRPCBatchRequest(List.of(invalidResponse)))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Only JSONRPCRequest or JSONRPCNotification are allowed in batch request.");
+	}
+
+	@Test
+	void testValidJSONRPCBatchResponse() {
+		// Create a valid response: JSONRPCResponse
+		McpSchema.JSONRPCResponse validResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, 1,
+				Map.of("result", "value"), null);
+
+		// Create a valid batch response
+		McpSchema.JSONRPCBatchResponse validBatchResponse = new McpSchema.JSONRPCBatchResponse(List.of(validResponse));
+	}
+
+	@Test
+	void testInvalidJSONRPCBatchResponse() {
+		// Create an invalid message: JSONRPCRequest which is not allowed in a response
+		McpSchema.JSONRPCRequest invalidRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, "method_name",
+				1, Map.of("key", "value"));
+
+		// Test that an exception is thrown when trying to create a batch response with
+		// invalid messages
+		assertThatThrownBy(() -> new McpSchema.JSONRPCBatchResponse(List.of(invalidRequest)))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Only JSONRPCResponse are allowed in batch response.");
 	}
 
 	// Initialization Tests

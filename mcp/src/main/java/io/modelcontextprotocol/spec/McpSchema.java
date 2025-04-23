@@ -17,6 +17,7 @@ import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
@@ -29,6 +30,7 @@ import org.slf4j.LoggerFactory;
  * Context Protocol Schema</a>.
  *
  * @author Christian Tzolov
+ * @author Jihoon Kim
  */
 public final class McpSchema {
 
@@ -140,42 +142,78 @@ public final class McpSchema {
 	};
 
 	/**
-	 * Deserializes a JSON string into a JSONRPCMessage object.
+	 * Deserializes a JSON string into a JSONRPCMessage object. Handles both single and
+	 * batch JSON-RPC messages.
 	 * @param objectMapper The ObjectMapper instance to use for deserialization
 	 * @param jsonText The JSON string to deserialize
-	 * @return A JSONRPCMessage instance using either the {@link JSONRPCRequest},
-	 * {@link JSONRPCNotification}, or {@link JSONRPCResponse} classes.
+	 * @return A JSONRPCMessage instance, either a {@link JSONRPCRequest},
+	 * {@link JSONRPCNotification}, {@link JSONRPCResponse}, or
+	 * {@link JSONRPCBatchRequest}, or {@link JSONRPCBatchResponse} based on the JSON
+	 * structure.
 	 * @throws IOException If there's an error during deserialization
 	 * @throws IllegalArgumentException If the JSON structure doesn't match any known
 	 * message type
 	 */
 	public static JSONRPCMessage deserializeJsonRpcMessage(ObjectMapper objectMapper, String jsonText)
 			throws IOException {
-
 		logger.debug("Received JSON message: {}", jsonText);
 
-		var map = objectMapper.readValue(jsonText, MAP_TYPE_REF);
+		JsonNode rootNode = objectMapper.readTree(jsonText);
 
-		// Determine message type based on specific JSON structure
+		// Check if it's a batch request/response
+		if (rootNode.isArray()) {
+			// Batch processing
+			List<JSONRPCMessage> messages = new ArrayList<>();
+			for (JsonNode node : rootNode) {
+				Map<String, Object> map = objectMapper.convertValue(node, MAP_TYPE_REF);
+				messages.add(convertToJsonRpcMessage(map, objectMapper));
+			}
+
+			// If it's a batch response, return JSONRPCBatchResponse
+			if (messages.get(0) instanceof JSONRPCResponse) {
+				return new JSONRPCBatchResponse(messages);
+			}
+			// If it's a batch request, return JSONRPCBatchRequest
+			else {
+				return new JSONRPCBatchRequest(messages);
+			}
+		}
+
+		// Single message processing
+		Map<String, Object> map = objectMapper.readValue(jsonText, MAP_TYPE_REF);
+		return convertToJsonRpcMessage(map, objectMapper);
+	}
+
+	/**
+	 * Converts a map into a specific JSON-RPC message type. Based on the map's structure,
+	 * this method determines whether the message is a {@link JSONRPCRequest},
+	 * {@link JSONRPCNotification}, or {@link JSONRPCResponse}.
+	 * @param map The map representing the JSON structure
+	 * @param objectMapper The ObjectMapper instance to use for deserialization
+	 * @return The corresponding JSONRPCMessage instance (could be {@link JSONRPCRequest},
+	 * {@link JSONRPCNotification}, or {@link JSONRPCResponse})
+	 * @throws IllegalArgumentException If the map structure doesn't match any known
+	 * message type
+	 */
+	private static JSONRPCMessage convertToJsonRpcMessage(Map<String, Object> map, ObjectMapper objectMapper) {
 		if (map.containsKey("method") && map.containsKey("id")) {
 			return objectMapper.convertValue(map, JSONRPCRequest.class);
 		}
-		else if (map.containsKey("method") && !map.containsKey("id")) {
+		else if (map.containsKey("method")) {
 			return objectMapper.convertValue(map, JSONRPCNotification.class);
 		}
 		else if (map.containsKey("result") || map.containsKey("error")) {
 			return objectMapper.convertValue(map, JSONRPCResponse.class);
 		}
 
-		throw new IllegalArgumentException("Cannot deserialize JSONRPCMessage: " + jsonText);
+		throw new IllegalArgumentException("Unknown JSON-RPC message type: " + map);
 	}
 
 	// ---------------------------
 	// JSON-RPC Message Types
 	// ---------------------------
-	public sealed interface JSONRPCMessage permits JSONRPCRequest, JSONRPCNotification, JSONRPCResponse {
-
-		String jsonrpc();
+	public sealed interface JSONRPCMessage
+			permits JSONRPCRequest, JSONRPCBatchRequest, JSONRPCNotification, JSONRPCResponse, JSONRPCBatchResponse {
 
 	}
 
@@ -187,6 +225,26 @@ public final class McpSchema {
 			@JsonProperty("id") Object id,
 			@JsonProperty("params") Object params) implements JSONRPCMessage {
 	} // @formatter:on
+
+	public record JSONRPCBatchRequest(List<JSONRPCMessage> messages) implements JSONRPCMessage {
+		public JSONRPCBatchRequest {
+			boolean valid = messages.stream()
+				.allMatch(message -> message instanceof JSONRPCRequest || message instanceof JSONRPCNotification);
+			if (!valid) {
+				throw new IllegalArgumentException(
+						"Only JSONRPCRequest or JSONRPCNotification are allowed in batch request.");
+			}
+		}
+	}
+
+	public record JSONRPCBatchResponse(List<JSONRPCMessage> responses) implements JSONRPCMessage {
+		public JSONRPCBatchResponse {
+			boolean valid = responses.stream().allMatch(response -> response instanceof JSONRPCResponse);
+			if (!valid) {
+				throw new IllegalArgumentException("Only JSONRPCResponse are allowed in batch response.");
+			}
+		}
+	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)

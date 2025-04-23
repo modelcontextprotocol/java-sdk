@@ -5,7 +5,10 @@
 package io.modelcontextprotocol.spec;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.MockMcpClientTransport;
@@ -26,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * request-response correlation, and notification processing.
  *
  * @author Christian Tzolov
+ * @author Jihoon Kim
  */
 class McpClientSessionTests {
 
@@ -153,6 +157,40 @@ class McpClientSessionTests {
 		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
 		assertThat(response.result()).isEqualTo(echoMessage);
 		assertThat(response.error()).isNull();
+	}
+
+	@Test
+	void testBatchRequestHandling() {
+		String echoMessage1 = "Hello MCP 1!";
+		String echoMessage2 = "Hello MCP 2!";
+
+		// Request handler: echoes the input
+		Map<String, McpClientSession.RequestHandler<?>> requestHandlers = Map.of(ECHO_METHOD,
+				params -> Mono.just(params));
+		transport = new MockMcpClientTransport();
+		session = new McpClientSession(TIMEOUT, transport, requestHandlers, Map.of());
+
+		// Simulate incoming batch request
+		McpSchema.JSONRPCRequest request1 = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, ECHO_METHOD,
+				"batch-id-1", echoMessage1);
+		McpSchema.JSONRPCRequest request2 = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, ECHO_METHOD,
+				"batch-id-2", echoMessage2);
+		McpSchema.JSONRPCBatchRequest batchRequest = new McpSchema.JSONRPCBatchRequest(List.of(request1, request2));
+		transport.simulateIncomingMessage(batchRequest);
+
+		// Wait for async processing
+		McpSchema.JSONRPCBatchResponse batchResponse = transport.getSentMessagesAsBatchResponse();
+		List<McpSchema.JSONRPCMessage> responses = batchResponse.responses();
+
+		assertThat(responses).hasSize(2);
+		assertThat(responses).allMatch(resp -> resp instanceof McpSchema.JSONRPCResponse);
+
+		Map<Object, McpSchema.JSONRPCResponse> responseMap = responses.stream()
+			.map(resp -> (McpSchema.JSONRPCResponse) resp)
+			.collect(Collectors.toMap(McpSchema.JSONRPCResponse::id, Function.identity()));
+
+		assertThat(responseMap.get("batch-id-1").result()).isEqualTo(echoMessage1);
+		assertThat(responseMap.get("batch-id-2").result()).isEqualTo(echoMessage2);
 	}
 
 	@Test

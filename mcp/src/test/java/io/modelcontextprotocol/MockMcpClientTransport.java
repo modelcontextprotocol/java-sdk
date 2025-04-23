@@ -63,6 +63,10 @@ public class MockMcpClientTransport implements McpClientTransport {
 		return !sent.isEmpty() ? sent.get(sent.size() - 1) : null;
 	}
 
+	public McpSchema.JSONRPCBatchResponse getSentMessagesAsBatchResponse() {
+		return new McpSchema.JSONRPCBatchResponse(sent);
+	}
+
 	private volatile boolean connected = false;
 
 	@Override

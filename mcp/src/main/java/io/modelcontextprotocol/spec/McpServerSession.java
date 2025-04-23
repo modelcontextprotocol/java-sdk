@@ -11,6 +11,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Sinks;
@@ -167,6 +168,13 @@ public class McpServerSession implements McpSession {
 				}
 				return Mono.empty();
 			}
+			else if (message instanceof McpSchema.JSONRPCBatchResponse batchResponse) {
+				logger.debug("Received Batch Response: {}", batchResponse);
+				return Flux.fromIterable(batchResponse.responses())
+					.filter(jsonrpcMessage -> jsonrpcMessage instanceof McpSchema.JSONRPCResponse)
+					.flatMap(this::handle)
+					.then();
+			}
 			else if (message instanceof McpSchema.JSONRPCRequest request) {
 				logger.debug("Received request: {}", request);
 				return handleIncomingRequest(request).onErrorResume(error -> {
@@ -176,6 +184,21 @@ public class McpServerSession implements McpSession {
 					// TODO: Should the error go to SSE or back as POST return?
 					return this.transport.sendMessage(errorResponse).then(Mono.empty());
 				}).flatMap(this.transport::sendMessage);
+			}
+			else if (message instanceof McpSchema.JSONRPCBatchRequest batchRequest) {
+				logger.debug("Received Batch Request: {}", batchRequest);
+				return Flux.fromIterable(batchRequest.messages()).flatMap(jsonrpcMessage -> {
+					if (jsonrpcMessage instanceof McpSchema.JSONRPCRequest request) {
+						return this.handle(request);
+					}
+					else if (jsonrpcMessage instanceof McpSchema.JSONRPCNotification notification) {
+						return this.handle(notification);
+					}
+					else {
+						logger.warn("Unsupported message in batch request: {}", jsonrpcMessage);
+						return Mono.empty();
+					}
+				}).then();
 			}
 			else if (message instanceof McpSchema.JSONRPCNotification notification) {
 				// TODO handle errors for communication to without initialization
