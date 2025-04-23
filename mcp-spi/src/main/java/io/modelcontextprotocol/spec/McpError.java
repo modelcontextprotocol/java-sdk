@@ -3,7 +3,7 @@
 */
 package io.modelcontextprotocol.spec;
 
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse.JSONRPCError;
+import io.modelcontextprotocol.schema.McpSchema.JSONRPCResponse.JSONRPCError;
 
 public class McpError extends RuntimeException {
 

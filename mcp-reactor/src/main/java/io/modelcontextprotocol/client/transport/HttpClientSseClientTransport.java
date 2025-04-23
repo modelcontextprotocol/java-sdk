@@ -16,14 +16,16 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.transport.FlowSseClient.SseEvent;
+import io.modelcontextprotocol.schema.McpJacksonCodec;
+import io.modelcontextprotocol.schema.McpSchemaCodec;
+import io.modelcontextprotocol.schema.McpType;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema;
 import io.modelcontextprotocol.spec.McpTransport;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
+import io.modelcontextprotocol.schema.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
 
@@ -90,8 +92,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	/** HTTP request builder for building requests to send messages to the server */
 	private final HttpRequest.Builder requestBuilder;
 
-	/** JSON object mapper for message serialization/deserialization */
-	protected ObjectMapper objectMapper;
+	/** McpSchemaCodec for message serialization/deserialization */
+	protected McpSchemaCodec schemaCodec;
 
 	/** Flag indicating if the transport is in closing state */
 	private volatile boolean isClosing = false;
@@ -184,7 +186,33 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		Assert.notNull(requestBuilder, "requestBuilder must not be null");
 		this.baseUri = URI.create(baseUri);
 		this.sseEndpoint = sseEndpoint;
-		this.objectMapper = objectMapper;
+		this.schemaCodec = new McpJacksonCodec(objectMapper);
+		this.httpClient = httpClient;
+		this.requestBuilder = requestBuilder;
+
+		this.sseClient = new FlowSseClient(this.httpClient, requestBuilder);
+	}
+
+	/**
+	 * Creates a new transport instance with custom HTTP client builder, object mapper,
+	 * and headers.
+	 * @param httpClient the HTTP client to use
+	 * @param requestBuilder the HTTP request builder to use
+	 * @param baseUri the base URI of the MCP server
+	 * @param sseEndpoint the SSE endpoint path
+	 * @param schemaCodec the schemaCodec for JSON serialization/deserialization
+	 * @throws IllegalArgumentException if objectMapper, clientBuilder, or headers is null
+	 */
+	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
+			String sseEndpoint, McpSchemaCodec schemaCodec) {
+		Assert.notNull(schemaCodec, "ObjectMapper must not be null");
+		Assert.hasText(baseUri, "baseUri must not be empty");
+		Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
+		Assert.notNull(httpClient, "httpClient must not be null");
+		Assert.notNull(requestBuilder, "requestBuilder must not be null");
+		this.baseUri = URI.create(baseUri);
+		this.sseEndpoint = sseEndpoint;
+		this.schemaCodec = schemaCodec;
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
 
@@ -214,6 +242,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			.connectTimeout(Duration.ofSeconds(10));
 
 		private ObjectMapper objectMapper = new ObjectMapper();
+
+		private McpSchemaCodec schemaCodec;
 
 		private HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
 			.header("Content-Type", "application/json");
@@ -316,12 +346,27 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		}
 
 		/**
+		 * Sets the schema codec for JSON serialization/deserialization.
+		 * @param schemaCodec the McpSchemaCodec implementation
+		 * @return this builder
+		 */
+		public Builder withSchemaCodec(final McpSchemaCodec schemaCodec) {
+			Assert.notNull(schemaCodec, "McpSchemaCodec must not be null");
+			this.schemaCodec = schemaCodec;
+			return this;
+		}
+
+		/**
 		 * Builds a new {@link HttpClientSseClientTransport} instance.
 		 * @return a new transport instance
 		 */
 		public HttpClientSseClientTransport build() {
+			if (schemaCodec == null) {
+				schemaCodec = new McpJacksonCodec(objectMapper);
+			}
+
 			return new HttpClientSseClientTransport(clientBuilder.build(), requestBuilder, baseUri, sseEndpoint,
-					objectMapper);
+					schemaCodec);
 		}
 
 	}
@@ -360,7 +405,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 						future.complete(null);
 					}
 					else if (MESSAGE_EVENT_TYPE.equals(event.type())) {
-						JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, event.data());
+						JSONRPCMessage message = schemaCodec.decodeFromString(event.data());
 						Publisher<McpSchema.JSONRPCMessage> result = handler.apply(Mono.just(message));
 						Mono.from(result).subscribe();
 					}
@@ -417,7 +462,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		}
 
 		try {
-			String jsonText = this.objectMapper.writeValueAsString(message);
+			String jsonText = this.schemaCodec.encodeAsString(message);
 			URI requestUri = Utils.resolveUri(baseUri, endpoint);
 			HttpRequest request = this.requestBuilder.uri(requestUri)
 				.POST(HttpRequest.BodyPublishers.ofString(jsonText))
@@ -471,8 +516,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 * @return the unmarshalled object
 	 */
 	@Override
-	public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-		return this.objectMapper.convertValue(data, typeRef);
+	public <T> T unmarshalFrom(Object data, McpType<T> typeRef) {
+		return schemaCodec.decodeResult(data, typeRef);
 	}
 
 }

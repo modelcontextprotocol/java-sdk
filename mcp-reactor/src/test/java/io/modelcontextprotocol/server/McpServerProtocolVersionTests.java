@@ -9,7 +9,7 @@ import java.util.UUID;
 
 import io.modelcontextprotocol.MockMcpServerTransport;
 import io.modelcontextprotocol.MockMcpServerTransportProvider;
-import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

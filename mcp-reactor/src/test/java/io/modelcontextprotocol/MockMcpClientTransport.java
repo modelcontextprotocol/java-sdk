@@ -11,12 +11,12 @@ import java.util.function.Function;
 
 import org.reactivestreams.Publisher;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.schema.McpJacksonCodec;
+import io.modelcontextprotocol.schema.McpType;
 import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCNotification;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
+import io.modelcontextprotocol.schema.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema.JSONRPCNotification;
+import io.modelcontextprotocol.schema.McpSchema.JSONRPCRequest;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 
@@ -30,6 +30,8 @@ public class MockMcpClientTransport implements McpClientTransport {
 	private final List<McpSchema.JSONRPCMessage> sent = new ArrayList<>();
 
 	private final BiConsumer<MockMcpClientTransport, McpSchema.JSONRPCMessage> interceptor;
+
+	private final McpJacksonCodec jacksonCodec = new McpJacksonCodec();
 
 	public MockMcpClientTransport() {
 		this((t, msg) -> {
@@ -96,8 +98,8 @@ public class MockMcpClientTransport implements McpClientTransport {
 	}
 
 	@Override
-	public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-		return new ObjectMapper().convertValue(data, typeRef);
+	public <T> T unmarshalFrom(Object data, McpType<T> typeRef) {
+		return jacksonCodec.decodeResult(data, typeRef);
 	}
 
 }

@@ -2,7 +2,7 @@
  * Copyright 2025-2025 the original author or authors.
  */
 
-package io.modelcontextprotocol;
+package io.modelcontextprotocol.util;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -12,9 +12,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 import java.util.Map;
 
-import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
-import io.modelcontextprotocol.util.McpUriTemplateManager;
-import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

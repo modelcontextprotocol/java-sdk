@@ -11,53 +11,22 @@
 
    <artifactId>mcp-spi</artifactId>
    <packaging>jar</packaging>
-   <name>Java MCP SDK SPI</name>
+   <name>Java SDK MCP SPI</name>
    <description>Java SDK SPI of the Model Context Protocol</description>
    <url>https://github.com/modelcontextprotocol/java-sdk</url>
 
-   <properties>
-      <maven.compiler.source>17</maven.compiler.source>
-      <maven.compiler.target>17</maven.compiler.target>
-      <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-   </properties>
-
    <dependencies>
-      <dependency>
-         <groupId>org.slf4j</groupId>
-         <artifactId>slf4j-api</artifactId>
-         <version>${slf4j-api.version}</version>
-      </dependency>
-
-      <dependency>
-         <groupId>com.fasterxml.jackson.core</groupId>
-         <artifactId>jackson-databind</artifactId>
-         <version>${jackson.version}</version>
-      </dependency>
-
       <dependency>
          <groupId>org.reactivestreams</groupId>
          <artifactId>reactive-streams</artifactId>
       </dependency>
 
-
+      <!--test-->
       <dependency>
          <groupId>org.junit.jupiter</groupId>
          <artifactId>junit-jupiter-api</artifactId>
          <version>${junit.version}</version>
          <scope>test</scope>
       </dependency>
-      <dependency>
-         <groupId>org.assertj</groupId>
-         <artifactId>assertj-core</artifactId>
-         <version>${assert4j.version}</version>
-         <scope>test</scope>
-      </dependency>
-      <dependency>
-         <groupId>net.javacrumbs.json-unit</groupId>
-         <artifactId>json-unit-assertj</artifactId>
-         <version>${json-unit-assertj.version}</version>
-         <scope>test</scope>
-      </dependency>
-
    </dependencies>
 </project>

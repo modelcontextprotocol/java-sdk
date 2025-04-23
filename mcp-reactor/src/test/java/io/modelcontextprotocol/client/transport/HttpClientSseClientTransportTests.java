@@ -16,8 +16,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
+import io.modelcontextprotocol.schema.McpJacksonCodec;
+import io.modelcontextprotocol.schema.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema.JSONRPCRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -65,7 +66,7 @@ class HttpClientSseClientTransportTests {
 		private final Sinks.Many<ServerSentEvent> events = Sinks.many().unicast().onBackpressureBuffer();
 
 		public TestHttpClientSseClientTransport(final String baseUri) {
-			super(HttpClient.newHttpClient(), HttpRequest.newBuilder(), baseUri, "/sse", new ObjectMapper());
+			super(HttpClient.newHttpClient(), HttpRequest.newBuilder(), baseUri, "/sse", new McpJacksonCodec());
 		}
 
 		public int getInboundMessageCount() {

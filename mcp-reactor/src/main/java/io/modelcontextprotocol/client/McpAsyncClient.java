@@ -13,23 +13,23 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.schema.McpType;
 import io.modelcontextprotocol.session.McpClientSession;
 import io.modelcontextprotocol.session.McpClientSession.NotificationHandler;
 import io.modelcontextprotocol.session.McpClientSession.RequestHandler;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
-import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
-import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
-import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
-import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
-import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
-import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
-import io.modelcontextprotocol.spec.McpSchema.PaginatedRequest;
-import io.modelcontextprotocol.spec.McpSchema.Root;
+import io.modelcontextprotocol.schema.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema.ClientCapabilities;
+import io.modelcontextprotocol.schema.McpSchema.CreateMessageRequest;
+import io.modelcontextprotocol.schema.McpSchema.CreateMessageResult;
+import io.modelcontextprotocol.schema.McpSchema.GetPromptRequest;
+import io.modelcontextprotocol.schema.McpSchema.GetPromptResult;
+import io.modelcontextprotocol.schema.McpSchema.ListPromptsResult;
+import io.modelcontextprotocol.schema.McpSchema.LoggingLevel;
+import io.modelcontextprotocol.schema.McpSchema.LoggingMessageNotification;
+import io.modelcontextprotocol.schema.McpSchema.PaginatedRequest;
+import io.modelcontextprotocol.schema.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpTransport;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
@@ -80,8 +80,7 @@ public class McpAsyncClient {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpAsyncClient.class);
 
-	private static TypeReference<Void> VOID_TYPE_REFERENCE = new TypeReference<>() {
-	};
+	private static final McpType<Void> VOID_TYPE_REFERENCE = McpType.of(Void.class);
 
 	protected final Sinks.One<McpSchema.InitializeResult> initializedSink = Sinks.one();
 
@@ -337,8 +336,7 @@ public class McpAsyncClient {
 				this.clientInfo); // @formatter:on
 
 		Mono<McpSchema.InitializeResult> result = this.mcpSession.sendRequest(McpSchema.METHOD_INITIALIZE,
-				initializeRequest, new TypeReference<McpSchema.InitializeResult>() {
-				});
+				initializeRequest, McpType.of(McpSchema.InitializeResult.class));
 
 		return result.flatMap(initializeResult -> {
 
@@ -389,8 +387,7 @@ public class McpAsyncClient {
 	 */
 	public Mono<Object> ping() {
 		return this.withInitializationCheck("pinging the server", initializedResult -> this.mcpSession
-			.sendRequest(McpSchema.METHOD_PING, null, new TypeReference<Object>() {
-			}));
+			.sendRequest(McpSchema.METHOD_PING, null, McpType.of(Object.class)));
 	}
 
 	// --------------------------
@@ -479,8 +476,7 @@ public class McpAsyncClient {
 		return params -> {
 			@SuppressWarnings("unused")
 			McpSchema.PaginatedRequest request = transport.unmarshalFrom(params,
-					new TypeReference<McpSchema.PaginatedRequest>() {
-					});
+					McpType.of(McpSchema.PaginatedRequest.class));
 
 			List<Root> roots = this.roots.values().stream().toList();
 
@@ -494,8 +490,7 @@ public class McpAsyncClient {
 	private RequestHandler<CreateMessageResult> samplingCreateMessageHandler() {
 		return params -> {
 			McpSchema.CreateMessageRequest request = transport.unmarshalFrom(params,
-					new TypeReference<McpSchema.CreateMessageRequest>() {
-					});
+					McpType.of(McpSchema.CreateMessageRequest.class));
 
 			return this.samplingHandler.apply(request);
 		};
@@ -504,11 +499,11 @@ public class McpAsyncClient {
 	// --------------------------
 	// Tools
 	// --------------------------
-	private static final TypeReference<McpSchema.CallToolResult> CALL_TOOL_RESULT_TYPE_REF = new TypeReference<>() {
-	};
+	private static final McpType<McpSchema.CallToolResult> CALL_TOOL_RESULT_TYPE_REF = McpType
+		.of(McpSchema.CallToolResult.class);
 
-	private static final TypeReference<McpSchema.ListToolsResult> LIST_TOOLS_RESULT_TYPE_REF = new TypeReference<>() {
-	};
+	private static final McpType<McpSchema.ListToolsResult> LIST_TOOLS_RESULT_TYPE_REF = McpType
+		.of(McpSchema.ListToolsResult.class);
 
 	/**
 	 * Calls a tool provided by the server. Tools enable servers to expose executable
@@ -570,14 +565,14 @@ public class McpAsyncClient {
 	// Resources
 	// --------------------------
 
-	private static final TypeReference<McpSchema.ListResourcesResult> LIST_RESOURCES_RESULT_TYPE_REF = new TypeReference<>() {
-	};
+	private static final McpType<McpSchema.ListResourcesResult> LIST_RESOURCES_RESULT_TYPE_REF = McpType
+		.of(McpSchema.ListResourcesResult.class);
 
-	private static final TypeReference<McpSchema.ReadResourceResult> READ_RESOURCE_RESULT_TYPE_REF = new TypeReference<>() {
-	};
+	private static final McpType<McpSchema.ReadResourceResult> READ_RESOURCE_RESULT_TYPE_REF = McpType
+		.of(McpSchema.ReadResourceResult.class);
 
-	private static final TypeReference<McpSchema.ListResourceTemplatesResult> LIST_RESOURCE_TEMPLATES_RESULT_TYPE_REF = new TypeReference<>() {
-	};
+	private static final McpType<McpSchema.ListResourceTemplatesResult> LIST_RESOURCE_TEMPLATES_RESULT_TYPE_REF = McpType
+		.of(McpSchema.ListResourceTemplatesResult.class);
 
 	/**
 	 * Retrieves the list of all resources provided by the server. Resources represent any
@@ -712,11 +707,11 @@ public class McpAsyncClient {
 	// --------------------------
 	// Prompts
 	// --------------------------
-	private static final TypeReference<McpSchema.ListPromptsResult> LIST_PROMPTS_RESULT_TYPE_REF = new TypeReference<>() {
-	};
+	private static final McpType<McpSchema.ListPromptsResult> LIST_PROMPTS_RESULT_TYPE_REF = McpType
+		.of(McpSchema.ListPromptsResult.class);
 
-	private static final TypeReference<McpSchema.GetPromptResult> GET_PROMPT_RESULT_TYPE_REF = new TypeReference<>() {
-	};
+	private static final McpType<McpSchema.GetPromptResult> GET_PROMPT_RESULT_TYPE_REF = McpType
+		.of(McpSchema.GetPromptResult.class);
 
 	/**
 	 * Retrieves the list of all prompts provided by the server.
@@ -781,8 +776,7 @@ public class McpAsyncClient {
 
 		return params -> {
 			McpSchema.LoggingMessageNotification loggingMessageNotification = transport.unmarshalFrom(params,
-					new TypeReference<McpSchema.LoggingMessageNotification>() {
-					});
+					McpType.of(McpSchema.LoggingMessageNotification.class));
 
 			return Flux.fromIterable(loggingConsumers)
 				.flatMap(consumer -> consumer.apply(loggingMessageNotification))
@@ -804,8 +798,8 @@ public class McpAsyncClient {
 
 		return this.withInitializationCheck("setting logging level", initializedResult -> {
 			var params = new McpSchema.SetLevelRequest(loggingLevel);
-			return this.mcpSession.sendRequest(McpSchema.METHOD_LOGGING_SET_LEVEL, params, new TypeReference<Object>() {
-			}).then();
+			return this.mcpSession.sendRequest(McpSchema.METHOD_LOGGING_SET_LEVEL, params, McpType.of(Object.class))
+				.then();
 		});
 	}
 
@@ -816,13 +810,14 @@ public class McpAsyncClient {
 	 */
 	void setProtocolVersions(List<String> protocolVersions) {
 		this.protocolVersions = protocolVersions;
+
 	}
 
 	// --------------------------
 	// Completions
 	// --------------------------
-	private static final TypeReference<McpSchema.CompleteResult> COMPLETION_COMPLETE_RESULT_TYPE_REF = new TypeReference<>() {
-	};
+	private static final McpType<McpSchema.CompleteResult> COMPLETION_COMPLETE_RESULT_TYPE_REF = McpType
+		.of(McpSchema.CompleteResult.class);
 
 	/**
 	 * Sends a completion/complete request to generate value suggestions based on a given

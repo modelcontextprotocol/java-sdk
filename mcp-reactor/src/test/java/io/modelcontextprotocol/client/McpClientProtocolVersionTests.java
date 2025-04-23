@@ -9,8 +9,8 @@ import java.util.List;
 
 import io.modelcontextprotocol.MockMcpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
+import io.modelcontextprotocol.schema.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema.InitializeResult;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;

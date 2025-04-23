@@ -20,20 +20,21 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
+import io.modelcontextprotocol.schema.McpJacksonCodec;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
-import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
-import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
-import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
-import io.modelcontextprotocol.spec.McpSchema.ModelPreferences;
-import io.modelcontextprotocol.spec.McpSchema.Role;
-import io.modelcontextprotocol.spec.McpSchema.Root;
-import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
+import io.modelcontextprotocol.schema.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema.CallToolResult;
+import io.modelcontextprotocol.schema.McpSchema.ClientCapabilities;
+import io.modelcontextprotocol.schema.McpSchema.CreateMessageRequest;
+import io.modelcontextprotocol.schema.McpSchema.CreateMessageResult;
+import io.modelcontextprotocol.schema.McpSchema.InitializeResult;
+import io.modelcontextprotocol.schema.McpSchema.ModelPreferences;
+import io.modelcontextprotocol.schema.McpSchema.Role;
+import io.modelcontextprotocol.schema.McpSchema.Root;
+import io.modelcontextprotocol.schema.McpSchema.ServerCapabilities;
+import io.modelcontextprotocol.schema.McpSchema.Tool;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
@@ -56,6 +57,8 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 	private static final String CUSTOM_SSE_ENDPOINT = "/somePath/sse";
 
 	private static final String CUSTOM_MESSAGE_ENDPOINT = "/otherPath/mcp/message";
+
+	private final McpJacksonCodec mcpJacksonCodec = new McpJacksonCodec();
 
 	private HttpServletSseServerTransportProvider mcpServerTransportProvider;
 
@@ -107,10 +110,11 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 	// ---------------------------------------
 	@Test
 	@Disabled
-	void testCreateMessageWithoutSamplingCapabilities() {
-
+	void testCreateMessageWithoutSamplingCapabilities() throws Exception {
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 
 					exchange.createMessage(mock(McpSchema.CreateMessageRequest.class)).block();
 
@@ -138,7 +142,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 	}
 
 	@Test
-	void testCreateMessageSuccess() {
+	void testCreateMessageSuccess() throws Exception {
 
 		Function<CreateMessageRequest, CreateMessageResult> samplingHandler = request -> {
 			assertThat(request.messages()).hasSize(1);
@@ -151,8 +155,10 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
 
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 
 					var createMessageRequest = McpSchema.CreateMessageRequest.builder()
 						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -199,7 +205,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 	}
 
 	@Test
-	void testCreateMessageWithRequestTimeoutSuccess() throws InterruptedException {
+	void testCreateMessageWithRequestTimeoutSuccess() throws Exception {
 
 		// Client
 
@@ -226,8 +232,10 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
 
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 
 					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
 						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -271,7 +279,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 	}
 
 	@Test
-	void testCreateMessageWithRequestTimeoutFail() throws InterruptedException {
+	void testCreateMessageWithRequestTimeoutFail() throws Exception {
 
 		// Client
 
@@ -297,9 +305,10 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
-
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 
 					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
 						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -389,10 +398,11 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 	}
 
 	@Test
-	void testRootsWithoutCapability() {
-
+	void testRootsWithoutCapability() throws Exception {
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.SyncToolSpecification tool = new McpServerFeatures.SyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 
 					exchange.listRoots(); // try to list roots
 
@@ -512,11 +522,12 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 			""";
 
 	@Test
-	void testToolCallSuccess() {
-
+	void testToolCallSuccess() throws Exception {
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 					// perform a blocking call to a remote service
 					try {
 						HttpClient client = HttpClient.newHttpClient();
@@ -557,11 +568,12 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 	}
 
 	@Test
-	void testToolListChangeHandlingSuccess() {
-
+	void testToolListChangeHandlingSuccess() throws Exception {
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 					// perform a blocking call to a remote service
 					try {
 						HttpClient client = HttpClient.newHttpClient();
@@ -628,8 +640,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 
 			// Add a new tool
 			McpServerFeatures.SyncToolSpecification tool2 = new McpServerFeatures.SyncToolSpecification(
-					new McpSchema.Tool("tool2", "tool2 description", emptyJsonSchema),
-					(exchange, request) -> callResponse);
+					new McpSchema.Tool("tool2", "tool2 description", jsonSchema), (exchange, request) -> callResponse);
 
 			mcpServer.addTool(tool2);
 
@@ -658,14 +669,14 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 	// Logging Tests
 	// ---------------------------------------
 	@Test
-	void testLoggingNotification() {
+	void testLoggingNotification() throws Exception {
 		// Create a list to store received logging notifications
 		List<McpSchema.LoggingMessageNotification> receivedNotifications = new ArrayList<>();
-
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		// Create server with a tool that sends logging notifications
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("logging-test", "Test logging notifications", emptyJsonSchema),
-				(exchange, request) -> {
+				new McpSchema.Tool("logging-test", "Test logging notifications", jsonSchema), (exchange, request) -> {
 
 					// Create and send notifications with different levels
 

@@ -7,16 +7,17 @@ package io.modelcontextprotocol.server;
 import java.time.Duration;
 import java.util.List;
 
+import io.modelcontextprotocol.schema.McpJacksonCodec;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
-import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
-import io.modelcontextprotocol.spec.McpSchema.Prompt;
-import io.modelcontextprotocol.spec.McpSchema.PromptMessage;
-import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
-import io.modelcontextprotocol.spec.McpSchema.Resource;
-import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
+import io.modelcontextprotocol.schema.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema.CallToolResult;
+import io.modelcontextprotocol.schema.McpSchema.GetPromptResult;
+import io.modelcontextprotocol.schema.McpSchema.Prompt;
+import io.modelcontextprotocol.schema.McpSchema.PromptMessage;
+import io.modelcontextprotocol.schema.McpSchema.ReadResourceResult;
+import io.modelcontextprotocol.schema.McpSchema.Resource;
+import io.modelcontextprotocol.schema.McpSchema.ServerCapabilities;
+import io.modelcontextprotocol.schema.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,6 +42,8 @@ public abstract class AbstractMcpAsyncServerTests {
 	private static final String TEST_RESOURCE_URI = "test://resource";
 
 	private static final String TEST_PROMPT_NAME = "test-prompt";
+
+	private final McpJacksonCodec mcpJacksonCodec = new McpJacksonCodec();
 
 	abstract protected McpServerTransportProvider createMcpTransportProvider();
 
@@ -101,8 +104,10 @@ public abstract class AbstractMcpAsyncServerTests {
 			""";
 
 	@Test
-	void testAddTool() {
-		Tool newTool = new McpSchema.Tool("new-tool", "New test tool", emptyJsonSchema);
+	void testAddTool() throws Exception {
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
+		Tool newTool = new McpSchema.Tool("new-tool", "New test tool", jsonSchema);
 		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
@@ -116,8 +121,10 @@ public abstract class AbstractMcpAsyncServerTests {
 	}
 
 	@Test
-	void testAddDuplicateTool() {
-		Tool duplicateTool = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
+	void testAddDuplicateTool() throws Exception {
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
+		Tool duplicateTool = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", jsonSchema);
 
 		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
@@ -137,8 +144,10 @@ public abstract class AbstractMcpAsyncServerTests {
 	}
 
 	@Test
-	void testRemoveTool() {
-		Tool too = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
+	void testRemoveTool() throws Exception {
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
+		Tool too = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", jsonSchema);
 
 		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
@@ -166,8 +175,10 @@ public abstract class AbstractMcpAsyncServerTests {
 	}
 
 	@Test
-	void testNotifyToolsListChanged() {
-		Tool too = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
+	void testNotifyToolsListChanged() throws Exception {
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
+		Tool too = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", jsonSchema);
 
 		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")

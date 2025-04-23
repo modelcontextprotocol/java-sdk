@@ -7,12 +7,14 @@ import java.io.IOException;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.modelcontextprotocol.schema.McpJacksonCodec;
+import io.modelcontextprotocol.schema.McpSchemaCodec;
+import io.modelcontextprotocol.schema.McpType;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
+import io.modelcontextprotocol.schema.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
 
 import org.reactivestreams.Publisher;
@@ -99,7 +101,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 * ObjectMapper for serializing outbound messages and deserializing inbound messages.
 	 * Handles conversion between JSON-RPC messages and their string representation.
 	 */
-	protected ObjectMapper objectMapper;
+	protected McpSchemaCodec schemaCodec;
 
 	/**
 	 * Subscription for the SSE connection handling inbound messages. Used for cleanup
@@ -159,11 +161,25 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 */
 	public WebFluxSseClientTransport(WebClient.Builder webClientBuilder, ObjectMapper objectMapper,
 			String sseEndpoint) {
-		Assert.notNull(objectMapper, "ObjectMapper must not be null");
+		this(webClientBuilder, new McpJacksonCodec(objectMapper), sseEndpoint);
+	}
+
+	/**
+	 * Constructs a new SseClientTransport with the specified WebClient builder and
+	 * ObjectMapper. Initializes both inbound and outbound message processing pipelines.
+	 * @param webClientBuilder the WebClient.Builder to use for creating the WebClient
+	 * instance
+	 * @param schemaCodec the McpSchemaCodec to use for JSON processing
+	 * @param sseEndpoint the SSE endpoint URI to use for establishing the connection
+	 * @throws IllegalArgumentException if either parameter is null
+	 */
+	public WebFluxSseClientTransport(WebClient.Builder webClientBuilder, McpSchemaCodec schemaCodec,
+			String sseEndpoint) {
+		Assert.notNull(schemaCodec, "schemaCodec must not be null");
 		Assert.notNull(webClientBuilder, "WebClient.Builder must not be null");
 		Assert.hasText(sseEndpoint, "SSE endpoint must not be null or empty");
 
-		this.objectMapper = objectMapper;
+		this.schemaCodec = schemaCodec;
 		this.webClient = webClientBuilder.build();
 		this.sseEndpoint = sseEndpoint;
 	}
@@ -207,7 +223,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 			}
 			else if (MESSAGE_EVENT_TYPE.equals(event.event())) {
 				try {
-					JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.objectMapper, event.data());
+					JSONRPCMessage message = schemaCodec.decodeFromString(event.data());
 					s.next(message);
 				}
 				catch (IOException ioException) {
@@ -244,7 +260,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 				return Mono.empty();
 			}
 			try {
-				String jsonText = this.objectMapper.writeValueAsString(message);
+				String jsonText = this.schemaCodec.encodeAsString(message);
 				return webClient.post()
 					.uri(messageEndpointUri)
 					.contentType(MediaType.APPLICATION_JSON)
@@ -341,13 +357,13 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 * type conversion capabilities to handle complex object structures.
 	 * @param <T> the target type to convert the data into
 	 * @param data the source object to convert
-	 * @param typeRef the TypeReference describing the target type
+	 * @param typeRef the McpType describing the target type
 	 * @return the unmarshalled object of type T
 	 * @throws IllegalArgumentException if the conversion cannot be performed
 	 */
 	@Override
-	public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-		return this.objectMapper.convertValue(data, typeRef);
+	public <T> T unmarshalFrom(Object data, McpType<T> typeRef) {
+		return schemaCodec.decodeResult(data, typeRef);
 	}
 
 	/**
@@ -370,6 +386,8 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
 
 		private ObjectMapper objectMapper = new ObjectMapper();
+
+		private McpSchemaCodec schemaCodec;
 
 		/**
 		 * Creates a new builder with the specified WebClient.Builder.
@@ -403,11 +421,25 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 		}
 
 		/**
+		 * Sets the schema codec for JSON serialization/deserialization.
+		 * @param schemaCodec the McpSchemaCodec implementation
+		 * @return this builder
+		 */
+		public Builder withSchemaCodec(final McpSchemaCodec schemaCodec) {
+			Assert.notNull(schemaCodec, "McpSchemaCodec must not be null");
+			this.schemaCodec = schemaCodec;
+			return this;
+		}
+
+		/**
 		 * Builds a new {@link WebFluxSseClientTransport} instance.
 		 * @return a new transport instance
 		 */
 		public WebFluxSseClientTransport build() {
-			return new WebFluxSseClientTransport(webClientBuilder, objectMapper, sseEndpoint);
+			if (schemaCodec == null) {
+				schemaCodec = new McpJacksonCodec(objectMapper);
+			}
+			return new WebFluxSseClientTransport(webClientBuilder, schemaCodec, sseEndpoint);
 		}
 
 	}

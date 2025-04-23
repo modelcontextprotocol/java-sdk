@@ -15,17 +15,20 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.modelcontextprotocol.schema.McpJacksonCodec;
+import io.modelcontextprotocol.schema.McpSchemaCodec;
+import io.modelcontextprotocol.schema.McpType;
 import io.modelcontextprotocol.session.McpClientSession;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
-import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
-import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
-import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
-import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
+import io.modelcontextprotocol.schema.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema.CallToolResult;
+import io.modelcontextprotocol.schema.McpSchema.LoggingLevel;
+import io.modelcontextprotocol.schema.McpSchema.LoggingMessageNotification;
+import io.modelcontextprotocol.schema.McpSchema.ResourceTemplate;
+import io.modelcontextprotocol.schema.McpSchema.SetLevelRequest;
+import io.modelcontextprotocol.schema.McpSchema.Tool;
 import io.modelcontextprotocol.session.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
@@ -256,7 +259,7 @@ public class McpAsyncServer {
 
 		private final McpServerTransportProvider mcpTransportProvider;
 
-		private final ObjectMapper objectMapper;
+		private final McpSchemaCodec schemaCodec;
 
 		private final McpSchema.ServerCapabilities serverCapabilities;
 
@@ -285,8 +288,15 @@ public class McpAsyncServer {
 		AsyncServerImpl(McpServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
 				Duration requestTimeout, McpServerFeatures.Async features,
 				McpUriTemplateManagerFactory uriTemplateManagerFactory) {
+			this(mcpTransportProvider, new McpJacksonCodec(objectMapper), requestTimeout, features,
+					uriTemplateManagerFactory);
+		}
+
+		AsyncServerImpl(McpServerTransportProvider mcpTransportProvider, McpSchemaCodec schemaCodec,
+				Duration requestTimeout, McpServerFeatures.Async features,
+				McpUriTemplateManagerFactory uriTemplateManagerFactory) {
 			this.mcpTransportProvider = mcpTransportProvider;
-			this.objectMapper = objectMapper;
+			this.schemaCodec = schemaCodec;
 			this.serverInfo = features.serverInfo();
 			this.serverCapabilities = features.serverCapabilities();
 			this.instructions = features.instructions();
@@ -492,9 +502,8 @@ public class McpAsyncServer {
 
 		private McpServerSession.RequestHandler<CallToolResult> toolsCallRequestHandler() {
 			return (exchange, params) -> {
-				McpSchema.CallToolRequest callToolRequest = objectMapper.convertValue(params,
-						new TypeReference<McpSchema.CallToolRequest>() {
-						});
+				McpSchema.CallToolRequest callToolRequest = schemaCodec.decodeResult(params,
+						McpType.of(McpSchema.CallToolRequest.class));
 
 				Optional<McpServerFeatures.AsyncToolSpecification> toolSpecification = this.tools.stream()
 					.filter(tr -> callToolRequest.name().equals(tr.tool().name()))
@@ -600,9 +609,8 @@ public class McpAsyncServer {
 
 		private McpServerSession.RequestHandler<McpSchema.ReadResourceResult> resourcesReadRequestHandler() {
 			return (exchange, params) -> {
-				McpSchema.ReadResourceRequest resourceRequest = objectMapper.convertValue(params,
-						new TypeReference<McpSchema.ReadResourceRequest>() {
-						});
+				McpSchema.ReadResourceRequest resourceRequest = schemaCodec.decodeResult(params,
+						McpType.of(McpSchema.ReadResourceRequest.class));
 				var resourceUri = resourceRequest.uri();
 
 				McpServerFeatures.AsyncResourceSpecification specification = this.resources.values()
@@ -699,9 +707,8 @@ public class McpAsyncServer {
 
 		private McpServerSession.RequestHandler<McpSchema.GetPromptResult> promptsGetRequestHandler() {
 			return (exchange, params) -> {
-				McpSchema.GetPromptRequest promptRequest = objectMapper.convertValue(params,
-						new TypeReference<McpSchema.GetPromptRequest>() {
-						});
+				McpSchema.GetPromptRequest promptRequest = schemaCodec.decodeResult(params,
+						McpType.of(McpSchema.GetPromptRequest.class));
 
 				// Implement prompt retrieval logic here
 				McpServerFeatures.AsyncPromptSpecification specification = this.prompts.get(promptRequest.name());
@@ -736,9 +743,8 @@ public class McpAsyncServer {
 			return (exchange, params) -> {
 				return Mono.defer(() -> {
 
-					SetLevelRequest newMinLoggingLevel = objectMapper.convertValue(params,
-							new TypeReference<SetLevelRequest>() {
-							});
+					SetLevelRequest newMinLoggingLevel = schemaCodec.decodeResult(params,
+							McpType.of(SetLevelRequest.class));
 
 					exchange.setMinLoggingLevel(newMinLoggingLevel.level());
 

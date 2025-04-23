@@ -14,11 +14,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.modelcontextprotocol.schema.McpJacksonCodec;
+import io.modelcontextprotocol.schema.McpSchemaCodec;
+import io.modelcontextprotocol.schema.McpType;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
+import io.modelcontextprotocol.schema.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.session.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
@@ -44,7 +47,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 
 	private static final Logger logger = LoggerFactory.getLogger(StdioServerTransportProvider.class);
 
-	private final ObjectMapper objectMapper;
+	private final McpSchemaCodec schemaCodec;
 
 	private final InputStream inputStream;
 
@@ -81,11 +84,23 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	 * @param outputStream The output stream to write to
 	 */
 	public StdioServerTransportProvider(ObjectMapper objectMapper, InputStream inputStream, OutputStream outputStream) {
-		Assert.notNull(objectMapper, "The ObjectMapper can not be null");
+		this(new McpJacksonCodec(objectMapper), inputStream, outputStream);
+	}
+
+	/**
+	 * Creates a new StdioServerTransportProvider with the specified ObjectMapper and
+	 * streams.
+	 * @param schemaCodec The McpSchemaCodec to use for JSON serialization/deserialization
+	 * @param inputStream The input stream to read from
+	 * @param outputStream The output stream to write to
+	 */
+	public StdioServerTransportProvider(McpSchemaCodec schemaCodec, InputStream inputStream,
+			OutputStream outputStream) {
+		Assert.notNull(schemaCodec, "The ObjectMapper can not be null");
 		Assert.notNull(inputStream, "The InputStream can not be null");
 		Assert.notNull(outputStream, "The OutputStream can not be null");
 
-		this.objectMapper = objectMapper;
+		this.schemaCodec = schemaCodec;
 		this.inputStream = inputStream;
 		this.outputStream = outputStream;
 	}
@@ -165,8 +180,8 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 		}
 
 		@Override
-		public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-			return objectMapper.convertValue(data, typeRef);
+		public <T> T unmarshalFrom(Object data, McpType<T> typeRef) {
+			return schemaCodec.decodeResult(data, typeRef);
 		}
 
 		@Override
@@ -219,8 +234,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 								logger.debug("Received JSON message: {}", line);
 
 								try {
-									McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper,
-											line);
+									McpSchema.JSONRPCMessage message = schemaCodec.decodeFromString(line);
 									if (!this.inboundSink.tryEmitNext(message).isSuccess()) {
 										// logIfNotClosing("Failed to enqueue message");
 										break;
@@ -263,7 +277,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 				 .handle((message, sink) -> {
 					 if (message != null && !isClosing.get()) {
 						 try {
-							 String jsonMessage = objectMapper.writeValueAsString(message);
+							 String jsonMessage = schemaCodec.encodeAsString(message);
 							 // Escape any embedded newlines in the JSON message as per spec
 							 jsonMessage = jsonMessage.replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\n");
 	

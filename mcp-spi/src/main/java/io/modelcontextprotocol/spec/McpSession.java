@@ -6,7 +6,7 @@ package io.modelcontextprotocol.spec;
 
 import org.reactivestreams.Publisher;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.schema.McpType;
 
 /**
  * Represents a Model Control Protocol (MCP) session that handles communication between
@@ -36,10 +36,10 @@ public interface McpSession {
 	 * @param <T> the type of the expected response
 	 * @param method the name of the method to be called on the counterparty
 	 * @param requestParams the parameters to be sent with the request
-	 * @param typeRef the TypeReference describing the expected response type
+	 * @param typeRef the McpType describing the expected response type
 	 * @return a Mono that will emit the response when received
 	 */
-	<T> Publisher<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef);
+	<T> Publisher<T> sendRequest(String method, Object requestParams, McpType<T> typeRef);
 
 	/**
 	 * Sends a notification to the model client or server without parameters.

@@ -4,11 +4,11 @@
 
 package io.modelcontextprotocol.server;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.schema.McpType;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
-import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
+import io.modelcontextprotocol.schema.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema.LoggingLevel;
+import io.modelcontextprotocol.schema.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.session.McpServerSession;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
@@ -30,11 +30,11 @@ public class McpAsyncServerExchange {
 
 	private volatile LoggingLevel minLoggingLevel = LoggingLevel.INFO;
 
-	private static final TypeReference<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeReference<>() {
-	};
+	private static final McpType<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = McpType
+		.of(McpSchema.CreateMessageResult.class);
 
-	private static final TypeReference<McpSchema.ListRootsResult> LIST_ROOTS_RESULT_TYPE_REF = new TypeReference<>() {
-	};
+	private static final McpType<McpSchema.ListRootsResult> LIST_ROOTS_RESULT_TYPE_REF = McpType
+		.of(McpSchema.ListRootsResult.class);
 
 	/**
 	 * Create a new asynchronous exchange with the client.

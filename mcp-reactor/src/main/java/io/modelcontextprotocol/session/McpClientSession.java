@@ -10,12 +10,11 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-
+import io.modelcontextprotocol.schema.McpType;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSession;
-import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema;
 import io.modelcontextprotocol.util.Assert;
 
 import org.slf4j.Logger;
@@ -233,7 +232,7 @@ public class McpClientSession implements McpSession {
 	 * @return A Publisher containing the response
 	 */
 	@Override
-	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {
+	public <T> Mono<T> sendRequest(String method, Object requestParams, McpType<T> typeRef) {
 		String requestId = this.generateRequestId();
 
 		return Mono.deferContextual(ctx -> Mono.<McpSchema.JSONRPCResponse>create(sink -> {
@@ -241,7 +240,7 @@ public class McpClientSession implements McpSession {
 			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, method,
 					requestId, requestParams);
 			Mono.from(this.transport.sendMessage(jsonrpcRequest))
-               .contextWrite(ctx)
+				.contextWrite(ctx)
 				// TODO: It's most efficient to create a dedicated Subscriber here
 				.subscribe(v -> {
 				}, error -> {
@@ -254,7 +253,7 @@ public class McpClientSession implements McpSession {
 				sink.error(new McpError(jsonRpcResponse.error()));
 			}
 			else {
-				if (typeRef.getType().equals(Void.class)) {
+				if (typeRef.getRawClass().equals(Void.class)) {
 					sink.complete();
 				}
 				else {

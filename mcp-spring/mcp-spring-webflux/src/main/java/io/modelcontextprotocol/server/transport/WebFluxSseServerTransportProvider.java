@@ -3,10 +3,14 @@ package io.modelcontextprotocol.server.transport;
 import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
+import io.modelcontextprotocol.schema.McpJacksonCodec;
+import io.modelcontextprotocol.schema.McpSchemaCodec;
+import io.modelcontextprotocol.schema.McpType;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema;
 import io.modelcontextprotocol.session.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
@@ -85,7 +89,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 	public static final String DEFAULT_BASE_URL = "";
 
-	private final ObjectMapper objectMapper;
+	private final McpSchemaCodec schemaCodec;
 
 	/**
 	 * Base URL for the message endpoint. This is used to construct the full URL for
@@ -150,12 +154,27 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 */
 	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint) {
-		Assert.notNull(objectMapper, "ObjectMapper must not be null");
+		this(new McpJacksonCodec(objectMapper), baseUrl, messageEndpoint, sseEndpoint);
+	}
+
+	/**
+	 * Constructs a new WebFlux SSE server transport provider instance.
+	 * @param schemaCodec The McpSchemaCodec to use for JSON serialization/deserialization
+	 * of MCP messages. Must not be null.
+	 * @param baseUrl webflux message base path
+	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
+	 * messages. This endpoint will be communicated to clients during SSE connection
+	 * setup. Must not be null.
+	 * @throws IllegalArgumentException if either parameter is null
+	 */
+	WebFluxSseServerTransportProvider(McpSchemaCodec schemaCodec, String baseUrl, String messageEndpoint,
+			String sseEndpoint) {
+		Assert.notNull(schemaCodec, "schemaCodec must not be null");
 		Assert.notNull(baseUrl, "Message base path must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
 
-		this.objectMapper = objectMapper;
+		this.schemaCodec = schemaCodec;
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
@@ -319,7 +338,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 		return request.bodyToMono(String.class).flatMap(body -> {
 			try {
-				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
+				McpSchema.JSONRPCMessage message = schemaCodec.decodeFromString(body);
 				return session.handle(message).flatMap(response -> ServerResponse.ok().build()).onErrorResume(error -> {
 					logger.error("Error processing  message: {}", error.getMessage());
 					// TODO: instead of signalling the error, just respond with 200 OK
@@ -348,7 +367,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
 			return Mono.fromSupplier(() -> {
 				try {
-					return objectMapper.writeValueAsString(message);
+					return schemaCodec.encodeAsString(message);
 				}
 				catch (IOException e) {
 					throw Exceptions.propagate(e);
@@ -367,8 +386,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		}
 
 		@Override
-		public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-			return objectMapper.convertValue(data, typeRef);
+		public <T> T unmarshalFrom(Object data, McpType<T> typeRef) {
+			return schemaCodec.decodeResult(data, typeRef);
 		}
 
 		@Override
@@ -395,6 +414,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 */
 	public static class Builder {
 
+		private McpSchemaCodec schemaCodec;
+
 		private ObjectMapper objectMapper;
 
 		private String baseUrl = DEFAULT_BASE_URL;
@@ -413,6 +434,17 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		public Builder objectMapper(ObjectMapper objectMapper) {
 			Assert.notNull(objectMapper, "ObjectMapper must not be null");
 			this.objectMapper = objectMapper;
+			return this;
+		}
+
+		/**
+		 * Sets the schema codec for JSON serialization/deserialization.
+		 * @param schemaCodec the McpSchemaCodec implementation
+		 * @return this builder
+		 */
+		public Builder withSchemaCodec(final McpSchemaCodec schemaCodec) {
+			Assert.notNull(schemaCodec, "McpSchemaCodec must not be null");
+			this.schemaCodec = schemaCodec;
 			return this;
 		}
 
@@ -462,8 +494,10 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		public WebFluxSseServerTransportProvider build() {
 			Assert.notNull(objectMapper, "ObjectMapper must be set");
 			Assert.notNull(messageEndpoint, "Message endpoint must be set");
-
-			return new WebFluxSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint);
+			if (schemaCodec == null) {
+				schemaCodec = new McpJacksonCodec(objectMapper);
+			}
+			return new WebFluxSseServerTransportProvider(schemaCodec, baseUrl, messageEndpoint, sseEndpoint);
 		}
 
 	}

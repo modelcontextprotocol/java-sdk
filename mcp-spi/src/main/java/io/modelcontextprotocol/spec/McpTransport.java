@@ -6,7 +6,8 @@ package io.modelcontextprotocol.spec;
 
 import org.reactivestreams.Publisher;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.schema.McpSchema;
+import io.modelcontextprotocol.schema.McpType;
 
 /**
  * Defines the asynchronous transport layer for the Model Context Protocol (MCP).
@@ -75,6 +76,6 @@ public interface McpTransport {
 	 * @param typeRef the type reference for the object to unmarshal
 	 * @return the unmarshalled object
 	 */
-	<T> T unmarshalFrom(Object data, TypeReference<T> typeRef);
+	<T> T unmarshalFrom(Object data, McpType<T> typeRef);
 
 }
