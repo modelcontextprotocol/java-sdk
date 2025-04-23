@@ -289,7 +289,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body.toString());
 
 			// Process the message through the session's handle method
-			session.handle(message).block(); // Block for Servlet compatibility
+			session.handle(request, message).block(); // Block for Servlet compatibility
 
 			response.setStatus(HttpServletResponse.SC_OK);
 		}

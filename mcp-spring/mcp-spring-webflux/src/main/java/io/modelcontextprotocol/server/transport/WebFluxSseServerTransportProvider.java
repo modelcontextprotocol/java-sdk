@@ -314,14 +314,16 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		return request.bodyToMono(String.class).flatMap(body -> {
 			try {
 				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
-				return session.handle(message).flatMap(response -> ServerResponse.ok().build()).onErrorResume(error -> {
-					logger.error("Error processing  message: {}", error.getMessage());
-					// TODO: instead of signalling the error, just respond with 200 OK
-					// - the error is signalled on the SSE connection
-					// return ServerResponse.ok().build();
-					return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
-						.bodyValue(new McpError(error.getMessage()));
-				});
+				return session.handle(request, message)
+					.flatMap(response -> ServerResponse.ok().build())
+					.onErrorResume(error -> {
+						logger.error("Error processing  message: {}", error.getMessage());
+						// TODO: instead of signalling the error, just respond with 200 OK
+						// - the error is signalled on the SSE connection
+						// return ServerResponse.ok().build();
+						return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+							.bodyValue(new McpError(error.getMessage()));
+					});
 			}
 			catch (IllegalArgumentException | IOException e) {
 				logger.error("Failed to deserialize message: {}", e.getMessage());

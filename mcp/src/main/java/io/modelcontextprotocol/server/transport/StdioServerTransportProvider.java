@@ -186,7 +186,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 		}
 
 		private void handleIncomingMessages() {
-			this.inboundSink.asFlux().flatMap(message -> session.handle(message)).doOnTerminate(() -> {
+			this.inboundSink.asFlux().flatMap(message -> session.handle(null, message)).doOnTerminate(() -> {
 				// The outbound processing will dispose its scheduler upon completion
 				this.outboundSink.tryEmitComplete();
 				this.inboundScheduler.dispose();

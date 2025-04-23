@@ -4,18 +4,20 @@
 
 package io.modelcontextprotocol.server;
 
+import io.modelcontextprotocol.spec.McpRequest;
+import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.RequestContext;
+import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.Utils;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
-
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.util.Assert;
-import io.modelcontextprotocol.util.Utils;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 /**
  * MCP server features specification that a particular server can choose to support.
@@ -73,9 +75,9 @@ public class McpServerFeatures {
 					: new McpSchema.ServerCapabilities(null, // completions
 							null, // experimental
 							new McpSchema.ServerCapabilities.LoggingCapabilities(), // Enable
-																					// logging
-																					// by
-																					// default
+							// logging
+							// by
+							// default
 							!Utils.isEmpty(prompts) ? new McpSchema.ServerCapabilities.PromptCapabilities(false) : null,
 							!Utils.isEmpty(resources)
 									? new McpSchema.ServerCapabilities.ResourceCapabilities(false, false) : null,
@@ -181,9 +183,9 @@ public class McpServerFeatures {
 					: new McpSchema.ServerCapabilities(null, // completions
 							null, // experimental
 							new McpSchema.ServerCapabilities.LoggingCapabilities(), // Enable
-																					// logging
-																					// by
-																					// default
+							// logging
+							// by
+							// default
 							!Utils.isEmpty(prompts) ? new McpSchema.ServerCapabilities.PromptCapabilities(false) : null,
 							!Utils.isEmpty(resources)
 									? new McpSchema.ServerCapabilities.ResourceCapabilities(false, false) : null,
@@ -237,7 +239,7 @@ public class McpServerFeatures {
 	 * connected client. The second arguments is a map of tool arguments.
 	 */
 	public record AsyncToolSpecification(McpSchema.Tool tool,
-			BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> call) {
+			BiFunction<McpAsyncServerExchange, McpRequest, Mono<McpSchema.CallToolResult>> call) {
 
 		static AsyncToolSpecification fromSync(SyncToolSpecification tool) {
 			// FIXME: This is temporary, proper validation should be implemented
@@ -245,8 +247,8 @@ public class McpServerFeatures {
 				return null;
 			}
 			return new AsyncToolSpecification(tool.tool(),
-					(exchange, map) -> Mono
-						.fromCallable(() -> tool.call().apply(new McpSyncServerExchange(exchange), map))
+					(exchange, request) -> Mono
+						.fromCallable(() -> tool.call().apply(new McpSyncServerExchange(exchange), request))
 						.subscribeOn(Schedulers.boundedElastic()));
 		}
 	}
@@ -413,7 +415,8 @@ public class McpServerFeatures {
 	 * client. The second arguments is a map of arguments passed to the tool.
 	 */
 	public record SyncToolSpecification(McpSchema.Tool tool,
-			BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> call) {
+			BiFunction<McpSyncServerExchange, McpRequest, McpSchema.CallToolResult> call) {
+
 	}
 
 	/**
