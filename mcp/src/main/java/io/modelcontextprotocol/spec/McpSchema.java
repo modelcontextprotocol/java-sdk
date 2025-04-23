@@ -709,16 +709,27 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static final class RichJsonSchema {
+
 		private String type;
+
 		private String title;
+
 		private String description;
+
 		private Map<String, Object> properties;
+
 		private List<String> required;
+
 		private Boolean additionalProperties;
+
 		private Object defaultValue;
+
 		private List<String> enumValues;
+
 		private Integer maxLength;
+
 		private Integer minLength;
+
 		private String pattern;
 
 		@JsonProperty("type")
@@ -778,10 +789,9 @@ public final class McpSchema {
 
 		public static RichJsonSchema from(JsonSchema schema) {
 			Assert.notNull(schema, "schema");
-			return new RichJsonSchema.Builder(schema.type)
-					.properties(schema.properties)
-					.required(schema.required)
-					.build();
+			return new RichJsonSchema.Builder(schema.type).properties(schema.properties)
+				.required(schema.required)
+				.build();
 		}
 
 		public static RichJsonSchema.Builder arrayBuilder() {
@@ -805,9 +815,12 @@ public final class McpSchema {
 		}
 
 		public static class Builder {
+
 			private final RichJsonSchema schema = new RichJsonSchema();
 
-			private Builder() {}
+			private Builder() {
+			}
+
 			private Builder(String type) {
 				this.schema.type = type;
 			}
@@ -905,7 +918,9 @@ public final class McpSchema {
 			public RichJsonSchema build() {
 				return this.schema;
 			}
+
 		}
+
 	}
 
 	/**
