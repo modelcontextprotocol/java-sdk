@@ -15,11 +15,13 @@ import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.modelcontextprotocol.schema.McpJacksonCodec;
+import io.modelcontextprotocol.schema.McpSchemaCodec;
+import io.modelcontextprotocol.schema.McpType;
 import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
+import io.modelcontextprotocol.schema.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
 
 import org.reactivestreams.Publisher;
@@ -50,7 +52,7 @@ public class StdioClientTransport implements McpClientTransport {
 	/** The server process being communicated with */
 	private Process process;
 
-	private ObjectMapper objectMapper;
+	private McpSchemaCodec schemaCodec;
 
 	/** Scheduler for handling inbound messages from the server process */
 	private Scheduler inboundScheduler;
@@ -86,15 +88,24 @@ public class StdioClientTransport implements McpClientTransport {
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 */
 	public StdioClientTransport(ServerParameters params, ObjectMapper objectMapper) {
+		this(params, new McpJacksonCodec(objectMapper));
+	}
+
+	/**
+	 * Creates a new StdioClientTransport with the specified parameters and ObjectMapper.
+	 * @param params The parameters for configuring the server process
+	 * @param schemaCodec The McpSchemaCodec to use for JSON serialization/deserialization
+	 */
+	public StdioClientTransport(ServerParameters params, McpSchemaCodec schemaCodec) {
 		Assert.notNull(params, "The params can not be null");
-		Assert.notNull(objectMapper, "The ObjectMapper can not be null");
+		Assert.notNull(schemaCodec, "The ObjectMapper can not be null");
 
 		this.inboundSink = Sinks.many().unicast().onBackpressureBuffer();
 		this.outboundSink = Sinks.many().unicast().onBackpressureBuffer();
 
 		this.params = params;
 
-		this.objectMapper = objectMapper;
+		this.schemaCodec = schemaCodec;
 
 		this.errorSink = Sinks.many().unicast().onBackpressureBuffer();
 
@@ -260,7 +271,7 @@ public class StdioClientTransport implements McpClientTransport {
 				String line;
 				while (!isClosing && (line = processReader.readLine()) != null) {
 					try {
-						JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.objectMapper, line);
+						JSONRPCMessage message = schemaCodec.decodeFromString(line);
 						if (!this.inboundSink.tryEmitNext(message).isSuccess()) {
 							if (!isClosing) {
 								logger.error("Failed to enqueue inbound message: {}", message);
@@ -301,7 +312,7 @@ public class StdioClientTransport implements McpClientTransport {
 			.handle((message, s) -> {
 				if (message != null && !isClosing) {
 					try {
-						String jsonMessage = objectMapper.writeValueAsString(message);
+						String jsonMessage = schemaCodec.encodeAsString(message);
 						// Escape any embedded newlines in the JSON message as per spec:
 						// https://spec.modelcontextprotocol.io/specification/basic/transports/#stdio
 						// - Messages are delimited by newlines, and MUST NOT contain
@@ -395,8 +406,8 @@ public class StdioClientTransport implements McpClientTransport {
 	}
 
 	@Override
-	public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-		return this.objectMapper.convertValue(data, typeRef);
+	public <T> T unmarshalFrom(Object data, McpType<T> typeRef) {
+		return schemaCodec.decodeResult(data, typeRef);
 	}
 
 }

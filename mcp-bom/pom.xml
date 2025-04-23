@@ -29,7 +29,14 @@
             <!-- MCP Spec -->
             <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
-                <artifactId>mcp-reactor</artifactId>
+                <artifactId>mcp-spi</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- MCP Jacson Schema -->
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-schema-jackson</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

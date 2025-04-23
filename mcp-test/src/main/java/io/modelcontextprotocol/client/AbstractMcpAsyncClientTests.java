@@ -14,18 +14,18 @@ import java.util.function.Function;
 
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
-import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
-import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
-import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
-import io.modelcontextprotocol.spec.McpSchema.Prompt;
-import io.modelcontextprotocol.spec.McpSchema.Resource;
-import io.modelcontextprotocol.spec.McpSchema.Root;
-import io.modelcontextprotocol.spec.McpSchema.SubscribeRequest;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
-import io.modelcontextprotocol.spec.McpSchema.UnsubscribeRequest;
+import io.modelcontextprotocol.schema.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema.CallToolRequest;
+import io.modelcontextprotocol.schema.McpSchema.ClientCapabilities;
+import io.modelcontextprotocol.schema.McpSchema.CreateMessageRequest;
+import io.modelcontextprotocol.schema.McpSchema.CreateMessageResult;
+import io.modelcontextprotocol.schema.McpSchema.GetPromptRequest;
+import io.modelcontextprotocol.schema.McpSchema.Prompt;
+import io.modelcontextprotocol.schema.McpSchema.Resource;
+import io.modelcontextprotocol.schema.McpSchema.Root;
+import io.modelcontextprotocol.schema.McpSchema.SubscribeRequest;
+import io.modelcontextprotocol.schema.McpSchema.Tool;
+import io.modelcontextprotocol.schema.McpSchema.UnsubscribeRequest;
 import io.modelcontextprotocol.spec.McpTransport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,7 +50,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	private static final String ECHO_TEST_MESSAGE = "Hello MCP Spring AI!";
 
-	abstract protected McpClientTransport createMcpTransport();
+	protected abstract McpClientTransport createMcpTransport();
 
 	protected void onStart() {
 	}

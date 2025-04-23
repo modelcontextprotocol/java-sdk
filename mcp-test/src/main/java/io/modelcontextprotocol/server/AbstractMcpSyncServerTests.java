@@ -6,16 +6,17 @@ package io.modelcontextprotocol.server;
 
 import java.util.List;
 
+import io.modelcontextprotocol.schema.McpJacksonCodec;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
-import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
-import io.modelcontextprotocol.spec.McpSchema.Prompt;
-import io.modelcontextprotocol.spec.McpSchema.PromptMessage;
-import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
-import io.modelcontextprotocol.spec.McpSchema.Resource;
-import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
+import io.modelcontextprotocol.schema.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema.CallToolResult;
+import io.modelcontextprotocol.schema.McpSchema.GetPromptResult;
+import io.modelcontextprotocol.schema.McpSchema.Prompt;
+import io.modelcontextprotocol.schema.McpSchema.PromptMessage;
+import io.modelcontextprotocol.schema.McpSchema.ReadResourceResult;
+import io.modelcontextprotocol.schema.McpSchema.Resource;
+import io.modelcontextprotocol.schema.McpSchema.ServerCapabilities;
+import io.modelcontextprotocol.schema.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +25,8 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Test suite for the {@link McpSyncServer} that can be used with different
@@ -39,6 +42,8 @@ public abstract class AbstractMcpSyncServerTests {
 	private static final String TEST_RESOURCE_URI = "test://resource";
 
 	private static final String TEST_PROMPT_NAME = "test-prompt";
+
+	private final McpJacksonCodec mcpJacksonCodec = new McpJacksonCodec(new ObjectMapper());
 
 	abstract protected McpServerTransportProvider createMcpTransportProvider();
 
@@ -109,13 +114,14 @@ public abstract class AbstractMcpSyncServerTests {
 			""";
 
 	@Test
-	void testAddTool() {
+	void testAddTool() throws Exception {
 		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.build();
-
-		Tool newTool = new McpSchema.Tool("new-tool", "New test tool", emptyJsonSchema);
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
+		Tool newTool = new McpSchema.Tool("new-tool", "New test tool", jsonSchema);
 		assertThatCode(() -> mcpSyncServer.addTool(new McpServerFeatures.SyncToolSpecification(newTool,
 				(exchange, args) -> new CallToolResult(List.of(), false))))
 			.doesNotThrowAnyException();
@@ -124,8 +130,10 @@ public abstract class AbstractMcpSyncServerTests {
 	}
 
 	@Test
-	void testAddDuplicateTool() {
-		Tool duplicateTool = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
+	void testAddDuplicateTool() throws Exception {
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
+		Tool duplicateTool = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", jsonSchema);
 
 		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
@@ -142,8 +150,10 @@ public abstract class AbstractMcpSyncServerTests {
 	}
 
 	@Test
-	void testRemoveTool() {
-		Tool tool = new McpSchema.Tool(TEST_TOOL_NAME, "Test tool", emptyJsonSchema);
+	void testRemoveTool() throws Exception {
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
+		Tool tool = new McpSchema.Tool(TEST_TOOL_NAME, "Test tool", jsonSchema);
 
 		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")

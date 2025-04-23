@@ -9,23 +9,24 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.MockMcpClientTransport;
+import io.modelcontextprotocol.schema.McpJacksonCodec;
+import io.modelcontextprotocol.schema.McpType;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
-import io.modelcontextprotocol.spec.McpSchema.Root;
+import io.modelcontextprotocol.schema.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema.ClientCapabilities;
+import io.modelcontextprotocol.schema.McpSchema.InitializeResult;
+import io.modelcontextprotocol.schema.McpSchema.Root;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
-import static io.modelcontextprotocol.spec.McpSchema.METHOD_INITIALIZE;
+import static io.modelcontextprotocol.schema.McpSchema.METHOD_INITIALIZE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class McpAsyncClientResponseHandlerTests {
+
+	private final McpJacksonCodec mcpJacksonCodec = new McpJacksonCodec();
 
 	private static final McpSchema.Implementation SERVER_INFO = new McpSchema.Implementation("test-server", "1.0.0");
 
@@ -90,7 +91,7 @@ class McpAsyncClientResponseHandlerTests {
 	}
 
 	@Test
-	void testToolsChangeNotificationHandling() throws JsonProcessingException {
+	void testToolsChangeNotificationHandling() throws Exception {
 		MockMcpClientTransport transport = initializationEnabledTransport();
 
 		// Create a list to store received tools for verification
@@ -107,8 +108,9 @@ class McpAsyncClientResponseHandlerTests {
 
 		// Create a mock tools list that the server will return
 		Map<String, Object> inputSchema = Map.of("type", "object", "properties", Map.of(), "required", List.of());
-		McpSchema.Tool mockTool = new McpSchema.Tool("test-tool", "Test Tool Description",
-				new ObjectMapper().writeValueAsString(inputSchema));
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(mcpJacksonCodec.getMapper().writeValueAsString(inputSchema), McpSchema.JsonSchema.class);
+		McpSchema.Tool mockTool = new McpSchema.Tool("test-tool", "Test Tool Description", jsonSchema);
 		McpSchema.ListToolsResult mockToolsResult = new McpSchema.ListToolsResult(List.of(mockTool), null);
 
 		// Simulate server sending tools/list_changed notification
@@ -293,8 +295,7 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(response.error()).isNull();
 
 		McpSchema.CreateMessageResult result = transport.unmarshalFrom(response.result(),
-				new TypeReference<McpSchema.CreateMessageResult>() {
-				});
+				McpType.of(McpSchema.CreateMessageResult.class));
 		assertThat(result).isNotNull();
 		assertThat(result.role()).isEqualTo(McpSchema.Role.ASSISTANT);
 		assertThat(result.content()).isNotNull();

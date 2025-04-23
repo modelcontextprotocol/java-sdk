@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema;
 import io.modelcontextprotocol.session.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import org.junit.jupiter.api.AfterEach;

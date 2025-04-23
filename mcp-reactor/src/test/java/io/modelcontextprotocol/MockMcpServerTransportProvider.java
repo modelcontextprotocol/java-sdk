@@ -15,7 +15,7 @@
 */
 package io.modelcontextprotocol;
 
-import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema;
 import io.modelcontextprotocol.session.McpServerSession;
 import io.modelcontextprotocol.spec.ServerSessionFactory;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;

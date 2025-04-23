@@ -7,7 +7,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.schema.McpType;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 
 import org.slf4j.Logger;
@@ -15,7 +15,7 @@ import org.slf4j.LoggerFactory;
 
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpSession;
 import io.modelcontextprotocol.spec.ServerSessionFactory;
@@ -116,7 +116,7 @@ public class McpServerSession implements McpSession {
 	}
 
 	@Override
-	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {
+	public <T> Mono<T> sendRequest(String method, Object requestParams, McpType<T> typeRef) {
 		String requestId = this.generateRequestId();
 
 		return Mono.<McpSchema.JSONRPCResponse>create(sink -> {
@@ -134,7 +134,7 @@ public class McpServerSession implements McpSession {
 				sink.error(new McpError(jsonRpcResponse.error()));
 			}
 			else {
-				if (typeRef.getType().equals(Void.class)) {
+				if (typeRef.getGenericType().equals(Void.class)) {
 					sink.complete();
 				}
 				else {
@@ -212,8 +212,7 @@ public class McpServerSession implements McpSession {
 			if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
 				// TODO handle situation where already initialized!
 				McpSchema.InitializeRequest initializeRequest = transport.unmarshalFrom(request.params(),
-						new TypeReference<McpSchema.InitializeRequest>() {
-						});
+						McpType.of(McpSchema.InitializeRequest.class));
 
 				this.state.lazySet(STATE_INITIALIZING);
 				this.init(initializeRequest.capabilities(), initializeRequest.clientInfo());

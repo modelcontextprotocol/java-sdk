@@ -101,6 +101,7 @@
 	<modules>
 		<module>mcp-bom</module>
 		<module>mcp-spi</module>
+		<module>mcp-schema-jackson</module>
 		<module>mcp-reactor</module>
 		<module>mcp-spring/mcp-spring-webflux</module>
 		<module>mcp-spring/mcp-spring-webmvc</module>

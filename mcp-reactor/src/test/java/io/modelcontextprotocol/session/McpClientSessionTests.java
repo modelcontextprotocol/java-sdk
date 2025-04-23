@@ -7,7 +7,6 @@ package io.modelcontextprotocol.session;
 import java.time.Duration;
 import java.util.Map;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.MockMcpClientTransport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,8 +14,9 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.modelcontextprotocol.schema.McpType;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
@@ -71,8 +71,7 @@ class McpClientSessionTests {
 			.hasMessageContaining("transport can not be null");
 	}
 
-	TypeReference<String> responseType = new TypeReference<>() {
-	};
+	McpType<String> responseType = McpType.of(String.class);
 
 	@Test
 	void testSendRequest() {

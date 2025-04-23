@@ -6,6 +6,8 @@ package io.modelcontextprotocol.spec;
 import java.util.function.Function;
 import org.reactivestreams.Publisher;
 
+import io.modelcontextprotocol.schema.McpSchema;
+
 /**
  * Marker interface for the client-side MCP transport.
  *

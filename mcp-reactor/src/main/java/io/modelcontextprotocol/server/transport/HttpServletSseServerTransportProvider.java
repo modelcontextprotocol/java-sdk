@@ -11,10 +11,12 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.modelcontextprotocol.schema.McpJacksonCodec;
+import io.modelcontextprotocol.schema.McpType;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema;
 import io.modelcontextprotocol.session.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
@@ -84,7 +86,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	public static final String DEFAULT_BASE_URL = "";
 
 	/** JSON object mapper for serialization/deserialization */
-	private final ObjectMapper objectMapper;
+	private final McpJacksonCodec jacksonCodec;
 
 	/** Base URL for the server transport */
 	private final String baseUrl;
@@ -128,7 +130,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 */
 	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint) {
-		this.objectMapper = objectMapper;
+		this.jacksonCodec = new McpJacksonCodec(objectMapper);
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
@@ -264,7 +266,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			response.setContentType(APPLICATION_JSON);
 			response.setCharacterEncoding(UTF_8);
 			response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-			String jsonError = objectMapper.writeValueAsString(new McpError("Session ID missing in message endpoint"));
+			String jsonError = jacksonCodec.getMapper()
+				.writeValueAsString(new McpError("Session ID missing in message endpoint"));
 			PrintWriter writer = response.getWriter();
 			writer.write(jsonError);
 			writer.flush();
@@ -277,7 +280,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			response.setContentType(APPLICATION_JSON);
 			response.setCharacterEncoding(UTF_8);
 			response.setStatus(HttpServletResponse.SC_NOT_FOUND);
-			String jsonError = objectMapper.writeValueAsString(new McpError("Session not found: " + sessionId));
+			String jsonError = jacksonCodec.getMapper()
+				.writeValueAsString(new McpError("Session not found: " + sessionId));
 			PrintWriter writer = response.getWriter();
 			writer.write(jsonError);
 			writer.flush();
@@ -292,7 +296,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 				body.append(line);
 			}
 
-			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body.toString());
+			McpSchema.JSONRPCMessage message = jacksonCodec.decodeFromString(body.toString());
 
 			// Process the message through the session's handle method
 			session.handle(message).block(); // Block for Servlet compatibility
@@ -306,7 +310,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 				response.setContentType(APPLICATION_JSON);
 				response.setCharacterEncoding(UTF_8);
 				response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-				String jsonError = objectMapper.writeValueAsString(mcpError);
+				String jsonError = jacksonCodec.getMapper().writeValueAsString(mcpError);
 				PrintWriter writer = response.getWriter();
 				writer.write(jsonError);
 				writer.flush();
@@ -396,7 +400,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
 			return Mono.fromRunnable(() -> {
 				try {
-					String jsonText = objectMapper.writeValueAsString(message);
+					String jsonText = jacksonCodec.getMapper().writeValueAsString(message);
 					sendEvent(writer, MESSAGE_EVENT_TYPE, jsonText);
 					logger.debug("Message sent to session {}", sessionId);
 				}
@@ -416,8 +420,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		 * @param <T> The target type
 		 */
 		@Override
-		public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-			return objectMapper.convertValue(data, typeRef);
+		public <T> T unmarshalFrom(Object data, McpType<T> typeRef) {
+			return jacksonCodec.decodeResult(data, typeRef);
 		}
 
 		/**
