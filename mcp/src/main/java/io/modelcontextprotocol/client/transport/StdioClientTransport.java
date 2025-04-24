@@ -266,6 +266,11 @@ public class StdioClientTransport implements McpClientTransport {
 						}
 					}
 					catch (Exception e) {
+						if (e instanceof JacksonException) {
+							// in typescript-server-sdk, console.log will use stdout, so ignore
+							logger.debug(line);
+							continue;
+						}
 						if (!isClosing) {
 							logger.error("Error processing inbound message for line: " + line, e);
 						}
