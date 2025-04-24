@@ -159,8 +159,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
 		this.routerFunction = RouterFunctions.route()
-			.GET(this.sseEndpoint, this::handleSseConnection)
-			.POST(this.messageEndpoint, this::handleMessage)
+			.GET(this.baseUrl + this.sseEndpoint, this::handleSseConnection)
+			.POST(this.baseUrl + this.messageEndpoint, this::handleMessage)
 			.build();
 	}
 
