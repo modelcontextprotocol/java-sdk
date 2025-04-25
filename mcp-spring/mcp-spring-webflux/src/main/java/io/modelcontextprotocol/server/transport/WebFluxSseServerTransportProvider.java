@@ -433,6 +433,17 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		private String messageEndpoint;
 
 		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
+		private McpServerAuthProvider authProvider = null;
+
+		/**
+		 * Sets the authentication provider.
+		 * @param authProvider the authentication provider
+		 * @return this builder instance
+		 */
+		public Builder authProvider(McpServerAuthProvider authProvider) {
+			this.authProvider = authProvider;
+			return this;
+		}
 
 		/**
 		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
@@ -494,7 +505,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			Assert.notNull(objectMapper, "ObjectMapper must be set");
 			Assert.notNull(messageEndpoint, "Message endpoint must be set");
 
-			return new WebFluxSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint);
+			return new WebFluxSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint, authProvider);
 		}
 
 	}
