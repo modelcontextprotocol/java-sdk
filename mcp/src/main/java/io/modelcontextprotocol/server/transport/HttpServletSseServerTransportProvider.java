@@ -18,6 +18,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.util.Assert;
 import jakarta.servlet.AsyncContext;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
@@ -79,8 +80,13 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	/** Event type for endpoint information */
 	public static final String ENDPOINT_EVENT_TYPE = "endpoint";
 
+	public static final String DEFAULT_BASE_URL = "";
+
 	/** JSON object mapper for serialization/deserialization */
 	private final ObjectMapper objectMapper;
+
+	/** Base URL for the server transport */
+	private final String baseUrl;
 
 	/** The endpoint path for handling client messages */
 	private final String messageEndpoint;
@@ -107,7 +113,22 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 */
 	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint,
 			String sseEndpoint) {
+		this(objectMapper, DEFAULT_BASE_URL, messageEndpoint, sseEndpoint);
+	}
+
+	/**
+	 * Creates a new HttpServletSseServerTransportProvider instance with a custom SSE
+	 * endpoint.
+	 * @param objectMapper The JSON object mapper to use for message
+	 * serialization/deserialization
+	 * @param baseUrl The base URL for the server transport
+	 * @param messageEndpoint The endpoint path where clients will send their messages
+	 * @param sseEndpoint The endpoint path where clients will establish SSE connections
+	 */
+	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+			String sseEndpoint) {
 		this.objectMapper = objectMapper;
+		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
 	}
@@ -139,7 +160,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 * @return A Mono that completes when the broadcast attempt is finished
 	 */
 	@Override
-	public Mono<Void> notifyClients(String method, Map<String, Object> params) {
+	public Mono<Void> notifyClients(String method, Object params) {
 		if (sessions.isEmpty()) {
 			logger.debug("No active sessions to broadcast message to");
 			return Mono.empty();
@@ -171,7 +192,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			throws ServletException, IOException {
 
 		String requestURI = request.getRequestURI();
-		if (!sseEndpoint.equals(requestURI)) {
+		if (!requestURI.endsWith(sseEndpoint)) {
 			response.sendError(HttpServletResponse.SC_NOT_FOUND);
 			return;
 		}
@@ -202,7 +223,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		this.sessions.put(sessionId, session);
 
 		// Send initial endpoint event
-		this.sendEvent(writer, ENDPOINT_EVENT_TYPE, messageEndpoint + "?sessionId=" + sessionId);
+		this.sendEvent(writer, ENDPOINT_EVENT_TYPE, this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId);
 	}
 
 	/**
@@ -226,7 +247,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		}
 
 		String requestURI = request.getRequestURI();
-		if (!messageEndpoint.equals(requestURI)) {
+		if (!requestURI.endsWith(messageEndpoint)) {
 			response.sendError(HttpServletResponse.SC_NOT_FOUND);
 			return;
 		}
@@ -425,6 +446,96 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			catch (Exception e) {
 				logger.warn("Failed to complete async context for session {}: {}", sessionId, e.getMessage());
 			}
+		}
+
+	}
+
+	/**
+	 * Creates a new Builder instance for configuring and creating instances of
+	 * HttpServletSseServerTransportProvider.
+	 * @return A new Builder instance
+	 */
+	public static Builder builder() {
+		return new Builder();
+	}
+
+	/**
+	 * Builder for creating instances of HttpServletSseServerTransportProvider.
+	 * <p>
+	 * This builder provides a fluent API for configuring and creating instances of
+	 * HttpServletSseServerTransportProvider with custom settings.
+	 */
+	public static class Builder {
+
+		private ObjectMapper objectMapper = new ObjectMapper();
+
+		private String baseUrl = DEFAULT_BASE_URL;
+
+		private String messageEndpoint;
+
+		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
+
+		/**
+		 * Sets the JSON object mapper to use for message serialization/deserialization.
+		 * @param objectMapper The object mapper to use
+		 * @return This builder instance for method chaining
+		 */
+		public Builder objectMapper(ObjectMapper objectMapper) {
+			Assert.notNull(objectMapper, "ObjectMapper must not be null");
+			this.objectMapper = objectMapper;
+			return this;
+		}
+
+		/**
+		 * Sets the base URL for the server transport.
+		 * @param baseUrl The base URL to use
+		 * @return This builder instance for method chaining
+		 */
+		public Builder baseUrl(String baseUrl) {
+			Assert.notNull(baseUrl, "Base URL must not be null");
+			this.baseUrl = baseUrl;
+			return this;
+		}
+
+		/**
+		 * Sets the endpoint path where clients will send their messages.
+		 * @param messageEndpoint The message endpoint path
+		 * @return This builder instance for method chaining
+		 */
+		public Builder messageEndpoint(String messageEndpoint) {
+			Assert.hasText(messageEndpoint, "Message endpoint must not be empty");
+			this.messageEndpoint = messageEndpoint;
+			return this;
+		}
+
+		/**
+		 * Sets the endpoint path where clients will establish SSE connections.
+		 * <p>
+		 * If not specified, the default value of {@link #DEFAULT_SSE_ENDPOINT} will be
+		 * used.
+		 * @param sseEndpoint The SSE endpoint path
+		 * @return This builder instance for method chaining
+		 */
+		public Builder sseEndpoint(String sseEndpoint) {
+			Assert.hasText(sseEndpoint, "SSE endpoint must not be empty");
+			this.sseEndpoint = sseEndpoint;
+			return this;
+		}
+
+		/**
+		 * Builds a new instance of HttpServletSseServerTransportProvider with the
+		 * configured settings.
+		 * @return A new HttpServletSseServerTransportProvider instance
+		 * @throws IllegalStateException if objectMapper or messageEndpoint is not set
+		 */
+		public HttpServletSseServerTransportProvider build() {
+			if (objectMapper == null) {
+				throw new IllegalStateException("ObjectMapper must be set");
+			}
+			if (messageEndpoint == null) {
+				throw new IllegalStateException("MessageEndpoint must be set");
+			}
+			return new HttpServletSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint);
 		}
 
 	}

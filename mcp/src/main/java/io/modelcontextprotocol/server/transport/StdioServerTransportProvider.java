@@ -93,11 +93,13 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	@Override
 	public void setSessionFactory(McpServerSession.Factory sessionFactory) {
 		// Create a single session for the stdio connection
-		this.session = sessionFactory.create(new StdioMcpSessionTransport());
+		var transport = new StdioMcpSessionTransport();
+		this.session = sessionFactory.create(transport);
+		transport.initProcessing();
 	}
 
 	@Override
-	public Mono<Void> notifyClients(String method, Map<String, Object> params) {
+	public Mono<Void> notifyClients(String method, Object params) {
 		if (this.session == null) {
 			return Mono.error(new McpError("No session to close"));
 		}
@@ -142,10 +144,6 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 					"stdio-inbound");
 			this.outboundScheduler = Schedulers.fromExecutorService(Executors.newSingleThreadExecutor(),
 					"stdio-outbound");
-
-			handleIncomingMessages();
-			startInboundProcessing();
-			startOutboundProcessing();
 		}
 
 		@Override
@@ -179,6 +177,12 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 		public void close() {
 			isClosing.set(true);
 			logger.debug("Session transport closed");
+		}
+
+		private void initProcessing() {
+			handleIncomingMessages();
+			startInboundProcessing();
+			startOutboundProcessing();
 		}
 
 		private void handleIncomingMessages() {

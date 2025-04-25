@@ -23,7 +23,7 @@ import org.springframework.web.reactive.function.server.RouterFunctions;
 @Timeout(15) // Giving extra time beyond the client timeout
 class WebFluxSseMcpSyncServerTests extends AbstractMcpSyncServerTests {
 
-	private static final int PORT = 8182;
+	private static final int PORT = TestUtil.findAvailablePort();
 
 	private static final String MESSAGE_ENDPOINT = "/mcp/message";
 
@@ -33,7 +33,9 @@ class WebFluxSseMcpSyncServerTests extends AbstractMcpSyncServerTests {
 
 	@Override
 	protected McpServerTransportProvider createMcpTransportProvider() {
-		transportProvider = new WebFluxSseServerTransportProvider(new ObjectMapper(), MESSAGE_ENDPOINT);
+		transportProvider = new WebFluxSseServerTransportProvider.Builder().objectMapper(new ObjectMapper())
+			.messageEndpoint(MESSAGE_ENDPOINT)
+			.build();
 		return transportProvider;
 	}
 

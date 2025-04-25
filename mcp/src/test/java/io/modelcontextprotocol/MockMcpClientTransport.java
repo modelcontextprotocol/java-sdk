@@ -13,30 +13,28 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.ServerMcpTransport;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCNotification;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 
 /**
- * A mock implementation of the {@link McpClientTransport} and {@link ServerMcpTransport}
- * interfaces.
+ * A mock implementation of the {@link McpClientTransport} interfaces.
  */
-public class MockMcpTransport implements McpClientTransport, ServerMcpTransport {
+public class MockMcpClientTransport implements McpClientTransport {
 
 	private final Sinks.Many<McpSchema.JSONRPCMessage> inbound = Sinks.many().unicast().onBackpressureBuffer();
 
 	private final List<McpSchema.JSONRPCMessage> sent = new ArrayList<>();
 
-	private final BiConsumer<MockMcpTransport, McpSchema.JSONRPCMessage> interceptor;
+	private final BiConsumer<MockMcpClientTransport, McpSchema.JSONRPCMessage> interceptor;
 
-	public MockMcpTransport() {
+	public MockMcpClientTransport() {
 		this((t, msg) -> {
 		});
 	}
 
-	public MockMcpTransport(BiConsumer<MockMcpTransport, McpSchema.JSONRPCMessage> interceptor) {
+	public MockMcpClientTransport(BiConsumer<MockMcpClientTransport, McpSchema.JSONRPCMessage> interceptor) {
 		this.interceptor = interceptor;
 	}
 

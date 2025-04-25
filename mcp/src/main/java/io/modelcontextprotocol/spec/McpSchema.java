@@ -18,13 +18,14 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Based on the <a href="http://www.jsonrpc.org/specification">JSON-RPC 2.0
  * specification</a> and the <a href=
- * "https://github.com/modelcontextprotocol/specification/blob/main/schema/schema.ts">Model
+ * "https://github.com/modelcontextprotocol/specification/blob/main/schema/2024-11-05/schema.ts">Model
  * Context Protocol Schema</a>.
  *
  * @author Christian Tzolov
@@ -77,6 +78,8 @@ public final class McpSchema {
 	public static final String METHOD_PROMPT_GET = "prompts/get";
 
 	public static final String METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED = "notifications/prompts/list_changed";
+
+	public static final String METHOD_COMPLETION_COMPLETE = "completion/complete";
 
 	// Logging Methods
 	public static final String METHOD_LOGGING_SET_LEVEL = "logging/setLevel";
@@ -190,7 +193,7 @@ public final class McpSchema {
 	public record JSONRPCNotification( // @formatter:off
 			@JsonProperty("jsonrpc") String jsonrpc,
 			@JsonProperty("method") String method,
-			@JsonProperty("params") Map<String, Object> params) implements JSONRPCMessage {
+			@JsonProperty("params") Object params) implements JSONRPCMessage {
 	} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -313,12 +316,16 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ServerCapabilities( // @formatter:off
+	    @JsonProperty("completions") CompletionCapabilities completions,
 		@JsonProperty("experimental") Map<String, Object> experimental,
 		@JsonProperty("logging") LoggingCapabilities logging,
 		@JsonProperty("prompts") PromptCapabilities prompts,
 		@JsonProperty("resources") ResourceCapabilities resources,
 		@JsonProperty("tools") ToolCapabilities tools) {
 
+		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		public record CompletionCapabilities() {
+		}
 			
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record LoggingCapabilities() {
@@ -346,11 +353,17 @@ public final class McpSchema {
 
 		public static class Builder {
 
+			private CompletionCapabilities completions;
 			private Map<String, Object> experimental;
 			private LoggingCapabilities logging = new LoggingCapabilities();
 			private PromptCapabilities prompts;
 			private ResourceCapabilities resources;
 			private ToolCapabilities tools;
+
+			public Builder completions() {
+				this.completions = new CompletionCapabilities();
+				return this;
+			}
 
 			public Builder experimental(Map<String, Object> experimental) {
 				this.experimental = experimental;
@@ -378,7 +391,7 @@ public final class McpSchema {
 			}
 
 			public ServerCapabilities build() {
-				return new ServerCapabilities(experimental, logging, prompts, resources, tools);
+				return new ServerCapabilities(completions, experimental, logging, prompts, resources, tools);
 			}
 		}
 	} // @formatter:on
@@ -690,7 +703,9 @@ public final class McpSchema {
 		@JsonProperty("type") String type,
 		@JsonProperty("properties") Map<String, Object> properties,
 		@JsonProperty("required") List<String> required,
-		@JsonProperty("additionalProperties") Boolean additionalProperties) {
+		@JsonProperty("additionalProperties") Boolean additionalProperties,
+		@JsonProperty("$defs") Map<String, Object> defs,
+		@JsonProperty("definitions") Map<String, Object> definitions) {
 	} // @formatter:on
 
 	/**
@@ -741,6 +756,19 @@ public final class McpSchema {
 	public record CallToolRequest(// @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("arguments") Map<String, Object> arguments) implements Request {
+
+		public CallToolRequest(String name, String jsonArguments) {
+			this(name, parseJsonArguments(jsonArguments));			
+		}
+
+		private static Map<String, Object> parseJsonArguments(String jsonArguments) {
+			try {
+				return OBJECT_MAPPER.readValue(jsonArguments, MAP_TYPE_REF);
+			}
+			catch (IOException e) {
+				throw new IllegalArgumentException("Invalid arguments: " + jsonArguments, e);
+			}
+		}
 	}// @formatter:off
 
 	/**
@@ -756,6 +784,103 @@ public final class McpSchema {
 	public record CallToolResult( // @formatter:off
 		@JsonProperty("content") List<Content> content,
 		@JsonProperty("isError") Boolean isError) {
+
+		/**
+		 * Creates a new instance of {@link CallToolResult} with a string containing the
+		 * tool result.
+		 *
+		 * @param content The content of the tool result. This will be mapped to a one-sized list
+		 * 				  with a {@link TextContent} element.
+		 * @param isError If true, indicates that the tool execution failed and the content contains error information.
+		 *                If false or absent, indicates successful execution.
+		 */
+		public CallToolResult(String content, Boolean isError) {
+			this(List.of(new TextContent(content)), isError);
+		}
+
+		/**
+		 * Creates a builder for {@link CallToolResult}.
+		 * @return a new builder instance
+		 */
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		/**
+		 * Builder for {@link CallToolResult}.
+		 */
+		public static class Builder {
+			private List<Content> content = new ArrayList<>();
+			private Boolean isError;
+
+			/**
+			 * Sets the content list for the tool result.
+			 * @param content the content list
+			 * @return this builder
+			 */
+			public Builder content(List<Content> content) {
+				Assert.notNull(content, "content must not be null");
+				this.content = content;
+				return this;
+			}
+
+			/**
+			 * Sets the text content for the tool result.
+			 * @param textContent the text content
+			 * @return this builder
+			 */
+			public Builder textContent(List<String> textContent) {
+				Assert.notNull(textContent, "textContent must not be null");
+				textContent.stream()
+					.map(TextContent::new)
+					.forEach(this.content::add);
+				return this;
+			}
+
+			/**
+			 * Adds a content item to the tool result.
+			 * @param contentItem the content item to add
+			 * @return this builder
+			 */
+			public Builder addContent(Content contentItem) {
+				Assert.notNull(contentItem, "contentItem must not be null");
+				if (this.content == null) {
+					this.content = new ArrayList<>();
+				}
+				this.content.add(contentItem);
+				return this;
+			}
+
+			/**
+			 * Adds a text content item to the tool result.
+			 * @param text the text content
+			 * @return this builder
+			 */
+			public Builder addTextContent(String text) {
+				Assert.notNull(text, "text must not be null");
+				return addContent(new TextContent(text));
+			}
+
+			/**
+			 * Sets whether the tool execution resulted in an error.
+			 * @param isError true if the tool execution failed, false otherwise
+			 * @return this builder
+			 */
+			public Builder isError(Boolean isError) {
+				Assert.notNull(isError, "isError must not be null");
+				this.isError = isError;
+				return this;
+			}
+
+			/**
+			 * Builds a new {@link CallToolResult} instance.
+			 * @return a new CallToolResult instance
+			 */
+			public CallToolResult build() {
+				return new CallToolResult(content, isError);
+			}
+		}
+
 	} // @formatter:on
 
 	// ---------------------------
@@ -992,7 +1117,7 @@ public final class McpSchema {
 	 * setting minimum log levels, with servers sending notifications containing severity
 	 * levels, optional logger names, and arbitrary JSON-serializable data.
 	 *
-	 * @param level The severity levels. The mimimum log level is set by the client.
+	 * @param level The severity levels. The minimum log level is set by the client.
 	 * @param logger The logger that generated the message.
 	 * @param data JSON-serializable logging data.
 	 */
@@ -1054,34 +1179,71 @@ public final class McpSchema {
 
 	} // @formatter:on
 
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record SetLevelRequest(@JsonProperty("level") LoggingLevel level) {
+	}
+
 	// ---------------------------
 	// Autocomplete
 	// ---------------------------
-	public record CompleteRequest(PromptOrResourceReference ref, CompleteArgument argument) implements Request {
-		public sealed interface PromptOrResourceReference permits PromptReference, ResourceReference {
+	public sealed interface CompleteReference permits PromptReference, ResourceReference {
 
-			String type();
+		String type();
 
+		String identifier();
+
+	}
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record PromptReference(// @formatter:off
+		@JsonProperty("type") String type,
+		@JsonProperty("name") String name) implements McpSchema.CompleteReference {
+
+		public PromptReference(String name) {
+			this("ref/prompt", name);
 		}
 
-		public record PromptReference(// @formatter:off
-			@JsonProperty("type") String type,
-			@JsonProperty("name") String name) implements PromptOrResourceReference {
-		}// @formatter:on
+		@Override
+		public String identifier() {
+			return name();
+		}
+	}// @formatter:on
 
-		public record ResourceReference(// @formatter:off
-			@JsonProperty("type") String type,
-			@JsonProperty("uri") String uri) implements PromptOrResourceReference {
-		}// @formatter:on
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ResourceReference(// @formatter:off
+		@JsonProperty("type") String type,
+		@JsonProperty("uri") String uri) implements McpSchema.CompleteReference {
 
-		public record CompleteArgument(// @formatter:off
+		public ResourceReference(String uri) {
+			this("ref/resource", uri);
+		}
+
+		@Override
+		public String identifier() {
+			return uri();
+		}
+	}// @formatter:on
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record CompleteRequest(// @formatter:off
+		@JsonProperty("ref") McpSchema.CompleteReference ref,
+		@JsonProperty("argument") CompleteArgument argument) implements Request {
+
+		public record CompleteArgument(
 			@JsonProperty("name") String name,
 			@JsonProperty("value") String value) {
 		}// @formatter:on
 	}
 
-	public record CompleteResult(CompleteCompletion completion) {
-		public record CompleteCompletion(// @formatter:off
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record CompleteResult(@JsonProperty("completion") CompleteCompletion completion) { // @formatter:off
+			
+		public record CompleteCompletion(
 			@JsonProperty("values") List<String> values,
 			@JsonProperty("total") Integer total,
 			@JsonProperty("hasMore") Boolean hasMore) {

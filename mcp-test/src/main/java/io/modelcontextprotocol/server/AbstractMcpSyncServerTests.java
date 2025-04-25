@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Test suite for the {@link McpSyncServer} that can be used with different
- * {@link McpTransportProvider} implementations.
+ * {@link io.modelcontextprotocol.spec.McpServerTransportProvider} implementations.
  *
  * @author Christian Tzolov
  */
@@ -200,16 +200,16 @@ public abstract class AbstractMcpSyncServerTests {
 
 		Resource resource = new Resource(TEST_RESOURCE_URI, "Test Resource", "text/plain", "Test resource description",
 				null);
-		McpServerFeatures.SyncResourceSpecification specificaiton = new McpServerFeatures.SyncResourceSpecification(
+		McpServerFeatures.SyncResourceSpecification specification = new McpServerFeatures.SyncResourceSpecification(
 				resource, (exchange, req) -> new ReadResourceResult(List.of()));
 
-		assertThatCode(() -> mcpSyncServer.addResource(specificaiton)).doesNotThrowAnyException();
+		assertThatCode(() -> mcpSyncServer.addResource(specification)).doesNotThrowAnyException();
 
 		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
 	}
 
 	@Test
-	void testAddResourceWithNullSpecifiation() {
+	void testAddResourceWithNullSpecification() {
 		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().resources(true, false).build())
@@ -279,11 +279,11 @@ public abstract class AbstractMcpSyncServerTests {
 			.build();
 
 		Prompt prompt = new Prompt(TEST_PROMPT_NAME, "Test Prompt", List.of());
-		McpServerFeatures.SyncPromptSpecification specificaiton = new McpServerFeatures.SyncPromptSpecification(prompt,
+		McpServerFeatures.SyncPromptSpecification specification = new McpServerFeatures.SyncPromptSpecification(prompt,
 				(exchange, req) -> new GetPromptResult("Test prompt description", List
 					.of(new PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent("Test content")))));
 
-		assertThatThrownBy(() -> serverWithoutPrompts.addPrompt(specificaiton)).isInstanceOf(McpError.class)
+		assertThatThrownBy(() -> serverWithoutPrompts.addPrompt(specification)).isInstanceOf(McpError.class)
 			.hasMessage("Server must be configured with prompt capabilities");
 	}
 
@@ -300,14 +300,14 @@ public abstract class AbstractMcpSyncServerTests {
 	@Test
 	void testRemovePrompt() {
 		Prompt prompt = new Prompt(TEST_PROMPT_NAME, "Test Prompt", List.of());
-		McpServerFeatures.SyncPromptSpecification specificaiton = new McpServerFeatures.SyncPromptSpecification(prompt,
+		McpServerFeatures.SyncPromptSpecification specification = new McpServerFeatures.SyncPromptSpecification(prompt,
 				(exchange, req) -> new GetPromptResult("Test prompt description", List
 					.of(new PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent("Test content")))));
 
 		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().prompts(true).build())
-			.prompts(specificaiton)
+			.prompts(specification)
 			.build();
 
 		assertThatCode(() -> mcpSyncServer.removePrompt(TEST_PROMPT_NAME)).doesNotThrowAnyException();
@@ -340,7 +340,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 		var singleConsumerServer = McpServer.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
-			.rootsChangeHandlers(List.of((exchage, roots) -> {
+			.rootsChangeHandlers(List.of((exchange, roots) -> {
 				consumerCalled[0] = true;
 				if (!roots.isEmpty()) {
 					rootsReceived[0] = roots.get(0);
@@ -386,55 +386,6 @@ public abstract class AbstractMcpSyncServerTests {
 
 		assertThat(noConsumersServer).isNotNull();
 		assertThatCode(() -> noConsumersServer.closeGracefully()).doesNotThrowAnyException();
-	}
-
-	// ---------------------------------------
-	// Logging Tests
-	// ---------------------------------------
-
-	@Test
-	void testLoggingLevels() {
-		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
-			.serverInfo("test-server", "1.0.0")
-			.capabilities(ServerCapabilities.builder().logging().build())
-			.build();
-
-		// Test all logging levels
-		for (McpSchema.LoggingLevel level : McpSchema.LoggingLevel.values()) {
-			var notification = McpSchema.LoggingMessageNotification.builder()
-				.level(level)
-				.logger("test-logger")
-				.data("Test message with level " + level)
-				.build();
-
-			assertThatCode(() -> mcpSyncServer.loggingNotification(notification)).doesNotThrowAnyException();
-		}
-	}
-
-	@Test
-	void testLoggingWithoutCapability() {
-		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
-			.serverInfo("test-server", "1.0.0")
-			.capabilities(ServerCapabilities.builder().build()) // No logging capability
-			.build();
-
-		var notification = McpSchema.LoggingMessageNotification.builder()
-			.level(McpSchema.LoggingLevel.INFO)
-			.logger("test-logger")
-			.data("Test log message")
-			.build();
-
-		assertThatCode(() -> mcpSyncServer.loggingNotification(notification)).doesNotThrowAnyException();
-	}
-
-	@Test
-	void testLoggingWithNullNotification() {
-		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
-			.serverInfo("test-server", "1.0.0")
-			.capabilities(ServerCapabilities.builder().logging().build())
-			.build();
-
-		assertThatThrownBy(() -> mcpSyncServer.loggingNotification(null)).isInstanceOf(McpError.class);
 	}
 
 }

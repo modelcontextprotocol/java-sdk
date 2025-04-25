@@ -39,6 +39,8 @@ public class FlowSseClient {
 
 	private final HttpClient httpClient;
 
+	private final HttpRequest.Builder requestBuilder;
+
 	/**
 	 * Pattern to extract the data content from SSE data field lines. Matches lines
 	 * starting with "data:" and captures the remaining content.
@@ -92,7 +94,17 @@ public class FlowSseClient {
 	 * @param httpClient the {@link HttpClient} instance to use for SSE connections
 	 */
 	public FlowSseClient(HttpClient httpClient) {
+		this(httpClient, HttpRequest.newBuilder());
+	}
+
+	/**
+	 * Creates a new FlowSseClient with the specified HTTP client and request builder.
+	 * @param httpClient the {@link HttpClient} instance to use for SSE connections
+	 * @param requestBuilder the {@link HttpRequest.Builder} to use for SSE requests
+	 */
+	public FlowSseClient(HttpClient httpClient, HttpRequest.Builder requestBuilder) {
 		this.httpClient = httpClient;
+		this.requestBuilder = requestBuilder;
 	}
 
 	/**
@@ -109,8 +121,7 @@ public class FlowSseClient {
 	 * @throws RuntimeException if the connection fails with a non-200 status code
 	 */
 	public void subscribe(String url, SseEventHandler eventHandler) {
-		HttpRequest request = HttpRequest.newBuilder()
-			.uri(URI.create(url))
+		HttpRequest request = this.requestBuilder.uri(URI.create(url))
 			.header("Accept", "text/event-stream")
 			.header("Cache-Control", "no-cache")
 			.GET()

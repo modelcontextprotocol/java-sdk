@@ -4,9 +4,16 @@
 
 package io.modelcontextprotocol.client.transport;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import io.modelcontextprotocol.spec.McpSchema;
@@ -15,6 +22,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import reactor.core.publisher.Mono;
@@ -25,6 +34,11 @@ import org.springframework.http.codec.ServerSentEvent;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Tests for the {@link HttpClientSseClientTransport} class.
@@ -51,8 +65,8 @@ class HttpClientSseClientTransportTests {
 
 		private Sinks.Many<ServerSentEvent<String>> events = Sinks.many().unicast().onBackpressureBuffer();
 
-		public TestHttpClientSseClientTransport(String baseUri) {
-			super(baseUri);
+		public TestHttpClientSseClientTransport(final String baseUri) {
+			super(HttpClient.newHttpClient(), HttpRequest.newBuilder(), baseUri, "/sse", new ObjectMapper());
 		}
 
 		public int getInboundMessageCount() {
@@ -191,13 +205,14 @@ class HttpClientSseClientTransportTests {
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 
 		// Message count should remain 0 after shutdown
-		assertThat(transport.getInboundMessageCount()).isEqualTo(0);
+		assertThat(transport.getInboundMessageCount()).isZero();
 	}
 
 	@Test
 	void testRetryBehavior() {
 		// Create a client that simulates connection failures
-		HttpClientSseClientTransport failingTransport = new HttpClientSseClientTransport("http://non-existent-host");
+		HttpClientSseClientTransport failingTransport = HttpClientSseClientTransport.builder("http://non-existent-host")
+			.build();
 
 		// Verify that the transport attempts to reconnect
 		StepVerifier.create(Mono.delay(Duration.ofSeconds(2))).expectNextCount(1).verifyComplete();
@@ -273,6 +288,107 @@ class HttpClientSseClientTransportTests {
 
 		// Verify message count and order
 		assertThat(transport.getInboundMessageCount()).isEqualTo(3);
+	}
+
+	@Test
+	void testCustomizeClient() {
+		// Create an atomic boolean to verify the customizer was called
+		AtomicBoolean customizerCalled = new AtomicBoolean(false);
+
+		// Create a transport with the customizer
+		HttpClientSseClientTransport customizedTransport = HttpClientSseClientTransport.builder(host)
+			.customizeClient(builder -> {
+				builder.version(HttpClient.Version.HTTP_2);
+				customizerCalled.set(true);
+			})
+			.build();
+
+		// Verify the customizer was called
+		assertThat(customizerCalled.get()).isTrue();
+
+		// Clean up
+		customizedTransport.closeGracefully().block();
+	}
+
+	@Test
+	void testCustomizeRequest() {
+		// Create an atomic boolean to verify the customizer was called
+		AtomicBoolean customizerCalled = new AtomicBoolean(false);
+
+		// Create a reference to store the custom header value
+		AtomicReference<String> headerName = new AtomicReference<>();
+		AtomicReference<String> headerValue = new AtomicReference<>();
+
+		// Create a transport with the customizer
+		HttpClientSseClientTransport customizedTransport = HttpClientSseClientTransport.builder(host)
+			// Create a request customizer that adds a custom header
+			.customizeRequest(builder -> {
+				builder.header("X-Custom-Header", "test-value");
+				customizerCalled.set(true);
+
+				// Create a new request to verify the header was set
+				HttpRequest request = builder.uri(URI.create("http://example.com")).build();
+				headerName.set("X-Custom-Header");
+				headerValue.set(request.headers().firstValue("X-Custom-Header").orElse(null));
+			})
+			.build();
+
+		// Verify the customizer was called
+		assertThat(customizerCalled.get()).isTrue();
+
+		// Verify the header was set correctly
+		assertThat(headerName.get()).isEqualTo("X-Custom-Header");
+		assertThat(headerValue.get()).isEqualTo("test-value");
+
+		// Clean up
+		customizedTransport.closeGracefully().block();
+	}
+
+	@Test
+	void testChainedCustomizations() {
+		// Create atomic booleans to verify both customizers were called
+		AtomicBoolean clientCustomizerCalled = new AtomicBoolean(false);
+		AtomicBoolean requestCustomizerCalled = new AtomicBoolean(false);
+
+		// Create a transport with both customizers chained
+		HttpClientSseClientTransport customizedTransport = HttpClientSseClientTransport.builder(host)
+			.customizeClient(builder -> {
+				builder.connectTimeout(Duration.ofSeconds(30));
+				clientCustomizerCalled.set(true);
+			})
+			.customizeRequest(builder -> {
+				builder.header("X-Api-Key", "test-api-key");
+				requestCustomizerCalled.set(true);
+			})
+			.build();
+
+		// Verify both customizers were called
+		assertThat(clientCustomizerCalled.get()).isTrue();
+		assertThat(requestCustomizerCalled.get()).isTrue();
+
+		// Clean up
+		customizedTransport.closeGracefully().block();
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void testResolvingClientEndpoint() {
+		HttpClient httpClient = Mockito.mock(HttpClient.class);
+		HttpResponse<Void> httpResponse = Mockito.mock(HttpResponse.class);
+		CompletableFuture<HttpResponse<Void>> future = new CompletableFuture<>();
+		future.complete(httpResponse);
+		when(httpClient.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(future);
+
+		HttpClientSseClientTransport transport = new HttpClientSseClientTransport(httpClient, HttpRequest.newBuilder(),
+				"http://example.com", "http://example.com/sse", new ObjectMapper());
+
+		transport.connect(Function.identity());
+
+		ArgumentCaptor<HttpRequest> httpRequestCaptor = ArgumentCaptor.forClass(HttpRequest.class);
+		verify(httpClient).sendAsync(httpRequestCaptor.capture(), any(HttpResponse.BodyHandler.class));
+		assertThat(httpRequestCaptor.getValue().uri()).isEqualTo(URI.create("http://example.com/sse"));
+
+		transport.closeGracefully().block();
 	}
 
 }

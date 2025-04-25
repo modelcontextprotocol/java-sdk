@@ -27,6 +27,9 @@ public class McpServerSession implements McpSession {
 
 	private final String id;
 
+	/** Duration to wait for request responses before timing out */
+	private final Duration requestTimeout;
+
 	private final AtomicLong requestCounter = new AtomicLong(0);
 
 	private final InitRequestHandler initRequestHandler;
@@ -61,14 +64,16 @@ public class McpServerSession implements McpSession {
 	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
 	 * server
 	 * @param initNotificationHandler called when a
-	 * {@link McpSchema.METHOD_NOTIFICATION_INITIALIZED} is received.
+	 * {@link io.modelcontextprotocol.spec.McpSchema#METHOD_NOTIFICATION_INITIALIZED} is
+	 * received.
 	 * @param requestHandlers map of request handlers to use
 	 * @param notificationHandlers map of notification handlers to use
 	 */
-	public McpServerSession(String id, McpServerTransport transport, InitRequestHandler initHandler,
-			InitNotificationHandler initNotificationHandler, Map<String, RequestHandler<?>> requestHandlers,
-			Map<String, NotificationHandler> notificationHandlers) {
+	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
+			InitRequestHandler initHandler, InitNotificationHandler initNotificationHandler,
+			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
 		this.id = id;
+		this.requestTimeout = requestTimeout;
 		this.transport = transport;
 		this.initRequestHandler = initHandler;
 		this.initNotificationHandler = initNotificationHandler;
@@ -116,7 +121,7 @@ public class McpServerSession implements McpSession {
 				this.pendingResponses.remove(requestId);
 				sink.error(error);
 			});
-		}).timeout(Duration.ofSeconds(10)).handle((jsonRpcResponse, sink) -> {
+		}).timeout(requestTimeout).handle((jsonRpcResponse, sink) -> {
 			if (jsonRpcResponse.error() != null) {
 				sink.error(new McpError(jsonRpcResponse.error()));
 			}
@@ -132,7 +137,7 @@ public class McpServerSession implements McpSession {
 	}
 
 	@Override
-	public Mono<Void> sendNotification(String method, Map<String, Object> params) {
+	public Mono<Void> sendNotification(String method, Object params) {
 		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
 				method, params);
 		return this.transport.sendMessage(jsonrpcNotification);
@@ -253,14 +258,8 @@ public class McpServerSession implements McpSession {
 	record MethodNotFoundError(String method, String message, Object data) {
 	}
 
-	static MethodNotFoundError getMethodNotFoundError(String method) {
-		switch (method) {
-			case McpSchema.METHOD_ROOTS_LIST:
-				return new MethodNotFoundError(method, "Roots not supported",
-						Map.of("reason", "Client does not have roots capability"));
-			default:
-				return new MethodNotFoundError(method, "Method not found: " + method, null);
-		}
+	private MethodNotFoundError getMethodNotFoundError(String method) {
+		return new MethodNotFoundError(method, "Method not found: " + method, null);
 	}
 
 	@Override

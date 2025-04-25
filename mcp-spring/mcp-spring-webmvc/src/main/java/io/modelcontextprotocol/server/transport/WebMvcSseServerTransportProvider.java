@@ -91,6 +91,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 
 	private final String sseEndpoint;
 
+	private final String baseUrl;
+
 	private final RouterFunction<ServerResponse> routerFunction;
 
 	private McpServerSession.Factory sessionFactory;
@@ -106,30 +108,6 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	private volatile boolean isClosing = false;
 
 	/**
-	 * Constructs a new WebMvcSseServerTransportProvider instance.
-	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
-	 * of messages.
-	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
-	 * messages via HTTP POST. This endpoint will be communicated to clients through the
-	 * SSE connection's initial endpoint event.
-	 * @param sseEndpoint The endpoint URI where clients establish their SSE connections.
-	 * @throws IllegalArgumentException if any parameter is null
-	 */
-	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
-		Assert.notNull(objectMapper, "ObjectMapper must not be null");
-		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
-		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
-
-		this.objectMapper = objectMapper;
-		this.messageEndpoint = messageEndpoint;
-		this.sseEndpoint = sseEndpoint;
-		this.routerFunction = RouterFunctions.route()
-			.GET(this.sseEndpoint, this::handleSseConnection)
-			.POST(this.messageEndpoint, this::handleMessage)
-			.build();
-	}
-
-	/**
 	 * Constructs a new WebMvcSseServerTransportProvider instance with the default SSE
 	 * endpoint.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
@@ -141,6 +119,49 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 */
 	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint) {
 		this(objectMapper, messageEndpoint, DEFAULT_SSE_ENDPOINT);
+	}
+
+	/**
+	 * Constructs a new WebMvcSseServerTransportProvider instance.
+	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
+	 * of messages.
+	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
+	 * messages via HTTP POST. This endpoint will be communicated to clients through the
+	 * SSE connection's initial endpoint event.
+	 * @param sseEndpoint The endpoint URI where clients establish their SSE connections.
+	 * @throws IllegalArgumentException if any parameter is null
+	 */
+	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
+		this(objectMapper, "", messageEndpoint, sseEndpoint);
+	}
+
+	/**
+	 * Constructs a new WebMvcSseServerTransportProvider instance.
+	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
+	 * of messages.
+	 * @param baseUrl The base URL for the message endpoint, used to construct the full
+	 * endpoint URL for clients.
+	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
+	 * messages via HTTP POST. This endpoint will be communicated to clients through the
+	 * SSE connection's initial endpoint event.
+	 * @param sseEndpoint The endpoint URI where clients establish their SSE connections.
+	 * @throws IllegalArgumentException if any parameter is null
+	 */
+	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+			String sseEndpoint) {
+		Assert.notNull(objectMapper, "ObjectMapper must not be null");
+		Assert.notNull(baseUrl, "Message base URL must not be null");
+		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
+		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
+
+		this.objectMapper = objectMapper;
+		this.baseUrl = baseUrl;
+		this.messageEndpoint = messageEndpoint;
+		this.sseEndpoint = sseEndpoint;
+		this.routerFunction = RouterFunctions.route()
+			.GET(this.sseEndpoint, this::handleSseConnection)
+			.POST(this.messageEndpoint, this::handleMessage)
+			.build();
 	}
 
 	@Override
@@ -158,7 +179,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * @return A Mono that completes when the broadcast attempt is finished
 	 */
 	@Override
-	public Mono<Void> notifyClients(String method, Map<String, Object> params) {
+	public Mono<Void> notifyClients(String method, Object params) {
 		if (sessions.isEmpty()) {
 			logger.debug("No active sessions to broadcast message to");
 			return Mono.empty();
@@ -248,7 +269,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				try {
 					sseBuilder.id(sessionId)
 						.event(ENDPOINT_EVENT_TYPE)
-						.data(messageEndpoint + "?sessionId=" + sessionId);
+						.data(this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId);
 				}
 				catch (Exception e) {
 					logger.error("Failed to send initial endpoint event: {}", e.getMessage());
@@ -279,7 +300,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
-		if (!request.param("sessionId").isPresent()) {
+		if (request.param("sessionId").isEmpty()) {
 			return ServerResponse.badRequest().body(new McpError("Session ID missing in message endpoint"));
 		}
 

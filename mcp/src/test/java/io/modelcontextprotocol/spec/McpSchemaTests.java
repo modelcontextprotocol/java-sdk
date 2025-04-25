@@ -6,8 +6,10 @@ package io.modelcontextprotocol.spec;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
 import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
@@ -449,6 +451,92 @@ public class McpSchemaTests {
 	// Tool Tests
 
 	@Test
+	void testJsonSchema() throws Exception {
+		String schemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"name": {
+							"type": "string"
+						},
+						"address": {
+							"$ref": "#/$defs/Address"
+						}
+					},
+					"required": ["name"],
+					"$defs": {
+						"Address": {
+							"type": "object",
+							"properties": {
+								"street": {"type": "string"},
+								"city": {"type": "string"}
+							},
+							"required": ["street", "city"]
+						}
+					}
+				}
+				""";
+
+		// Deserialize the original string to a JsonSchema object
+		McpSchema.JsonSchema schema = mapper.readValue(schemaJson, McpSchema.JsonSchema.class);
+
+		// Serialize the object back to a string
+		String serialized = mapper.writeValueAsString(schema);
+
+		// Deserialize again
+		McpSchema.JsonSchema deserialized = mapper.readValue(serialized, McpSchema.JsonSchema.class);
+
+		// Serialize one more time and compare with the first serialization
+		String serializedAgain = mapper.writeValueAsString(deserialized);
+
+		// The two serialized strings should be the same
+		assertThatJson(serializedAgain).when(Option.IGNORING_ARRAY_ORDER).isEqualTo(json(serialized));
+	}
+
+	@Test
+	void testJsonSchemaWithDefinitions() throws Exception {
+		String schemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"name": {
+							"type": "string"
+						},
+						"address": {
+							"$ref": "#/definitions/Address"
+						}
+					},
+					"required": ["name"],
+					"definitions": {
+						"Address": {
+							"type": "object",
+							"properties": {
+								"street": {"type": "string"},
+								"city": {"type": "string"}
+							},
+							"required": ["street", "city"]
+						}
+					}
+				}
+				""";
+
+		// Deserialize the original string to a JsonSchema object
+		McpSchema.JsonSchema schema = mapper.readValue(schemaJson, McpSchema.JsonSchema.class);
+
+		// Serialize the object back to a string
+		String serialized = mapper.writeValueAsString(schema);
+
+		// Deserialize again
+		McpSchema.JsonSchema deserialized = mapper.readValue(serialized, McpSchema.JsonSchema.class);
+
+		// Serialize one more time and compare with the first serialization
+		String serializedAgain = mapper.writeValueAsString(deserialized);
+
+		// The two serialized strings should be the same
+		assertThatJson(serializedAgain).when(Option.IGNORING_ARRAY_ORDER).isEqualTo(json(serialized));
+	}
+
+	@Test
 	void testTool() throws Exception {
 		String schemaJson = """
 				{
@@ -477,12 +565,73 @@ public class McpSchemaTests {
 	}
 
 	@Test
+	void testToolWithComplexSchema() throws Exception {
+		String complexSchemaJson = """
+				{
+					"type": "object",
+					"$defs": {
+						"Address": {
+							"type": "object",
+							"properties": {
+								"street": {"type": "string"},
+								"city": {"type": "string"}
+							},
+							"required": ["street", "city"]
+						}
+					},
+					"properties": {
+						"name": {"type": "string"},
+						"shippingAddress": {"$ref": "#/$defs/Address"}
+					},
+					"required": ["name", "shippingAddress"]
+				}
+				""";
+
+		McpSchema.Tool tool = new McpSchema.Tool("addressTool", "Handles addresses", complexSchemaJson);
+
+		// Serialize the tool to a string
+		String serialized = mapper.writeValueAsString(tool);
+
+		// Deserialize back to a Tool object
+		McpSchema.Tool deserializedTool = mapper.readValue(serialized, McpSchema.Tool.class);
+
+		// Serialize again and compare with first serialization
+		String serializedAgain = mapper.writeValueAsString(deserializedTool);
+
+		// The two serialized strings should be the same
+		assertThatJson(serializedAgain).when(Option.IGNORING_ARRAY_ORDER).isEqualTo(json(serialized));
+
+		// Just verify the basic structure was preserved
+		assertThat(deserializedTool.inputSchema().defs()).isNotNull();
+		assertThat(deserializedTool.inputSchema().defs()).containsKey("Address");
+	}
+
+	@Test
 	void testCallToolRequest() throws Exception {
 		Map<String, Object> arguments = new HashMap<>();
 		arguments.put("name", "test");
 		arguments.put("value", 42);
 
 		McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("test-tool", arguments);
+
+		String value = mapper.writeValueAsString(request);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"name":"test-tool","arguments":{"name":"test","value":42}}"""));
+	}
+
+	@Test
+	void testCallToolRequestJsonArguments() throws Exception {
+
+		McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("test-tool", """
+				{
+					"name": "test",
+					"value": 42
+				}
+				""");
 
 		String value = mapper.writeValueAsString(request);
 
@@ -506,6 +655,98 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(json("""
 					{"content":[{"type":"text","text":"Tool execution result"}],"isError":false}"""));
+	}
+
+	@Test
+	void testCallToolResultBuilder() throws Exception {
+		McpSchema.CallToolResult result = McpSchema.CallToolResult.builder()
+			.addTextContent("Tool execution result")
+			.isError(false)
+			.build();
+
+		String value = mapper.writeValueAsString(result);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"content":[{"type":"text","text":"Tool execution result"}],"isError":false}"""));
+	}
+
+	@Test
+	void testCallToolResultBuilderWithMultipleContents() throws Exception {
+		McpSchema.TextContent textContent = new McpSchema.TextContent("Text result");
+		McpSchema.ImageContent imageContent = new McpSchema.ImageContent(null, null, "base64data", "image/png");
+
+		McpSchema.CallToolResult result = McpSchema.CallToolResult.builder()
+			.addContent(textContent)
+			.addContent(imageContent)
+			.isError(false)
+			.build();
+
+		String value = mapper.writeValueAsString(result);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"content":[{"type":"text","text":"Text result"},{"type":"image","data":"base64data","mimeType":"image/png"}],"isError":false}"""));
+	}
+
+	@Test
+	void testCallToolResultBuilderWithContentList() throws Exception {
+		McpSchema.TextContent textContent = new McpSchema.TextContent("Text result");
+		McpSchema.ImageContent imageContent = new McpSchema.ImageContent(null, null, "base64data", "image/png");
+		List<McpSchema.Content> contents = Arrays.asList(textContent, imageContent);
+
+		McpSchema.CallToolResult result = McpSchema.CallToolResult.builder().content(contents).isError(true).build();
+
+		String value = mapper.writeValueAsString(result);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"content":[{"type":"text","text":"Text result"},{"type":"image","data":"base64data","mimeType":"image/png"}],"isError":true}"""));
+	}
+
+	@Test
+	void testCallToolResultBuilderWithErrorResult() throws Exception {
+		McpSchema.CallToolResult result = McpSchema.CallToolResult.builder()
+			.addTextContent("Error: Operation failed")
+			.isError(true)
+			.build();
+
+		String value = mapper.writeValueAsString(result);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"content":[{"type":"text","text":"Error: Operation failed"}],"isError":true}"""));
+	}
+
+	@Test
+	void testCallToolResultStringConstructor() throws Exception {
+		// Test the existing string constructor alongside the builder
+		McpSchema.CallToolResult result1 = new McpSchema.CallToolResult("Simple result", false);
+		McpSchema.CallToolResult result2 = McpSchema.CallToolResult.builder()
+			.addTextContent("Simple result")
+			.isError(false)
+			.build();
+
+		String value1 = mapper.writeValueAsString(result1);
+		String value2 = mapper.writeValueAsString(result2);
+
+		// Both should produce the same JSON
+		assertThat(value1).isEqualTo(value2);
+		assertThatJson(value1).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"content":[{"type":"text","text":"Simple result"}],"isError":false}"""));
 	}
 
 	// Sampling Tests

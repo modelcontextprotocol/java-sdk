@@ -6,7 +6,6 @@ package io.modelcontextprotocol.client;
 
 import java.time.Duration;
 
-import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
@@ -47,6 +46,7 @@ import org.slf4j.LoggerFactory;
  *
  * @author Dariusz Jędrzejczyk
  * @author Christian Tzolov
+ * @author Jihoon Kim
  * @see McpClient
  * @see McpAsyncClient
  * @see McpSchema
@@ -66,12 +66,8 @@ public class McpSyncClient implements AutoCloseable {
 	 * Create a new McpSyncClient with the given delegate.
 	 * @param delegate the asynchronous kernel on top of which this synchronous client
 	 * provides a blocking API.
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link McpClient#sync(McpClientTransport)} to obtain an instance.
 	 */
-	@Deprecated
-	// TODO make the constructor package private post-deprecation
-	public McpSyncClient(McpAsyncClient delegate) {
+	McpSyncClient(McpAsyncClient delegate) {
 		Assert.notNull(delegate, "The delegate can not be null");
 		this.delegate = delegate;
 	}
@@ -82,6 +78,15 @@ public class McpSyncClient implements AutoCloseable {
 	 */
 	public McpSchema.ServerCapabilities getServerCapabilities() {
 		return this.delegate.getServerCapabilities();
+	}
+
+	/**
+	 * Get the server instructions that provide guidance to the client on how to interact
+	 * with this server.
+	 * @return The instructions
+	 */
+	public String getServerInstructions() {
+		return this.delegate.getServerInstructions();
 	}
 
 	/**
@@ -328,6 +333,16 @@ public class McpSyncClient implements AutoCloseable {
 	 */
 	public void setLoggingLevel(McpSchema.LoggingLevel loggingLevel) {
 		this.delegate.setLoggingLevel(loggingLevel).block();
+	}
+
+	/**
+	 * Send a completion/complete request.
+	 * @param completeRequest the completion request contains the prompt or resource
+	 * reference and arguments for generating suggestions.
+	 * @return the completion result containing suggested values.
+	 */
+	public McpSchema.CompleteResult completeCompletion(McpSchema.CompleteRequest completeRequest) {
+		return this.delegate.completeCompletion(completeRequest).block();
 	}
 
 }

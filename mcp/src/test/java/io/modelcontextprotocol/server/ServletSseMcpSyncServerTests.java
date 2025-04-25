@@ -4,7 +4,6 @@
 
 package io.modelcontextprotocol.server;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.server.transport.HttpServletSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.junit.jupiter.api.Timeout;
@@ -19,7 +18,7 @@ class ServletSseMcpSyncServerTests extends AbstractMcpSyncServerTests {
 
 	@Override
 	protected McpServerTransportProvider createMcpTransportProvider() {
-		return new HttpServletSseServerTransportProvider(new ObjectMapper(), "/mcp/message");
+		return HttpServletSseServerTransportProvider.builder().messageEndpoint("/mcp/message").build();
 	}
 
 }

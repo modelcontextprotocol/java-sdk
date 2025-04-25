@@ -14,10 +14,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import io.modelcontextprotocol.spec.ClientMcpTransport;
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpClientSession.NotificationHandler;
 import io.modelcontextprotocol.spec.McpClientSession.RequestHandler;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
@@ -71,6 +71,7 @@ import reactor.core.publisher.Sinks;
  *
  * @author Dariusz Jędrzejczyk
  * @author Christian Tzolov
+ * @author Jihoon Kim
  * @see McpClient
  * @see McpSchema
  * @see McpClientSession
@@ -113,6 +114,11 @@ public class McpAsyncClient {
 	private McpSchema.ServerCapabilities serverCapabilities;
 
 	/**
+	 * Server instructions.
+	 */
+	private String serverInstructions;
+
+	/**
 	 * Server implementation information.
 	 */
 	private McpSchema.Implementation serverInfo;
@@ -153,7 +159,7 @@ public class McpAsyncClient {
 	 * @param initializationTimeout the max timeout to await for the client-server
 	 * @param features the MCP Client supported features.
 	 */
-	McpAsyncClient(ClientMcpTransport transport, Duration requestTimeout, Duration initializationTimeout,
+	McpAsyncClient(McpClientTransport transport, Duration requestTimeout, Duration initializationTimeout,
 			McpClientFeatures.Async features) {
 
 		Assert.notNull(transport, "Transport must not be null");
@@ -241,6 +247,15 @@ public class McpAsyncClient {
 	}
 
 	/**
+	 * Get the server instructions that provide guidance to the client on how to interact
+	 * with this server.
+	 * @return The server instructions
+	 */
+	public String getServerInstructions() {
+		return this.serverInstructions;
+	}
+
+	/**
 	 * Get the server implementation information.
 	 * @return The server implementation details
 	 */
@@ -302,9 +317,9 @@ public class McpAsyncClient {
 	 * The client MUST initiate this phase by sending an initialize request containing:
 	 * The protocol version the client supports, client's capabilities and clients
 	 * implementation information.
-	 * <p/>
+	 * <p>
 	 * The server MUST respond with its own capabilities and information.
-	 * <p/>
+	 * </p>
 	 * After successful initialization, the client MUST send an initialized notification
 	 * to indicate it is ready to begin normal operations.
 	 * @return the initialize result.
@@ -328,6 +343,7 @@ public class McpAsyncClient {
 		return result.flatMap(initializeResult -> {
 
 			this.serverCapabilities = initializeResult.capabilities();
+			this.serverInstructions = initializeResult.instructions();
 			this.serverInfo = initializeResult.serverInfo();
 
 			logger.info("Server response with Protocol: {}, Capabilities: {}, Info: {} and Instructions {}",
@@ -364,7 +380,7 @@ public class McpAsyncClient {
 	}
 
 	// --------------------------
-	// Basic Utilites
+	// Basic Utilities
 	// --------------------------
 
 	/**
@@ -751,6 +767,14 @@ public class McpAsyncClient {
 	// --------------------------
 	// Logging
 	// --------------------------
+	/**
+	 * Create a notification handler for logging notifications from the server. This
+	 * handler automatically distributes logging messages to all registered consumers.
+	 * @param loggingConsumers List of consumers that will be notified when a logging
+	 * message is received. Each consumer receives the logging message notification.
+	 * @return A NotificationHandler that processes log notifications by distributing the
+	 * message to all registered consumers
+	 */
 	private NotificationHandler asyncLoggingNotificationHandler(
 			List<Function<LoggingMessageNotification, Mono<Void>>> loggingConsumers) {
 
@@ -778,10 +802,9 @@ public class McpAsyncClient {
 		}
 
 		return this.withInitializationCheck("setting logging level", initializedResult -> {
-			String levelName = this.transport.unmarshalFrom(loggingLevel, new TypeReference<String>() {
-			});
-			Map<String, Object> params = Map.of("level", levelName);
-			return this.mcpSession.sendNotification(McpSchema.METHOD_LOGGING_SET_LEVEL, params);
+			var params = new McpSchema.SetLevelRequest(loggingLevel);
+			return this.mcpSession.sendRequest(McpSchema.METHOD_LOGGING_SET_LEVEL, params, new TypeReference<Object>() {
+			}).then();
 		});
 	}
 
@@ -792,6 +815,27 @@ public class McpAsyncClient {
 	 */
 	void setProtocolVersions(List<String> protocolVersions) {
 		this.protocolVersions = protocolVersions;
+	}
+
+	// --------------------------
+	// Completions
+	// --------------------------
+	private static final TypeReference<McpSchema.CompleteResult> COMPLETION_COMPLETE_RESULT_TYPE_REF = new TypeReference<>() {
+	};
+
+	/**
+	 * Sends a completion/complete request to generate value suggestions based on a given
+	 * reference and argument. This is typically used to provide auto-completion options
+	 * for user input fields.
+	 * @param completeRequest The request containing the prompt or resource reference and
+	 * argument for which to generate completions.
+	 * @return A Mono that completes with the result containing completion suggestions.
+	 * @see McpSchema.CompleteRequest
+	 * @see McpSchema.CompleteResult
+	 */
+	public Mono<McpSchema.CompleteResult> completeCompletion(McpSchema.CompleteRequest completeRequest) {
+		return this.withInitializationCheck("complete completions", initializedResult -> this.mcpSession
+			.sendRequest(McpSchema.METHOD_COMPLETION_COMPLETE, completeRequest, COMPLETION_COMPLETE_RESULT_TYPE_REF));
 	}
 
 }

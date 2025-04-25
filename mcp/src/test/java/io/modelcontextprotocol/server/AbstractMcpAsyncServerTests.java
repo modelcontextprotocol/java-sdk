@@ -109,7 +109,7 @@ public abstract class AbstractMcpAsyncServerTests {
 			.build();
 
 		StepVerifier.create(mcpAsyncServer.addTool(new McpServerFeatures.AsyncToolSpecification(newTool,
-				(excnage, args) -> Mono.just(new CallToolResult(List.of(), false)))))
+				(exchange, args) -> Mono.just(new CallToolResult(List.of(), false)))))
 			.verifyComplete();
 
 		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
@@ -413,55 +413,6 @@ public abstract class AbstractMcpAsyncServerTests {
 		assertThat(noConsumersServer).isNotNull();
 		assertThatCode(() -> noConsumersServer.closeGracefully().block(Duration.ofSeconds(10)))
 			.doesNotThrowAnyException();
-	}
-
-	// ---------------------------------------
-	// Logging Tests
-	// ---------------------------------------
-
-	@Test
-	void testLoggingLevels() {
-		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
-			.serverInfo("test-server", "1.0.0")
-			.capabilities(ServerCapabilities.builder().logging().build())
-			.build();
-
-		// Test all logging levels
-		for (McpSchema.LoggingLevel level : McpSchema.LoggingLevel.values()) {
-			var notification = McpSchema.LoggingMessageNotification.builder()
-				.level(level)
-				.logger("test-logger")
-				.data("Test message with level " + level)
-				.build();
-
-			StepVerifier.create(mcpAsyncServer.loggingNotification(notification)).verifyComplete();
-		}
-	}
-
-	@Test
-	void testLoggingWithoutCapability() {
-		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
-			.serverInfo("test-server", "1.0.0")
-			.capabilities(ServerCapabilities.builder().build()) // No logging capability
-			.build();
-
-		var notification = McpSchema.LoggingMessageNotification.builder()
-			.level(McpSchema.LoggingLevel.INFO)
-			.logger("test-logger")
-			.data("Test log message")
-			.build();
-
-		StepVerifier.create(mcpAsyncServer.loggingNotification(notification)).verifyComplete();
-	}
-
-	@Test
-	void testLoggingWithNullNotification() {
-		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
-			.serverInfo("test-server", "1.0.0")
-			.capabilities(ServerCapabilities.builder().logging().build())
-			.build();
-
-		StepVerifier.create(mcpAsyncServer.loggingNotification(null)).verifyError(McpError.class);
 	}
 
 }

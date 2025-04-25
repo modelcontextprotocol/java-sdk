@@ -6,7 +6,7 @@
 	<parent>
 		<groupId>io.modelcontextprotocol.sdk</groupId>
 		<artifactId>mcp-parent</artifactId>
-		<version>0.9.0-SNAPSHOT</version>
+		<version>0.10.0-SNAPSHOT</version>
 	</parent>
 	<artifactId>mcp</artifactId>
 	<packaging>jar</packaging>
@@ -97,7 +97,7 @@
 			<scope>test</scope>
 		</dependency>
 
-		<!-- The Spring Context is required due to the reactor-netty connector being dependant on
+		<!-- The Spring Context is required due to the reactor-netty connector being dependent on
 		the Spring Lifecycle, as discussed here:
 		https://github.com/spring-projects/spring-framework/issues/31180 -->
 		<dependency>
@@ -127,11 +127,25 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-params</artifactId>
+			<version>${junit.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
 			<groupId>org.mockito</groupId>
 			<artifactId>mockito-core</artifactId>
 			<version>${mockito.version}</version>
 			<scope>test</scope>
 		</dependency>
+
+		<!-- Mockito cannot mock this class: class java.net.http.HttpClient. the bytebuddy helps. -->
+		<dependency>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy</artifactId>
+            <version>${byte-buddy.version}</version>
+            <scope>test</scope>
+        </dependency>
 		<dependency>
 			<groupId>io.projectreactor</groupId>
 			<artifactId>reactor-test</artifactId>

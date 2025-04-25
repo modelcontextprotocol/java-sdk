@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
-import java.util.function.Function;
 
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.util.Assert;
@@ -22,6 +21,7 @@ import reactor.core.scheduler.Schedulers;
  * MCP server features specification that a particular server can choose to support.
  *
  * @author Dariusz Jędrzejczyk
+ * @author Jihoon Kim
  */
 public class McpServerFeatures {
 
@@ -36,12 +36,15 @@ public class McpServerFeatures {
 	 * @param prompts The map of prompt specifications
 	 * @param rootsChangeConsumers The list of consumers that will be notified when the
 	 * roots list changes
+	 * @param instructions The server instructions text
 	 */
 	record Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 			List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
 			List<McpSchema.ResourceTemplate> resourceTemplates,
 			Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
-			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
+			Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
+			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
+			String instructions) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -53,18 +56,22 @@ public class McpServerFeatures {
 		 * @param prompts The map of prompt specifications
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
+		 * @param instructions The server instructions text
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
 				List<McpSchema.ResourceTemplate> resourceTemplates,
 				Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
-				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
+				Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
+				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
+				String instructions) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
 			this.serverInfo = serverInfo;
 			this.serverCapabilities = (serverCapabilities != null) ? serverCapabilities
-					: new McpSchema.ServerCapabilities(null, // experimental
+					: new McpSchema.ServerCapabilities(null, // completions
+							null, // experimental
 							new McpSchema.ServerCapabilities.LoggingCapabilities(), // Enable
 																					// logging
 																					// by
@@ -78,7 +85,9 @@ public class McpServerFeatures {
 			this.resources = (resources != null) ? resources : Map.of();
 			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : List.of();
 			this.prompts = (prompts != null) ? prompts : Map.of();
+			this.completions = (completions != null) ? completions : Map.of();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : List.of();
+			this.instructions = instructions;
 		}
 
 		/**
@@ -105,6 +114,11 @@ public class McpServerFeatures {
 				prompts.put(key, AsyncPromptSpecification.fromSync(prompt));
 			});
 
+			Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions = new HashMap<>();
+			syncSpec.completions().forEach((key, completion) -> {
+				completions.put(key, AsyncCompletionSpecification.fromSync(completion));
+			});
+
 			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootChangeConsumers = new ArrayList<>();
 
 			for (var rootChangeConsumer : syncSpec.rootsChangeConsumers()) {
@@ -114,7 +128,7 @@ public class McpServerFeatures {
 			}
 
 			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources,
-					syncSpec.resourceTemplates(), prompts, rootChangeConsumers);
+					syncSpec.resourceTemplates(), prompts, completions, rootChangeConsumers, syncSpec.instructions());
 		}
 	}
 
@@ -129,13 +143,15 @@ public class McpServerFeatures {
 	 * @param prompts The map of prompt specifications
 	 * @param rootsChangeConsumers The list of consumers that will be notified when the
 	 * roots list changes
+	 * @param instructions The server instructions text
 	 */
 	record Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 			List<McpServerFeatures.SyncToolSpecification> tools,
 			Map<String, McpServerFeatures.SyncResourceSpecification> resources,
 			List<McpSchema.ResourceTemplate> resourceTemplates,
 			Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
-			List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers) {
+			Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions,
+			List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers, String instructions) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -147,19 +163,23 @@ public class McpServerFeatures {
 		 * @param prompts The map of prompt specifications
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
+		 * @param instructions The server instructions text
 		 */
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpServerFeatures.SyncToolSpecification> tools,
 				Map<String, McpServerFeatures.SyncResourceSpecification> resources,
 				List<McpSchema.ResourceTemplate> resourceTemplates,
 				Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
-				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers) {
+				Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions,
+				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers,
+				String instructions) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
 			this.serverInfo = serverInfo;
 			this.serverCapabilities = (serverCapabilities != null) ? serverCapabilities
-					: new McpSchema.ServerCapabilities(null, // experimental
+					: new McpSchema.ServerCapabilities(null, // completions
+							null, // experimental
 							new McpSchema.ServerCapabilities.LoggingCapabilities(), // Enable
 																					// logging
 																					// by
@@ -173,7 +193,9 @@ public class McpServerFeatures {
 			this.resources = (resources != null) ? resources : new HashMap<>();
 			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : new ArrayList<>();
 			this.prompts = (prompts != null) ? prompts : new HashMap<>();
+			this.completions = (completions != null) ? completions : new HashMap<>();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : new ArrayList<>();
+			this.instructions = instructions;
 		}
 
 	}
@@ -318,6 +340,44 @@ public class McpServerFeatures {
 	}
 
 	/**
+	 * Specification of a completion handler function with asynchronous execution support.
+	 * Completions generate AI model outputs based on prompt or resource references and
+	 * user-provided arguments. This abstraction enables:
+	 * <ul>
+	 * <li>Customizable response generation logic
+	 * <li>Parameter-driven template expansion
+	 * <li>Dynamic interaction with connected clients
+	 * </ul>
+	 *
+	 * @param referenceKey The unique key representing the completion reference.
+	 * @param completionHandler The asynchronous function that processes completion
+	 * requests and returns results. The first argument is an
+	 * {@link McpAsyncServerExchange} used to interact with the client. The second
+	 * argument is a {@link io.modelcontextprotocol.spec.McpSchema.CompleteRequest}.
+	 */
+	public record AsyncCompletionSpecification(McpSchema.CompleteReference referenceKey,
+			BiFunction<McpAsyncServerExchange, McpSchema.CompleteRequest, Mono<McpSchema.CompleteResult>> completionHandler) {
+
+		/**
+		 * Converts a synchronous {@link SyncCompletionSpecification} into an
+		 * {@link AsyncCompletionSpecification} by wrapping the handler in a bounded
+		 * elastic scheduler for safe non-blocking execution.
+		 * @param completion the synchronous completion specification
+		 * @return an asynchronous wrapper of the provided sync specification, or
+		 * {@code null} if input is null
+		 */
+		static AsyncCompletionSpecification fromSync(SyncCompletionSpecification completion) {
+			if (completion == null) {
+				return null;
+			}
+			return new AsyncCompletionSpecification(completion.referenceKey(),
+					(exchange, request) -> Mono.fromCallable(
+							() -> completion.completionHandler().apply(new McpSyncServerExchange(exchange), request))
+						.subscribeOn(Schedulers.boundedElastic()));
+		}
+	}
+
+	/**
 	 * Specification of a tool with its synchronous handler function. Tools are the
 	 * primary way for MCP servers to expose functionality to AI models. Each tool
 	 * represents a specific capability, such as:
@@ -423,272 +483,17 @@ public class McpServerFeatures {
 			BiFunction<McpSyncServerExchange, McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler) {
 	}
 
-	// ---------------------------------------
-	// Deprecated registrations
-	// ---------------------------------------
-
 	/**
-	 * Registration of a tool with its asynchronous handler function. Tools are the
-	 * primary way for MCP servers to expose functionality to AI models. Each tool
-	 * represents a specific capability, such as:
-	 * <ul>
-	 * <li>Performing calculations
-	 * <li>Accessing external APIs
-	 * <li>Querying databases
-	 * <li>Manipulating files
-	 * <li>Executing system commands
-	 * </ul>
+	 * Specification of a completion handler function with synchronous execution support.
 	 *
-	 * <p>
-	 * Example tool registration: <pre>{@code
-	 * new McpServerFeatures.AsyncToolRegistration(
-	 *     new Tool(
-	 *         "calculator",
-	 *         "Performs mathematical calculations",
-	 *         new JsonSchemaObject()
-	 *             .required("expression")
-	 *             .property("expression", JsonSchemaType.STRING)
-	 *     ),
-	 *     args -> {
-	 *         String expr = (String) args.get("expression");
-	 *         return Mono.just(new CallToolResult("Result: " + evaluate(expr)));
-	 *     }
-	 * )
-	 * }</pre>
-	 *
-	 * @param tool The tool definition including name, description, and parameter schema
-	 * @param call The function that implements the tool's logic, receiving arguments and
-	 * returning results
-	 * @deprecated This class is deprecated and will be removed in 0.9.0. Use
-	 * {@link AsyncToolSpecification}.
+	 * @param referenceKey The unique key representing the completion reference.
+	 * @param completionHandler The synchronous function that processes completion
+	 * requests and returns results. The first argument is an
+	 * {@link McpSyncServerExchange} used to interact with the client. The second argument
+	 * is a {@link io.modelcontextprotocol.spec.McpSchema.CompleteRequest}.
 	 */
-	@Deprecated
-	public record AsyncToolRegistration(McpSchema.Tool tool,
-			Function<Map<String, Object>, Mono<McpSchema.CallToolResult>> call) {
-
-		static AsyncToolRegistration fromSync(SyncToolRegistration tool) {
-			// FIXME: This is temporary, proper validation should be implemented
-			if (tool == null) {
-				return null;
-			}
-			return new AsyncToolRegistration(tool.tool(),
-					map -> Mono.fromCallable(() -> tool.call().apply(map)).subscribeOn(Schedulers.boundedElastic()));
-		}
-
-		public AsyncToolSpecification toSpecification() {
-			return new AsyncToolSpecification(tool(), (exchange, map) -> call.apply(map));
-		}
-	}
-
-	/**
-	 * Registration of a resource with its asynchronous handler function. Resources
-	 * provide context to AI models by exposing data such as:
-	 * <ul>
-	 * <li>File contents
-	 * <li>Database records
-	 * <li>API responses
-	 * <li>System information
-	 * <li>Application state
-	 * </ul>
-	 *
-	 * <p>
-	 * Example resource registration: <pre>{@code
-	 * new McpServerFeatures.AsyncResourceRegistration(
-	 *     new Resource("docs", "Documentation files", "text/markdown"),
-	 *     request -> {
-	 *         String content = readFile(request.getPath());
-	 *         return Mono.just(new ReadResourceResult(content));
-	 *     }
-	 * )
-	 * }</pre>
-	 *
-	 * @param resource The resource definition including name, description, and MIME type
-	 * @param readHandler The function that handles resource read requests
-	 * @deprecated This class is deprecated and will be removed in 0.9.0. Use
-	 * {@link AsyncResourceSpecification}.
-	 */
-	@Deprecated
-	public record AsyncResourceRegistration(McpSchema.Resource resource,
-			Function<McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
-
-		static AsyncResourceRegistration fromSync(SyncResourceRegistration resource) {
-			// FIXME: This is temporary, proper validation should be implemented
-			if (resource == null) {
-				return null;
-			}
-			return new AsyncResourceRegistration(resource.resource(),
-					req -> Mono.fromCallable(() -> resource.readHandler().apply(req))
-						.subscribeOn(Schedulers.boundedElastic()));
-		}
-
-		public AsyncResourceSpecification toSpecification() {
-			return new AsyncResourceSpecification(resource(), (exchange, request) -> readHandler.apply(request));
-		}
-	}
-
-	/**
-	 * Registration of a prompt template with its asynchronous handler function. Prompts
-	 * provide structured templates for AI model interactions, supporting:
-	 * <ul>
-	 * <li>Consistent message formatting
-	 * <li>Parameter substitution
-	 * <li>Context injection
-	 * <li>Response formatting
-	 * <li>Instruction templating
-	 * </ul>
-	 *
-	 * <p>
-	 * Example prompt registration: <pre>{@code
-	 * new McpServerFeatures.AsyncPromptRegistration(
-	 *     new Prompt("analyze", "Code analysis template"),
-	 *     request -> {
-	 *         String code = request.getArguments().get("code");
-	 *         return Mono.just(new GetPromptResult(
-	 *             "Analyze this code:\n\n" + code + "\n\nProvide feedback on:"
-	 *         ));
-	 *     }
-	 * )
-	 * }</pre>
-	 *
-	 * @param prompt The prompt definition including name and description
-	 * @param promptHandler The function that processes prompt requests and returns
-	 * formatted templates
-	 * @deprecated This class is deprecated and will be removed in 0.9.0. Use
-	 * {@link AsyncPromptSpecification}.
-	 */
-	@Deprecated
-	public record AsyncPromptRegistration(McpSchema.Prompt prompt,
-			Function<McpSchema.GetPromptRequest, Mono<McpSchema.GetPromptResult>> promptHandler) {
-
-		static AsyncPromptRegistration fromSync(SyncPromptRegistration prompt) {
-			// FIXME: This is temporary, proper validation should be implemented
-			if (prompt == null) {
-				return null;
-			}
-			return new AsyncPromptRegistration(prompt.prompt(),
-					req -> Mono.fromCallable(() -> prompt.promptHandler().apply(req))
-						.subscribeOn(Schedulers.boundedElastic()));
-		}
-
-		public AsyncPromptSpecification toSpecification() {
-			return new AsyncPromptSpecification(prompt(), (exchange, request) -> promptHandler.apply(request));
-		}
-	}
-
-	/**
-	 * Registration of a tool with its synchronous handler function. Tools are the primary
-	 * way for MCP servers to expose functionality to AI models. Each tool represents a
-	 * specific capability, such as:
-	 * <ul>
-	 * <li>Performing calculations
-	 * <li>Accessing external APIs
-	 * <li>Querying databases
-	 * <li>Manipulating files
-	 * <li>Executing system commands
-	 * </ul>
-	 *
-	 * <p>
-	 * Example tool registration: <pre>{@code
-	 * new McpServerFeatures.SyncToolRegistration(
-	 *     new Tool(
-	 *         "calculator",
-	 *         "Performs mathematical calculations",
-	 *         new JsonSchemaObject()
-	 *             .required("expression")
-	 *             .property("expression", JsonSchemaType.STRING)
-	 *     ),
-	 *     args -> {
-	 *         String expr = (String) args.get("expression");
-	 *         return new CallToolResult("Result: " + evaluate(expr));
-	 *     }
-	 * )
-	 * }</pre>
-	 *
-	 * @param tool The tool definition including name, description, and parameter schema
-	 * @param call The function that implements the tool's logic, receiving arguments and
-	 * returning results
-	 * @deprecated This class is deprecated and will be removed in 0.9.0. Use
-	 * {@link SyncToolSpecification}.
-	 */
-	@Deprecated
-	public record SyncToolRegistration(McpSchema.Tool tool,
-			Function<Map<String, Object>, McpSchema.CallToolResult> call) {
-		public SyncToolSpecification toSpecification() {
-			return new SyncToolSpecification(tool, (exchange, map) -> call.apply(map));
-		}
-	}
-
-	/**
-	 * Registration of a resource with its synchronous handler function. Resources provide
-	 * context to AI models by exposing data such as:
-	 * <ul>
-	 * <li>File contents
-	 * <li>Database records
-	 * <li>API responses
-	 * <li>System information
-	 * <li>Application state
-	 * </ul>
-	 *
-	 * <p>
-	 * Example resource registration: <pre>{@code
-	 * new McpServerFeatures.SyncResourceRegistration(
-	 *     new Resource("docs", "Documentation files", "text/markdown"),
-	 *     request -> {
-	 *         String content = readFile(request.getPath());
-	 *         return new ReadResourceResult(content);
-	 *     }
-	 * )
-	 * }</pre>
-	 *
-	 * @param resource The resource definition including name, description, and MIME type
-	 * @param readHandler The function that handles resource read requests
-	 * @deprecated This class is deprecated and will be removed in 0.9.0. Use
-	 * {@link SyncResourceSpecification}.
-	 */
-	@Deprecated
-	public record SyncResourceRegistration(McpSchema.Resource resource,
-			Function<McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
-		public SyncResourceSpecification toSpecification() {
-			return new SyncResourceSpecification(resource, (exchange, request) -> readHandler.apply(request));
-		}
-	}
-
-	/**
-	 * Registration of a prompt template with its synchronous handler function. Prompts
-	 * provide structured templates for AI model interactions, supporting:
-	 * <ul>
-	 * <li>Consistent message formatting
-	 * <li>Parameter substitution
-	 * <li>Context injection
-	 * <li>Response formatting
-	 * <li>Instruction templating
-	 * </ul>
-	 *
-	 * <p>
-	 * Example prompt registration: <pre>{@code
-	 * new McpServerFeatures.SyncPromptRegistration(
-	 *     new Prompt("analyze", "Code analysis template"),
-	 *     request -> {
-	 *         String code = request.getArguments().get("code");
-	 *         return new GetPromptResult(
-	 *             "Analyze this code:\n\n" + code + "\n\nProvide feedback on:"
-	 *         );
-	 *     }
-	 * )
-	 * }</pre>
-	 *
-	 * @param prompt The prompt definition including name and description
-	 * @param promptHandler The function that processes prompt requests and returns
-	 * formatted templates
-	 * @deprecated This class is deprecated and will be removed in 0.9.0. Use
-	 * {@link SyncPromptSpecification}.
-	 */
-	@Deprecated
-	public record SyncPromptRegistration(McpSchema.Prompt prompt,
-			Function<McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler) {
-		public SyncPromptSpecification toSpecification() {
-			return new SyncPromptSpecification(prompt, (exchange, request) -> promptHandler.apply(request));
-		}
+	public record SyncCompletionSpecification(McpSchema.CompleteReference referenceKey,
+			BiFunction<McpSyncServerExchange, McpSchema.CompleteRequest, McpSchema.CompleteResult> completionHandler) {
 	}
 
 }
