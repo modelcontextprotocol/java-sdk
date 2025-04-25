@@ -169,7 +169,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
 	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
-											String sseEndpoint, McpServerAuthProvider authProvider) {
+			String sseEndpoint, McpServerAuthProvider authProvider) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(baseUrl, "Message base URL must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
@@ -181,9 +181,9 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		this.sseEndpoint = sseEndpoint;
 		this.authProvider = authProvider;
 		this.routerFunction = RouterFunctions.route()
-				.GET(this.sseEndpoint, this::handleSseConnection)
-				.POST(this.messageEndpoint, this::handleMessage)
-				.build();
+			.GET(this.sseEndpoint, this::handleSseConnection)
+			.POST(this.messageEndpoint, this::handleMessage)
+			.build();
 	}
 
 	@Override
@@ -312,10 +312,10 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 
 	private McpServerAuthParam assemblyAuthParam(ServerRequest request) {
 		return McpServerAuthParam.builder()
-				.sseEndpoint(this.sseEndpoint)
-				.uri(request.uri().toString())
-				.params(request.params().toSingleValueMap())
-				.build();
+			.sseEndpoint(this.sseEndpoint)
+			.uri(request.uri().toString())
+			.params(request.params().toSingleValueMap())
+			.build();
 	}
 
 	/**

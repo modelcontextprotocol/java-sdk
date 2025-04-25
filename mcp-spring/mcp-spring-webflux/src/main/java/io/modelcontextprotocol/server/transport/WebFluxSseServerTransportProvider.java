@@ -172,7 +172,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
 	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
-											 String sseEndpoint, McpServerAuthProvider authProvider) {
+			String sseEndpoint, McpServerAuthProvider authProvider) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(baseUrl, "Message base path must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
@@ -184,9 +184,9 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		this.sseEndpoint = sseEndpoint;
 		this.authProvider = authProvider;
 		this.routerFunction = RouterFunctions.route()
-				.GET(this.sseEndpoint, this::handleSseConnection)
-				.POST(this.messageEndpoint, this::handleMessage)
-				.build();
+			.GET(this.sseEndpoint, this::handleSseConnection)
+			.POST(this.messageEndpoint, this::handleMessage)
+			.build();
 	}
 
 	@Override
@@ -311,10 +311,10 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 	private McpServerAuthParam assemblyAuthParam(ServerRequest request) {
 		return McpServerAuthParam.builder()
-				.sseEndpoint(this.sseEndpoint)
-				.uri(request.uri().toString())
-				.params(request.queryParams().toSingleValueMap())
-				.build();
+			.sseEndpoint(this.sseEndpoint)
+			.uri(request.uri().toString())
+			.params(request.queryParams().toSingleValueMap())
+			.build();
 	}
 
 	/**
