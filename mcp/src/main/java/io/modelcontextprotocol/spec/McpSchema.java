@@ -703,7 +703,9 @@ public final class McpSchema {
 		@JsonProperty("type") String type,
 		@JsonProperty("properties") Map<String, Object> properties,
 		@JsonProperty("required") List<String> required,
-		@JsonProperty("additionalProperties") Boolean additionalProperties) {
+		@JsonProperty("additionalProperties") Boolean additionalProperties,
+		@JsonProperty("$defs") Map<String, Object> defs,
+		@JsonProperty("definitions") Map<String, Object> definitions) {
 	} // @formatter:on
 
 	/**
