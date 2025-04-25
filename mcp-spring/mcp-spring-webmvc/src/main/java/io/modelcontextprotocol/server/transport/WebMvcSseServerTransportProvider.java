@@ -6,7 +6,6 @@ package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -14,6 +13,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.server.McpServerAuthParam;
+import io.modelcontextprotocol.server.McpServerAuthProvider;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpServerSession;
@@ -107,6 +108,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 */
 	private volatile boolean isClosing = false;
 
+	private final McpServerAuthProvider authProvider;
+
 	/**
 	 * Constructs a new WebMvcSseServerTransportProvider instance with the default SSE
 	 * endpoint.
@@ -149,6 +152,24 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 */
 	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint) {
+		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, null);
+	}
+
+	/**
+	 * Constructs a new WebMvcSseServerTransportProvider instance.
+	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
+	 * of messages.
+	 * @param baseUrl The base URL for the message endpoint, used to construct the full
+	 * endpoint URL for clients.
+	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
+	 * messages via HTTP POST. This endpoint will be communicated to clients through the
+	 * SSE connection's initial endpoint event.
+	 * @param sseEndpoint The endpoint URI where clients establish their SSE connections.
+	 * @param authProvider The authentication provider to use for authentication.
+	 * @throws IllegalArgumentException if any parameter is null
+	 */
+	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+											String sseEndpoint, McpServerAuthProvider authProvider) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(baseUrl, "Message base URL must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
@@ -158,10 +179,11 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
+		this.authProvider = authProvider;
 		this.routerFunction = RouterFunctions.route()
-			.GET(this.sseEndpoint, this::handleSseConnection)
-			.POST(this.messageEndpoint, this::handleMessage)
-			.build();
+				.GET(this.sseEndpoint, this::handleSseConnection)
+				.POST(this.messageEndpoint, this::handleMessage)
+				.build();
 	}
 
 	@Override
@@ -247,6 +269,10 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
+		if (null != authProvider && !authProvider.authenticate(assemblyAuthParam(request))) {
+			return ServerResponse.status(HttpStatus.UNAUTHORIZED).body("Unauthorized");
+		}
+
 		String sessionId = UUID.randomUUID().toString();
 		logger.debug("Creating new SSE connection for session: {}", sessionId);
 
@@ -282,6 +308,14 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			sessions.remove(sessionId);
 			return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
 		}
+	}
+
+	private McpServerAuthParam assemblyAuthParam(ServerRequest request) {
+		return McpServerAuthParam.builder()
+				.sseEndpoint(this.sseEndpoint)
+				.uri(request.uri().toString())
+				.params(request.params().toSingleValueMap())
+				.build();
 	}
 
 	/**
