@@ -490,6 +490,10 @@ public class McpAsyncClient {
 		};
 	}
 
+
+	// --------------------------
+	// Ping - The receiver MUST respond promptly with an empty response
+	// --------------------------
 	private RequestHandler<Object> pingRequestHandler() {
 		return params -> Mono.just(Map.of());
 	}
