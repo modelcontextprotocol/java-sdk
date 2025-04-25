@@ -175,6 +175,9 @@ public class McpAsyncClient {
 		// Request Handlers
 		Map<String, RequestHandler<?>> requestHandlers = new HashMap<>();
 
+		// Ping Request Handler
+		requestHandlers.put(McpSchema.METHOD_PING, pingRequestHandler());
+
 		// Roots List Request Handler
 		if (this.clientCapabilities.roots() != null) {
 			requestHandlers.put(McpSchema.METHOD_ROOTS_LIST, rootsListRequestHandler());
@@ -485,6 +488,10 @@ public class McpAsyncClient {
 
 			return Mono.just(new McpSchema.ListRootsResult(roots));
 		};
+	}
+	
+	private RequestHandler<Object> pingRequestHandler() {
+		return params -> Mono.just(Map.of());
 	}
 
 	// --------------------------
