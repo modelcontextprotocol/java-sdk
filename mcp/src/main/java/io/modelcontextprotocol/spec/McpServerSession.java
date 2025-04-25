@@ -143,6 +143,12 @@ public class McpServerSession implements McpSession {
 		return this.transport.sendMessage(jsonrpcNotification);
 	}
 
+	public Mono<Void> sendResponse(Object id, Object result, McpSchema.JSONRPCResponse.JSONRPCError error) {
+		McpSchema.JSONRPCResponse response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, id, result,
+				error);
+		return this.transport.sendMessage(response);
+	}
+
 	/**
 	 * Called by the {@link McpServerTransportProvider} once the session is determined.
 	 * The purpose of this method is to dispatch the message to an appropriate handler as
