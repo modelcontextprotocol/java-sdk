@@ -489,7 +489,7 @@ public class McpAsyncClient {
 			return Mono.just(new McpSchema.ListRootsResult(roots));
 		};
 	}
-	
+
 	private RequestHandler<Object> pingRequestHandler() {
 		return params -> Mono.just(Map.of());
 	}

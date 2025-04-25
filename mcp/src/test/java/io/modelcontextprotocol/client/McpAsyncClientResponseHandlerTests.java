@@ -349,19 +349,15 @@ class McpAsyncClientResponseHandlerTests {
 			.hasMessage("Sampling handler must not be null when client capabilities include sampling");
 	}
 
-	@Test 
+	@Test
 	void testPingMessageRequestHandling() {
 		MockMcpClientTransport transport = initializationEnabledTransport();
 
 		McpAsyncClient asyncMcpClient = McpClient.async(transport).build();
 
 		// Simulate incoming ping request from server
-		McpSchema.JSONRPCRequest pingRequest = new McpSchema.JSONRPCRequest(
-			McpSchema.JSONRPC_VERSION,
-			McpSchema.METHOD_PING,
-			"ping-id",
-			null
-		);
+		McpSchema.JSONRPCRequest pingRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
+				McpSchema.METHOD_PING, "ping-id", null);
 		transport.simulateIncomingMessage(pingRequest);
 
 		// Verify response
