@@ -64,7 +64,9 @@ import org.springframework.web.servlet.function.ServerResponse.SseBuilder;
  *
  * @author Christian Tzolov
  * @author Alexandros Pappas
+ * @author lambochen
  * @see McpServerTransportProvider
+ * @see McpServerAuthProvider
  * @see RouterFunction
  */
 public class WebMvcSseServerTransportProvider implements McpServerTransportProvider {
