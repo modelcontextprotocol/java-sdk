@@ -30,6 +30,18 @@ public class McpServerAuthParam {
 		this.params = params;
 	}
 
+	public String getSseEndpoint() {
+		return sseEndpoint;
+	}
+
+	public String getUri() {
+		return uri;
+	}
+
+	public Map<String, String> getParams() {
+		return params;
+	}
+
 	public static Builder builder() {
 		return new Builder();
 	}
