@@ -122,33 +122,38 @@ public class McpClientSession implements McpSession {
 		// Observation associated with the individual message - it can be used to
 		// create child Observation and emit it together with the message to the
 		// consumer
-		this.connection = this.transport.connect(mono -> mono.doOnNext(message -> {
-			if (message instanceof McpSchema.JSONRPCResponse response) {
-				logger.debug("Received Response: {}", response);
-				var sink = pendingResponses.remove(response.id());
-				if (sink == null) {
-					logger.warn("Unexpected response for unknown id {}", response.id());
-				}
-				else {
-					sink.success(response);
-				}
+		this.connection = this.transport.connect(mono -> mono.doOnNext(this::handle)).subscribe();
+	}
+
+	private void handle(McpSchema.JSONRPCMessage message) {
+		if (message instanceof McpSchema.JSONRPCResponse response) {
+			logger.debug("Received Response: {}", response);
+			var sink = pendingResponses.remove(response.id());
+			if (sink == null) {
+				logger.warn("Unexpected response for unknown id {}", response.id());
 			}
-			else if (message instanceof McpSchema.JSONRPCRequest request) {
-				logger.debug("Received request: {}", request);
-				handleIncomingRequest(request).subscribe(response -> transport.sendMessage(response).subscribe(),
-						error -> {
-							var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-									null, new McpSchema.JSONRPCResponse.JSONRPCError(
-											McpSchema.ErrorCodes.INTERNAL_ERROR, error.getMessage(), null));
-							transport.sendMessage(errorResponse).subscribe();
-						});
+			else {
+				sink.success(response);
 			}
-			else if (message instanceof McpSchema.JSONRPCNotification notification) {
-				logger.debug("Received notification: {}", notification);
-				handleIncomingNotification(notification).subscribe(null,
-						error -> logger.error("Error handling notification: {}", error.getMessage()));
-			}
-		})).subscribe();
+		}
+		else if (message instanceof McpSchema.JSONRPCRequest request) {
+			logger.debug("Received request: {}", request);
+			handleIncomingRequest(request).onErrorResume(error -> {
+				var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
+						new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+								error.getMessage(), null));
+				return this.transport.sendMessage(errorResponse).then(Mono.empty());
+			}).flatMap(this.transport::sendMessage).subscribe();
+		}
+		else if (message instanceof McpSchema.JSONRPCNotification notification) {
+			logger.debug("Received notification: {}", notification);
+			handleIncomingNotification(notification)
+				.doOnError(error -> logger.error("Error handling notification: {}", error.getMessage()))
+				.subscribe();
+		}
+		else {
+			logger.warn("Received unknown message type: {}", message);
+		}
 	}
 
 	/**
@@ -225,18 +230,19 @@ public class McpClientSession implements McpSession {
 	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {
 		String requestId = this.generateRequestId();
 
-		return Mono.<McpSchema.JSONRPCResponse>create(sink -> {
+		return Mono.deferContextual(ctx -> Mono.<McpSchema.JSONRPCResponse>create(sink -> {
 			this.pendingResponses.put(requestId, sink);
 			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, method,
 					requestId, requestParams);
 			this.transport.sendMessage(jsonrpcRequest)
+				.contextWrite(ctx)
 				// TODO: It's most efficient to create a dedicated Subscriber here
 				.subscribe(v -> {
 				}, error -> {
 					this.pendingResponses.remove(requestId);
 					sink.error(error);
 				});
-		}).timeout(this.requestTimeout).handle((jsonRpcResponse, sink) -> {
+		})).timeout(this.requestTimeout).handle((jsonRpcResponse, sink) -> {
 			if (jsonRpcResponse.error() != null) {
 				logger.error("Error handling request: {}", jsonRpcResponse.error());
 				sink.error(new McpError(jsonRpcResponse.error()));
