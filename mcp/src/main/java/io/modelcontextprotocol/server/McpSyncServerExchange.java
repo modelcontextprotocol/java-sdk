@@ -90,4 +90,7 @@ public class McpSyncServerExchange {
 		this.exchange.loggingNotification(loggingMessageNotification).block();
 	}
 
+	public McpAsyncServerExchange getExchange() {
+		return exchange;
+	}
 }
