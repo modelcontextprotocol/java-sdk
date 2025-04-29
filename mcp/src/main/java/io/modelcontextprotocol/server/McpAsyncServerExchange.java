@@ -89,6 +89,10 @@ public class McpAsyncServerExchange {
 		this.transportContext = transportContext;
 	}
 
+	public McpServerSession getSession() {
+		return session;
+	}
+
 	/**
 	 * Get the client capabilities that define the supported features and functionality.
 	 * @return The client capabilities

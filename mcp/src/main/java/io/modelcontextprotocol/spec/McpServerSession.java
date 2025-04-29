@@ -20,6 +20,8 @@ import io.modelcontextprotocol.server.McpTransportContext;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Sinks;
@@ -54,6 +56,8 @@ public class McpServerSession implements McpLoggableSession {
 	private final AtomicReference<McpSchema.ClientCapabilities> clientCapabilities = new AtomicReference<>();
 
 	private final AtomicReference<McpSchema.Implementation> clientInfo = new AtomicReference<>();
+
+	private Authentication authentication;
 
 	private static final int STATE_UNINITIALIZED = 0;
 
@@ -112,6 +116,7 @@ public class McpServerSession implements McpLoggableSession {
 		this.initRequestHandler = initHandler;
 		this.requestHandlers = requestHandlers;
 		this.notificationHandlers = notificationHandlers;
+		this.authentication = SecurityContextHolder.getContext().getAuthentication();
 	}
 
 	/**
@@ -120,6 +125,14 @@ public class McpServerSession implements McpLoggableSession {
 	 */
 	public String getId() {
 		return this.id;
+	}
+
+	/**
+	 * Retrieve authentication object set by Spring security filters as per your project security config
+	 * @return Authentication
+	 */
+	public Authentication getAuthentication() {
+		return authentication;
 	}
 
 	/**

@@ -142,4 +142,7 @@ public class McpSyncServerExchange {
 		return this.exchange.ping().block();
 	}
 
+	public McpAsyncServerExchange getExchange() {
+		return exchange;
+	}
 }
