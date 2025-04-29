@@ -128,7 +128,8 @@ public class McpServerSession implements McpLoggableSession {
 	}
 
 	/**
-	 * Retrieve authentication object set by Spring security filters as per your project security config
+	 * Retrieve authentication object set by Spring security filters as per your project
+	 * security config
 	 * @return Authentication
 	 */
 	public Authentication getAuthentication() {

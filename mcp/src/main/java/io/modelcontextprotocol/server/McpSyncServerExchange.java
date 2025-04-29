@@ -6,6 +6,7 @@ package io.modelcontextprotocol.server;
 
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
+import io.modelcontextprotocol.spec.McpServerSession;
 
 /**
  * Represents a synchronous exchange with a Model Context Protocol (MCP) client. The
@@ -142,7 +143,7 @@ public class McpSyncServerExchange {
 		return this.exchange.ping().block();
 	}
 
-	public McpAsyncServerExchange getExchange() {
-		return exchange;
+	public McpServerSession getSession() {
+		return exchange.getSession();
 	}
 }
