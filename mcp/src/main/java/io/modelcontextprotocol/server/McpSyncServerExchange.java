@@ -94,5 +94,4 @@ public class McpSyncServerExchange {
 	public McpServerSession getSession() {
 		return exchange.getSession();
 	}
-
 }
