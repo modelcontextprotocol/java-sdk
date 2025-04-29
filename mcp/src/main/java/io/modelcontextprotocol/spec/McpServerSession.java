@@ -95,7 +95,8 @@ public class McpServerSession implements McpSession {
 	}
 
 	/**
-	 * Retrieve authentication object set by Spring security filters as per your project security config
+	 * Retrieve authentication object set by Spring security filters as per your project
+	 * security config
 	 * @return Authentication
 	 */
 	public Authentication getAuthentication() {
