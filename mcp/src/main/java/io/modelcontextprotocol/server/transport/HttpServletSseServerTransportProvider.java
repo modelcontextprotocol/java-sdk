@@ -433,21 +433,6 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			});
 		}
 
-		/**
-		 * Closes the transport immediately.
-		 */
-		@Override
-		public void close() {
-			try {
-				sessions.remove(sessionId);
-				asyncContext.complete();
-				logger.debug("Successfully completed async context for session {}", sessionId);
-			}
-			catch (Exception e) {
-				logger.warn("Failed to complete async context for session {}: {}", sessionId, e.getMessage());
-			}
-		}
-
 	}
 
 	/**

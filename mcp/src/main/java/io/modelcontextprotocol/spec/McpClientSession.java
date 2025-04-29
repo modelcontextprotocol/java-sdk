@@ -283,13 +283,4 @@ public class McpClientSession implements McpSession {
 		});
 	}
 
-	/**
-	 * Closes the session immediately, potentially interrupting pending operations.
-	 */
-	@Override
-	public void close() {
-		this.connection.dispose();
-		transport.close();
-	}
-
 }

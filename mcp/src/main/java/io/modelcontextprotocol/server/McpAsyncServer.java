@@ -126,13 +126,6 @@ public class McpAsyncServer {
 		return this.delegate.closeGracefully();
 	}
 
-	/**
-	 * Close the server immediately.
-	 */
-	public void close() {
-		this.delegate.close();
-	}
-
 	// ---------------------------------------
 	// Tool Management
 	// ---------------------------------------
@@ -398,11 +391,6 @@ public class McpAsyncServer {
 		@Override
 		public Mono<Void> closeGracefully() {
 			return this.mcpTransportProvider.closeGracefully();
-		}
-
-		@Override
-		public void close() {
-			this.mcpTransportProvider.close();
 		}
 
 		private McpServerSession.NotificationHandler asyncRootsListChangedNotificationHandler(

@@ -370,11 +370,6 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			return Mono.fromRunnable(sink::complete);
 		}
 
-		@Override
-		public void close() {
-			sink.complete();
-		}
-
 	}
 
 	public static Builder builder() {
