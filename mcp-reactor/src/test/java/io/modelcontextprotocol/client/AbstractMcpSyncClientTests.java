@@ -70,11 +70,12 @@ public abstract class AbstractMcpSyncClientTests {
 		return client(transport, Function.identity());
 	}
 
-	McpSyncClient client(McpClientTransport transport, Function<McpClient.SyncSpec, McpClient.SyncSpec> customizer) {
+	McpSyncClient client(McpClientTransport transport,
+			Function<McpClientFactory.SyncSpec, McpClientFactory.SyncSpec> customizer) {
 		AtomicReference<McpSyncClient> client = new AtomicReference<>();
 
 		assertThatCode(() -> {
-			McpClient.SyncSpec builder = McpClient.sync(transport)
+			McpClientFactory.SyncSpec builder = McpClientFactory.sync(transport)
 				.requestTimeout(getRequestTimeout())
 				.initializationTimeout(getInitializationTimeout())
 				.capabilities(ClientCapabilities.builder().roots(true).build());
@@ -89,8 +90,8 @@ public abstract class AbstractMcpSyncClientTests {
 		withClient(transport, Function.identity(), c);
 	}
 
-	void withClient(McpClientTransport transport, Function<McpClient.SyncSpec, McpClient.SyncSpec> customizer,
-			Consumer<McpSyncClient> c) {
+	void withClient(McpClientTransport transport,
+			Function<McpClientFactory.SyncSpec, McpClientFactory.SyncSpec> customizer, Consumer<McpSyncClient> c) {
 		var client = client(transport, customizer);
 		try {
 			c.accept(client);
@@ -145,10 +146,10 @@ public abstract class AbstractMcpSyncClientTests {
 
 	@Test
 	void testConstructorWithInvalidArguments() {
-		assertThatThrownBy(() -> McpClient.sync(null).build()).isInstanceOf(IllegalArgumentException.class)
+		assertThatThrownBy(() -> McpClientFactory.sync(null).build()).isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Transport must not be null");
 
-		assertThatThrownBy(() -> McpClient.sync(createMcpTransport()).requestTimeout(null).build())
+		assertThatThrownBy(() -> McpClientFactory.sync(createMcpTransport()).requestTimeout(null).build())
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Request timeout must not be null");
 	}

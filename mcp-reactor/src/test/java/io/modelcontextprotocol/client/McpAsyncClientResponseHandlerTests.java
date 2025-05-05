@@ -61,7 +61,7 @@ class McpAsyncClientResponseHandlerTests {
 			.resources(true, true) // Enable both resources and resource templates
 			.build();
 		MockMcpClientTransport transport = initializationEnabledTransport(serverCapabilities, serverInfo);
-		McpAsyncClient asyncMcpClient = McpClient.async(transport).build();
+		McpAsyncClient asyncMcpClient = McpClientFactory.async(transport).build();
 
 		// Verify client is not initialized initially
 		assertThat(asyncMcpClient.isInitialized()).isFalse();
@@ -102,7 +102,9 @@ class McpAsyncClientResponseHandlerTests {
 			.fromRunnable(() -> receivedTools.addAll(tools));
 
 		// Create client with tools change consumer
-		McpAsyncClient asyncMcpClient = McpClient.async(transport).toolsChangeConsumer(toolsChangeConsumer).build();
+		McpAsyncClient asyncMcpClient = McpClientFactory.async(transport)
+			.toolsChangeConsumer(toolsChangeConsumer)
+			.build();
 
 		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
@@ -138,7 +140,7 @@ class McpAsyncClientResponseHandlerTests {
 	void testRootsListRequestHandling() {
 		MockMcpClientTransport transport = initializationEnabledTransport();
 
-		McpAsyncClient asyncMcpClient = McpClient.async(transport)
+		McpAsyncClient asyncMcpClient = McpClientFactory.async(transport)
 			.roots(new Root("file:///test/path", "test-root"))
 			.build();
 
@@ -174,7 +176,7 @@ class McpAsyncClientResponseHandlerTests {
 			.fromRunnable(() -> receivedResources.addAll(resources));
 
 		// Create client with resources change consumer
-		McpAsyncClient asyncMcpClient = McpClient.async(transport)
+		McpAsyncClient asyncMcpClient = McpClientFactory.async(transport)
 			.resourcesChangeConsumer(resourcesChangeConsumer)
 			.build();
 
@@ -220,7 +222,9 @@ class McpAsyncClientResponseHandlerTests {
 			.fromRunnable(() -> receivedPrompts.addAll(prompts));
 
 		// Create client with prompts change consumer
-		McpAsyncClient asyncMcpClient = McpClient.async(transport).promptsChangeConsumer(promptsChangeConsumer).build();
+		McpAsyncClient asyncMcpClient = McpClientFactory.async(transport)
+			.promptsChangeConsumer(promptsChangeConsumer)
+			.build();
 
 		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
@@ -264,7 +268,7 @@ class McpAsyncClientResponseHandlerTests {
 		};
 
 		// Create client with sampling capability and handler
-		McpAsyncClient asyncMcpClient = McpClient.async(transport)
+		McpAsyncClient asyncMcpClient = McpClientFactory.async(transport)
 			.capabilities(ClientCapabilities.builder().sampling().build())
 			.sampling(samplingHandler)
 			.build();
@@ -310,7 +314,7 @@ class McpAsyncClientResponseHandlerTests {
 		MockMcpClientTransport transport = initializationEnabledTransport();
 
 		// Create client without sampling capability
-		McpAsyncClient asyncMcpClient = McpClient.async(transport)
+		McpAsyncClient asyncMcpClient = McpClientFactory.async(transport)
 			.capabilities(ClientCapabilities.builder().build()) // No sampling capability
 			.build();
 
@@ -344,9 +348,9 @@ class McpAsyncClientResponseHandlerTests {
 		MockMcpClientTransport transport = new MockMcpClientTransport();
 
 		// Create client with sampling capability but null handler
-		assertThatThrownBy(
-				() -> McpClient.async(transport).capabilities(ClientCapabilities.builder().sampling().build()).build())
-			.isInstanceOf(McpError.class)
+		assertThatThrownBy(() -> McpClientFactory.async(transport)
+			.capabilities(ClientCapabilities.builder().sampling().build())
+			.build()).isInstanceOf(McpError.class)
 			.hasMessage("Sampling handler must not be null when client capabilities include sampling");
 	}
 

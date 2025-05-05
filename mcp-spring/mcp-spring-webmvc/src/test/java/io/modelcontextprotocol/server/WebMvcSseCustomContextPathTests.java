@@ -4,7 +4,7 @@
 package io.modelcontextprotocol.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.client.McpClient;
+import io.modelcontextprotocol.client.McpClientFactory;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.server.transport.WebMvcSseServerTransportProvider;
 import io.modelcontextprotocol.schema.McpSchema;
@@ -32,7 +32,7 @@ class WebMvcSseCustomContextPathTests {
 
 	private WebMvcSseServerTransportProvider mcpServerTransportProvider;
 
-	McpClient.SyncSpec clientBuilder;
+	McpClientFactory.SyncSpec clientBuilder;
 
 	private TomcatTestUtil.TomcatServer tomcatServer;
 
@@ -53,7 +53,7 @@ class WebMvcSseCustomContextPathTests {
 			.sseEndpoint(CUSTOM_CONTEXT_PATH + WebMvcSseServerTransportProvider.DEFAULT_SSE_ENDPOINT)
 			.build();
 
-		clientBuilder = McpClient.sync(clientTransport);
+		clientBuilder = McpClientFactory.sync(clientTransport);
 
 		mcpServerTransportProvider = tomcatServer.appContext().getBean(WebMvcSseServerTransportProvider.class);
 	}
@@ -79,7 +79,7 @@ class WebMvcSseCustomContextPathTests {
 
 	@Test
 	void testCustomContextPath() {
-		McpServer.async(mcpServerTransportProvider).serverInfo("test-server", "1.0.0").build();
+		McpServerFactory.async(mcpServerTransportProvider).serverInfo("test-server", "1.0.0").build();
 		var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0")).build();
 		assertThat(client.initialize()).isNotNull();
 	}

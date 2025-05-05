@@ -14,6 +14,7 @@ import java.util.function.BiFunction;
 import io.modelcontextprotocol.schema.McpSchema;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
+import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -39,7 +40,7 @@ public class McpServerFeatures {
 	 * @param instructions The server instructions text
 	 */
 	record Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-			List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
+			List<McpServer.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
 			List<McpSchema.ResourceTemplate> resourceTemplates,
 			Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
@@ -59,7 +60,7 @@ public class McpServerFeatures {
 		 * @param instructions The server instructions text
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-				List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
+				List<McpServer.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
 				List<McpSchema.ResourceTemplate> resourceTemplates,
 				Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
@@ -99,7 +100,7 @@ public class McpServerFeatures {
 		 * user.
 		 */
 		static Async fromSync(Sync syncSpec) {
-			List<McpServerFeatures.AsyncToolSpecification> tools = new ArrayList<>();
+			List<McpServer.AsyncToolSpecification> tools = new ArrayList<>();
 			for (var tool : syncSpec.tools()) {
 				tools.add(AsyncToolSpecification.fromSync(tool));
 			}
@@ -232,12 +233,14 @@ public class McpServerFeatures {
 	 *
 	 * @param tool The tool definition including name, description, and parameter schema
 	 * @param call The function that implements the tool's logic, receiving arguments and
-	 * returning results. The function's first argument is an
-	 * {@link McpAsyncServerExchange} upon which the server can interact with the
-	 * connected client. The second arguments is a map of tool arguments.
+	 * returning results. The function's first argument is an {@link McpServerExchange}
+	 * upon which the server can interact with the connected client. The second arguments
+	 * is a map of tool arguments.
 	 */
 	public record AsyncToolSpecification(McpSchema.Tool tool,
-			BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> call) {
+			BiFunction<McpServerExchange, Map<String, Object>, Publisher<McpSchema.CallToolResult>> call)
+			implements
+				McpServer.AsyncToolSpecification {
 
 		static AsyncToolSpecification fromSync(SyncToolSpecification tool) {
 			// FIXME: This is temporary, proper validation should be implemented
@@ -274,12 +277,14 @@ public class McpServerFeatures {
 	 *
 	 * @param resource The resource definition including name, description, and MIME type
 	 * @param readHandler The function that handles resource read requests. The function's
-	 * first argument is an {@link McpAsyncServerExchange} upon which the server can
-	 * interact with the connected client. The second arguments is a
+	 * first argument is an {@link McpServerExchange} upon which the server can interact
+	 * with the connected client. The second arguments is a
 	 * {@link McpSchema.ReadResourceRequest}.
 	 */
 	public record AsyncResourceSpecification(McpSchema.Resource resource,
-			BiFunction<McpAsyncServerExchange, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
+			BiFunction<McpServerExchange, McpSchema.ReadResourceRequest, Publisher<McpSchema.ReadResourceResult>> readHandler)
+			implements
+				McpServer.AsyncResourceSpecification {
 
 		static AsyncResourceSpecification fromSync(SyncResourceSpecification resource) {
 			// FIXME: This is temporary, proper validation should be implemented
@@ -319,12 +324,14 @@ public class McpServerFeatures {
 	 *
 	 * @param prompt The prompt definition including name and description
 	 * @param promptHandler The function that processes prompt requests and returns
-	 * formatted templates. The function's first argument is an
-	 * {@link McpAsyncServerExchange} upon which the server can interact with the
-	 * connected client. The second arguments is a {@link McpSchema.GetPromptRequest}.
+	 * formatted templates. The function's first argument is an {@link McpServerExchange}
+	 * upon which the server can interact with the connected client. The second arguments
+	 * is a {@link McpSchema.GetPromptRequest}.
 	 */
 	public record AsyncPromptSpecification(McpSchema.Prompt prompt,
-			BiFunction<McpAsyncServerExchange, McpSchema.GetPromptRequest, Mono<McpSchema.GetPromptResult>> promptHandler) {
+			BiFunction<McpServerExchange, McpSchema.GetPromptRequest, Publisher<McpSchema.GetPromptResult>> promptHandler)
+			implements
+				McpServer.AsyncPromptSpecification {
 
 		static AsyncPromptSpecification fromSync(SyncPromptSpecification prompt) {
 			// FIXME: This is temporary, proper validation should be implemented

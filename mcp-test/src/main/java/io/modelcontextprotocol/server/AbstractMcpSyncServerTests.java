@@ -69,32 +69,38 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testConstructorWithInvalidArguments() {
-		assertThatThrownBy(() -> McpServer.sync((McpServerTransportProvider) null))
+		assertThatThrownBy(() -> McpServerFactory.sync((McpServerTransportProvider) null))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Transport provider must not be null");
 
-		assertThatThrownBy(() -> McpServer.sync(createMcpTransportProvider()).serverInfo(null))
+		assertThatThrownBy(() -> McpServerFactory.sync(createMcpTransportProvider()).serverInfo(null))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Server info must not be null");
 	}
 
 	@Test
 	void testGracefulShutdown() {
-		var mcpSyncServer = McpServer.sync(createMcpTransportProvider()).serverInfo("test-server", "1.0.0").build();
+		var mcpSyncServer = McpServerFactory.sync(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.build();
 
 		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
 	}
 
 	@Test
 	void testImmediateClose() {
-		var mcpSyncServer = McpServer.sync(createMcpTransportProvider()).serverInfo("test-server", "1.0.0").build();
+		var mcpSyncServer = McpServerFactory.sync(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.build();
 
 		assertThatCode(() -> mcpSyncServer.close()).doesNotThrowAnyException();
 	}
 
 	@Test
 	void testGetAsyncServer() {
-		var mcpSyncServer = McpServer.sync(createMcpTransportProvider()).serverInfo("test-server", "1.0.0").build();
+		var mcpSyncServer = McpServerFactory.sync(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.build();
 
 		assertThat(mcpSyncServer.getAsyncServer()).isNotNull();
 
@@ -115,7 +121,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testAddTool() throws Exception {
-		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
+		var mcpSyncServer = McpServerFactory.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.build();
@@ -135,7 +141,7 @@ public abstract class AbstractMcpSyncServerTests {
 			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		Tool duplicateTool = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", jsonSchema);
 
-		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
+		var mcpSyncServer = McpServerFactory.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tool(duplicateTool, (exchange, args) -> new CallToolResult(List.of(), false))
@@ -155,7 +161,7 @@ public abstract class AbstractMcpSyncServerTests {
 			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		Tool tool = new McpSchema.Tool(TEST_TOOL_NAME, "Test tool", jsonSchema);
 
-		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
+		var mcpSyncServer = McpServerFactory.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tool(tool, (exchange, args) -> new CallToolResult(List.of(), false))
@@ -168,7 +174,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testRemoveNonexistentTool() {
-		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
+		var mcpSyncServer = McpServerFactory.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.build();
@@ -181,7 +187,9 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testNotifyToolsListChanged() {
-		var mcpSyncServer = McpServer.sync(createMcpTransportProvider()).serverInfo("test-server", "1.0.0").build();
+		var mcpSyncServer = McpServerFactory.sync(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.build();
 
 		assertThatCode(() -> mcpSyncServer.notifyToolsListChanged()).doesNotThrowAnyException();
 
@@ -194,7 +202,9 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testNotifyResourcesListChanged() {
-		var mcpSyncServer = McpServer.sync(createMcpTransportProvider()).serverInfo("test-server", "1.0.0").build();
+		var mcpSyncServer = McpServerFactory.sync(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.build();
 
 		assertThatCode(() -> mcpSyncServer.notifyResourcesListChanged()).doesNotThrowAnyException();
 
@@ -203,7 +213,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testAddResource() {
-		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
+		var mcpSyncServer = McpServerFactory.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().resources(true, false).build())
 			.build();
@@ -220,7 +230,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testAddResourceWithNullSpecification() {
-		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
+		var mcpSyncServer = McpServerFactory.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().resources(true, false).build())
 			.build();
@@ -234,7 +244,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testAddResourceWithoutCapability() {
-		var serverWithoutResources = McpServer.sync(createMcpTransportProvider())
+		var serverWithoutResources = McpServerFactory.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.build();
 
@@ -249,7 +259,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testRemoveResourceWithoutCapability() {
-		var serverWithoutResources = McpServer.sync(createMcpTransportProvider())
+		var serverWithoutResources = McpServerFactory.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.build();
 
@@ -263,7 +273,9 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testNotifyPromptsListChanged() {
-		var mcpSyncServer = McpServer.sync(createMcpTransportProvider()).serverInfo("test-server", "1.0.0").build();
+		var mcpSyncServer = McpServerFactory.sync(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.build();
 
 		assertThatCode(() -> mcpSyncServer.notifyPromptsListChanged()).doesNotThrowAnyException();
 
@@ -272,7 +284,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testAddPromptWithNullSpecification() {
-		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
+		var mcpSyncServer = McpServerFactory.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().prompts(false).build())
 			.build();
@@ -284,7 +296,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testAddPromptWithoutCapability() {
-		var serverWithoutPrompts = McpServer.sync(createMcpTransportProvider())
+		var serverWithoutPrompts = McpServerFactory.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.build();
 
@@ -299,7 +311,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testRemovePromptWithoutCapability() {
-		var serverWithoutPrompts = McpServer.sync(createMcpTransportProvider())
+		var serverWithoutPrompts = McpServerFactory.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.build();
 
@@ -314,7 +326,7 @@ public abstract class AbstractMcpSyncServerTests {
 				(exchange, req) -> new GetPromptResult("Test prompt description", List
 					.of(new PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent("Test content")))));
 
-		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
+		var mcpSyncServer = McpServerFactory.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().prompts(true).build())
 			.prompts(specification)
@@ -327,7 +339,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testRemoveNonexistentPrompt() {
-		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
+		var mcpSyncServer = McpServerFactory.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().prompts(true).build())
 			.build();
@@ -348,7 +360,7 @@ public abstract class AbstractMcpSyncServerTests {
 		var rootsReceived = new McpSchema.Root[1];
 		var consumerCalled = new boolean[1];
 
-		var singleConsumerServer = McpServer.sync(createMcpTransportProvider())
+		var singleConsumerServer = McpServerFactory.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.rootsChangeHandlers(List.of((exchange, roots) -> {
 				consumerCalled[0] = true;
@@ -367,7 +379,7 @@ public abstract class AbstractMcpSyncServerTests {
 		var consumer2Called = new boolean[1];
 		var rootsContent = new List[1];
 
-		var multipleConsumersServer = McpServer.sync(createMcpTransportProvider())
+		var multipleConsumersServer = McpServerFactory.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.rootsChangeHandlers(List.of((exchange, roots) -> {
 				consumer1Called[0] = true;
@@ -380,7 +392,7 @@ public abstract class AbstractMcpSyncServerTests {
 		onClose();
 
 		// Test error handling
-		var errorHandlingServer = McpServer.sync(createMcpTransportProvider())
+		var errorHandlingServer = McpServerFactory.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.rootsChangeHandlers(List.of((exchange, roots) -> {
 				throw new RuntimeException("Test error");
@@ -392,7 +404,9 @@ public abstract class AbstractMcpSyncServerTests {
 		onClose();
 
 		// Test without consumers
-		var noConsumersServer = McpServer.sync(createMcpTransportProvider()).serverInfo("test-server", "1.0.0").build();
+		var noConsumersServer = McpServerFactory.sync(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.build();
 
 		assertThat(noConsumersServer).isNotNull();
 		assertThatCode(() -> noConsumersServer.closeGracefully()).doesNotThrowAnyException();

@@ -42,7 +42,7 @@ import reactor.core.scheduler.Schedulers;
  * operations in non-blocking contexts by scheduling them on a bounded elastic scheduler.
  *
  * @author Dariusz Jędrzejczyk
- * @see McpClient
+ * @see McpClientFactory
  * @see McpSchema.Implementation
  * @see McpSchema.ClientCapabilities
  */

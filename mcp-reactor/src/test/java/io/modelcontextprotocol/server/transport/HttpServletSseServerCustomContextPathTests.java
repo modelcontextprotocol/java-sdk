@@ -5,9 +5,9 @@ package io.modelcontextprotocol.server.transport;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.modelcontextprotocol.client.McpClient;
+import io.modelcontextprotocol.client.McpClientFactory;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
-import io.modelcontextprotocol.server.McpServer;
+import io.modelcontextprotocol.server.McpServerFactory;
 import io.modelcontextprotocol.schema.McpSchema;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
@@ -30,7 +30,7 @@ class HttpServletSseServerCustomContextPathTests {
 
 	private HttpServletSseServerTransportProvider mcpServerTransportProvider;
 
-	McpClient.SyncSpec clientBuilder;
+	McpClientFactory.SyncSpec clientBuilder;
 
 	private Tomcat tomcat;
 
@@ -55,7 +55,7 @@ class HttpServletSseServerCustomContextPathTests {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		this.clientBuilder = McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
+		this.clientBuilder = McpClientFactory.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
 			.sseEndpoint(CUSTOM_CONTEXT_PATH + CUSTOM_SSE_ENDPOINT)
 			.build());
 	}
@@ -78,7 +78,7 @@ class HttpServletSseServerCustomContextPathTests {
 
 	@Test
 	void testCustomContextPath() {
-		var server = McpServer.async(mcpServerTransportProvider).serverInfo("test-server", "1.0.0").build();
+		var server = McpServerFactory.async(mcpServerTransportProvider).serverInfo("test-server", "1.0.0").build();
 		try (//@formatter:off
 			var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0")) .build()) { //@formatter:on
 
