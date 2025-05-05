@@ -99,7 +99,7 @@ import reactor.core.publisher.Mono;
  * @see McpSyncClient
  * @see McpTransport
  */
-public interface McpClient {
+public interface McpClientFactory {
 
 	/**
 	 * Start building a synchronous MCP client with the specified transport layer. The

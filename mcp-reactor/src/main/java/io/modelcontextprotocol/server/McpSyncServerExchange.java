@@ -6,6 +6,7 @@ package io.modelcontextprotocol.server;
 
 import io.modelcontextprotocol.schema.McpSchema;
 import io.modelcontextprotocol.schema.McpSchema.LoggingMessageNotification;
+import reactor.core.publisher.Mono;
 
 /**
  * Represents a synchronous exchange with a Model Context Protocol (MCP) client. The
@@ -16,14 +17,14 @@ import io.modelcontextprotocol.schema.McpSchema.LoggingMessageNotification;
  */
 public class McpSyncServerExchange {
 
-	private final McpAsyncServerExchange exchange;
+	private final McpServerExchange exchange;
 
 	/**
 	 * Create a new synchronous exchange with the client using the provided asynchronous
 	 * implementation as a delegate.
 	 * @param exchange The asynchronous exchange to delegate to.
 	 */
-	public McpSyncServerExchange(McpAsyncServerExchange exchange) {
+	public McpSyncServerExchange(McpServerExchange exchange) {
 		this.exchange = exchange;
 	}
 
@@ -60,7 +61,7 @@ public class McpSyncServerExchange {
 	 * Specification</a>
 	 */
 	public McpSchema.CreateMessageResult createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
-		return this.exchange.createMessage(createMessageRequest).block();
+		return Mono.from(this.exchange.createMessage(createMessageRequest)).block();
 	}
 
 	/**
@@ -68,7 +69,7 @@ public class McpSyncServerExchange {
 	 * @return The list of roots result.
 	 */
 	public McpSchema.ListRootsResult listRoots() {
-		return this.exchange.listRoots().block();
+		return Mono.from(this.exchange.listRoots()).block();
 	}
 
 	/**
@@ -77,7 +78,7 @@ public class McpSyncServerExchange {
 	 * @return The list of roots result
 	 */
 	public McpSchema.ListRootsResult listRoots(String cursor) {
-		return this.exchange.listRoots(cursor).block();
+		return Mono.from(this.exchange.listRoots(cursor)).block();
 	}
 
 	/**
@@ -86,7 +87,7 @@ public class McpSyncServerExchange {
 	 * @param loggingMessageNotification The logging message to send
 	 */
 	public void loggingNotification(LoggingMessageNotification loggingMessageNotification) {
-		this.exchange.loggingNotification(loggingMessageNotification).block();
+		Mono.from(this.exchange.loggingNotification(loggingMessageNotification)).block();
 	}
 
 }

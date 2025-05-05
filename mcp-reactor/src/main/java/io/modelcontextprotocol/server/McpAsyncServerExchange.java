@@ -20,7 +20,7 @@ import reactor.core.publisher.Mono;
  * @author Dariusz Jędrzejczyk
  * @author Christian Tzolov
  */
-public class McpAsyncServerExchange {
+public class McpAsyncServerExchange implements McpServerExchange {
 
 	private final McpServerSession session;
 
@@ -136,7 +136,7 @@ public class McpAsyncServerExchange {
 	 * filtered out.
 	 * @param minLoggingLevel The minimum logging level
 	 */
-	void setMinLoggingLevel(LoggingLevel minLoggingLevel) {
+	public void setMinLoggingLevel(LoggingLevel minLoggingLevel) {
 		Assert.notNull(minLoggingLevel, "minLoggingLevel must not be null");
 		this.minLoggingLevel = minLoggingLevel;
 	}

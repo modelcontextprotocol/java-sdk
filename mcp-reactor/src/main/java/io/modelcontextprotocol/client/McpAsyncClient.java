@@ -72,11 +72,11 @@ import reactor.core.publisher.Sinks;
  * @author Dariusz Jędrzejczyk
  * @author Christian Tzolov
  * @author Jihoon Kim
- * @see McpClient
+ * @see McpClientFactory
  * @see McpSchema
  * @see McpClientSession
  */
-public class McpAsyncClient {
+public class McpAsyncClient implements McpClient {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpAsyncClient.class);
 
@@ -84,7 +84,7 @@ public class McpAsyncClient {
 
 	protected final Sinks.One<McpSchema.InitializeResult> initializedSink = Sinks.one();
 
-	private AtomicBoolean initialized = new AtomicBoolean(false);
+	private final AtomicBoolean initialized = new AtomicBoolean(false);
 
 	/**
 	 * The max timeout to await for the client-server connection to be initialized.
@@ -808,7 +808,7 @@ public class McpAsyncClient {
 	 * code.
 	 * @param protocolVersions the Client supported protocol versions.
 	 */
-	void setProtocolVersions(List<String> protocolVersions) {
+	public void setProtocolVersions(List<String> protocolVersions) {
 		this.protocolVersions = protocolVersions;
 
 	}

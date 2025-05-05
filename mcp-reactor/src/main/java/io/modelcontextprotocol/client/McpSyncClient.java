@@ -47,7 +47,7 @@ import org.slf4j.LoggerFactory;
  * @author Dariusz Jędrzejczyk
  * @author Christian Tzolov
  * @author Jihoon Kim
- * @see McpClient
+ * @see McpClientFactory
  * @see McpAsyncClient
  * @see McpSchema
  */

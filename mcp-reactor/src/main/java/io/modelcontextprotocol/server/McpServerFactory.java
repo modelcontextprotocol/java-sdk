@@ -5,11 +5,7 @@
 package io.modelcontextprotocol.server;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
@@ -21,6 +17,7 @@ import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
+import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 
 /**
@@ -122,7 +119,7 @@ import reactor.core.publisher.Mono;
  * @see McpSyncServer
  * @see McpServerTransportProvider
  */
-public interface McpServer {
+public interface McpServerFactory {
 
 	/**
 	 * Starts building a synchronous MCP server that provides blocking operations.
@@ -175,7 +172,7 @@ public interface McpServer {
 		 * Each tool is uniquely identified by a name and includes metadata describing its
 		 * schema.
 		 */
-		private final List<McpServerFeatures.AsyncToolSpecification> tools = new ArrayList<>();
+		private final List<McpServer.AsyncToolSpecification> tools = new ArrayList<>();
 
 		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
@@ -316,14 +313,14 @@ public interface McpServer {
 		 * @param tool The tool definition including name, description, and schema. Must
 		 * not be null.
 		 * @param handler The function that implements the tool's logic. Must not be null.
-		 * The function's first argument is an {@link McpAsyncServerExchange} upon which
-		 * the server can interact with the connected client. The second argument is the
-		 * map of arguments passed to the tool.
+		 * The function's first argument is an {@link McpServerExchange} upon which the
+		 * server can interact with the connected client. The second argument is the map
+		 * of arguments passed to the tool.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
 		public AsyncSpecification tool(McpSchema.Tool tool,
-				BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<CallToolResult>> handler) {
+				BiFunction<McpServerExchange, Map<String, Object>, Publisher<CallToolResult>> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
 
@@ -367,9 +364,7 @@ public interface McpServer {
 		 */
 		public AsyncSpecification tools(McpServerFeatures.AsyncToolSpecification... toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
-			for (McpServerFeatures.AsyncToolSpecification tool : toolSpecifications) {
-				this.tools.add(tool);
-			}
+			Collections.addAll(this.tools, toolSpecifications);
 			return this;
 		}
 
@@ -465,9 +460,7 @@ public interface McpServer {
 		 */
 		public AsyncSpecification resourceTemplates(ResourceTemplate... resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			for (ResourceTemplate resourceTemplate : resourceTemplates) {
-				this.resourceTemplates.add(resourceTemplate);
-			}
+			Collections.addAll(this.resourceTemplates, resourceTemplates);
 			return this;
 		}
 
@@ -607,7 +600,7 @@ public interface McpServer {
 		 * @see #rootsChangeHandlers(List)
 		 */
 		public AsyncSpecification rootsChangeHandlers(
-				@SuppressWarnings("unchecked") BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>... handlers) {
+				BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>... handlers) {
 			Assert.notNull(handlers, "Handlers list must not be null");
 			return this.rootsChangeHandlers(Arrays.asList(handlers));
 		}
@@ -858,9 +851,7 @@ public interface McpServer {
 		 */
 		public SyncSpecification tools(McpServerFeatures.SyncToolSpecification... toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
-			for (McpServerFeatures.SyncToolSpecification tool : toolSpecifications) {
-				this.tools.add(tool);
-			}
+			Collections.addAll(this.tools, toolSpecifications);
 			return this;
 		}
 
@@ -956,9 +947,7 @@ public interface McpServer {
 		 */
 		public SyncSpecification resourceTemplates(ResourceTemplate... resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			for (ResourceTemplate resourceTemplate : resourceTemplates) {
-				this.resourceTemplates.add(resourceTemplate);
-			}
+			Collections.addAll(this.resourceTemplates, resourceTemplates);
 			return this;
 		}
 

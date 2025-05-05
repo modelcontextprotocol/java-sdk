@@ -32,7 +32,7 @@ class McpServerProtocolVersionTests {
 	void shouldUseLatestVersionByDefault() {
 		MockMcpServerTransport serverTransport = new MockMcpServerTransport();
 		var transportProvider = new MockMcpServerTransportProvider(serverTransport);
-		McpAsyncServer server = McpServer.async(transportProvider).serverInfo(SERVER_INFO).build();
+		McpAsyncServer server = McpServerFactory.async(transportProvider).serverInfo(SERVER_INFO).build();
 
 		String requestId = UUID.randomUUID().toString();
 
@@ -56,7 +56,7 @@ class McpServerProtocolVersionTests {
 		MockMcpServerTransport serverTransport = new MockMcpServerTransport();
 		var transportProvider = new MockMcpServerTransportProvider(serverTransport);
 
-		McpAsyncServer server = McpServer.async(transportProvider).serverInfo(SERVER_INFO).build();
+		McpAsyncServer server = McpServerFactory.async(transportProvider).serverInfo(SERVER_INFO).build();
 
 		server.setProtocolVersions(List.of(oldVersion, McpSchema.LATEST_PROTOCOL_VERSION));
 
@@ -81,7 +81,7 @@ class McpServerProtocolVersionTests {
 		MockMcpServerTransport serverTransport = new MockMcpServerTransport();
 		var transportProvider = new MockMcpServerTransportProvider(serverTransport);
 
-		McpAsyncServer server = McpServer.async(transportProvider).serverInfo(SERVER_INFO).build();
+		McpAsyncServer server = McpServerFactory.async(transportProvider).serverInfo(SERVER_INFO).build();
 
 		String requestId = UUID.randomUUID().toString();
 
@@ -107,7 +107,7 @@ class McpServerProtocolVersionTests {
 		MockMcpServerTransport serverTransport = new MockMcpServerTransport();
 		var transportProvider = new MockMcpServerTransportProvider(serverTransport);
 
-		McpAsyncServer server = McpServer.async(transportProvider).serverInfo(SERVER_INFO).build();
+		McpAsyncServer server = McpServerFactory.async(transportProvider).serverInfo(SERVER_INFO).build();
 
 		server.setProtocolVersions(List.of(oldVersion, middleVersion, latestVersion));
 

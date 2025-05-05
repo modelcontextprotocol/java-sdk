@@ -18,10 +18,10 @@ import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.modelcontextprotocol.client.McpClient;
+import io.modelcontextprotocol.client.McpClientFactory;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.schema.McpJacksonCodec;
-import io.modelcontextprotocol.server.McpServer;
+import io.modelcontextprotocol.server.McpServerFactory;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.schema.McpSchema;
@@ -62,7 +62,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 
 	private HttpServletSseServerTransportProvider mcpServerTransportProvider;
 
-	McpClient.SyncSpec clientBuilder;
+	McpClientFactory.SyncSpec clientBuilder;
 
 	private Tomcat tomcat;
 
@@ -84,7 +84,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		this.clientBuilder = McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
+		this.clientBuilder = McpClientFactory.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
 			.sseEndpoint(CUSTOM_SSE_ENDPOINT)
 			.build());
 	}
@@ -116,12 +116,15 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
 				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 
-					exchange.createMessage(mock(McpSchema.CreateMessageRequest.class)).block();
+					Mono.from(exchange.createMessage(mock(McpSchema.CreateMessageRequest.class))).block();
 
 					return Mono.just(mock(CallToolResult.class));
 				});
 
-		var server = McpServer.async(mcpServerTransportProvider).serverInfo("test-server", "1.0.0").tools(tool).build();
+		var server = McpServerFactory.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.tools(tool)
+			.build();
 
 		try (
 				// Create client without sampling capabilities
@@ -183,7 +186,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 					return Mono.just(callResponse);
 				});
 
-		var mcpServer = McpServer.async(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
 			.tools(tool)
 			.build();
@@ -260,7 +263,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 					return Mono.just(callResponse);
 				});
 
-		var mcpServer = McpServer.async(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
 			.requestTimeout(Duration.ofSeconds(3))
 			.tools(tool)
@@ -333,7 +336,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 					return Mono.just(callResponse);
 				});
 
-		var mcpServer = McpServer.async(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
 			.requestTimeout(Duration.ofSeconds(1))
 			.tools(tool)
@@ -359,7 +362,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
 			.build();
 
@@ -409,8 +412,11 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 					return mock(CallToolResult.class);
 				});
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider).rootsChangeHandler((exchange, rootsUpdate) -> {
-		}).tools(tool).build();
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
+			.rootsChangeHandler((exchange, rootsUpdate) -> {
+			})
+			.tools(tool)
+			.build();
 
 		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().build()).build()) {
 
@@ -432,7 +438,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 	void testRootsNotificationWithEmptyRootsList() {
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
 			.build();
 
@@ -460,7 +466,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 		AtomicReference<List<Root>> rootsRef1 = new AtomicReference<>();
 		AtomicReference<List<Root>> rootsRef2 = new AtomicReference<>();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef1.set(rootsUpdate))
 			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef2.set(rootsUpdate))
 			.build();
@@ -488,7 +494,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
 			.build();
 
@@ -547,7 +553,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 					return callResponse;
 				});
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(tool1)
 			.build();
@@ -594,7 +600,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 
 		AtomicReference<List<Tool>> rootsRef = new AtomicReference<>();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(tool1)
 			.build();
@@ -654,7 +660,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 
 	@Test
 	void testInitialize() {
-		var mcpServer = McpServer.sync(mcpServerTransportProvider).build();
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider).build();
 
 		try (var mcpClient = clientBuilder.build()) {
 
@@ -681,54 +687,44 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 					// Create and send notifications with different levels
 
 					// This should be filtered out (DEBUG < NOTICE)
-					exchange
-						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
-							.level(McpSchema.LoggingLevel.DEBUG)
-							.logger("test-logger")
-							.data("Debug message")
-							.build())
-						.block();
+					Mono.from(exchange.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+						.level(McpSchema.LoggingLevel.DEBUG)
+						.logger("test-logger")
+						.data("Debug message")
+						.build())).block();
 
 					// This should be sent (NOTICE >= NOTICE)
-					exchange
-						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
-							.level(McpSchema.LoggingLevel.NOTICE)
-							.logger("test-logger")
-							.data("Notice message")
-							.build())
-						.block();
+					Mono.from(exchange.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+						.level(McpSchema.LoggingLevel.NOTICE)
+						.logger("test-logger")
+						.data("Notice message")
+						.build())).block();
 
 					// This should be sent (ERROR > NOTICE)
-					exchange
-						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
-							.level(McpSchema.LoggingLevel.ERROR)
-							.logger("test-logger")
-							.data("Error message")
-							.build())
-						.block();
+					Mono.from(exchange.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+						.level(McpSchema.LoggingLevel.ERROR)
+						.logger("test-logger")
+						.data("Error message")
+						.build())).block();
 
 					// This should be filtered out (INFO < NOTICE)
-					exchange
-						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
-							.level(McpSchema.LoggingLevel.INFO)
-							.logger("test-logger")
-							.data("Another info message")
-							.build())
-						.block();
+					Mono.from(exchange.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+						.level(McpSchema.LoggingLevel.INFO)
+						.logger("test-logger")
+						.data("Another info message")
+						.build())).block();
 
 					// This should be sent (ERROR >= NOTICE)
-					exchange
-						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
-							.level(McpSchema.LoggingLevel.ERROR)
-							.logger("test-logger")
-							.data("Another error message")
-							.build())
-						.block();
+					Mono.from(exchange.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+						.level(McpSchema.LoggingLevel.ERROR)
+						.logger("test-logger")
+						.data("Another error message")
+						.build())).block();
 
 					return Mono.just(new CallToolResult("Logging test completed", false));
 				});
 
-		var mcpServer = McpServer.async(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().logging().tools(true).build())
 			.tools(tool)
