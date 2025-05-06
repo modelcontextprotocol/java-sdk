@@ -17,6 +17,8 @@ import java.util.function.BiFunction;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.modelcontextprotocol.logger.McpLogger;
+import io.modelcontextprotocol.logger.Slf4jMcpLogger;
 import io.modelcontextprotocol.schema.McpJacksonCodec;
 import io.modelcontextprotocol.schema.McpSchemaCodec;
 import io.modelcontextprotocol.schema.McpType;
@@ -31,11 +33,8 @@ import io.modelcontextprotocol.schema.McpSchema.SetLevelRequest;
 import io.modelcontextprotocol.schema.McpSchema.Tool;
 import io.modelcontextprotocol.session.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
-import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -83,12 +82,13 @@ import reactor.core.publisher.Mono;
  */
 public class McpAsyncServer implements McpServer {
 
-	private static final Logger logger = LoggerFactory.getLogger(McpAsyncServer.class);
+	private final McpLogger logger;
 
 	private final McpAsyncServer delegate;
 
 	McpAsyncServer() {
 		this.delegate = null;
+		this.logger = new Slf4jMcpLogger(McpAsyncServer.class);
 	}
 
 	/**
@@ -101,8 +101,16 @@ public class McpAsyncServer implements McpServer {
 	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory) {
-		this.delegate = new AsyncServerImpl(mcpTransportProvider, objectMapper, requestTimeout, features,
-				uriTemplateManagerFactory);
+		this(mcpTransportProvider, new McpJacksonCodec(objectMapper), features, requestTimeout,
+				uriTemplateManagerFactory, new Slf4jMcpLogger(McpAsyncServer.class));
+	}
+
+	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, McpSchemaCodec schemaCodec,
+			McpServerFeatures.Async features, Duration requestTimeout,
+			McpUriTemplateManagerFactory uriTemplateManagerFactory, McpLogger logger) {
+		this.logger = logger;
+		this.delegate = new AsyncServerImpl(mcpTransportProvider, schemaCodec, requestTimeout, features,
+				uriTemplateManagerFactory, logger);
 	}
 
 	/**
@@ -261,6 +269,8 @@ public class McpAsyncServer implements McpServer {
 
 		private final McpSchemaCodec schemaCodec;
 
+		private final McpLogger logger;
+
 		private final McpSchema.ServerCapabilities serverCapabilities;
 
 		private final McpSchema.Implementation serverInfo;
@@ -289,12 +299,12 @@ public class McpAsyncServer implements McpServer {
 				Duration requestTimeout, McpServerFeatures.Async features,
 				McpUriTemplateManagerFactory uriTemplateManagerFactory) {
 			this(mcpTransportProvider, new McpJacksonCodec(objectMapper), requestTimeout, features,
-					uriTemplateManagerFactory);
+					uriTemplateManagerFactory, new Slf4jMcpLogger(AsyncServerImpl.class));
 		}
 
 		AsyncServerImpl(McpServerTransportProvider mcpTransportProvider, McpSchemaCodec schemaCodec,
 				Duration requestTimeout, McpServerFeatures.Async features,
-				McpUriTemplateManagerFactory uriTemplateManagerFactory) {
+				McpUriTemplateManagerFactory uriTemplateManagerFactory, McpLogger logger) {
 			this.mcpTransportProvider = mcpTransportProvider;
 			this.schemaCodec = schemaCodec;
 			this.serverInfo = features.serverInfo();
@@ -306,6 +316,7 @@ public class McpAsyncServer implements McpServer {
 			this.prompts.putAll(features.prompts());
 			this.completions.putAll(features.completions());
 			this.uriTemplateManagerFactory = uriTemplateManagerFactory;
+			this.logger = logger;
 
 			Map<String, McpServerSession.RequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -352,9 +363,9 @@ public class McpAsyncServer implements McpServer {
 
 			if (Utils.isEmpty(rootsChangeConsumers)) {
 				rootsChangeConsumers = List.of((exchange,
-						roots) -> Mono.fromRunnable(() -> logger.warn(
-								"Roots list changed notification, but no consumers provided. Roots list changed: {}",
-								roots)));
+						roots) -> Mono.fromRunnable(() -> logger
+							.warn("Roots list changed notification, but no consumers provided. Roots list changed: %s"
+								.formatted(roots))));
 			}
 
 			notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED,
@@ -371,9 +382,9 @@ public class McpAsyncServer implements McpServer {
 		private Mono<McpSchema.InitializeResult> asyncInitializeRequestHandler(
 				McpSchema.InitializeRequest initializeRequest) {
 			return Mono.defer(() -> {
-				logger.info("Client initialize request - Protocol: {}, Capabilities: {}, Info: {}",
+				logger.info("Client initialize request - Protocol: %s, Capabilities: %s, Info: %s".formatted(
 						initializeRequest.protocolVersion(), initializeRequest.capabilities(),
-						initializeRequest.clientInfo());
+						initializeRequest.clientInfo()));
 
 				// The server MUST respond with the highest protocol version it supports
 				// if
@@ -388,8 +399,8 @@ public class McpAsyncServer implements McpServer {
 				}
 				else {
 					logger.warn(
-							"Client requested unsupported protocol version: {}, so the server will suggest the {} version instead",
-							initializeRequest.protocolVersion(), serverProtocolVersion);
+							"Client requested unsupported protocol version: %s, so the server will suggest the %s version instead"
+								.formatted(initializeRequest.protocolVersion(), serverProtocolVersion));
 				}
 
 				return Mono.just(new McpSchema.InitializeResult(serverProtocolVersion, this.serverCapabilities,
@@ -454,7 +465,7 @@ public class McpAsyncServer implements McpServer {
 				}
 
 				this.tools.add(toolSpecification);
-				logger.debug("Added tool handler: {}", toolSpecification.tool().name());
+				logger.debug("Added tool handler: %s".formatted(toolSpecification.tool().name()));
 
 				if (this.serverCapabilities.tools().listChanged()) {
 					return notifyToolsListChanged();
@@ -476,7 +487,7 @@ public class McpAsyncServer implements McpServer {
 				boolean removed = this.tools
 					.removeIf(toolSpecification -> toolSpecification.tool().name().equals(toolName));
 				if (removed) {
-					logger.debug("Removed tool handler: {}", toolName);
+					logger.debug("Removed tool handler: %s".formatted(toolName));
 					if (this.serverCapabilities.tools().listChanged()) {
 						return notifyToolsListChanged();
 					}
@@ -538,7 +549,7 @@ public class McpAsyncServer implements McpServer {
 					return Mono.error(new McpError(
 							"Resource with URI '" + resourceSpecification.resource().uri() + "' already exists"));
 				}
-				logger.debug("Added resource handler: {}", resourceSpecification.resource().uri());
+				logger.debug("Added resource handler: %s".formatted(resourceSpecification.resource().uri()));
 				if (this.serverCapabilities.resources().listChanged()) {
 					return notifyResourcesListChanged();
 				}
@@ -558,7 +569,7 @@ public class McpAsyncServer implements McpServer {
 			return Mono.defer(() -> {
 				McpServer.AsyncResourceSpecification removed = this.resources.remove(resourceUri);
 				if (removed != null) {
-					logger.debug("Removed resource handler: {}", resourceUri);
+					logger.debug("Removed resource handler: %s".formatted(resourceUri));
 					if (this.serverCapabilities.resources().listChanged()) {
 						return notifyResourcesListChanged();
 					}
@@ -647,7 +658,7 @@ public class McpAsyncServer implements McpServer {
 							"Prompt with name '" + promptSpecification.prompt().name() + "' already exists"));
 				}
 
-				logger.debug("Added prompt handler: {}", promptSpecification.prompt().name());
+				logger.debug("Added prompt handler: %s".formatted(promptSpecification.prompt().name()));
 
 				// Servers that declared the listChanged capability SHOULD send a
 				// notification,
@@ -672,7 +683,7 @@ public class McpAsyncServer implements McpServer {
 				McpServer.AsyncPromptSpecification removed = this.prompts.remove(promptName);
 
 				if (removed != null) {
-					logger.debug("Removed prompt handler: {}", promptName);
+					logger.debug("Removed prompt handler: %s".formatted(promptName));
 					// Servers that declared the listChanged capability SHOULD send a
 					// notification, when the list of available prompts changes
 					if (this.serverCapabilities.prompts().listChanged()) {

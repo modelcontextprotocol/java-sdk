@@ -76,6 +76,11 @@
 			<artifactId>mcp-schema-jackson</artifactId>
 			<version>${project.version}</version>
 		</dependency>
+		<dependency>
+			<groupId>io.modelcontextprotocol.sdk</groupId>
+			<artifactId>mcp-logging-slf4j</artifactId>
+			<version>${project.version}</version>
+		</dependency>
 		<!--Reactor-->
 		<dependency>
 			<groupId>org.reactivestreams</groupId>
@@ -93,12 +98,7 @@
 			<version>${jakarta.servlet.version}</version>
 			<scope>provided</scope>
 		</dependency>
-		<!--Logs-->
-		<dependency>
-			<groupId>org.slf4j</groupId>
-			<artifactId>slf4j-api</artifactId>
-			<version>${slf4j-api.version}</version>
-		</dependency>
+
 		<!--For test-->
 		<dependency>
 			<groupId>org.assertj</groupId>

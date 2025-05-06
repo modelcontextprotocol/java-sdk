@@ -13,7 +13,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.modelcontextprotocol.logger.McpLogger;
+import io.modelcontextprotocol.logger.Slf4jMcpLogger;
 import io.modelcontextprotocol.schema.McpJacksonCodec;
+import io.modelcontextprotocol.schema.McpSchemaCodec;
 import io.modelcontextprotocol.schema.McpType;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.schema.McpSchema;
@@ -28,8 +31,6 @@ import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -65,9 +66,6 @@ import reactor.core.publisher.Mono;
 @WebServlet(asyncSupported = true)
 public class HttpServletSseServerTransportProvider extends HttpServlet implements McpServerTransportProvider {
 
-	/** Logger for this class */
-	private static final Logger logger = LoggerFactory.getLogger(HttpServletSseServerTransportProvider.class);
-
 	public static final String UTF_8 = "UTF-8";
 
 	public static final String APPLICATION_JSON = "application/json";
@@ -86,7 +84,10 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	public static final String DEFAULT_BASE_URL = "";
 
 	/** JSON object mapper for serialization/deserialization */
-	private final McpJacksonCodec jacksonCodec;
+	private final McpSchemaCodec schemaCodec;
+
+	/** Logger for this class */
+	private final McpLogger logger;
 
 	/** Base URL for the server transport */
 	private final String baseUrl;
@@ -130,7 +131,14 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 */
 	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint) {
-		this.jacksonCodec = new McpJacksonCodec(objectMapper);
+		this(new McpJacksonCodec(objectMapper), new Slf4jMcpLogger(HttpServletSseServerTransportProvider.class),
+				baseUrl, messageEndpoint, sseEndpoint);
+	}
+
+	public HttpServletSseServerTransportProvider(McpSchemaCodec schemaCodec, McpLogger logger, String baseUrl,
+			String messageEndpoint, String sseEndpoint) {
+		this.schemaCodec = schemaCodec;
+		this.logger = logger;
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
@@ -169,12 +177,11 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			return Mono.empty();
 		}
 
-		logger.debug("Attempting to broadcast message to {} active sessions", sessions.size());
+		logger.debug("Attempting to broadcast message to %s active sessions".formatted(sessions.size()));
 
 		return Flux.fromIterable(sessions.values())
 			.flatMap(session -> session.sendNotification(method, params)
-				.doOnError(
-						e -> logger.error("Failed to send message to session {}: {}", session.getId(), e.getMessage()))
+				.doOnError(e -> logger.error("Failed to send message to session %s".formatted(session.getId()), e))
 				.onErrorComplete())
 			.then();
 	}
@@ -266,8 +273,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			response.setContentType(APPLICATION_JSON);
 			response.setCharacterEncoding(UTF_8);
 			response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-			String jsonError = jacksonCodec.getMapper()
-				.writeValueAsString(new McpError("Session ID missing in message endpoint"));
+			String jsonError = schemaCodec.encodeAsString(new McpError("Session ID missing in message endpoint"));
 			PrintWriter writer = response.getWriter();
 			writer.write(jsonError);
 			writer.flush();
@@ -280,8 +286,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			response.setContentType(APPLICATION_JSON);
 			response.setCharacterEncoding(UTF_8);
 			response.setStatus(HttpServletResponse.SC_NOT_FOUND);
-			String jsonError = jacksonCodec.getMapper()
-				.writeValueAsString(new McpError("Session not found: " + sessionId));
+			String jsonError = schemaCodec.encodeAsString(new McpError("Session not found: " + sessionId));
 			PrintWriter writer = response.getWriter();
 			writer.write(jsonError);
 			writer.flush();
@@ -296,7 +301,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 				body.append(line);
 			}
 
-			McpSchema.JSONRPCMessage message = jacksonCodec.decodeFromString(body.toString());
+			McpSchema.JSONRPCMessage message = schemaCodec.decodeFromString(body.toString());
 
 			// Process the message through the session's handle method
 			session.handle(message).block(); // Block for Servlet compatibility
@@ -304,19 +309,19 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			response.setStatus(HttpServletResponse.SC_OK);
 		}
 		catch (Exception e) {
-			logger.error("Error processing message: {}", e.getMessage());
+			logger.error("Error processing message", e);
 			try {
 				McpError mcpError = new McpError(e.getMessage());
 				response.setContentType(APPLICATION_JSON);
 				response.setCharacterEncoding(UTF_8);
 				response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-				String jsonError = jacksonCodec.getMapper().writeValueAsString(mcpError);
+				String jsonError = schemaCodec.encodeAsString(mcpError);
 				PrintWriter writer = response.getWriter();
 				writer.write(jsonError);
 				writer.flush();
 			}
 			catch (IOException ex) {
-				logger.error(FAILED_TO_SEND_ERROR_RESPONSE, ex.getMessage());
+				logger.error(FAILED_TO_SEND_ERROR_RESPONSE, ex);
 				response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error processing message");
 			}
 		}
@@ -332,7 +337,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	@Override
 	public Mono<Void> closeGracefully() {
 		isClosing.set(true);
-		logger.debug("Initiating graceful shutdown with {} active sessions", sessions.size());
+		logger.debug("Initiating graceful shutdown with %s active sessions".formatted(sessions.size()));
 
 		return Flux.fromIterable(sessions.values()).flatMap(McpServerSession::closeGracefully).then();
 	}
@@ -388,7 +393,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			this.sessionId = sessionId;
 			this.asyncContext = asyncContext;
 			this.writer = writer;
-			logger.debug("Session transport {} initialized with SSE writer", sessionId);
+			logger.debug("Session transport %s initialized with SSE writer".formatted(sessionId));
 		}
 
 		/**
@@ -400,12 +405,12 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
 			return Mono.fromRunnable(() -> {
 				try {
-					String jsonText = jacksonCodec.getMapper().writeValueAsString(message);
+					String jsonText = schemaCodec.encodeAsString(message);
 					sendEvent(writer, MESSAGE_EVENT_TYPE, jsonText);
-					logger.debug("Message sent to session {}", sessionId);
+					logger.debug("Message sent to session %s".formatted(sessionId));
 				}
 				catch (Exception e) {
-					logger.error("Failed to send message to session {}: {}", sessionId, e.getMessage());
+					logger.error("Failed to send message to session %s".formatted(sessionId), e);
 					sessions.remove(sessionId);
 					asyncContext.complete();
 				}
@@ -421,7 +426,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		 */
 		@Override
 		public <T> T unmarshalFrom(Object data, McpType<T> typeRef) {
-			return jacksonCodec.decodeResult(data, typeRef);
+			return schemaCodec.decodeResult(data, typeRef);
 		}
 
 		/**
@@ -431,14 +436,15 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		@Override
 		public Mono<Void> closeGracefully() {
 			return Mono.fromRunnable(() -> {
-				logger.debug("Closing session transport: {}", sessionId);
+				logger.debug("Closing session transport: %s".formatted(sessionId));
 				try {
 					sessions.remove(sessionId);
 					asyncContext.complete();
-					logger.debug("Successfully completed async context for session {}", sessionId);
+					logger.debug("Successfully completed async context for session %s".formatted(sessionId));
 				}
 				catch (Exception e) {
-					logger.warn("Failed to complete async context for session {}: {}", sessionId, e.getMessage());
+					logger.warn(
+							"Failed to complete async context for session %s: %s".formatted(sessionId, e.getMessage()));
 				}
 			});
 		}
@@ -451,10 +457,10 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			try {
 				sessions.remove(sessionId);
 				asyncContext.complete();
-				logger.debug("Successfully completed async context for session {}", sessionId);
+				logger.debug("Successfully completed async context for session %s".formatted(sessionId));
 			}
 			catch (Exception e) {
-				logger.warn("Failed to complete async context for session {}: {}", sessionId, e.getMessage());
+				logger.warn("Failed to complete async context for session %s: %s".formatted(sessionId, e.getMessage()));
 			}
 		}
 

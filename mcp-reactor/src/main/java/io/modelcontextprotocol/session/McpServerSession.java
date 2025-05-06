@@ -6,13 +6,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-
+import io.modelcontextprotocol.logger.McpLogger;
+import io.modelcontextprotocol.logger.Slf4jMcpLogger;
 import io.modelcontextprotocol.schema.McpType;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.schema.McpSchema;
@@ -28,8 +25,6 @@ import reactor.core.publisher.Sinks;
  * bidirectional JSON-RPC communication with the client.
  */
 public class McpServerSession implements McpSession {
-
-	private static final Logger logger = LoggerFactory.getLogger(McpServerSession.class);
 
 	private final ConcurrentHashMap<Object, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
 
@@ -49,6 +44,8 @@ public class McpServerSession implements McpSession {
 	private final Map<String, NotificationHandler> notificationHandlers;
 
 	private final McpServerTransport transport;
+
+	private final McpLogger logger;
 
 	private final Sinks.One<McpAsyncServerExchange> exchangeSink = Sinks.one();
 
@@ -71,14 +68,21 @@ public class McpServerSession implements McpSession {
 	 * @param initHandler called when a {@link McpSchema.InitializeRequest} is received by
 	 * the server
 	 * @param initNotificationHandler called when a
-	 * {@link io.modelcontextprotocol.spec.McpSchema#METHOD_NOTIFICATION_INITIALIZED} is
-	 * received.
+	 * {@link McpSchema#METHOD_NOTIFICATION_INITIALIZED} is received.
 	 * @param requestHandlers map of request handlers to use
 	 * @param notificationHandlers map of notification handlers to use
 	 */
 	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
 			InitRequestHandler initHandler, InitNotificationHandler initNotificationHandler,
 			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
+		this(id, requestTimeout, transport, initHandler, initNotificationHandler, requestHandlers, notificationHandlers,
+				new Slf4jMcpLogger(McpServerSession.class));
+	}
+
+	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
+			InitRequestHandler initHandler, InitNotificationHandler initNotificationHandler,
+			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers,
+			McpLogger logger) {
 		this.id = id;
 		this.requestTimeout = requestTimeout;
 		this.transport = transport;
@@ -86,6 +90,7 @@ public class McpServerSession implements McpSession {
 		this.initNotificationHandler = initNotificationHandler;
 		this.requestHandlers = requestHandlers;
 		this.notificationHandlers = notificationHandlers;
+		this.logger = logger;
 	}
 
 	/**
@@ -166,10 +171,10 @@ public class McpServerSession implements McpSession {
 			// TODO handle errors for communication to without initialization happening
 			// first
 			if (message instanceof McpSchema.JSONRPCResponse response) {
-				logger.debug("Received Response: {}", response);
+				logger.debug("Received Response: %s".formatted(response));
 				var sink = pendingResponses.remove(response.id());
 				if (sink == null) {
-					logger.warn("Unexpected response for unknown id {}", response.id());
+					logger.warn("Unexpected response for unknown id %s".formatted(response.id()));
 				}
 				else {
 					sink.success(response);
@@ -177,7 +182,7 @@ public class McpServerSession implements McpSession {
 				return Mono.empty();
 			}
 			else if (message instanceof McpSchema.JSONRPCRequest request) {
-				logger.debug("Received request: {}", request);
+				logger.debug("Received request: %s".formatted(request));
 				return handleIncomingRequest(request).onErrorResume(error -> {
 					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
 							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
@@ -189,13 +194,13 @@ public class McpServerSession implements McpSession {
 			else if (message instanceof McpSchema.JSONRPCNotification notification) {
 				// TODO handle errors for communication to without initialization
 				// happening first
-				logger.debug("Received notification: {}", notification);
+				logger.debug("Received notification: %s".formatted(notification));
 				// TODO: in case of error, should the POST request be signalled?
 				return handleIncomingNotification(notification)
-					.doOnError(error -> logger.error("Error handling notification: {}", error.getMessage()));
+					.doOnError(error -> logger.error("Error handling notification", error));
 			}
 			else {
-				logger.warn("Received unknown message type: {}", message);
+				logger.warn("Received unknown message type: %s".formatted(message));
 				return Mono.empty();
 			}
 		});
@@ -255,7 +260,7 @@ public class McpServerSession implements McpSession {
 
 			var handler = notificationHandlers.get(notification.method());
 			if (handler == null) {
-				logger.error("No handler registered for notification method: {}", notification.method());
+				logger.warn("No handler registered for notification method: %s".formatted(notification.method()));
 				return Mono.empty();
 			}
 			return this.exchangeSink.asMono().flatMap(exchange -> handler.handle(exchange, notification.params()));

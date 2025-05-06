@@ -3,8 +3,8 @@ package io.modelcontextprotocol.schema;
 import java.io.IOException;
 import java.util.HashMap;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.modelcontextprotocol.logger.McpLogger;
+import io.modelcontextprotocol.logger.Slf4jMcpLogger;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,20 +16,27 @@ import io.modelcontextprotocol.util.Assert;
  */
 public class McpJacksonCodec implements McpSchemaCodec {
 
-	private static final Logger logger = LoggerFactory.getLogger(McpJacksonCodec.class);
-
 	private static final TypeReference<HashMap<String, Object>> MAP_TYPE_REF = new TypeReference<>() {
 	};
 
 	private final ObjectMapper mapper;
+
+	private final McpLogger logger;
 
 	public McpJacksonCodec() {
 		this(new ObjectMapper());
 	}
 
 	public McpJacksonCodec(final ObjectMapper objectMapper) {
+		this(objectMapper, new Slf4jMcpLogger(McpJacksonCodec.class));
+	}
+
+	public McpJacksonCodec(final ObjectMapper objectMapper, final McpLogger logger) {
+		Assert.notNull(logger, "The MCP Logger can not be null");
 		Assert.notNull(objectMapper, "The ObjectMapper can not be null");
 		this.mapper = objectMapper;
+		this.logger = logger;
+
 		registerMixins();
 	}
 
@@ -54,7 +61,7 @@ public class McpJacksonCodec implements McpSchemaCodec {
 	 */
 	public McpSchema.JSONRPCMessage decodeFromString(String jsonText) throws IOException {
 
-		logger.debug("Received JSON message: {}", jsonText);
+		logger.debug("Received JSON message: %s".formatted(jsonText));
 
 		var map = mapper.readValue(jsonText, MAP_TYPE_REF);
 

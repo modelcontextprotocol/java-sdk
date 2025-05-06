@@ -21,12 +21,12 @@
          <artifactId>mcp-spi</artifactId>
          <version>${project.version}</version>
       </dependency>
-
       <dependency>
-         <groupId>org.slf4j</groupId>
-         <artifactId>slf4j-api</artifactId>
-         <version>${slf4j-api.version}</version>
+         <groupId>io.modelcontextprotocol.sdk</groupId>
+         <artifactId>mcp-logging-slf4j</artifactId>
+         <version>${project.version}</version>
       </dependency>
+
 
       <!--Jackson-->
       <dependency>
