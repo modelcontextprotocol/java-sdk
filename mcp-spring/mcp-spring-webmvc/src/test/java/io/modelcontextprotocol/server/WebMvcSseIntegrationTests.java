@@ -11,21 +11,22 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.client.McpClient;
+import io.modelcontextprotocol.client.McpClientFactory;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
+import io.modelcontextprotocol.schema.McpJacksonCodec;
 import io.modelcontextprotocol.server.transport.WebMvcSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
-import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
-import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
-import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
-import io.modelcontextprotocol.spec.McpSchema.ModelPreferences;
-import io.modelcontextprotocol.spec.McpSchema.Role;
-import io.modelcontextprotocol.spec.McpSchema.Root;
-import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
+import io.modelcontextprotocol.schema.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema.CallToolResult;
+import io.modelcontextprotocol.schema.McpSchema.ClientCapabilities;
+import io.modelcontextprotocol.schema.McpSchema.CreateMessageRequest;
+import io.modelcontextprotocol.schema.McpSchema.CreateMessageResult;
+import io.modelcontextprotocol.schema.McpSchema.InitializeResult;
+import io.modelcontextprotocol.schema.McpSchema.ModelPreferences;
+import io.modelcontextprotocol.schema.McpSchema.Role;
+import io.modelcontextprotocol.schema.McpSchema.Root;
+import io.modelcontextprotocol.schema.McpSchema.ServerCapabilities;
+import io.modelcontextprotocol.schema.McpSchema.Tool;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.junit.jupiter.api.AfterEach;
@@ -52,9 +53,11 @@ class WebMvcSseIntegrationTests {
 
 	private static final String MESSAGE_ENDPOINT = "/mcp/message";
 
+	private final McpJacksonCodec mcpJacksonCodec = new McpJacksonCodec(new ObjectMapper());
+
 	private WebMvcSseServerTransportProvider mcpServerTransportProvider;
 
-	McpClient.SyncSpec clientBuilder;
+	McpClientFactory.SyncSpec clientBuilder;
 
 	@Configuration
 	@EnableWebMvc
@@ -87,7 +90,7 @@ class WebMvcSseIntegrationTests {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		clientBuilder = McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT).build());
+		clientBuilder = McpClientFactory.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT).build());
 
 		// Get the transport from Spring context
 		mcpServerTransportProvider = tomcatServer.appContext().getBean(WebMvcSseServerTransportProvider.class);
@@ -117,18 +120,20 @@ class WebMvcSseIntegrationTests {
 	// Sampling Tests
 	// ---------------------------------------
 	@Test
-	void testCreateMessageWithoutSamplingCapabilities() {
+	void testCreateMessageWithoutSamplingCapabilities() throws Exception {
 
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 
-					exchange.createMessage(mock(McpSchema.CreateMessageRequest.class)).block();
+					Mono.from(exchange.createMessage(mock(McpSchema.CreateMessageRequest.class))).block();
 
 					return Mono.just(mock(CallToolResult.class));
 				});
 
 		//@formatter:off
-		var server = McpServer.async(mcpServerTransportProvider)
+		var server = McpServerFactory.async(mcpServerTransportProvider)
 				.serverInfo("test-server", "1.0.0")
 				.tools(tool)
 				.build();
@@ -153,7 +158,7 @@ class WebMvcSseIntegrationTests {
 	}
 
 	@Test
-	void testCreateMessageSuccess() {
+	void testCreateMessageSuccess() throws Exception {
 
 		Function<CreateMessageRequest, CreateMessageResult> samplingHandler = request -> {
 			assertThat(request.messages()).hasSize(1);
@@ -166,8 +171,10 @@ class WebMvcSseIntegrationTests {
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
 
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 
 					var createMessageRequest = McpSchema.CreateMessageRequest.builder()
 						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -193,7 +200,7 @@ class WebMvcSseIntegrationTests {
 				});
 
 		//@formatter:off		
-		var mcpServer = McpServer.async(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.async(mcpServerTransportProvider)
 				.serverInfo("test-server", "1.0.0")
 				.tools(tool)
 				.build();
@@ -215,7 +222,7 @@ class WebMvcSseIntegrationTests {
 	}
 
 	@Test
-	void testCreateMessageWithRequestTimeoutSuccess() throws InterruptedException {
+	void testCreateMessageWithRequestTimeoutSuccess() throws Exception {
 
 		// Client
 
@@ -242,8 +249,10 @@ class WebMvcSseIntegrationTests {
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
 
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 
 					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
 						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -268,7 +277,7 @@ class WebMvcSseIntegrationTests {
 					return Mono.just(callResponse);
 				});
 
-		var mcpServer = McpServer.async(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
 			.requestTimeout(Duration.ofSeconds(4))
 			.tools(tool)
@@ -279,15 +288,14 @@ class WebMvcSseIntegrationTests {
 
 		CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
 
-		assertThat(response).isNotNull();
-		assertThat(response).isEqualTo(callResponse);
+		assertThat(response).isNotNull().isEqualTo(callResponse);
 
 		mcpClient.close();
 		mcpServer.close();
 	}
 
 	@Test
-	void testCreateMessageWithRequestTimeoutFail() throws InterruptedException {
+	void testCreateMessageWithRequestTimeoutFail() throws Exception {
 
 		// Client
 
@@ -310,12 +318,13 @@ class WebMvcSseIntegrationTests {
 			.build();
 
 		// Server
-
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
 
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 
 					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
 						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -340,7 +349,7 @@ class WebMvcSseIntegrationTests {
 					return Mono.just(callResponse);
 				});
 
-		var mcpServer = McpServer.async(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
 			.requestTimeout(Duration.ofSeconds(1))
 			.tools(tool)
@@ -366,7 +375,7 @@ class WebMvcSseIntegrationTests {
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
 			.build();
 
@@ -405,18 +414,23 @@ class WebMvcSseIntegrationTests {
 	}
 
 	@Test
-	void testRootsWithoutCapability() {
+	void testRootsWithoutCapability() throws Exception {
 
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.SyncToolSpecification tool = new McpServerFeatures.SyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 
 					exchange.listRoots(); // try to list roots
 
 					return mock(CallToolResult.class);
 				});
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider).rootsChangeHandler((exchange, rootsUpdate) -> {
-		}).tools(tool).build();
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
+			.rootsChangeHandler((exchange, rootsUpdate) -> {
+			})
+			.tools(tool)
+			.build();
 
 		try (
 				// Create client without roots capability
@@ -441,7 +455,7 @@ class WebMvcSseIntegrationTests {
 	void testRootsNotificationWithEmptyRootsList() {
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
 			.build();
 
@@ -469,7 +483,7 @@ class WebMvcSseIntegrationTests {
 		AtomicReference<List<Root>> rootsRef1 = new AtomicReference<>();
 		AtomicReference<List<Root>> rootsRef2 = new AtomicReference<>();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef1.set(rootsUpdate))
 			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef2.set(rootsUpdate))
 			.build();
@@ -497,7 +511,7 @@ class WebMvcSseIntegrationTests {
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
 			.build();
 
@@ -531,11 +545,13 @@ class WebMvcSseIntegrationTests {
 			""";
 
 	@Test
-	void testToolCallSuccess() {
+	void testToolCallSuccess() throws Exception {
 
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
@@ -546,7 +562,7 @@ class WebMvcSseIntegrationTests {
 					return callResponse;
 				});
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(tool1)
 			.build();
@@ -567,11 +583,13 @@ class WebMvcSseIntegrationTests {
 	}
 
 	@Test
-	void testToolListChangeHandlingSuccess() {
+	void testToolListChangeHandlingSuccess() throws Exception {
 
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
@@ -584,7 +602,7 @@ class WebMvcSseIntegrationTests {
 
 		AtomicReference<List<Tool>> rootsRef = new AtomicReference<>();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(tool1)
 			.build();
@@ -622,8 +640,7 @@ class WebMvcSseIntegrationTests {
 
 			// Add a new tool
 			McpServerFeatures.SyncToolSpecification tool2 = new McpServerFeatures.SyncToolSpecification(
-					new McpSchema.Tool("tool2", "tool2 description", emptyJsonSchema),
-					(exchange, request) -> callResponse);
+					new McpSchema.Tool("tool2", "tool2 description", jsonSchema), (exchange, request) -> callResponse);
 
 			mcpServer.addTool(tool2);
 
@@ -638,7 +655,7 @@ class WebMvcSseIntegrationTests {
 	@Test
 	void testInitialize() {
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider).build();
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider).build();
 
 		try (var mcpClient = clientBuilder.build()) {
 
