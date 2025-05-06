@@ -12,6 +12,8 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import io.modelcontextprotocol.logger.McpLogger;
+import io.modelcontextprotocol.logger.Slf4jMcpLogger;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.schema.McpSchema;
 import io.modelcontextprotocol.spec.McpTransport;
@@ -95,6 +97,7 @@ import reactor.core.publisher.Mono;
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @author Aliaksei Darafeyeu
  * @see McpAsyncClient
  * @see McpSyncClient
  * @see McpTransport
@@ -174,6 +177,8 @@ public interface McpClientFactory {
 		private final List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers = new ArrayList<>();
 
 		private Function<CreateMessageRequest, CreateMessageResult> samplingHandler;
+
+		private McpLogger logger = new Slf4jMcpLogger(McpSyncClient.class);
 
 		private SyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
@@ -357,19 +362,30 @@ public interface McpClientFactory {
 		}
 
 		/**
+		 * Adds logger.
+		 * @param logger McpLogger
+		 * @return his builder instance for method chaining
+		 */
+		public SyncSpec logger(final McpLogger logger) {
+			Assert.notNull(logger, "logger must not be null");
+			this.logger = logger;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpSyncClient} with the provided configurations or
 		 * sensible defaults.
 		 * @return a new instance of {@link McpSyncClient}.
 		 */
 		public McpSyncClient build() {
-			McpClientFeatures.Sync syncFeatures = new McpClientFeatures.Sync(this.clientInfo, this.capabilities,
+			final McpClientFeatures.Sync syncFeatures = new McpClientFeatures.Sync(this.clientInfo, this.capabilities,
 					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.promptsChangeConsumers,
 					this.loggingConsumers, this.samplingHandler);
+			final McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
+			final McpAsyncClient delegate = new McpAsyncClient(transport, this.requestTimeout,
+					this.initializationTimeout, asyncFeatures, logger);
 
-			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
-
-			return new McpSyncClient(
-					new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout, asyncFeatures));
+			return new McpSyncClient(delegate, logger);
 		}
 
 	}
@@ -413,6 +429,8 @@ public interface McpClientFactory {
 		private final List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers = new ArrayList<>();
 
 		private Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler;
+
+		private McpLogger logger = new Slf4jMcpLogger(McpAsyncClient.class);
 
 		private AsyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
@@ -598,6 +616,17 @@ public interface McpClientFactory {
 		}
 
 		/**
+		 * Adds logger.
+		 * @param logger McpLogger
+		 * @return his builder instance for method chaining
+		 */
+		public AsyncSpec logger(final McpLogger logger) {
+			Assert.notNull(logger, "logger must not be null");
+			this.logger = logger;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpAsyncClient} with the provided configurations
 		 * or sensible defaults.
 		 * @return a new instance of {@link McpAsyncClient}.
@@ -606,7 +635,8 @@ public interface McpClientFactory {
 			return new McpAsyncClient(this.transport, this.requestTimeout, this.initializationTimeout,
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
 							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.promptsChangeConsumers,
-							this.loggingConsumers, this.samplingHandler));
+							this.loggingConsumers, this.samplingHandler),
+					logger);
 		}
 
 	}

@@ -17,6 +17,8 @@ import java.util.function.Function;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.modelcontextprotocol.logger.McpLogger;
+import io.modelcontextprotocol.logger.Slf4jMcpLogger;
 import io.modelcontextprotocol.schema.McpJacksonCodec;
 import io.modelcontextprotocol.schema.McpSchemaCodec;
 import io.modelcontextprotocol.schema.McpType;
@@ -25,8 +27,6 @@ import io.modelcontextprotocol.schema.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
 
 import org.reactivestreams.Publisher;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
@@ -40,10 +40,9 @@ import reactor.core.scheduler.Schedulers;
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @author Aliaksei_Darafeyeu
  */
 public class StdioClientTransport implements McpClientTransport {
-
-	private static final Logger logger = LoggerFactory.getLogger(StdioClientTransport.class);
 
 	private final Sinks.Many<JSONRPCMessage> inboundSink;
 
@@ -52,7 +51,9 @@ public class StdioClientTransport implements McpClientTransport {
 	/** The server process being communicated with */
 	private Process process;
 
-	private McpSchemaCodec schemaCodec;
+	private final McpSchemaCodec schemaCodec;
+
+	private final McpLogger logger;
 
 	/** Scheduler for handling inbound messages from the server process */
 	private Scheduler inboundScheduler;
@@ -71,7 +72,7 @@ public class StdioClientTransport implements McpClientTransport {
 	private volatile boolean isClosing = false;
 
 	// visible for tests
-	private Consumer<String> stdErrorHandler = error -> logger.info("STDERR Message received: {}", error);
+	private Consumer<String> stdErrorHandler;
 
 	/**
 	 * Creates a new StdioClientTransport with the specified parameters and default
@@ -88,7 +89,7 @@ public class StdioClientTransport implements McpClientTransport {
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 */
 	public StdioClientTransport(ServerParameters params, ObjectMapper objectMapper) {
-		this(params, new McpJacksonCodec(objectMapper));
+		this(params, new McpJacksonCodec(objectMapper), new Slf4jMcpLogger(StdioClientTransport.class));
 	}
 
 	/**
@@ -96,7 +97,7 @@ public class StdioClientTransport implements McpClientTransport {
 	 * @param params The parameters for configuring the server process
 	 * @param schemaCodec The McpSchemaCodec to use for JSON serialization/deserialization
 	 */
-	public StdioClientTransport(ServerParameters params, McpSchemaCodec schemaCodec) {
+	public StdioClientTransport(ServerParameters params, McpSchemaCodec schemaCodec, McpLogger logger) {
 		Assert.notNull(params, "The params can not be null");
 		Assert.notNull(schemaCodec, "The ObjectMapper can not be null");
 
@@ -104,10 +105,11 @@ public class StdioClientTransport implements McpClientTransport {
 		this.outboundSink = Sinks.many().unicast().onBackpressureBuffer();
 
 		this.params = params;
-
 		this.schemaCodec = schemaCodec;
+		this.logger = logger;
 
 		this.errorSink = Sinks.many().unicast().onBackpressureBuffer();
+		this.stdErrorHandler = error -> logger.info("STDERR Message received: %s".formatted(error));
 
 		// Start threads
 		this.inboundScheduler = Schedulers.fromExecutorService(Executors.newSingleThreadExecutor(), "inbound");
@@ -206,7 +208,7 @@ public class StdioClientTransport implements McpClientTransport {
 					try {
 						if (!this.errorSink.tryEmitNext(line).isSuccess()) {
 							if (!isClosing) {
-								logger.error("Failed to emit error message");
+								logger.warn("Failed to emit error message");
 							}
 							break;
 						}
@@ -274,7 +276,7 @@ public class StdioClientTransport implements McpClientTransport {
 						JSONRPCMessage message = schemaCodec.decodeFromString(line);
 						if (!this.inboundSink.tryEmitNext(message).isSuccess()) {
 							if (!isClosing) {
-								logger.error("Failed to enqueue inbound message: {}", message);
+								logger.warn("Failed to enqueue inbound message: %s".formatted(message));
 							}
 							break;
 						}

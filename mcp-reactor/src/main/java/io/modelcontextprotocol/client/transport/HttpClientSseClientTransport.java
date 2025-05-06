@@ -18,6 +18,8 @@ import java.util.function.Function;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.transport.FlowSseClient.SseEvent;
+import io.modelcontextprotocol.logger.McpLogger;
+import io.modelcontextprotocol.logger.Slf4jMcpLogger;
 import io.modelcontextprotocol.schema.McpJacksonCodec;
 import io.modelcontextprotocol.schema.McpSchemaCodec;
 import io.modelcontextprotocol.schema.McpType;
@@ -30,8 +32,6 @@ import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
 
 import org.reactivestreams.Publisher;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import reactor.core.publisher.Mono;
 
@@ -63,8 +63,6 @@ import reactor.core.publisher.Mono;
  */
 public class HttpClientSseClientTransport implements McpClientTransport {
 
-	private static final Logger logger = LoggerFactory.getLogger(HttpClientSseClientTransport.class);
-
 	/** SSE event type for JSON-RPC messages */
 	private static final String MESSAGE_EVENT_TYPE = "message";
 
@@ -93,7 +91,9 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	private final HttpRequest.Builder requestBuilder;
 
 	/** McpSchemaCodec for message serialization/deserialization */
-	protected McpSchemaCodec schemaCodec;
+	private final McpSchemaCodec schemaCodec;
+
+	private final McpLogger logger;
 
 	/** Flag indicating if the transport is in closing state */
 	private volatile boolean isClosing = false;
@@ -179,18 +179,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 */
 	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
 			String sseEndpoint, ObjectMapper objectMapper) {
-		Assert.notNull(objectMapper, "ObjectMapper must not be null");
-		Assert.hasText(baseUri, "baseUri must not be empty");
-		Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
-		Assert.notNull(httpClient, "httpClient must not be null");
-		Assert.notNull(requestBuilder, "requestBuilder must not be null");
-		this.baseUri = URI.create(baseUri);
-		this.sseEndpoint = sseEndpoint;
-		this.schemaCodec = new McpJacksonCodec(objectMapper);
-		this.httpClient = httpClient;
-		this.requestBuilder = requestBuilder;
-
-		this.sseClient = new FlowSseClient(this.httpClient, requestBuilder);
+		this(httpClient, requestBuilder, baseUri, sseEndpoint, new McpJacksonCodec(objectMapper),
+				new Slf4jMcpLogger(HttpClientSseClientTransport.class));
 	}
 
 	/**
@@ -204,17 +194,19 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 * @throws IllegalArgumentException if objectMapper, clientBuilder, or headers is null
 	 */
 	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
-			String sseEndpoint, McpSchemaCodec schemaCodec) {
-		Assert.notNull(schemaCodec, "ObjectMapper must not be null");
+			String sseEndpoint, McpSchemaCodec schemaCodec, McpLogger logger) {
+		Assert.notNull(schemaCodec, "schemaCodec must not be null");
 		Assert.hasText(baseUri, "baseUri must not be empty");
 		Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
 		Assert.notNull(httpClient, "httpClient must not be null");
 		Assert.notNull(requestBuilder, "requestBuilder must not be null");
+		Assert.notNull(requestBuilder, "logger must not be null");
 		this.baseUri = URI.create(baseUri);
 		this.sseEndpoint = sseEndpoint;
 		this.schemaCodec = schemaCodec;
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
+		this.logger = logger;
 
 		this.sseClient = new FlowSseClient(this.httpClient, requestBuilder);
 	}
@@ -247,6 +239,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 
 		private HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
 			.header("Content-Type", "application/json");
+
+		private McpLogger logger = new Slf4jMcpLogger(HttpClientSseClientTransport.class);
 
 		/**
 		 * Creates a new builder instance.
@@ -357,6 +351,17 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		}
 
 		/**
+		 * Adds logger.
+		 * @param logger McpLogger
+		 * @return his builder instance for method chaining
+		 */
+		public Builder logger(final McpLogger logger) {
+			Assert.notNull(logger, "logger must not be null");
+			this.logger = logger;
+			return this;
+		}
+
+		/**
 		 * Builds a new {@link HttpClientSseClientTransport} instance.
 		 * @return a new transport instance
 		 */
@@ -366,7 +371,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			}
 
 			return new HttpClientSseClientTransport(clientBuilder.build(), requestBuilder, baseUri, sseEndpoint,
-					schemaCodec);
+					schemaCodec, logger);
 		}
 
 	}
@@ -410,7 +415,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 						Mono.from(result).subscribe();
 					}
 					else {
-						logger.error("Received unrecognized SSE event type: {}", event.type());
+						logger.warn("Received unrecognized SSE event type: %s".formatted(event.type()));
 					}
 				}
 				catch (IOException e) {
@@ -472,7 +477,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 					httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding()).thenAccept(response -> {
 						if (response.statusCode() != 200 && response.statusCode() != 201 && response.statusCode() != 202
 								&& response.statusCode() != 206) {
-							logger.error("Error sending message: {}", response.statusCode());
+							logger.warn("Error sending message: %s".formatted(response.statusCode()));
 						}
 					}));
 		}

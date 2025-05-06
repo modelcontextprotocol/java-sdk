@@ -13,6 +13,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
+import io.modelcontextprotocol.logger.McpLogger;
 import io.modelcontextprotocol.schema.McpType;
 import io.modelcontextprotocol.session.McpClientSession;
 import io.modelcontextprotocol.session.McpClientSession.NotificationHandler;
@@ -33,8 +34,6 @@ import io.modelcontextprotocol.schema.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpTransport;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
@@ -77,8 +76,6 @@ import reactor.core.publisher.Sinks;
  * @see McpClientSession
  */
 public class McpAsyncClient implements McpClient {
-
-	private static final Logger logger = LoggerFactory.getLogger(McpAsyncClient.class);
 
 	private static final McpType<Void> VOID_TYPE_REFERENCE = McpType.of(Void.class);
 
@@ -145,6 +142,8 @@ public class McpAsyncClient implements McpClient {
 	 */
 	private final McpTransport transport;
 
+	private final McpLogger logger;
+
 	/**
 	 * Supported protocol versions.
 	 */
@@ -159,7 +158,7 @@ public class McpAsyncClient implements McpClient {
 	 * @param features the MCP Client supported features.
 	 */
 	McpAsyncClient(McpClientTransport transport, Duration requestTimeout, Duration initializationTimeout,
-			McpClientFeatures.Async features) {
+			McpClientFeatures.Async features, McpLogger logger) {
 
 		Assert.notNull(transport, "Transport must not be null");
 		Assert.notNull(requestTimeout, "Request timeout must not be null");
@@ -170,6 +169,7 @@ public class McpAsyncClient implements McpClient {
 		this.transport = transport;
 		this.roots = new ConcurrentHashMap<>(features.roots());
 		this.initializationTimeout = initializationTimeout;
+		this.logger = logger;
 
 		// Request Handlers
 		Map<String, RequestHandler<?>> requestHandlers = new HashMap<>();
@@ -194,7 +194,7 @@ public class McpAsyncClient implements McpClient {
 		// Tools Change Notification
 		List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumersFinal = new ArrayList<>();
 		toolsChangeConsumersFinal
-			.add((notification) -> Mono.fromRunnable(() -> logger.debug("Tools changed: {}", notification)));
+			.add((notification) -> Mono.fromRunnable(() -> logger.debug("Tools changed: %s".formatted(notification))));
 
 		if (!Utils.isEmpty(features.toolsChangeConsumers())) {
 			toolsChangeConsumersFinal.addAll(features.toolsChangeConsumers());
@@ -204,8 +204,8 @@ public class McpAsyncClient implements McpClient {
 
 		// Resources Change Notification
 		List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumersFinal = new ArrayList<>();
-		resourcesChangeConsumersFinal
-			.add((notification) -> Mono.fromRunnable(() -> logger.debug("Resources changed: {}", notification)));
+		resourcesChangeConsumersFinal.add((notification) -> Mono
+			.fromRunnable(() -> logger.debug("Resources changed: %s".formatted(notification))));
 
 		if (!Utils.isEmpty(features.resourcesChangeConsumers())) {
 			resourcesChangeConsumersFinal.addAll(features.resourcesChangeConsumers());
@@ -216,8 +216,8 @@ public class McpAsyncClient implements McpClient {
 
 		// Prompts Change Notification
 		List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumersFinal = new ArrayList<>();
-		promptsChangeConsumersFinal
-			.add((notification) -> Mono.fromRunnable(() -> logger.debug("Prompts changed: {}", notification)));
+		promptsChangeConsumersFinal.add(
+				(notification) -> Mono.fromRunnable(() -> logger.debug("Prompts changed: %s".formatted(notification))));
 		if (!Utils.isEmpty(features.promptsChangeConsumers())) {
 			promptsChangeConsumersFinal.addAll(features.promptsChangeConsumers());
 		}
@@ -226,7 +226,8 @@ public class McpAsyncClient implements McpClient {
 
 		// Utility Logging Notification
 		List<Function<LoggingMessageNotification, Mono<Void>>> loggingConsumersFinal = new ArrayList<>();
-		loggingConsumersFinal.add((notification) -> Mono.fromRunnable(() -> logger.debug("Logging: {}", notification)));
+		loggingConsumersFinal
+			.add((notification) -> Mono.fromRunnable(() -> logger.debug("Logging: %s".formatted(notification))));
 		if (!Utils.isEmpty(features.loggingConsumers())) {
 			loggingConsumersFinal.addAll(features.loggingConsumers());
 		}
@@ -344,9 +345,9 @@ public class McpAsyncClient implements McpClient {
 			this.serverInstructions = initializeResult.instructions();
 			this.serverInfo = initializeResult.serverInfo();
 
-			logger.info("Server response with Protocol: {}, Capabilities: {}, Info: {} and Instructions {}",
+			logger.info("Server response with Protocol: %s, Capabilities: %s, Info: %s and Instructions %s".formatted(
 					initializeResult.protocolVersion(), initializeResult.capabilities(), initializeResult.serverInfo(),
-					initializeResult.instructions());
+					initializeResult.instructions()));
 
 			if (!this.protocolVersions.contains(initializeResult.protocolVersion())) {
 				return Mono.error(new McpError(
@@ -414,7 +415,7 @@ public class McpAsyncClient implements McpClient {
 
 		this.roots.put(root.uri(), root);
 
-		logger.debug("Added root: {}", root);
+		logger.debug("Added root: %s".formatted(root));
 
 		if (this.clientCapabilities.roots().listChanged()) {
 			if (this.isInitialized()) {
@@ -445,7 +446,7 @@ public class McpAsyncClient implements McpClient {
 		Root removed = this.roots.remove(rootUri);
 
 		if (removed != null) {
-			logger.debug("Removed Root: {}", rootUri);
+			logger.debug("Removed Root: %s".formatted(rootUri));
 			if (this.clientCapabilities.roots().listChanged()) {
 				if (this.isInitialized()) {
 					return this.rootsListChangedNotification();

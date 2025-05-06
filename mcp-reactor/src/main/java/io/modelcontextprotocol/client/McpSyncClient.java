@@ -6,14 +6,13 @@ package io.modelcontextprotocol.client;
 
 import java.time.Duration;
 
+import io.modelcontextprotocol.logger.McpLogger;
 import io.modelcontextprotocol.schema.McpSchema;
 import io.modelcontextprotocol.schema.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.schema.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.schema.McpSchema.GetPromptResult;
 import io.modelcontextprotocol.schema.McpSchema.ListPromptsResult;
 import io.modelcontextprotocol.util.Assert;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * A synchronous client implementation for the Model Context Protocol (MCP) that wraps an
@@ -47,13 +46,12 @@ import org.slf4j.LoggerFactory;
  * @author Dariusz Jędrzejczyk
  * @author Christian Tzolov
  * @author Jihoon Kim
+ * @author Aliaksei Darafeyeu
  * @see McpClientFactory
  * @see McpAsyncClient
  * @see McpSchema
  */
 public class McpSyncClient implements AutoCloseable {
-
-	private static final Logger logger = LoggerFactory.getLogger(McpSyncClient.class);
 
 	// TODO: Consider providing a client config to set this properly
 	// this is currently a concern only because AutoCloseable is used - perhaps it
@@ -62,14 +60,18 @@ public class McpSyncClient implements AutoCloseable {
 
 	private final McpAsyncClient delegate;
 
+	private final McpLogger logger;
+
 	/**
 	 * Create a new McpSyncClient with the given delegate.
 	 * @param delegate the asynchronous kernel on top of which this synchronous client
 	 * provides a blocking API.
 	 */
-	McpSyncClient(McpAsyncClient delegate) {
+	McpSyncClient(McpAsyncClient delegate, McpLogger logger) {
 		Assert.notNull(delegate, "The delegate can not be null");
+		Assert.notNull(logger, "The logger can not be null");
 		this.delegate = delegate;
+		this.logger = logger;
 	}
 
 	/**
@@ -131,7 +133,7 @@ public class McpSyncClient implements AutoCloseable {
 			this.delegate.closeGracefully().block(Duration.ofMillis(DEFAULT_CLOSE_TIMEOUT_MS));
 		}
 		catch (RuntimeException e) {
-			logger.warn("Client didn't close within timeout of {} ms.", DEFAULT_CLOSE_TIMEOUT_MS, e);
+			logger.warn("Client didn't close within timeout of %d ms.".formatted(DEFAULT_CLOSE_TIMEOUT_MS), e);
 			return false;
 		}
 		return true;

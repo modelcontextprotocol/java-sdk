@@ -16,6 +16,8 @@ import java.util.function.Function;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.modelcontextprotocol.logger.McpLogger;
+import io.modelcontextprotocol.logger.Slf4jMcpLogger;
 import io.modelcontextprotocol.schema.McpJacksonCodec;
 import io.modelcontextprotocol.schema.McpSchemaCodec;
 import io.modelcontextprotocol.schema.McpType;
@@ -26,9 +28,6 @@ import io.modelcontextprotocol.session.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import io.modelcontextprotocol.spec.ServerSessionFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -45,7 +44,7 @@ import reactor.core.scheduler.Schedulers;
  */
 public class StdioServerTransportProvider implements McpServerTransportProvider {
 
-	private static final Logger logger = LoggerFactory.getLogger(StdioServerTransportProvider.class);
+	private final McpLogger logger;
 
 	private final McpSchemaCodec schemaCodec;
 
@@ -84,7 +83,8 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	 * @param outputStream The output stream to write to
 	 */
 	public StdioServerTransportProvider(ObjectMapper objectMapper, InputStream inputStream, OutputStream outputStream) {
-		this(new McpJacksonCodec(objectMapper), inputStream, outputStream);
+		this(new McpJacksonCodec(objectMapper), new Slf4jMcpLogger(StdioServerTransportProvider.class), inputStream,
+				outputStream);
 	}
 
 	/**
@@ -94,13 +94,15 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	 * @param inputStream The input stream to read from
 	 * @param outputStream The output stream to write to
 	 */
-	public StdioServerTransportProvider(McpSchemaCodec schemaCodec, InputStream inputStream,
+	public StdioServerTransportProvider(McpSchemaCodec schemaCodec, McpLogger logger, InputStream inputStream,
 			OutputStream outputStream) {
-		Assert.notNull(schemaCodec, "The ObjectMapper can not be null");
+		Assert.notNull(schemaCodec, "The schemaCodec can not be null");
+		Assert.notNull(schemaCodec, "The logger can not be null");
 		Assert.notNull(inputStream, "The InputStream can not be null");
 		Assert.notNull(outputStream, "The OutputStream can not be null");
 
 		this.schemaCodec = schemaCodec;
+		this.logger = logger;
 		this.inputStream = inputStream;
 		this.outputStream = outputStream;
 	}
@@ -119,7 +121,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 			return Mono.error(new McpError("No session to close"));
 		}
 		return this.session.sendNotification(method, params)
-			.doOnError(e -> logger.error("Failed to send notification: {}", e.getMessage()));
+			.doOnError(e -> logger.error("Failed to send notification", e));
 	}
 
 	@Override
@@ -231,7 +233,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 									break;
 								}
 
-								logger.debug("Received JSON message: {}", line);
+								logger.debug("Received JSON message: %s".formatted(line));
 
 								try {
 									McpSchema.JSONRPCMessage message = schemaCodec.decodeFromString(line);
@@ -294,7 +296,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 								 sink.error(new RuntimeException(e));
 							 }
 							 else {
-								 logger.debug("Stream closed during shutdown", e);
+								 logger.error("Stream closed during shutdown", e);
 							 }
 						 }
 					 }

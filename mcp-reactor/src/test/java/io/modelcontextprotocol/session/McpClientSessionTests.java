@@ -8,11 +8,11 @@ import java.time.Duration;
 import java.util.Map;
 
 import io.modelcontextprotocol.MockMcpClientTransport;
+import io.modelcontextprotocol.logger.McpLogger;
+import io.modelcontextprotocol.logger.Slf4jMcpLogger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import io.modelcontextprotocol.schema.McpType;
 import io.modelcontextprotocol.spec.McpError;
@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class McpClientSessionTests {
 
-	private static final Logger logger = LoggerFactory.getLogger(McpClientSessionTests.class);
+	private static final McpLogger logger = new Slf4jMcpLogger(McpClientSessionTests.class);
 
 	private static final Duration TIMEOUT = Duration.ofSeconds(5);
 

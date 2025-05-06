@@ -17,6 +17,8 @@ import java.util.function.BiFunction;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.modelcontextprotocol.logger.McpLogger;
+import io.modelcontextprotocol.logger.Slf4jMcpLogger;
 import io.modelcontextprotocol.schema.McpJacksonCodec;
 import io.modelcontextprotocol.schema.McpSchemaCodec;
 import io.modelcontextprotocol.schema.McpType;
@@ -31,11 +33,8 @@ import io.modelcontextprotocol.schema.McpSchema.SetLevelRequest;
 import io.modelcontextprotocol.schema.McpSchema.Tool;
 import io.modelcontextprotocol.session.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
-import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -83,11 +82,11 @@ import reactor.core.publisher.Mono;
  */
 public class McpAsyncServer implements McpServer {
 
-	private static final Logger logger = LoggerFactory.getLogger(McpAsyncServer.class);
+	private final McpLogger logger;
 
 	private final McpServerTransportProvider mcpTransportProvider;
 
-    private final McpSchemaCodec schemaCodec;
+	private final McpSchemaCodec schemaCodec;
 
 	private final McpSchema.ServerCapabilities serverCapabilities;
 
@@ -124,14 +123,14 @@ public class McpAsyncServer implements McpServer {
 			McpServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory) {
 		this(mcpTransportProvider, new McpJacksonCodec(objectMapper), requestTimeout, features,
-					uriTemplateManagerFactory);
-		}
+				uriTemplateManagerFactory, new Slf4jMcpLogger(McpAsyncServer.class));
+	}
 
-    McpAsyncServer(McpServerTransportProvider mcpTransportProvider, McpSchemaCodec schemaCodec,
-				Duration requestTimeout, McpServerFeatures.Async features,
-				McpUriTemplateManagerFactory uriTemplateManagerFactory) {
+	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, McpSchemaCodec schemaCodec, Duration requestTimeout,
+			McpServerFeatures.Async features, McpUriTemplateManagerFactory uriTemplateManagerFactory,
+			McpLogger logger) {
 		this.mcpTransportProvider = mcpTransportProvider;
-        this.schemaCodec = schemaCodec;
+		this.schemaCodec = schemaCodec;
 		this.serverInfo = features.serverInfo();
 		this.serverCapabilities = features.serverCapabilities();
 		this.instructions = features.instructions();
@@ -141,6 +140,7 @@ public class McpAsyncServer implements McpServer {
 		this.prompts.putAll(features.prompts());
 		this.completions.putAll(features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
+		this.logger = logger;
 
 		Map<String, McpServerSession.RequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -186,8 +186,10 @@ public class McpAsyncServer implements McpServer {
 			.rootsChangeConsumers();
 
 		if (Utils.isEmpty(rootsChangeConsumers)) {
-			rootsChangeConsumers = List.of((exchange, roots) -> Mono.fromRunnable(() -> logger
-				.warn("Roots list changed notification, but no consumers provided. Roots list changed: {}", roots)));
+			rootsChangeConsumers = List.of((exchange,
+					roots) -> Mono.fromRunnable(() -> logger
+						.warn("Roots list changed notification, but no consumers provided. Roots list changed: %s"
+							.formatted(roots))));
 		}
 
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED,
@@ -204,9 +206,9 @@ public class McpAsyncServer implements McpServer {
 	private Mono<McpSchema.InitializeResult> asyncInitializeRequestHandler(
 			McpSchema.InitializeRequest initializeRequest) {
 		return Mono.defer(() -> {
-			logger.info("Client initialize request - Protocol: {}, Capabilities: {}, Info: {}",
+			logger.info("Client initialize request - Protocol: %s, Capabilities: %s, Info: %s".formatted(
 					initializeRequest.protocolVersion(), initializeRequest.capabilities(),
-					initializeRequest.clientInfo());
+					initializeRequest.clientInfo()));
 
 			// The server MUST respond with the highest protocol version it supports
 			// if
@@ -221,8 +223,8 @@ public class McpAsyncServer implements McpServer {
 			}
 			else {
 				logger.warn(
-						"Client requested unsupported protocol version: {}, so the server will suggest the {} version instead",
-						initializeRequest.protocolVersion(), serverProtocolVersion);
+						"Client requested unsupported protocol version: %s, so the server will suggest the %s version instead"
+							.formatted(initializeRequest.protocolVersion(), serverProtocolVersion));
 			}
 
 			return Mono.just(new McpSchema.InitializeResult(serverProtocolVersion, this.serverCapabilities,
@@ -304,7 +306,7 @@ public class McpAsyncServer implements McpServer {
 			}
 
 			this.tools.add(toolSpecification);
-			logger.debug("Added tool handler: {}", toolSpecification.tool().name());
+			logger.debug("Added tool handler: %s".formatted(toolSpecification.tool().name()));
 
 			if (this.serverCapabilities.tools().listChanged()) {
 				return notifyToolsListChanged();
@@ -330,7 +332,7 @@ public class McpAsyncServer implements McpServer {
 			boolean removed = this.tools
 				.removeIf(toolSpecification -> toolSpecification.tool().name().equals(toolName));
 			if (removed) {
-				logger.debug("Removed tool handler: {}", toolName);
+				logger.debug("Removed tool handler: %s".formatted(toolName));
 				if (this.serverCapabilities.tools().listChanged()) {
 					return notifyToolsListChanged();
 				}
@@ -346,7 +348,7 @@ public class McpAsyncServer implements McpServer {
 	 */
 	public Mono<Void> notifyToolsListChanged() {
 		return Mono
-				.from(this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_TOOLS_LIST_CHANGED, null));
+			.from(this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_TOOLS_LIST_CHANGED, null));
 	}
 
 	private McpServerSession.RequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
@@ -370,8 +372,7 @@ public class McpAsyncServer implements McpServer {
 				return Mono.error(new McpError("Tool not found: " + callToolRequest.name()));
 			}
 
-			return toolSpecification
-					.map(tool -> Mono.from(tool.call().apply(exchange, callToolRequest.arguments())))
+			return toolSpecification.map(tool -> Mono.from(tool.call().apply(exchange, callToolRequest.arguments())))
 				.orElse(Mono.error(new McpError("Tool not found: " + callToolRequest.name())));
 		};
 	}
@@ -399,7 +400,7 @@ public class McpAsyncServer implements McpServer {
 				return Mono.error(new McpError(
 						"Resource with URI '" + resourceSpecification.resource().uri() + "' already exists"));
 			}
-			logger.debug("Added resource handler: {}", resourceSpecification.resource().uri());
+			logger.debug("Added resource handler: %s".formatted(resourceSpecification.resource().uri()));
 			if (this.serverCapabilities.resources().listChanged()) {
 				return notifyResourcesListChanged();
 			}
@@ -423,7 +424,7 @@ public class McpAsyncServer implements McpServer {
 		return Mono.defer(() -> {
 			McpServer.AsyncResourceSpecification removed = this.resources.remove(resourceUri);
 			if (removed != null) {
-				logger.debug("Removed resource handler: {}", resourceUri);
+				logger.debug("Removed resource handler: %s".formatted(resourceUri));
 				if (this.serverCapabilities.resources().listChanged()) {
 					return notifyResourcesListChanged();
 				}
@@ -438,8 +439,8 @@ public class McpAsyncServer implements McpServer {
 	 * @return A Mono that completes when all clients have been notified
 	 */
 	public Mono<Void> notifyResourcesListChanged() {
-		return Mono.from(this.mcpTransportProvider
-				.notifyClients(McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED, null));
+		return Mono
+			.from(this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED, null));
 	}
 
 	private McpServerSession.RequestHandler<McpSchema.ListResourcesResult> resourcesListRequestHandler() {
@@ -465,9 +466,8 @@ public class McpAsyncServer implements McpServer {
 			.filter(uri -> uri.contains("{"))
 			.map(uri -> {
 				var resource = this.resources.get(uri).resource();
-				var template = new McpSchema.ResourceTemplate(resource.uri(), resource.name(), resource.description(),
+				return new ResourceTemplate(resource.uri(), resource.name(), resource.description(),
 						resource.mimeType(), resource.annotations());
-				return template;
 			})
 			.toList();
 
@@ -519,7 +519,7 @@ public class McpAsyncServer implements McpServer {
 						new McpError("Prompt with name '" + promptSpecification.prompt().name() + "' already exists"));
 			}
 
-			logger.debug("Added prompt handler: {}", promptSpecification.prompt().name());
+			logger.debug("Added prompt handler: %s".formatted(promptSpecification.prompt().name()));
 
 			// Servers that declared the listChanged capability SHOULD send a
 			// notification,
@@ -548,7 +548,7 @@ public class McpAsyncServer implements McpServer {
 			McpServer.AsyncPromptSpecification removed = this.prompts.remove(promptName);
 
 			if (removed != null) {
-				logger.debug("Removed prompt handler: {}", promptName);
+				logger.debug("Removed prompt handler: %s".formatted(promptName));
 				// Servers that declared the listChanged capability SHOULD send a
 				// notification, when the list of available prompts changes
 				if (this.serverCapabilities.prompts().listChanged()) {
@@ -565,8 +565,8 @@ public class McpAsyncServer implements McpServer {
 	 * @return A Mono that completes when all clients have been notified
 	 */
 	public Mono<Void> notifyPromptsListChanged() {
-		return Mono.from(
-					this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED, null));
+		return Mono
+			.from(this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED, null));
 	}
 
 	private McpServerSession.RequestHandler<McpSchema.ListPromptsResult> promptsListRequestHandler() {
@@ -576,10 +576,7 @@ public class McpAsyncServer implements McpServer {
 			// new TypeReference<McpSchema.PaginatedRequest>() {
 			// });
 
-			var promptList = this.prompts.values()
-				.stream()
-				.map(McpServer.AsyncPromptSpecification::prompt)
-				.toList();
+			var promptList = this.prompts.values().stream().map(McpServer.AsyncPromptSpecification::prompt).toList();
 
 			return Mono.just(new McpSchema.ListPromptsResult(promptList, null));
 		};
@@ -631,21 +628,18 @@ public class McpAsyncServer implements McpServer {
 	}
 
 	private McpServerSession.RequestHandler<Object> setLoggerRequestHandler() {
-		return (exchange, params) -> {
-			return Mono.defer(() -> {
+		return (exchange, params) -> Mono.defer(() -> {
 
-				SetLevelRequest newMinLoggingLevel = schemaCodec.decodeResult(params,
-						McpType.of(SetLevelRequest.class));
+			SetLevelRequest newMinLoggingLevel = schemaCodec.decodeResult(params, McpType.of(SetLevelRequest.class));
 
-				exchange.setMinLoggingLevel(newMinLoggingLevel.level());
+			exchange.setMinLoggingLevel(newMinLoggingLevel.level());
 
-				// FIXME: this field is deprecated and should be removed together
-				// with the broadcasting loggingNotification.
-				this.minLoggingLevel = newMinLoggingLevel.level();
+			// FIXME: this field is deprecated and should be removed together
+			// with the broadcasting loggingNotification.
+			this.minLoggingLevel = newMinLoggingLevel.level();
 
-				return Mono.just(Map.of());
-			});
-		};
+			return Mono.just(Map.of());
+		});
 	}
 
 	private McpServerSession.RequestHandler<McpSchema.CompleteResult> completionCompleteRequestHandler() {
@@ -678,14 +672,14 @@ public class McpAsyncServer implements McpServer {
 
 			if (type.equals("ref/resource") && request.ref() instanceof McpSchema.ResourceReference resourceReference) {
 				McpServer.AsyncResourceSpecification resourceSpec = this.resources.get(resourceReference.uri());
-					if (resourceSpec == null) {
-						return Mono.error(new McpError("Resource not found: " + resourceReference.uri()));
-					}
-					if (!uriTemplateManagerFactory.create(resourceSpec.resource().uri())
-						.getVariableNames()
-						.contains(argumentName)) {
-						return Mono.error(new McpError("Argument not found: " + argumentName));
-					}
+				if (resourceSpec == null) {
+					return Mono.error(new McpError("Resource not found: " + resourceReference.uri()));
+				}
+				if (!uriTemplateManagerFactory.create(resourceSpec.resource().uri())
+					.getVariableNames()
+					.contains(argumentName)) {
+					return Mono.error(new McpError("Argument not found: " + argumentName));
+				}
 
 			}
 
@@ -740,7 +734,7 @@ public class McpAsyncServer implements McpServer {
 	 * @param protocolVersions the Client supported protocol versions.
 	 */
 	public void setProtocolVersions(List<String> protocolVersions) {
-			this.protocolVersions = protocolVersions;
-		}
+		this.protocolVersions = protocolVersions;
+	}
 
 }
