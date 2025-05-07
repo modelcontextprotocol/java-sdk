@@ -6,7 +6,10 @@ package io.modelcontextprotocol.client.transport;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -83,6 +86,11 @@ class WebFluxSseClientTransportTests {
 
 		public void simulateMessageEvent(String jsonMessage) {
 			events.tryEmitNext(ServerSentEvent.<String>builder().event("message").data(jsonMessage).build());
+			inboundMessageCount.incrementAndGet();
+		}
+
+		public void simulateComment(String comment) {
+			events.tryEmitNext(ServerSentEvent.<String>builder().comment(comment).build());
 			inboundMessageCount.incrementAndGet();
 		}
 
@@ -336,6 +344,28 @@ class WebFluxSseClientTransportTests {
 
 		// Verify message count and order
 		assertThat(transport.getInboundMessageCount()).isEqualTo(3);
+	}
+
+	@Test
+	void customErrorHandlerShouldProcessErrors() throws InterruptedException {
+		AtomicReference<ServerSentEvent<String>> receivedErrorEvent = new AtomicReference<>();
+		AtomicReference<Throwable> handledError = new AtomicReference<>();
+
+		transport.setSseErrorHandler((error, event) -> {
+			receivedErrorEvent.set(event);
+			handledError.set(error);
+			return Mono.empty();
+		});
+
+		// Mock receive a common message `: This is a comment.\n\n`
+		transport.simulateComment("This is a comment.");
+
+		assertThat(receivedErrorEvent.get().comment()).isNotNull().isEqualTo("This is a comment.");
+
+		// Mock receive a common message `:ping - 2025-05-06 08:42:06.508759+00:00\n\n`
+		transport.simulateComment("ping - 2025-05-06 08:42:06.508759+00:00");
+
+		assertThat(receivedErrorEvent.get().comment()).isNotNull().isEqualTo("ping - 2025-05-06 08:42:06.508759+00:00");
 	}
 
 }

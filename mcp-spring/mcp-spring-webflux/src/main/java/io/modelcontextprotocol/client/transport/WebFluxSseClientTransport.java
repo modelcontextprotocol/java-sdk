@@ -5,6 +5,7 @@ package io.modelcontextprotocol.client.transport;
 
 import java.io.IOException;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -124,6 +125,16 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	private String sseEndpoint;
 
 	/**
+	 * Handle exceptions that occur during the processing of SSE events to avoid
+	 * connection interruption.
+	 */
+	private BiFunction<Throwable, ServerSentEvent<String>, Mono<? extends JSONRPCMessage>> sseErrorHandler = (error,
+																											  event) -> {
+		logger.warn("Failed to handle SSE event {}", event, error);
+		return Mono.empty();
+	};
+
+	/**
 	 * Constructs a new SseClientTransport with the specified WebClient builder. Uses a
 	 * default ObjectMapper instance for JSON processing.
 	 * @param webClientBuilder the WebClient.Builder to use for creating the WebClient
@@ -215,10 +226,24 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 			else {
 				s.error(new McpError("Received unrecognized SSE event type: " + event.event()));
 			}
-		}).transform(handler)).subscribe();
+		}).onErrorResume(e -> sseErrorHandler.apply(e, event)).transform(handler)).subscribe();
 
 		// The connection is established once the server sends the endpoint event
 		return messageEndpointSink.asMono().then();
+	}
+
+	/**
+	 * Sets the handler for processing transport-level errors.
+	 *
+	 * <p>
+	 * The provided handler will be called when errors occur during transport operations,
+	 * such as connection failures or protocol violations.
+	 * </p>
+	 * @param errorHandler a consumer that processes error messages
+	 */
+	public void setSseErrorHandler(
+			BiFunction<Throwable, ServerSentEvent<String>, Mono<? extends JSONRPCMessage>> errorHandler) {
+		this.sseErrorHandler = errorHandler;
 	}
 
 	/**
