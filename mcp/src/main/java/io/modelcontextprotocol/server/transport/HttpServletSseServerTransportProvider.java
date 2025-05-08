@@ -13,11 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpServerSession;
-import io.modelcontextprotocol.spec.McpServerTransport;
-import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.*;
 import io.modelcontextprotocol.util.Assert;
 import jakarta.servlet.AsyncContext;
 import jakarta.servlet.ServletException;
@@ -103,6 +99,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	/** Session factory for creating new sessions */
 	private McpServerSession.Factory sessionFactory;
 
+	private McpContextFactory mcpContextFactory;
+
 	/**
 	 * Creates a new HttpServletSseServerTransportProvider instance with a custom SSE
 	 * endpoint.
@@ -151,6 +149,11 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	@Override
 	public void setSessionFactory(McpServerSession.Factory sessionFactory) {
 		this.sessionFactory = sessionFactory;
+	}
+
+	@Override
+	public void setMcpContextFactory(final McpContextFactory mcpContextFactory) {
+		this.mcpContextFactory = mcpContextFactory;
 	}
 
 	/**
@@ -219,11 +222,23 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 				writer);
 
 		// Create a new session using the session factory
-		McpServerSession session = sessionFactory.create(sessionTransport);
+		McpServerSession session = sessionFactory.create(sessionTransport, createContext(request));
 		this.sessions.put(sessionId, session);
 
 		// Send initial endpoint event
 		this.sendEvent(writer, ENDPOINT_EVENT_TYPE, this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId);
+	}
+
+	private McpContext createContext(final HttpServletRequest request) {
+		// create a context form the request
+		McpContext context;
+		if (mcpContextFactory != null) {
+			context = mcpContextFactory.create(request);
+		}
+		else {
+			context = McpContext.empty();
+		}
+		return context;
 	}
 
 	/**
@@ -289,7 +304,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body.toString());
 
 			// Process the message through the session's handle method
-			session.handle(message).block(); // Block for Servlet compatibility
+			session.handle(message, createContext(request)).block(); // Block for Servlet
+																		// compatibility
 
 			response.setStatus(HttpServletResponse.SC_OK);
 		}

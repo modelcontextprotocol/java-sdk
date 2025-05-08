@@ -15,10 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpServerSession;
-import io.modelcontextprotocol.spec.McpServerTransport;
+import io.modelcontextprotocol.spec.*;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -71,7 +68,7 @@ class StdioServerTransportProviderTests {
 		sessionFactory = mock(McpServerSession.Factory.class);
 
 		// Configure mock behavior
-		when(sessionFactory.create(any(McpServerTransport.class))).thenReturn(mockSession);
+		when(sessionFactory.create(any(McpServerTransport.class), any(McpContext.class))).thenReturn(mockSession);
 		when(mockSession.closeGracefully()).thenReturn(Mono.empty());
 		when(mockSession.sendNotification(any(), any())).thenReturn(Mono.empty());
 
@@ -110,9 +107,9 @@ class StdioServerTransportProviderTests {
 		AtomicReference<McpSchema.JSONRPCMessage> capturedMessage = new AtomicReference<>();
 		CountDownLatch messageLatch = new CountDownLatch(1);
 
-		McpServerSession.Factory realSessionFactory = transport -> {
+		McpServerSession.Factory realSessionFactory = (transport, ctx) -> {
 			McpServerSession session = mock(McpServerSession.class);
-			when(session.handle(any())).thenAnswer(invocation -> {
+			when(session.handle(any(), any(McpContext.class))).thenAnswer(invocation -> {
 				capturedMessage.set(invocation.getArgument(0));
 				messageLatch.countDown();
 				return Mono.empty();

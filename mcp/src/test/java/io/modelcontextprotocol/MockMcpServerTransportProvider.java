@@ -17,10 +17,8 @@ package io.modelcontextprotocol;
 
 import java.util.Map;
 
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpServerSession;
+import io.modelcontextprotocol.spec.*;
 import io.modelcontextprotocol.spec.McpServerSession.Factory;
-import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import reactor.core.publisher.Mono;
 
 /**
@@ -32,6 +30,8 @@ public class MockMcpServerTransportProvider implements McpServerTransportProvide
 
 	private final MockMcpServerTransport transport;
 
+	private McpContextFactory mcpContextFactory;
+
 	public MockMcpServerTransportProvider(MockMcpServerTransport transport) {
 		this.transport = transport;
 	}
@@ -42,8 +42,13 @@ public class MockMcpServerTransportProvider implements McpServerTransportProvide
 
 	@Override
 	public void setSessionFactory(Factory sessionFactory) {
+		var ctx = mcpContextFactory != null ? mcpContextFactory.create(null) : McpContext.empty();
+		session = sessionFactory.create(transport, ctx);
+	}
 
-		session = sessionFactory.create(transport);
+	@Override
+	public void setMcpContextFactory(McpContextFactory mcpContextFactory) {
+		this.mcpContextFactory = mcpContextFactory;
 	}
 
 	@Override
@@ -57,7 +62,7 @@ public class MockMcpServerTransportProvider implements McpServerTransportProvide
 	}
 
 	public void simulateIncomingMessage(McpSchema.JSONRPCMessage message) {
-		session.handle(message).subscribe();
+		session.handle(message, McpContext.empty()).subscribe();
 	}
 
 }
