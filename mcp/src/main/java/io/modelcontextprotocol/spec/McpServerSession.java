@@ -48,6 +48,8 @@ public class McpServerSession implements McpSession {
 
 	private final AtomicReference<McpSchema.Implementation> clientInfo = new AtomicReference<>();
 
+	private final AtomicReference<McpContext> initContext = new AtomicReference<>();
+
 	private static final int STATE_UNINITIALIZED = 0;
 
 	private static final int STATE_INITIALIZING = 1;
@@ -98,10 +100,13 @@ public class McpServerSession implements McpSession {
 	 * Spec</a>
 	 * @param clientCapabilities the capabilities the connected client provides
 	 * @param clientInfo the information about the connected client
+	 * @param mcpContext the context of the request
 	 */
-	public void init(McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo) {
+	public void init(McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
+			McpContext mcpContext) {
 		this.clientCapabilities.lazySet(clientCapabilities);
 		this.clientInfo.lazySet(clientInfo);
+		this.initContext.lazySet(mcpContext);
 	}
 
 	private String generateRequestId() {
@@ -151,9 +156,10 @@ public class McpServerSession implements McpSession {
 	 * {@link io.modelcontextprotocol.server.McpSyncServer}) via
 	 * {@link McpServerSession.Factory} that the server creates.
 	 * @param message the incoming JSON-RPC message
+	 * @param mcpContext the context of the request
 	 * @return a Mono that completes when the message is processed
 	 */
-	public Mono<Void> handle(McpSchema.JSONRPCMessage message) {
+	public Mono<Void> handle(McpSchema.JSONRPCMessage message, McpContext mcpContext) {
 		return Mono.defer(() -> {
 			// TODO handle errors for communication to without initialization happening
 			// first
@@ -170,7 +176,7 @@ public class McpServerSession implements McpSession {
 			}
 			else if (message instanceof McpSchema.JSONRPCRequest request) {
 				logger.debug("Received request: {}", request);
-				return handleIncomingRequest(request).onErrorResume(error -> {
+				return handleIncomingRequest(request, mcpContext).onErrorResume(error -> {
 					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
 							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 									error.getMessage(), null));
@@ -183,7 +189,7 @@ public class McpServerSession implements McpSession {
 				// happening first
 				logger.debug("Received notification: {}", notification);
 				// TODO: in case of error, should the POST request be signalled?
-				return handleIncomingNotification(notification)
+				return handleIncomingNotification(notification, mcpContext)
 					.doOnError(error -> logger.error("Error handling notification: {}", error.getMessage()));
 			}
 			else {
@@ -196,9 +202,11 @@ public class McpServerSession implements McpSession {
 	/**
 	 * Handles an incoming JSON-RPC request by routing it to the appropriate handler.
 	 * @param request The incoming JSON-RPC request
+	 * @param mcpContext The context of the request
 	 * @return A Mono containing the JSON-RPC response
 	 */
-	private Mono<McpSchema.JSONRPCResponse> handleIncomingRequest(McpSchema.JSONRPCRequest request) {
+	private Mono<McpSchema.JSONRPCResponse> handleIncomingRequest(McpSchema.JSONRPCRequest request,
+			McpContext mcpContext) {
 		return Mono.defer(() -> {
 			Mono<?> resultMono;
 			if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
@@ -208,8 +216,8 @@ public class McpServerSession implements McpSession {
 						});
 
 				this.state.lazySet(STATE_INITIALIZING);
-				this.init(initializeRequest.capabilities(), initializeRequest.clientInfo());
-				resultMono = this.initRequestHandler.handle(initializeRequest);
+				this.init(initializeRequest.capabilities(), initializeRequest.clientInfo(), mcpContext);
+				resultMono = this.initRequestHandler.handle(initializeRequest, mcpContext);
 			}
 			else {
 				// TODO handle errors for communication to this session without
@@ -222,7 +230,8 @@ public class McpServerSession implements McpSession {
 									error.message(), error.data())));
 				}
 
-				resultMono = this.exchangeSink.asMono().flatMap(exchange -> handler.handle(exchange, request.params()));
+				resultMono = this.exchangeSink.asMono()
+					.flatMap(exchange -> handler.handle(exchange, request.params(), mcpContext));
 			}
 			return resultMono
 				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
@@ -236,14 +245,15 @@ public class McpServerSession implements McpSession {
 	/**
 	 * Handles an incoming JSON-RPC notification by routing it to the appropriate handler.
 	 * @param notification The incoming JSON-RPC notification
+	 * @param mcpContext The context of the request
 	 * @return A Mono that completes when the notification is processed
 	 */
-	private Mono<Void> handleIncomingNotification(McpSchema.JSONRPCNotification notification) {
+	private Mono<Void> handleIncomingNotification(McpSchema.JSONRPCNotification notification, McpContext mcpContext) {
 		return Mono.defer(() -> {
 			if (McpSchema.METHOD_NOTIFICATION_INITIALIZED.equals(notification.method())) {
 				this.state.lazySet(STATE_INITIALIZED);
 				exchangeSink.tryEmitValue(new McpAsyncServerExchange(this, clientCapabilities.get(), clientInfo.get()));
-				return this.initNotificationHandler.handle();
+				return this.initNotificationHandler.handle(mcpContext);
 			}
 
 			var handler = notificationHandlers.get(notification.method());
@@ -251,7 +261,8 @@ public class McpServerSession implements McpSession {
 				logger.error("No handler registered for notification method: {}", notification.method());
 				return Mono.empty();
 			}
-			return this.exchangeSink.asMono().flatMap(exchange -> handler.handle(exchange, notification.params()));
+			return this.exchangeSink.asMono()
+				.flatMap(exchange -> handler.handle(exchange, notification.params(), mcpContext));
 		});
 	}
 
@@ -280,9 +291,10 @@ public class McpServerSession implements McpSession {
 		/**
 		 * Handles the initialization request.
 		 * @param initializeRequest the initialization request by the client
+		 * @param mcpContext the context of the request
 		 * @return a Mono that will emit the result of the initialization
 		 */
-		Mono<McpSchema.InitializeResult> handle(McpSchema.InitializeRequest initializeRequest);
+		Mono<McpSchema.InitializeResult> handle(McpSchema.InitializeRequest initializeRequest, McpContext mcpContext);
 
 	}
 
@@ -293,9 +305,10 @@ public class McpServerSession implements McpSession {
 
 		/**
 		 * Specifies an action to take upon successful initialization.
+		 * @param mcpContext the context of the request
 		 * @return a Mono that will complete when the initialization is acted upon.
 		 */
-		Mono<Void> handle();
+		Mono<Void> handle(McpContext mcpContext);
 
 	}
 
@@ -309,9 +322,10 @@ public class McpServerSession implements McpSession {
 		 * @param exchange the exchange associated with the client that allows calling
 		 * back to the connected client or inspecting its capabilities.
 		 * @param params the parameters of the notification.
+		 * @param mcpContext the context of the request
 		 * @return a Mono that completes once the notification is handled.
 		 */
-		Mono<Void> handle(McpAsyncServerExchange exchange, Object params);
+		Mono<Void> handle(McpAsyncServerExchange exchange, Object params, McpContext mcpContext);
 
 	}
 
@@ -328,9 +342,10 @@ public class McpServerSession implements McpSession {
 		 * @param exchange the exchange associated with the client that allows calling
 		 * back to the connected client or inspecting its capabilities.
 		 * @param params the parameters of the request.
+		 * @param mcpContext the context of the request
 		 * @return a Mono that will emit the response to the request.
 		 */
-		Mono<T> handle(McpAsyncServerExchange exchange, Object params);
+		Mono<T> handle(McpAsyncServerExchange exchange, Object params, McpContext mcpContext);
 
 	}
 
@@ -344,9 +359,10 @@ public class McpServerSession implements McpSession {
 		/**
 		 * Creates a new 1:1 representation of the client-server interaction.
 		 * @param sessionTransport the transport to use for communication with the client.
+		 * @param mcpContext the context of the request
 		 * @return a new server session.
 		 */
-		McpServerSession create(McpServerTransport sessionTransport);
+		McpServerSession create(McpServerTransport sessionTransport, McpContext mcpContext);
 
 	}
 

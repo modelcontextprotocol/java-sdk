@@ -23,10 +23,10 @@ import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.TestUtil;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvider;
+import io.modelcontextprotocol.spec.McpContext;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.*;
-import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities.CompletionCapabilities;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -767,9 +767,11 @@ class WebFluxSseIntegrationTests {
 		));
 
 		AtomicReference<CompleteRequest> samplingRequest = new AtomicReference<>();
-		BiFunction<McpSyncServerExchange, CompleteRequest, CompleteResult> completionHandler = (mcpSyncServerExchange,
-				request) -> {
-			samplingRequest.set(request);
+		AtomicReference<McpContext> mcpContext = new AtomicReference<>();
+		BiFunction<McpSyncServerExchange, McpServerFeatures.RequestWithContext<CompleteRequest>, CompleteResult> completionHandler = (
+				mcpSyncServerExchange, reqWithContext) -> {
+			samplingRequest.set(reqWithContext.request());
+			mcpContext.set(reqWithContext.mcpContext());
 			return completionResponse;
 		};
 

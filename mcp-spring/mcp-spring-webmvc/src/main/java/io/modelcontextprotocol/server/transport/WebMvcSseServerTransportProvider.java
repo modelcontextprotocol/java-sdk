@@ -6,17 +6,12 @@ package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpServerTransport;
-import io.modelcontextprotocol.spec.McpServerTransportProvider;
-import io.modelcontextprotocol.spec.McpServerSession;
+import io.modelcontextprotocol.spec.*;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -97,6 +92,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 
 	private McpServerSession.Factory sessionFactory;
 
+	private McpContextFactory mcpContextFactory;
+
 	/**
 	 * Map of active client sessions, keyed by session ID.
 	 */
@@ -167,6 +164,11 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	@Override
 	public void setSessionFactory(McpServerSession.Factory sessionFactory) {
 		this.sessionFactory = sessionFactory;
+	}
+
+	@Override
+	public void setMcpContextFactory(McpContextFactory mcpContextFactory) {
+		this.mcpContextFactory = mcpContextFactory;
 	}
 
 	/**
@@ -263,7 +265,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				});
 
 				WebMvcMcpSessionTransport sessionTransport = new WebMvcMcpSessionTransport(sessionId, sseBuilder);
-				McpServerSession session = sessionFactory.create(sessionTransport);
+				McpServerSession session = sessionFactory.create(sessionTransport, createContext(request));
 				this.sessions.put(sessionId, session);
 
 				try {
@@ -282,6 +284,18 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			sessions.remove(sessionId);
 			return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
 		}
+	}
+
+	private McpContext createContext(final ServerRequest request) {
+		// create a context form the request
+		McpContext context;
+		if (mcpContextFactory != null) {
+			context = mcpContextFactory.create(request);
+		}
+		else {
+			context = McpContext.empty();
+		}
+		return context;
 	}
 
 	/**
@@ -316,7 +330,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
 
 			// Process the message through the session's handle method
-			session.handle(message).block(); // Block for WebMVC compatibility
+			session.handle(message, createContext(request)).block(); // Block for WebMVC
+																		// compatibility
 
 			return ServerResponse.ok().build();
 		}

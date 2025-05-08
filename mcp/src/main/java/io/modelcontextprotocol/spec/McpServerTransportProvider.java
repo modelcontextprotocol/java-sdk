@@ -40,6 +40,12 @@ public interface McpServerTransportProvider {
 	void setSessionFactory(McpServerSession.Factory sessionFactory);
 
 	/**
+	 * Set the MCP context factory that will be used to create the MCP context. This
+	 * method must be called before `setSessionFactory`.
+	 */
+	void setMcpContextFactory(McpContextFactory mcpContextFactory);
+
+	/**
 	 * Sends a notification to all connected clients.
 	 * @param method the name of the notification method to be called on the clients
 	 * @param params parameters to be sent with the notification

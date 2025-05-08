@@ -18,12 +18,8 @@ import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.*;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
-import io.modelcontextprotocol.spec.McpServerSession;
-import io.modelcontextprotocol.spec.McpServerTransport;
-import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,6 +51,11 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	private final AtomicBoolean isClosing = new AtomicBoolean(false);
 
 	private final Sinks.One<Void> inboundReady = Sinks.one();
+
+	// Create a single session for the stdio connection
+	private final StdioMcpSessionTransport transport = new StdioMcpSessionTransport();
+
+	private McpContextFactory mcpContextFactory;
 
 	/**
 	 * Creates a new StdioServerTransportProvider with a default ObjectMapper and System
@@ -92,10 +93,20 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 
 	@Override
 	public void setSessionFactory(McpServerSession.Factory sessionFactory) {
-		// Create a single session for the stdio connection
-		var transport = new StdioMcpSessionTransport();
-		this.session = sessionFactory.create(transport);
+		this.session = sessionFactory.create(transport, createContext());
 		transport.initProcessing();
+	}
+
+	protected McpContext createContext() {
+		if (this.mcpContextFactory != null) {
+			return this.mcpContextFactory.create(null);
+		}
+		return McpContext.empty();
+	}
+
+	@Override
+	public void setMcpContextFactory(final McpContextFactory mcpContextFactory) {
+		this.mcpContextFactory = mcpContextFactory;
 	}
 
 	@Override
@@ -186,7 +197,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 		}
 
 		private void handleIncomingMessages() {
-			this.inboundSink.asFlux().flatMap(message -> session.handle(message)).doOnTerminate(() -> {
+			this.inboundSink.asFlux().flatMap(message -> session.handle(message, createContext())).doOnTerminate(() -> {
 				// The outbound processing will dispose its scheduler upon completion
 				this.outboundSink.tryEmitComplete();
 				this.inboundScheduler.dispose();

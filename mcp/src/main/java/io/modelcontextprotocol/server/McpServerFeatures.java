@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
+import io.modelcontextprotocol.spec.McpContext;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
@@ -237,7 +238,7 @@ public class McpServerFeatures {
 	 * connected client. The second arguments is a map of tool arguments.
 	 */
 	public record AsyncToolSpecification(McpSchema.Tool tool,
-			BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> call) {
+			BiFunction<McpAsyncServerExchange, RequestWithContext<McpSchema.CallToolRequest>, Mono<McpSchema.CallToolResult>> call) {
 
 		static AsyncToolSpecification fromSync(SyncToolSpecification tool) {
 			// FIXME: This is temporary, proper validation should be implemented
@@ -245,10 +246,13 @@ public class McpServerFeatures {
 				return null;
 			}
 			return new AsyncToolSpecification(tool.tool(),
-					(exchange, map) -> Mono
-						.fromCallable(() -> tool.call().apply(new McpSyncServerExchange(exchange), map))
+					(exchange, reqWithContext) -> Mono
+						.fromCallable(() -> tool.call().apply(new McpSyncServerExchange(exchange), reqWithContext))
 						.subscribeOn(Schedulers.boundedElastic()));
 		}
+	}
+
+	public record RequestWithContext<Request>(Request request, McpContext mcpContext) {
 	}
 
 	/**
@@ -279,7 +283,7 @@ public class McpServerFeatures {
 	 * {@link io.modelcontextprotocol.spec.McpSchema.ReadResourceRequest}.
 	 */
 	public record AsyncResourceSpecification(McpSchema.Resource resource,
-			BiFunction<McpAsyncServerExchange, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
+			BiFunction<McpAsyncServerExchange, RequestWithContext<McpSchema.ReadResourceRequest>, Mono<McpSchema.ReadResourceResult>> readHandler) {
 
 		static AsyncResourceSpecification fromSync(SyncResourceSpecification resource) {
 			// FIXME: This is temporary, proper validation should be implemented
@@ -325,7 +329,7 @@ public class McpServerFeatures {
 	 * {@link io.modelcontextprotocol.spec.McpSchema.GetPromptRequest}.
 	 */
 	public record AsyncPromptSpecification(McpSchema.Prompt prompt,
-			BiFunction<McpAsyncServerExchange, McpSchema.GetPromptRequest, Mono<McpSchema.GetPromptResult>> promptHandler) {
+			BiFunction<McpAsyncServerExchange, RequestWithContext<McpSchema.GetPromptRequest>, Mono<McpSchema.GetPromptResult>> promptHandler) {
 
 		static AsyncPromptSpecification fromSync(SyncPromptSpecification prompt) {
 			// FIXME: This is temporary, proper validation should be implemented
@@ -356,7 +360,7 @@ public class McpServerFeatures {
 	 * argument is a {@link io.modelcontextprotocol.spec.McpSchema.CompleteRequest}.
 	 */
 	public record AsyncCompletionSpecification(McpSchema.CompleteReference referenceKey,
-			BiFunction<McpAsyncServerExchange, McpSchema.CompleteRequest, Mono<McpSchema.CompleteResult>> completionHandler) {
+			BiFunction<McpAsyncServerExchange, RequestWithContext<McpSchema.CompleteRequest>, Mono<McpSchema.CompleteResult>> completionHandler) {
 
 		/**
 		 * Converts a synchronous {@link SyncCompletionSpecification} into an
@@ -413,7 +417,7 @@ public class McpServerFeatures {
 	 * client. The second arguments is a map of arguments passed to the tool.
 	 */
 	public record SyncToolSpecification(McpSchema.Tool tool,
-			BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> call) {
+			BiFunction<McpSyncServerExchange, RequestWithContext<McpSchema.CallToolRequest>, McpSchema.CallToolResult> call) {
 	}
 
 	/**
@@ -445,7 +449,7 @@ public class McpServerFeatures {
 	 * {@link io.modelcontextprotocol.spec.McpSchema.ReadResourceRequest}.
 	 */
 	public record SyncResourceSpecification(McpSchema.Resource resource,
-			BiFunction<McpSyncServerExchange, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
+			BiFunction<McpSyncServerExchange, RequestWithContext<McpSchema.ReadResourceRequest>, McpSchema.ReadResourceResult> readHandler) {
 	}
 
 	/**
@@ -480,7 +484,7 @@ public class McpServerFeatures {
 	 * {@link io.modelcontextprotocol.spec.McpSchema.GetPromptRequest}.
 	 */
 	public record SyncPromptSpecification(McpSchema.Prompt prompt,
-			BiFunction<McpSyncServerExchange, McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler) {
+			BiFunction<McpSyncServerExchange, RequestWithContext<McpSchema.GetPromptRequest>, McpSchema.GetPromptResult> promptHandler) {
 	}
 
 	/**
@@ -493,7 +497,7 @@ public class McpServerFeatures {
 	 * is a {@link io.modelcontextprotocol.spec.McpSchema.CompleteRequest}.
 	 */
 	public record SyncCompletionSpecification(McpSchema.CompleteReference referenceKey,
-			BiFunction<McpSyncServerExchange, McpSchema.CompleteRequest, McpSchema.CompleteResult> completionHandler) {
+			BiFunction<McpSyncServerExchange, RequestWithContext<McpSchema.CompleteRequest>, McpSchema.CompleteResult> completionHandler) {
 	}
 
 }
