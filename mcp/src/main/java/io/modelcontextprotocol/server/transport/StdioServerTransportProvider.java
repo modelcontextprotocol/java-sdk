@@ -95,7 +95,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	public void setSessionFactory(McpServerSession.Factory sessionFactory) {
 		// Create a single session for the stdio connection
 		var transport = new StdioMcpSessionTransport();
-		String sessionId = UUID.randomUUID().toString();
+		String sessionId = sessionFactory.generateId();
 		this.session = sessionFactory.create(sessionId, transport);
 		transport.initProcessing();
 	}

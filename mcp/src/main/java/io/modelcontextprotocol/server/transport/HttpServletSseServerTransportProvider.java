@@ -208,7 +208,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		response.setHeader("Connection", "keep-alive");
 		response.setHeader("Access-Control-Allow-Origin", "*");
 
-		String sessionId = UUID.randomUUID().toString();
+		String sessionId = sessionFactory.generateId();
 		AsyncContext asyncContext = request.startAsync();
 		asyncContext.setTimeout(0);
 

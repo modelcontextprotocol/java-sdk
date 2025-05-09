@@ -247,7 +247,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
-		String sessionId = UUID.randomUUID().toString();
+		String sessionId = sessionFactory.generateId();
 		logger.debug("Creating new SSE connection for session: {}", sessionId);
 
 		// Send initial endpoint event

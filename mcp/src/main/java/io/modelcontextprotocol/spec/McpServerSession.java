@@ -2,6 +2,7 @@ package io.modelcontextprotocol.spec;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -347,6 +348,14 @@ public class McpServerSession implements McpSession {
 		 * @return a new server session.
 		 */
 		McpServerSession create(String sessionId, McpServerTransport sessionTransport);
+
+		/**
+		 * Generates a unique session id.
+		 * @return a unique session id.
+		 */
+		default String generateId() {
+			return UUID.randomUUID().toString();
+		}
 
 	}
 
