@@ -1,13 +1,14 @@
 package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.server.McpServerAuthParam;
+import io.modelcontextprotocol.server.McpServerAuthProvider;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
@@ -60,7 +61,9 @@ import org.springframework.web.reactive.function.server.ServerResponse;
  * @author Christian Tzolov
  * @author Alexandros Pappas
  * @author Dariusz Jędrzejczyk
+ * @author lambochen
  * @see McpServerTransport
+ * @see McpServerAuthProvider
  * @see ServerSentEvent
  */
 public class WebFluxSseServerTransportProvider implements McpServerTransportProvider {
@@ -99,6 +102,11 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	private final RouterFunction<?> routerFunction;
 
 	private McpServerSession.Factory sessionFactory;
+
+	/**
+	 * auth provider
+	 */
+	private final McpServerAuthProvider authProvider;
 
 	/**
 	 * Map of active client sessions, keyed by session ID.
@@ -149,6 +157,22 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 */
 	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint) {
+		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, null);
+	}
+
+	/**
+	 * Constructs a new WebFlux SSE server transport provider instance.
+	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
+	 * of MCP messages. Must not be null.
+	 * @param baseUrl webflux message base path
+	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
+	 * messages. This endpoint will be communicated to clients during SSE connection
+	 * setup. Must not be null.
+	 * @param authProvider auth provider
+	 * @throws IllegalArgumentException if either parameter is null
+	 */
+	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+			String sseEndpoint, McpServerAuthProvider authProvider) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(baseUrl, "Message base path must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
@@ -158,6 +182,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
+		this.authProvider = authProvider;
 		this.routerFunction = RouterFunctions.route()
 			.GET(this.sseEndpoint, this::handleSseConnection)
 			.POST(this.messageEndpoint, this::handleMessage)
@@ -256,6 +281,10 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
 		}
 
+		if (null != authProvider && !authProvider.authenticate(assemblyAuthParam(request))) {
+			return ServerResponse.status(HttpStatus.UNAUTHORIZED).bodyValue("Unauthorized");
+		}
+
 		return ServerResponse.ok()
 			.contentType(MediaType.TEXT_EVENT_STREAM)
 			.body(Flux.<ServerSentEvent<?>>create(sink -> {
@@ -278,6 +307,14 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 					sessions.remove(sessionId);
 				});
 			}), ServerSentEvent.class);
+	}
+
+	private McpServerAuthParam assemblyAuthParam(ServerRequest request) {
+		return McpServerAuthParam.builder()
+			.sseEndpoint(this.sseEndpoint)
+			.uri(request.uri().toString())
+			.params(request.queryParams().toSingleValueMap())
+			.build();
 	}
 
 	/**
@@ -397,6 +434,18 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
 
+		private McpServerAuthProvider authProvider = null;
+
+		/**
+		 * Sets the authentication provider.
+		 * @param authProvider the authentication provider
+		 * @return this builder instance
+		 */
+		public Builder authProvider(McpServerAuthProvider authProvider) {
+			this.authProvider = authProvider;
+			return this;
+		}
+
 		/**
 		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
@@ -457,7 +506,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			Assert.notNull(objectMapper, "ObjectMapper must be set");
 			Assert.notNull(messageEndpoint, "Message endpoint must be set");
 
-			return new WebFluxSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint);
+			return new WebFluxSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint,
+					authProvider);
 		}
 
 	}

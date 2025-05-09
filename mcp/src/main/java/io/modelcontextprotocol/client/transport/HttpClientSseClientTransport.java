@@ -9,6 +9,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -74,6 +75,11 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 
 	/** SSE endpoint path */
 	private final String sseEndpoint;
+
+	/**
+	 * Additional parameters for the connect( client to server).
+	 */
+	private final Map<String, String> params;
 
 	/** SSE client for handling server-sent events. Uses the /sse endpoint */
 	private final FlowSseClient sseClient;
@@ -174,6 +180,11 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 */
 	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
 			String sseEndpoint, ObjectMapper objectMapper) {
+		this(httpClient, requestBuilder, baseUri, sseEndpoint, objectMapper, null);
+	}
+
+	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
+			String sseEndpoint, ObjectMapper objectMapper, Map<String, String> params) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.hasText(baseUri, "baseUri must not be empty");
 		Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
@@ -181,6 +192,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		Assert.notNull(requestBuilder, "requestBuilder must not be null");
 		this.baseUri = URI.create(baseUri);
 		this.sseEndpoint = sseEndpoint;
+		this.params = params;
 		this.objectMapper = objectMapper;
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
@@ -205,6 +217,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		private String baseUri;
 
 		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
+
+		private Map<String, String> params;
 
 		private HttpClient.Builder clientBuilder = HttpClient.newBuilder()
 			.version(HttpClient.Version.HTTP_1_1)
@@ -254,6 +268,16 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		public Builder sseEndpoint(String sseEndpoint) {
 			Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
 			this.sseEndpoint = sseEndpoint;
+			return this;
+		}
+
+		/**
+		 * Sets the request params.
+		 * @param params the request params
+		 * @return this builder
+		 */
+		public Builder params(Map<String, String> params) {
+			this.params = params;
 			return this;
 		}
 
@@ -318,7 +342,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		 */
 		public HttpClientSseClientTransport build() {
 			return new HttpClientSseClientTransport(clientBuilder.build(), requestBuilder, baseUri, sseEndpoint,
-					objectMapper);
+					objectMapper, params);
 		}
 
 	}
@@ -342,7 +366,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		connectionFuture.set(future);
 
 		URI clientUri = Utils.resolveUri(this.baseUri, this.sseEndpoint);
-		sseClient.subscribe(clientUri.toString(), new FlowSseClient.SseEventHandler() {
+		sseClient.subscribe(assemblyUri(clientUri.toString(), this.params), new FlowSseClient.SseEventHandler() {
 			@Override
 			public void onEvent(SseEvent event) {
 				if (isClosing) {
@@ -380,6 +404,23 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		});
 
 		return Mono.fromFuture(future);
+	}
+
+	/**
+	 * Assembles the full URI with the base URI and the params.
+	 * @param baseUri baseUri + sseEndpoint
+	 * @param params additional params
+	 * @return full uri: baseUri + sseEndpoint + params
+	 */
+	private String assemblyUri(String baseUri, Map<String, String> params) {
+		if (null == params || params.isEmpty()) {
+			return baseUri;
+		}
+		StringBuilder uri = new StringBuilder(baseUri);
+		uri.append("?");
+		params.forEach((k, v) -> uri.append(k).append("=").append(v).append("&"));
+		uri.deleteCharAt(uri.length() - 1);
+		return uri.toString();
 	}
 
 	/**
