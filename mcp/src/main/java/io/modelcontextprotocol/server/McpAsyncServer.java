@@ -183,9 +183,8 @@ public class McpAsyncServer {
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED,
 				asyncRootsListChangedNotificationHandler(rootsChangeConsumers));
 
-		mcpTransportProvider.setSessionFactory(
-                (id, transport) -> new McpServerSession(id, requestTimeout, transport,
-						this::asyncInitializeRequestHandler, Mono::empty, requestHandlers, notificationHandlers));
+		mcpTransportProvider.setSessionFactory((id, transport) -> new McpServerSession(id, requestTimeout, transport,
+				this::asyncInitializeRequestHandler, Mono::empty, requestHandlers, notificationHandlers));
 	}
 
 	// ---------------------------------------
