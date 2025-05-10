@@ -1,7 +1,6 @@
 package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -14,6 +13,7 @@ import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.web.reactive.function.server.*;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
@@ -22,10 +22,6 @@ import reactor.core.publisher.Mono;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
-import org.springframework.web.reactive.function.server.RouterFunction;
-import org.springframework.web.reactive.function.server.RouterFunctions;
-import org.springframework.web.reactive.function.server.ServerRequest;
-import org.springframework.web.reactive.function.server.ServerResponse;
 
 /**
  * Server-side implementation of the MCP (Model Context Protocol) HTTP transport using
@@ -83,6 +79,12 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	public static final String DEFAULT_SSE_ENDPOINT = "/sse";
 
 	public static final String DEFAULT_BASE_URL = "";
+
+	/**
+	 * Default filter function for handling requests, do nothing
+	 */
+	public static final HandlerFilterFunction<ServerResponse, ServerResponse> DEFAULT_REQUEST_FILTER = ((request,
+			next) -> next.handle(request));
 
 	private final ObjectMapper objectMapper;
 
@@ -149,10 +151,28 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 */
 	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint) {
+		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, DEFAULT_REQUEST_FILTER);
+	}
+
+	/**
+	 * Constructs a new WebFlux SSE server transport provider instance.
+	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
+	 * of MCP messages. Must not be null.
+	 * @param baseUrl webflux message base path
+	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
+	 * messages. This endpoint will be communicated to clients during SSE connection
+	 * setup. Must not be null.
+	 * @param requestFilter The filter function to apply to incoming requests, which may
+	 * be sse or message request.
+	 * @throws IllegalArgumentException if either parameter is null
+	 */
+	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+			String sseEndpoint, HandlerFilterFunction<ServerResponse, ServerResponse> requestFilter) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(baseUrl, "Message base path must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
+		Assert.notNull(requestFilter, "Request filter must not be null");
 
 		this.objectMapper = objectMapper;
 		this.baseUrl = baseUrl;
@@ -161,6 +181,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		this.routerFunction = RouterFunctions.route()
 			.GET(this.sseEndpoint, this::handleSseConnection)
 			.POST(this.messageEndpoint, this::handleMessage)
+			.filter(requestFilter)
 			.build();
 	}
 
@@ -243,6 +264,14 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 */
 	public RouterFunction<?> getRouterFunction() {
 		return this.routerFunction;
+	}
+
+	/**
+	 * Returns the McpServerSession associated with the given session ID.
+	 * @return session The McpServerSession associated with the given session ID, or null
+	 */
+	public McpServerSession getSession(String sessionId) {
+		return sessions.get(sessionId);
 	}
 
 	/**
@@ -397,6 +426,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
 
+		private HandlerFilterFunction<ServerResponse, ServerResponse> requestFilter = DEFAULT_REQUEST_FILTER;
+
 		/**
 		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
@@ -447,6 +478,12 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			return this;
 		}
 
+		public Builder requestFilter(HandlerFilterFunction<ServerResponse, ServerResponse> requestFilter) {
+			Assert.notNull(requestFilter, "requestFilter must not be null");
+			this.requestFilter = requestFilter;
+			return this;
+		}
+
 		/**
 		 * Builds a new instance of {@link WebFluxSseServerTransportProvider} with the
 		 * configured settings.
@@ -457,7 +494,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			Assert.notNull(objectMapper, "ObjectMapper must be set");
 			Assert.notNull(messageEndpoint, "Message endpoint must be set");
 
-			return new WebFluxSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint);
+			return new WebFluxSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint,
+					requestFilter);
 		}
 
 	}

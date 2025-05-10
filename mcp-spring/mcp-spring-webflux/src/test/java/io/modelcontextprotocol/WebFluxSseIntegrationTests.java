@@ -22,15 +22,16 @@ import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.TestUtil;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
+import io.modelcontextprotocol.server.filter.CallToolHandlerFilter;
 import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.*;
-import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities.CompletionCapabilities;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.web.reactive.function.server.ServerRequest;
 import reactor.netty.DisposableServer;
 import reactor.netty.http.server.HttpServer;
 
@@ -552,6 +553,128 @@ class WebFluxSseIntegrationTests {
 
 			assertThat(response).isNotNull();
 			assertThat(response).isEqualTo(callResponse);
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testToolCallWithFilterFail(String clientType) {
+		// Server
+		// Restart http server to add server filter
+		httpServer.disposeNow();
+		var failCallResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("FAIL RESPONSE")), true);
+		var successCallResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("SUCCESS RESPONSE")),
+				false);
+		// User custom request filter
+		CallToolHandlerFilter customFilter = new CallToolHandlerFilter() {
+			@Override
+			public McpSchema.CallToolResult doFilter(ServerRequest request, CallToolRequest callToolRequest) {
+				if (request.headers().header("X-Custom-Header").isEmpty()) {
+					return failCallResponse;
+				}
+				return CallToolHandlerFilter.PASS;
+			}
+
+			@Override
+			public String matchPath() {
+				return CUSTOM_MESSAGE_ENDPOINT;
+			}
+		};
+		this.mcpServerTransportProvider = new WebFluxSseServerTransportProvider.Builder()
+			.objectMapper(new ObjectMapper())
+			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
+			.sseEndpoint(CUSTOM_SSE_ENDPOINT)
+			.requestFilter(customFilter)
+			.build();
+		customFilter.applySession(mcpServerTransportProvider);
+
+		HttpHandler httpHandler = RouterFunctions.toHttpHandler(mcpServerTransportProvider.getRouterFunction());
+		ReactorHttpHandlerAdapter adapter = new ReactorHttpHandlerAdapter(httpHandler);
+		this.httpServer = HttpServer.create().port(PORT).handle(adapter).bindNow();
+
+		McpServerFeatures.SyncToolSpecification tool = new McpServerFeatures.SyncToolSpecification(
+				new McpSchema.Tool("tool", "tool description", emptyJsonSchema),
+				(exchange, request) -> successCallResponse);
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool)
+			.build();
+
+		// Client
+		var clientBuilder = clientBuilders.get(clientType);
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThat(mcpClient.listTools().tools()).contains(tool.tool());
+
+			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool", Map.of()));
+
+			assertThat(response).isNotNull();
+			assertThat(response).isEqualTo(failCallResponse);
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testToolCallWithFilterSuccess(String clientType) {
+		// Server
+		// Restart http server to add server filter
+		httpServer.disposeNow();
+		var successCallResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("SUCCESS RESPONSE")),
+				false);
+		// User custom request filter
+		CallToolHandlerFilter customFilter = new CallToolHandlerFilter() {
+			@Override
+			public McpSchema.CallToolResult doFilter(ServerRequest request, CallToolRequest callToolRequest) {
+				return CallToolHandlerFilter.PASS;
+			}
+
+			@Override
+			public String matchPath() {
+				return CUSTOM_MESSAGE_ENDPOINT;
+			}
+		};
+		this.mcpServerTransportProvider = new WebFluxSseServerTransportProvider.Builder()
+			.objectMapper(new ObjectMapper())
+			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
+			.sseEndpoint(CUSTOM_SSE_ENDPOINT)
+			.requestFilter(customFilter)
+			.build();
+		customFilter.applySession(mcpServerTransportProvider);
+
+		HttpHandler httpHandler = RouterFunctions.toHttpHandler(mcpServerTransportProvider.getRouterFunction());
+		ReactorHttpHandlerAdapter adapter = new ReactorHttpHandlerAdapter(httpHandler);
+		this.httpServer = HttpServer.create().port(PORT).handle(adapter).bindNow();
+
+		McpServerFeatures.SyncToolSpecification tool = new McpServerFeatures.SyncToolSpecification(
+				new McpSchema.Tool("tool", "tool description", emptyJsonSchema),
+				(exchange, request) -> successCallResponse);
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool)
+			.build();
+
+		// Client
+		var clientBuilder = clientBuilders.get(clientType);
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThat(mcpClient.listTools().tools()).contains(tool.tool());
+
+			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool", Map.of()));
+
+			assertThat(response).isNotNull();
+			assertThat(response).isEqualTo(successCallResponse);
 		}
 
 		mcpServer.close();
