@@ -11,6 +11,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Sinks;
@@ -48,6 +50,8 @@ public class McpServerSession implements McpSession {
 
 	private final AtomicReference<McpSchema.Implementation> clientInfo = new AtomicReference<>();
 
+	private Authentication authentication;
+
 	private static final int STATE_UNINITIALIZED = 0;
 
 	private static final int STATE_INITIALIZING = 1;
@@ -79,6 +83,7 @@ public class McpServerSession implements McpSession {
 		this.initNotificationHandler = initNotificationHandler;
 		this.requestHandlers = requestHandlers;
 		this.notificationHandlers = notificationHandlers;
+		this.authentication = SecurityContextHolder.getContext().getAuthentication();
 	}
 
 	/**
@@ -87,6 +92,15 @@ public class McpServerSession implements McpSession {
 	 */
 	public String getId() {
 		return this.id;
+	}
+
+	/**
+	 * Retrieve authentication object set by Spring security filters as per your project
+	 * security config
+	 * @return Authentication
+	 */
+	public Authentication getAuthentication() {
+		return authentication;
 	}
 
 	/**
