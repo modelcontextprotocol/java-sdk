@@ -19,6 +19,7 @@ import reactor.core.publisher.Mono;
  *
  * @author Dariusz Jędrzejczyk
  * @author Christian Tzolov
+ * @author lambochen
  */
 public class McpAsyncServerExchange {
 
@@ -48,6 +49,14 @@ public class McpAsyncServerExchange {
 		this.session = session;
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
+	}
+
+	/**
+	 * Get the server session.
+	 * @return The server session.
+	 */
+	public McpServerSession getSession() {
+		return session;
 	}
 
 	/**
