@@ -314,7 +314,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		return request.bodyToMono(String.class).flatMap(body -> {
 			try {
 				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
-				return session.handle(message).flatMap(response -> ServerResponse.ok().build()).onErrorResume(error -> {
+				return session.handle(message).then(Mono.defer(() -> ServerResponse.ok().build())).onErrorResume(error -> {
 					logger.error("Error processing  message: {}", error.getMessage());
 					// TODO: instead of signalling the error, just respond with 200 OK
 					// - the error is signalled on the SSE connection
