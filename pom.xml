@@ -6,7 +6,7 @@
 
 	<groupId>io.modelcontextprotocol.sdk</groupId>
 	<artifactId>mcp-parent</artifactId>
-	<version>0.10.0</version>
+	<version>0.10.1-SNAPSHOT</version>
 
 	<packaging>pom</packaging>
 	<url>https://github.com/modelcontextprotocol/java-sdk</url>

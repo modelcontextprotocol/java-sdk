@@ -6,7 +6,7 @@
 	<parent>
 		<groupId>io.modelcontextprotocol.sdk</groupId>
 		<artifactId>mcp-parent</artifactId>
-		<version>0.10.0</version>
+		<version>0.10.1-SNAPSHOT</version>
 	</parent>
 	<artifactId>mcp</artifactId>
 	<packaging>jar</packaging>
