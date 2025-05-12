@@ -29,6 +29,14 @@ public class McpSyncServerExchange {
 	}
 
 	/**
+	 * Get the session id.
+	 * @return The session id
+	 */
+	public String getSessionId() {
+		return this.exchange.getSessionId();
+	}
+
+	/**
 	 * Get the client capabilities that define the supported features and functionality.
 	 * @return The client capabilities
 	 */

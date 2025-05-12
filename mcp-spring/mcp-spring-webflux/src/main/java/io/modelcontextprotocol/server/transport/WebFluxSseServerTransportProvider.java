@@ -1,16 +1,11 @@
 package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpServerSession;
-import io.modelcontextprotocol.spec.McpServerTransport;
-import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.*;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,6 +95,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 	private McpServerSession.Factory sessionFactory;
 
+	private McpServerSessionListener<ServerRequest> mcpServerSessionListener;
+
 	/**
 	 * Map of active client sessions, keyed by session ID.
 	 */
@@ -149,6 +146,22 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 */
 	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint) {
+		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, null);
+	}
+
+	/**
+	 * Constructs a new WebFlux SSE server transport provider instance.
+	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
+	 * of MCP messages. Must not be null.
+	 * @param baseUrl webflux message base path
+	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
+	 * messages. This endpoint will be communicated to clients during SSE connection
+	 * setup. Must not be null.
+	 * @param mcpServerSessionListener The listener for handling server session events.
+	 * @throws IllegalArgumentException if either parameter is null
+	 */
+	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+			String sseEndpoint, McpServerSessionListener<ServerRequest> mcpServerSessionListener) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(baseUrl, "Message base path must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
@@ -162,6 +175,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			.GET(this.sseEndpoint, this::handleSseConnection)
 			.POST(this.messageEndpoint, this::handleMessage)
 			.build();
+		this.mcpServerSessionListener = mcpServerSessionListener;
 	}
 
 	@Override
@@ -229,6 +243,10 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			.then();
 	}
 
+	public void setMcpServerSessionListener(McpServerSessionListener<ServerRequest> mcpServerSessionListener) {
+		this.mcpServerSessionListener = mcpServerSessionListener;
+	}
+
 	/**
 	 * Returns the WebFlux router function that defines the transport's HTTP endpoints.
 	 * This router function should be integrated into the application's web configuration.
@@ -277,6 +295,10 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 					logger.debug("Session {} cancelled", sessionId);
 					sessions.remove(sessionId);
 				});
+
+				if (null != mcpServerSessionListener) {
+					mcpServerSessionListener.onConnection(session, request);
+				}
 			}), ServerSentEvent.class);
 	}
 
@@ -309,6 +331,9 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		if (session == null) {
 			return ServerResponse.status(HttpStatus.NOT_FOUND)
 				.bodyValue(new McpError("Session not found: " + request.queryParam("sessionId").get()));
+		}
+		if (null != mcpServerSessionListener) {
+			mcpServerSessionListener.onMessage(session, request);
 		}
 
 		return request.bodyToMono(String.class).flatMap(body -> {
