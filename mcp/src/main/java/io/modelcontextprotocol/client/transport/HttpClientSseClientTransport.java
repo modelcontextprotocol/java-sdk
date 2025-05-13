@@ -404,6 +404,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			}
 		}
 		catch (InterruptedException e) {
+			Thread.currentThread().interrupt(); // Preserve interrupt status
 			return Mono.error(new McpError("Failed to wait for the message endpoint"));
 		}
 
