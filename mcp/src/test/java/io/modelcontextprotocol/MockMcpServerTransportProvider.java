@@ -16,7 +16,6 @@
 package io.modelcontextprotocol;
 
 import java.util.Map;
-import java.util.UUID;
 
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
