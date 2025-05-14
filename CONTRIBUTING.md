@@ -71,6 +71,9 @@ git checkout -b feature/your-feature-name
 4. Submit a pull request to the main repository.
 5. Follow the pull request template.
 6. Wait for review.
+7. For any follow-up work, please add new commits instead of force-pushing. This will 
+   allow the reviewer to focus on incremental changes instead of having to restart the 
+   review process.
 
 ## Code of Conduct
 
