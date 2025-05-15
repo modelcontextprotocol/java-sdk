@@ -98,6 +98,14 @@ public class McpSyncClient implements AutoCloseable {
 	}
 
 	/**
+	 * Check if the client-server connection is initialized.
+	 * @return true if the client-server connection is initialized
+	 */
+	public boolean isInitialized() {
+		return this.delegate.isInitialized();
+	}
+
+	/**
 	 * Get the client capabilities that define the supported features and functionality.
 	 * @return The client capabilities
 	 */
