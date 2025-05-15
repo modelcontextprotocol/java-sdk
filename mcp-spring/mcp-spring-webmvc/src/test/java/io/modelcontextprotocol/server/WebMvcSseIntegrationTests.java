@@ -297,7 +297,7 @@ class WebMvcSseIntegrationTests {
 	@Test
 	void testCreateMessageWithRequestTimeoutFail() throws Exception {
 		// Server
-		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),null);
+		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		var jsonSchema = mcpJacksonCodec.getMapper().readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		var tool = new McpServerFeatures.AsyncToolSpecification(
 				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
