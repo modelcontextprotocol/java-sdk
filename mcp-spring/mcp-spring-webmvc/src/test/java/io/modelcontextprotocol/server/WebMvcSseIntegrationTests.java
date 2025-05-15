@@ -296,34 +296,10 @@ class WebMvcSseIntegrationTests {
 
 	@Test
 	void testCreateMessageWithRequestTimeoutFail() throws Exception {
-
-		// Client
-
-		Function<CreateMessageRequest, CreateMessageResult> samplingHandler = request -> {
-			assertThat(request.messages()).hasSize(1);
-			assertThat(request.messages().get(0).content()).isInstanceOf(McpSchema.TextContent.class);
-			try {
-				TimeUnit.SECONDS.sleep(2);
-			}
-			catch (InterruptedException e) {
-				throw new RuntimeException(e);
-			}
-			return new CreateMessageResult(Role.USER, new McpSchema.TextContent("Test message"), "MockModelName",
-					CreateMessageResult.StopReason.STOP_SEQUENCE);
-		};
-
-		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
-			.capabilities(ClientCapabilities.builder().sampling().build())
-			.sampling(samplingHandler)
-			.build();
-
 		// Server
-		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
-				null);
-
-		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
-			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
-		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
+		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),null);
+		var jsonSchema = mcpJacksonCodec.getMapper().readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
+		var tool = new McpServerFeatures.AsyncToolSpecification(
 				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 
 					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
@@ -348,11 +324,28 @@ class WebMvcSseIntegrationTests {
 
 					return Mono.just(callResponse);
 				});
-
 		var mcpServer = McpServerFactory.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
 			.requestTimeout(Duration.ofSeconds(1))
 			.tools(tool)
+			.build();
+
+		// Client
+		Function<CreateMessageRequest, CreateMessageResult> samplingHandler = request -> {
+			assertThat(request.messages()).hasSize(1);
+			assertThat(request.messages().get(0).content()).isInstanceOf(McpSchema.TextContent.class);
+			try {
+				TimeUnit.SECONDS.sleep(2);
+			}
+			catch (InterruptedException e) {
+				throw new RuntimeException(e);
+			}
+			return new CreateMessageResult(Role.USER, new McpSchema.TextContent("Test message"), "MockModelName",
+					CreateMessageResult.StopReason.STOP_SEQUENCE);
+		};
+		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+			.capabilities(ClientCapabilities.builder().sampling().build())
+			.sampling(samplingHandler)
 			.build();
 
 		InitializeResult initResult = mcpClient.initialize();
