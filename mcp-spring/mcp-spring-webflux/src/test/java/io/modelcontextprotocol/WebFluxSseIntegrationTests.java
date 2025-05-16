@@ -17,22 +17,24 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.client.McpClient;
+import io.modelcontextprotocol.client.McpClientFactory;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
-import io.modelcontextprotocol.server.McpServer;
+import io.modelcontextprotocol.schema.McpJacksonCodec;
+import io.modelcontextprotocol.server.McpServerFactory;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.TestUtil;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.*;
-import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities.CompletionCapabilities;
+import io.modelcontextprotocol.schema.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema.*;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import reactor.core.publisher.Mono;
 import reactor.netty.DisposableServer;
 import reactor.netty.http.server.HttpServer;
 
@@ -60,7 +62,9 @@ class WebFluxSseIntegrationTests {
 
 	private WebFluxSseServerTransportProvider mcpServerTransportProvider;
 
-	ConcurrentHashMap<String, McpClient.SyncSpec> clientBuilders = new ConcurrentHashMap<>();
+	private final McpJacksonCodec mcpJacksonCodec = new McpJacksonCodec(new ObjectMapper());
+
+	ConcurrentHashMap<String, McpClientFactory.SyncSpec> clientBuilders = new ConcurrentHashMap<>();
 
 	@BeforeEach
 	public void before() {
@@ -76,11 +80,11 @@ class WebFluxSseIntegrationTests {
 		this.httpServer = HttpServer.create().port(PORT).handle(adapter).bindNow();
 
 		clientBuilders.put("httpclient",
-				McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
+				McpClientFactory.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
 					.sseEndpoint(CUSTOM_SSE_ENDPOINT)
 					.build()));
 		clientBuilders.put("webflux",
-				McpClient
+				McpClientFactory
 					.sync(WebFluxSseClientTransport.builder(WebClient.builder().baseUrl("http://localhost:" + PORT))
 						.sseEndpoint(CUSTOM_SSE_ENDPOINT)
 						.build()));
@@ -99,19 +103,24 @@ class WebFluxSseIntegrationTests {
 	// ---------------------------------------
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
-	void testCreateMessageWithoutSamplingCapabilities(String clientType) {
+	void testCreateMessageWithoutSamplingCapabilities(String clientType) throws Exception {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema),
-				(exchange, request) -> exchange.createMessage(mock(CreateMessageRequest.class))
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema),
+				(exchange, request) -> Mono.from(exchange.createMessage(mock(CreateMessageRequest.class)))
 					.thenReturn(mock(CallToolResult.class)));
 
-		var server = McpServer.async(mcpServerTransportProvider).serverInfo("test-server", "1.0.0").tools(tool).build();
+		var server = McpServerFactory.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.tools(tool)
+			.build();
 
 		try (var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
-			.build();) {
+			.build()) {
 
 			assertThat(client.initialize()).isNotNull();
 
@@ -128,7 +137,7 @@ class WebFluxSseIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
-	void testCreateMessageSuccess(String clientType) {
+	void testCreateMessageSuccess(String clientType) throws Exception {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
@@ -145,8 +154,10 @@ class WebFluxSseIntegrationTests {
 
 		AtomicReference<CreateMessageResult> samplingResult = new AtomicReference<>();
 
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 
 					var createMessageRequest = McpSchema.CreateMessageRequest.builder()
 						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -159,12 +170,12 @@ class WebFluxSseIntegrationTests {
 							.build())
 						.build();
 
-					return exchange.createMessage(createMessageRequest)
+					return Mono.from(exchange.createMessage(createMessageRequest))
 						.doOnNext(samplingResult::set)
 						.thenReturn(callResponse);
 				});
 
-		var mcpServer = McpServer.async(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
 			.tools(tool)
 			.build();
@@ -196,7 +207,7 @@ class WebFluxSseIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
-	void testCreateMessageWithRequestTimeoutSuccess(String clientType) throws InterruptedException {
+	void testCreateMessageWithRequestTimeoutSuccess(String clientType) throws Exception {
 
 		// Client
 		var clientBuilder = clientBuilders.get(clientType);
@@ -221,8 +232,10 @@ class WebFluxSseIntegrationTests {
 
 		AtomicReference<CreateMessageResult> samplingResult = new AtomicReference<>();
 
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 
 					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
 						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -235,12 +248,12 @@ class WebFluxSseIntegrationTests {
 							.build())
 						.build();
 
-					return exchange.createMessage(craeteMessageRequest)
+					return Mono.from(exchange.createMessage(craeteMessageRequest))
 						.doOnNext(samplingResult::set)
 						.thenReturn(callResponse);
 				});
 
-		var mcpServer = McpServer.async(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.async(mcpServerTransportProvider)
 			.requestTimeout(Duration.ofSeconds(4))
 			.serverInfo("test-server", "1.0.0")
 			.tools(tool)
@@ -274,7 +287,7 @@ class WebFluxSseIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
-	void testCreateMessageWithRequestTimeoutFail(String clientType) throws InterruptedException {
+	void testCreateMessageWithRequestTimeoutFail(String clientType) throws Exception {
 
 		// Client
 		var clientBuilder = clientBuilders.get(clientType);
@@ -297,18 +310,20 @@ class WebFluxSseIntegrationTests {
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
 
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 
 					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
 						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
 								new McpSchema.TextContent("Test message"))))
 						.build();
 
-					return exchange.createMessage(craeteMessageRequest).thenReturn(callResponse);
+					return Mono.from(exchange.createMessage(craeteMessageRequest)).thenReturn(callResponse);
 				});
 
-		var mcpServer = McpServer.async(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.async(mcpServerTransportProvider)
 			.requestTimeout(Duration.ofSeconds(1))
 			.serverInfo("test-server", "1.0.0")
 			.tools(tool)
@@ -343,7 +358,7 @@ class WebFluxSseIntegrationTests {
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
 			.build();
 
@@ -383,20 +398,25 @@ class WebFluxSseIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
-	void testRootsWithoutCapability(String clientType) {
+	void testRootsWithoutCapability(String clientType) throws Exception {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.SyncToolSpecification tool = new McpServerFeatures.SyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 
 					exchange.listRoots(); // try to list roots
 
 					return mock(CallToolResult.class);
 				});
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider).rootsChangeHandler((exchange, rootsUpdate) -> {
-		}).tools(tool).build();
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
+			.rootsChangeHandler((exchange, rootsUpdate) -> {
+			})
+			.tools(tool)
+			.build();
 
 		// Create client without roots capability
 		try (var mcpClient = clientBuilder.capabilities(ClientCapabilities.builder().build()).build()) {
@@ -422,7 +442,7 @@ class WebFluxSseIntegrationTests {
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
 			.build();
 
@@ -453,7 +473,7 @@ class WebFluxSseIntegrationTests {
 		AtomicReference<List<Root>> rootsRef1 = new AtomicReference<>();
 		AtomicReference<List<Root>> rootsRef2 = new AtomicReference<>();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef1.set(rootsUpdate))
 			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef2.set(rootsUpdate))
 			.build();
@@ -486,7 +506,7 @@ class WebFluxSseIntegrationTests {
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.rootsChangeHandler((exchange, rootsUpdate) -> rootsRef.set(rootsUpdate))
 			.build();
 
@@ -521,13 +541,15 @@ class WebFluxSseIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
-	void testToolCallSuccess(String clientType) {
+	void testToolCallSuccess(String clientType) throws Exception {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
@@ -538,7 +560,7 @@ class WebFluxSseIntegrationTests {
 					return callResponse;
 				});
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(tool1)
 			.build();
@@ -561,13 +583,15 @@ class WebFluxSseIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
-	void testToolListChangeHandlingSuccess(String clientType) {
+	void testToolListChangeHandlingSuccess(String clientType) throws Exception {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+				new McpSchema.Tool("tool1", "tool1 description", jsonSchema), (exchange, request) -> {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
@@ -580,7 +604,7 @@ class WebFluxSseIntegrationTests {
 
 		AtomicReference<List<Tool>> rootsRef = new AtomicReference<>();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(tool1)
 			.build();
@@ -618,8 +642,7 @@ class WebFluxSseIntegrationTests {
 
 			// Add a new tool
 			McpServerFeatures.SyncToolSpecification tool2 = new McpServerFeatures.SyncToolSpecification(
-					new McpSchema.Tool("tool2", "tool2 description", emptyJsonSchema),
-					(exchange, request) -> callResponse);
+					new McpSchema.Tool("tool2", "tool2 description", jsonSchema), (exchange, request) -> callResponse);
 
 			mcpServer.addTool(tool2);
 
@@ -637,7 +660,7 @@ class WebFluxSseIntegrationTests {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider).build();
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider).build();
 
 		try (var mcpClient = clientBuilder.build()) {
 			InitializeResult initResult = mcpClient.initialize();
@@ -653,7 +676,7 @@ class WebFluxSseIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
-	void testLoggingNotification(String clientType) throws InterruptedException {
+	void testLoggingNotification(String clientType) throws Exception {
 		int expectedNotificationsCount = 3;
 		CountDownLatch latch = new CountDownLatch(expectedNotificationsCount);
 		// Create a list to store received logging notifications
@@ -662,48 +685,49 @@ class WebFluxSseIntegrationTests {
 		var clientBuilder = clientBuilders.get(clientType);
 
 		// Create server with a tool that sends logging notifications
+		McpSchema.JsonSchema jsonSchema = mcpJacksonCodec.getMapper()
+			.readValue(emptyJsonSchema, McpSchema.JsonSchema.class);
 		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("logging-test", "Test logging notifications", emptyJsonSchema),
-				(exchange, request) -> {
+				new McpSchema.Tool("logging-test", "Test logging notifications", jsonSchema), (exchange, request) -> {
 
 					// Create and send notifications with different levels
 
 				//@formatter:off
-					return exchange // This should be filtered out (DEBUG < NOTICE)
+					return Mono.from(exchange // This should be filtered out (DEBUG < NOTICE)
 						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
 								.level(McpSchema.LoggingLevel.DEBUG)
 								.logger("test-logger")
 								.data("Debug message")
-								.build())
-					.then(exchange // This should be sent (NOTICE >= NOTICE)
+								.build()))
+					.then(Mono.from(exchange // This should be sent (NOTICE >= NOTICE)
 						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
 								.level(McpSchema.LoggingLevel.NOTICE)
 								.logger("test-logger")
 								.data("Notice message")
-								.build()))
-					.then(exchange // This should be sent (ERROR > NOTICE)
+								.build())))
+					.then(Mono.from(exchange // This should be sent (ERROR > NOTICE)
 						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
 							.level(McpSchema.LoggingLevel.ERROR)
 							.logger("test-logger")
 							.data("Error message")
-							.build()))
-					.then(exchange // This should be filtered out (INFO < NOTICE)
+							.build())))
+					.then(Mono.from(exchange // This should be filtered out (INFO < NOTICE)
 						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
 								.level(McpSchema.LoggingLevel.INFO)
 								.logger("test-logger")
 								.data("Another info message")
-								.build()))
-					.then(exchange // This should be sent (ERROR >= NOTICE)
+								.build())))
+					.then(Mono.from(exchange // This should be sent (ERROR >= NOTICE)
 						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
 								.level(McpSchema.LoggingLevel.ERROR)
 								.logger("test-logger")
 								.data("Another error message")
-								.build()))
+								.build())))
 					.thenReturn(new CallToolResult("Logging test completed", false));
 					//@formatter:on
 				});
 
-		var mcpServer = McpServer.async(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().logging().tools(true).build())
 			.tools(tool)
@@ -775,7 +799,7 @@ class WebFluxSseIntegrationTests {
 			return completionResponse;
 		};
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		var mcpServer = McpServerFactory.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.prompts(new McpServerFeatures.SyncPromptSpecification(
 					new Prompt("code_review", "this is code review prompt",

@@ -1,9 +1,10 @@
 # WebFlux SSE Transport
 
 ```xml
+
 <dependency>
-    <groupId>io.modelcontextprotocol.sdk</groupId>
-    <artifactId>mcp-spring-webflux</artifactId>
+   <groupId>io.modelcontextprotocol.specio.modelcontextprotocol.spec</groupId>
+   <artifactId>mcp-spring-webflux</artifactId>
 </dependency>
 ```
 

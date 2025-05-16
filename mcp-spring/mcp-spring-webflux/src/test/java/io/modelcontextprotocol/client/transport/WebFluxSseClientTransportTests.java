@@ -10,8 +10,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
+import io.modelcontextprotocol.schema.McpSchema;
+import io.modelcontextprotocol.schema.McpSchema.JSONRPCRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -127,7 +127,7 @@ class WebFluxSseClientTransportTests {
 
 		assertThatThrownBy(() -> new WebFluxSseClientTransport(webClientBuilder, null))
 			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("ObjectMapper must not be null");
+			.hasMessageContaining("The ObjectMapper can not be null");
 	}
 
 	@Test
@@ -252,7 +252,7 @@ class WebFluxSseClientTransportTests {
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 
 		// Message count should remain 0 after shutdown
-		assertThat(transport.getInboundMessageCount()).isEqualTo(0);
+		assertThat(transport.getInboundMessageCount()).isZero();
 	}
 
 	@Test
