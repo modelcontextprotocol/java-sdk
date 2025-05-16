@@ -6,6 +6,7 @@ package io.modelcontextprotocol.server;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,13 +20,13 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.spec.McpParamsValidationError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
@@ -99,6 +100,8 @@ public class McpAsyncServer {
 	private final ConcurrentHashMap<String, McpServerFeatures.AsyncResourceSpecification> resources = new ConcurrentHashMap<>();
 
 	private final ConcurrentHashMap<String, McpServerFeatures.AsyncPromptSpecification> prompts = new ConcurrentHashMap<>();
+
+	private static final int PAGE_SIZE = 10;
 
 	// FIXME: this field is deprecated and should be remvoed together with the
 	// broadcasting loggingNotification.
@@ -340,9 +343,25 @@ public class McpAsyncServer {
 
 	private McpServerSession.RequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
 		return (exchange, params) -> {
-			List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList();
+			McpSchema.PaginatedRequest request = objectMapper.convertValue(params,
+					new TypeReference<McpSchema.PaginatedRequest>() {
+					});
 
-			return Mono.just(new McpSchema.ListToolsResult(tools, null));
+			int mapSize = this.tools.size();
+			int mapHash = this.tools.hashCode();
+
+			int requestedStartIndex = handleCursor(request.cursor(), mapSize, mapHash).block();
+			int endIndex = Math.min(requestedStartIndex + PAGE_SIZE, mapSize);
+
+			var nextCursor = getCursor(endIndex, mapSize, mapHash);
+
+			var resultList = this.tools.stream()
+				.skip(requestedStartIndex)
+				.limit(endIndex - requestedStartIndex)
+				.map(McpServerFeatures.AsyncToolSpecification::tool)
+				.toList();
+
+			return Mono.just(new McpSchema.ListToolsResult(resultList, nextCursor));
 		};
 	}
 
@@ -432,18 +451,49 @@ public class McpAsyncServer {
 
 	private McpServerSession.RequestHandler<McpSchema.ListResourcesResult> resourcesListRequestHandler() {
 		return (exchange, params) -> {
-			var resourceList = this.resources.values()
+			McpSchema.PaginatedRequest request = objectMapper.convertValue(params,
+					new TypeReference<McpSchema.PaginatedRequest>() {
+					});
+
+			int mapSize = this.resources.size();
+			int mapHash = this.resources.hashCode();
+
+			int requestedStartIndex = handleCursor(request.cursor(), mapSize, mapHash).block();
+			int endIndex = Math.min(requestedStartIndex + PAGE_SIZE, mapSize);
+
+			var nextCursor = getCursor(endIndex, mapSize, mapHash);
+
+			var resultList = this.resources.values()
 				.stream()
+				.skip(requestedStartIndex)
+				.limit(endIndex - requestedStartIndex)
 				.map(McpServerFeatures.AsyncResourceSpecification::resource)
 				.toList();
-			return Mono.just(new McpSchema.ListResourcesResult(resourceList, null));
+
+			return Mono.just(new McpSchema.ListResourcesResult(resultList, nextCursor));
 		};
 	}
 
 	private McpServerSession.RequestHandler<McpSchema.ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
-		return (exchange, params) -> Mono
-			.just(new McpSchema.ListResourceTemplatesResult(this.getResourceTemplates(), null));
+		return (exchange, params) -> {
+			McpSchema.PaginatedRequest request = objectMapper.convertValue(params,
+					new TypeReference<McpSchema.PaginatedRequest>() {
+					});
 
+			var all = this.getResourceTemplates();
+
+			int mapSize = all.size();
+			int mapHash = all.hashCode();
+
+			int requestedStartIndex = handleCursor(request.cursor(), mapSize, mapHash).block();
+			int endIndex = Math.min(requestedStartIndex + PAGE_SIZE, mapSize);
+
+			var nextCursor = getCursor(endIndex, mapSize, mapHash);
+
+			var resultList = all.stream().skip(requestedStartIndex).limit(endIndex - requestedStartIndex).toList();
+
+			return Mono.just(new McpSchema.ListResourceTemplatesResult(resultList, nextCursor));
+		};
 	}
 
 	private List<McpSchema.ResourceTemplate> getResourceTemplates() {
@@ -559,17 +609,27 @@ public class McpAsyncServer {
 
 	private McpServerSession.RequestHandler<McpSchema.ListPromptsResult> promptsListRequestHandler() {
 		return (exchange, params) -> {
-			// TODO: Implement pagination
-			// McpSchema.PaginatedRequest request = objectMapper.convertValue(params,
-			// new TypeReference<McpSchema.PaginatedRequest>() {
-			// });
 
-			var promptList = this.prompts.values()
+			McpSchema.PaginatedRequest request = objectMapper.convertValue(params,
+					new TypeReference<McpSchema.PaginatedRequest>() {
+					});
+
+			int mapSize = this.prompts.size();
+			int mapHash = this.prompts.hashCode();
+
+			int requestedStartIndex = handleCursor(request.cursor(), mapSize, mapHash).block();
+			int endIndex = Math.min(requestedStartIndex + PAGE_SIZE, mapSize);
+
+			var nextCursor = getCursor(endIndex, mapSize, mapHash);
+
+			var resultList = this.prompts.values()
 				.stream()
+				.skip(requestedStartIndex)
+				.limit(endIndex - requestedStartIndex)
 				.map(McpServerFeatures.AsyncPromptSpecification::prompt)
 				.toList();
 
-			return Mono.just(new McpSchema.ListPromptsResult(promptList, null));
+			return Mono.just(new McpSchema.ListPromptsResult(resultList, nextCursor));
 		};
 	}
 
@@ -736,6 +796,81 @@ public class McpAsyncServer {
 	 */
 	void setProtocolVersions(List<String> protocolVersions) {
 		this.protocolVersions = protocolVersions;
+	}
+
+	// ---------------------------------------
+	// Cursor Handling for paginated requests
+	// ---------------------------------------
+
+	/**
+	 * Handles the cursor by decoding, validating and reading the index of it.
+	 * @param cursor the base64 representation of the cursor.
+	 * @param mapSize the size of the map from which the values should be read.
+	 * @param mapHash the hash of the map to compare the cursor value to.
+	 * @return a {@link Mono} which contains the index to which the cursor points.
+	 */
+	private Mono<Integer> handleCursor(String cursor, int mapSize, int mapHash) {
+		if (cursor == null) {
+			return Mono.just(0);
+		}
+
+		var decodedCursor = decodeCursor(cursor);
+
+		if (!isCursorValid(decodedCursor, mapSize, mapHash)) {
+			return Mono.error(new McpParamsValidationError("Invalid cursor"));
+		}
+
+		return Mono.just(getCursorIndex(decodedCursor));
+	}
+
+	private String getCursor(int endIndex, int mapSize, int mapHash) {
+		if (endIndex >= mapSize) {
+			return null;
+		}
+		return encodeCursor(endIndex, mapHash);
+	}
+
+	private int getCursorIndex(String cursor) {
+		return Integer.parseInt(cursor.split(":")[0]);
+	}
+
+	private boolean isCursorValid(String cursor, int maxPageSize, int currentHash) {
+		var cursorElements = cursor.split(":");
+
+		if (cursorElements.length != 2) {
+			logger.debug("Length of elements in cursor doesn't match expected number. Cursor: {} Actual number: {}",
+					cursor, cursorElements.length);
+			return false;
+		}
+
+		int index;
+		int hash;
+
+		try {
+			index = Integer.parseInt(cursorElements[0]);
+			hash = Integer.parseInt(cursorElements[1]);
+		}
+		catch (NumberFormatException e) {
+			logger.debug("Failed to parse cursor elements.");
+			return false;
+		}
+
+		if (index < 0 || index > maxPageSize || hash != currentHash) {
+			logger.debug("Cursor boundaries are invalid.");
+			return false;
+		}
+
+		return true;
+	}
+
+	private String encodeCursor(int index, int hash) {
+		var cursor = index + ":" + hash;
+
+		return Base64.getEncoder().encodeToString(cursor.getBytes());
+	}
+
+	private String decodeCursor(String base64Cursor) {
+		return new String(Base64.getDecoder().decode(base64Cursor));
 	}
 
 }
