@@ -59,7 +59,7 @@ public class McpSchemaTests {
 				{"type":"WRONG","text":"XXX"}""", McpSchema.TextContent.class))
 			.isInstanceOf(InvalidTypeIdException.class)
 			.hasMessageContaining(
-					"Could not resolve type id 'WRONG' as a subtype of `io.modelcontextprotocol.spec.McpSchema$TextContent`: known type ids = [image, resource, text]");
+					"Could not resolve type id 'WRONG' as a subtype of `io.modelcontextprotocol.spec.McpSchema$TextContent`: known type ids = [audio, image, resource, text]");
 	}
 
 	@Test
@@ -82,6 +82,46 @@ public class McpSchemaTests {
 		assertThat(imageContent.type()).isEqualTo("image");
 		assertThat(imageContent.data()).isEqualTo("base64encodeddata");
 		assertThat(imageContent.mimeType()).isEqualTo("image/png");
+	}
+
+	@Test
+	void testAudioContent() throws Exception {
+		McpSchema.AudioContent test = new McpSchema.AudioContent(List.of(McpSchema.Role.USER), 0.8, "base64audiodata",
+				"audio/mp3");
+
+		String value = mapper.writeValueAsString(test);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{
+					"type":"audio",
+					  "audience": ["user"],
+					  "priority": 0.8,
+					  "data": "base64audiodata",
+					  "mimeType": "audio/mp3"
+					}"""));
+	}
+
+	@Test
+	void testAudioContentDeserialization() throws Exception {
+		String json = """
+				{
+				"type":"audio",
+				  "audience": ["user"],
+				  "priority": 0.8,
+				  "data": "base64audiodata",
+				  "mimeType": "audio/mp3"
+				}""";
+
+		McpSchema.AudioContent audioContent = mapper.readValue(json, McpSchema.AudioContent.class);
+
+		assertThat(audioContent).isNotNull();
+		assertThat(audioContent.audience()).containsExactly(McpSchema.Role.USER);
+		assertThat(audioContent.priority()).isEqualTo(0.8);
+		assertThat(audioContent.data()).isEqualTo("base64audiodata");
+		assertThat(audioContent.mimeType()).isEqualTo("audio/mp3");
 	}
 
 	@Test
