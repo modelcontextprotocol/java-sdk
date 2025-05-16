@@ -6,7 +6,7 @@
 
 	<groupId>io.modelcontextprotocol.sdk</groupId>
 	<artifactId>mcp-parent</artifactId>
-	<version>0.11.0-SNAPSHOT</version>
+	<version>${revision}</version>
 
 	<packaging>pom</packaging>
 	<url>https://github.com/modelcontextprotocol/java-sdk</url>
@@ -52,6 +52,8 @@
 	</ciManagement>
 
 	<properties>
+		<revision>0.11.0-SNAPSHOT</revision>
+
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 		<java.version>17</java.version>
