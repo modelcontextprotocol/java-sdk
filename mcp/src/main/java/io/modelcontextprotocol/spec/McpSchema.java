@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -173,11 +174,36 @@ public final class McpSchema {
 	// ---------------------------
 	// JSON-RPC Message Types
 	// ---------------------------
-	public sealed interface JSONRPCMessage permits JSONRPCRequest, JSONRPCNotification, JSONRPCResponse {
+	public sealed interface JSONRPCMessage
+			permits JSONRPCBatchRequest, JSONRPCBatchResponse, JSONRPCRequest, JSONRPCNotification, JSONRPCResponse {
 
 		String jsonrpc();
 
 	}
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record JSONRPCBatchRequest( // @formatter:off
+			@JsonProperty("items") List<JSONRPCMessage> items) implements JSONRPCMessage {
+
+			@Override
+			@JsonIgnore
+			public String jsonrpc() {
+					return JSONRPC_VERSION;
+			}
+	} // @formatter:on
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record JSONRPCBatchResponse( // @formatter:off
+			@JsonProperty("items") List<JSONRPCMessage> items) implements JSONRPCMessage {
+
+		@Override
+		@JsonIgnore
+		public String jsonrpc() {
+			return JSONRPC_VERSION;
+		}
+	} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
