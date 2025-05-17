@@ -67,6 +67,14 @@ public class McpAsyncServerExchange {
 	}
 
 	/**
+	 * Get mcp server session.
+	 * @return The mcp server session
+	 */
+	public McpServerSession getSession() {
+		return this.session;
+	}
+
+	/**
 	 * Create a new message using the sampling capabilities of the client. The Model
 	 * Context Protocol (MCP) provides a standardized way for servers to request LLM
 	 * sampling (“completions” or “generations”) from language models via clients. This
