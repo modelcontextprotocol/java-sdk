@@ -61,7 +61,7 @@ public class McpClientSession implements McpSession {
 	/** Atomic counter for generating unique request IDs */
 	private final AtomicLong requestCounter = new AtomicLong(0);
 
-	private final Disposable connection;
+	private Disposable connection;
 
 	/**
 	 * Functional interface for handling incoming JSON-RPC requests. Implementations
@@ -116,6 +116,17 @@ public class McpClientSession implements McpSession {
 		this.transport = transport;
 		this.requestHandlers.putAll(requestHandlers);
 		this.notificationHandlers.putAll(notificationHandlers);
+	}
+
+	/**
+	 * The client may issue an HTTP GET to the MCP endpoint. This can be used to open an
+	 * SSE stream, allowing the server to communicate to the client, without the client
+	 * first sending data via HTTP POST.
+	 */
+	public void openSSE() {
+		if (this.connection != null && !this.connection.isDisposed()) {
+			return; // already connected and still active
+		}
 
 		// TODO: consider mono.transformDeferredContextual where the Context contains
 		// the
@@ -288,7 +299,9 @@ public class McpClientSession implements McpSession {
 	 */
 	@Override
 	public void close() {
-		this.connection.dispose();
+		if (this.connection != null) {
+			this.connection.dispose();
+		}
 		transport.close();
 	}
 

@@ -26,6 +26,24 @@ import reactor.core.publisher.Mono;
 public interface McpSession {
 
 	/**
+	 * Retrieve the session id.
+	 * @return session id
+	 */
+	String getId();
+
+	/**
+	 * Called by the {@link McpServerTransportProvider} once the session is determined.
+	 * The purpose of this method is to dispatch the message to an appropriate handler as
+	 * specified by the MCP server implementation
+	 * ({@link io.modelcontextprotocol.server.McpAsyncServer} or
+	 * {@link io.modelcontextprotocol.server.McpSyncServer}) via
+	 * {@link McpServerSession.Factory} that the server creates.
+	 * @param message the incoming JSON-RPC message
+	 * @return a Mono that completes when the message is processed
+	 */
+	Mono<Void> handle(McpSchema.JSONRPCMessage message);
+
+	/**
 	 * Sends a request to the model counterparty and expects a response of type T.
 	 *
 	 * <p>
