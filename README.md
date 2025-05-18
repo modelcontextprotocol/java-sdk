@@ -1,16 +1,16 @@
 # MCP Java SDK
-[![Build Status](https://github.com/modelcontextprotocol/java-sdk/actions/workflows/publish-snapshot.yml/badge.svg)](https://github.com/modelcontextprotocol/java-sdk/actions/workflows/publish-snapshot.yml)
+[[!xây dựng trạng thái](https://github.com/modelcontextprotocol/java-sdk/actions/workflows/publish-snapshot.yml/badge.svg)](https://github.com/modelcontextprotocol/java-sdk/actions/workflows/publish-snapshot.yml)
 
-A set of projects that provide Java SDK integration for the [Model Context Protocol](https://modelcontextprotocol.org/docs/concepts/architecture). 
+Một tập hợp các dự án cung cấp tích hợp Java SDK cho  [Giao thức ngữ cảnh mô hình](https://modelcontextprotocol.org/docs/concepts/architecture).  
 This SDK enables Java applications to interact with AI models and tools through a standardized interface, supporting both synchronous and asynchronous communication patterns.
 
-## 📚 Reference Documentation 
+## Tài liệu tham khảo 📚 
 
-#### MCP Java SDK documentation
-For comprehensive guides and SDK API documentation, visit the [MCP Java SDK Reference Documentation](https://modelcontextprotocol.io/sdk/java/mcp-overview).
+#### Tài liệu MCP Java SDK
+Để biết hướng dẫn chi tiết và tài liệu SDK API, hãy truy cập.  [Tài liệu tham khảo MCP Java SDK](https://modelcontextprotocol.io/sdk/java/mcp-overview).
 
-#### Spring AI MCP documentation
-[Spring AI MCP](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) extends the MCP Java SDK with Spring Boot integration, providing both [client](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html) and [server](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-server-boot-starter-docs.html) starters. Bootstrap your AI applications with MCP support using [Spring Initializer](https://start.spring.io).
+#### Tài liệu MCP mùa xuân AI
+[MCP mùa xuân](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html)    mở rộng MCP Java SDK với tích hợp Spring Boot, cung cấp cả hai    [khách hàng](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html)    Và    [máy chủ](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-server-boot-starter-docs.html)    bắt đầu. Các ứng dụng AI của bạn với hỗ trợ MCP sử dụng    [Spring Initializer](https://start.spring.io).
 
 ## Development
 
