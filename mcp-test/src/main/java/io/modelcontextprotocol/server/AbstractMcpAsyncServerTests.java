@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Test suite for the {@link McpAsyncServer} that can be used with different
- * {@link McpTransportProvider} implementations.
+ * {@link io.modelcontextprotocol.spec.McpServerTransportProvider} implementations.
  *
  * @author Christian Tzolov
  */
@@ -110,7 +110,7 @@ public abstract class AbstractMcpAsyncServerTests {
 			.build();
 
 		StepVerifier.create(mcpAsyncServer.addTool(new McpServerFeatures.AsyncToolSpecification(newTool,
-				(excnage, args) -> Mono.just(new CallToolResult(List.of(), false)))))
+				(exchange, args) -> Mono.just(new CallToolResult(List.of(), false)))))
 			.verifyComplete();
 
 		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();

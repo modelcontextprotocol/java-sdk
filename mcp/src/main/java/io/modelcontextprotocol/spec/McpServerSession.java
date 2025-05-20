@@ -64,7 +64,8 @@ public class McpServerSession implements McpSession {
 	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
 	 * server
 	 * @param initNotificationHandler called when a
-	 * {@link McpSchema.METHOD_NOTIFICATION_INITIALIZED} is received.
+	 * {@link io.modelcontextprotocol.spec.McpSchema#METHOD_NOTIFICATION_INITIALIZED} is
+	 * received.
 	 * @param requestHandlers map of request handlers to use
 	 * @param notificationHandlers map of notification handlers to use
 	 */
@@ -257,14 +258,8 @@ public class McpServerSession implements McpSession {
 	record MethodNotFoundError(String method, String message, Object data) {
 	}
 
-	static MethodNotFoundError getMethodNotFoundError(String method) {
-		switch (method) {
-			case McpSchema.METHOD_ROOTS_LIST:
-				return new MethodNotFoundError(method, "Roots not supported",
-						Map.of("reason", "Client does not have roots capability"));
-			default:
-				return new MethodNotFoundError(method, "Method not found: " + method, null);
-		}
+	private MethodNotFoundError getMethodNotFoundError(String method) {
+		return new MethodNotFoundError(method, "Method not found: " + method, null);
 	}
 
 	@Override

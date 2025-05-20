@@ -300,7 +300,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
-		if (!request.param("sessionId").isPresent()) {
+		if (request.param("sessionId").isEmpty()) {
 			return ServerResponse.badRequest().body(new McpError("Session ID missing in message endpoint"));
 		}
 

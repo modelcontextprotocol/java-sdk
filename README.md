@@ -4,7 +4,7 @@
 A set of projects that provide Java SDK integration for the [Model Context Protocol](https://modelcontextprotocol.org/docs/concepts/architecture). 
 This SDK enables Java applications to interact with AI models and tools through a standardized interface, supporting both synchronous and asynchronous communication patterns.
 
-## 📚 Reference Documentation
+## 📚 Reference Documentation 
 
 #### MCP Java SDK documentation
 For comprehensive guides and SDK API documentation, visit the [MCP Java SDK Reference Documentation](https://modelcontextprotocol.io/sdk/java/mcp-overview).
@@ -30,11 +30,8 @@ To run the tests you have to pre-install `Docker` and `npx`.
 
 ## Contributing
 
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Submit a Pull Request
+Contributions are welcome!
+Please follow the [Contributing Guidelines](CONTRIBUTING.md).
 
 ## Team
 

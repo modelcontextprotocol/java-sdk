@@ -19,6 +19,8 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
+import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
 import reactor.core.publisher.Mono;
 
 /**
@@ -115,6 +117,7 @@ import reactor.core.publisher.Mono;
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @author Jihoon Kim
  * @see McpAsyncServer
  * @see McpSyncServer
  * @see McpServerTransportProvider
@@ -155,6 +158,8 @@ public interface McpServer {
 
 		private final McpServerTransportProvider transportProvider;
 
+		private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
+
 		private ObjectMapper objectMapper;
 
 		private McpSchema.Implementation serverInfo = DEFAULT_SERVER_INFO;
@@ -192,6 +197,8 @@ public interface McpServer {
 		 */
 		private final Map<String, McpServerFeatures.AsyncPromptSpecification> prompts = new HashMap<>();
 
+		private final Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions = new HashMap<>();
+
 		private final List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeHandlers = new ArrayList<>();
 
 		private Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
@@ -199,6 +206,19 @@ public interface McpServer {
 		private AsyncSpecification(McpServerTransportProvider transportProvider) {
 			Assert.notNull(transportProvider, "Transport provider must not be null");
 			this.transportProvider = transportProvider;
+		}
+
+		/**
+		 * Sets the URI template manager factory to use for creating URI templates. This
+		 * allows for custom URI template parsing and variable extraction.
+		 * @param uriTemplateManagerFactory The factory to use. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if uriTemplateManagerFactory is null
+		 */
+		public AsyncSpecification uriTemplateManagerFactory(McpUriTemplateManagerFactory uriTemplateManagerFactory) {
+			Assert.notNull(uriTemplateManagerFactory, "URI template manager factory must not be null");
+			this.uriTemplateManagerFactory = uriTemplateManagerFactory;
+			return this;
 		}
 
 		/**
@@ -515,6 +535,36 @@ public interface McpServer {
 		}
 
 		/**
+		 * Registers multiple completions with their handlers using a List. This method is
+		 * useful when completions need to be added in bulk from a collection.
+		 * @param completions List of completion specifications. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if completions is null
+		 */
+		public AsyncSpecification completions(List<McpServerFeatures.AsyncCompletionSpecification> completions) {
+			Assert.notNull(completions, "Completions list must not be null");
+			for (McpServerFeatures.AsyncCompletionSpecification completion : completions) {
+				this.completions.put(completion.referenceKey(), completion);
+			}
+			return this;
+		}
+
+		/**
+		 * Registers multiple completions with their handlers using varargs. This method
+		 * is useful when completions are defined inline and added directly.
+		 * @param completions Array of completion specifications. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if completions is null
+		 */
+		public AsyncSpecification completions(McpServerFeatures.AsyncCompletionSpecification... completions) {
+			Assert.notNull(completions, "Completions list must not be null");
+			for (McpServerFeatures.AsyncCompletionSpecification completion : completions) {
+				this.completions.put(completion.referenceKey(), completion);
+			}
+			return this;
+		}
+
+		/**
 		 * Registers a consumer that will be notified when the list of roots changes. This
 		 * is useful for updating resource availability dynamically, such as when new
 		 * files are added or removed.
@@ -581,9 +631,11 @@ public interface McpServer {
 		 */
 		public McpAsyncServer build() {
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
-					this.resources, this.resourceTemplates, this.prompts, this.rootsChangeHandlers, this.instructions);
+					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
+					this.instructions);
 			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
-			return new McpAsyncServer(this.transportProvider, mapper, features, this.requestTimeout);
+			return new McpAsyncServer(this.transportProvider, mapper, features, this.requestTimeout,
+					this.uriTemplateManagerFactory);
 		}
 
 	}
@@ -595,6 +647,8 @@ public interface McpServer {
 
 		private static final McpSchema.Implementation DEFAULT_SERVER_INFO = new McpSchema.Implementation("mcp-server",
 				"1.0.0");
+
+		private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
 
 		private final McpServerTransportProvider transportProvider;
 
@@ -635,6 +689,8 @@ public interface McpServer {
 		 */
 		private final Map<String, McpServerFeatures.SyncPromptSpecification> prompts = new HashMap<>();
 
+		private final Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions = new HashMap<>();
+
 		private final List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeHandlers = new ArrayList<>();
 
 		private Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
@@ -642,6 +698,19 @@ public interface McpServer {
 		private SyncSpecification(McpServerTransportProvider transportProvider) {
 			Assert.notNull(transportProvider, "Transport provider must not be null");
 			this.transportProvider = transportProvider;
+		}
+
+		/**
+		 * Sets the URI template manager factory to use for creating URI templates. This
+		 * allows for custom URI template parsing and variable extraction.
+		 * @param uriTemplateManagerFactory The factory to use. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if uriTemplateManagerFactory is null
+		 */
+		public SyncSpecification uriTemplateManagerFactory(McpUriTemplateManagerFactory uriTemplateManagerFactory) {
+			Assert.notNull(uriTemplateManagerFactory, "URI template manager factory must not be null");
+			this.uriTemplateManagerFactory = uriTemplateManagerFactory;
+			return this;
 		}
 
 		/**
@@ -958,6 +1027,37 @@ public interface McpServer {
 		}
 
 		/**
+		 * Registers multiple completions with their handlers using a List. This method is
+		 * useful when completions need to be added in bulk from a collection.
+		 * @param completions List of completion specifications. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if completions is null
+		 * @see #completions(McpServerFeatures.SyncCompletionSpecification...)
+		 */
+		public SyncSpecification completions(List<McpServerFeatures.SyncCompletionSpecification> completions) {
+			Assert.notNull(completions, "Completions list must not be null");
+			for (McpServerFeatures.SyncCompletionSpecification completion : completions) {
+				this.completions.put(completion.referenceKey(), completion);
+			}
+			return this;
+		}
+
+		/**
+		 * Registers multiple completions with their handlers using varargs. This method
+		 * is useful when completions are defined inline and added directly.
+		 * @param completions Array of completion specifications. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if completions is null
+		 */
+		public SyncSpecification completions(McpServerFeatures.SyncCompletionSpecification... completions) {
+			Assert.notNull(completions, "Completions list must not be null");
+			for (McpServerFeatures.SyncCompletionSpecification completion : completions) {
+				this.completions.put(completion.referenceKey(), completion);
+			}
+			return this;
+		}
+
+		/**
 		 * Registers a consumer that will be notified when the list of roots changes. This
 		 * is useful for updating resource availability dynamically, such as when new
 		 * files are added or removed.
@@ -1023,11 +1123,12 @@ public interface McpServer {
 		 */
 		public McpSyncServer build() {
 			McpServerFeatures.Sync syncFeatures = new McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,
-					this.tools, this.resources, this.resourceTemplates, this.prompts, this.rootsChangeHandlers,
-					this.instructions);
+					this.tools, this.resources, this.resourceTemplates, this.prompts, this.completions,
+					this.rootsChangeHandlers, this.instructions);
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures);
 			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
-			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures, this.requestTimeout);
+			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures, this.requestTimeout,
+					this.uriTemplateManagerFactory);
 
 			return new McpSyncServer(asyncServer);
 		}
