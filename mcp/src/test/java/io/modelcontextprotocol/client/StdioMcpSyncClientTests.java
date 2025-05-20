@@ -88,14 +88,17 @@ class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 
 					if (i % 2 == 0) {
 						assertThat(resourceResult.contents()).allSatisfy(content -> {
-							McpSchema.TextResourceContents text = assertInstanceOf(McpSchema.TextResourceContents.class, content);
+							McpSchema.TextResourceContents text = assertInstanceOf(McpSchema.TextResourceContents.class,
+									content);
 							assertThat(text.mimeType()).isEqualTo("text/plain");
 							assertThat(text.uri()).isNotEmpty();
 							assertThat(text.text()).isNotEmpty();
 						});
-					} else {
+					}
+					else {
 						assertThat(resourceResult.contents()).allSatisfy(content -> {
-							McpSchema.BlobResourceContents blob = assertInstanceOf(McpSchema.BlobResourceContents.class, content);
+							McpSchema.BlobResourceContents blob = assertInstanceOf(McpSchema.BlobResourceContents.class,
+									content);
 							assertThat(blob.mimeType()).isEqualTo("application/octet-stream");
 							assertThat(blob.uri()).isNotEmpty();
 							assertThat(blob.blob()).isNotEmpty();
@@ -104,7 +107,8 @@ class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 
 					i++;
 				}
-			} while (nextCursor != null);
+			}
+			while (nextCursor != null);
 		});
 	}
 
@@ -121,13 +125,15 @@ class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 				nextCursor = result.nextCursor();
 
 				for (McpSchema.ResourceTemplate resourceTemplate : result.resourceTemplates()) {
-					// mimeType is null in @modelcontextprotocol/server-everything, but we don't assert that it's
+					// mimeType is null in @modelcontextprotocol/server-everything, but we
+					// don't assert that it's
 					// null in case they change that later.
 					assertThat(resourceTemplate.uriTemplate()).isNotEmpty();
 					assertThat(resourceTemplate.name()).isNotEmpty();
 					assertThat(resourceTemplate.description()).isNotEmpty();
 				}
-			} while (nextCursor != null);
+			}
+			while (nextCursor != null);
 		});
 	}
 
@@ -138,16 +144,16 @@ class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 		withClient(transport, client -> {
 			client.initialize();
 
-			McpSchema.CallToolResult result = client.callTool(new McpSchema.CallToolRequest("getResourceReference",
-					Map.of(
-							"resourceId", 1
-					)));
+			McpSchema.CallToolResult result = client
+				.callTool(new McpSchema.CallToolRequest("getResourceReference", Map.of("resourceId", 1)));
 
 			assertThat(result.content()).hasAtLeastOneElementOfType(McpSchema.EmbeddedResource.class);
 			assertThat(result.content()).allSatisfy(content -> {
-				if (!(content instanceof McpSchema.EmbeddedResource resource)) return;
+				if (!(content instanceof McpSchema.EmbeddedResource resource))
+					return;
 
-                McpSchema.TextResourceContents text = assertInstanceOf(McpSchema.TextResourceContents.class, resource.resource());
+				McpSchema.TextResourceContents text = assertInstanceOf(McpSchema.TextResourceContents.class,
+						resource.resource());
 				assertThat(text.mimeType()).isEqualTo("text/plain");
 				assertThat(text.uri()).isNotEmpty();
 				assertThat(text.text()).isNotEmpty();
