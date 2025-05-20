@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.client;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -127,6 +128,30 @@ class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 					assertThat(resourceTemplate.description()).isNotEmpty();
 				}
 			} while (nextCursor != null);
+		});
+	}
+
+	@Test
+	void testEmbeddedResources() {
+		McpClientTransport transport = createMcpTransport();
+
+		withClient(transport, client -> {
+			client.initialize();
+
+			McpSchema.CallToolResult result = client.callTool(new McpSchema.CallToolRequest("getResourceReference",
+					Map.of(
+							"resourceId", 1
+					)));
+
+			assertThat(result.content()).hasAtLeastOneElementOfType(McpSchema.EmbeddedResource.class);
+			assertThat(result.content()).allSatisfy(content -> {
+				if (!(content instanceof McpSchema.EmbeddedResource resource)) return;
+
+                McpSchema.TextResourceContents text = assertInstanceOf(McpSchema.TextResourceContents.class, resource.resource());
+				assertThat(text.mimeType()).isEqualTo("text/plain");
+				assertThat(text.uri()).isNotEmpty();
+				assertThat(text.text()).isNotEmpty();
+			});
 		});
 	}
 
