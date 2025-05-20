@@ -1108,7 +1108,8 @@ public final class McpSchema {
 	public record ProgressNotification(// @formatter:off
 		@JsonProperty("progressToken") String progressToken,
 		@JsonProperty("progress") double progress,
-		@JsonProperty("total") Double total) {
+		@JsonProperty("total") Double total,
+	   	@JsonProperty("message") String message) {
 	}// @formatter:on
 
 	/**
