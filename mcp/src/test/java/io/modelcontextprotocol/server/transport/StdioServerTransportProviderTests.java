@@ -4,6 +4,17 @@
 
 package io.modelcontextprotocol.server.transport;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpServerSession;
+import io.modelcontextprotocol.spec.McpServerTransport;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -13,24 +24,12 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpServerSession;
-import io.modelcontextprotocol.spec.McpServerTransport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * Tests for {@link StdioServerTransportProvider}.
@@ -52,9 +51,9 @@ class StdioServerTransportProviderTests {
 
 	private ObjectMapper objectMapper;
 
-	private McpServerSession.Factory sessionFactory;
+  private McpServerSession.Factory sessionFactory;
 
-	private McpServerSession mockSession;
+  private McpServerSession mockSession;
 
 	@BeforeEach
 	void setUp() {
@@ -66,9 +65,9 @@ class StdioServerTransportProviderTests {
 
 		objectMapper = new ObjectMapper();
 
-		// Create mocks for session factory and session
-		mockSession = mock(McpServerSession.class);
-		sessionFactory = mock(McpServerSession.Factory.class);
+    // Create mocks for session factory and session
+    mockSession = mock(McpServerSession.class);
+    sessionFactory = mock(McpServerSession.Factory.class);
 
 		// Configure mock behavior
 		when(sessionFactory.create(any(McpServerTransport.class))).thenReturn(mockSession);
@@ -110,16 +109,19 @@ class StdioServerTransportProviderTests {
 		AtomicReference<McpSchema.JSONRPCMessage> capturedMessage = new AtomicReference<>();
 		CountDownLatch messageLatch = new CountDownLatch(1);
 
-		McpServerSession.Factory realSessionFactory = transport -> {
-			McpServerSession session = mock(McpServerSession.class);
-			when(session.handle(any())).thenAnswer(invocation -> {
-				capturedMessage.set(invocation.getArgument(0));
-				messageLatch.countDown();
-				return Mono.empty();
-			});
-			when(session.closeGracefully()).thenReturn(Mono.empty());
-			return session;
-		};
+    McpServerSession.Factory realSessionFactory =
+        transport -> {
+          McpServerSession session = mock(McpServerSession.class);
+          when(session.handle(any()))
+              .thenAnswer(
+                  invocation -> {
+                    capturedMessage.set(invocation.getArgument(0));
+                    messageLatch.countDown();
+                    return Mono.empty();
+                  });
+          when(session.closeGracefully()).thenReturn(Mono.empty());
+          return session;
+        };
 
 		// Set session factory
 		transportProvider.setSessionFactory(realSessionFactory);

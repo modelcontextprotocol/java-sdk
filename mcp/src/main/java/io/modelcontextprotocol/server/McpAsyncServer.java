@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.server;
 
+import io.modelcontextprotocol.spec.McpServerSessionImpl;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -184,7 +185,7 @@ public class McpAsyncServer {
 				asyncRootsListChangedNotificationHandler(rootsChangeConsumers));
 
 		mcpTransportProvider.setSessionFactory(
-				transport -> new McpServerSession(UUID.randomUUID().toString(), requestTimeout, transport,
+				transport -> new McpServerSessionImpl(UUID.randomUUID().toString(), requestTimeout, transport,
 						this::asyncInitializeRequestHandler, Mono::empty, requestHandlers, notificationHandlers));
 	}
 
