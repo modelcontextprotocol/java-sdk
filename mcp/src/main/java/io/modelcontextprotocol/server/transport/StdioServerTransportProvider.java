@@ -48,7 +48,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 
 	private final OutputStream outputStream;
 
-  private McpSession session;
+	private McpServerSession session;
 
 	private final AtomicBoolean isClosing = new AtomicBoolean(false);
 

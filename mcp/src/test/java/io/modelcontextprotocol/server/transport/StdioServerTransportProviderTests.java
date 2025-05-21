@@ -51,9 +51,9 @@ class StdioServerTransportProviderTests {
 
 	private ObjectMapper objectMapper;
 
-  private McpServerSession.Factory sessionFactory;
+	private McpServerSession.Factory sessionFactory;
 
-  private McpServerSession mockSession;
+	private McpServerSession mockSession;
 
 	@BeforeEach
 	void setUp() {
@@ -65,9 +65,9 @@ class StdioServerTransportProviderTests {
 
 		objectMapper = new ObjectMapper();
 
-    // Create mocks for session factory and session
-    mockSession = mock(McpServerSession.class);
-    sessionFactory = mock(McpServerSession.Factory.class);
+		// Create mocks for session factory and session
+		mockSession = mock(McpServerSession.class);
+		sessionFactory = mock(McpServerSession.Factory.class);
 
 		// Configure mock behavior
 		when(sessionFactory.create(any(McpServerTransport.class))).thenReturn(mockSession);
@@ -109,19 +109,16 @@ class StdioServerTransportProviderTests {
 		AtomicReference<McpSchema.JSONRPCMessage> capturedMessage = new AtomicReference<>();
 		CountDownLatch messageLatch = new CountDownLatch(1);
 
-    McpServerSession.Factory realSessionFactory =
-        transport -> {
-          McpServerSession session = mock(McpServerSession.class);
-          when(session.handle(any()))
-              .thenAnswer(
-                  invocation -> {
-                    capturedMessage.set(invocation.getArgument(0));
-                    messageLatch.countDown();
-                    return Mono.empty();
-                  });
-          when(session.closeGracefully()).thenReturn(Mono.empty());
-          return session;
-        };
+		McpServerSession.Factory realSessionFactory = transport -> {
+			McpServerSession session = mock(McpServerSession.class);
+			when(session.handle(any())).thenAnswer(invocation -> {
+				capturedMessage.set(invocation.getArgument(0));
+				messageLatch.countDown();
+				return Mono.empty();
+			});
+			when(session.closeGracefully()).thenReturn(Mono.empty());
+			return session;
+		};
 
 		// Set session factory
 		transportProvider.setSessionFactory(realSessionFactory);

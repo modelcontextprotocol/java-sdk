@@ -273,4 +273,5 @@ public class McpServerSessionImpl implements McpServerSession {
 	public void close() {
 		this.transport.close();
 	}
+
 }
