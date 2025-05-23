@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.util;
 
+import java.net.URL;
 import reactor.util.annotation.Nullable;
 
 import java.net.URI;
@@ -76,6 +77,26 @@ public final class Utils {
 		else {
 			return baseUrl.resolve(endpointUri);
 		}
+	}
+
+	public static URI resolveSseUri(URI baseUrl, String endpointUrl) {
+		String sanitizedEndpoint = stripLeadingSlash(endpointUrl);
+		URI endpointUri = URI.create(sanitizedEndpoint);
+		if (endpointUri.isAbsolute() && !isUnderBaseUri(baseUrl, endpointUri)) {
+			throw new IllegalArgumentException("Absolute endpoint URL does not match the base URL.");
+		}
+
+		URI res = ensureTrailingSlash(baseUrl).resolve(endpointUri);
+		return res;
+	}
+
+	private static String stripLeadingSlash(String url) {
+		return url.startsWith("/") ? url.substring(1) : url;
+	}
+
+	private static URI ensureTrailingSlash(URI uri) {
+		String uriString = uri.toString();
+		return !uriString.endsWith("/") ? URI.create(uriString.concat("/")) : uri;
 	}
 
 	/**

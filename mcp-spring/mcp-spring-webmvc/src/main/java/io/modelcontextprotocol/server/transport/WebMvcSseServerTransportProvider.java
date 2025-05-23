@@ -6,6 +6,7 @@ package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -152,7 +153,13 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(baseUrl, "Message base URL must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
+		Assert.hasText(messageEndpoint, "Message endpoint must not be empty");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
+		Assert.hasText(sseEndpoint, "SSE endpoint must not be empty");
+
+		if (baseUrl.endsWith("/")) {
+			baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+		}
 
 		this.objectMapper = objectMapper;
 		this.baseUrl = baseUrl;

@@ -49,8 +49,8 @@ class WebMvcSseCustomContextPathTests {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		var clientTransport = HttpClientSseClientTransport.builder("http://localhost:" + PORT)
-			.sseEndpoint(CUSTOM_CONTEXT_PATH + WebMvcSseServerTransportProvider.DEFAULT_SSE_ENDPOINT)
+		var clientTransport = HttpClientSseClientTransport.builder("http://localhost:" + PORT + CUSTOM_CONTEXT_PATH)
+			.sseEndpoint(WebMvcSseServerTransportProvider.DEFAULT_SSE_ENDPOINT)
 			.build();
 
 		clientBuilder = McpClient.sync(clientTransport);
