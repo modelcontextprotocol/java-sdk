@@ -154,6 +154,10 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
 
+		if (baseUrl.endsWith("/")) {
+			baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+		}
+
 		this.objectMapper = objectMapper;
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;

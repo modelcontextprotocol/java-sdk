@@ -175,9 +175,9 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
 			String sseEndpoint, ObjectMapper objectMapper) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
-		Assert.hasText(baseUri, "baseUri must not be empty");
-		Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
-		Assert.notNull(httpClient, "httpClient must not be null");
+		Assert.notNull(baseUri, "baseUri must not be null");
+		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
+		Assert.hasText(sseEndpoint, "SSE endpoint must not be empty");
 		Assert.notNull(requestBuilder, "requestBuilder must not be null");
 		this.baseUri = URI.create(baseUri);
 		this.sseEndpoint = sseEndpoint;
@@ -341,7 +341,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		CompletableFuture<Void> future = new CompletableFuture<>();
 		connectionFuture.set(future);
 
-		URI clientUri = Utils.resolveUri(this.baseUri, this.sseEndpoint);
+		URI clientUri = Utils.resolveSseUri(this.baseUri, this.sseEndpoint);
+		logger.debug("Subscribing to {}", clientUri);
 		sseClient.subscribe(clientUri.toString(), new FlowSseClient.SseEventHandler() {
 			@Override
 			public void onEvent(SseEvent event) {
