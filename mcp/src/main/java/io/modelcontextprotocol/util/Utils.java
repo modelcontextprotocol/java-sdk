@@ -70,12 +70,12 @@ public final class Utils {
 	 * base URL or URI is malformed
 	 */
 	public static URI resolveUri(URI baseUrl, String endpointUrl) {
-		URI endpointUri = URI.create(endpointUrl);
+		URI endpointUri = URI.create(endpointUrl.startsWith("/") ? endpointUrl.substring(1) : endpointUrl);
 		if (endpointUri.isAbsolute() && !isUnderBaseUri(baseUrl, endpointUri)) {
 			throw new IllegalArgumentException("Absolute endpoint URL does not match the base URL.");
 		}
 		else {
-			return baseUrl.resolve(endpointUri);
+			return ensureTrailingSlash(baseUrl).resolve(endpointUri);
 		}
 	}
 

@@ -94,6 +94,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 
 	private final String baseUrl;
 
+	private final String contextPath;
+
 	private final RouterFunction<ServerResponse> routerFunction;
 
 	private McpServerSession.Factory sessionFactory;
@@ -133,13 +135,14 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
 	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
-		this(objectMapper, "", messageEndpoint, sseEndpoint);
+		this(objectMapper, "", "", messageEndpoint, sseEndpoint);
 	}
 
 	/**
 	 * Constructs a new WebMvcSseServerTransportProvider instance.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 * of messages.
+	 * @param contextPath The context path under which the server runs.
 	 * @param baseUrl The base URL for the message endpoint, used to construct the full
 	 * endpoint URL for clients.
 	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
@@ -148,9 +151,10 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * @param sseEndpoint The endpoint URI where clients establish their SSE connections.
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
-	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
-			String sseEndpoint) {
+	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String contextPath, String baseUrl,
+			String messageEndpoint, String sseEndpoint) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
+		Assert.notNull(contextPath, "Context path must not be null");
 		Assert.notNull(baseUrl, "Message base URL must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
 		Assert.hasText(messageEndpoint, "Message endpoint must not be empty");
@@ -161,13 +165,18 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 		}
 
+		if (contextPath.endsWith("/")) {
+			contextPath = contextPath.substring(0, contextPath.length() - 1);
+		}
+
 		this.objectMapper = objectMapper;
 		this.baseUrl = baseUrl;
+		this.contextPath = contextPath;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
 		this.routerFunction = RouterFunctions.route()
-			.GET(this.sseEndpoint, this::handleSseConnection)
-			.POST(this.messageEndpoint, this::handleMessage)
+			.GET(this.baseUrl + this.sseEndpoint, this::handleSseConnection)
+			.POST(this.baseUrl + this.messageEndpoint, this::handleMessage)
 			.build();
 	}
 
@@ -276,7 +285,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				try {
 					sseBuilder.id(sessionId)
 						.event(ENDPOINT_EVENT_TYPE)
-						.data(this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId);
+						.data(this.contextPath + this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId);
 				}
 				catch (Exception e) {
 					logger.error("Failed to send initial endpoint event: {}", e.getMessage());

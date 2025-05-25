@@ -51,8 +51,10 @@ public class WebMvcSseCustomPathIntegrationTests {
 			String baseUrl = env.getProperty("test.baseUrl");
 			String messageEndpoint = env.getProperty("test.messageEndpoint");
 			String sseEndpoint = env.getProperty("test.sseEndpoint");
+			String contextPath = env.getProperty("test.contextPath");
 
-			return new WebMvcSseServerTransportProvider(new ObjectMapper(), baseUrl, messageEndpoint, sseEndpoint);
+			return new WebMvcSseServerTransportProvider(new ObjectMapper(), contextPath, baseUrl, messageEndpoint,
+					sseEndpoint);
 		}
 
 		@Bean
@@ -62,14 +64,17 @@ public class WebMvcSseCustomPathIntegrationTests {
 
 	}
 
-	@ParameterizedTest(name = "baseUrl = \"{0}\" messageEndpoint = \"{1}\" sseEndpoint = \"{2}\" : {displayName} ")
+	@ParameterizedTest(
+			name = "baseUrl = \"{0}\" messageEndpoint = \"{1}\" sseEndpoint = \"{2}\" contextPath = \"{3}\" : {displayName} ")
 	@MethodSource("provideCustomEndpoints")
-	public void testCustomizedEndpoints(String baseUrl, String messageEndpoint, String sseEndpoint) {
+	public void testCustomizedEndpoints(String baseUrl, String messageEndpoint, String sseEndpoint,
+			String contextPath) {
 		System.setProperty("test.baseUrl", baseUrl);
 		System.setProperty("test.messageEndpoint", messageEndpoint);
 		System.setProperty("test.sseEndpoint", sseEndpoint);
+		System.setProperty("test.contextPath", contextPath);
 
-		tomcatServer = TomcatTestUtil.createTomcatServer(baseUrl, PORT, TestConfig.class);
+		tomcatServer = TomcatTestUtil.createTomcatServer(contextPath, PORT, TestConfig.class);
 
 		try {
 			tomcatServer.tomcat().start();
@@ -79,9 +84,18 @@ public class WebMvcSseCustomPathIntegrationTests {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		clientBuilder = McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT + baseUrl)
-			.sseEndpoint(sseEndpoint)
-			.build());
+		var c = contextPath;
+		var b = baseUrl;
+		var s = sseEndpoint;
+		if (baseUrl.endsWith("/")) {
+			b = b.substring(0, b.length() - 1);
+		}
+		if (contextPath.endsWith("/")) {
+			c = c.substring(0, c.length() - 1);
+		}
+
+		clientBuilder = McpClient
+			.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT).sseEndpoint(c + b + s).build());
 
 		McpSchema.CallToolResult callResponse = new McpSchema.CallToolResult(
 				List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
@@ -113,14 +127,13 @@ public class WebMvcSseCustomPathIntegrationTests {
 		String[] baseUrls = { "", "/v1", "/api/v1", "/", "/v1/", "/api/v1/" };
 		String[] messageEndpoints = { "/message", "/another/sse", "/" };
 		String[] sseEndpoints = { "/sse", "/another/sse", "/" };
-		String[] contextPath = { "", "/v1", "/api/v1", "/", "/v1/", "/api/v1/" };
+		String[] contextPaths = { "", "/mcp", "/root/mcp", "/", "/mcp/", "/root/mcp/" };
 
 		return Stream.of(baseUrls)
 			.flatMap(baseUrl -> Stream.of(messageEndpoints)
 				.flatMap(messageEndpoint -> Stream.of(sseEndpoints)
-					.map(sseEndpoint -> Arguments.of(baseUrl, messageEndpoint, sseEndpoint))
-
-				));
+					.flatMap(sseEndpoint -> Stream.of(contextPaths)
+						.map(contextPath -> Arguments.of(baseUrl, messageEndpoint, sseEndpoint, contextPath)))));
 	}
 
 	@AfterEach
