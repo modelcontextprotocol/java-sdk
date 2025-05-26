@@ -558,6 +558,22 @@ public interface McpClient {
 		}
 
 		/**
+		 * Adds a consumer to be notified when a specific resource is updated. This allows
+		 * the client to react to changes in individual resources, such as updates to
+		 * their content or metadata.
+		 * @param resourcesUpdateConsumer A consumer function that processes the updated
+		 * resource and returns a Mono indicating the completion of the processing. Must
+		 * not be null.
+		 * @return This builder instance for method chaining.
+		 * @throws IllegalArgumentException If the resourcesUpdateConsumer is null.
+		 */
+		public AsyncSpec resourcesUpdateConsumer(Function<McpSchema.Resource, Mono<Void>> resourcesUpdateConsumer) {
+			Assert.notNull(resourcesUpdateConsumer, "Resources update consumer must not be null");
+			this.resourcesUpdateConsumers.add(resourcesUpdateConsumer);
+			return this;
+		}
+
+		/**
 		 * Adds a consumer to be notified when the available prompts change. This allows
 		 * the client to react to changes in the server's prompt templates, such as new
 		 * templates being added or existing ones being modified.
