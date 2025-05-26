@@ -416,6 +416,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			String jsonText = this.objectMapper.writeValueAsString(message);
 			URI requestUri = Utils.resolveUri(baseUri, endpoint);
 			HttpRequest request = this.requestBuilder.uri(requestUri)
+				.setHeader("Content-Type", "application/json;charset=UTF-8")
 				.POST(HttpRequest.BodyPublishers.ofString(jsonText))
 				.build();
 
