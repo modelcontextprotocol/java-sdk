@@ -169,6 +169,8 @@ public interface McpClient {
 
 		private final List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers = new ArrayList<>();
 
+		private final List<Consumer<McpSchema.Resource>> resourceUpdateConsumers = new ArrayList<>();
+
 		private final List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers = new ArrayList<>();
 
 		private final List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers = new ArrayList<>();
@@ -363,8 +365,8 @@ public interface McpClient {
 		 */
 		public McpSyncClient build() {
 			McpClientFeatures.Sync syncFeatures = new McpClientFeatures.Sync(this.clientInfo, this.capabilities,
-					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.promptsChangeConsumers,
-					this.loggingConsumers, this.samplingHandler);
+					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourceUpdateConsumers,
+					this.promptsChangeConsumers, this.loggingConsumers, this.samplingHandler);
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
@@ -407,6 +409,8 @@ public interface McpClient {
 		private final List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers = new ArrayList<>();
 
 		private final List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers = new ArrayList<>();
+
+		private final List<Function<McpSchema.Resource, Mono<Void>>> resourcesUpdateConsumers = new ArrayList<>();
 
 		private final List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers = new ArrayList<>();
 
@@ -605,8 +609,8 @@ public interface McpClient {
 		public McpAsyncClient build() {
 			return new McpAsyncClient(this.transport, this.requestTimeout, this.initializationTimeout,
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
-							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.promptsChangeConsumers,
-							this.loggingConsumers, this.samplingHandler));
+							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
+							this.promptsChangeConsumers, this.loggingConsumers, this.samplingHandler));
 		}
 
 	}

@@ -215,6 +215,18 @@ public class McpAsyncClient {
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED,
 				asyncResourcesChangeNotificationHandler(resourcesChangeConsumersFinal));
 
+		// Resource Update Notification
+		List<Function<McpSchema.Resource, Mono<Void>>> resourcesUpdateConsumersFinal = new ArrayList<>();
+		resourcesUpdateConsumersFinal
+			.add((notification) -> Mono.fromRunnable(() -> logger.debug("Resources updated: {}", notification)));
+
+		if (!Utils.isEmpty(features.resourcesUpdateConsumers())) {
+			resourcesUpdateConsumersFinal.addAll(features.resourcesUpdateConsumers());
+		}
+
+		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_RESOURCES_UPDATED,
+				asyncResourcesUpdatedNotificationHandler(resourcesChangeConsumersFinal));
+
 		// Prompts Change Notification
 		List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumersFinal = new ArrayList<>();
 		promptsChangeConsumersFinal
@@ -703,6 +715,17 @@ public class McpAsyncClient {
 			.flatMap(consumer -> consumer.apply(listResourcesResult.resources()))
 			.onErrorResume(error -> {
 				logger.error("Error handling resources list change notification", error);
+				return Mono.empty();
+			})
+			.then());
+	}
+
+	private NotificationHandler asyncResourcesUpdatedNotificationHandler(
+			List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesUpdateConsumers) {
+		return params -> listResources().flatMap(listResourcesResult -> Flux.fromIterable(resourcesUpdateConsumers)
+			.flatMap(consumer -> consumer.apply(listResourcesResult.resources()))
+			.onErrorResume(error -> {
+				logger.error("Error handling resources updated notification", error);
 				return Mono.empty();
 			})
 			.then());
