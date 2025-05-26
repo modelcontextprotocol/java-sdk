@@ -215,7 +215,7 @@ public class McpAsyncClient {
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED,
 				asyncResourcesChangeNotificationHandler(resourcesChangeConsumersFinal));
 
-		// Resource Update Notification
+		// Resources Update Notification
 		List<Function<McpSchema.Resource, Mono<Void>>> resourcesUpdateConsumersFinal = new ArrayList<>();
 		resourcesUpdateConsumersFinal
 			.add((notification) -> Mono.fromRunnable(() -> logger.debug("Resources updated: {}", notification)));
@@ -723,9 +723,8 @@ public class McpAsyncClient {
 	private NotificationHandler asyncResourcesUpdatedNotificationHandler(
 			List<Function<McpSchema.Resource, Mono<Void>>> resourcesUpdateConsumers) {
 		return params -> {
-			McpSchema.Resource updatedResource = transport.unmarshalFrom(params,
-					new TypeReference<McpSchema.Resource>() {
-					});
+			McpSchema.Resource updatedResource = transport.unmarshalFrom(params, new TypeReference<>() {
+			});
 
 			return Flux.fromIterable(resourcesUpdateConsumers)
 				.flatMap(consumer -> consumer.apply(updatedResource))

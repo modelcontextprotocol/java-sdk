@@ -169,7 +169,7 @@ public interface McpClient {
 
 		private final List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers = new ArrayList<>();
 
-		private final List<Consumer<McpSchema.Resource>> resourceUpdateConsumers = new ArrayList<>();
+		private final List<Consumer<McpSchema.Resource>> resourcesUpdateConsumers = new ArrayList<>();
 
 		private final List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers = new ArrayList<>();
 
@@ -365,7 +365,7 @@ public interface McpClient {
 		 */
 		public McpSyncClient build() {
 			McpClientFeatures.Sync syncFeatures = new McpClientFeatures.Sync(this.clientInfo, this.capabilities,
-					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourceUpdateConsumers,
+					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 					this.promptsChangeConsumers, this.loggingConsumers, this.samplingHandler);
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
