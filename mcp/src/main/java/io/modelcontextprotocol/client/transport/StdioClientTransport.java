@@ -344,15 +344,15 @@ public class StdioClientTransport implements McpClientTransport {
 		return Mono.fromRunnable(() -> {
 			isClosing = true;
 			logger.debug("Initiating graceful shutdown");
-		}).then(Mono.defer(() -> {
+		}).then(Mono.<Void>defer(() -> {
 			// First complete all sinks to stop accepting new messages
 			inboundSink.tryEmitComplete();
 			outboundSink.tryEmitComplete();
 			errorSink.tryEmitComplete();
 
 			// Give a short time for any pending messages to be processed
-			return Mono.delay(Duration.ofMillis(100));
-		})).then(Mono.defer(() -> {
+			return Mono.delay(Duration.ofMillis(100)).then();
+		})).then(Mono.<Process>defer(() -> {
 			logger.debug("Sending TERM to process");
 			if (this.process != null) {
 				this.process.destroy();
