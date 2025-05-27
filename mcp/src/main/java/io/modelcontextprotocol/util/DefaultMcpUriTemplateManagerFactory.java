@@ -6,7 +6,7 @@ package io.modelcontextprotocol.util;
 /**
  * @author Christian Tzolov
  */
-public class DeafaultMcpUriTemplateManagerFactory implements McpUriTemplateManagerFactory {
+public class DefaultMcpUriTemplateManagerFactory implements McpUriTemplateManagerFactory {
 
 	/**
 	 * Creates a new instance of {@link McpUriTemplateManager} with the specified URI
