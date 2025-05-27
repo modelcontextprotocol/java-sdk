@@ -8,6 +8,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
@@ -651,9 +653,11 @@ class WebFluxSseIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
-	void testLoggingNotification(String clientType) {
+	void testLoggingNotification(String clientType) throws InterruptedException {
+		int expectedNotificationsCount = 3;
+		CountDownLatch latch = new CountDownLatch(expectedNotificationsCount);
 		// Create a list to store received logging notifications
-		List<McpSchema.LoggingMessageNotification> receivedNotifications = new ArrayList<>();
+		List<McpSchema.LoggingMessageNotification> receivedNotifications = new CopyOnWriteArrayList<>();
 
 		var clientBuilder = clientBuilders.get(clientType);
 
@@ -709,6 +713,7 @@ class WebFluxSseIntegrationTests {
 				// Create client with logging notification handler
 				var mcpClient = clientBuilder.loggingConsumer(notification -> {
 					receivedNotifications.add(notification);
+					latch.countDown();
 				}).build()) {
 
 			// Initialize client
@@ -724,31 +729,28 @@ class WebFluxSseIntegrationTests {
 			assertThat(result.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
 			assertThat(((McpSchema.TextContent) result.content().get(0)).text()).isEqualTo("Logging test completed");
 
-			// Wait for notifications to be processed
-			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+			assertThat(latch.await(5, TimeUnit.SECONDS)).as("Should receive notifications in reasonable time").isTrue();
 
-				// Should have received 3 notifications (1 NOTICE and 2 ERROR)
-				assertThat(receivedNotifications).hasSize(3);
+			// Should have received 3 notifications (1 NOTICE and 2 ERROR)
+			assertThat(receivedNotifications).hasSize(expectedNotificationsCount);
 
-				Map<String, McpSchema.LoggingMessageNotification> notificationMap = receivedNotifications.stream()
-					.collect(Collectors.toMap(n -> n.data(), n -> n));
+			Map<String, McpSchema.LoggingMessageNotification> notificationMap = receivedNotifications.stream()
+				.collect(Collectors.toMap(n -> n.data(), n -> n));
 
-				// First notification should be NOTICE level
-				assertThat(notificationMap.get("Notice message").level()).isEqualTo(McpSchema.LoggingLevel.NOTICE);
-				assertThat(notificationMap.get("Notice message").logger()).isEqualTo("test-logger");
-				assertThat(notificationMap.get("Notice message").data()).isEqualTo("Notice message");
+			// First notification should be NOTICE level
+			assertThat(notificationMap.get("Notice message").level()).isEqualTo(McpSchema.LoggingLevel.NOTICE);
+			assertThat(notificationMap.get("Notice message").logger()).isEqualTo("test-logger");
+			assertThat(notificationMap.get("Notice message").data()).isEqualTo("Notice message");
 
-				// Second notification should be ERROR level
-				assertThat(notificationMap.get("Error message").level()).isEqualTo(McpSchema.LoggingLevel.ERROR);
-				assertThat(notificationMap.get("Error message").logger()).isEqualTo("test-logger");
-				assertThat(notificationMap.get("Error message").data()).isEqualTo("Error message");
+			// Second notification should be ERROR level
+			assertThat(notificationMap.get("Error message").level()).isEqualTo(McpSchema.LoggingLevel.ERROR);
+			assertThat(notificationMap.get("Error message").logger()).isEqualTo("test-logger");
+			assertThat(notificationMap.get("Error message").data()).isEqualTo("Error message");
 
-				// Third notification should be ERROR level
-				assertThat(notificationMap.get("Another error message").level())
-					.isEqualTo(McpSchema.LoggingLevel.ERROR);
-				assertThat(notificationMap.get("Another error message").logger()).isEqualTo("test-logger");
-				assertThat(notificationMap.get("Another error message").data()).isEqualTo("Another error message");
-			});
+			// Third notification should be ERROR level
+			assertThat(notificationMap.get("Another error message").level()).isEqualTo(McpSchema.LoggingLevel.ERROR);
+			assertThat(notificationMap.get("Another error message").logger()).isEqualTo("test-logger");
+			assertThat(notificationMap.get("Another error message").data()).isEqualTo("Another error message");
 		}
 		mcpServer.close();
 	}
