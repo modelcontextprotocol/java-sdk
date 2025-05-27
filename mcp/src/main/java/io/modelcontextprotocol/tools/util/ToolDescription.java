@@ -12,7 +12,7 @@ import io.modelcontextprotocol.tools.annotation.Tool;
 import io.modelcontextprotocol.tools.annotation.ToolAnnotations;
 
 public record ToolDescription(String name, String description, List<ToolParamDescription> toolParamDescriptions,
-		ToolResultDescription resultDescriptions, List<ToolAnnotationDescription> toolAnnotationDescriptions) {
+		ToolResultDescription resultDescription, ToolAnnotationsDescription toolAnnotationsDescription) {
 
 	public static List<ToolDescription> fromClass(Class<?> clazz) {
 		return Arrays.asList(clazz.getMethods()).stream().map(m -> {
@@ -25,7 +25,7 @@ public record ToolDescription(String name, String description, List<ToolParamDes
 					ToolAnnotations tas = m.getAnnotation(ToolAnnotations.class);
 					return new ToolDescription(m.getName(), ma.description(),
 							ToolParamDescription.fromParameters(m.getParameters()), ToolResultDescription.fromMethod(m),
-							ToolAnnotationDescription.fromAnnotations(tas != null ? tas.value() : null));
+							ToolAnnotationsDescription.fromAnnotations(tas));
 				}
 			}
 			return null;
