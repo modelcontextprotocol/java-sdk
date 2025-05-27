@@ -28,7 +28,7 @@ import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
-import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
+import io.modelcontextprotocol.util.DefaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
@@ -108,7 +108,7 @@ public class McpAsyncServer {
 
 	private List<String> protocolVersions = List.of(McpSchema.LATEST_PROTOCOL_VERSION);
 
-	private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
+	private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
 
 	/**
 	 * Create a new McpAsyncServer with the given transport provider and capabilities.
@@ -117,9 +117,13 @@ public class McpAsyncServer {
 	 * @param features The MCP server supported features.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 */
-	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
-			McpServerFeatures.Async features, Duration requestTimeout,
-			McpUriTemplateManagerFactory uriTemplateManagerFactory) {
+	McpAsyncServer(
+			McpServerTransportProvider mcpTransportProvider,
+			ObjectMapper objectMapper,
+			McpServerFeatures.Async features,
+			Duration requestTimeout,
+			McpUriTemplateManagerFactory uriTemplateManagerFactory
+	) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.objectMapper = objectMapper;
 		this.serverInfo = features.serverInfo();
