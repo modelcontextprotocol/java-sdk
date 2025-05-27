@@ -13,6 +13,6 @@ public @interface Tool {
 
 	String description() default "";
 
-	ToolAnnotation[] annotations() default {};
+	ToolAnnotations annotations();
 
 }
