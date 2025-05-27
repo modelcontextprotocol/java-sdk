@@ -10,14 +10,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonSubTypes;
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.*;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -94,6 +92,9 @@ public final class McpSchema {
 	// Sampling Methods
 	public static final String METHOD_SAMPLING_CREATE_MESSAGE = "sampling/createMessage";
 
+	// Elicitation Methods
+	public static final String METHOD_ELICITATION_CREATE = "elicitation/create";
+
 	private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
 	// ---------------------------
@@ -131,8 +132,8 @@ public final class McpSchema {
 
 	}
 
-	public sealed interface Request
-			permits InitializeRequest, CallToolRequest, CreateMessageRequest, CompleteRequest, GetPromptRequest {
+	public sealed interface Request permits InitializeRequest, CallToolRequest, CreateMessageRequest, ElicitRequest,
+			CompleteRequest, GetPromptRequest {
 
 	}
 
@@ -221,7 +222,7 @@ public final class McpSchema {
 	public record InitializeRequest( // @formatter:off
 		@JsonProperty("protocolVersion") String protocolVersion,
 		@JsonProperty("capabilities") ClientCapabilities capabilities,
-		@JsonProperty("clientInfo") Implementation clientInfo) implements Request {		
+		@JsonProperty("clientInfo") Implementation clientInfo) implements Request {
 	} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -245,6 +246,8 @@ public final class McpSchema {
 	 * access to.
 	 * @param sampling Provides a standardized way for servers to request LLM sampling
 	 * (“completions” or “generations”) from language models via clients.
+	 * @param elicitation Provides a standardized way for servers to request additional
+	 * information from users through the client during interactions.
 	 *
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -252,7 +255,8 @@ public final class McpSchema {
 	public record ClientCapabilities( // @formatter:off
 		@JsonProperty("experimental") Map<String, Object> experimental,
 		@JsonProperty("roots") RootCapabilities roots,
-		@JsonProperty("sampling") Sampling sampling) {
+		@JsonProperty("sampling") Sampling sampling,
+		@JsonProperty("elicitation") Elicitation elicitation) {
 
 		/**
 		 * Roots define the boundaries of where servers can operate within the filesystem,
@@ -264,7 +268,7 @@ public final class McpSchema {
 		 * 		  has changed since the last time the server checked.
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
-		@JsonIgnoreProperties(ignoreUnknown = true)	
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record RootCapabilities(
 			@JsonProperty("listChanged") Boolean listChanged) {
 		}
@@ -279,8 +283,20 @@ public final class McpSchema {
 		 * image-based interactions and optionally include context
 		 * from MCP servers in their prompts.
 		 */
-		@JsonInclude(JsonInclude.Include.NON_ABSENT)			
+		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record Sampling() {
+		}
+
+		/**
+		 * Provides a standardized way for servers to request additional
+		 * information from users through the client during interactions.
+		 * This flow allows clients to maintain control over user
+		 * interactions and data sharing while enabling servers to gather
+		 * necessary information dynamically. Servers can request structured
+		 * data from users with optional JSON schemas to validate responses.
+		 */
+		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		public record Elicitation() {
 		}
 
 		public static Builder builder() {
@@ -291,6 +307,7 @@ public final class McpSchema {
 			private Map<String, Object> experimental;
 			private RootCapabilities roots;
 			private Sampling sampling;
+			private Elicitation elicitation;
 
 			public Builder experimental(Map<String, Object> experimental) {
 				this.experimental = experimental;
@@ -307,8 +324,13 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder elicitation() {
+				this.elicitation = new Elicitation();
+				return this;
+			}
+
 			public ClientCapabilities build() {
-				return new ClientCapabilities(experimental, roots, sampling);
+				return new ClientCapabilities(experimental, roots, sampling, elicitation);
 			}
 		}
 	}// @formatter:on
@@ -326,11 +348,11 @@ public final class McpSchema {
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record CompletionCapabilities() {
 		}
-			
+
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record LoggingCapabilities() {
 		}
-	
+
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record PromptCapabilities(
 			@JsonProperty("listChanged") Boolean listChanged) {
@@ -727,11 +749,11 @@ public final class McpSchema {
 		@JsonProperty("name") String name,
 		@JsonProperty("description") String description,
 		@JsonProperty("inputSchema") JsonSchema inputSchema) {
-	
+
 		public Tool(String name, String description, String schema) {
 			this(name, description, parseSchema(schema));
 		}
-			
+
 	} // @formatter:on
 
 	private static JsonSchema parseSchema(String schema) {
@@ -758,7 +780,7 @@ public final class McpSchema {
 		@JsonProperty("arguments") Map<String, Object> arguments) implements Request {
 
 		public CallToolRequest(String name, String jsonArguments) {
-			this(name, parseJsonArguments(jsonArguments));			
+			this(name, parseJsonArguments(jsonArguments));
 		}
 
 		private static Map<String, Object> parseJsonArguments(String jsonArguments) {
@@ -893,7 +915,7 @@ public final class McpSchema {
 	@JsonProperty("costPriority") Double costPriority,
 	@JsonProperty("speedPriority") Double speedPriority,
 	@JsonProperty("intelligencePriority") Double intelligencePriority) {
-	
+
 	public static Builder builder() {
 		return new Builder();
 	}
@@ -963,7 +985,7 @@ public final class McpSchema {
 		@JsonProperty("includeContext") ContextInclusionStrategy includeContext,
 		@JsonProperty("temperature") Double temperature,
 		@JsonProperty("maxTokens") int maxTokens,
-		@JsonProperty("stopSequences") List<String> stopSequences, 			
+		@JsonProperty("stopSequences") List<String> stopSequences,
 		@JsonProperty("metadata") Map<String, Object> metadata) implements Request {
 
 		public enum ContextInclusionStrategy {
@@ -971,7 +993,7 @@ public final class McpSchema {
 			@JsonProperty("thisServer") THIS_SERVER,
 			@JsonProperty("allServers") ALL_SERVERS
 		}
-		
+
 		public static Builder builder() {
 			return new Builder();
 		}
@@ -1040,7 +1062,7 @@ public final class McpSchema {
 		@JsonProperty("content") Content content,
 		@JsonProperty("model") String model,
 		@JsonProperty("stopReason") StopReason stopReason) {
-		
+
 		public enum StopReason {
 			@JsonProperty("endTurn") END_TURN,
 			@JsonProperty("stopSequence") STOP_SEQUENCE,
@@ -1084,6 +1106,359 @@ public final class McpSchema {
 
 			public CreateMessageResult build() {
 				return new CreateMessageResult(role, content, model, stopReason);
+			}
+		}
+	}// @formatter:on
+
+	// Elicitation
+	/**
+	 * Used by the server to send an elicitation to the client.
+	 *
+	 * @param message The body of the elicitation message.
+	 * @param requestedSchema The elicitation response schema that must be satisfied.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ElicitRequest(// @formatter:off
+		@JsonProperty("message") String message,
+		@JsonProperty("requestedSchema") PrimitiveSchemaDefinition requestedSchema) implements Request {
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private String message;
+			private PrimitiveSchemaDefinition requestedSchema;
+
+			public Builder message(String message) {
+				this.message = message;
+				return this;
+			}
+
+			public Builder requestedSchema(PrimitiveSchemaDefinition requestedSchema) {
+				this.requestedSchema = requestedSchema;
+				return this;
+			}
+
+			public ElicitRequest build() {
+				return new ElicitRequest(message, requestedSchema);
+			}
+		}
+	}// @formatter:on
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ElicitResult(// @formatter:off
+		@JsonProperty("action") Action action,
+		@JsonProperty("content") Map<String, Object> content) {
+
+		public enum Action {
+			@JsonProperty("accept") ACCEPT,
+			@JsonProperty("decline") DECLINE,
+			@JsonProperty("cancel") CANCEL
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private Action action;
+			private Map<String, Object> content;
+
+			public Builder message(Action action) {
+				this.action = action;
+				return this;
+			}
+
+			public Builder content(Map<String, Object> content) {
+				this.content = content;
+				return this;
+			}
+
+			public ElicitResult build() {
+				return new ElicitResult(action, content);
+			}
+		}
+	}// @formatter:on
+
+	// Schema objects
+
+	// We use a custom deserializer for this due to complications around handling the
+	// "string" type,
+	// which can either be used for StringSchema or EnumSchema, depending on if the "enum"
+	// field is present
+	// in the schema object. We can't cleanly combine tagged union deserialization with
+	// custom deserializer
+	// logic, so we just use the custom deserializer for this entire hierarchy.
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	@JsonDeserialize(using = McpSchemaObjectDeserializer.class)
+	public sealed interface Schema permits StringSchema, EnumSchema, BooleanSchema, NumberSchema {
+
+		@JsonProperty("type")
+		default String type() {
+			if (this instanceof StringSchema || this instanceof EnumSchema) {
+				return "string";
+			}
+
+			if (this instanceof BooleanSchema) {
+				return "boolean";
+			}
+
+			if (this instanceof NumberSchema ns) {
+				// NumberSchema keeps track of if it was created with "number" or
+				// "integer"
+				return ns.typeVariant.toString();
+			}
+
+			throw new IllegalArgumentException("Unknown schema type: " + this);
+		}
+
+	}
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record PrimitiveSchemaDefinition(// @formatter:off
+		@JsonProperty("properties") Map<String, Schema> properties,
+		@JsonProperty("required") List<String> required) {
+
+		@JsonProperty("type")
+		public String type() {
+			return "object";
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private Map<String, Schema> properties;
+			private List<String> required;
+
+			public Builder properties(Map<String, Schema> properties) {
+				this.properties = properties;
+				return this;
+			}
+
+			public Builder required(List<String> required) {
+				this.required = required;
+				return this;
+			}
+
+			public PrimitiveSchemaDefinition build() {
+				return new PrimitiveSchemaDefinition(properties, required);
+			}
+		}
+	}// @formatter:on
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	@JsonDeserialize // Override to default deserializer to avoid recursion
+	public record StringSchema(// @formatter:off
+		@JsonProperty("description") String description,
+		@JsonProperty("format") Format format,
+		@JsonProperty("maxLength") Integer maxLength,
+		@JsonProperty("minLength") Integer minLength,
+		@JsonProperty("title") String title) implements Schema {
+
+		public enum Format {
+			@JsonProperty("date") DATE,
+			@JsonProperty("date-time") DATE_TIME,
+			@JsonProperty("email") EMAIL,
+			@JsonProperty("uri") URI
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private String description;
+			private Format format;
+			private Integer maxLength;
+			private Integer minLength;
+			private String title;
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder format(Format format) {
+				this.format = format;
+				return this;
+			}
+
+			public Builder maxLength(Integer maxLength) {
+				this.maxLength = maxLength;
+				return this;
+			}
+
+			public Builder minLength(Integer minLength) {
+				this.minLength = minLength;
+				return this;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public StringSchema build() {
+				return new StringSchema(description, format, maxLength, minLength, title);
+			}
+		}
+	}// @formatter:on
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	@JsonDeserialize // Override to default deserializer to avoid recursion
+	public record EnumSchema(// @formatter:off
+		@JsonProperty("description") String description,
+		@JsonProperty("enum") List<String> enumValues,
+		@JsonProperty("enumNames") List<String> enumNames,
+		@JsonProperty("title") String title) implements Schema {
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private String description;
+			private List<String> enumValues;
+			private List<String> enumNames;
+			private String title;
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder enumValues(List<String> enumValues) {
+				this.enumValues = enumValues;
+				return this;
+			}
+
+			public Builder enumNames(List<String> enumNames) {
+				this.enumNames = enumNames;
+				return this;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public EnumSchema build() {
+				return new EnumSchema(description, enumValues, enumNames, title);
+			}
+		}
+	}// @formatter:on
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	@JsonDeserialize // Override to default deserializer to avoid recursion
+	public record BooleanSchema(// @formatter:off
+		@JsonProperty("default") boolean defaultValue,
+		@JsonProperty("description") String description,
+		@JsonProperty("title") String title) implements Schema {
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private boolean defaultValue;
+			private String description;
+			private String title;
+
+			public Builder defaultValue(boolean defaultValue) {
+				this.defaultValue = defaultValue;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public BooleanSchema build() {
+				return new BooleanSchema(defaultValue, description, title);
+			}
+		}
+	}// @formatter:on
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	@JsonDeserialize // Override to default deserializer to avoid recursion
+	public record NumberSchema(// @formatter:off
+		@JsonProperty("description") String description,
+		@JsonProperty("minimum") double minimum,
+		@JsonProperty("maximum") double maximum,
+		@JsonProperty("title") String title,
+		@JsonProperty("type") TypeVariant typeVariant) implements Schema {
+
+		public enum TypeVariant {
+			@JsonProperty("number") NUMBER("number"),
+			@JsonProperty("integer") INTEGER("integer");
+
+			private final String name;
+
+			TypeVariant(String value) {
+				name = value;
+			}
+
+			@Override
+			public String toString() {
+				return this.name;
+			}
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private String description;
+			private double minimum;
+			private double maximum;
+			private String title;
+			private TypeVariant type;
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder minimum(double minimum) {
+				this.minimum = minimum;
+				return this;
+			}
+
+			public Builder maximum(double maximum) {
+				this.maximum = maximum;
+				return this;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder type(TypeVariant type) {
+				this.type = type;
+				return this;
+			}
+
+			public NumberSchema build() {
+				return new NumberSchema(description, minimum, maximum, title, type);
 			}
 		}
 	}// @formatter:on

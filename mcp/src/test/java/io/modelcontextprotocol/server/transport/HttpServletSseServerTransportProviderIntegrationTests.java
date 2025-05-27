@@ -24,6 +24,8 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
+import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
+import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.ModelPreferences;
 import io.modelcontextprotocol.spec.McpSchema.Role;
@@ -337,6 +339,220 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 
 		mcpClient.close();
 		mcpServer.close();
+	}
+
+	// ---------------------------------------
+	// Elicitation Tests
+	// ---------------------------------------
+	@Test
+	@Disabled
+	void testCreateElicitationWithoutElicitationCapabilities() {
+
+		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+
+					exchange.createElicitation(mock(ElicitRequest.class)).block();
+
+					return Mono.just(mock(CallToolResult.class));
+				});
+
+		var server = McpServer.async(mcpServerTransportProvider).serverInfo("test-server", "1.0.0").tools(tool).build();
+
+		try (
+				// Create client without sampling capabilities
+				var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0")).build()) {
+
+			assertThat(client.initialize()).isNotNull();
+
+			try {
+				client.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+			}
+			catch (McpError e) {
+				assertThat(e).isInstanceOf(McpError.class)
+					.hasMessage("Client must be configured with elicitation capabilities");
+			}
+		}
+		server.closeGracefully().block();
+	}
+
+	@Test
+	void testCreateElicitationSuccess() {
+
+		Function<ElicitRequest, ElicitResult> elicitationHandler = request -> {
+			assertThat(request.message()).isNotEmpty();
+			assertThat(request.requestedSchema()).isNotNull();
+
+			return new ElicitResult(ElicitResult.Action.ACCEPT, Map.of("message", request.message()));
+		};
+
+		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
+				null);
+
+		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+
+					var elicitationRequest = ElicitRequest.builder()
+						.message("Test message")
+						.requestedSchema(McpSchema.PrimitiveSchemaDefinition.builder()
+							.properties(Map.of("message", McpSchema.StringSchema.builder().build()))
+							.build())
+						.build();
+
+					StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
+						assertThat(result).isNotNull();
+						assertThat(result.action()).isEqualTo(ElicitResult.Action.ACCEPT);
+						assertThat(result.content().get("message")).isEqualTo("Test message");
+					}).verifyComplete();
+
+					return Mono.just(callResponse);
+				});
+
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.tools(tool)
+			.build();
+
+		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+			.capabilities(ClientCapabilities.builder().elicitation().build())
+			.elicitation(elicitationHandler)
+			.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+
+			assertThat(response).isNotNull();
+			assertThat(response).isEqualTo(callResponse);
+		}
+		mcpServer.closeGracefully().block();
+	}
+
+	@Test
+	void testCreateElicitationWithRequestTimeoutSuccess() {
+
+		// Client
+
+		Function<ElicitRequest, ElicitResult> elicitationHandler = request -> {
+			assertThat(request.message()).isNotEmpty();
+			assertThat(request.requestedSchema()).isNotNull();
+			try {
+				TimeUnit.SECONDS.sleep(2);
+			}
+			catch (InterruptedException e) {
+				throw new RuntimeException(e);
+			}
+			return new ElicitResult(ElicitResult.Action.ACCEPT, Map.of("message", request.message()));
+		};
+
+		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+			.capabilities(ClientCapabilities.builder().elicitation().build())
+			.elicitation(elicitationHandler)
+			.build();
+
+		// Server
+
+		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
+				null);
+
+		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+
+					var elicitationRequest = ElicitRequest.builder()
+						.message("Test message")
+						.requestedSchema(McpSchema.PrimitiveSchemaDefinition.builder()
+							.properties(Map.of("message", McpSchema.StringSchema.builder().build()))
+							.build())
+						.build();
+
+					StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
+						assertThat(result).isNotNull();
+						assertThat(result.action()).isEqualTo(ElicitResult.Action.ACCEPT);
+						assertThat(result.content().get("message")).isEqualTo("Test message");
+					}).verifyComplete();
+
+					return Mono.just(callResponse);
+				});
+
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.requestTimeout(Duration.ofSeconds(3))
+			.tools(tool)
+			.build();
+
+		InitializeResult initResult = mcpClient.initialize();
+		assertThat(initResult).isNotNull();
+
+		CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+
+		assertThat(response).isNotNull();
+		assertThat(response).isEqualTo(callResponse);
+
+		mcpClient.closeGracefully();
+		mcpServer.closeGracefully().block();
+	}
+
+	@Test
+	void testCreateElicitationWithRequestTimeoutFail() {
+
+		// Client
+
+		Function<ElicitRequest, ElicitResult> elicitationHandler = request -> {
+			assertThat(request.message()).isNotEmpty();
+			assertThat(request.requestedSchema()).isNotNull();
+			try {
+				TimeUnit.SECONDS.sleep(2);
+			}
+			catch (InterruptedException e) {
+				throw new RuntimeException(e);
+			}
+			return new ElicitResult(ElicitResult.Action.ACCEPT, Map.of("message", request.message()));
+		};
+
+		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+			.capabilities(ClientCapabilities.builder().elicitation().build())
+			.elicitation(elicitationHandler)
+			.build();
+
+		// Server
+
+		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
+				null);
+
+		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+
+					var elicitationRequest = ElicitRequest.builder()
+						.message("Test message")
+						.requestedSchema(McpSchema.PrimitiveSchemaDefinition.builder()
+							.properties(Map.of("message", McpSchema.StringSchema.builder().build()))
+							.build())
+						.build();
+
+					StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
+						assertThat(result).isNotNull();
+						assertThat(result.action()).isEqualTo(ElicitResult.Action.ACCEPT);
+						assertThat(result.content().get("message")).isEqualTo("Test message");
+					}).verifyComplete();
+
+					return Mono.just(callResponse);
+				});
+
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.requestTimeout(Duration.ofSeconds(1))
+			.tools(tool)
+			.build();
+
+		InitializeResult initResult = mcpClient.initialize();
+		assertThat(initResult).isNotNull();
+
+		assertThatExceptionOfType(McpError.class).isThrownBy(() -> {
+			mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+		}).withMessageContaining("Timeout");
+
+		mcpClient.closeGracefully();
+		mcpServer.closeGracefully().block();
 	}
 
 	// ---------------------------------------
