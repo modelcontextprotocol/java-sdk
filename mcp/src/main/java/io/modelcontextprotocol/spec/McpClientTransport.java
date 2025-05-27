@@ -3,6 +3,7 @@
 */
 package io.modelcontextprotocol.spec;
 
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import reactor.core.publisher.Mono;
@@ -15,6 +16,9 @@ import reactor.core.publisher.Mono;
  */
 public interface McpClientTransport extends McpTransport {
 
+//	@Deprecated
 	Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler);
+
+//	Mono<Void> connect(Consumer<McpSchema.JSONRPCMessage> consumer);
 
 }
