@@ -117,11 +117,11 @@ public class McpAsyncServer {
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 */
 	McpAsyncServer(
-			McpServerTransportProvider mcpTransportProvider,
-			ObjectMapper objectMapper,
-			McpServerFeatures.Async features,
-			Duration requestTimeout,
-			McpUriTemplateManagerFactory uriTemplateManagerFactory
+		McpServerTransportProvider mcpTransportProvider,
+		ObjectMapper objectMapper,
+		McpServerFeatures.Async features,
+		Duration requestTimeout,
+		McpUriTemplateManagerFactory uriTemplateManagerFactory
 	) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.objectMapper = objectMapper;
