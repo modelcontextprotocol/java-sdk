@@ -69,11 +69,16 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	@Override
 	public Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
-		if (this.openConnections.isDisposed()) {
-			return Mono.error(new RuntimeException("Transport already disposed"));
-		}
-		this.handler.set(handler);
-		return openConnectionOnStartup ? startOrResumeSession(null) : Mono.empty();
+		return Mono.deferContextual(ctx -> {
+			if (this.openConnections.isDisposed()) {
+				return Mono.error(new RuntimeException("Transport already disposed"));
+			}
+			this.handler.set(handler);
+			if (openConnectionOnStartup) {
+				this.reconnect(null, ctx);
+			}
+			return Mono.empty();
+		});
 	}
 
 	@Override
@@ -82,63 +87,58 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	}
 
 	private void reconnect(McpStream stream, ContextView ctx) {
-		Disposable connection = this.startOrResumeSession(stream).contextWrite(ctx).subscribe();
+		// Here we attempt to initialize the client.
+		// In case the server supports SSE, we will establish a long-running session
+		// here and
+		// listen for messages.
+		// If it doesn't, nothing actually happens here, that's just the way it is...
+		final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
+		Disposable connection = webClient.get()
+			.uri(this.endpoint)
+			.accept(MediaType.TEXT_EVENT_STREAM)
+			.headers(httpHeaders -> {
+				if (sessionId.get() != null) {
+					httpHeaders.add("mcp-session-id", sessionId.get());
+				}
+				if (stream != null && stream.lastId() != null) {
+					httpHeaders.add("last-event-id", stream.lastId());
+				}
+			})
+			.exchangeToFlux(response -> {
+				// Per spec, we are not checking whether it's 2xx, but only if the
+				// Accept header is proper.
+				if (response.headers().contentType().isPresent()
+						&& response.headers().contentType().get().isCompatibleWith(MediaType.TEXT_EVENT_STREAM)) {
+
+					McpStream sessionStream = stream != null ? stream : new McpStream(this.resumableStreams);
+
+					Flux<Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>>> idWithMessages = response
+						.bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {
+						})
+						.map(this::parse);
+
+					return sessionStream.consumeSseStream(idWithMessages);
+				}
+				else if (response.statusCode().isSameCodeAs(HttpStatus.METHOD_NOT_ALLOWED)) {
+					logger.info("The server does not support SSE streams, using request-response mode.");
+					return Flux.empty();
+				}
+				else {
+					return response.<McpSchema.JSONRPCMessage>createError().doOnError(e -> {
+						logger.info("Opening an SSE stream failed. This can be safely ignored.", e);
+					}).flux();
+				}
+			})
+			.doFinally(s -> {
+				Disposable ref = disposableRef.getAndSet(null);
+				if (ref != null) {
+					this.openConnections.remove(ref);
+				}
+			})
+			.contextWrite(ctx)
+			.subscribe();
+		disposableRef.set(connection);
 		this.openConnections.add(connection);
-	}
-
-	private Mono<Void> startOrResumeSession(McpStream stream) {
-		return Mono.create(sink -> {
-			// Here we attempt to initialize the client.
-			// In case the server supports SSE, we will establish a long-running session
-			// here and
-			// listen for messages.
-			// If it doesn't, nothing actually happens here, that's just the way it is...
-
-			Disposable connection = webClient.get()
-				.uri(this.endpoint)
-				.accept(MediaType.TEXT_EVENT_STREAM)
-				.headers(httpHeaders -> {
-					if (sessionId.get() != null) {
-						httpHeaders.add("mcp-session-id", sessionId.get());
-					}
-					if (stream != null && stream.lastId() != null) {
-						httpHeaders.add("last-event-id", stream.lastId());
-					}
-				})
-				.exchangeToFlux(response -> {
-					// Per spec, we are not checking whether it's 2xx, but only if the
-					// Accept header is proper.
-					if (response.headers().contentType().isPresent()
-							&& response.headers().contentType().get().isCompatibleWith(MediaType.TEXT_EVENT_STREAM)) {
-
-						sink.success();
-
-						McpStream sessionStream = stream != null ? stream : new McpStream(this.resumableStreams);
-
-						Flux<Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>>> idWithMessages = response
-							.bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {
-							})
-							.map(this::parse);
-
-						return sessionStream.consumeSseStream(idWithMessages);
-					}
-					else if (response.statusCode().isSameCodeAs(HttpStatus.METHOD_NOT_ALLOWED)) {
-						sink.success();
-						logger.info("The server does not support SSE streams, using request-response mode.");
-						return Flux.empty();
-					}
-					else {
-						return response.<McpSchema.JSONRPCMessage>createError().doOnError(e -> {
-							sink.error(new RuntimeException("Connection on client startup failed", e));
-						}).flux();
-					}
-				})
-				// TODO: Consider retries - examine cause to decide whether a retry is
-				// needed.
-				.contextWrite(sink.contextView())
-				.subscribe();
-			this.openConnections.add(connection);
-		});
 	}
 
 	@Override
@@ -150,6 +150,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			// here and
 			// listen for messages.
 			// If it doesn't, nothing actually happens here, that's just the way it is...
+			final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
 			Disposable connection = webClient.post()
 				.uri(this.endpoint)
 				.accept(MediaType.TEXT_EVENT_STREAM, MediaType.APPLICATION_JSON)
@@ -166,7 +167,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 							sessionId.set(response.headers().asHttpHeaders().getFirst("mcp-session-id"));
 							// Once we have a session, we try to open an async stream for
 							// the server to send notifications and requests out-of-band.
-							startOrResumeSession(null).contextWrite(sink.contextView()).subscribe();
+							reconnect(null, sink.contextView());
 						}
 					}
 
@@ -242,10 +243,15 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 				})
 				.map(Mono::just)
 				.flatMap(this.handler.get())
-				// TODO: Consider retries - examine cause to decide whether a retry is
-				// needed.
+				.doFinally(s -> {
+					Disposable ref = disposableRef.getAndSet(null);
+					if (ref != null) {
+						this.openConnections.remove(ref);
+					}
+				})
 				.contextWrite(sink.contextView())
 				.subscribe();
+			disposableRef.set(connection);
 			this.openConnections.add(connection);
 		});
 	}
@@ -295,10 +301,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			return Flux.deferContextual(ctx -> Flux.from(eventStream).doOnError(e -> {
 				// TODO: examine which error :)
 				if (resumable) {
-					Disposable connection = WebClientStreamableHttpTransport.this.startOrResumeSession(this)
-						.contextWrite(ctx)
-						.subscribe();
-					WebClientStreamableHttpTransport.this.openConnections.add(connection);
+					reconnect(this, ctx);
 				}
 			})
 				.doOnNext(idAndMessage -> idAndMessage.getT1().ifPresent(this.lastId::set))
