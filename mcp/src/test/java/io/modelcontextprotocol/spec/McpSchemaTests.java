@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
 import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
 import net.javacrumbs.jsonunit.core.Option;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
@@ -747,6 +748,457 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(json("""
 					{"content":[{"type":"text","text":"Simple result"}],"isError":false}"""));
+	}
+
+	// Tools search
+
+	@Test
+	void testSearchToolsRequest() throws Exception {
+		McpSchema.SearchToolsRequest request = McpSchema.SearchToolsRequest.builder()
+			.query("foo")
+			.cursor("next-page-token")
+			.build();
+
+		String value = mapper.writeValueAsString(request);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"query":"foo","cursor":"next-page-token"}"""));
+	}
+
+	@Test
+	void testSearchToolsRequestDeserialization() throws Exception {
+		// Test deserialization of a search request
+		String json = """
+				{"query":"foo","cursor":"next-page-token"}""";
+
+		McpSchema.SearchToolsRequest request = mapper.readValue(json, McpSchema.SearchToolsRequest.class);
+
+		assertThat(request.query()).isEqualTo("foo");
+		assertThat(request.cursor()).isEqualTo("next-page-token");
+	}
+
+	@Test
+	void testSearchToolsResult() throws Exception {
+		// Create a simple JSON schema for testing
+		List<McpSchema.Tool> tools = getToolList();
+
+		// Create the search result
+		McpSchema.SearchToolsResult result = McpSchema.SearchToolsResult.builder()
+			.tools(tools)
+			.nextCursor("next-cursor")
+			.build();
+
+		String value = mapper.writeValueAsString(result);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"tools":[
+							    {"name":"foo","description":"A foo tool","inputSchema":{"type":"object","properties":{"param":{"type":"string"}},"required":["param"]}},
+							    {"name":"bar","description":"A bar tool","inputSchema":{"type":"object","properties":{"param":{"type":"string"}},"required":["param"]}}
+							],"nextCursor":"next-cursor"}"""));
+	}
+
+	private static @NotNull List<McpSchema.Tool> getToolList() {
+		String schemaJson = """
+				{
+				    "type": "object",
+				    "properties": {
+				        "param": {
+				            "type": "string"
+				        }
+				    },
+				    "required": ["param"]
+				}
+				""";
+
+		// Create tools for the result
+		McpSchema.Tool foo = new McpSchema.Tool("foo", "A foo tool", schemaJson);
+		McpSchema.Tool bar = new McpSchema.Tool("bar", "A bar tool", schemaJson);
+
+		return Arrays.asList(foo, bar);
+	}
+
+	@Test
+	void testSearchToolsResultDeserialization() throws Exception {
+		// Test deserialization of a search result
+		String json = """
+				{
+				    "tools": [
+				        {
+				            "name": "foo",
+				            "description": "A foo tool",
+				            "inputSchema": {
+				                "type": "object",
+				                "properties": {
+				                    "param": {
+				                        "type": "string"
+				                    }
+				                },
+				                "required": ["param"]
+				            }
+				        }
+				    ],
+				    "nextCursor": "next-cursor"
+				}
+				""";
+
+		McpSchema.SearchToolsResult result = mapper.readValue(json, McpSchema.SearchToolsResult.class);
+
+		assertThat(result.tools()).hasSize(1);
+		assertThat(result.tools().get(0).name()).isEqualTo("foo");
+		assertThat(result.tools().get(0).description()).isEqualTo("A foo tool");
+		assertThat(result.nextCursor()).isEqualTo("next-cursor");
+	}
+
+	@Test
+	void testSearchToolsResultWithEmptyTools() throws Exception {
+		// Create a search result with empty tools list
+		McpSchema.SearchToolsResult result = McpSchema.SearchToolsResult.builder()
+			.tools(Collections.emptyList())
+			.build();
+
+		String value = mapper.writeValueAsString(result);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"tools":[]}"""));
+	}
+
+	// Resources search Tests
+
+	@Test
+	void testSearchResourcesRequest() throws Exception {
+		McpSchema.SearchResourcesRequest request = McpSchema.SearchResourcesRequest.builder()
+			.query("foo")
+			.cursor("next-page-token")
+			.build();
+
+		String value = mapper.writeValueAsString(request);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"query":"foo","cursor":"next-page-token"}"""));
+	}
+
+	@Test
+	void testSearchResourcesRequestDeserialization() throws Exception {
+		// Test deserialization of a search request
+		String json = """
+				{"query":"foo","cursor":"next-page-token"}""";
+
+		McpSchema.SearchResourcesRequest request = mapper.readValue(json, McpSchema.SearchResourcesRequest.class);
+
+		assertThat(request.query()).isEqualTo("foo");
+		assertThat(request.cursor()).isEqualTo("next-page-token");
+	}
+
+	@Test
+	void testSearchResourcesResult() throws Exception {
+		// Create annotations for testing
+		List<McpSchema.Resource> resources = getResourceList();
+
+		// Create the search result
+		McpSchema.SearchResourcesResult result = McpSchema.SearchResourcesResult.builder()
+			.resources(resources)
+			.nextCursor("next-cursor")
+			.build();
+
+		String value = mapper.writeValueAsString(result);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"resources":[
+							    {"uri":"resource://foo","name":"Foo Resource","description":"A foo resource","mimeType":"text/plain","annotations":{"audience":["user","assistant"],"priority":0.8}},
+							    {"uri":"resource://bar","name":"Bar Resource","description":"A bar resource","mimeType":"text/plain","annotations":{"audience":["user","assistant"],"priority":0.8}}
+							],"nextCursor":"next-cursor"}"""));
+	}
+
+	private static @NotNull List<McpSchema.Resource> getResourceList() {
+		McpSchema.Annotations annotations = new McpSchema.Annotations(
+				Arrays.asList(McpSchema.Role.USER, McpSchema.Role.ASSISTANT), 0.8);
+
+		// Create resources for the result
+		McpSchema.Resource foo = new McpSchema.Resource("resource://foo", "Foo Resource", "A foo resource",
+				"text/plain", annotations);
+		McpSchema.Resource bar = new McpSchema.Resource("resource://bar", "Bar Resource", "A bar resource",
+				"text/plain", annotations);
+
+		return Arrays.asList(foo, bar);
+	}
+
+	@Test
+	void testSearchResourcesResultDeserialization() throws Exception {
+		// Test deserialization of a search result
+		String json = """
+				{
+				    "resources": [
+				        {
+				            "uri": "resource://foo",
+				            "name": "Foo Resource",
+				            "description": "A foo resource",
+				            "mimeType": "text/plain",
+				            "annotations": {
+				                "audience": ["user"],
+				                "priority": 0.5
+				            }
+				        }
+				    ],
+				    "nextCursor": "next-cursor"
+				}
+				""";
+
+		McpSchema.SearchResourcesResult result = mapper.readValue(json, McpSchema.SearchResourcesResult.class);
+
+		assertThat(result.resources()).hasSize(1);
+		assertThat(result.resources().get(0).uri()).isEqualTo("resource://foo");
+		assertThat(result.resources().get(0).name()).isEqualTo("Foo Resource");
+		assertThat(result.resources().get(0).description()).isEqualTo("A foo resource");
+		assertThat(result.nextCursor()).isEqualTo("next-cursor");
+	}
+
+	@Test
+	void testSearchResourcesResultWithEmptyResources() throws Exception {
+		// Create a search result with empty resources list
+		McpSchema.SearchResourcesResult result = McpSchema.SearchResourcesResult.builder()
+			.resources(Collections.emptyList())
+			.build();
+
+		String value = mapper.writeValueAsString(result);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"resources":[]}"""));
+	}
+
+	// Resource templates search
+
+	@Test
+	void testSearchResourceTemplatesRequest() throws Exception {
+		McpSchema.SearchResourceTemplatesRequest request = McpSchema.SearchResourceTemplatesRequest.builder()
+			.query("foo")
+			.cursor("next-page-token")
+			.build();
+
+		String value = mapper.writeValueAsString(request);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"query":"foo","cursor":"next-page-token"}"""));
+	}
+
+	@Test
+	void testSearchResourceTemplatesRequestDeserialization() throws Exception {
+		// Test deserialization of a search request
+		String json = """
+				{"query":"foo","cursor":"next-page-token"}""";
+
+		McpSchema.SearchResourceTemplatesRequest request = mapper.readValue(json,
+				McpSchema.SearchResourceTemplatesRequest.class);
+
+		assertThat(request.query()).isEqualTo("foo");
+		assertThat(request.cursor()).isEqualTo("next-page-token");
+	}
+
+	@Test
+	void testSearchResourceTemplatesResult() throws Exception {
+		// Create annotations for testing
+		List<McpSchema.ResourceTemplate> templates = getResourceTemplateList();
+
+		// Create the search result
+		McpSchema.SearchResourceTemplatesResult result = McpSchema.SearchResourceTemplatesResult.builder()
+			.resourceTemplates(templates)
+			.nextCursor("next-cursor")
+			.build();
+
+		String value = mapper.writeValueAsString(result);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"resourceTemplates":[
+							    {"uriTemplate":"resource://foo/{id}","name":"Foo Template","description":"A foo template","mimeType":"text/plain","annotations":{"audience":["user","assistant"],"priority":0.8}},
+							    {"uriTemplate":"resource://bar/{id}","name":"Bar Template","description":"A bar template","mimeType":"text/plain","annotations":{"audience":["user","assistant"],"priority":0.8}}
+							],"nextCursor":"next-cursor"}"""));
+	}
+
+	private static @NotNull List<McpSchema.ResourceTemplate> getResourceTemplateList() {
+		McpSchema.Annotations annotations = new McpSchema.Annotations(
+				Arrays.asList(McpSchema.Role.USER, McpSchema.Role.ASSISTANT), 0.8);
+
+		// Create resource templates for the result
+		McpSchema.ResourceTemplate foo = new McpSchema.ResourceTemplate("resource://foo/{id}", "Foo Template",
+				"A foo template", "text/plain", annotations);
+		McpSchema.ResourceTemplate bar = new McpSchema.ResourceTemplate("resource://bar/{id}", "Bar Template",
+				"A bar template", "text/plain", annotations);
+
+		return Arrays.asList(foo, bar);
+	}
+
+	@Test
+	void testSearchResourceTemplatesResultDeserialization() throws Exception {
+		// Test deserialization of a search result
+		String json = """
+				{
+				    "resourceTemplates": [
+				        {
+				            "uriTemplate": "resource://foo/{id}",
+				            "name": "Foo Template",
+				            "description": "A foo template",
+				            "mimeType": "text/plain",
+				            "annotations": {
+				                "audience": ["user"],
+				                "priority": 0.5
+				            }
+				        }
+				    ],
+				    "nextCursor": "next-cursor"
+				}
+				""";
+
+		McpSchema.SearchResourceTemplatesResult result = mapper.readValue(json,
+				McpSchema.SearchResourceTemplatesResult.class);
+
+		assertThat(result.resourceTemplates()).hasSize(1);
+		assertThat(result.resourceTemplates().get(0).uriTemplate()).isEqualTo("resource://foo/{id}");
+		assertThat(result.resourceTemplates().get(0).name()).isEqualTo("Foo Template");
+		assertThat(result.resourceTemplates().get(0).description()).isEqualTo("A foo template");
+		assertThat(result.nextCursor()).isEqualTo("next-cursor");
+	}
+
+	@Test
+	void testSearchResourceTemplatesResultWithEmptyTemplates() throws Exception {
+		// Create a search result with empty templates list
+		McpSchema.SearchResourceTemplatesResult result = McpSchema.SearchResourceTemplatesResult.builder()
+			.resourceTemplates(Collections.emptyList())
+			.build();
+
+		String value = mapper.writeValueAsString(result);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"resourceTemplates":[]}"""));
+	}
+
+	// Prompts search
+
+	@Test
+	void testSearchPromptsRequest() throws Exception {
+		McpSchema.SearchPromptsRequest request = McpSchema.SearchPromptsRequest.builder()
+			.query("foo")
+			.cursor("next-page-token")
+			.build();
+
+		String value = mapper.writeValueAsString(request);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"query":"foo","cursor":"next-page-token"}"""));
+	}
+
+	@Test
+	void testSearchPromptsRequestDeserialization() throws Exception {
+		// Test deserialization of a search request
+		String json = """
+				{"query":"foo","cursor":"next-page-token"}""";
+
+		McpSchema.SearchPromptsRequest request = mapper.readValue(json, McpSchema.SearchPromptsRequest.class);
+
+		assertThat(request.query()).isEqualTo("foo");
+		assertThat(request.cursor()).isEqualTo("next-page-token");
+	}
+
+	@Test
+	void testSearchPromptsResult() throws Exception {
+		// Create prompt arguments for testing
+		List<McpSchema.Prompt> prompts = getPromptList();
+
+		// Create the search result
+		McpSchema.SearchPromptsResult result = McpSchema.SearchPromptsResult.builder()
+			.prompts(prompts)
+			.nextCursor("next-cursor")
+			.build();
+
+		String value = mapper.writeValueAsString(result);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"prompts":[
+							    {"name":"foo","description":"A foo prompt","arguments":[{"name":"param1","description":"First parameter","required":true},{"name":"param2","description":"Second parameter","required":false}]},
+							    {"name":"bar","description":"A bar prompt","arguments":[{"name":"param1","description":"First parameter","required":true}]}
+							],"nextCursor":"next-cursor"}"""));
+	}
+
+	private static @NotNull List<McpSchema.Prompt> getPromptList() {
+		McpSchema.PromptArgument arg1 = new McpSchema.PromptArgument("param1", "First parameter", true);
+		McpSchema.PromptArgument arg2 = new McpSchema.PromptArgument("param2", "Second parameter", false);
+
+		// Create prompts for the result
+		McpSchema.Prompt foo = new McpSchema.Prompt("foo", "A foo prompt", Arrays.asList(arg1, arg2));
+		McpSchema.Prompt bar = new McpSchema.Prompt("bar", "A bar prompt", Collections.singletonList(arg1));
+
+		return Arrays.asList(foo, bar);
+	}
+
+	@Test
+	void testSearchPromptsResultDeserialization() throws Exception {
+		// Test deserialization of a search result
+		String json = """
+				{
+				    "prompts": [
+				        {
+				            "name": "foo",
+				            "description": "A foo prompt",
+				            "arguments": [
+				                {
+				                    "name": "param1",
+				                    "description": "First parameter",
+				                    "required": true
+				                }
+				            ]
+				        }
+				    ],
+				    "nextCursor": "next-cursor"
+				}
+				""";
+
+		McpSchema.SearchPromptsResult result = mapper.readValue(json, McpSchema.SearchPromptsResult.class);
+
+		assertThat(result.prompts()).hasSize(1);
+		assertThat(result.prompts().get(0).name()).isEqualTo("foo");
+		assertThat(result.prompts().get(0).description()).isEqualTo("A foo prompt");
+		assertThat(result.prompts().get(0).arguments()).hasSize(1);
+		assertThat(result.prompts().get(0).arguments().get(0).name()).isEqualTo("param1");
+		assertThat(result.nextCursor()).isEqualTo("next-cursor");
+	}
+
+	@Test
+	void testSearchPromptsResultWithEmptyPrompts() throws Exception {
+		// Create a search result with empty prompts list
+		McpSchema.SearchPromptsResult result = McpSchema.SearchPromptsResult.builder()
+			.prompts(Collections.emptyList())
+			.build();
+
+		String value = mapper.writeValueAsString(result);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"prompts":[]}"""));
 	}
 
 	// Sampling Tests
