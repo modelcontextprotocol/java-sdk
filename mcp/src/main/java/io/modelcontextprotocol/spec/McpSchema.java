@@ -66,6 +66,8 @@ public final class McpSchema {
 
 	public static final String METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED = "notifications/resources/list_changed";
 
+	public static final String METHOD_NOTIFICATION_RESOURCES_UPDATED = "notifications/resources/updated";
+
 	public static final String METHOD_RESOURCES_TEMPLATES_LIST = "resources/templates/list";
 
 	public static final String METHOD_RESOURCES_SUBSCRIBE = "resources/subscribe";
@@ -1109,6 +1111,17 @@ public final class McpSchema {
 		@JsonProperty("progressToken") String progressToken,
 		@JsonProperty("progress") double progress,
 		@JsonProperty("total") Double total) {
+	}// @formatter:on
+
+	/**
+	 * The Model Context Protocol (MCP) provides a standardized way for servers to send
+	 * resources update message to clients.
+	 *
+	 * @param uri The updated resource uri.
+	 */
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ResourcesUpdatedNotification(// @formatter:off
+	   @JsonProperty("uri") String uri) {
 	}// @formatter:on
 
 	/**
