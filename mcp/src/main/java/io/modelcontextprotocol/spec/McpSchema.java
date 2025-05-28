@@ -57,6 +57,8 @@ public final class McpSchema {
 
 	public static final String METHOD_TOOLS_CALL = "tools/call";
 
+	public static final String METHOD_TOOLS_SEARCH = "tools/search";
+
 	public static final String METHOD_NOTIFICATION_TOOLS_LIST_CHANGED = "notifications/tools/list_changed";
 
 	// Resources Methods
@@ -64,9 +66,13 @@ public final class McpSchema {
 
 	public static final String METHOD_RESOURCES_READ = "resources/read";
 
+	public static final String METHOD_RESOURCES_SEARCH = "resources/search";
+
 	public static final String METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED = "notifications/resources/list_changed";
 
 	public static final String METHOD_RESOURCES_TEMPLATES_LIST = "resources/templates/list";
+
+	public static final String METHOD_RESOURCES_TEMPLATES_SEARCH = "resources/templates/search";
 
 	public static final String METHOD_RESOURCES_SUBSCRIBE = "resources/subscribe";
 
@@ -76,6 +82,8 @@ public final class McpSchema {
 	public static final String METHOD_PROMPT_LIST = "prompts/list";
 
 	public static final String METHOD_PROMPT_GET = "prompts/get";
+
+	public static final String METHOD_PROMPT_SEARCH = "prompts/search";
 
 	public static final String METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED = "notifications/prompts/list_changed";
 
@@ -132,7 +140,8 @@ public final class McpSchema {
 	}
 
 	public sealed interface Request
-			permits InitializeRequest, CallToolRequest, CreateMessageRequest, CompleteRequest, GetPromptRequest {
+			permits InitializeRequest, CallToolRequest, CreateMessageRequest, CompleteRequest, GetPromptRequest,
+			SearchToolsRequest, SearchResourcesRequest, SearchResourceTemplatesRequest, SearchPromptsRequest {
 
 	}
 
@@ -878,6 +887,273 @@ public final class McpSchema {
 			 */
 			public CallToolResult build() {
 				return new CallToolResult(content, isError);
+			}
+		}
+
+	} // @formatter:on
+
+	// ---------------------------
+	// Search Interfaces
+	// ---------------------------
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record SearchToolsRequest(// @formatter:off
+		@JsonProperty("query") String query,
+		@JsonProperty("cursor") String cursor) implements Request {
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private String query;
+			private String cursor;
+
+			public Builder query(String query) {
+				Assert.notNull(query, "query must not be null");
+				this.query = query;
+				return this;
+			}
+
+			public Builder cursor(String cursor) {
+				Assert.notNull(cursor, "cursor must not be null");
+				this.cursor = cursor;
+				return this;
+			}
+
+			public SearchToolsRequest build() {
+				return new SearchToolsRequest(query, cursor);
+			}
+		}
+
+	}// @formatter:off
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record SearchToolsResult( // @formatter:off
+		@JsonProperty("tools") List<Tool> tools,
+		@JsonProperty("nextCursor") String nextCursor) {
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private List<Tool> tools = new ArrayList<>();
+			private String nextCursor;
+
+			public Builder tools(List<Tool> tools) {
+				Assert.notNull(tools, "tools must not be null");
+				this.tools = tools;
+				return this;
+			}
+
+			public Builder nextCursor(String nextCursor) {
+				Assert.notNull(nextCursor, "nextCursor must not be null");
+				this.nextCursor = nextCursor;
+				return this;
+			}
+
+			public SearchToolsResult build() {
+				return new SearchToolsResult(tools, nextCursor);
+			}
+		}
+
+	} // @formatter:on
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record SearchResourcesRequest(// @formatter:off
+		@JsonProperty("query") String query,
+		@JsonProperty("cursor") String cursor) implements Request {
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private String query;
+			private String cursor;
+
+			public Builder query(String query) {
+				Assert.notNull(query, "query must not be null");
+				this.query = query;
+				return this;
+			}
+
+			public Builder cursor(String cursor) {
+				Assert.notNull(cursor, "cursor must not be null");
+				this.cursor = cursor;
+				return this;
+			}
+
+			public SearchResourcesRequest build() {
+				return new SearchResourcesRequest(query, cursor);
+			}
+		}
+
+	}// @formatter:off
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record SearchResourcesResult( // @formatter:off
+		@JsonProperty("resources") List<Resource> resources,
+		@JsonProperty("nextCursor") String nextCursor) {
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private List<Resource> resources = new ArrayList<>();
+			private String nextCursor;
+
+			public Builder resources(List<Resource> resources) {
+				Assert.notNull(resources, "resources must not be null");
+				this.resources = resources;
+				return this;
+			}
+
+			public Builder nextCursor(String nextCursor) {
+				Assert.notNull(nextCursor, "nextCursor must not be null");
+				this.nextCursor = nextCursor;
+				return this;
+			}
+
+			public SearchResourcesResult build() {
+				return new SearchResourcesResult(resources, nextCursor);
+			}
+		}
+
+	} // @formatter:on
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record SearchResourceTemplatesRequest(// @formatter:off
+		@JsonProperty("query") String query,
+		@JsonProperty("cursor") String cursor) implements Request {
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private String query;
+			private String cursor;
+
+			public Builder query(String query) {
+				Assert.notNull(query, "query must not be null");
+				this.query = query;
+				return this;
+			}
+
+			public Builder cursor(String cursor) {
+				Assert.notNull(cursor, "cursor must not be null");
+				this.cursor = cursor;
+				return this;
+			}
+
+			public SearchResourceTemplatesRequest build() {
+				return new SearchResourceTemplatesRequest(query, cursor);
+			}
+		}
+
+	}// @formatter:off
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record SearchResourceTemplatesResult( // @formatter:off
+		@JsonProperty("resourceTemplates") List<ResourceTemplate> resourceTemplates,
+		@JsonProperty("nextCursor") String nextCursor) {
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private List<ResourceTemplate> resourceTemplates = new ArrayList<>();
+			private String nextCursor;
+
+			public Builder resourceTemplates(List<ResourceTemplate> resourceTemplates) {
+				Assert.notNull(resourceTemplates, "resourceTemplates must not be null");
+				this.resourceTemplates = resourceTemplates;
+				return this;
+			}
+
+			public Builder nextCursor(String nextCursor) {
+				Assert.notNull(nextCursor, "nextCursor must not be null");
+				this.nextCursor = nextCursor;
+				return this;
+			}
+
+			public SearchResourceTemplatesResult build() {
+				return new SearchResourceTemplatesResult(resourceTemplates, nextCursor);
+			}
+		}
+
+	} // @formatter:on
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record SearchPromptsRequest(// @formatter:off
+		@JsonProperty("query") String query,
+		@JsonProperty("cursor") String cursor) implements Request {
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private String query;
+			private String cursor;
+
+			public Builder query(String query) {
+				Assert.notNull(query, "query must not be null");
+				this.query = query;
+				return this;
+			}
+
+			public Builder cursor(String cursor) {
+				Assert.notNull(cursor, "cursor must not be null");
+				this.cursor = cursor;
+				return this;
+			}
+
+			public SearchPromptsRequest build() {
+				return new SearchPromptsRequest(query, cursor);
+			}
+		}
+
+	}// @formatter:off
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record SearchPromptsResult( // @formatter:off
+		@JsonProperty("prompts") List<Prompt> prompts,
+		@JsonProperty("nextCursor") String nextCursor) {
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private List<Prompt> prompts = new ArrayList<>();
+			private String nextCursor;
+
+			public Builder prompts(List<Prompt> prompts) {
+				Assert.notNull(prompts, "prompts must not be null");
+				this.prompts = prompts;
+				return this;
+			}
+
+			public Builder nextCursor(String nextCursor) {
+				Assert.notNull(nextCursor, "nextCursor must not be null");
+				this.nextCursor = nextCursor;
+				return this;
+			}
+
+			public SearchPromptsResult build() {
+				return new SearchPromptsResult(prompts, nextCursor);
 			}
 		}
 
