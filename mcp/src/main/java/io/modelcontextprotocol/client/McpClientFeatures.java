@@ -64,7 +64,7 @@ class McpClientFeatures {
 	record Async(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 			Map<String, McpSchema.Root> roots, List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers,
 			List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers,
-			List<Function<McpSchema.Resource, Mono<Void>>> resourcesUpdateConsumers,
+			List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers,
 			List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers,
 			List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers,
 			Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler) {
@@ -83,7 +83,7 @@ class McpClientFeatures {
 				Map<String, McpSchema.Root> roots,
 				List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers,
 				List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers,
-				List<Function<McpSchema.Resource, Mono<Void>>> resourcesUpdateConsumers,
+				List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers,
 				List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers,
 				List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers,
 				Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler) {
@@ -125,8 +125,8 @@ class McpClientFeatures {
 					.subscribeOn(Schedulers.boundedElastic()));
 			}
 
-			List<Function<McpSchema.Resource, Mono<Void>>> resourcesUpdateConsumers = new ArrayList<>();
-			for (Consumer<McpSchema.Resource> consumer : syncSpec.resourcesUpdateConsumers()) {
+			List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers = new ArrayList<>();
+			for (Consumer<List<McpSchema.ResourceContents>> consumer : syncSpec.resourcesUpdateConsumers()) {
 				resourcesUpdateConsumers.add(r -> Mono.<Void>fromRunnable(() -> consumer.accept(r))
 					.subscribeOn(Schedulers.boundedElastic()));
 			}
@@ -168,7 +168,7 @@ class McpClientFeatures {
 	public record Sync(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 			Map<String, McpSchema.Root> roots, List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers,
 			List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers,
-			List<Consumer<McpSchema.Resource>> resourcesUpdateConsumers,
+			List<Consumer<List<McpSchema.ResourceContents>>> resourcesUpdateConsumers,
 			List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers,
 			List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers,
 			Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler) {
@@ -188,7 +188,7 @@ class McpClientFeatures {
 		public Sync(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 				Map<String, McpSchema.Root> roots, List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers,
 				List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers,
-				List<Consumer<McpSchema.Resource>> resourcesUpdateConsumers,
+				List<Consumer<List<McpSchema.ResourceContents>>> resourcesUpdateConsumers,
 				List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers,
 				List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers,
 				Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler) {

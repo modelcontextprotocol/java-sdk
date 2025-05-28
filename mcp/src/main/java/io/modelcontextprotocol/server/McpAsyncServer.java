@@ -430,6 +430,15 @@ public class McpAsyncServer {
 		return this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED, null);
 	}
 
+	/**
+	 * Notifies clients that the resources have updated.
+	 * @return A Mono that completes when all clients have been notified
+	 */
+	public Mono<Void> notifyResourcesUpdated(McpSchema.ResourcesUpdatedNotification resourcesUpdatedNotification) {
+		return this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_RESOURCES_UPDATED,
+				resourcesUpdatedNotification);
+	}
+
 	private McpServerSession.RequestHandler<McpSchema.ListResourcesResult> resourcesListRequestHandler() {
 		return (exchange, params) -> {
 			var resourceList = this.resources.values()

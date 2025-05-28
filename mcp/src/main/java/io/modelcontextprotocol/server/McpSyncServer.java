@@ -142,6 +142,13 @@ public class McpSyncServer {
 	}
 
 	/**
+	 * Notify clients that the resources have updated.
+	 */
+	public void notifyResourcesUpdated(McpSchema.ResourcesUpdatedNotification resourcesUpdatedNotification) {
+		this.asyncServer.notifyResourcesUpdated(resourcesUpdatedNotification).block();
+	}
+
+	/**
 	 * Notify clients that the list of available prompts has changed.
 	 */
 	public void notifyPromptsListChanged() {

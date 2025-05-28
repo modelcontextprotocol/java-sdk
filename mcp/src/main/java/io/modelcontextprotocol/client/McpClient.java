@@ -169,7 +169,7 @@ public interface McpClient {
 
 		private final List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers = new ArrayList<>();
 
-		private final List<Consumer<McpSchema.Resource>> resourcesUpdateConsumers = new ArrayList<>();
+		private final List<Consumer<List<McpSchema.ResourceContents>>> resourcesUpdateConsumers = new ArrayList<>();
 
 		private final List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers = new ArrayList<>();
 
@@ -410,7 +410,7 @@ public interface McpClient {
 
 		private final List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers = new ArrayList<>();
 
-		private final List<Function<McpSchema.Resource, Mono<Void>>> resourcesUpdateConsumers = new ArrayList<>();
+		private final List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers = new ArrayList<>();
 
 		private final List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers = new ArrayList<>();
 
@@ -567,7 +567,8 @@ public interface McpClient {
 		 * @return This builder instance for method chaining.
 		 * @throws IllegalArgumentException If the resourcesUpdateConsumer is null.
 		 */
-		public AsyncSpec resourcesUpdateConsumer(Function<McpSchema.Resource, Mono<Void>> resourcesUpdateConsumer) {
+		public AsyncSpec resourcesUpdateConsumer(
+				Function<List<McpSchema.ResourceContents>, Mono<Void>> resourcesUpdateConsumer) {
 			Assert.notNull(resourcesUpdateConsumer, "Resources update consumer must not be null");
 			this.resourcesUpdateConsumers.add(resourcesUpdateConsumer);
 			return this;
