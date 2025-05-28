@@ -16,9 +16,9 @@ import reactor.core.publisher.Mono;
  */
 public interface McpClientTransport extends McpTransport {
 
-//	@Deprecated
+	// @Deprecated
 	Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler);
 
-//	Mono<Void> connect(Consumer<McpSchema.JSONRPCMessage> consumer);
+	// Mono<Void> connect(Consumer<McpSchema.JSONRPCMessage> consumer);
 
 }

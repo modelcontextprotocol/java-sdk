@@ -71,17 +71,17 @@ public class MockMcpTransport implements McpClientTransport, McpServerTransport 
 
 	private volatile boolean connected = false;
 
-//	@Override
-//	public Mono<Void> connect(Consumer<McpSchema.JSONRPCMessage> consumer) {
-//		if (connected) {
-//			return Mono.error(new IllegalStateException("Already connected"));
-//		}
-//		connected = true;
-//		return inbound.asFlux()
-//				.doOnNext(consumer)
-//				.doFinally(signal -> connected = false)
-//				.then();
-//	}
+	// @Override
+	// public Mono<Void> connect(Consumer<McpSchema.JSONRPCMessage> consumer) {
+	// if (connected) {
+	// return Mono.error(new IllegalStateException("Already connected"));
+	// }
+	// connected = true;
+	// return inbound.asFlux()
+	// .doOnNext(consumer)
+	// .doFinally(signal -> connected = false)
+	// .then();
+	// }
 
 	@Override
 	public Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
