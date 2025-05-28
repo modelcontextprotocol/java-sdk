@@ -11,15 +11,13 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import io.modelcontextprotocol.spec.McpClientSession;
+import io.modelcontextprotocol.spec.*;
 import io.modelcontextprotocol.spec.McpClientSession.NotificationHandler;
 import io.modelcontextprotocol.spec.McpClientSession.RequestHandler;
-import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
@@ -30,7 +28,6 @@ import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSchema.PaginatedRequest;
 import io.modelcontextprotocol.spec.McpSchema.Root;
-import io.modelcontextprotocol.spec.McpTransport;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
@@ -83,9 +80,7 @@ public class McpAsyncClient {
 	private static TypeReference<Void> VOID_TYPE_REFERENCE = new TypeReference<>() {
 	};
 
-	protected final Sinks.One<McpSchema.InitializeResult> initializedSink = Sinks.one();
-
-	private AtomicBoolean initialized = new AtomicBoolean(false);
+	private final AtomicReference<McpSchema.InitializeResult> initialization = new AtomicReference<>();
 
 	/**
 	 * The max timeout to await for the client-server connection to be initialized.
@@ -107,21 +102,6 @@ public class McpAsyncClient {
 	 * Client implementation information.
 	 */
 	private final McpSchema.Implementation clientInfo;
-
-	/**
-	 * Server capabilities.
-	 */
-	private McpSchema.ServerCapabilities serverCapabilities;
-
-	/**
-	 * Server instructions.
-	 */
-	private String serverInstructions;
-
-	/**
-	 * Server implementation information.
-	 */
-	private McpSchema.Implementation serverInfo;
 
 	/**
 	 * Roots define the boundaries of where servers can operate within the filesystem,
@@ -234,8 +214,15 @@ public class McpAsyncClient {
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_MESSAGE,
 				asyncLoggingNotificationHandler(loggingConsumersFinal));
 
-		this.mcpSession = new McpClientSession(requestTimeout, transport, requestHandlers, notificationHandlers);
+		this.mcpSession = new McpClientSession(requestTimeout, transport, this::handleException, requestHandlers,
+				notificationHandlers);
 
+	}
+
+	private void handleException(Throwable t) {
+		if (t instanceof McpSessionNotFoundException) {
+			this.initialize().subscribe();
+		}
 	}
 
 	/**
@@ -243,7 +230,8 @@ public class McpAsyncClient {
 	 * @return The server capabilities
 	 */
 	public McpSchema.ServerCapabilities getServerCapabilities() {
-		return this.serverCapabilities;
+		McpSchema.InitializeResult initializeResult = this.initialization.get();
+		return initializeResult != null ? initializeResult.capabilities() : null;
 	}
 
 	/**
@@ -252,7 +240,8 @@ public class McpAsyncClient {
 	 * @return The server instructions
 	 */
 	public String getServerInstructions() {
-		return this.serverInstructions;
+		McpSchema.InitializeResult initializeResult = this.initialization.get();
+		return initializeResult != null ? initializeResult.instructions() : null;
 	}
 
 	/**
@@ -260,7 +249,8 @@ public class McpAsyncClient {
 	 * @return The server implementation details
 	 */
 	public McpSchema.Implementation getServerInfo() {
-		return this.serverInfo;
+		McpSchema.InitializeResult initializeResult = this.initialization.get();
+		return initializeResult != null ? initializeResult.serverInfo() : null;
 	}
 
 	/**
@@ -268,7 +258,7 @@ public class McpAsyncClient {
 	 * @return true if the client-server connection is initialized
 	 */
 	public boolean isInitialized() {
-		return this.initialized.get();
+		return this.initialization.get() != null;
 	}
 
 	/**
@@ -341,11 +331,6 @@ public class McpAsyncClient {
 				});
 
 		return result.flatMap(initializeResult -> {
-
-			this.serverCapabilities = initializeResult.capabilities();
-			this.serverInstructions = initializeResult.instructions();
-			this.serverInfo = initializeResult.serverInfo();
-
 			logger.info("Server response with Protocol: {}, Capabilities: {}, Info: {} and Instructions {}",
 					initializeResult.protocolVersion(), initializeResult.capabilities(), initializeResult.serverInfo(),
 					initializeResult.instructions());
@@ -356,8 +341,7 @@ public class McpAsyncClient {
 			}
 
 			return this.mcpSession.sendNotification(McpSchema.METHOD_NOTIFICATION_INITIALIZED, null).doOnSuccess(v -> {
-				this.initialized.set(true);
-				this.initializedSink.tryEmitValue(initializeResult);
+				this.initialization.set(initializeResult);
 			}).thenReturn(initializeResult);
 		});
 	}
@@ -372,11 +356,25 @@ public class McpAsyncClient {
 	 */
 	private <T> Mono<T> withInitializationCheck(String actionName,
 			Function<McpSchema.InitializeResult, Mono<T>> operation) {
-		return this.initializedSink.asMono()
-			.timeout(this.initializationTimeout)
-			.onErrorResume(TimeoutException.class,
-					ex -> Mono.error(new McpError("Client must be initialized before " + actionName)))
-			.flatMap(operation);
+		return Mono.defer(() -> {
+			McpSchema.InitializeResult initializeResult = this.initialization.get();
+			// FIXME: in case of bursts this will trigger multiple inits, we have to batch
+			// requests
+			// and dispatch once a single init finishes
+			if (initializeResult != null) {
+				return operation.apply(initializeResult);
+			}
+			else {
+				return this.initialize()
+					.timeout(this.initializationTimeout)
+					// TODO: McpError should be used when communicating over the wire, not
+					// to
+					// the user of the client API
+					.onErrorResume(TimeoutException.class,
+							ex -> Mono.error(new McpError("Client must be initialized before " + actionName)))
+					.flatMap(operation);
+			}
+		});
 	}
 
 	// --------------------------
@@ -522,7 +520,7 @@ public class McpAsyncClient {
 	 */
 	public Mono<McpSchema.CallToolResult> callTool(McpSchema.CallToolRequest callToolRequest) {
 		return this.withInitializationCheck("calling tools", initializedResult -> {
-			if (this.serverCapabilities.tools() == null) {
+			if (initializedResult.capabilities().tools() == null) {
 				return Mono.error(new McpError("Server does not provide tools capability"));
 			}
 			return this.mcpSession.sendRequest(McpSchema.METHOD_TOOLS_CALL, callToolRequest, CALL_TOOL_RESULT_TYPE_REF);
@@ -544,7 +542,7 @@ public class McpAsyncClient {
 	 */
 	public Mono<McpSchema.ListToolsResult> listTools(String cursor) {
 		return this.withInitializationCheck("listing tools", initializedResult -> {
-			if (this.serverCapabilities.tools() == null) {
+			if (initializedResult.capabilities().tools() == null) {
 				return Mono.error(new McpError("Server does not provide tools capability"));
 			}
 			return this.mcpSession.sendRequest(McpSchema.METHOD_TOOLS_LIST, new McpSchema.PaginatedRequest(cursor),
@@ -601,7 +599,7 @@ public class McpAsyncClient {
 	 */
 	public Mono<McpSchema.ListResourcesResult> listResources(String cursor) {
 		return this.withInitializationCheck("listing resources", initializedResult -> {
-			if (this.serverCapabilities.resources() == null) {
+			if (initializedResult.capabilities().resources() == null) {
 				return Mono.error(new McpError("Server does not provide the resources capability"));
 			}
 			return this.mcpSession.sendRequest(McpSchema.METHOD_RESOURCES_LIST, new McpSchema.PaginatedRequest(cursor),
@@ -632,7 +630,7 @@ public class McpAsyncClient {
 	 */
 	public Mono<McpSchema.ReadResourceResult> readResource(McpSchema.ReadResourceRequest readResourceRequest) {
 		return this.withInitializationCheck("reading resources", initializedResult -> {
-			if (this.serverCapabilities.resources() == null) {
+			if (initializedResult.capabilities().resources() == null) {
 				return Mono.error(new McpError("Server does not provide the resources capability"));
 			}
 			return this.mcpSession.sendRequest(McpSchema.METHOD_RESOURCES_READ, readResourceRequest,
@@ -661,7 +659,7 @@ public class McpAsyncClient {
 	 */
 	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates(String cursor) {
 		return this.withInitializationCheck("listing resource templates", initializedResult -> {
-			if (this.serverCapabilities.resources() == null) {
+			if (initializedResult.capabilities().resources() == null) {
 				return Mono.error(new McpError("Server does not provide the resources capability"));
 			}
 			return this.mcpSession.sendRequest(McpSchema.METHOD_RESOURCES_TEMPLATES_LIST,

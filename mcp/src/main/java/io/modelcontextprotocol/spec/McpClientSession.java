@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.util.Assert;
@@ -104,7 +105,7 @@ public class McpClientSession implements McpSession {
 	 * @param requestHandlers Map of method names to request handlers
 	 * @param notificationHandlers Map of method names to notification handlers
 	 */
-	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
+	public McpClientSession(Duration requestTimeout, McpClientTransport transport, Consumer<Throwable> exceptionHandler,
 			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
 
 		Assert.notNull(requestTimeout, "The requestTimeout can not be null");
@@ -123,6 +124,23 @@ public class McpClientSession implements McpSession {
 		// create child Observation and emit it together with the message to the
 		// consumer
 		this.connection = this.transport.connect(mono -> mono.doOnNext(this::handle)).subscribe();
+		this.transport.handleException(t -> {
+			this.pendingResponses.clear();
+			exceptionHandler.accept(t);
+		});
+	}
+
+	/**
+	 * Creates a new McpClientSession with the specified configuration and handlers.
+	 * @param requestTimeout Duration to wait for responses
+	 * @param transport Transport implementation for message exchange
+	 * @param requestHandlers Map of method names to request handlers
+	 * @param notificationHandlers Map of method names to notification handlers
+	 */
+	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
+			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
+		this(requestTimeout, transport, e -> {
+		}, requestHandlers, notificationHandlers);
 	}
 
 	private void handle(McpSchema.JSONRPCMessage message) {

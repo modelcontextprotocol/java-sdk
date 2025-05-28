@@ -19,6 +19,12 @@ public interface McpClientTransport extends McpTransport {
 	// @Deprecated
 	Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler);
 
-	// Mono<Void> connect(Consumer<McpSchema.JSONRPCMessage> consumer);
+	default void handleException(Consumer<Throwable> handler) {
+	}
+
+	// default void connect(Consumer<McpSchema.JSONRPCMessage> consumer) {
+	// this.connect((Function<Mono<McpSchema.JSONRPCMessage>,
+	// Mono<McpSchema.JSONRPCMessage>>) mono -> mono.doOnNext(consumer)).subscribe();
+	// }
 
 }

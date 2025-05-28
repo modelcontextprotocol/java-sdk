@@ -2,10 +2,7 @@ package io.modelcontextprotocol.client.transport;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSessionNotFoundException;
+import io.modelcontextprotocol.spec.*;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +25,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class WebClientStreamableHttpTransport implements McpClientTransport {
@@ -52,11 +50,9 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	private AtomicReference<Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>>> handler = new AtomicReference<>();
 
-	private final Disposable.Composite openConnections = Disposables.composite();
+	private final AtomicReference<McpTransportSession> activeSession = new AtomicReference<>();
 
-	private final AtomicBoolean initialized = new AtomicBoolean();
-
-	private final AtomicReference<String> sessionId = new AtomicReference<>();
+	private final AtomicReference<Consumer<Throwable>> exceptionHandler = new AtomicReference<>();
 
 	public WebClientStreamableHttpTransport(ObjectMapper objectMapper, WebClient.Builder webClientBuilder,
 			String endpoint, boolean resumableStreams, boolean openConnectionOnStartup) {
@@ -65,14 +61,12 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		this.endpoint = endpoint;
 		this.resumableStreams = resumableStreams;
 		this.openConnectionOnStartup = openConnectionOnStartup;
+		this.activeSession.set(new McpTransportSession());
 	}
 
 	@Override
 	public Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
 		return Mono.deferContextual(ctx -> {
-			if (this.openConnections.isDisposed()) {
-				return Mono.error(new RuntimeException("Transport already disposed"));
-			}
 			this.handler.set(handler);
 			if (openConnectionOnStartup) {
 				this.reconnect(null, ctx);
@@ -82,8 +76,19 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	}
 
 	@Override
+	public void handleException(Consumer<Throwable> handler) {
+		this.exceptionHandler.set(handler);
+	}
+
+	@Override
 	public Mono<Void> closeGracefully() {
-		return Mono.fromRunnable(this.openConnections::dispose);
+		return Mono.defer(() -> {
+			McpTransportSession currentSession = this.activeSession.get();
+			if (currentSession != null) {
+				return currentSession.closeGracefully();
+			}
+			return Mono.empty();
+		});
 	}
 
 	private void reconnect(McpStream stream, ContextView ctx) {
@@ -93,12 +98,13 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		// listen for messages.
 		// If it doesn't, nothing actually happens here, that's just the way it is...
 		final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
+		final McpTransportSession transportSession = this.activeSession.get();
 		Disposable connection = webClient.get()
 			.uri(this.endpoint)
 			.accept(MediaType.TEXT_EVENT_STREAM)
 			.headers(httpHeaders -> {
-				if (sessionId.get() != null) {
-					httpHeaders.add("mcp-session-id", sessionId.get());
+				if (transportSession.sessionId() != null) {
+					httpHeaders.add("mcp-session-id", transportSession.sessionId());
 				}
 				if (stream != null && stream.lastId() != null) {
 					httpHeaders.add("last-event-id", stream.lastId());
@@ -123,22 +129,33 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 					logger.info("The server does not support SSE streams, using request-response mode.");
 					return Flux.empty();
 				}
+				else if (response.statusCode().isSameCodeAs(HttpStatus.NOT_FOUND)) {
+					logger.info("Session {} was not found on the MCP server", transportSession.sessionId());
+
+					McpSessionNotFoundException notFoundException = new McpSessionNotFoundException(
+							"Session " + transportSession.sessionId() + " not found");
+					// inform the stream/connection subscriber
+					return Flux.error(notFoundException);
+				}
 				else {
 					return response.<McpSchema.JSONRPCMessage>createError().doOnError(e -> {
 						logger.info("Opening an SSE stream failed. This can be safely ignored.", e);
 					}).flux();
 				}
 			})
+			.doOnError(e -> {
+				this.exceptionHandler.get().accept(e);
+			})
 			.doFinally(s -> {
 				Disposable ref = disposableRef.getAndSet(null);
 				if (ref != null) {
-					this.openConnections.remove(ref);
+					transportSession.removeConnection(ref);
 				}
 			})
 			.contextWrite(ctx)
 			.subscribe();
 		disposableRef.set(connection);
-		this.openConnections.add(connection);
+		transportSession.addConnection(connection);
 	}
 
 	@Override
@@ -151,20 +168,22 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			// listen for messages.
 			// If it doesn't, nothing actually happens here, that's just the way it is...
 			final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
+			final McpTransportSession transportSession = this.activeSession.get();
+
 			Disposable connection = webClient.post()
 				.uri(this.endpoint)
 				.accept(MediaType.TEXT_EVENT_STREAM, MediaType.APPLICATION_JSON)
 				.headers(httpHeaders -> {
-					if (sessionId.get() != null) {
-						httpHeaders.add("mcp-session-id", sessionId.get());
+					if (transportSession.sessionId() != null) {
+						httpHeaders.add("mcp-session-id", transportSession.sessionId());
 					}
 				})
 				.bodyValue(message)
 				.exchangeToFlux(response -> {
-					// TODO: this goes into the request phase
-					if (!initialized.compareAndExchange(false, true)) {
+					if (transportSession.markInitialized()) {
 						if (!response.headers().header("mcp-session-id").isEmpty()) {
-							sessionId.set(response.headers().asHttpHeaders().getFirst("mcp-session-id"));
+							transportSession
+								.setSessionId(response.headers().asHttpHeaders().getFirst("mcp-session-id"));
 							// Once we have a session, we try to open an async stream for
 							// the server to send notifications and requests out-of-band.
 							reconnect(null, sink.contextView());
@@ -176,10 +195,10 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 					// if (!response.statusCode().isSameCodeAs(HttpStatus.ACCEPTED)) {
 					if (!response.statusCode().is2xxSuccessful()) {
 						if (response.statusCode().isSameCodeAs(HttpStatus.NOT_FOUND)) {
-							logger.info("Session {} was not found on the MCP server", sessionId.get());
+							logger.info("Session {} was not found on the MCP server", transportSession.sessionId());
 
 							McpSessionNotFoundException notFoundException = new McpSessionNotFoundException(
-									"Session " + sessionId.get() + " not found");
+									"Session " + transportSession.sessionId() + " not found");
 							// inform the caller of sendMessage
 							sink.error(notFoundException);
 							// inform the stream/connection subscriber
@@ -233,8 +252,6 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 									}
 								})
 							.flatMapIterable(Function.identity());
-						// .map(Mono::just)
-						// .flatMap(this.handler.get());
 					}
 					else {
 						sink.error(new RuntimeException("Unknown media type"));
@@ -246,13 +263,13 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 				.doFinally(s -> {
 					Disposable ref = disposableRef.getAndSet(null);
 					if (ref != null) {
-						this.openConnections.remove(ref);
+						transportSession.removeConnection(ref);
 					}
 				})
 				.contextWrite(sink.contextView())
 				.subscribe();
 			disposableRef.set(connection);
-			this.openConnections.add(connection);
+			transportSession.addConnection(connection);
 		});
 	}
 
