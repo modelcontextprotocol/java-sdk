@@ -3,10 +3,6 @@
  */
 package io.modelcontextprotocol.client.transport;
 
-import java.io.IOException;
-import java.util.function.BiConsumer;
-import java.util.function.Function;
-
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpClientTransport;
@@ -16,6 +12,10 @@ import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -25,10 +25,9 @@ import reactor.core.scheduler.Schedulers;
 import reactor.util.retry.Retry;
 import reactor.util.retry.Retry.RetrySignal;
 
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.MediaType;
-import org.springframework.http.codec.ServerSentEvent;
-import org.springframework.web.reactive.function.client.WebClient;
+import java.io.IOException;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
 
 /**
  * Server-Sent Events (SSE) implementation of the
@@ -166,6 +165,10 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 		this.sseEndpoint = sseEndpoint;
 	}
 
+	private boolean isPingEvent(ServerSentEvent<String> event) {
+		return event.comment() != null && event.comment().startsWith("ping");
+	}
+
 	/**
 	 * Establishes a connection to the MCP server using Server-Sent Events (SSE). This
 	 * method initiates the SSE connection and sets up the message processing pipeline.
@@ -211,6 +214,10 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 				catch (IOException ioException) {
 					s.error(ioException);
 				}
+			}
+			else if (isPingEvent(event)) {
+				logger.debug("Received SSE ping message");
+				s.complete();
 			}
 			else {
 				s.error(new McpError("Received unrecognized SSE event type: " + event.event()));
