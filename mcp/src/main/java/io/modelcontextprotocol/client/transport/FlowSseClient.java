@@ -3,6 +3,8 @@
 */
 package io.modelcontextprotocol.client.transport;
 
+import static io.modelcontextprotocol.spec.McpStreamableHttpClient.*;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -120,12 +122,28 @@ public class FlowSseClient {
 	 * notifications
 	 * @throws RuntimeException if the connection fails with a non-200 status code
 	 */
-	public void subscribe(String url, SseEventHandler eventHandler) {
-		HttpRequest request = this.requestBuilder.uri(URI.create(url))
-			.header("Accept", "text/event-stream")
+	public void subscribe(String url, String mcpSessionId, SseEventHandler eventHandler) {
+		HttpRequest.Builder requestBuilder = this.requestBuilder.copy()
+			.uri(URI.create(url))
 			.header("Cache-Control", "no-cache")
-			.GET()
-			.build();
+			.GET();
+		if (mcpSessionId != null) { // Using StreamableHTTP Transport
+			if (!requestBuilder.build().headers().map().containsKey(ACCEPT_HEADER_NAME)) {
+				requestBuilder.header(ACCEPT_HEADER_NAME, ACCEPT_HEADER_VALUE);
+			}
+			if (!requestBuilder.build().headers().map().containsKey(CONTENT_TYPE_HEADER_NAME)) {
+				requestBuilder.header(CONTENT_TYPE_HEADER_NAME, CONTENT_TYPE_HEADER_VALUE);
+			}
+			if (!requestBuilder.build().headers().map().containsKey(MCP_SESSION_ID_HEADER_NAME)) {
+				requestBuilder.header(MCP_SESSION_ID_HEADER_NAME, mcpSessionId);
+			}
+		}
+		else { // Using HTTP+SSE Transport
+			if (!requestBuilder.build().headers().map().containsKey(ACCEPT_HEADER_NAME)) {
+				requestBuilder.header(ACCEPT_HEADER_NAME, "text/event-stream");
+			}
+		}
+		HttpRequest request = requestBuilder.build();
 
 		StringBuilder eventBuilder = new StringBuilder();
 		AtomicReference<String> currentEventId = new AtomicReference<>();

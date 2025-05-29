@@ -7,15 +7,24 @@ package io.modelcontextprotocol.util;
 import reactor.util.annotation.Nullable;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 
 /**
  * Miscellaneous utility methods.
  *
  * @author Christian Tzolov
  */
-
 public final class Utils {
 
 	/**
@@ -102,6 +111,16 @@ public final class Utils {
 			basePath = basePath.substring(0, basePath.length() - 1);
 		}
 		return endpointPath.startsWith(basePath);
+	}
+
+	/**
+	 * Resolves a URI against a base URI string.
+	 * @param baseUri the base URI string
+	 * @param path the path to resolve
+	 * @return the resolved URI
+	 */
+	public static URI resolveUri(String baseUri, String path) {
+		return resolveUri(URI.create(baseUri), path);
 	}
 
 }
