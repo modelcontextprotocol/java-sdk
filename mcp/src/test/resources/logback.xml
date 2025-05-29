@@ -9,16 +9,16 @@
     </appender>
 
     <!-- Main MCP package -->
-    <logger name="org.springframework.ai.mcp" level="INFO"/>
+    <logger name="org.springframework.ai.mcp" level="DEBUG"/>
 
     <!-- Client packages -->
-    <logger name="org.springframework.ai.mcp.client" level="INFO"/>
+    <logger name="org.springframework.ai.mcp.client" level="DEBUG"/>
 
     <!-- Spec package -->
-    <logger name="org.springframework.ai.mcp.spec" level="INFO"/>
+    <logger name="org.springframework.ai.mcp.spec" level="DEBUG"/>
 
     <!-- Root logger -->
-    <root level="INFO">
+    <root level="DEBUG">
         <appender-ref ref="CONSOLE"/>
     </root>
 </configuration>

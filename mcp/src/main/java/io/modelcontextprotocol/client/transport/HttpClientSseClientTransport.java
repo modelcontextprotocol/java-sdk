@@ -342,7 +342,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		connectionFuture.set(future);
 
 		URI clientUri = Utils.resolveUri(this.baseUri, this.sseEndpoint);
-		sseClient.subscribe(clientUri.toString(), new FlowSseClient.SseEventHandler() {
+		sseClient.subscribe(clientUri.toString(), null, new FlowSseClient.SseEventHandler() {
 			@Override
 			public void onEvent(SseEvent event) {
 				if (isClosing) {
