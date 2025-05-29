@@ -342,18 +342,121 @@ public final class McpSchema {
 	
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record PromptCapabilities(
-			@JsonProperty("listChanged") Boolean listChanged) {
+			@JsonProperty("listChanged") Boolean listChanged,
+			@JsonProperty("search") Boolean search) {
+
+			// old ctor for backwards-compat
+			public PromptCapabilities(Boolean listChanged) {
+				this(listChanged, false);
+			}
+
+			public static Builder builder() {
+				return new Builder()
+						.listChanged(false)
+						.search(false);
+			}
+
+			public static class Builder {
+
+				private Boolean listChanged;
+				private Boolean search;
+
+				public Builder listChanged(Boolean listChanged) {
+					this.listChanged = listChanged;
+					return this;
+				}
+
+				public Builder search(Boolean search) {
+					this.search = search;
+					return this;
+				}
+
+				public PromptCapabilities build() {
+					return new PromptCapabilities(listChanged, search);
+				}
+			}
 		}
 
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record ResourceCapabilities(
 			@JsonProperty("subscribe") Boolean subscribe,
-			@JsonProperty("listChanged") Boolean listChanged) {
+			@JsonProperty("listChanged") Boolean listChanged,
+			@JsonProperty("search") Boolean search) {
+
+			// old ctor for backwards-compat
+			public ResourceCapabilities(Boolean subscribe, Boolean listChanged) {
+				this(subscribe, listChanged, false);
+			}
+
+			public static Builder builder() {
+				return new Builder()
+						.subscribe(false)
+						.listChanged(false)
+						.search(false);
+			}
+
+			public static class Builder {
+
+				private Boolean subscribe;
+				private Boolean listChanged;
+				private Boolean search;
+
+				public Builder subscribe(Boolean subscribe) {
+					this.subscribe = subscribe;
+					return this;
+				}
+
+				public Builder listChanged(Boolean listChanged) {
+					this.listChanged = listChanged;
+					return this;
+				}
+
+				public Builder search(Boolean search) {
+					this.search = search;
+					return this;
+				}
+
+				public ResourceCapabilities build() {
+					return new ResourceCapabilities(subscribe, listChanged, search);
+				}
+			}
 		}
 
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record ToolCapabilities(
-			@JsonProperty("listChanged") Boolean listChanged) {
+			@JsonProperty("listChanged") Boolean listChanged,
+			@JsonProperty("search") Boolean search) {
+
+			// old ctor for backwards-compat
+			public ToolCapabilities(Boolean listChanged) {
+				this(listChanged, false);
+			}
+
+			public static Builder builder() {
+				return new Builder()
+						.listChanged(false)
+						.search(false);
+			}
+
+			public static class Builder {
+
+				private Boolean listChanged;
+				private Boolean search;
+
+				public Builder listChanged(Boolean listChanged) {
+					this.listChanged = listChanged;
+					return this;
+				}
+
+				public Builder search(Boolean search) {
+					this.search = search;
+					return this;
+				}
+
+				public ToolCapabilities build() {
+					return new ToolCapabilities(listChanged, search);
+				}
+			}
 		}
 
 		public static Builder builder() {
@@ -389,13 +492,28 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder prompts(PromptCapabilities promptCapabilities) {
+				this.prompts = promptCapabilities;
+				return this;
+			}
+
 			public Builder resources(Boolean subscribe, Boolean listChanged) {
 				this.resources = new ResourceCapabilities(subscribe, listChanged);
 				return this;
 			}
 
+			public Builder resources(ResourceCapabilities resourceCapabilities) {
+				this.resources = resourceCapabilities;
+				return this;
+			}
+
 			public Builder tools(Boolean listChanged) {
 				this.tools = new ToolCapabilities(listChanged);
+				return this;
+			}
+
+			public Builder tools(ToolCapabilities toolCapabilities) {
+				this.tools = toolCapabilities;
 				return this;
 			}
 

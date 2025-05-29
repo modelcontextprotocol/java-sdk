@@ -14,6 +14,7 @@ import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
 
 /**
  * A synchronous client implementation for the Model Context Protocol (MCP) that wraps an
@@ -351,6 +352,26 @@ public class McpSyncClient implements AutoCloseable {
 	 */
 	public McpSchema.CompleteResult completeCompletion(McpSchema.CompleteRequest completeRequest) {
 		return this.delegate.completeCompletion(completeRequest).block();
+	}
+
+	// --------------------------
+	// Search
+	// --------------------------
+	public McpSchema.SearchToolsResult searchTools(McpSchema.SearchToolsRequest searchToolsRequest) {
+		return this.delegate.searchTools(searchToolsRequest).block();
+	}
+
+	public McpSchema.SearchResourcesResult searchResources(McpSchema.SearchResourcesRequest searchResourcesRequest) {
+		return this.delegate.searchResources(searchResourcesRequest).block();
+	}
+
+	public McpSchema.SearchResourceTemplatesResult searchResourceTemplates(
+			McpSchema.SearchResourceTemplatesRequest searchResourceTemplatesRequest) {
+		return this.delegate.searchResourceTemplates(searchResourceTemplatesRequest).block();
+	}
+
+	public McpSchema.SearchPromptsResult searchPrompts(McpSchema.SearchPromptsRequest searchPromptsRequest) {
+		return this.delegate.searchPrompts(searchPromptsRequest).block();
 	}
 
 }
