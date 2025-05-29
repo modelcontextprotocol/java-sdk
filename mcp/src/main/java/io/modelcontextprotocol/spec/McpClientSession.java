@@ -125,7 +125,10 @@ public class McpClientSession implements McpSession {
 		// consumer
 		this.connection = this.transport.connect(mono -> mono.doOnNext(this::handle)).subscribe();
 		this.transport.handleException(t -> {
-			this.pendingResponses.clear();
+			// 🤔 let's think for a moment - we only clear when the session is invalidated
+			if (t instanceof McpSessionNotFoundException) {
+				this.pendingResponses.clear();
+			}
 			exceptionHandler.accept(t);
 		});
 	}
