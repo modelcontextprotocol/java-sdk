@@ -124,7 +124,7 @@ public class McpClientSession implements McpSession {
 		// create child Observation and emit it together with the message to the
 		// consumer
 		this.connection = this.transport.connect(mono -> mono.doOnNext(this::handle)).subscribe();
-		this.transport.handleException(t -> {
+		this.transport.registerExceptionHandler(t -> {
 			// 🤔 let's think for a moment - we only clear when the session is invalidated
 			if (t instanceof McpSessionNotFoundException) {
 				this.pendingResponses.clear();

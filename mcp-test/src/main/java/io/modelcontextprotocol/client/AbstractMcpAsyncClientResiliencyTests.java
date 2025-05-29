@@ -10,6 +10,8 @@ import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.ToxiproxyContainer;
@@ -26,6 +28,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 public abstract class AbstractMcpAsyncClientResiliencyTests {
+
+	private static final Logger logger = LoggerFactory.getLogger(AbstractMcpAsyncClientResiliencyTests.class);
 
 	static Network network = Network.newNetwork();
 	static String host = "http://localhost:3001";
@@ -63,6 +67,37 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 
 		// int port = container.getMappedPort(3001);
 		host = "http://" + ipAddressViaToxiproxy + ":" + portViaToxiproxy;
+	}
+
+	void disconnect() {
+		long start = System.nanoTime();
+		try {
+			// disconnect
+			// proxy.toxics().bandwidth("CUT_CONNECTION_DOWNSTREAM",
+			// ToxicDirection.DOWNSTREAM, 0);
+			// proxy.toxics().bandwidth("CUT_CONNECTION_UPSTREAM",
+			// ToxicDirection.UPSTREAM, 0);
+			proxy.toxics().resetPeer("RESET_DOWNSTREAM", ToxicDirection.DOWNSTREAM, 0);
+			proxy.toxics().resetPeer("RESET_UPSTREAM", ToxicDirection.UPSTREAM, 0);
+			logger.info("Disconnect took {} ms", Duration.ofNanos(System.nanoTime() - start).toMillis());
+		}
+		catch (IOException e) {
+			throw new RuntimeException("Failed to disconnect", e);
+		}
+	}
+
+	void reconnect() {
+		long start = System.nanoTime();
+		try {
+			proxy.toxics().get("RESET_UPSTREAM").remove();
+			proxy.toxics().get("RESET_DOWNSTREAM").remove();
+			// proxy.toxics().get("CUT_CONNECTION_DOWNSTREAM").remove();
+			// proxy.toxics().get("CUT_CONNECTION_UPSTREAM").remove();
+			logger.info("Reconnect took {} ms", Duration.ofNanos(System.nanoTime() - start).toMillis());
+		}
+		catch (IOException e) {
+			throw new RuntimeException("Failed to reconnect", e);
+		}
 	}
 
 	abstract McpClientTransport createMcpTransport();
@@ -112,29 +147,15 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 	@Test
 	void testPing() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
-			try {
-				StepVerifier.create(mcpAsyncClient.initialize()).expectNextCount(1).verifyComplete();
+			StepVerifier.create(mcpAsyncClient.initialize()).expectNextCount(1).verifyComplete();
 
-				// disconnect
-				// proxy.toxics().bandwidth("CUT_CONNECTION_DOWNSTREAM",
-				// ToxicDirection.DOWNSTREAM, 0);
-				// proxy.toxics().bandwidth("CUT_CONNECTION_UPSTREAM",
-				// ToxicDirection.UPSTREAM, 0);
-				proxy.toxics().resetPeer("RESET_DOWNSTREAM", ToxicDirection.DOWNSTREAM, 0);
-				proxy.toxics().resetPeer("RESET_UPSTREAM", ToxicDirection.UPSTREAM, 0);
+			disconnect();
 
-				StepVerifier.create(mcpAsyncClient.ping()).expectError().verify();
+			StepVerifier.create(mcpAsyncClient.ping()).expectError().verify();
 
-				proxy.toxics().get("RESET_UPSTREAM").remove();
-				proxy.toxics().get("RESET_DOWNSTREAM").remove();
-				// proxy.toxics().get("CUT_CONNECTION_DOWNSTREAM").remove();
-				// proxy.toxics().get("CUT_CONNECTION_UPSTREAM").remove();
+			reconnect();
 
-				StepVerifier.create(mcpAsyncClient.ping()).expectNextCount(1).verifyComplete();
-			}
-			catch (IOException e) {
-				throw new RuntimeException(e);
-			}
+			StepVerifier.create(mcpAsyncClient.ping()).expectNextCount(1).verifyComplete();
 		});
 	}
 
