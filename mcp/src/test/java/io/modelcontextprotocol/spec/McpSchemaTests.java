@@ -252,7 +252,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"protocolVersion":"2024-11-05","capabilities":{"logging":{},"prompts":{"listChanged":true},"resources":{"subscribe":true,"listChanged":true},"tools":{"listChanged":true}},"serverInfo":{"name":"test-server","version":"1.0.0"},"instructions":"Server initialized successfully"}"""));
+							{"protocolVersion":"2024-11-05","capabilities":{"logging":{},"prompts":{"listChanged":true,"search":false},"resources":{"subscribe":true,"listChanged":true,"search":false},"tools":{"listChanged":true,"search":false}},"serverInfo":{"name":"test-server","version":"1.0.0"},"instructions":"Server initialized successfully"}"""));
 	}
 
 	// Resource Tests
