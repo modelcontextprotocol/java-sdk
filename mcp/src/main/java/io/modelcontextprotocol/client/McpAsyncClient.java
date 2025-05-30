@@ -221,6 +221,7 @@ public class McpAsyncClient {
 
 	private void handleException(Throwable t) {
 		if (t instanceof McpSessionNotFoundException) {
+			this.initialization.set(null);
 			this.initialize().subscribe();
 		}
 	}

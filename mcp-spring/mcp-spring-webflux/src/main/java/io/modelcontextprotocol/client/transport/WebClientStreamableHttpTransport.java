@@ -15,8 +15,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.Disposable;
-import reactor.core.Disposables;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.context.ContextView;
@@ -26,7 +26,6 @@ import reactor.util.function.Tuples;
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -52,9 +51,9 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	private final boolean resumableStreams;
 
-	private AtomicReference<Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>>> handler = new AtomicReference<>();
-
 	private final AtomicReference<McpTransportSession> activeSession = new AtomicReference<>();
+
+	private final AtomicReference<Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>>> handler = new AtomicReference<>();
 
 	private final AtomicReference<Consumer<Throwable>> exceptionHandler = new AtomicReference<>();
 
@@ -88,6 +87,11 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	private void handleException(Throwable t) {
 		logger.debug("Handling exception for session {}", activeSession.get().sessionId(), t);
+		if (t instanceof McpSessionNotFoundException) {
+			McpTransportSession invalidSession = this.activeSession.getAndSet(new McpTransportSession());
+			logger.warn("Server does not recognize session {}. Invalidating.", invalidSession.sessionId());
+			invalidSession.close();
+		}
 		Consumer<Throwable> handler = this.exceptionHandler.get();
 		if (handler != null) {
 			handler.accept(t);
@@ -106,6 +110,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		});
 	}
 
+	// FIXME: Avoid passing the ContextView - add hook allowing the Reactor Context to be
+	// attached to the chain?
 	private void reconnect(McpStream stream, ContextView ctx) {
 		if (stream != null) {
 			logger.debug("Reconnecting stream {} with lastId {}", stream.streamId(), stream.lastId());
@@ -273,8 +279,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 						else {
 							logger.warn("Unknown media type {} returned for POST in session {}", contentType,
 									transportSession.sessionId());
-							sink.error(new RuntimeException("Unknown media type returned: " + contentType));
-							return Flux.empty();
+							return Flux.error(new RuntimeException("Unknown media type returned: " + contentType));
 						}
 					}
 					else {
@@ -283,20 +288,45 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 							McpSessionNotFoundException notFoundException = new McpSessionNotFoundException(
 									transportSession.sessionId());
-							// inform the caller of sendMessage
-							sink.error(notFoundException);
 							// inform the stream/connection subscriber
 							return Flux.error(notFoundException);
 						}
-						return response.<McpSchema.JSONRPCMessage>createError().doOnError(e -> {
-							sink.error(new RuntimeException("Sending request failed", e));
+						return response.<McpSchema.JSONRPCMessage>createError().onErrorResume(e -> {
+							WebClientResponseException responseException = (WebClientResponseException) e;
+							byte[] body = responseException.getResponseBodyAsByteArray();
+							McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = null;
+							Exception toPropagate;
+							try {
+								McpSchema.JSONRPCResponse jsonRpcResponse = objectMapper.readValue(body,
+										McpSchema.JSONRPCResponse.class);
+								jsonRpcError = jsonRpcResponse.error();
+								toPropagate = new McpError(jsonRpcError);
+							}
+							catch (IOException ex) {
+								toPropagate = new RuntimeException("Sending request failed", e);
+								logger.debug("Received content together with {} HTTP code response: {}",
+										response.statusCode(), body);
+							}
+
+							// Some implementations can return 400 when presented with a
+							// session id that it doesn't know about, so we will
+							// invalidate the session
+							// https://github.com/modelcontextprotocol/typescript-sdk/issues/389
+							if (responseException.getStatusCode().isSameCodeAs(HttpStatus.BAD_REQUEST)) {
+								return Mono.error(new McpSessionNotFoundException(this.activeSession.get().sessionId(),
+										toPropagate));
+							}
+							return Mono.empty();
 						}).flux();
 					}
 				})
 				.map(Mono::just)
 				.flatMap(this.handler.get())
 				.onErrorResume(t -> {
+					// handle the error first
 					this.handleException(t);
+
+					// inform the caller of sendMessage
 					sink.error(t);
 					return Flux.empty();
 				})
@@ -321,7 +351,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	private Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> parse(ServerSentEvent<String> event) {
 		if (MESSAGE_EVENT_TYPE.equals(event.event())) {
 			try {
-				// TODO: support batching?
+				// We don't support batching ATM and probably won't since the next version
+				// considers removing it.
 				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.objectMapper, event.data());
 				return Tuples.of(Optional.ofNullable(event.id()), List.of(message));
 			}
@@ -340,6 +371,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 		private final AtomicReference<String> lastId = new AtomicReference<>();
 
+		// Used only for internal accounting
 		private final long streamId;
 
 		private final boolean resumable;
@@ -360,8 +392,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		Flux<McpSchema.JSONRPCMessage> consumeSseStream(
 				Publisher<Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>>> eventStream) {
 			return Flux.deferContextual(ctx -> Flux.from(eventStream).doOnError(e -> {
-				// TODO: examine which error :)
-				if (resumable) {
+				if (resumable && !(e instanceof McpSessionNotFoundException)) {
 					reconnect(this, ctx);
 				}
 			})
