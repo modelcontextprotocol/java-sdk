@@ -9,9 +9,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.io.Reader;
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
@@ -148,14 +146,12 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 
 		@Override
 		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
-
 			return Mono.zip(inboundReady.asMono(), outboundReady.asMono()).then(Mono.defer(() -> {
-				if (outboundSink.tryEmitNext(message).isSuccess()) {
+				Sinks.EmitResult result = outboundSink.tryEmitNext(message);
+				if (result.isSuccess()) {
 					return Mono.empty();
 				}
-				else {
-					return Mono.error(new RuntimeException("Failed to enqueue message"));
-				}
+				return Mono.error(new RuntimeException("Failed to enqueue message: " + message + ", due to " + result));
 			}));
 		}
 
