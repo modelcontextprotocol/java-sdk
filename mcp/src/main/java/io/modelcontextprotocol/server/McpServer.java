@@ -201,6 +201,14 @@ public interface McpServer {
 
 		private final List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeHandlers = new ArrayList<>();
 
+		private BiFunction<McpAsyncServerExchange, McpSchema.SearchToolsRequest, Mono<McpSchema.SearchToolsResult>> toolSearchHandler;
+
+		private BiFunction<McpAsyncServerExchange, McpSchema.SearchResourcesRequest, Mono<McpSchema.SearchResourcesResult>> resourceSearchHandler;
+
+		private BiFunction<McpAsyncServerExchange, McpSchema.SearchResourceTemplatesRequest, Mono<McpSchema.SearchResourceTemplatesResult>> resourceTemplateSearchHandler;
+
+		private BiFunction<McpAsyncServerExchange, McpSchema.SearchPromptsRequest, Mono<McpSchema.SearchPromptsResult>> promptSearchHandler;
+
 		private Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
 
 		private AsyncSpecification(McpServerTransportProvider transportProvider) {
@@ -612,6 +620,34 @@ public interface McpServer {
 			return this.rootsChangeHandlers(Arrays.asList(handlers));
 		}
 
+		public AsyncSpecification toolSearchHandler(
+				BiFunction<McpAsyncServerExchange, McpSchema.SearchToolsRequest, Mono<McpSchema.SearchToolsResult>> handler) {
+			Assert.notNull(handler, "Handler must not be null");
+			this.toolSearchHandler = handler;
+			return this;
+		}
+
+		public AsyncSpecification resourceSearchHandler(
+				BiFunction<McpAsyncServerExchange, McpSchema.SearchResourcesRequest, Mono<McpSchema.SearchResourcesResult>> handler) {
+			Assert.notNull(handler, "Handler must not be null");
+			this.resourceSearchHandler = handler;
+			return this;
+		}
+
+		public AsyncSpecification resourceTemplateSearchHandler(
+				BiFunction<McpAsyncServerExchange, McpSchema.SearchResourceTemplatesRequest, Mono<McpSchema.SearchResourceTemplatesResult>> handler) {
+			Assert.notNull(handler, "Handler must not be null");
+			this.resourceTemplateSearchHandler = handler;
+			return this;
+		}
+
+		public AsyncSpecification promptSearchHandler(
+				BiFunction<McpAsyncServerExchange, McpSchema.SearchPromptsRequest, Mono<McpSchema.SearchPromptsResult>> handler) {
+			Assert.notNull(handler, "Handler must not be null");
+			this.promptSearchHandler = handler;
+			return this;
+		}
+
 		/**
 		 * Sets the object mapper to use for serializing and deserializing JSON messages.
 		 * @param objectMapper the instance to use. Must not be null.
@@ -632,7 +668,8 @@ public interface McpServer {
 		public McpAsyncServer build() {
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
-					this.instructions);
+					this.instructions, this.toolSearchHandler, this.resourceSearchHandler,
+					this.resourceTemplateSearchHandler, this.promptSearchHandler);
 			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
 			return new McpAsyncServer(this.transportProvider, mapper, features, this.requestTimeout,
 					this.uriTemplateManagerFactory);
@@ -692,6 +729,14 @@ public interface McpServer {
 		private final Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions = new HashMap<>();
 
 		private final List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeHandlers = new ArrayList<>();
+
+		private BiFunction<McpSyncServerExchange, McpSchema.SearchToolsRequest, McpSchema.SearchToolsResult> toolSearchHandler;
+
+		private BiFunction<McpSyncServerExchange, McpSchema.SearchResourcesRequest, McpSchema.SearchResourcesResult> resourceSearchHandler;
+
+		private BiFunction<McpSyncServerExchange, McpSchema.SearchResourceTemplatesRequest, McpSchema.SearchResourceTemplatesResult> resourceTemplateSearchHandler;
+
+		private BiFunction<McpSyncServerExchange, McpSchema.SearchPromptsRequest, McpSchema.SearchPromptsResult> promptSearchHandler;
 
 		private Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
 
@@ -1104,6 +1149,34 @@ public interface McpServer {
 			return this.rootsChangeHandlers(List.of(handlers));
 		}
 
+		public SyncSpecification toolSearchHandler(
+				BiFunction<McpSyncServerExchange, McpSchema.SearchToolsRequest, McpSchema.SearchToolsResult> handler) {
+			Assert.notNull(handler, "Handler must not be null");
+			this.toolSearchHandler = handler;
+			return this;
+		}
+
+		public SyncSpecification resourceSearchHandler(
+				BiFunction<McpSyncServerExchange, McpSchema.SearchResourcesRequest, McpSchema.SearchResourcesResult> handler) {
+			Assert.notNull(handler, "Handler must not be null");
+			this.resourceSearchHandler = handler;
+			return this;
+		}
+
+		public SyncSpecification resourceTemplateSearchHandler(
+				BiFunction<McpSyncServerExchange, McpSchema.SearchResourceTemplatesRequest, McpSchema.SearchResourceTemplatesResult> handler) {
+			Assert.notNull(handler, "Handler must not be null");
+			this.resourceTemplateSearchHandler = handler;
+			return this;
+		}
+
+		public SyncSpecification promptSearchHandler(
+				BiFunction<McpSyncServerExchange, McpSchema.SearchPromptsRequest, McpSchema.SearchPromptsResult> handler) {
+			Assert.notNull(handler, "Handler must not be null");
+			this.promptSearchHandler = handler;
+			return this;
+		}
+
 		/**
 		 * Sets the object mapper to use for serializing and deserializing JSON messages.
 		 * @param objectMapper the instance to use. Must not be null.
@@ -1124,7 +1197,8 @@ public interface McpServer {
 		public McpSyncServer build() {
 			McpServerFeatures.Sync syncFeatures = new McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,
 					this.tools, this.resources, this.resourceTemplates, this.prompts, this.completions,
-					this.rootsChangeHandlers, this.instructions);
+					this.rootsChangeHandlers, this.instructions, this.toolSearchHandler, this.resourceSearchHandler,
+					this.resourceTemplateSearchHandler, this.promptSearchHandler);
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures);
 			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
 			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures, this.requestTimeout,

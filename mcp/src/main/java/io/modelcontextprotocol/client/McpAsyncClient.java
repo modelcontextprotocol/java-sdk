@@ -838,4 +838,63 @@ public class McpAsyncClient {
 			.sendRequest(McpSchema.METHOD_COMPLETION_COMPLETE, completeRequest, COMPLETION_COMPLETE_RESULT_TYPE_REF));
 	}
 
+	// --------------------------
+	// Search
+	// --------------------------
+
+	private static final TypeReference<McpSchema.SearchToolsResult> SEARCH_TOOLS_RESULT_TYPE_REF = new TypeReference<>() {
+	};
+
+	private static final TypeReference<McpSchema.SearchResourcesResult> SEARCH_RESOURCES_RESULT_TYPE_REF = new TypeReference<>() {
+	};
+
+	private static final TypeReference<McpSchema.SearchResourceTemplatesResult> SEARCH_RESOURCE_TEMPLATES_RESULT_TYPE_REF = new TypeReference<>() {
+	};
+
+	private static final TypeReference<McpSchema.SearchPromptsResult> SEARCH_PROMPTS_RESULT_TYPE_REF = new TypeReference<>() {
+	};
+
+	public Mono<McpSchema.SearchToolsResult> searchTools(McpSchema.SearchToolsRequest searchToolsRequest) {
+		return this.withInitializationCheck("searching tools", initializedResult -> {
+			if (this.serverCapabilities.tools() == null || !this.serverCapabilities.tools().search()) {
+				return Mono.error(new McpError("Server does not provide the tool search capability"));
+			}
+			return this.mcpSession.sendRequest(McpSchema.METHOD_TOOLS_SEARCH, searchToolsRequest,
+					SEARCH_TOOLS_RESULT_TYPE_REF);
+		});
+	}
+
+	public Mono<McpSchema.SearchResourcesResult> searchResources(
+			McpSchema.SearchResourcesRequest searchResourcesRequest) {
+		return this.withInitializationCheck("searching resources", initializedResult -> {
+			if (this.serverCapabilities.resources() == null || !this.serverCapabilities.resources().search()) {
+				return Mono.error(new McpError("Server does not provide the resource search capability"));
+			}
+			return this.mcpSession.sendRequest(McpSchema.METHOD_RESOURCES_SEARCH, searchResourcesRequest,
+					SEARCH_RESOURCES_RESULT_TYPE_REF);
+		});
+	}
+
+	public Mono<McpSchema.SearchResourceTemplatesResult> searchResourceTemplates(
+			McpSchema.SearchResourceTemplatesRequest searchResourceTemplatesRequest) {
+		return this.withInitializationCheck("searching resource templates", initializedResult -> {
+			if (this.serverCapabilities.resources() == null || !this.serverCapabilities.resources().search()) {
+				// shares a capability with resources
+				return Mono.error(new McpError("Server does not provide the resource search capability"));
+			}
+			return this.mcpSession.sendRequest(McpSchema.METHOD_RESOURCES_TEMPLATES_SEARCH,
+					searchResourceTemplatesRequest, SEARCH_RESOURCE_TEMPLATES_RESULT_TYPE_REF);
+		});
+	}
+
+	public Mono<McpSchema.SearchPromptsResult> searchPrompts(McpSchema.SearchPromptsRequest searchPromptsRequest) {
+		return this.withInitializationCheck("searching prompts", initializedResult -> {
+			if (this.serverCapabilities.prompts() == null || !this.serverCapabilities.prompts().search()) {
+				return Mono.error(new McpError("Server does not provide the tool search capability"));
+			}
+			return this.mcpSession.sendRequest(McpSchema.METHOD_PROMPT_SEARCH, searchPromptsRequest,
+					SEARCH_PROMPTS_RESULT_TYPE_REF);
+		});
+	}
+
 }

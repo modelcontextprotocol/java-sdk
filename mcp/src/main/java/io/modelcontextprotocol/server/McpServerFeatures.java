@@ -37,6 +37,10 @@ public class McpServerFeatures {
 	 * @param rootsChangeConsumers The list of consumers that will be notified when the
 	 * roots list changes
 	 * @param instructions The server instructions text
+	 * @param toolSearchHandler The tool search provider
+	 * @param resourceSearchHandler The resource search provider
+	 * @param resourceTemplateSearchHandler The resource template search provider
+	 * @param promptSearchHandler The prompt search provider
 	 */
 	record Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 			List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
@@ -44,7 +48,11 @@ public class McpServerFeatures {
 			Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
 			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
-			String instructions) {
+			String instructions,
+			BiFunction<McpAsyncServerExchange, McpSchema.SearchToolsRequest, Mono<McpSchema.SearchToolsResult>> toolSearchHandler,
+			BiFunction<McpAsyncServerExchange, McpSchema.SearchResourcesRequest, Mono<McpSchema.SearchResourcesResult>> resourceSearchHandler,
+			BiFunction<McpAsyncServerExchange, McpSchema.SearchResourceTemplatesRequest, Mono<McpSchema.SearchResourceTemplatesResult>> resourceTemplateSearchHandler,
+			BiFunction<McpAsyncServerExchange, McpSchema.SearchPromptsRequest, Mono<McpSchema.SearchPromptsResult>> promptSearchHandler) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -57,6 +65,10 @@ public class McpServerFeatures {
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
 		 * @param instructions The server instructions text
+		 * @param toolSearchHandler The tool search provider
+		 * @param resourceSearchHandler The resource search provider
+		 * @param resourceTemplateSearchHandler The resource template search provider
+		 * @param promptSearchHandler The prompt search provider
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
@@ -64,7 +76,11 @@ public class McpServerFeatures {
 				Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
 				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
-				String instructions) {
+				String instructions,
+				BiFunction<McpAsyncServerExchange, McpSchema.SearchToolsRequest, Mono<McpSchema.SearchToolsResult>> toolSearchHandler,
+				BiFunction<McpAsyncServerExchange, McpSchema.SearchResourcesRequest, Mono<McpSchema.SearchResourcesResult>> resourceSearchHandler,
+				BiFunction<McpAsyncServerExchange, McpSchema.SearchResourceTemplatesRequest, Mono<McpSchema.SearchResourceTemplatesResult>> resourceTemplateSearchHandler,
+				BiFunction<McpAsyncServerExchange, McpSchema.SearchPromptsRequest, Mono<McpSchema.SearchPromptsResult>> promptSearchHandler) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -88,6 +104,10 @@ public class McpServerFeatures {
 			this.completions = (completions != null) ? completions : Map.of();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : List.of();
 			this.instructions = instructions;
+			this.toolSearchHandler = toolSearchHandler;
+			this.resourceSearchHandler = resourceSearchHandler;
+			this.resourceTemplateSearchHandler = resourceTemplateSearchHandler;
+			this.promptSearchHandler = promptSearchHandler;
 		}
 
 		/**
@@ -127,8 +147,22 @@ public class McpServerFeatures {
 					.subscribeOn(Schedulers.boundedElastic()));
 			}
 
+			BiFunction<McpAsyncServerExchange, McpSchema.SearchToolsRequest, Mono<McpSchema.SearchToolsResult>> toolSearchHandler = (
+					exchange, request) -> Mono.fromCallable(
+							() -> syncSpec.toolSearchHandler().apply(new McpSyncServerExchange(exchange), request));
+			BiFunction<McpAsyncServerExchange, McpSchema.SearchResourcesRequest, Mono<McpSchema.SearchResourcesResult>> resourceSearchHandler = (
+					exchange, request) -> Mono.fromCallable(
+							() -> syncSpec.resourceSearchHandler().apply(new McpSyncServerExchange(exchange), request));
+			BiFunction<McpAsyncServerExchange, McpSchema.SearchResourceTemplatesRequest, Mono<McpSchema.SearchResourceTemplatesResult>> resourceTemplateSearchHandler = (
+					exchange, request) -> Mono.fromCallable(() -> syncSpec.resourceTemplateSearchHandler()
+						.apply(new McpSyncServerExchange(exchange), request));
+			BiFunction<McpAsyncServerExchange, McpSchema.SearchPromptsRequest, Mono<McpSchema.SearchPromptsResult>> promptSearchHandler = (
+					exchange, request) -> Mono.fromCallable(
+							() -> syncSpec.promptSearchHandler().apply(new McpSyncServerExchange(exchange), request));
+
 			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources,
-					syncSpec.resourceTemplates(), prompts, completions, rootChangeConsumers, syncSpec.instructions());
+					syncSpec.resourceTemplates(), prompts, completions, rootChangeConsumers, syncSpec.instructions(),
+					toolSearchHandler, resourceSearchHandler, resourceTemplateSearchHandler, promptSearchHandler);
 		}
 	}
 
@@ -144,6 +178,10 @@ public class McpServerFeatures {
 	 * @param rootsChangeConsumers The list of consumers that will be notified when the
 	 * roots list changes
 	 * @param instructions The server instructions text
+	 * @param toolSearchHandler The tool search provider
+	 * @param resourceSearchHandler The resource search provider
+	 * @param resourceTemplateSearchHandler The resource template search provider
+	 * @param promptSearchHandler The prompt search provider
 	 */
 	record Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 			List<McpServerFeatures.SyncToolSpecification> tools,
@@ -151,7 +189,11 @@ public class McpServerFeatures {
 			List<McpSchema.ResourceTemplate> resourceTemplates,
 			Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions,
-			List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers, String instructions) {
+			List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers, String instructions,
+			BiFunction<McpSyncServerExchange, McpSchema.SearchToolsRequest, McpSchema.SearchToolsResult> toolSearchHandler,
+			BiFunction<McpSyncServerExchange, McpSchema.SearchResourcesRequest, McpSchema.SearchResourcesResult> resourceSearchHandler,
+			BiFunction<McpSyncServerExchange, McpSchema.SearchResourceTemplatesRequest, McpSchema.SearchResourceTemplatesResult> resourceTemplateSearchHandler,
+			BiFunction<McpSyncServerExchange, McpSchema.SearchPromptsRequest, McpSchema.SearchPromptsResult> promptSearchHandler) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -164,6 +206,10 @@ public class McpServerFeatures {
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
 		 * @param instructions The server instructions text
+		 * @param toolSearchHandler The tool search provider
+		 * @param resourceSearchHandler The resource search provider
+		 * @param resourceTemplateSearchHandler The resource template search provider
+		 * @param promptSearchHandler The prompt search provider
 		 */
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpServerFeatures.SyncToolSpecification> tools,
@@ -171,8 +217,11 @@ public class McpServerFeatures {
 				List<McpSchema.ResourceTemplate> resourceTemplates,
 				Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions,
-				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers,
-				String instructions) {
+				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers, String instructions,
+				BiFunction<McpSyncServerExchange, McpSchema.SearchToolsRequest, McpSchema.SearchToolsResult> toolSearchHandler,
+				BiFunction<McpSyncServerExchange, McpSchema.SearchResourcesRequest, McpSchema.SearchResourcesResult> resourceSearchHandler,
+				BiFunction<McpSyncServerExchange, McpSchema.SearchResourceTemplatesRequest, McpSchema.SearchResourceTemplatesResult> resourceTemplateSearchHandler,
+				BiFunction<McpSyncServerExchange, McpSchema.SearchPromptsRequest, McpSchema.SearchPromptsResult> promptSearchHandler) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -196,6 +245,10 @@ public class McpServerFeatures {
 			this.completions = (completions != null) ? completions : new HashMap<>();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : new ArrayList<>();
 			this.instructions = instructions;
+			this.toolSearchHandler = toolSearchHandler;
+			this.resourceSearchHandler = resourceSearchHandler;
+			this.resourceTemplateSearchHandler = resourceTemplateSearchHandler;
+			this.promptSearchHandler = promptSearchHandler;
 		}
 
 	}

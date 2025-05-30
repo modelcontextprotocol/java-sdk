@@ -5,12 +5,7 @@
 package io.modelcontextprotocol.server;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
@@ -110,6 +105,14 @@ public class McpAsyncServer {
 
 	private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
 
+	private final BiFunction<McpAsyncServerExchange, McpSchema.SearchToolsRequest, Mono<McpSchema.SearchToolsResult>> toolSearchHandler;
+
+	private final BiFunction<McpAsyncServerExchange, McpSchema.SearchResourcesRequest, Mono<McpSchema.SearchResourcesResult>> resourceSearchHandler;
+
+	private final BiFunction<McpAsyncServerExchange, McpSchema.SearchResourceTemplatesRequest, Mono<McpSchema.SearchResourceTemplatesResult>> resourceTemplateSearchHandler;
+
+	private final BiFunction<McpAsyncServerExchange, McpSchema.SearchPromptsRequest, Mono<McpSchema.SearchPromptsResult>> promptSearchHandler;
+
 	/**
 	 * Create a new McpAsyncServer with the given transport provider and capabilities.
 	 * @param mcpTransportProvider The transport layer implementation for MCP
@@ -131,6 +134,10 @@ public class McpAsyncServer {
 		this.prompts.putAll(features.prompts());
 		this.completions.putAll(features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
+		this.toolSearchHandler = features.toolSearchHandler();
+		this.resourceSearchHandler = features.resourceSearchHandler();
+		this.resourceTemplateSearchHandler = features.resourceTemplateSearchHandler();
+		this.promptSearchHandler = features.promptSearchHandler();
 
 		Map<String, McpServerSession.RequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -143,6 +150,10 @@ public class McpAsyncServer {
 		if (this.serverCapabilities.tools() != null) {
 			requestHandlers.put(McpSchema.METHOD_TOOLS_LIST, toolsListRequestHandler());
 			requestHandlers.put(McpSchema.METHOD_TOOLS_CALL, toolsCallRequestHandler());
+
+			if (this.serverCapabilities.tools().search()) {
+				requestHandlers.put(McpSchema.METHOD_TOOLS_SEARCH, searchToolsRequestHandler());
+			}
 		}
 
 		// Add resources API handlers if provided
@@ -150,12 +161,22 @@ public class McpAsyncServer {
 			requestHandlers.put(McpSchema.METHOD_RESOURCES_LIST, resourcesListRequestHandler());
 			requestHandlers.put(McpSchema.METHOD_RESOURCES_READ, resourcesReadRequestHandler());
 			requestHandlers.put(McpSchema.METHOD_RESOURCES_TEMPLATES_LIST, resourceTemplateListRequestHandler());
+
+			if (this.serverCapabilities.resources().search()) {
+				requestHandlers.put(McpSchema.METHOD_RESOURCES_SEARCH, searchResourcesRequestHandler());
+				requestHandlers.put(McpSchema.METHOD_RESOURCES_TEMPLATES_SEARCH,
+						searchResourceTemplatesRequestHandler());
+			}
 		}
 
 		// Add prompts API handlers if provider exists
 		if (this.serverCapabilities.prompts() != null) {
 			requestHandlers.put(McpSchema.METHOD_PROMPT_LIST, promptsListRequestHandler());
 			requestHandlers.put(McpSchema.METHOD_PROMPT_GET, promptsGetRequestHandler());
+
+			if (this.serverCapabilities.prompts().search()) {
+				requestHandlers.put(McpSchema.METHOD_PROMPT_SEARCH, searchPromptsRequestHandler());
+			}
 		}
 
 		// Add logging API handlers if the logging capability is enabled
@@ -691,6 +712,84 @@ public class McpAsyncServer {
 			}
 
 			return specification.completionHandler().apply(exchange, request);
+		};
+	}
+
+	// ---------------------------------------
+	// Search
+	// ---------------------------------------
+
+	private McpServerSession.RequestHandler<McpSchema.SearchToolsResult> searchToolsRequestHandler() {
+		return (exchange, params) -> {
+			McpSchema.ServerCapabilities.ToolCapabilities toolCapabilities = serverCapabilities.tools();
+			if (toolCapabilities == null || !toolCapabilities.search()) {
+				return Mono.error(new McpError("Server must be configured with tool search capabilities"));
+			}
+
+			if (toolSearchHandler == null) {
+				return Mono.error(new McpError("Tool search handler must not be null"));
+			}
+
+			McpSchema.SearchToolsRequest request = objectMapper.convertValue(params, new TypeReference<>() {
+			});
+
+			return toolSearchHandler.apply(exchange, request);
+		};
+	}
+
+	private McpServerSession.RequestHandler<McpSchema.SearchResourcesResult> searchResourcesRequestHandler() {
+		return (exchange, params) -> {
+			McpSchema.ServerCapabilities.ResourceCapabilities resourceCapabilities = serverCapabilities.resources();
+			if (resourceCapabilities == null || !resourceCapabilities.search()) {
+				return Mono.error(new McpError("Server must be configured with resource search capabilities"));
+			}
+
+			if (resourceSearchHandler == null) {
+				return Mono.error(new McpError("Resource search handler must not be null"));
+			}
+
+			McpSchema.SearchResourcesRequest request = objectMapper.convertValue(params, new TypeReference<>() {
+			});
+
+			return resourceSearchHandler.apply(exchange, request);
+		};
+	}
+
+	private McpServerSession.RequestHandler<McpSchema.SearchResourceTemplatesResult> searchResourceTemplatesRequestHandler() {
+		return (exchange, params) -> {
+			McpSchema.ServerCapabilities.ResourceCapabilities resourceCapabilities = serverCapabilities.resources();
+			if (resourceCapabilities == null || !resourceCapabilities.search()) {
+				// Controlled with the same capability as resources - raise a resource
+				// error
+				return Mono.error(new McpError("Server must be configured with resource search capabilities"));
+			}
+
+			if (resourceTemplateSearchHandler == null) {
+				return Mono.error(new McpError("Resource template search handler must not be null"));
+			}
+
+			McpSchema.SearchResourceTemplatesRequest request = objectMapper.convertValue(params, new TypeReference<>() {
+			});
+
+			return resourceTemplateSearchHandler.apply(exchange, request);
+		};
+	}
+
+	private McpServerSession.RequestHandler<McpSchema.SearchPromptsResult> searchPromptsRequestHandler() {
+		return (exchange, params) -> {
+			McpSchema.ServerCapabilities.PromptCapabilities promptCapabilities = serverCapabilities.prompts();
+			if (promptCapabilities == null || !promptCapabilities.search()) {
+				return Mono.error(new McpError("Server must be configured with prompt search capabilities"));
+			}
+
+			if (promptSearchHandler == null) {
+				return Mono.error(new McpError("Prompt search handler must not be null"));
+			}
+
+			McpSchema.SearchPromptsRequest request = objectMapper.convertValue(params, new TypeReference<>() {
+			});
+
+			return promptSearchHandler.apply(exchange, request);
 		};
 	}
 

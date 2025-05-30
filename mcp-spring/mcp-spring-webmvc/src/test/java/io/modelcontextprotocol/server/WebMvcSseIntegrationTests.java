@@ -635,6 +635,145 @@ class WebMvcSseIntegrationTests {
 		mcpServer.close();
 	}
 
+	// ---------------------------------------
+	// Search Tests
+	// ---------------------------------------
+	@Test
+	void testSearchToolsSuccess() {
+
+		var tool1Spec = new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema);
+		var searchResponse = McpSchema.SearchToolsResult.builder().tools(List.of(tool1Spec)).build();
+		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(tool1Spec,
+				(exchange, request) -> CallToolResult.builder().textContent(List.of("CALL RESPONSE")).build());
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder()
+				.tools(ServerCapabilities.ToolCapabilities.builder().search(true).build())
+				.build())
+			.tools(tool1)
+			.toolSearchHandler((exchange, request) -> searchResponse)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThat(mcpClient.searchTools(McpSchema.SearchToolsRequest.builder().query("test").build()).tools())
+				.contains(tool1.tool());
+
+			mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+		}
+
+		mcpServer.close();
+	}
+
+	@Test
+	void testSearchResourcesSuccess() {
+
+		var tool1Spec = new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema);
+
+		var resource = new McpSchema.Resource("uri://test", "test", "test", "text/plain", null);
+		var searchResponse = McpSchema.SearchResourcesResult.builder().resources(List.of(resource)).build();
+
+		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(tool1Spec,
+				(exchange, request) -> CallToolResult.builder().textContent(List.of("CALL RESPONSE")).build());
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder()
+				.tools(ServerCapabilities.ToolCapabilities.builder().build())
+				.resources(ServerCapabilities.ResourceCapabilities.builder().search(true).build())
+				.build())
+			.tools(tool1)
+			.resourceSearchHandler((exchange, request) -> searchResponse)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThat(mcpClient.searchResources(McpSchema.SearchResourcesRequest.builder().query("test").build())
+				.resources()).contains(resource);
+
+			mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+		}
+
+		mcpServer.close();
+	}
+
+	@Test
+	void testSearchResourceTemplatesSuccess() {
+
+		var tool1Spec = new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema);
+
+		var resourceTemplate = new McpSchema.ResourceTemplate("uri://test", "test", "test", "text/plain", null);
+		var searchResponse = McpSchema.SearchResourceTemplatesResult.builder()
+			.resourceTemplates(List.of(resourceTemplate))
+			.build();
+
+		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(tool1Spec,
+				(exchange, request) -> CallToolResult.builder().textContent(List.of("CALL RESPONSE")).build());
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder()
+				.tools(ServerCapabilities.ToolCapabilities.builder().build())
+				.resources(ServerCapabilities.ResourceCapabilities.builder().search(true).build())
+				.build())
+			.tools(tool1)
+			.resourceTemplateSearchHandler((exchange, request) -> searchResponse)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThat(mcpClient
+				.searchResourceTemplates(McpSchema.SearchResourceTemplatesRequest.builder().query("test").build())
+				.resourceTemplates()).contains(resourceTemplate);
+
+			mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+		}
+
+		mcpServer.close();
+	}
+
+	@Test
+	void testSearchPromptsSuccess() {
+
+		var tool1Spec = new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema);
+
+		var prompt = new McpSchema.Prompt("test", "test", List.of());
+		var searchResponse = McpSchema.SearchPromptsResult.builder().prompts(List.of(prompt)).build();
+
+		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(tool1Spec,
+				(exchange, request) -> CallToolResult.builder().textContent(List.of("CALL RESPONSE")).build());
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder()
+				.tools(ServerCapabilities.ToolCapabilities.builder().build())
+				.prompts(ServerCapabilities.PromptCapabilities.builder().search(true).build())
+				.build())
+			.tools(tool1)
+			.promptSearchHandler((exchange, request) -> searchResponse)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThat(
+					mcpClient.searchPrompts(McpSchema.SearchPromptsRequest.builder().query("test").build()).prompts())
+				.contains(prompt);
+
+			mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+		}
+
+		mcpServer.close();
+	}
+
 	@Test
 	void testInitialize() {
 
