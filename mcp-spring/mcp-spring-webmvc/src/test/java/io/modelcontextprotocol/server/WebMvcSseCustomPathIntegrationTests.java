@@ -4,10 +4,14 @@ import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.server.transport.WebMvcSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
+
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
+
+import org.springframework.core.env.Environment;
 import reactor.core.publisher.Mono;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.apache.catalina.LifecycleException;
@@ -24,13 +28,15 @@ import org.springframework.web.servlet.function.ServerResponse;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+/**
+ * Tests the {@link WebMvcSseServerTransportProvider} with different values for the
+ * endpoint.
+ */
 public class WebMvcSseCustomPathIntegrationTests {
 
 	private static final int PORT = TestUtil.findAvailablePort();
 
 	private WebMvcSseServerTransportProvider mcpServerTransportProvider;
-
-	McpClient.SyncSpec clientBuilder;
 
 	private TomcatTestUtil.TomcatServer tomcatServer;
 
@@ -47,7 +53,7 @@ public class WebMvcSseCustomPathIntegrationTests {
 	static class TestConfig {
 
 		@Bean
-		public WebMvcSseServerTransportProvider transportProvider(org.springframework.core.env.Environment env) {
+		public WebMvcSseServerTransportProvider transportProvider(Environment env) {
 			String baseUrl = env.getProperty("test.baseUrl");
 			String messageEndpoint = env.getProperty("test.messageEndpoint");
 			String sseEndpoint = env.getProperty("test.sseEndpoint");
@@ -84,18 +90,10 @@ public class WebMvcSseCustomPathIntegrationTests {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		var c = contextPath;
-		var b = baseUrl;
-		var s = sseEndpoint;
-		if (baseUrl.endsWith("/")) {
-			b = b.substring(0, b.length() - 1);
-		}
-		if (contextPath.endsWith("/")) {
-			c = c.substring(0, c.length() - 1);
-		}
+		var endpoint = buildSseEndpoint(contextPath, baseUrl, sseEndpoint);
 
-		clientBuilder = McpClient
-			.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT).sseEndpoint(c + b + s).build());
+		var clientBuilder = McpClient
+			.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT).sseEndpoint(endpoint).build());
 
 		McpSchema.CallToolResult callResponse = new McpSchema.CallToolResult(
 				List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
@@ -123,17 +121,23 @@ public class WebMvcSseCustomPathIntegrationTests {
 		server.close();
 	}
 
-	private static Stream<Arguments> provideCustomEndpoints() {
-		String[] baseUrls = { "", "/v1", "/api/v1", "/", "/v1/", "/api/v1/" };
-		String[] messageEndpoints = { "/message", "/another/sse", "/" };
-		String[] sseEndpoints = { "/sse", "/another/sse", "/" };
-		String[] contextPaths = { "", "/mcp", "/root/mcp", "/", "/mcp/", "/root/mcp/" };
+	/**
+	 * This is a helper function for the tests which builds the SSE endpoint to pass to the client transport.
+	 *
+	 * @param contextPath context path of the server.
+	 * @param baseUrl base url of the sse endpoint.
+	 * @param sseEndpoint the sse endpoint.
+	 * @return the created sse endpoint.
+	 */
+	private String buildSseEndpoint(String contextPath, String baseUrl, String sseEndpoint) {
+		if (baseUrl.endsWith("/")) {
+			baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+		}
+		if (contextPath.endsWith("/")) {
+			contextPath = contextPath.substring(0, contextPath.length() - 1);
+		}
 
-		return Stream.of(baseUrls)
-			.flatMap(baseUrl -> Stream.of(messageEndpoints)
-				.flatMap(messageEndpoint -> Stream.of(sseEndpoints)
-					.flatMap(sseEndpoint -> Stream.of(contextPaths)
-						.map(contextPath -> Arguments.of(baseUrl, messageEndpoint, sseEndpoint, contextPath)))));
+		return contextPath + baseUrl + sseEndpoint;
 	}
 
 	@AfterEach
@@ -153,6 +157,36 @@ public class WebMvcSseCustomPathIntegrationTests {
 				throw new RuntimeException("Failed to stop Tomcat", e);
 			}
 		}
+	}
+
+	/**
+	 * Provides a stream of custom endpoints. This generates all possible combinations for
+	 * allowed endpoint values.
+	 *
+	 * <p>
+	 * Each combination is returned as an {@link Arguments} object containing four
+	 * parameters in the following order:
+	 * </p>
+	 * <ol>
+	 * <li>Base URL (String)</li>
+	 * <li>Message endpoint (String)</li>
+	 * <li>SSE endpoint (String)</li>
+	 * <li>Context path (String)</li>
+	 * </ol>
+	 * @return a {@link Stream} of {@link Arguments} objects, each containing four String
+	 * parameters representing different endpoint combinations for parameterized testing
+	 */
+	private static Stream<Arguments> provideCustomEndpoints() {
+		String[] baseUrls = { "", "/", "/v1", "/v1/" };
+		String[] messageEndpoints = { "/", "/message", "/message/" };
+		String[] sseEndpoints = { "/", "/sse", "/sse/" };
+		String[] contextPaths = { "", "/", "/mcp", "/mcp/" };
+
+		return Stream.of(baseUrls)
+			.flatMap(baseUrl -> Stream.of(messageEndpoints)
+				.flatMap(messageEndpoint -> Stream.of(sseEndpoints)
+					.flatMap(sseEndpoint -> Stream.of(contextPaths)
+						.map(contextPath -> Arguments.of(baseUrl, messageEndpoint, sseEndpoint, contextPath)))));
 	}
 
 }

@@ -91,7 +91,7 @@ class WebMvcSseCustomContextPathTests {
 		@Bean
 		public WebMvcSseServerTransportProvider webMvcSseServerTransportProvider() {
 
-			return new WebMvcSseServerTransportProvider(new ObjectMapper(), "", CUSTOM_CONTEXT_PATH, MESSAGE_ENDPOINT,
+			return new WebMvcSseServerTransportProvider(new ObjectMapper(), CUSTOM_CONTEXT_PATH, "", MESSAGE_ENDPOINT,
 					WebMvcSseServerTransportProvider.DEFAULT_SSE_ENDPOINT);
 		}
 

@@ -4,7 +4,6 @@
 
 package io.modelcontextprotocol.util;
 
-import java.net.URL;
 import reactor.util.annotation.Nullable;
 
 import java.net.URI;
@@ -54,6 +53,19 @@ public final class Utils {
 		return (map == null || map.isEmpty());
 	}
 
+
+	/**
+	 * Removes the trailing slash character of the given String.
+	 * @param str the String to remove the trailing slash
+	 * @return the modified String.
+	 */
+	public static String removeTrailingSlash(String str) {
+		if (str.endsWith("/")) {
+			str = str.substring(0, str.length() - 1);
+		}
+		return str;
+	}
+
 	/**
 	 * Resolves the given endpoint URL against the base URL.
 	 * <ul>
@@ -70,33 +82,13 @@ public final class Utils {
 	 * base URL or URI is malformed
 	 */
 	public static URI resolveUri(URI baseUrl, String endpointUrl) {
-		URI endpointUri = URI.create(endpointUrl.startsWith("/") ? endpointUrl.substring(1) : endpointUrl);
+		URI endpointUri = URI.create(endpointUrl);
 		if (endpointUri.isAbsolute() && !isUnderBaseUri(baseUrl, endpointUri)) {
 			throw new IllegalArgumentException("Absolute endpoint URL does not match the base URL.");
 		}
 		else {
-			return ensureTrailingSlash(baseUrl).resolve(endpointUri);
+			return baseUrl.resolve(endpointUri);
 		}
-	}
-
-	public static URI resolveSseUri(URI baseUrl, String endpointUrl) {
-		String sanitizedEndpoint = stripLeadingSlash(endpointUrl);
-		URI endpointUri = URI.create(sanitizedEndpoint);
-		if (endpointUri.isAbsolute() && !isUnderBaseUri(baseUrl, endpointUri)) {
-			throw new IllegalArgumentException("Absolute endpoint URL does not match the base URL.");
-		}
-
-		URI res = ensureTrailingSlash(baseUrl).resolve(endpointUri);
-		return res;
-	}
-
-	private static String stripLeadingSlash(String url) {
-		return url.startsWith("/") ? url.substring(1) : url;
-	}
-
-	private static URI ensureTrailingSlash(URI uri) {
-		String uriString = uri.toString();
-		return !uriString.endsWith("/") ? URI.create(uriString.concat("/")) : uri;
 	}
 
 	/**

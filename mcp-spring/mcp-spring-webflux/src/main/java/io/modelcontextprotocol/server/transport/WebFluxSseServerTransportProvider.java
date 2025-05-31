@@ -12,6 +12,7 @@ import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
@@ -145,6 +146,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 * Constructs a new WebFlux SSE server transport provider instance.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 * of MCP messages. Must not be null.
+	 * @param contextPath The context path of the server.
 	 * @param baseUrl webflux message base path
 	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
 	 * messages. This endpoint will be communicated to clients during SSE connection
@@ -159,16 +161,9 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
 
-		if (baseUrl.endsWith("/")) {
-			baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
-		}
-		if (contextPath.endsWith("/")) {
-			contextPath = contextPath.substring(0, contextPath.length() - 1);
-		}
-
 		this.objectMapper = objectMapper;
-		this.contextPath = contextPath;
-		this.baseUrl = baseUrl;
+		this.contextPath = Utils.removeTrailingSlash(contextPath);
+		this.baseUrl = Utils.removeTrailingSlash(baseUrl);
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
 		this.routerFunction = RouterFunctions.route()
@@ -435,6 +430,18 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		public Builder basePath(String baseUrl) {
 			Assert.notNull(baseUrl, "basePath must not be null");
 			this.baseUrl = baseUrl;
+			return this;
+		}
+
+		/**
+		 * Sets the context path under which the server is running.
+		 * @param contextPath the context path.
+		 * @return this builder instance.
+		 * @throws IllegalArgumentException if contextPath is null
+		 */
+		public Builder contextPath(String contextPath) {
+			Assert.notNull(contextPath, "contextPath must not be null");
+			this.contextPath = contextPath;
 			return this;
 		}
 

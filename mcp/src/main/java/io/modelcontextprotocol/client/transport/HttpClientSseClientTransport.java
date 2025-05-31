@@ -341,7 +341,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		CompletableFuture<Void> future = new CompletableFuture<>();
 		connectionFuture.set(future);
 
-		URI clientUri = Utils.resolveSseUri(this.baseUri, this.sseEndpoint);
+		URI clientUri = Utils.resolveUri(this.baseUri, this.sseEndpoint);
 		logger.debug("Subscribing to {}", clientUri);
 		sseClient.subscribe(clientUri.toString(), new FlowSseClient.SseEventHandler() {
 			@Override

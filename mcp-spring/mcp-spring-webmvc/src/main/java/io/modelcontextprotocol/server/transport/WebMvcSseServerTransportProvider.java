@@ -19,6 +19,7 @@ import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -161,17 +162,9 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
 		Assert.hasText(sseEndpoint, "SSE endpoint must not be empty");
 
-		if (baseUrl.endsWith("/")) {
-			baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
-		}
-
-		if (contextPath.endsWith("/")) {
-			contextPath = contextPath.substring(0, contextPath.length() - 1);
-		}
-
 		this.objectMapper = objectMapper;
-		this.baseUrl = baseUrl;
-		this.contextPath = contextPath;
+		this.contextPath = Utils.removeTrailingSlash(contextPath);
+		this.baseUrl = Utils.removeTrailingSlash(baseUrl);
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
 		this.routerFunction = RouterFunctions.route()

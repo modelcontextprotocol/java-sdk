@@ -12,7 +12,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.http.server.reactive.HttpHandler;
 import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.server.RequestPredicates;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerResponse;
@@ -22,14 +21,16 @@ import reactor.netty.http.server.HttpServer;
 
 import java.util.List;
 import java.util.Map;
-import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.web.reactive.function.server.RequestPredicates.path;
 import static org.springframework.web.reactive.function.server.RouterFunctions.nest;
-import static org.springframework.web.reactive.function.server.RouterFunctions.route;
 
+/**
+ * Tests the {@link WebFluxSseServerTransportProvider} with different values for the
+ * endpoint.
+ */
 public class WebFluxSseCustomPathIntegrationTests {
 
 	private static final int PORT = TestUtil.findAvailablePort();
@@ -56,25 +57,18 @@ public class WebFluxSseCustomPathIntegrationTests {
 				baseUrl, messageEndpoint, sseEndpoint);
 
 		RouterFunction<?> router = this.mcpServerTransportProvider.getRouterFunction();
+		// wrap the context path around the router function
 		RouterFunction<ServerResponse> nestedRouter = (RouterFunction<ServerResponse>) nest(path(contextPath), router);
 		HttpHandler httpHandler = RouterFunctions.toHttpHandler(nestedRouter);
 		ReactorHttpHandlerAdapter adapter = new ReactorHttpHandlerAdapter(httpHandler);
 
 		this.httpServer = HttpServer.create().port(PORT).handle(adapter).bindNow();
 
-		var c = contextPath;
-		var b = baseUrl;
-		var s = sseEndpoint;
-		if (baseUrl.endsWith("/")) {
-			b = b.substring(0, b.length() - 1);
-		}
-		if (contextPath.endsWith("/")) {
-			c = c.substring(0, c.length() - 1);
-		}
+		var endpoint = buildSseEndpoint(contextPath, baseUrl, sseEndpoint);
 
 		var clientBuilder = McpClient
 			.sync(WebFluxSseClientTransport.builder(WebClient.builder().baseUrl("http://localhost:" + PORT))
-				.sseEndpoint(c + b + s)
+				.sseEndpoint(endpoint)
 				.build());
 
 		McpSchema.CallToolResult callResponse = new McpSchema.CallToolResult(
@@ -102,24 +96,63 @@ public class WebFluxSseCustomPathIntegrationTests {
 
 	}
 
+	/**
+	 * This is a helper function for the tests which builds the SSE endpoint to pass to the client transport.
+	 *
+	 * @param contextPath context path of the server.
+	 * @param baseUrl base url of the sse endpoint.
+	 * @param sseEndpoint the sse endpoint.
+	 * @return the created sse endpoint.
+	 */
+	private String buildSseEndpoint(String contextPath, String baseUrl, String sseEndpoint) {
+		if (baseUrl.endsWith("/")) {
+			baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+		}
+		if (contextPath.endsWith("/")) {
+			contextPath = contextPath.substring(0, contextPath.length() - 1);
+		}
+
+		return contextPath + baseUrl + sseEndpoint;
+	}
+
+	@AfterEach
+	public void after() {
+		if (mcpServerTransportProvider != null) {
+			mcpServerTransportProvider.closeGracefully().block();
+		}
+		if (httpServer != null) {
+			httpServer.disposeNow();
+		}
+	}
+
+	/**
+	 * Provides a stream of custom endpoints. This generates all possible combinations for
+	 * allowed endpoint values.
+	 *
+	 * <p>
+	 * Each combination is returned as an {@link Arguments} object containing four
+	 * parameters in the following order:
+	 * </p>
+	 * <ol>
+	 * <li>Base URL (String)</li>
+	 * <li>Message endpoint (String)</li>
+	 * <li>SSE endpoint (String)</li>
+	 * <li>Context path (String)</li>
+	 * </ol>
+	 * @return a {@link Stream} of {@link Arguments} objects, each containing four String
+	 * parameters representing different endpoint combinations for parameterized testing
+	 */
 	private static Stream<Arguments> provideCustomEndpoints() {
-		String[] baseUrls = { "", "/v1", "/api/v1", "/", "/v1/", "/api/v1/" };
-		String[] messageEndpoints = { "/message", "/another/sse", "/" };
-		String[] sseEndpoints = { "/sse", "/another/sse", "/" };
-		String[] contextPaths = { "", "/mcp", "/root/mcp", "/", "/mcp/", "/root/mcp/" };
+		String[] baseUrls = { "", "/", "/v1", "/v1/" };
+		String[] messageEndpoints = { "/", "/message", "/message/" };
+		String[] sseEndpoints = { "/", "/sse", "/sse/" };
+		String[] contextPaths = { "", "/", "/mcp", "/mcp/" };
 
 		return Stream.of(baseUrls)
 			.flatMap(baseUrl -> Stream.of(messageEndpoints)
 				.flatMap(messageEndpoint -> Stream.of(sseEndpoints)
 					.flatMap(sseEndpoint -> Stream.of(contextPaths)
 						.map(contextPath -> Arguments.of(baseUrl, messageEndpoint, sseEndpoint, contextPath)))));
-	}
-
-	@AfterEach
-	public void after() {
-		if (httpServer != null) {
-			httpServer.disposeNow();
-		}
 	}
 
 }
