@@ -53,7 +53,6 @@ public final class Utils {
 		return (map == null || map.isEmpty());
 	}
 
-
 	/**
 	 * Removes the trailing slash character of the given String.
 	 * @param str the String to remove the trailing slash

@@ -97,8 +97,8 @@ public class WebFluxSseCustomPathIntegrationTests {
 	}
 
 	/**
-	 * This is a helper function for the tests which builds the SSE endpoint to pass to the client transport.
-	 *
+	 * This is a helper function for the tests which builds the SSE endpoint to pass to
+	 * the client transport.
 	 * @param contextPath context path of the server.
 	 * @param baseUrl base url of the sse endpoint.
 	 * @param sseEndpoint the sse endpoint.

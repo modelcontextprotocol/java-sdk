@@ -159,7 +159,9 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		Assert.notNull(contextPath, "Context path must not be null");
 		Assert.notNull(baseUrl, "Message base path must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
+		Assert.hasText(messageEndpoint, "Message endpoint must not be empty");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
+		Assert.hasText(sseEndpoint, "SSE endpoint must not be empty");
 
 		this.objectMapper = objectMapper;
 		this.contextPath = Utils.removeTrailingSlash(contextPath);
