@@ -121,6 +121,11 @@ public class McpServerSession implements McpSession {
 				this.pendingResponses.remove(requestId);
 				sink.error(error);
 			});
+			sink.onDispose(() -> {
+				if (this.pendingResponses.remove(requestId) != null) {
+					logger.debug("Request {} disposed (e.g., timeout, cancellation), removed from client pendingResponses.", requestId);
+				}
+			});
 		}).timeout(requestTimeout).handle((jsonRpcResponse, sink) -> {
 			if (jsonRpcResponse.error() != null) {
 				sink.error(new McpError(jsonRpcResponse.error()));
