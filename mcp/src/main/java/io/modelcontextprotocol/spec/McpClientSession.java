@@ -242,6 +242,11 @@ public class McpClientSession implements McpSession {
 					this.pendingResponses.remove(requestId);
 					sink.error(error);
 				});
+			sink.onDispose(() -> {
+				if (this.pendingResponses.remove(requestId) != null) {
+					logger.debug("Request {} disposed (e.g., timeout, cancellation), removed from client pendingResponses.", requestId);
+				}
+			});
 		})).timeout(this.requestTimeout).handle((jsonRpcResponse, sink) -> {
 			if (jsonRpcResponse.error() != null) {
 				logger.error("Error handling request: {}", jsonRpcResponse.error());
