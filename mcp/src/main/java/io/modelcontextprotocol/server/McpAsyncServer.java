@@ -214,7 +214,6 @@ public class McpAsyncServer {
 						"Client requested unsupported protocol version: {}, so the server will suggest the {} version instead",
 						initializeRequest.protocolVersion(), serverProtocolVersion);
 			}
-
 			return Mono.just(new McpSchema.InitializeResult(serverProtocolVersion, this.serverCapabilities,
 					this.serverInfo, this.instructions));
 		});

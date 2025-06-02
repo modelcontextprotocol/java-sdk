@@ -3,6 +3,7 @@ package io.modelcontextprotocol.spec;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -102,6 +103,14 @@ public class McpServerSession implements McpSession {
 	public void init(McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo) {
 		this.clientCapabilities.lazySet(clientCapabilities);
 		this.clientInfo.lazySet(clientInfo);
+	}
+
+	public McpSchema.ClientCapabilities getClientCapabilities() {
+		return this.clientCapabilities.get();
+	}
+
+	public McpSchema.Implementation getClientInfo() {
+		return this.clientInfo.get();
 	}
 
 	private String generateRequestId() {

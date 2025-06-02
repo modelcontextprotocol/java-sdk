@@ -9,6 +9,8 @@ import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
+import io.modelcontextprotocol.spec.McpSession;
+import io.modelcontextprotocol.spec.McpStreamableHttpServerSession;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
@@ -22,7 +24,7 @@ import reactor.core.publisher.Mono;
  */
 public class McpAsyncServerExchange {
 
-	private final McpServerSession session;
+	private final McpSession session;
 
 	private final McpSchema.ClientCapabilities clientCapabilities;
 
@@ -48,6 +50,20 @@ public class McpAsyncServerExchange {
 	 */
 	public McpAsyncServerExchange(McpServerSession session, McpSchema.ClientCapabilities clientCapabilities,
 			McpSchema.Implementation clientInfo) {
+		this.session = session;
+		this.clientCapabilities = clientCapabilities;
+		this.clientInfo = clientInfo;
+	}
+
+	/**
+	 * Create a new asynchronous exchange with the client.
+	 * @param session The server session representing a 1-1 interaction.
+	 * @param clientCapabilities The client capabilities that define the supported
+	 * features and functionality.
+	 * @param clientInfo The client implementation information.
+	 */
+	public McpAsyncServerExchange(McpStreamableHttpServerSession session,
+			McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo) {
 		this.session = session;
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
