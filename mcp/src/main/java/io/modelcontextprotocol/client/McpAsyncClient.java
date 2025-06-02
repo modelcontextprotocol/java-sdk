@@ -34,6 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Sinks;
 
 /**
@@ -80,7 +81,9 @@ public class McpAsyncClient {
 	private static TypeReference<Void> VOID_TYPE_REFERENCE = new TypeReference<>() {
 	};
 
-	private final AtomicReference<McpSchema.InitializeResult> initialization = new AtomicReference<>();
+	// private final AtomicReference<McpSchema.InitializeResult> initialization = new
+	// AtomicReference<>();
+	private final AtomicReference<Initialization> initialization = new AtomicReference<>();
 
 	/**
 	 * The max timeout to await for the client-server connection to be initialized.
@@ -220,9 +223,10 @@ public class McpAsyncClient {
 	}
 
 	private void handleException(Throwable t) {
+		logger.warn("Handling exception", t);
 		if (t instanceof McpSessionNotFoundException) {
 			this.initialization.set(null);
-			this.initialize().subscribe();
+			withInitializationCheck("re-initializing", result -> Mono.empty()).subscribe();
 		}
 	}
 
@@ -231,7 +235,8 @@ public class McpAsyncClient {
 	 * @return The server capabilities
 	 */
 	public McpSchema.ServerCapabilities getServerCapabilities() {
-		McpSchema.InitializeResult initializeResult = this.initialization.get();
+		Initialization current = this.initialization.get();
+		McpSchema.InitializeResult initializeResult = current != null ? current.result.get() : null;
 		return initializeResult != null ? initializeResult.capabilities() : null;
 	}
 
@@ -241,7 +246,8 @@ public class McpAsyncClient {
 	 * @return The server instructions
 	 */
 	public String getServerInstructions() {
-		McpSchema.InitializeResult initializeResult = this.initialization.get();
+		Initialization current = this.initialization.get();
+		McpSchema.InitializeResult initializeResult = current != null ? current.result.get() : null;
 		return initializeResult != null ? initializeResult.instructions() : null;
 	}
 
@@ -250,7 +256,8 @@ public class McpAsyncClient {
 	 * @return The server implementation details
 	 */
 	public McpSchema.Implementation getServerInfo() {
-		McpSchema.InitializeResult initializeResult = this.initialization.get();
+		Initialization current = this.initialization.get();
+		McpSchema.InitializeResult initializeResult = current != null ? current.result.get() : null;
 		return initializeResult != null ? initializeResult.serverInfo() : null;
 	}
 
@@ -319,6 +326,10 @@ public class McpAsyncClient {
 	 * Initialization Spec</a>
 	 */
 	public Mono<McpSchema.InitializeResult> initialize() {
+		return withInitializationCheck("initialize", Mono::just);
+	}
+
+	private Mono<McpSchema.InitializeResult> initialize0() {
 
 		String latestVersion = this.protocolVersions.get(this.protocolVersions.size() - 1);
 
@@ -341,10 +352,25 @@ public class McpAsyncClient {
 						"Unsupported protocol version from the server: " + initializeResult.protocolVersion()));
 			}
 
-			return this.mcpSession.sendNotification(McpSchema.METHOD_NOTIFICATION_INITIALIZED, null).doOnSuccess(v -> {
-				this.initialization.set(initializeResult);
-			}).thenReturn(initializeResult);
+			return this.mcpSession.sendNotification(McpSchema.METHOD_NOTIFICATION_INITIALIZED, null)
+				.thenReturn(initializeResult);
 		});
+	}
+
+	private static class Initialization {
+
+		private final Sinks.One<McpSchema.InitializeResult> initSink;
+
+		private final AtomicReference<McpSchema.InitializeResult> result = new AtomicReference<>();
+
+		Initialization(Sinks.One<McpSchema.InitializeResult> initSink) {
+			this.initSink = initSink;
+		}
+
+		static Initialization create() {
+			return new Initialization(Sinks.one());
+		}
+
 	}
 
 	/**
@@ -358,23 +384,28 @@ public class McpAsyncClient {
 	private <T> Mono<T> withInitializationCheck(String actionName,
 			Function<McpSchema.InitializeResult, Mono<T>> operation) {
 		return Mono.defer(() -> {
-			McpSchema.InitializeResult initializeResult = this.initialization.get();
-			// FIXME: in case of bursts this will trigger multiple inits, we have to batch
-			// requests
-			// and dispatch once a single init finishes
-			if (initializeResult != null) {
-				return operation.apply(initializeResult);
+			Initialization newInit = Initialization.create();
+			Initialization current = this.initialization.compareAndExchange(null, newInit);
+			if (current == null) {
+				logger.info("Initialization process started");
 			}
 			else {
-				return this.initialize()
-					.timeout(this.initializationTimeout)
-					// TODO: McpError should be used when communicating over the wire, not
-					// to
-					// the user of the client API
-					.onErrorResume(TimeoutException.class,
-							ex -> Mono.error(new McpError("Client must be initialized before " + actionName)))
-					.flatMap(operation);
+				logger.info("Joining previous initialization");
 			}
+			return (current != null ? current.initSink.asMono() : this.initialize0().doOnNext(result -> {
+				// first ensure the state is persisted
+				newInit.result.set(result);
+				// inform all the subscribers
+				newInit.initSink.emitValue(result, Sinks.EmitFailureHandler.FAIL_FAST);
+			}).onErrorResume(ex -> {
+				Initialization ongoing = this.initialization.getAndSet(null);
+				if (ongoing != null) {
+					ongoing.initSink.emitError(ex, Sinks.EmitFailureHandler.FAIL_FAST);
+				}
+				return Mono.error(ex);
+			})).timeout(this.initializationTimeout).onErrorResume(ex -> {
+				return Mono.error(new McpError("Client failed to initialize " + actionName));
+			}).flatMap(operation);
 		});
 	}
 

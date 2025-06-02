@@ -111,14 +111,16 @@ public abstract class AbstractMcpAsyncClientTests {
 		onClose();
 	}
 
-	<T> void verifyInitializationTimeout(Function<McpAsyncClient, Mono<T>> operation, String action) {
+	<T> void verifyNotificationSucceedsWithImplicitInitialization(Function<McpAsyncClient, Mono<T>> operation,
+			String action) {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.withVirtualTime(() -> operation.apply(mcpAsyncClient))
-				.expectSubscription()
-				.thenAwait(getInitializationTimeout())
-				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
-					.hasMessage("Client must be initialized before " + action))
-				.verify();
+			StepVerifier.create(operation.apply(mcpAsyncClient)).verifyComplete();
+		});
+	}
+
+	<T> void verifyCallSucceedsWithImplicitInitialization(Function<McpAsyncClient, Mono<T>> operation, String action) {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(operation.apply(mcpAsyncClient)).expectNextCount(1).verifyComplete();
 		});
 	}
 
@@ -134,7 +136,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListToolsWithoutInitialization() {
-		verifyInitializationTimeout(client -> client.listTools(null), "listing tools");
+		verifyCallSucceedsWithImplicitInitialization(client -> client.listTools(null), "listing tools");
 	}
 
 	@Test
@@ -154,7 +156,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testPingWithoutInitialization() {
-		verifyInitializationTimeout(client -> client.ping(), "pinging the server");
+		verifyCallSucceedsWithImplicitInitialization(client -> client.ping(), "pinging the server");
 	}
 
 	@Test
@@ -169,7 +171,7 @@ public abstract class AbstractMcpAsyncClientTests {
 	@Test
 	void testCallToolWithoutInitialization() {
 		CallToolRequest callToolRequest = new CallToolRequest("echo", Map.of("message", ECHO_TEST_MESSAGE));
-		verifyInitializationTimeout(client -> client.callTool(callToolRequest), "calling tools");
+		verifyCallSucceedsWithImplicitInitialization(client -> client.callTool(callToolRequest), "calling tools");
 	}
 
 	@Test
@@ -203,7 +205,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListResourcesWithoutInitialization() {
-		verifyInitializationTimeout(client -> client.listResources(null), "listing resources");
+		verifyCallSucceedsWithImplicitInitialization(client -> client.listResources(null), "listing resources");
 	}
 
 	@Test
@@ -234,7 +236,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListPromptsWithoutInitialization() {
-		verifyInitializationTimeout(client -> client.listPrompts(null), "listing " + "prompts");
+		verifyCallSucceedsWithImplicitInitialization(client -> client.listPrompts(null), "listing " + "prompts");
 	}
 
 	@Test
@@ -259,7 +261,7 @@ public abstract class AbstractMcpAsyncClientTests {
 	@Test
 	void testGetPromptWithoutInitialization() {
 		GetPromptRequest request = new GetPromptRequest("simple_prompt", Map.of());
-		verifyInitializationTimeout(client -> client.getPrompt(request), "getting " + "prompts");
+		verifyCallSucceedsWithImplicitInitialization(client -> client.getPrompt(request), "getting " + "prompts");
 	}
 
 	@Test
@@ -280,7 +282,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testRootsListChangedWithoutInitialization() {
-		verifyInitializationTimeout(client -> client.rootsListChangedNotification(),
+		verifyNotificationSucceedsWithImplicitInitialization(client -> client.rootsListChangedNotification(),
 				"sending roots list changed notification");
 	}
 
@@ -355,7 +357,8 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListResourceTemplatesWithoutInitialization() {
-		verifyInitializationTimeout(client -> client.listResourceTemplates(), "listing resource templates");
+		verifyCallSucceedsWithImplicitInitialization(client -> client.listResourceTemplates(),
+				"listing resource templates");
 	}
 
 	@Test
@@ -448,8 +451,8 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testLoggingLevelsWithoutInitialization() {
-		verifyInitializationTimeout(client -> client.setLoggingLevel(McpSchema.LoggingLevel.DEBUG),
-				"setting logging level");
+		verifyNotificationSucceedsWithImplicitInitialization(
+				client -> client.setLoggingLevel(McpSchema.LoggingLevel.DEBUG), "setting logging level");
 	}
 
 	@Test

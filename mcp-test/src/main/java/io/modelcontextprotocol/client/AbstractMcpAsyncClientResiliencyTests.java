@@ -1,14 +1,10 @@
 package io.modelcontextprotocol.client;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import eu.rekawek.toxiproxy.Proxy;
 import eu.rekawek.toxiproxy.ToxiproxyClient;
 import eu.rekawek.toxiproxy.model.ToxicDirection;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
-import org.awaitility.Awaitility;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,7 +20,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 public abstract class AbstractMcpAsyncClientResiliencyTests {
@@ -69,7 +64,7 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 		host = "http://" + ipAddressViaToxiproxy + ":" + portViaToxiproxy;
 	}
 
-	void disconnect() {
+	private static void disconnect() {
 		long start = System.nanoTime();
 		try {
 			// disconnect
@@ -86,7 +81,7 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 		}
 	}
 
-	void reconnect() {
+	private static void reconnect() {
 		long start = System.nanoTime();
 		try {
 			proxy.toxics().get("RESET_UPSTREAM").remove();
@@ -98,6 +93,11 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 		catch (IOException e) {
 			throw new RuntimeException("Failed to reconnect", e);
 		}
+	}
+
+	private static void restartMcpServer() {
+		container.stop();
+		container.start();
 	}
 
 	abstract McpClientTransport createMcpTransport();
@@ -164,8 +164,7 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.initialize()).expectNextCount(1).verifyComplete();
 
-			container.stop();
-			container.start();
+			restartMcpServer();
 
 			// The first try will face the session mismatch exception and the second one
 			// will go through the re-initialization process.
