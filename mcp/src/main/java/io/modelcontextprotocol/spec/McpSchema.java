@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Based on the <a href="http://www.jsonrpc.org/specification">JSON-RPC 2.0
  * specification</a> and the <a href=
- * "https://github.com/modelcontextprotocol/specification/blob/main/schema/2024-11-05/schema.ts">Model
+ * "https://github.com/modelcontextprotocol/specification/blob/main/schema/2025-06-18/schema.ts">Model
  * Context Protocol Schema</a>.
  *
  * @author Christian Tzolov
@@ -40,7 +40,7 @@ public final class McpSchema {
 	private McpSchema() {
 	}
 
-	public static final String LATEST_PROTOCOL_VERSION = "2024-11-05";
+	public static final String LATEST_PROTOCOL_VERSION = "2025-06-18";
 
 	public static final String JSONRPC_VERSION = "2.0";
 
