@@ -1,49 +1,65 @@
 package io.modelcontextprotocol.spec;
 
-import reactor.core.Disposable;
-import reactor.core.Disposables;
-import reactor.core.publisher.Mono;
+import org.reactivestreams.Publisher;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.Optional;
 
-public class McpTransportSession {
+/**
+ * An abstraction of the session as perceived from the MCP transport layer. Not to be
+ * confused with the {@link McpSession} type that operates at the level of the JSON-RPC
+ * communication protocol and matches asynchronous responses with previously issued
+ * requests.
+ *
+ * @param <CONNECTION> the resource representing the connection that the transport
+ * manages.
+ * @author Dariusz Jędrzejczyk
+ */
+public interface McpTransportSession<CONNECTION> {
 
-	private final Disposable.Composite openConnections = Disposables.composite();
+	/**
+	 * In case of stateful MCP servers, the value is present and contains the String
+	 * identifier for the transport-level session.
+	 * @return optional session id
+	 */
+	Optional<String> sessionId();
 
-	private final AtomicBoolean initialized = new AtomicBoolean(false);
+	/**
+	 * If the transport provides a session id for the communication, this method should be
+	 * called to record the current identifier.
+	 * @param sessionId session identifier as provided by the server
+	 */
+	void setSessionId(String sessionId);
 
-	private final AtomicReference<String> sessionId = new AtomicReference<>();
+	/**
+	 * Stateful operation that flips the un-initialized state to initialized if this is
+	 * the first call.
+	 * @return if successful, this method returns {@code true} and means that a
+	 * post-initialization step can be performed
+	 */
+	boolean markInitialized();
 
-	public McpTransportSession() {
-	}
+	/**
+	 * Adds a resource that this transport session can monitor and dismiss when needed.
+	 * @param connection the managed resource
+	 */
+	void addConnection(CONNECTION connection);
 
-	public String sessionId() {
-		return this.sessionId.get();
-	}
+	/**
+	 * Called when the resource is terminating by itself and the transport session does
+	 * not need to track it anymore.
+	 * @param connection the resource to remove from the monitored collection
+	 */
+	void removeConnection(CONNECTION connection);
 
-	public void setSessionId(String sessionId) {
-		this.sessionId.set(sessionId);
-	}
+	/**
+	 * Close and clear the monitored resources. Potentially asynchronous.
+	 */
+	void close();
 
-	public boolean markInitialized() {
-		return this.initialized.compareAndSet(false, true);
-	}
-
-	public void addConnection(Disposable connection) {
-		this.openConnections.add(connection);
-	}
-
-	public void removeConnection(Disposable connection) {
-		this.openConnections.remove(connection);
-	}
-
-	public void close() {
-		this.closeGracefully().subscribe();
-	}
-
-	public Mono<Void> closeGracefully() {
-		return Mono.fromRunnable(this.openConnections::dispose);
-	}
+	/**
+	 * Close and clear the monitored resources in a graceful manner.
+	 * @return completes once all resources have been dismissed
+	 */
+	Publisher<Void> closeGracefully();
 
 }

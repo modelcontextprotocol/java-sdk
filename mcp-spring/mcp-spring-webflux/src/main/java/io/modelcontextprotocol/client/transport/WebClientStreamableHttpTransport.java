@@ -2,6 +2,7 @@ package io.modelcontextprotocol.client.transport;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -51,12 +52,13 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	private final boolean resumableStreams;
 
-	private final AtomicReference<McpTransportSession> activeSession = new AtomicReference<>();
+	private final AtomicReference<DefaultMcpTransportSession> activeSession = new AtomicReference<>();
 
 	private final AtomicReference<Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>>> handler = new AtomicReference<>();
 
 	private final AtomicReference<Consumer<Throwable>> exceptionHandler = new AtomicReference<>();
 
+	// TODO: builder
 	public WebClientStreamableHttpTransport(ObjectMapper objectMapper, WebClient.Builder webClientBuilder,
 			String endpoint, boolean resumableStreams, boolean openConnectionOnStartup) {
 		this.objectMapper = objectMapper;
@@ -64,7 +66,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		this.endpoint = endpoint;
 		this.resumableStreams = resumableStreams;
 		this.openConnectionOnStartup = openConnectionOnStartup;
-		this.activeSession.set(new McpTransportSession());
+		this.activeSession.set(new DefaultMcpTransportSession());
 	}
 
 	@Override
@@ -80,15 +82,15 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	}
 
 	@Override
-	public void registerExceptionHandler(Consumer<Throwable> handler) {
+	public void setExceptionHandler(Consumer<Throwable> handler) {
 		logger.debug("Exception handler registered");
 		this.exceptionHandler.set(handler);
 	}
 
 	private void handleException(Throwable t) {
-		logger.debug("Handling exception for session {}", activeSession.get().sessionId(), t);
+		logger.debug("Handling exception for session {}", sessionIdRepresentation(this.activeSession.get()), t);
 		if (t instanceof McpSessionNotFoundException) {
-			McpTransportSession invalidSession = this.activeSession.getAndSet(new McpTransportSession());
+			McpTransportSession<?> invalidSession = this.activeSession.getAndSet(new DefaultMcpTransportSession());
 			logger.warn("Server does not recognize session {}. Invalidating.", invalidSession.sessionId());
 			invalidSession.close();
 		}
@@ -102,7 +104,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	public Mono<Void> closeGracefully() {
 		return Mono.defer(() -> {
 			logger.debug("Graceful close triggered");
-			McpTransportSession currentSession = this.activeSession.get();
+			DefaultMcpTransportSession currentSession = this.activeSession.get();
 			if (currentSession != null) {
 				return currentSession.closeGracefully();
 			}
@@ -125,16 +127,14 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		// listen for messages.
 		// If it doesn't, nothing actually happens here, that's just the way it is...
 		final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
-		final McpTransportSession transportSession = this.activeSession.get();
+		final McpTransportSession<Disposable> transportSession = this.activeSession.get();
 		Disposable connection = webClient.get()
 			.uri(this.endpoint)
 			.accept(MediaType.TEXT_EVENT_STREAM)
 			.headers(httpHeaders -> {
-				if (transportSession.sessionId() != null) {
-					httpHeaders.add("mcp-session-id", transportSession.sessionId());
-				}
-				if (stream != null && stream.lastId() != null) {
-					httpHeaders.add("last-event-id", stream.lastId());
+				transportSession.sessionId().ifPresent(id -> httpHeaders.add("mcp-session-id", id));
+				if (stream != null) {
+					stream.lastId().ifPresent(id -> httpHeaders.add("last-event-id", id));
 				}
 			})
 			.exchangeToFlux(response -> {
@@ -161,7 +161,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 					logger.warn("Session {} was not found on the MCP server", transportSession.sessionId());
 
 					McpSessionNotFoundException notFoundException = new McpSessionNotFoundException(
-							transportSession.sessionId());
+							sessionIdRepresentation(transportSession));
 					// inform the stream/connection subscriber
 					return Flux.error(notFoundException);
 				}
@@ -187,6 +187,10 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		transportSession.addConnection(connection);
 	}
 
+	private static String sessionIdRepresentation(McpTransportSession<?> transportSession) {
+		return transportSession.sessionId().orElse("[missing_session_id]");
+	}
+
 	@Override
 	public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
 		return Mono.create(sink -> {
@@ -197,15 +201,13 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			// listen for messages.
 			// If it doesn't, nothing actually happens here, that's just the way it is...
 			final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
-			final McpTransportSession transportSession = this.activeSession.get();
+			final McpTransportSession<Disposable> transportSession = this.activeSession.get();
 
 			Disposable connection = webClient.post()
 				.uri(this.endpoint)
 				.accept(MediaType.TEXT_EVENT_STREAM, MediaType.APPLICATION_JSON)
 				.headers(httpHeaders -> {
-					if (transportSession.sessionId() != null) {
-						httpHeaders.add("mcp-session-id", transportSession.sessionId());
-					}
+					transportSession.sessionId().ifPresent(id -> httpHeaders.add("mcp-session-id", id));
 				})
 				.bodyValue(message)
 				.exchangeToFlux(response -> {
@@ -287,7 +289,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 							logger.warn("Session {} was not found on the MCP server", transportSession.sessionId());
 
 							McpSessionNotFoundException notFoundException = new McpSessionNotFoundException(
-									transportSession.sessionId());
+									sessionIdRepresentation(transportSession));
 							// inform the stream/connection subscriber
 							return Flux.error(notFoundException);
 						}
@@ -313,8 +315,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 							// invalidate the session
 							// https://github.com/modelcontextprotocol/typescript-sdk/issues/389
 							if (responseException.getStatusCode().isSameCodeAs(HttpStatus.BAD_REQUEST)) {
-								return Mono.error(new McpSessionNotFoundException(this.activeSession.get().sessionId(),
-										toPropagate));
+								return Mono.error(new McpSessionNotFoundException(
+										sessionIdRepresentation(this.activeSession.get()), toPropagate));
 							}
 							return Mono.empty();
 						}).flux();
@@ -381,8 +383,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			this.resumable = resumable;
 		}
 
-		String lastId() {
-			return this.lastId.get();
+		Optional<String> lastId() {
+			return Optional.ofNullable(this.lastId.get());
 		}
 
 		long streamId() {
@@ -395,9 +397,10 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 				if (resumable && !(e instanceof McpSessionNotFoundException)) {
 					reconnect(this, ctx);
 				}
-			})
-				.doOnNext(idAndMessage -> idAndMessage.getT1().ifPresent(this.lastId::set))
-				.flatMapIterable(Tuple2::getT2));
+			}).doOnNext(idAndMessage -> idAndMessage.getT1().ifPresent(id -> {
+				String previousId = this.lastId.getAndSet(id);
+				logger.debug("Updating last id {} -> {} for stream {}", previousId, id, this.streamId);
+			})).flatMapIterable(Tuple2::getT2));
 		}
 
 	}

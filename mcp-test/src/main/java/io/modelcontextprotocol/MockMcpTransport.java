@@ -7,7 +7,6 @@ package io.modelcontextprotocol;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -70,18 +69,6 @@ public class MockMcpTransport implements McpClientTransport, McpServerTransport 
 	}
 
 	private volatile boolean connected = false;
-
-	// @Override
-	// public Mono<Void> connect(Consumer<McpSchema.JSONRPCMessage> consumer) {
-	// if (connected) {
-	// return Mono.error(new IllegalStateException("Already connected"));
-	// }
-	// connected = true;
-	// return inbound.asFlux()
-	// .doOnNext(consumer)
-	// .doFinally(signal -> connected = false)
-	// .then();
-	// }
 
 	@Override
 	public Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {

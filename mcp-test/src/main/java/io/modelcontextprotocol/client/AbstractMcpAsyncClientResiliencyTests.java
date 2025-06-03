@@ -16,6 +16,8 @@ import reactor.test.StepVerifier;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -60,7 +62,6 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 		final String ipAddressViaToxiproxy = toxiproxy.getHost();
 		final int portViaToxiproxy = toxiproxy.getMappedPort(3000);
 
-		// int port = container.getMappedPort(3001);
 		host = "http://" + ipAddressViaToxiproxy + ":" + portViaToxiproxy;
 	}
 
@@ -169,6 +170,28 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 			// The first try will face the session mismatch exception and the second one
 			// will go through the re-initialization process.
 			StepVerifier.create(mcpAsyncClient.ping().retry(1)).expectNextCount(1).verifyComplete();
+		});
+	}
+
+	@Test
+	void testCallTool() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			AtomicReference<List<McpSchema.Tool>> tools = new AtomicReference<>();
+			StepVerifier.create(mcpAsyncClient.initialize()).expectNextCount(1).verifyComplete();
+			StepVerifier.create(mcpAsyncClient.listTools())
+				.consumeNextWith(list -> tools.set(list.tools()))
+				.verifyComplete();
+
+			disconnect();
+
+			String name = tools.get().get(0).name();
+			// Assuming this is the echo tool
+			McpSchema.CallToolRequest request = new McpSchema.CallToolRequest(name, Map.of("message", "hello"));
+			StepVerifier.create(mcpAsyncClient.callTool(request)).expectError().verify();
+
+			reconnect();
+
+			StepVerifier.create(mcpAsyncClient.callTool(request)).expectNextCount(1).verifyComplete();
 		});
 	}
 

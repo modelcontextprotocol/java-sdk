@@ -15,7 +15,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 
@@ -38,8 +37,11 @@ import reactor.core.publisher.MonoSink;
  */
 public class McpClientSession implements McpSession {
 
-	/** Logger for this class */
 	private static final Logger logger = LoggerFactory.getLogger(McpClientSession.class);
+
+	private static final Consumer<Throwable> DEFAULT_CONSUMER = t -> {
+		logger.warn("MCP transport issued an exception", t);
+	};
 
 	/** Duration to wait for request responses before timing out */
 	private final Duration requestTimeout;
@@ -61,8 +63,6 @@ public class McpClientSession implements McpSession {
 
 	/** Atomic counter for generating unique request IDs */
 	private final AtomicLong requestCounter = new AtomicLong(0);
-
-	private final Disposable connection;
 
 	/**
 	 * Functional interface for handling incoming JSON-RPC requests. Implementations
@@ -102,6 +102,8 @@ public class McpClientSession implements McpSession {
 	 * Creates a new McpClientSession with the specified configuration and handlers.
 	 * @param requestTimeout Duration to wait for responses
 	 * @param transport Transport implementation for message exchange
+	 * @param exceptionHandler A hook to take action when transport level exceptions
+	 * happen.
 	 * @param requestHandlers Map of method names to request handlers
 	 * @param notificationHandlers Map of method names to notification handlers
 	 */
@@ -118,19 +120,22 @@ public class McpClientSession implements McpSession {
 		this.requestHandlers.putAll(requestHandlers);
 		this.notificationHandlers.putAll(notificationHandlers);
 
-		// TODO: consider mono.transformDeferredContextual where the Context contains
-		// the
-		// Observation associated with the individual message - it can be used to
-		// create child Observation and emit it together with the message to the
-		// consumer
-		this.connection = this.transport.connect(mono -> mono.doOnNext(this::handle)).subscribe();
-		this.transport.registerExceptionHandler(t -> {
-			// 🤔 let's think for a moment - we only clear when the session is invalidated
+		this.transport.setExceptionHandler(t -> {
+			// We only clear when the session is invalidated
 			if (t instanceof McpSessionNotFoundException) {
 				this.pendingResponses.clear();
 			}
 			exceptionHandler.accept(t);
 		});
+		this.transport.connect(mono -> mono.doOnNext(this::handle)).subscribe();
+	}
+
+	private void dismissPendingResponses() {
+		this.pendingResponses.forEach((id, sink) -> {
+			logger.warn("Abruptly terminating exchange for request {}", id);
+			sink.error(new RuntimeException("MCP session with server terminated"));
+		});
+		this.pendingResponses.clear();
 	}
 
 	/**
@@ -139,11 +144,13 @@ public class McpClientSession implements McpSession {
 	 * @param transport Transport implementation for message exchange
 	 * @param requestHandlers Map of method names to request handlers
 	 * @param notificationHandlers Map of method names to notification handlers
+	 * @deprecated Use
+	 * {@link #McpClientSession(Duration, McpClientTransport, Consumer, Map, Map)}.
 	 */
+	@Deprecated
 	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
 			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
-		this(requestTimeout, transport, e -> {
-		}, requestHandlers, notificationHandlers);
+		this(requestTimeout, transport, DEFAULT_CONSUMER, requestHandlers, notificationHandlers);
 	}
 
 	private void handle(McpSchema.JSONRPCMessage message) {
@@ -256,14 +263,11 @@ public class McpClientSession implements McpSession {
 			this.pendingResponses.put(requestId, sink);
 			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, method,
 					requestId, requestParams);
-			this.transport.sendMessage(jsonrpcRequest)
-				.contextWrite(ctx)
-				// TODO: It's most efficient to create a dedicated Subscriber here
-				.subscribe(v -> {
-				}, error -> {
-					this.pendingResponses.remove(requestId);
-					sink.error(error);
-				});
+			this.transport.sendMessage(jsonrpcRequest).contextWrite(ctx).subscribe(v -> {
+			}, error -> {
+				this.pendingResponses.remove(requestId);
+				sink.error(error);
+			});
 		})).timeout(this.requestTimeout).handle((jsonRpcResponse, sink) -> {
 			if (jsonRpcResponse.error() != null) {
 				logger.error("Error handling request: {}", jsonRpcResponse.error());
@@ -299,10 +303,8 @@ public class McpClientSession implements McpSession {
 	 */
 	@Override
 	public Mono<Void> closeGracefully() {
-		return Mono.defer(() -> {
-			this.connection.dispose();
-			return transport.closeGracefully();
-		});
+		dismissPendingResponses();
+		return this.transport.closeGracefully();
 	}
 
 	/**
@@ -310,7 +312,7 @@ public class McpClientSession implements McpSession {
 	 */
 	@Override
 	public void close() {
-		this.connection.dispose();
+		dismissPendingResponses();
 		transport.close();
 	}
 
