@@ -48,11 +48,11 @@ public class McpServerSession implements McpSession {
 
 	private final AtomicReference<McpSchema.Implementation> clientInfo = new AtomicReference<>();
 
-	private static final int STATE_UNINITIALIZED = 0;
+	public static final int STATE_UNINITIALIZED = 0;
 
-	private static final int STATE_INITIALIZING = 1;
+	public static final int STATE_INITIALIZING = 1;
 
-	private static final int STATE_INITIALIZED = 2;
+	public static final int STATE_INITIALIZED = 2;
 
 	private final AtomicInteger state = new AtomicInteger(STATE_UNINITIALIZED);
 
