@@ -4,19 +4,18 @@
 
 package io.modelcontextprotocol.spec;
 
-import java.time.Duration;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Consumer;
-
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
+
+import java.time.Duration;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Default implementation of the MCP (Model Context Protocol) session that manages
@@ -38,10 +37,6 @@ import reactor.core.publisher.MonoSink;
 public class McpClientSession implements McpSession {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpClientSession.class);
-
-	private static final Consumer<Throwable> DEFAULT_CONSUMER = t -> {
-		logger.warn("MCP transport issued an exception", t);
-	};
 
 	/** Duration to wait for request responses before timing out */
 	private final Duration requestTimeout;
@@ -102,12 +97,10 @@ public class McpClientSession implements McpSession {
 	 * Creates a new McpClientSession with the specified configuration and handlers.
 	 * @param requestTimeout Duration to wait for responses
 	 * @param transport Transport implementation for message exchange
-	 * @param exceptionHandler A hook to take action when transport level exceptions
-	 * happen.
 	 * @param requestHandlers Map of method names to request handlers
 	 * @param notificationHandlers Map of method names to notification handlers
 	 */
-	public McpClientSession(Duration requestTimeout, McpClientTransport transport, Consumer<Throwable> exceptionHandler,
+	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
 			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
 
 		Assert.notNull(requestTimeout, "The requestTimeout can not be null");
@@ -120,13 +113,6 @@ public class McpClientSession implements McpSession {
 		this.requestHandlers.putAll(requestHandlers);
 		this.notificationHandlers.putAll(notificationHandlers);
 
-		this.transport.setExceptionHandler(t -> {
-			// We only clear when the session is invalidated
-			if (t instanceof McpSessionNotFoundException) {
-				this.pendingResponses.clear();
-			}
-			exceptionHandler.accept(t);
-		});
 		this.transport.connect(mono -> mono.doOnNext(this::handle)).subscribe();
 	}
 
@@ -136,21 +122,6 @@ public class McpClientSession implements McpSession {
 			sink.error(new RuntimeException("MCP session with server terminated"));
 		});
 		this.pendingResponses.clear();
-	}
-
-	/**
-	 * Creates a new McpClientSession with the specified configuration and handlers.
-	 * @param requestTimeout Duration to wait for responses
-	 * @param transport Transport implementation for message exchange
-	 * @param requestHandlers Map of method names to request handlers
-	 * @param notificationHandlers Map of method names to notification handlers
-	 * @deprecated Use
-	 * {@link #McpClientSession(Duration, McpClientTransport, Consumer, Map, Map)}.
-	 */
-	@Deprecated
-	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
-			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
-		this(requestTimeout, transport, DEFAULT_CONSUMER, requestHandlers, notificationHandlers);
 	}
 
 	private void handle(McpSchema.JSONRPCMessage message) {
@@ -303,8 +274,7 @@ public class McpClientSession implements McpSession {
 	 */
 	@Override
 	public Mono<Void> closeGracefully() {
-		dismissPendingResponses();
-		return this.transport.closeGracefully();
+		return Mono.fromRunnable(this::dismissPendingResponses);
 	}
 
 	/**
@@ -313,7 +283,6 @@ public class McpClientSession implements McpSession {
 	@Override
 	public void close() {
 		dismissPendingResponses();
-		transport.close();
 	}
 
 }
