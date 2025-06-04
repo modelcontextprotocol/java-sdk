@@ -149,8 +149,6 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 			return;
 		}
 
-		// resp
-		resp.setStatus(HttpServletResponse.SC_OK);
 		resp.setCharacterEncoding("UTF-8");
 
 		final McpServerTransport transport = new StreamableHttpServerTransport(resp.getOutputStream(), objectMapper);
@@ -168,7 +166,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 		try {
 			messages = parseRequestBodyAsStream(req);
 		}
-		catch (Exception e) {
+		catch (final Exception e) {
 			resp.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid JSON input");
 			return;
 		}
@@ -176,6 +174,9 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 		boolean hasRequest = messages.stream().anyMatch(m -> m instanceof McpSchema.JSONRPCRequest);
 		if (!hasRequest) {
 			resp.setStatus(HttpServletResponse.SC_ACCEPTED);
+			if ("stateless".equals(session.getId())) {
+				transport.closeGracefully().subscribe();
+			}
 			return;
 		}
 
@@ -190,24 +191,17 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 			Flux.fromIterable(messages)
 				.flatMap(session::handle)
 				.doOnError(e -> sendError(resp, 500, "Streaming failed: " + e.getMessage()))
-				.then(transport.closeGracefully())
+				.then(closeIfStateless(session, transport))
 				.subscribe();
 		}
 		else if (accept.contains(APPLICATION_JSON)) {
 			// TODO: Handle traditional JSON-RPC,
 			resp.setContentType(APPLICATION_JSON);
-			Flux.fromIterable(messages).flatMap(session::handle).collectList().flatMap(responses -> {
-				try {
-					// todo: collect result if it's a response,
-					// hm handle should not be void ...
-					String json = objectMapper.writeValueAsString(responses.size() == 1 ? responses.get(0) : responses);
-					resp.getWriter().write(json);
-					return transport.closeGracefully();
-				}
-				catch (IOException e) {
-					return Mono.error(e);
-				}
-			}).doOnError(e -> sendError(resp, 500, "JSON response failed: " + e.getMessage())).subscribe();
+			Flux.fromIterable(messages)
+					.flatMap(session::handle)
+					.doOnError(e -> sendError(resp, 500, "Streaming failed: " + e.getMessage()))
+					.then(closeIfStateless(session, transport))
+					.subscribe();
 
 		}
 		else {
@@ -266,7 +260,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 		resp.setStatus(HttpServletResponse.SC_NO_CONTENT);
 	}
 
-	private List<McpSchema.JSONRPCMessage> parseRequestBodyAsStream(final HttpServletRequest req) {
+	private List<McpSchema.JSONRPCMessage> parseRequestBodyAsStream(final HttpServletRequest req) throws IOException {
 		try (final InputStream inputStream = req.getInputStream()) {
 			final JsonNode node = objectMapper.readTree(inputStream);
 			if (node.isArray()) {
@@ -288,10 +282,6 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 
 			}
 		}
-		catch (Exception e) {
-			throw new IllegalArgumentException("Invalid JSON-RPC request: " + e.getMessage());
-		}
-
 	}
 
 	private void sendEvent(PrintWriter writer, String eventType, String data) throws IOException {
@@ -318,6 +308,12 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 		else {
 			return new McpStatelessSession(transport);
 		}
+	}
+
+	Mono<Void> closeIfStateless(final McpSession session, final McpServerTransport transport) {
+		return "stateless".equals(session.getId())
+				? transport.closeGracefully()
+				: Mono.empty();
 	}
 
 	private void sendError(final HttpServletResponse resp, final int code, final String msg) {
