@@ -14,9 +14,12 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import io.modelcontextprotocol.spec.*;
+import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpClientSession.NotificationHandler;
 import io.modelcontextprotocol.spec.McpClientSession.RequestHandler;
+import io.modelcontextprotocol.spec.McpClientTransport;
+import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
@@ -27,6 +30,7 @@ import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSchema.PaginatedRequest;
 import io.modelcontextprotocol.spec.McpSchema.Root;
+import io.modelcontextprotocol.spec.McpSessionNotFoundException;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
@@ -444,7 +448,7 @@ public class McpAsyncClient {
 			Initialization previous = this.initialization.compareAndExchange(null, newInit);
 
 			boolean needsToInitialize = previous == null;
-			logger.info(needsToInitialize ? "Initialization process started" : "Joining previous initialization");
+			logger.debug(needsToInitialize ? "Initialization process started" : "Joining previous initialization");
 			if (needsToInitialize) {
 				newInit.setMcpClientSession(this.sessionSupplier.get());
 			}

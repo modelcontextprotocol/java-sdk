@@ -9,13 +9,13 @@
     </appender>
 
     <!-- Main MCP package -->
-    <logger name="io.modelcontextprotocol" level="DEBUG"/>
+    <logger name="io.modelcontextprotocol" level="INFO"/>
 
     <!-- Client packages -->
-    <logger name="org.springframework.ai.mcp.client" level="DEBUG"/>
-    
+    <logger name="io.modelcontextprotocol.client" level="INFO"/>
+
     <!-- Spec package -->
-    <logger name="org.springframework.ai.mcp.spec" level="DEBUG"/>
+    <logger name="io.modelcontextprotocol.spec" level="INFO"/>
 
 
     <!-- Root logger -->
