@@ -1,5 +1,7 @@
 package io.modelcontextprotocol.spec;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.Disposable;
 import reactor.core.Disposables;
 import reactor.core.publisher.Mono;
@@ -9,6 +11,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class DefaultMcpTransportSession implements McpTransportSession<Disposable> {
+
+	private static final Logger logger = LoggerFactory.getLogger(DefaultMcpTransportSession.class);
 
 	private final Disposable.Composite openConnections = Disposables.composite();
 
@@ -25,13 +29,19 @@ public class DefaultMcpTransportSession implements McpTransportSession<Disposabl
 	}
 
 	@Override
-	public void setSessionId(String sessionId) {
-		this.sessionId.set(sessionId);
-	}
-
-	@Override
-	public boolean markInitialized() {
-		return this.initialized.compareAndSet(false, true);
+	public boolean markInitialized(String sessionId) {
+		boolean flipped = this.initialized.compareAndSet(false, true);
+		if (flipped) {
+			this.sessionId.set(sessionId);
+			logger.debug("Established session with id {}", sessionId);
+		}
+		else {
+			if (sessionId != null && !sessionId.equals(this.sessionId.get())) {
+				logger.warn("Different session id provided in response. Expecting {} but server returned {}",
+						this.sessionId.get(), sessionId);
+			}
+		}
+		return flipped;
 	}
 
 	@Override

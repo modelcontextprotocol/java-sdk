@@ -24,19 +24,14 @@ public interface McpTransportSession<CONNECTION> {
 	Optional<String> sessionId();
 
 	/**
-	 * If the transport provides a session id for the communication, this method should be
-	 * called to record the current identifier.
-	 * @param sessionId session identifier as provided by the server
-	 */
-	void setSessionId(String sessionId);
-
-	/**
 	 * Stateful operation that flips the un-initialized state to initialized if this is
-	 * the first call.
+	 * the first call. If the transport provides a session id for the communication,
+	 * argument should not be null to record the current identifier.
+	 * @param sessionId session identifier as provided by the server
 	 * @return if successful, this method returns {@code true} and means that a
 	 * post-initialization step can be performed
 	 */
-	boolean markInitialized();
+	boolean markInitialized(String sessionId);
 
 	/**
 	 * Adds a resource that this transport session can monitor and dismiss when needed.
