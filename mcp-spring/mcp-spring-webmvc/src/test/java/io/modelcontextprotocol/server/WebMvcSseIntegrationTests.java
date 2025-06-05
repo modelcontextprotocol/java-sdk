@@ -374,7 +374,7 @@ class WebMvcSseIntegrationTests {
 		var server = McpServer.async(mcpServerTransportProvider).serverInfo("test-server", "1.0.0").tools(tool).build();
 
 		try (
-				// Create client without sampling capabilities
+				// Create client without elicitation capabilities
 				var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0")).build()) {
 
 			assertThat(client.initialize()).isNotNull();
