@@ -367,7 +367,8 @@ public class StdioClientTransport implements McpClientTransport {
 		})).doOnNext(process -> {
 			if (process.exitValue() != 0) {
 				logger.warn("Process terminated with code " + process.exitValue());
-			} else {
+			}
+			else {
 				logger.info("MCP server process stopped");
 			}
 		}).then(Mono.fromRunnable(() -> {
