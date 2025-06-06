@@ -122,9 +122,9 @@ public abstract class AbstractMcpSyncClientTests {
 
 	<T> void verifyCallSucceedsWithImplicitInitialization(Function<McpSyncClient, T> blockingOperation, String action) {
 		withClient(createMcpTransport(), mcpSyncClient -> {
-			StepVerifier.create(Mono.fromSupplier(() -> blockingOperation.apply(mcpSyncClient)))
-				.expectNextCount(1)
-				.verifyComplete();
+			StepVerifier.create(Mono.fromSupplier(() -> blockingOperation.apply(mcpSyncClient))
+				// Offload the blocking call to the real scheduler
+				.subscribeOn(Schedulers.boundedElastic())).expectNextCount(1).verifyComplete();
 		});
 	}
 
