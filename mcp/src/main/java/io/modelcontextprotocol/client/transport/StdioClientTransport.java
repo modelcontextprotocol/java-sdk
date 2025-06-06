@@ -124,13 +124,15 @@ public class StdioClientTransport implements McpClientTransport {
 			processBuilder.command(fullCommand);
 			processBuilder.environment().putAll(params.getEnv());
 
-			// Start the process
-			try {
-				this.process = processBuilder.start();
-			}
-			catch (IOException e) {
-				throw new RuntimeException("Failed to start process with command: " + fullCommand, e);
-			}
+			measureTime(() -> {
+				// Start the process
+				try {
+					this.process = processBuilder.start();
+				}
+				catch (IOException e) {
+					throw new RuntimeException("Failed to start process with command: " + fullCommand, e);
+				}
+			}, "Process start");
 
 			// Validate process streams
 			if (this.process.getInputStream() == null || process.getOutputStream() == null) {
@@ -389,6 +391,17 @@ public class StdioClientTransport implements McpClientTransport {
 	@Override
 	public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
 		return this.objectMapper.convertValue(data, typeRef);
+	}
+
+	private static void measureTime(Runnable op, String opName) {
+		long start = System.nanoTime();
+		try {
+			op.run();
+		}
+		finally {
+			long delta = System.nanoTime() - start;
+			logger.info("{} took {}ms", opName, Duration.ofNanos(delta).toMillis());
+		}
 	}
 
 }
