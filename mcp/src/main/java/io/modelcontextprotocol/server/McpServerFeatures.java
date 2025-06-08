@@ -222,8 +222,8 @@ public class McpServerFeatures {
 	 *             .required("expression")
 	 *             .property("expression", JsonSchemaType.STRING)
 	 *     ),
-	 *     (exchange, args) -> {
-	 *         String expr = (String) args.get("expression");
+	 *     (exchange, request) -> {
+	 *         String expr = (String) request.arguments().get("expression");
 	 *         return Mono.fromSupplier(() -> evaluate(expr))
 	 *             .map(result -> new CallToolResult("Result: " + result));
 	 *     }
@@ -237,7 +237,7 @@ public class McpServerFeatures {
 	 * connected client. The second arguments is a map of tool arguments.
 	 */
 	public record AsyncToolSpecification(McpSchema.Tool tool,
-			BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> call) {
+			BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> call) {
 
 		static AsyncToolSpecification fromSync(SyncToolSpecification tool) {
 			// FIXME: This is temporary, proper validation should be implemented
@@ -413,7 +413,7 @@ public class McpServerFeatures {
 	 * client. The second arguments is a map of arguments passed to the tool.
 	 */
 	public record SyncToolSpecification(McpSchema.Tool tool,
-			BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> call) {
+			BiFunction<McpSyncServerExchange, McpSchema.CallToolRequest, McpSchema.CallToolResult> call) {
 	}
 
 	/**
