@@ -870,6 +870,8 @@ public final class McpSchema {
 	 * tools/list.
 	 * @param arguments Arguments to pass to the tool. These must conform to the tool's
 	 * input schema.
+	 * @param _meta Optional metadata about the request. This can include additional
+	 * information like `progressToken`
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1319,9 +1321,9 @@ public final class McpSchema {
 	// ---------------------------
 
 	/**
-	 * The Model Context Protocol (MCP) supports optional progress tracking for long-running
-	 * operations through notification messages. Either side can send progress notifications
-	 * to provide updates about operation status.
+	 * The Model Context Protocol (MCP) supports optional progress tracking for
+	 * long-running operations through notification messages. Either side can send
+	 * progress notifications to provide updates about operation status.
 	 *
 	 * @param progressToken The original progress token
 	 * @param progress The current progress value so far

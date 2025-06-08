@@ -139,6 +139,16 @@ public class McpAsyncServerExchange {
 				LIST_ROOTS_RESULT_TYPE_REF);
 	}
 
+	public Mono<Void> notification(String method, Object params) {
+		if (method == null || method.isEmpty()) {
+			return Mono.error(new McpError("Method must not be null or empty"));
+		}
+		if (params == null) {
+			return Mono.error(new McpError("Params must not be null"));
+		}
+		return this.session.sendNotification(method, params);
+	}
+
 	/**
 	 * Send a logging message notification to the client. Messages below the current
 	 * minimum logging level will be filtered out.
