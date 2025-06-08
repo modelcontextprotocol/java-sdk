@@ -58,6 +58,8 @@ public final class McpSchema {
 
 	public static final String METHOD_PING = "ping";
 
+	public static final String METHOD_NOTIFICATION_PROGRESS = "notifications/progress";
+
 	// Tool Methods
 	public static final String METHOD_TOOLS_LIST = "tools/list";
 
