@@ -177,6 +177,8 @@ public interface McpClient {
 
 		private final List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers = new ArrayList<>();
 
+		private final List<Consumer<McpSchema.ProgressNotification>> progressConsumers = new ArrayList<>();
+
 		private Function<CreateMessageRequest, CreateMessageResult> samplingHandler;
 
 		private Function<ElicitRequest, ElicitResult> elicitationHandler;
@@ -378,6 +380,36 @@ public interface McpClient {
 		}
 
 		/**
+		 * Adds a consumer to be notified of progress notifications from the server. This
+		 * allows the client to track long-running operations and provide feedback to
+		 * users.
+		 * @param progressConsumer A consumer that receives progress notifications. Must
+		 * not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if progressConsumer is null
+		 */
+		public SyncSpec progressConsumer(Consumer<McpSchema.ProgressNotification> progressConsumer) {
+			Assert.notNull(progressConsumer, "Progress consumer must not be null");
+			this.progressConsumers.add(progressConsumer);
+			return this;
+		}
+
+		/**
+		 * Adds a multiple consumers to be notified of progress notifications from the
+		 * server. This allows the client to track long-running operations and provide
+		 * feedback to users.
+		 * @param progressConsumers A list of consumers that receives progress
+		 * notifications. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if progressConsumer is null
+		 */
+		public SyncSpec progressConsumers(List<Consumer<McpSchema.ProgressNotification>> progressConsumers) {
+			Assert.notNull(progressConsumers, "Progress consumers must not be null");
+			this.progressConsumers.addAll(progressConsumers);
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpSyncClient} with the provided configurations or
 		 * sensible defaults.
 		 * @return a new instance of {@link McpSyncClient}.
@@ -385,7 +417,8 @@ public interface McpClient {
 		public McpSyncClient build() {
 			McpClientFeatures.Sync syncFeatures = new McpClientFeatures.Sync(this.clientInfo, this.capabilities,
 					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
-					this.promptsChangeConsumers, this.loggingConsumers, this.samplingHandler, this.elicitationHandler);
+					this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers, this.samplingHandler,
+					this.elicitationHandler);
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
@@ -434,6 +467,8 @@ public interface McpClient {
 		private final List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers = new ArrayList<>();
 
 		private final List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers = new ArrayList<>();
+
+		private final List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers = new ArrayList<>();
 
 		private Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler;
 
@@ -663,8 +698,8 @@ public interface McpClient {
 			return new McpAsyncClient(this.transport, this.requestTimeout, this.initializationTimeout,
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
 							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
-							this.promptsChangeConsumers, this.loggingConsumers, this.samplingHandler,
-							this.elicitationHandler));
+							this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
+							this.samplingHandler, this.elicitationHandler));
 		}
 
 	}
