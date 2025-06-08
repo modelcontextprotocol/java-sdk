@@ -309,7 +309,7 @@ public interface McpServer {
 		 * Example usage: <pre>{@code
 		 * .tool(
 		 *     new Tool("calculator", "Performs calculations", schema),
-		 *     (exchange, args) -> Mono.fromSupplier(() -> calculate(args))
+		 *     (exchange, request) -> Mono.fromSupplier(() -> calculate(request))
 		 *         .map(result -> new CallToolResult("Result: " + result))
 		 * )
 		 * }</pre>
@@ -323,7 +323,7 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
 		public AsyncSpecification tool(McpSchema.Tool tool,
-				BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<CallToolResult>> handler) {
+				BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<CallToolResult>> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
 
@@ -801,7 +801,7 @@ public interface McpServer {
 		 * Example usage: <pre>{@code
 		 * .tool(
 		 *     new Tool("calculator", "Performs calculations", schema),
-		 *     (exchange, args) -> new CallToolResult("Result: " + calculate(args))
+		 *     (exchange, request) -> new CallToolResult("Result: " + calculate(request))
 		 * )
 		 * }</pre>
 		 * @param tool The tool definition including name, description, and schema. Must
@@ -814,7 +814,7 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
 		public SyncSpecification tool(McpSchema.Tool tool,
-				BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> handler) {
+				BiFunction<McpSyncServerExchange, McpSchema.CallToolRequest, McpSchema.CallToolResult> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
 
