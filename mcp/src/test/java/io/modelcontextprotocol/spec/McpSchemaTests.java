@@ -187,6 +187,24 @@ public class McpSchemaTests {
 	}
 
 	@Test
+	void testJSONRPCRequestWithMeta() throws Exception {
+		Map<String, Object> params = new HashMap<>();
+		params.put("key", "value");
+		params.put("_meta", Map.of("progressToken", "abc123"));
+
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, "method_name", 1,
+				params);
+
+		String value = mapper.writeValueAsString(request);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"jsonrpc":"2.0","method":"method_name","id":1,"params":{"key":"value"},"_meta":{"progressToken":"abc123"}}"""));
+	}
+
+	@Test
 	void testJSONRPCNotification() throws Exception {
 		Map<String, Object> params = new HashMap<>();
 		params.put("key", "value");
