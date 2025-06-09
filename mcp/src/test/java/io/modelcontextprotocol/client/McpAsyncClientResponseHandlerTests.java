@@ -352,18 +352,19 @@ class McpAsyncClientResponseHandlerTests {
 	}
 
 	@Test
+	@SuppressWarnings("unchecked")
 	void testElicitationCreateRequestHandling() {
 		MockMcpClientTransport transport = initializationEnabledTransport();
 
 		// Create a test elicitation handler that echoes back the input
 		Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler = request -> {
 			assertThat(request.message()).isNotEmpty();
-			assertThat(request.requestedSchema()).isInstanceOf(McpSchema.PrimitiveSchemaDefinition.class);
-			assertThat(request.requestedSchema().type()).isEqualTo("object");
+			assertThat(request.requestedSchema()).isInstanceOf(Map.class);
+			assertThat(request.requestedSchema().get("type")).isEqualTo("object");
 
-			var properties = request.requestedSchema().properties();
+			var properties = request.requestedSchema().get("properties");
 			assertThat(properties).isNotNull();
-			assertThat(properties.get("message")).isInstanceOf(McpSchema.StringSchema.class);
+			assertThat(((Map<String, Object>) properties).get("message")).isInstanceOf(Map.class);
 
 			return Mono.just(McpSchema.ElicitResult.builder()
 				.message(McpSchema.ElicitResult.Action.ACCEPT)
@@ -382,9 +383,7 @@ class McpAsyncClientResponseHandlerTests {
 		// Create a mock elicitation
 		var elicitRequest = McpSchema.ElicitRequest.builder()
 			.message("Test message")
-			.requestedSchema(McpSchema.PrimitiveSchemaDefinition.builder()
-				.properties(Map.of("message", McpSchema.StringSchema.builder().build()))
-				.build())
+			.requestedSchema(Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
 			.build();
 
 		// Simulate incoming request
@@ -429,9 +428,7 @@ class McpAsyncClientResponseHandlerTests {
 		// Create a mock elicitation
 		var elicitRequest = McpSchema.ElicitRequest.builder()
 			.message("Test message")
-			.requestedSchema(McpSchema.PrimitiveSchemaDefinition.builder()
-				.properties(Map.of("message", McpSchema.StringSchema.builder().build()))
-				.build())
+			.requestedSchema(Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
 			.build();
 
 		// Simulate incoming request
@@ -470,14 +467,8 @@ class McpAsyncClientResponseHandlerTests {
 
 		// Create a mock elicitation
 		var elicitRequest = new McpSchema.ElicitRequest("test",
-				McpSchema.PrimitiveSchemaDefinition.builder()
-					.properties(Map.of("test",
-							McpSchema.BooleanSchema.builder()
-								.defaultValue(true)
-								.description("test-description")
-								.title("test-title")
-								.build()))
-					.build());
+				Map.of("type", "object", "properties", Map.of("test", Map.of("type", "boolean", "defaultValue", true,
+						"description", "test-description", "title", "test-title"))));
 
 		// Simulate incoming request
 		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,

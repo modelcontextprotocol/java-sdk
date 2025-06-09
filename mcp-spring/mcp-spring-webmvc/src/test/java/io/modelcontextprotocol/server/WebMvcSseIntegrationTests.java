@@ -409,9 +409,8 @@ class WebMvcSseIntegrationTests {
 
 					var elicitationRequest = McpSchema.ElicitRequest.builder()
 						.message("Test message")
-						.requestedSchema(McpSchema.PrimitiveSchemaDefinition.builder()
-							.properties(Map.of("message", McpSchema.StringSchema.builder().build()))
-							.build())
+						.requestedSchema(
+								Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
 						.build();
 
 					StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
@@ -477,9 +476,8 @@ class WebMvcSseIntegrationTests {
 
 					var elicitationRequest = McpSchema.ElicitRequest.builder()
 						.message("Test message")
-						.requestedSchema(McpSchema.PrimitiveSchemaDefinition.builder()
-							.properties(Map.of("message", McpSchema.StringSchema.builder().build()))
-							.build())
+						.requestedSchema(
+								Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
 						.build();
 
 					StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
@@ -542,9 +540,8 @@ class WebMvcSseIntegrationTests {
 
 					var elicitationRequest = McpSchema.ElicitRequest.builder()
 						.message("Test message")
-						.requestedSchema(McpSchema.PrimitiveSchemaDefinition.builder()
-							.properties(Map.of("message", McpSchema.StringSchema.builder().build()))
-							.build())
+						.requestedSchema(
+								Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
 						.build();
 
 					StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {

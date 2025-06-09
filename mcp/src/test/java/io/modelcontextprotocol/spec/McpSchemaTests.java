@@ -812,10 +812,8 @@ public class McpSchemaTests {
 	@Test
 	void testCreateElicitationRequest() throws Exception {
 		McpSchema.ElicitRequest request = McpSchema.ElicitRequest.builder()
-			.requestedSchema(McpSchema.PrimitiveSchemaDefinition.builder()
-				.required(List.of("a"))
-				.properties(Map.of("foo", McpSchema.StringSchema.builder().build()))
-				.build())
+			.requestedSchema(Map.of("type", "object", "required", List.of("a"), "properties",
+					Map.of("foo", Map.of("type", "string"))))
 			.build();
 
 		String value = mapper.writeValueAsString(request);
@@ -874,69 +872,6 @@ public class McpSchemaTests {
 					json("""
 							{"roots":[{"uri":"file:///path/to/root1","name":"First Root"},{"uri":"file:///path/to/root2","name":"Second Root"}]}"""));
 
-	}
-
-	// Schema Tests
-
-	@Test
-	void testSchema() throws Exception {
-		McpSchema.PrimitiveSchemaDefinition schemaDefinition = McpSchema.PrimitiveSchemaDefinition.builder()
-			.properties(Map.of("foo",
-					McpSchema.StringSchema.builder()
-						.title("title")
-						.description("description")
-						.format(McpSchema.StringSchema.Format.URI)
-						.maxLength(10)
-						.minLength(1)
-						.build(),
-					"bar",
-					McpSchema.EnumSchema.builder()
-						.title("title")
-						.description("description")
-						.enumNames(List.of("A", "B", "C"))
-						.enumValues(List.of("a", "b", "c"))
-						.build(),
-					"baz",
-					McpSchema.NumberSchema.builder()
-						.title("title")
-						.description("description")
-						.maximum(10)
-						.minimum(1)
-						.type(McpSchema.NumberSchema.TypeVariant.INTEGER)
-						.build(),
-					"baz2",
-					McpSchema.NumberSchema.builder()
-						.title("title")
-						.description("description")
-						.maximum(0.2)
-						.minimum(0.1)
-						.type(McpSchema.NumberSchema.TypeVariant.NUMBER)
-						.build(),
-					"buz",
-					McpSchema.BooleanSchema.builder()
-						.title("title")
-						.description("description")
-						.defaultValue(true)
-						.build()))
-			.required(List.of("foo"))
-			.build();
-
-		String value = mapper.writeValueAsString(schemaDefinition);
-
-		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
-			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
-			.isObject()
-			.isEqualTo(
-					json("""
-							{"properties":{"bar":{"description":"description","enum":["a", "b", "c"],"enumNames":["A", "B", "C"],"title":"title","type":"string"},"baz":{"description":"description","maximum":10.0,"minimum":1.0,"title":"title","type":"integer"},"baz2":{"description":"description","maximum":0.2,"minimum":0.1,"title":"title","type":"number"},"buz":{"default":true,"description":"description","title":"title","type":"boolean"},"foo":{"description":"description","format":"uri","maxLength":10,"minLength":1,"title":"title","type":"string"}},"required":["foo"],"type":"object"}"""));
-
-		// Attempt to go the other way, since Schema is a complex type to (de)serialize
-		// and behaves differently when
-		// serialized vs. deserialized due to the string/number types being used for
-		// multiple concrete types
-		McpSchema.PrimitiveSchemaDefinition schemaDefinition2 = mapper.readValue(value,
-				McpSchema.PrimitiveSchemaDefinition.class);
-		assertThat(schemaDefinition2).isEqualTo(schemaDefinition);
 	}
 
 }

@@ -4,7 +4,6 @@
 package io.modelcontextprotocol;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,7 +27,6 @@ import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvide
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.*;
-import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities.CompletionCapabilities;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -390,9 +388,8 @@ class WebFluxSseIntegrationTests {
 
 					var elicitationRequest = ElicitRequest.builder()
 						.message("Test message")
-						.requestedSchema(McpSchema.PrimitiveSchemaDefinition.builder()
-							.properties(Map.of("message", McpSchema.StringSchema.builder().build()))
-							.build())
+						.requestedSchema(
+								Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
 						.build();
 
 					StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
@@ -459,9 +456,8 @@ class WebFluxSseIntegrationTests {
 
 					var elicitationRequest = ElicitRequest.builder()
 						.message("Test message")
-						.requestedSchema(McpSchema.PrimitiveSchemaDefinition.builder()
-							.properties(Map.of("message", McpSchema.StringSchema.builder().build()))
-							.build())
+						.requestedSchema(
+								Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
 						.build();
 
 					StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
@@ -525,9 +521,8 @@ class WebFluxSseIntegrationTests {
 
 					var elicitationRequest = ElicitRequest.builder()
 						.message("Test message")
-						.requestedSchema(McpSchema.PrimitiveSchemaDefinition.builder()
-							.properties(Map.of("message", McpSchema.StringSchema.builder().build()))
-							.build())
+						.requestedSchema(
+								Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
 						.build();
 
 					StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
