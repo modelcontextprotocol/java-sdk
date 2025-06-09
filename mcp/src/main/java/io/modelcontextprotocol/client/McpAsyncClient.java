@@ -245,6 +245,8 @@ public class McpAsyncClient {
 			if (previous != null) {
 				previous.close();
 			}
+			// Providing an empty operation since we are only interested in triggering the
+			// implicit initialization step.
 			withSession("re-initializing", result -> Mono.empty()).subscribe();
 		}
 	}
