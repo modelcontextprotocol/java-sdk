@@ -25,8 +25,8 @@ public class DefaultMcpTransportSession implements McpTransportSession<Disposabl
 	private final Supplier<Publisher<Void>> onClose;
 
 	public DefaultMcpTransportSession(Supplier<Publisher<Void>> onClose) {
-        this.onClose = onClose;
-    }
+		this.onClose = onClose;
+	}
 
 	@Override
 	public Optional<String> sessionId() {

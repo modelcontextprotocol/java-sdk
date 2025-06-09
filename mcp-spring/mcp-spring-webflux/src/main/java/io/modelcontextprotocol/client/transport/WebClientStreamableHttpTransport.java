@@ -7,7 +7,7 @@ import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSessionNotFoundException;
+import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.spec.McpTransportSession;
 import io.modelcontextprotocol.spec.McpTransportStream;
 import org.reactivestreams.Publisher;
@@ -77,16 +77,10 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	private DefaultMcpTransportSession createTransportSession() {
 		Supplier<Publisher<Void>> onClose = () -> {
 			DefaultMcpTransportSession transportSession = this.activeSession.get();
-			return transportSession.sessionId().isEmpty() ? Mono.empty() : webClient
-				.delete()
-				.uri(this.endpoint)
-				.headers(httpHeaders -> {
-					httpHeaders.add("mcp-session-id", transportSession.sessionId().get());
-				})
-				.retrieve()
-				.toBodilessEntity()
-					.doOnError(e -> logger.info("Got response {}", e))
-				.then();
+			return transportSession.sessionId().isEmpty() ? Mono.empty()
+					: webClient.delete().uri(this.endpoint).headers(httpHeaders -> {
+						httpHeaders.add("mcp-session-id", transportSession.sessionId().get());
+					}).retrieve().toBodilessEntity().doOnError(e -> logger.info("Got response {}", e)).then();
 		};
 		return new DefaultMcpTransportSession(onClose);
 	}
@@ -111,7 +105,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	private void handleException(Throwable t) {
 		logger.debug("Handling exception for session {}", sessionIdOrPlaceholder(this.activeSession.get()), t);
-		if (t instanceof McpSessionNotFoundException) {
+		if (t instanceof McpTransportSessionNotFoundException) {
 			McpTransportSession<?> invalidSession = this.activeSession.getAndSet(createTransportSession());
 			logger.warn("Server does not recognize session {}. Invalidating.", invalidSession.sessionId());
 			invalidSession.close();
@@ -291,7 +285,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	private static Flux<McpSchema.JSONRPCMessage> mcpSessionNotFoundError(String sessionRepresentation) {
 		logger.warn("Session {} was not found on the MCP server", sessionRepresentation);
 		// inform the stream/connection subscriber
-		return Flux.error(new McpSessionNotFoundException(sessionRepresentation));
+		return Flux.error(new McpTransportSessionNotFoundException(sessionRepresentation));
 	}
 
 	private Flux<McpSchema.JSONRPCMessage> extractError(ClientResponse response, String sessionRepresentation) {
@@ -316,7 +310,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			// invalidate the session
 			// https://github.com/modelcontextprotocol/typescript-sdk/issues/389
 			if (responseException.getStatusCode().isSameCodeAs(HttpStatus.BAD_REQUEST)) {
-				return Mono.error(new McpSessionNotFoundException(sessionRepresentation, toPropagate));
+				return Mono.error(new McpTransportSessionNotFoundException(sessionRepresentation, toPropagate));
 			}
 			return Mono.empty();
 		}).flux();

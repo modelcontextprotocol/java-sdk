@@ -48,7 +48,7 @@ public class DefaultMcpTransportStream<CONNECTION> implements McpTransportStream
 	public Publisher<McpSchema.JSONRPCMessage> consumeSseStream(
 			Publisher<Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>>> eventStream) {
 		return Flux.deferContextual(ctx -> Flux.from(eventStream).doOnError(e -> {
-			if (resumable && !(e instanceof McpSessionNotFoundException)) {
+			if (resumable && !(e instanceof McpTransportSessionNotFoundException)) {
 				Mono.from(reconnect.apply(this)).contextWrite(ctx).subscribe();
 			}
 		}).doOnNext(idAndMessage -> idAndMessage.getT1().ifPresent(id -> {

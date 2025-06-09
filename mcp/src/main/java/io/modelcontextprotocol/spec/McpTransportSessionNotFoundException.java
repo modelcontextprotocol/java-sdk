@@ -6,14 +6,14 @@ package io.modelcontextprotocol.spec;
  *
  * @author Dariusz Jędrzejczyk
  */
-public class McpSessionNotFoundException extends RuntimeException {
+public class McpTransportSessionNotFoundException extends RuntimeException {
 
-	public McpSessionNotFoundException(String sessionId, Exception cause) {
+	public McpTransportSessionNotFoundException(String sessionId, Exception cause) {
 		super("Session " + sessionId + " not found on the server", cause);
 
 	}
 
-	public McpSessionNotFoundException(String sessionId) {
+	public McpTransportSessionNotFoundException(String sessionId) {
 		super("Session " + sessionId + " not found on the server");
 	}
 
