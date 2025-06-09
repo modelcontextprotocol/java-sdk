@@ -10,6 +10,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSessionNotFoundException;
 import io.modelcontextprotocol.spec.McpTransportSession;
 import io.modelcontextprotocol.spec.McpTransportStream;
+import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
@@ -31,6 +32,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 public class WebClientStreamableHttpTransport implements McpClientTransport {
 
@@ -69,7 +71,24 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		this.endpoint = endpoint;
 		this.resumableStreams = resumableStreams;
 		this.openConnectionOnStartup = openConnectionOnStartup;
-		this.activeSession.set(new DefaultMcpTransportSession());
+		this.activeSession.set(createTransportSession());
+	}
+
+	private DefaultMcpTransportSession createTransportSession() {
+		Supplier<Publisher<Void>> onClose = () -> {
+			DefaultMcpTransportSession transportSession = this.activeSession.get();
+			return transportSession.sessionId().isEmpty() ? Mono.empty() : webClient
+				.delete()
+				.uri(this.endpoint)
+				.headers(httpHeaders -> {
+					httpHeaders.add("mcp-session-id", transportSession.sessionId().get());
+				})
+				.retrieve()
+				.toBodilessEntity()
+					.doOnError(e -> logger.info("Got response {}", e))
+				.then();
+		};
+		return new DefaultMcpTransportSession(onClose);
 	}
 
 	@Override
@@ -93,7 +112,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	private void handleException(Throwable t) {
 		logger.debug("Handling exception for session {}", sessionIdOrPlaceholder(this.activeSession.get()), t);
 		if (t instanceof McpSessionNotFoundException) {
-			McpTransportSession<?> invalidSession = this.activeSession.getAndSet(new DefaultMcpTransportSession());
+			McpTransportSession<?> invalidSession = this.activeSession.getAndSet(createTransportSession());
 			logger.warn("Server does not recognize session {}. Invalidating.", invalidSession.sessionId());
 			invalidSession.close();
 		}
@@ -107,7 +126,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	public Mono<Void> closeGracefully() {
 		return Mono.defer(() -> {
 			logger.debug("Graceful close triggered");
-			DefaultMcpTransportSession currentSession = this.activeSession.get();
+			DefaultMcpTransportSession currentSession = this.activeSession.getAndSet(createTransportSession());
 			if (currentSession != null) {
 				return currentSession.closeGracefully();
 			}

@@ -195,4 +195,15 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 		});
 	}
 
+	@Test
+	void testSessionClose() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize()).expectNextCount(1).verifyComplete();
+			// In case of Streamable HTTP this call should issue a HTTP DELETE request invalidating the session
+			StepVerifier.create(mcpAsyncClient.closeGracefully()).expectComplete().verify();
+			// The next use should immediately re-initialize with no issue and send the request without any broken connections.
+			StepVerifier.create(mcpAsyncClient.ping()).expectNextCount(1).verifyComplete();
+		});
+	}
+
 }

@@ -1,5 +1,6 @@
 package io.modelcontextprotocol.spec;
 
+import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Disposable;
@@ -9,6 +10,7 @@ import reactor.core.publisher.Mono;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 public class DefaultMcpTransportSession implements McpTransportSession<Disposable> {
 
@@ -20,8 +22,11 @@ public class DefaultMcpTransportSession implements McpTransportSession<Disposabl
 
 	private final AtomicReference<String> sessionId = new AtomicReference<>();
 
-	public DefaultMcpTransportSession() {
-	}
+	private final Supplier<Publisher<Void>> onClose;
+
+	public DefaultMcpTransportSession(Supplier<Publisher<Void>> onClose) {
+        this.onClose = onClose;
+    }
 
 	@Override
 	public Optional<String> sessionId() {
@@ -61,7 +66,7 @@ public class DefaultMcpTransportSession implements McpTransportSession<Disposabl
 
 	@Override
 	public Mono<Void> closeGracefully() {
-		return Mono.fromRunnable(this.openConnections::dispose);
+		return Mono.from(this.onClose.get()).then(Mono.fromRunnable(this.openConnections::dispose));
 	}
 
 }

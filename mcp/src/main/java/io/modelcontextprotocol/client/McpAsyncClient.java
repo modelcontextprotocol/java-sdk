@@ -321,9 +321,11 @@ public class McpAsyncClient {
 	 * @return A Mono that completes when the connection is closed
 	 */
 	public Mono<Void> closeGracefully() {
-		Initialization current = this.initialization.getAndSet(null);
-		Mono<?> sessionClose = current != null ? current.closeGracefully() : Mono.empty();
-		return sessionClose.then(transport.closeGracefully());
+		return Mono.defer(() -> {
+			Initialization current = this.initialization.getAndSet(null);
+			Mono<?> sessionClose = current != null ? current.closeGracefully() : Mono.empty();
+			return sessionClose.then(transport.closeGracefully());
+		});
 	}
 
 	// --------------------------
