@@ -10,6 +10,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.spec.McpTransportSession;
 import io.modelcontextprotocol.spec.McpTransportStream;
+import io.modelcontextprotocol.util.Assert;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,6 +39,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebClientStreamableHttpTransport.class);
 
+	private static final String DEFAULT_ENDPOINT = "/mcp";
+
 	/**
 	 * Event type for JSON-RPC messages received through the SSE connection. The server
 	 * sends messages with this event type to transmit JSON-RPC protocol data.
@@ -64,7 +67,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	private final AtomicReference<Consumer<Throwable>> exceptionHandler = new AtomicReference<>();
 
 	// TODO: builder
-	public WebClientStreamableHttpTransport(ObjectMapper objectMapper, WebClient.Builder webClientBuilder,
+	private WebClientStreamableHttpTransport(ObjectMapper objectMapper, WebClient.Builder webClientBuilder,
 			String endpoint, boolean resumableStreams, boolean openConnectionOnStartup) {
 		this.objectMapper = objectMapper;
 		this.webClient = webClientBuilder.build();
@@ -74,15 +77,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		this.activeSession.set(createTransportSession());
 	}
 
-	private DefaultMcpTransportSession createTransportSession() {
-		Supplier<Publisher<Void>> onClose = () -> {
-			DefaultMcpTransportSession transportSession = this.activeSession.get();
-			return transportSession.sessionId().isEmpty() ? Mono.empty()
-					: webClient.delete().uri(this.endpoint).headers(httpHeaders -> {
-						httpHeaders.add("mcp-session-id", transportSession.sessionId().get());
-					}).retrieve().toBodilessEntity().doOnError(e -> logger.info("Got response {}", e)).then();
-		};
-		return new DefaultMcpTransportSession(onClose);
+	public static Builder builder(WebClient.Builder webClientBuilder) {
+		return new Builder(webClientBuilder);
 	}
 
 	@Override
@@ -95,6 +91,17 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			}
 			return Mono.empty();
 		});
+	}
+
+	private DefaultMcpTransportSession createTransportSession() {
+		Supplier<Publisher<Void>> onClose = () -> {
+			DefaultMcpTransportSession transportSession = this.activeSession.get();
+			return transportSession.sessionId().isEmpty() ? Mono.empty()
+					: webClient.delete().uri(this.endpoint).headers(httpHeaders -> {
+						httpHeaders.add("mcp-session-id", transportSession.sessionId().get());
+					}).retrieve().toBodilessEntity().doOnError(e -> logger.info("Got response {}", e)).then();
+		};
+		return new DefaultMcpTransportSession(onClose);
 	}
 
 	@Override
@@ -383,6 +390,60 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		else {
 			throw new McpError("Received unrecognized SSE event type: " + event.event());
 		}
+	}
+
+	public static class Builder {
+
+		private ObjectMapper objectMapper;
+
+		private WebClient.Builder webClientBuilder;
+
+		private String endpoint = DEFAULT_ENDPOINT;
+
+		private boolean resumableStreams = true;
+
+		private boolean openConnectionOnStartup = false;
+
+		private Builder(WebClient.Builder webClientBuilder) {
+			Assert.notNull(webClientBuilder, "WebClient.Builder must not be null");
+			this.webClientBuilder = webClientBuilder;
+		}
+
+		public Builder objectMapper(ObjectMapper objectMapper) {
+			Assert.notNull(objectMapper, "ObjectMapper must not be null");
+			this.objectMapper = objectMapper;
+			return this;
+		}
+
+		public Builder webClientBuilder(WebClient.Builder webClientBuilder) {
+			Assert.notNull(webClientBuilder, "WebClient.Builder must not be null");
+			this.webClientBuilder = webClientBuilder;
+			return this;
+		}
+
+		public Builder endpoint(String endpoint) {
+			Assert.hasText(endpoint, "endpoint must be a non-empty String");
+			this.endpoint = endpoint;
+			return this;
+		}
+
+		public Builder resumableStreams(boolean resumableStreams) {
+			this.resumableStreams = resumableStreams;
+			return this;
+		}
+
+		public Builder openConnectionOnStartup(boolean openConnectionOnStartup) {
+			this.openConnectionOnStartup = openConnectionOnStartup;
+			return this;
+		}
+
+		public WebClientStreamableHttpTransport build() {
+			ObjectMapper objectMapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
+
+			return new WebClientStreamableHttpTransport(objectMapper, this.webClientBuilder, endpoint, resumableStreams,
+					openConnectionOnStartup);
+		}
+
 	}
 
 }
