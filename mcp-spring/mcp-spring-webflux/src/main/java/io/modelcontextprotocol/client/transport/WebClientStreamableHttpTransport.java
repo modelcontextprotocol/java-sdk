@@ -35,6 +35,31 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+/**
+ * An implementation of the Streamable HTTP protocol as defined by the
+ * <code>2025-03-26</code> version of the MCP specification.
+ *
+ * <p>
+ * The transport is capable of resumability and reconnects. It reacts to transport-level
+ * session invalidation and will propagate {@link McpTransportSessionNotFoundException
+ * appropriate exceptions} to the higher level abstraction layer when needed in order to
+ * allow proper state management. The implementation handles servers that are stateful and
+ * provide session meta information, but can also communicate with stateless servers that
+ * do not provide a session identifier and do not support SSE streams.
+ * </p>
+ * <p>
+ * This implementation does not handle backwards compatibility with the <a href=
+ * "https://modelcontextprotocol.io/specification/2024-11-05/basic/transports#http-with-sse">"HTTP
+ * with SSE" transport</a>. In order to communicate over the phased-out
+ * <code>2024-11-05</code> protocol, use {@link HttpClientSseClientTransport} or
+ * {@link WebFluxSseClientTransport}.
+ * </p>
+ *
+ * @author Dariusz Jędrzejczyk
+ * @see <a href=
+ * "https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http">Streamable
+ * HTTP transport specification</a>
+ */
 public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebClientStreamableHttpTransport.class);
@@ -47,7 +72,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	 */
 	private static final String MESSAGE_EVENT_TYPE = "message";
 
-	public static final ParameterizedTypeReference<ServerSentEvent<String>> PARAMETERIZED_TYPE_REF = new ParameterizedTypeReference<>() {
+	private static final ParameterizedTypeReference<ServerSentEvent<String>> PARAMETERIZED_TYPE_REF = new ParameterizedTypeReference<>() {
 	};
 
 	private final ObjectMapper objectMapper;
@@ -66,7 +91,6 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	private final AtomicReference<Consumer<Throwable>> exceptionHandler = new AtomicReference<>();
 
-	// TODO: builder
 	private WebClientStreamableHttpTransport(ObjectMapper objectMapper, WebClient.Builder webClientBuilder,
 			String endpoint, boolean resumableStreams, boolean openConnectionOnStartup) {
 		this.objectMapper = objectMapper;
@@ -77,6 +101,13 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		this.activeSession.set(createTransportSession());
 	}
 
+	/**
+	 * Create a stateful builder for creating {@link WebClientStreamableHttpTransport}
+	 * instances.
+	 * @param webClientBuilder the {@link WebClient.Builder} to use
+	 * @return a builder which will create an instance of
+	 * {@link WebClientStreamableHttpTransport} once {@link Builder#build()} is called
+	 */
 	public static Builder builder(WebClient.Builder webClientBuilder) {
 		return new Builder(webClientBuilder);
 	}
@@ -392,6 +423,9 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		}
 	}
 
+	/**
+	 * Builder for {@link WebClientStreamableHttpTransport}.
+	 */
 	public static class Builder {
 
 		private ObjectMapper objectMapper;
@@ -409,34 +443,71 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			this.webClientBuilder = webClientBuilder;
 		}
 
+		/**
+		 * Configure the {@link ObjectMapper} to use.
+		 * @param objectMapper instance to use
+		 * @return the builder instance
+		 */
 		public Builder objectMapper(ObjectMapper objectMapper) {
 			Assert.notNull(objectMapper, "ObjectMapper must not be null");
 			this.objectMapper = objectMapper;
 			return this;
 		}
 
+		/**
+		 * Configure the {@link WebClient.Builder} to construct the {@link WebClient}.
+		 * @param webClientBuilder instance to use
+		 * @return the builder instance
+		 */
 		public Builder webClientBuilder(WebClient.Builder webClientBuilder) {
 			Assert.notNull(webClientBuilder, "WebClient.Builder must not be null");
 			this.webClientBuilder = webClientBuilder;
 			return this;
 		}
 
+		/**
+		 * Configure the endpoint to make HTTP requests against.
+		 * @param endpoint endpoint to use
+		 * @return the builder instance
+		 */
 		public Builder endpoint(String endpoint) {
 			Assert.hasText(endpoint, "endpoint must be a non-empty String");
 			this.endpoint = endpoint;
 			return this;
 		}
 
+		/**
+		 * Configure whether to use the stream resumability feature by keeping track of
+		 * SSE event ids.
+		 * @param resumableStreams if {@code true} event ids will be tracked and upon
+		 * disconnection, the last seen id will be used upon reconnection as a header to
+		 * resume consuming messages.
+		 * @return the builder instance
+		 */
 		public Builder resumableStreams(boolean resumableStreams) {
 			this.resumableStreams = resumableStreams;
 			return this;
 		}
 
+		/**
+		 * Configure whether the client should open an SSE connection upon startup. Not
+		 * all servers support this (although it is in theory possible with the current
+		 * specification), so use with caution. By default, this value is {@code false}.
+		 * @param openConnectionOnStartup if {@code true} the {@link #connect(Function)}
+		 * method call will try to open an SSE connection before sending any JSON-RPC
+		 * request
+		 * @return the builder instance
+		 */
 		public Builder openConnectionOnStartup(boolean openConnectionOnStartup) {
 			this.openConnectionOnStartup = openConnectionOnStartup;
 			return this;
 		}
 
+		/**
+		 * Construct a fresh instance of {@link WebClientStreamableHttpTransport} using
+		 * the current builder configuration.
+		 * @return a new instance of {@link WebClientStreamableHttpTransport}
+		 */
 		public WebClientStreamableHttpTransport build() {
 			ObjectMapper objectMapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
 

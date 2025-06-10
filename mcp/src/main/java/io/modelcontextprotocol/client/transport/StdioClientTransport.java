@@ -396,15 +396,4 @@ public class StdioClientTransport implements McpClientTransport {
 		return this.objectMapper.convertValue(data, typeRef);
 	}
 
-	private static void measureTime(Runnable op, String opName) {
-		long start = System.nanoTime();
-		try {
-			op.run();
-		}
-		finally {
-			long delta = System.nanoTime() - start;
-			logger.info("{} took {}ms", opName, Duration.ofNanos(delta).toMillis());
-		}
-	}
-
 }

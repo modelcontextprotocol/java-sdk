@@ -75,6 +75,7 @@ import reactor.core.publisher.Sinks;
  * @see McpClient
  * @see McpSchema
  * @see McpClientSession
+ * @see McpClientTransport
  */
 public class McpAsyncClient {
 

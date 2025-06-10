@@ -12,6 +12,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
+/**
+ * Default implementation of {@link McpTransportSession} which manages the open
+ * connections using tye {@link Disposable} type and allows to perform clean up using the
+ * {@link Disposable#dispose()} method.
+ *
+ * @author Dariusz Jędrzejczyk
+ */
 public class DefaultMcpTransportSession implements McpTransportSession<Disposable> {
 
 	private static final Logger logger = LoggerFactory.getLogger(DefaultMcpTransportSession.class);

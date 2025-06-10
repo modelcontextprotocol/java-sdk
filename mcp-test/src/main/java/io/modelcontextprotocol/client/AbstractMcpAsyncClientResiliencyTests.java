@@ -5,6 +5,7 @@ import eu.rekawek.toxiproxy.ToxiproxyClient;
 import eu.rekawek.toxiproxy.model.ToxicDirection;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpTransport;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +25,16 @@ import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 
+/**
+ * Resiliency test suite for the {@link McpAsyncClient} that can be used with different
+ * {@link McpTransport} implementations that support Streamable HTTP.
+ *
+ * The purpose of these tests is to allow validating the transport layer resiliency
+ * instead of the functionality offered by the logical layer of MCP concepts such as
+ * tools, resources, prompts, etc.
+ *
+ * @author Dariusz Jędrzejczyk
+ */
 public abstract class AbstractMcpAsyncClientResiliencyTests {
 
 	private static final Logger logger = LoggerFactory.getLogger(AbstractMcpAsyncClientResiliencyTests.class);
