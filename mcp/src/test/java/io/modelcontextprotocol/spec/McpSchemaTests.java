@@ -829,6 +829,40 @@ public class McpSchemaTests {
 							{"role":"assistant","content":{"type":"text","text":"Assistant response"},"model":"gpt-4","stopReason":"endTurn"}"""));
 	}
 
+	// Elicitation Tests
+
+	@Test
+	void testCreateElicitationRequest() throws Exception {
+		McpSchema.ElicitRequest request = McpSchema.ElicitRequest.builder()
+			.requestedSchema(Map.of("type", "object", "required", List.of("a"), "properties",
+					Map.of("foo", Map.of("type", "string"))))
+			.build();
+
+		String value = mapper.writeValueAsString(request);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"requestedSchema":{"properties":{"foo":{"type":"string"}},"required":["a"],"type":"object"}}"""));
+	}
+
+	@Test
+	void testCreateElicitationResult() throws Exception {
+		McpSchema.ElicitResult result = McpSchema.ElicitResult.builder()
+			.content(Map.of("foo", "bar"))
+			.message(McpSchema.ElicitResult.Action.ACCEPT)
+			.build();
+
+		String value = mapper.writeValueAsString(result);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"action":"accept","content":{"foo":"bar"}}"""));
+	}
+
 	// Roots Tests
 
 	@Test
