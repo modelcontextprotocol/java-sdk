@@ -12,6 +12,19 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.apache.catalina.LifecycleException;
+import org.apache.catalina.LifecycleState;
+import org.apache.catalina.startup.Tomcat;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.awaitility.Awaitility.await;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
+import static org.mockito.Mockito.mock;
+import org.springframework.web.client.RestClient;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.modelcontextprotocol.client.McpClient;
@@ -32,22 +45,8 @@ import io.modelcontextprotocol.spec.McpSchema.Role;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
-import org.apache.catalina.LifecycleException;
-import org.apache.catalina.LifecycleState;
-import org.apache.catalina.startup.Tomcat;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-
-import org.springframework.web.client.RestClient;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
-import static org.awaitility.Awaitility.await;
-import static org.mockito.Mockito.mock;
 
 class HttpServletSseServerTransportProviderIntegrationTests {
 
@@ -824,6 +823,115 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 			});
 		}
 
+		mcpServer.close();
+	}
+
+	@Test
+	void testToolCallStructuredOutputSuccess() {
+		String outputSchema = """
+				{
+					"$schema": "http://json-schema.org/draft-07/schema#",
+					"type": "object",
+					"properties": {
+						"message": {
+							"type": "string"
+						},
+						"count": {
+							"type": "integer"
+						}
+					}
+				}
+				""";
+
+		CallToolResult callResponse = new McpSchema.CallToolResult(null, null, Map.of("message", "mks", "count", 1));
+
+		McpServerFeatures.AsyncToolSpecification toolWithOutputSchema = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("toolWithOutputSchema", "tool1 description", emptyJsonSchema, outputSchema),
+				(exchange, request) -> {
+					return Mono.just(callResponse);
+				});
+
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.tools(toolWithOutputSchema)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThat(mcpClient.listTools().tools()).contains(toolWithOutputSchema.tool());
+
+			CallToolResult response = mcpClient
+				.callTool(new McpSchema.CallToolRequest("toolWithOutputSchema", Map.of()));
+
+			assertThat(response).isNotNull();
+			assertThat(response).isEqualTo(callResponse);
+		}
+		mcpServer.close();
+	}
+
+	@Test
+	void testToolCallStructuredOutputValidationFailure() {
+		String outputSchema = """
+				{
+					"$schema": "http://json-schema.org/draft-07/schema#",
+					"type": "object",
+					"properties": {
+						"message": {
+							"type": "string"
+						},
+						"cnt": {
+							"type": "integer"
+						}
+					}
+				}
+				""";
+
+		CallToolResult callResponseWithStructuredContent = new McpSchema.CallToolResult(null, null,
+				Map.of("message", "hello", "count", 1));
+		CallToolResult callResponseWithoutStructuredContent = new McpSchema.CallToolResult(
+				"{\"message\":\"hello\",\"count\":1}", null);
+
+		McpServerFeatures.AsyncToolSpecification toolWithOutputSchema1 = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("toolWithOutputSchema1", "toolWithOutputSchema1 description", emptyJsonSchema,
+						outputSchema),
+				(exchange, request) -> {
+					return Mono.just(callResponseWithStructuredContent);
+				});
+		McpServerFeatures.AsyncToolSpecification toolWithOutputSchema2 = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("toolWithOutputSchema2", "toolWithOutputSchema2 description", emptyJsonSchema,
+						outputSchema),
+				(exchange, request) -> {
+					return Mono.just(callResponseWithoutStructuredContent);
+				});
+
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.tools(toolWithOutputSchema1, toolWithOutputSchema2)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThat(mcpClient.listTools().tools()).contains(toolWithOutputSchema1.tool());
+
+			assertThatExceptionOfType(McpError.class).isThrownBy(() -> {
+				mcpClient.callTool(new McpSchema.CallToolRequest("toolWithOutputSchema1", Map.of()));
+			})
+				.withMessageContaining(
+						"CallToolResult validation failed: structuredContent does not match tool outputSchema.");
+
+			assertThatExceptionOfType(McpError.class).isThrownBy(() -> {
+				mcpClient.callTool(new McpSchema.CallToolRequest("toolWithOutputSchema2", Map.of()));
+			})
+				.withMessageContaining(
+						"CallToolResult validation failed: structuredContent is null and does not match tool outputSchema.");
+
+		}
 		mcpServer.close();
 	}
 
