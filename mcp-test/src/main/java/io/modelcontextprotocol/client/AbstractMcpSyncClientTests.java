@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.client;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -12,7 +13,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -112,33 +112,18 @@ public abstract class AbstractMcpSyncClientTests {
 
 	static final Object DUMMY_RETURN_VALUE = new Object();
 
-	<T> void verifyNotificationTimesOut(Consumer<McpSyncClient> operation, String action) {
-		verifyCallTimesOut(client -> {
+	<T> void verifyNotificationSucceedsWithImplicitInitialization(Consumer<McpSyncClient> operation, String action) {
+		verifyCallSucceedsWithImplicitInitialization(client -> {
 			operation.accept(client);
 			return DUMMY_RETURN_VALUE;
 		}, action);
 	}
 
-	<T> void verifyCallTimesOut(Function<McpSyncClient, T> blockingOperation, String action) {
+	<T> void verifyCallSucceedsWithImplicitInitialization(Function<McpSyncClient, T> blockingOperation, String action) {
 		withClient(createMcpTransport(), mcpSyncClient -> {
-			// This scheduler is not replaced by virtual time scheduler
-			Scheduler customScheduler = Schedulers.newBoundedElastic(1, 1, "actualBoundedElastic");
-
-			StepVerifier.withVirtualTime(() -> Mono.fromSupplier(() -> blockingOperation.apply(mcpSyncClient))
-				// Offload the blocking call to the real scheduler
-				.subscribeOn(customScheduler))
-				.expectSubscription()
-				// This works without actually waiting but executes all the
-				// tasks pending execution on the VirtualTimeScheduler.
-				// It is possible to execute the blocking code from the operation
-				// because it is blocked on a dedicated Scheduler and the main
-				// flow is not blocked and uses the VirtualTimeScheduler.
-				.thenAwait(getInitializationTimeout())
-				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
-					.hasMessage("Client must be initialized before " + action))
-				.verify();
-
-			customScheduler.dispose();
+			StepVerifier.create(Mono.fromSupplier(() -> blockingOperation.apply(mcpSyncClient)))
+				.expectNextCount(1)
+				.verifyComplete();
 		});
 	}
 
@@ -154,7 +139,7 @@ public abstract class AbstractMcpSyncClientTests {
 
 	@Test
 	void testListToolsWithoutInitialization() {
-		verifyCallTimesOut(client -> client.listTools(null), "listing tools");
+		verifyCallSucceedsWithImplicitInitialization(client -> client.listTools(null), "listing tools");
 	}
 
 	@Test
@@ -175,8 +160,8 @@ public abstract class AbstractMcpSyncClientTests {
 
 	@Test
 	void testCallToolsWithoutInitialization() {
-		verifyCallTimesOut(client -> client.callTool(new CallToolRequest("add", Map.of("a", 3, "b", 4))),
-				"calling tools");
+		verifyCallSucceedsWithImplicitInitialization(
+				client -> client.callTool(new CallToolRequest("add", Map.of("a", 3, "b", 4))), "calling tools");
 	}
 
 	@Test
@@ -200,7 +185,7 @@ public abstract class AbstractMcpSyncClientTests {
 
 	@Test
 	void testPingWithoutInitialization() {
-		verifyCallTimesOut(client -> client.ping(), "pinging the server");
+		verifyCallSucceedsWithImplicitInitialization(client -> client.ping(), "pinging the server");
 	}
 
 	@Test
@@ -214,7 +199,7 @@ public abstract class AbstractMcpSyncClientTests {
 	@Test
 	void testCallToolWithoutInitialization() {
 		CallToolRequest callToolRequest = new CallToolRequest("echo", Map.of("message", TEST_MESSAGE));
-		verifyCallTimesOut(client -> client.callTool(callToolRequest), "calling tools");
+		verifyCallSucceedsWithImplicitInitialization(client -> client.callTool(callToolRequest), "calling tools");
 	}
 
 	@Test
@@ -243,7 +228,7 @@ public abstract class AbstractMcpSyncClientTests {
 
 	@Test
 	void testRootsListChangedWithoutInitialization() {
-		verifyNotificationTimesOut(client -> client.rootsListChangedNotification(),
+		verifyNotificationSucceedsWithImplicitInitialization(client -> client.rootsListChangedNotification(),
 				"sending roots list changed notification");
 	}
 
@@ -257,7 +242,7 @@ public abstract class AbstractMcpSyncClientTests {
 
 	@Test
 	void testListResourcesWithoutInitialization() {
-		verifyCallTimesOut(client -> client.listResources(null), "listing resources");
+		verifyCallSucceedsWithImplicitInitialization(client -> client.listResources(null), "listing resources");
 	}
 
 	@Test
@@ -333,8 +318,14 @@ public abstract class AbstractMcpSyncClientTests {
 
 	@Test
 	void testReadResourceWithoutInitialization() {
-		Resource resource = new Resource("test://uri", "Test Resource", null, null, null);
-		verifyCallTimesOut(client -> client.readResource(resource), "reading resources");
+		AtomicReference<List<Resource>> resources = new AtomicReference<>();
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			resources.set(mcpSyncClient.listResources().resources());
+		});
+
+		verifyCallSucceedsWithImplicitInitialization(client -> client.readResource(resources.get().get(0)),
+				"reading resources");
 	}
 
 	@Test
@@ -355,7 +346,8 @@ public abstract class AbstractMcpSyncClientTests {
 
 	@Test
 	void testListResourceTemplatesWithoutInitialization() {
-		verifyCallTimesOut(client -> client.listResourceTemplates(null), "listing resource templates");
+		verifyCallSucceedsWithImplicitInitialization(client -> client.listResourceTemplates(null),
+				"listing resource templates");
 	}
 
 	@Test
@@ -413,8 +405,8 @@ public abstract class AbstractMcpSyncClientTests {
 
 	@Test
 	void testLoggingLevelsWithoutInitialization() {
-		verifyNotificationTimesOut(client -> client.setLoggingLevel(McpSchema.LoggingLevel.DEBUG),
-				"setting logging level");
+		verifyNotificationSucceedsWithImplicitInitialization(
+				client -> client.setLoggingLevel(McpSchema.LoggingLevel.DEBUG), "setting logging level");
 	}
 
 	@Test
