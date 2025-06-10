@@ -94,6 +94,9 @@ public final class McpSchema {
 	// Sampling Methods
 	public static final String METHOD_SAMPLING_CREATE_MESSAGE = "sampling/createMessage";
 
+	// Elicitation Methods
+	public static final String METHOD_ELICITATION_CREATE = "elicitation/create";
+
 	private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
 	// ---------------------------
@@ -131,8 +134,8 @@ public final class McpSchema {
 
 	}
 
-	public sealed interface Request
-			permits InitializeRequest, CallToolRequest, CreateMessageRequest, CompleteRequest, GetPromptRequest {
+	public sealed interface Request permits InitializeRequest, CallToolRequest, CreateMessageRequest, ElicitRequest,
+			CompleteRequest, GetPromptRequest {
 
 	}
 
@@ -181,6 +184,8 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
+	// TODO: batching support
+	// @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
 	public record JSONRPCRequest( // @formatter:off
 			@JsonProperty("jsonrpc") String jsonrpc,
 			@JsonProperty("method") String method,
@@ -190,6 +195,8 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
+	// TODO: batching support
+	// @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
 	public record JSONRPCNotification( // @formatter:off
 			@JsonProperty("jsonrpc") String jsonrpc,
 			@JsonProperty("method") String method,
@@ -198,6 +205,8 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
+	// TODO: batching support
+	// @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
 	public record JSONRPCResponse( // @formatter:off
 			@JsonProperty("jsonrpc") String jsonrpc,
 			@JsonProperty("id") Object id,
@@ -221,7 +230,7 @@ public final class McpSchema {
 	public record InitializeRequest( // @formatter:off
 		@JsonProperty("protocolVersion") String protocolVersion,
 		@JsonProperty("capabilities") ClientCapabilities capabilities,
-		@JsonProperty("clientInfo") Implementation clientInfo) implements Request {		
+		@JsonProperty("clientInfo") Implementation clientInfo) implements Request {
 	} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -245,6 +254,8 @@ public final class McpSchema {
 	 * access to.
 	 * @param sampling Provides a standardized way for servers to request LLM sampling
 	 * (“completions” or “generations”) from language models via clients.
+	 * @param elicitation Provides a standardized way for servers to request additional
+	 * information from users through the client during interactions.
 	 *
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -252,7 +263,8 @@ public final class McpSchema {
 	public record ClientCapabilities( // @formatter:off
 		@JsonProperty("experimental") Map<String, Object> experimental,
 		@JsonProperty("roots") RootCapabilities roots,
-		@JsonProperty("sampling") Sampling sampling) {
+		@JsonProperty("sampling") Sampling sampling,
+		@JsonProperty("elicitation") Elicitation elicitation) {
 
 		/**
 		 * Roots define the boundaries of where servers can operate within the filesystem,
@@ -264,7 +276,7 @@ public final class McpSchema {
 		 * 		  has changed since the last time the server checked.
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
-		@JsonIgnoreProperties(ignoreUnknown = true)	
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record RootCapabilities(
 			@JsonProperty("listChanged") Boolean listChanged) {
 		}
@@ -279,8 +291,20 @@ public final class McpSchema {
 		 * image-based interactions and optionally include context
 		 * from MCP servers in their prompts.
 		 */
-		@JsonInclude(JsonInclude.Include.NON_ABSENT)			
+		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record Sampling() {
+		}
+
+		/**
+		 * Provides a standardized way for servers to request additional
+		 * information from users through the client during interactions.
+		 * This flow allows clients to maintain control over user
+		 * interactions and data sharing while enabling servers to gather
+		 * necessary information dynamically. Servers can request structured
+		 * data from users with optional JSON schemas to validate responses.
+		 */
+		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		public record Elicitation() {
 		}
 
 		public static Builder builder() {
@@ -291,6 +315,7 @@ public final class McpSchema {
 			private Map<String, Object> experimental;
 			private RootCapabilities roots;
 			private Sampling sampling;
+			private Elicitation elicitation;
 
 			public Builder experimental(Map<String, Object> experimental) {
 				this.experimental = experimental;
@@ -307,8 +332,13 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder elicitation() {
+				this.elicitation = new Elicitation();
+				return this;
+			}
+
 			public ClientCapabilities build() {
-				return new ClientCapabilities(experimental, roots, sampling);
+				return new ClientCapabilities(experimental, roots, sampling, elicitation);
 			}
 		}
 	}// @formatter:on
@@ -326,11 +356,11 @@ public final class McpSchema {
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record CompletionCapabilities() {
 		}
-			
+
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record LoggingCapabilities() {
 		}
-	
+
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record PromptCapabilities(
 			@JsonProperty("listChanged") Boolean listChanged) {
@@ -727,11 +757,11 @@ public final class McpSchema {
 		@JsonProperty("name") String name,
 		@JsonProperty("description") String description,
 		@JsonProperty("inputSchema") JsonSchema inputSchema) {
-	
+
 		public Tool(String name, String description, String schema) {
 			this(name, description, parseSchema(schema));
 		}
-			
+
 	} // @formatter:on
 
 	private static JsonSchema parseSchema(String schema) {
@@ -758,7 +788,7 @@ public final class McpSchema {
 		@JsonProperty("arguments") Map<String, Object> arguments) implements Request {
 
 		public CallToolRequest(String name, String jsonArguments) {
-			this(name, parseJsonArguments(jsonArguments));			
+			this(name, parseJsonArguments(jsonArguments));
 		}
 
 		private static Map<String, Object> parseJsonArguments(String jsonArguments) {
@@ -893,7 +923,7 @@ public final class McpSchema {
 	@JsonProperty("costPriority") Double costPriority,
 	@JsonProperty("speedPriority") Double speedPriority,
 	@JsonProperty("intelligencePriority") Double intelligencePriority) {
-	
+
 	public static Builder builder() {
 		return new Builder();
 	}
@@ -963,7 +993,7 @@ public final class McpSchema {
 		@JsonProperty("includeContext") ContextInclusionStrategy includeContext,
 		@JsonProperty("temperature") Double temperature,
 		@JsonProperty("maxTokens") int maxTokens,
-		@JsonProperty("stopSequences") List<String> stopSequences, 			
+		@JsonProperty("stopSequences") List<String> stopSequences,
 		@JsonProperty("metadata") Map<String, Object> metadata) implements Request {
 
 		public enum ContextInclusionStrategy {
@@ -971,7 +1001,7 @@ public final class McpSchema {
 			@JsonProperty("thisServer") THIS_SERVER,
 			@JsonProperty("allServers") ALL_SERVERS
 		}
-		
+
 		public static Builder builder() {
 			return new Builder();
 		}
@@ -1040,7 +1070,7 @@ public final class McpSchema {
 		@JsonProperty("content") Content content,
 		@JsonProperty("model") String model,
 		@JsonProperty("stopReason") StopReason stopReason) {
-		
+
 		public enum StopReason {
 			@JsonProperty("endTurn") END_TURN,
 			@JsonProperty("stopSequence") STOP_SEQUENCE,
@@ -1084,6 +1114,79 @@ public final class McpSchema {
 
 			public CreateMessageResult build() {
 				return new CreateMessageResult(role, content, model, stopReason);
+			}
+		}
+	}// @formatter:on
+
+	// Elicitation
+	/**
+	 * Used by the server to send an elicitation to the client.
+	 *
+	 * @param message The body of the elicitation message.
+	 * @param requestedSchema The elicitation response schema that must be satisfied.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ElicitRequest(// @formatter:off
+		@JsonProperty("message") String message,
+		@JsonProperty("requestedSchema") Map<String, Object> requestedSchema) implements Request {
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private String message;
+			private Map<String, Object> requestedSchema;
+
+			public Builder message(String message) {
+				this.message = message;
+				return this;
+			}
+
+			public Builder requestedSchema(Map<String, Object> requestedSchema) {
+				this.requestedSchema = requestedSchema;
+				return this;
+			}
+
+			public ElicitRequest build() {
+				return new ElicitRequest(message, requestedSchema);
+			}
+		}
+	}// @formatter:on
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ElicitResult(// @formatter:off
+		@JsonProperty("action") Action action,
+		@JsonProperty("content") Map<String, Object> content) {
+
+		public enum Action {
+			@JsonProperty("accept") ACCEPT,
+			@JsonProperty("decline") DECLINE,
+			@JsonProperty("cancel") CANCEL
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private Action action;
+			private Map<String, Object> content;
+
+			public Builder message(Action action) {
+				this.action = action;
+				return this;
+			}
+
+			public Builder content(Map<String, Object> content) {
+				this.content = content;
+				return this;
+			}
+
+			public ElicitResult build() {
+				return new ElicitResult(action, content);
 			}
 		}
 	}// @formatter:on

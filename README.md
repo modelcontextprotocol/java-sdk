@@ -30,11 +30,8 @@ To run the tests you have to pre-install `Docker` and `npx`.
 
 ## Contributing
 
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Submit a Pull Request
+Contributions are welcome!
+Please follow the [Contributing Guidelines](CONTRIBUTING.md).
 
 ## Team
 
