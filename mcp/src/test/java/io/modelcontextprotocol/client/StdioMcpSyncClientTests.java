@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.client;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -12,12 +13,17 @@ import java.util.concurrent.atomic.AtomicReference;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.spec.McpClientTransport;
+import io.modelcontextprotocol.spec.McpSchema;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * Tests for the {@link McpSyncClient} with {@link StdioClientTransport}.
@@ -65,6 +71,60 @@ class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 		assertThat(receivedError.get()).isNotNull().isEqualTo(errorMessage);
 
 		StepVerifier.create(transport.closeGracefully()).expectComplete().verify(Duration.ofSeconds(5));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "success", "error", "debug" })
+	void testMessageAnnotations(String messageType) {
+		McpClientTransport transport = createMcpTransport();
+
+		withClient(transport, client -> {
+			client.initialize();
+
+			McpSchema.CallToolResult result = client.callTool(new McpSchema.CallToolRequest("annotatedMessage",
+					Map.of("messageType", messageType, "includeImage", true)));
+
+			assertThat(result).isNotNull();
+			assertThat(result.isError()).isNotEqualTo(true);
+			assertThat(result.content()).isNotEmpty();
+			assertThat(result.content()).allSatisfy(content -> {
+				switch (content.type()) {
+					case "text":
+						McpSchema.TextContent textContent = assertInstanceOf(McpSchema.TextContent.class, content);
+						assertThat(textContent.text()).isNotEmpty();
+						assertThat(textContent.annotations()).isNotNull();
+
+						switch (messageType) {
+							case "error":
+								assertThat(textContent.annotations().priority()).isEqualTo(1.0);
+								assertThat(textContent.annotations().audience()).containsOnly(McpSchema.Role.USER,
+										McpSchema.Role.ASSISTANT);
+								break;
+							case "success":
+								assertThat(textContent.annotations().priority()).isEqualTo(0.7);
+								assertThat(textContent.annotations().audience()).containsExactly(McpSchema.Role.USER);
+								break;
+							case "debug":
+								assertThat(textContent.annotations().priority()).isEqualTo(0.3);
+								assertThat(textContent.annotations().audience())
+									.containsExactly(McpSchema.Role.ASSISTANT);
+								break;
+							default:
+								throw new IllegalStateException("Unexpected value: " + content.type());
+						}
+						break;
+					case "image":
+						McpSchema.ImageContent imageContent = assertInstanceOf(McpSchema.ImageContent.class, content);
+						assertThat(imageContent.data()).isNotEmpty();
+						assertThat(imageContent.annotations()).isNotNull();
+						assertThat(imageContent.annotations().priority()).isEqualTo(0.5);
+						assertThat(imageContent.annotations().audience()).containsExactly(McpSchema.Role.USER);
+						break;
+					default:
+						fail("Unexpected content type: " + content.type());
+				}
+			});
+		});
 	}
 
 	protected Duration getInitializationTimeout() {
