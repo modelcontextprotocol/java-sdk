@@ -1,36 +1,30 @@
-/*
- * Copyright 2024-2024 the original author or authors.
- */
-
 package io.modelcontextprotocol.client;
 
-import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.client.transport.WebClientStreamableHttpTransport;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import org.junit.jupiter.api.Timeout;
+import org.springframework.web.reactive.function.client.WebClient;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.images.builder.ImageFromDockerfile;
 
-/**
- * Tests for the {@link McpSyncClient} with {@link HttpClientSseClientTransport}.
- *
- * @author Christian Tzolov
- */
 @Timeout(15)
-class HttpSseMcpAsyncClientTests extends AbstractMcpAsyncClientTests {
+public class WebClientStreamableHttpAsyncClientTests extends AbstractMcpAsyncClientTests {
 
-	String host = "http://localhost:3004";
+	static String host = "http://localhost:3001";
 
 	// Uses the https://github.com/tzolov/mcp-everything-server-docker-image
 	@SuppressWarnings("resource")
 	GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v2")
-		.withCommand("node dist/index.js sse")
+		.withCommand("node dist/index.js streamableHttp")
 		.withLogConsumer(outputFrame -> System.out.println(outputFrame.getUtf8String()))
 		.withExposedPorts(3001)
 		.waitingFor(Wait.forHttp("/").forStatusCode(404));
 
 	@Override
 	protected McpClientTransport createMcpTransport() {
-		return HttpClientSseClientTransport.builder(host).build();
+		return WebClientStreamableHttpTransport.builder(WebClient.builder().baseUrl(host)).build();
 	}
 
 	@Override
@@ -41,7 +35,7 @@ class HttpSseMcpAsyncClientTests extends AbstractMcpAsyncClientTests {
 	}
 
 	@Override
-	protected void onClose() {
+	public void onClose() {
 		container.stop();
 	}
 

@@ -112,6 +112,7 @@ public class StdioClientTransport implements McpClientTransport {
 	@Override
 	public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
 		return Mono.<Void>fromRunnable(() -> {
+			logger.info("MCP server starting.");
 			handleIncomingMessages(handler);
 			handleIncomingErrors();
 
@@ -142,6 +143,7 @@ public class StdioClientTransport implements McpClientTransport {
 			startInboundProcessing();
 			startOutboundProcessing();
 			startErrorProcessing();
+			logger.info("MCP server started");
 		}).subscribeOn(Schedulers.boundedElastic());
 	}
 
@@ -365,6 +367,9 @@ public class StdioClientTransport implements McpClientTransport {
 		})).doOnNext(process -> {
 			if (process.exitValue() != 0) {
 				logger.warn("Process terminated with code " + process.exitValue());
+			}
+			else {
+				logger.info("MCP server process stopped");
 			}
 		}).then(Mono.fromRunnable(() -> {
 			try {
