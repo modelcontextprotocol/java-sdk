@@ -1,6 +1,7 @@
 package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -111,6 +112,11 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	private volatile boolean isClosing = false;
 
 	/**
+	 * DNS rebinding protection configuration.
+	 */
+	private final DnsRebindingProtectionConfig dnsRebindingProtectionConfig;
+
+	/**
 	 * Constructs a new WebFlux SSE server transport provider instance with the default
 	 * SSE endpoint.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
@@ -134,7 +140,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
 	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
-		this(objectMapper, DEFAULT_BASE_URL, messageEndpoint, sseEndpoint);
+		this(objectMapper, DEFAULT_BASE_URL, messageEndpoint, sseEndpoint, null);
 	}
 
 	/**
@@ -149,6 +155,24 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 */
 	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint) {
+		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, null);
+	}
+
+	/**
+	 * Constructs a new WebFlux SSE server transport provider instance with optional DNS
+	 * rebinding protection.
+	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
+	 * of MCP messages. Must not be null.
+	 * @param baseUrl webflux message base path
+	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
+	 * messages. This endpoint will be communicated to clients during SSE connection
+	 * setup. Must not be null.
+	 * @param sseEndpoint The endpoint URI where clients establish their SSE connections.
+	 * @param dnsRebindingProtectionConfig The DNS rebinding protection configuration (may be null).
+	 * @throws IllegalArgumentException if required parameters are null
+	 */
+	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+			String sseEndpoint, DnsRebindingProtectionConfig dnsRebindingProtectionConfig) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(baseUrl, "Message base path must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
@@ -158,6 +182,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
+		this.dnsRebindingProtectionConfig = dnsRebindingProtectionConfig;
 		this.routerFunction = RouterFunctions.route()
 			.GET(this.sseEndpoint, this::handleSseConnection)
 			.POST(this.messageEndpoint, this::handleMessage)
@@ -256,6 +281,16 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
 		}
 
+		// Validate headers
+		if (dnsRebindingProtectionConfig != null) {
+			String hostHeader = request.headers().asHttpHeaders().getFirst("Host");
+			String originHeader = request.headers().asHttpHeaders().getFirst("Origin");
+			if (!dnsRebindingProtectionConfig.validate(hostHeader, originHeader)) {
+				logger.warn("DNS rebinding protection validation failed - Host: '{}', Origin: '{}'", hostHeader, originHeader);
+				return ServerResponse.status(HttpStatus.FORBIDDEN).bodyValue("DNS rebinding protection validation failed");
+			}
+		}
+
 		return ServerResponse.ok()
 			.contentType(MediaType.TEXT_EVENT_STREAM)
 			.body(Flux.<ServerSentEvent<?>>create(sink -> {
@@ -298,6 +333,25 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	private Mono<ServerResponse> handleMessage(ServerRequest request) {
 		if (isClosing) {
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
+		}
+
+		// Always validate Content-Type for POST requests
+		String contentType = request.headers().contentType()
+			.map(MediaType::toString)
+			.orElse(null);
+		if (contentType == null || !contentType.toLowerCase().startsWith("application/json")) {
+			logger.warn("Invalid Content-Type header: '{}'", contentType);
+			return ServerResponse.badRequest().bodyValue(new McpError("Content-Type must be application/json"));
+		}
+
+		// Validate headers for POST requests if DNS rebinding protection is configured
+		if (dnsRebindingProtectionConfig != null) {
+			String hostHeader = request.headers().asHttpHeaders().getFirst("Host");
+			String originHeader = request.headers().asHttpHeaders().getFirst("Origin");
+			if (!dnsRebindingProtectionConfig.validate(hostHeader, originHeader)) {
+				logger.warn("DNS rebinding protection validation failed - Host: '{}', Origin: '{}'", hostHeader, originHeader);
+				return ServerResponse.status(HttpStatus.FORBIDDEN).bodyValue("DNS rebinding protection validation failed");
+			}
 		}
 
 		if (request.queryParam("sessionId").isEmpty()) {
@@ -397,6 +451,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
 
+		private DnsRebindingProtectionConfig dnsRebindingProtectionConfig;
+
 		/**
 		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
@@ -447,6 +503,23 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			return this;
 		}
 
+
+		/**
+		 * Sets the DNS rebinding protection configuration.
+		 * <p>
+		 * When set, this configuration will be used to create a header validator that
+		 * enforces DNS rebinding protection rules. This will override any previously set
+		 * header validator.
+		 * @param config The DNS rebinding protection configuration
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if config is null
+		 */
+		public Builder dnsRebindingProtectionConfig(DnsRebindingProtectionConfig config) {
+			Assert.notNull(config, "DNS rebinding protection config must not be null");
+			this.dnsRebindingProtectionConfig = config;
+			return this;
+		}
+
 		/**
 		 * Builds a new instance of {@link WebFluxSseServerTransportProvider} with the
 		 * configured settings.
@@ -457,7 +530,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			Assert.notNull(objectMapper, "ObjectMapper must be set");
 			Assert.notNull(messageEndpoint, "Message endpoint must be set");
 
-			return new WebFluxSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint);
+			return new WebFluxSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint,
+					dnsRebindingProtectionConfig);
 		}
 
 	}
