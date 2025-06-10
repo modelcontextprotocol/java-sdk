@@ -23,6 +23,8 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
+import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
+import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
 import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
@@ -135,6 +137,15 @@ public class McpAsyncClient {
 	private Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler;
 
 	/**
+	 * MCP provides a standardized way for servers to request additional information from
+	 * users through the client during interactions. This flow allows clients to maintain
+	 * control over user interactions and data sharing while enabling servers to gather
+	 * necessary information dynamically. Servers can request structured data from users
+	 * with optional JSON schemas to validate responses.
+	 */
+	private Function<ElicitRequest, Mono<ElicitResult>> elicitationHandler;
+
+	/**
 	 * Client transport implementation.
 	 */
 	private final McpClientTransport transport;
@@ -186,6 +197,15 @@ public class McpAsyncClient {
 			}
 			this.samplingHandler = features.samplingHandler();
 			requestHandlers.put(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, samplingCreateMessageHandler());
+		}
+
+		// Elicitation Handler
+		if (this.clientCapabilities.elicitation() != null) {
+			if (features.elicitationHandler() == null) {
+				throw new McpError("Elicitation handler must not be null when client capabilities include elicitation");
+			}
+			this.elicitationHandler = features.elicitationHandler();
+			requestHandlers.put(McpSchema.METHOD_ELICITATION_CREATE, elicitationCreateHandler());
 		}
 
 		// Notification Handlers
@@ -590,6 +610,18 @@ public class McpAsyncClient {
 			McpSchema.CreateMessageRequest request = transport.unmarshalFrom(params, CREATE_MESSAGE_REQUEST_TYPE_REF);
 
 			return this.samplingHandler.apply(request);
+		};
+	}
+
+	// --------------------------
+	// Elicitation
+	// --------------------------
+	private RequestHandler<ElicitResult> elicitationCreateHandler() {
+		return params -> {
+			ElicitRequest request = transport.unmarshalFrom(params, new TypeReference<>() {
+			});
+
+			return this.elicitationHandler.apply(request);
 		};
 	}
 

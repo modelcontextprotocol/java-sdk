@@ -19,6 +19,8 @@ import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import reactor.core.publisher.Mono;
 
 import static io.modelcontextprotocol.spec.McpSchema.METHOD_INITIALIZE;
@@ -347,6 +349,154 @@ class McpAsyncClientResponseHandlerTests {
 				() -> McpClient.async(transport).capabilities(ClientCapabilities.builder().sampling().build()).build())
 			.isInstanceOf(McpError.class)
 			.hasMessage("Sampling handler must not be null when client capabilities include sampling");
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void testElicitationCreateRequestHandling() {
+		MockMcpClientTransport transport = initializationEnabledTransport();
+
+		// Create a test elicitation handler that echoes back the input
+		Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler = request -> {
+			assertThat(request.message()).isNotEmpty();
+			assertThat(request.requestedSchema()).isInstanceOf(Map.class);
+			assertThat(request.requestedSchema().get("type")).isEqualTo("object");
+
+			var properties = request.requestedSchema().get("properties");
+			assertThat(properties).isNotNull();
+			assertThat(((Map<String, Object>) properties).get("message")).isInstanceOf(Map.class);
+
+			return Mono.just(McpSchema.ElicitResult.builder()
+				.message(McpSchema.ElicitResult.Action.ACCEPT)
+				.content(Map.of("message", request.message()))
+				.build());
+		};
+
+		// Create client with elicitation capability and handler
+		McpAsyncClient asyncMcpClient = McpClient.async(transport)
+			.capabilities(ClientCapabilities.builder().elicitation().build())
+			.elicitation(elicitationHandler)
+			.build();
+
+		assertThat(asyncMcpClient.initialize().block()).isNotNull();
+
+		// Create a mock elicitation
+		var elicitRequest = McpSchema.ElicitRequest.builder()
+			.message("Test message")
+			.requestedSchema(Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
+			.build();
+
+		// Simulate incoming request
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
+				McpSchema.METHOD_ELICITATION_CREATE, "test-id", elicitRequest);
+		transport.simulateIncomingMessage(request);
+
+		// Verify response
+		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
+		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
+
+		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
+		assertThat(response.id()).isEqualTo("test-id");
+		assertThat(response.error()).isNull();
+
+		McpSchema.ElicitResult result = transport.unmarshalFrom(response.result(), new TypeReference<>() {
+		});
+		assertThat(result).isNotNull();
+		assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+		assertThat(result.content()).isEqualTo(Map.of("message", "Test message"));
+
+		asyncMcpClient.closeGracefully();
+	}
+
+	@ParameterizedTest
+	@EnumSource(value = McpSchema.ElicitResult.Action.class, names = { "DECLINE", "CANCEL" })
+	void testElicitationFailRequestHandling(McpSchema.ElicitResult.Action action) {
+		MockMcpClientTransport transport = initializationEnabledTransport();
+
+		// Create a test elicitation handler to decline the request
+		Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler = request -> Mono
+			.just(McpSchema.ElicitResult.builder().message(action).build());
+
+		// Create client with elicitation capability and handler
+		McpAsyncClient asyncMcpClient = McpClient.async(transport)
+			.capabilities(ClientCapabilities.builder().elicitation().build())
+			.elicitation(elicitationHandler)
+			.build();
+
+		assertThat(asyncMcpClient.initialize().block()).isNotNull();
+
+		// Create a mock elicitation
+		var elicitRequest = McpSchema.ElicitRequest.builder()
+			.message("Test message")
+			.requestedSchema(Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
+			.build();
+
+		// Simulate incoming request
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
+				McpSchema.METHOD_ELICITATION_CREATE, "test-id", elicitRequest);
+		transport.simulateIncomingMessage(request);
+
+		// Verify response
+		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
+		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
+
+		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
+		assertThat(response.id()).isEqualTo("test-id");
+		assertThat(response.error()).isNull();
+
+		McpSchema.ElicitResult result = transport.unmarshalFrom(response.result(), new TypeReference<>() {
+		});
+		assertThat(result).isNotNull();
+		assertThat(result.action()).isEqualTo(action);
+		assertThat(result.content()).isNull();
+
+		asyncMcpClient.closeGracefully();
+	}
+
+	@Test
+	void testElicitationCreateRequestHandlingWithoutCapability() {
+		MockMcpClientTransport transport = initializationEnabledTransport();
+
+		// Create client without elicitation capability
+		McpAsyncClient asyncMcpClient = McpClient.async(transport)
+			.capabilities(ClientCapabilities.builder().build()) // No elicitation
+																// capability
+			.build();
+
+		assertThat(asyncMcpClient.initialize().block()).isNotNull();
+
+		// Create a mock elicitation
+		var elicitRequest = new McpSchema.ElicitRequest("test",
+				Map.of("type", "object", "properties", Map.of("test", Map.of("type", "boolean", "defaultValue", true,
+						"description", "test-description", "title", "test-title"))));
+
+		// Simulate incoming request
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
+				McpSchema.METHOD_ELICITATION_CREATE, "test-id", elicitRequest);
+		transport.simulateIncomingMessage(request);
+
+		// Verify error response
+		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
+		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
+
+		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
+		assertThat(response.id()).isEqualTo("test-id");
+		assertThat(response.result()).isNull();
+		assertThat(response.error()).isNotNull();
+		assertThat(response.error().message()).contains("Method not found: elicitation/create");
+
+		asyncMcpClient.closeGracefully();
+	}
+
+	@Test
+	void testElicitationCreateRequestHandlingWithNullHandler() {
+		MockMcpClientTransport transport = new MockMcpClientTransport();
+
+		// Create client with elicitation capability but null handler
+		assertThatThrownBy(() -> McpClient.async(transport)
+			.capabilities(ClientCapabilities.builder().elicitation().build())
+			.build()).isInstanceOf(McpError.class)
+			.hasMessage("Elicitation handler must not be null when client capabilities include elicitation");
 	}
 
 }
