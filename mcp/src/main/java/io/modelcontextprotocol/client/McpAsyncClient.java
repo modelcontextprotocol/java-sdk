@@ -682,9 +682,17 @@ public class McpAsyncClient {
 	private NotificationHandler asyncToolsChangeNotificationHandler(
 			List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers) {
 		// TODO: params are not used yet
-		return params -> this.listTools()
-			.flatMap(listToolsResult -> Flux.fromIterable(toolsChangeConsumers)
-				.flatMap(consumer -> consumer.apply(listToolsResult.tools()))
+		return params -> this.listTools().expand(result -> {
+			if (result.nextCursor() != null) {
+				return this.listTools(result.nextCursor());
+			}
+			return Mono.empty();
+		}).reduce(new ArrayList<McpSchema.Tool>(), (allTools, result) -> {
+			allTools.addAll(result.tools());
+			return allTools;
+		})
+			.flatMap(allTools -> Flux.fromIterable(toolsChangeConsumers)
+				.flatMap(consumer -> consumer.apply(allTools))
 				.onErrorResume(error -> {
 					logger.error("Error handling tools list change notification", error);
 					return Mono.empty();
