@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @author Jihoon Kim
  */
 public class McpClientSession implements McpSession {
 
@@ -135,6 +136,14 @@ public class McpClientSession implements McpSession {
 				sink.success(response);
 			}
 		}
+		else if (message instanceof McpSchema.JSONRPCBatchResponse batchResponse) {
+			logger.debug("Received Batch Response: {}", batchResponse);
+			batchResponse.responses().forEach(jsonrpcMessage -> {
+				if (jsonrpcMessage instanceof McpSchema.JSONRPCResponse response) {
+					this.handle(response);
+				}
+			});
+		}
 		else if (message instanceof McpSchema.JSONRPCRequest request) {
 			logger.debug("Received request: {}", request);
 			handleIncomingRequest(request).onErrorResume(error -> {
@@ -143,6 +152,17 @@ public class McpClientSession implements McpSession {
 								error.getMessage(), null));
 				return this.transport.sendMessage(errorResponse).then(Mono.empty());
 			}).flatMap(this.transport::sendMessage).subscribe();
+		}
+		else if (message instanceof McpSchema.JSONRPCBatchRequest batchRequest) {
+			logger.debug("Received Batch Request: {}", batchRequest);
+			batchRequest.messages().forEach(jsonrpcMessage -> {
+				if (jsonrpcMessage instanceof McpSchema.JSONRPCRequest request) {
+					this.handle(request);
+				}
+				else if (jsonrpcMessage instanceof McpSchema.JSONRPCNotification notification) {
+					this.handle(notification);
+				}
+			});
 		}
 		else if (message instanceof McpSchema.JSONRPCNotification notification) {
 			logger.debug("Received notification: {}", notification);
