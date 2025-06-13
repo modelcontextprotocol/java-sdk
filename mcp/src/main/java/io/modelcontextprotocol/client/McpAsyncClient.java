@@ -40,6 +40,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
+import reactor.util.context.ContextView;
 
 /**
  * The Model Context Protocol (MCP) client implementation that provides asynchronous
@@ -159,7 +160,7 @@ public class McpAsyncClient {
 	 * The MCP session supplier that manages bidirectional JSON-RPC communication between
 	 * clients and servers.
 	 */
-	private final Supplier<McpClientSession> sessionSupplier;
+	private final Function<ContextView, McpClientSession> sessionSupplier;
 
 	/**
 	 * Create a new McpAsyncClient with the given transport and session request-response
@@ -254,8 +255,8 @@ public class McpAsyncClient {
 				asyncLoggingNotificationHandler(loggingConsumersFinal));
 
 		this.transport.setExceptionHandler(this::handleException);
-		this.sessionSupplier = () -> new McpClientSession(requestTimeout, transport, requestHandlers,
-				notificationHandlers);
+		this.sessionSupplier = ctx -> new McpClientSession(requestTimeout, transport, requestHandlers,
+				notificationHandlers, con -> con.contextWrite(ctx));
 
 	}
 
@@ -471,14 +472,14 @@ public class McpAsyncClient {
 	 * @return A Mono that completes with the result of the operation
 	 */
 	private <T> Mono<T> withSession(String actionName, Function<Initialization, Mono<T>> operation) {
-		return Mono.defer(() -> {
+		return Mono.deferContextual(ctx -> {
 			Initialization newInit = Initialization.create();
 			Initialization previous = this.initializationRef.compareAndExchange(null, newInit);
 
 			boolean needsToInitialize = previous == null;
 			logger.debug(needsToInitialize ? "Initialization process started" : "Joining previous initialization");
 			if (needsToInitialize) {
-				newInit.setMcpClientSession(this.sessionSupplier.get());
+				newInit.setMcpClientSession(this.sessionSupplier.apply(ctx));
 			}
 
 			Mono<McpSchema.InitializeResult> initializationJob = needsToInitialize

@@ -6,6 +6,7 @@ package io.modelcontextprotocol.spec;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.util.Assert;
+import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -16,6 +17,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 
 /**
  * Default implementation of the MCP (Model Context Protocol) session that manages
@@ -101,7 +103,8 @@ public class McpClientSession implements McpSession {
 	 * @param notificationHandlers Map of method names to notification handlers
 	 */
 	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
-			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
+			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers,
+			Function<? super Mono<Void>, ? extends Publisher<Void>> connectHook) {
 
 		Assert.notNull(requestTimeout, "The requestTimeout can not be null");
 		Assert.notNull(transport, "The transport can not be null");
@@ -113,7 +116,7 @@ public class McpClientSession implements McpSession {
 		this.requestHandlers.putAll(requestHandlers);
 		this.notificationHandlers.putAll(notificationHandlers);
 
-		this.transport.connect(mono -> mono.doOnNext(this::handle)).subscribe();
+		this.transport.connect(mono -> mono.doOnNext(this::handle)).transform(connectHook).subscribe();
 	}
 
 	private void dismissPendingResponses() {
