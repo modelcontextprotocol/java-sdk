@@ -362,7 +362,7 @@ public class StdioClientTransport implements McpClientTransport {
 			}
 			else {
 				logger.warn("Process not started");
-				return Mono.empty();
+				return Mono.<Process>empty();
 			}
 		})).doOnNext(process -> {
 			if (process.exitValue() != 0) {

@@ -15,8 +15,6 @@
 */
 package io.modelcontextprotocol;
 
-import java.util.Map;
-
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerSession.Factory;
