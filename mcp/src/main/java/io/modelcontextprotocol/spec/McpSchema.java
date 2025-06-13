@@ -738,6 +738,17 @@ public final class McpSchema {
 		@JsonProperty("definitions") Map<String, Object> definitions) {
 	} // @formatter:on
 
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ToolAnnotations( // @formatter:off
+								   @JsonProperty("title")  String title,
+								   @JsonProperty("readOnlyHint")   Boolean readOnlyHint,
+								   @JsonProperty("destructiveHint") Boolean destructiveHint,
+								   @JsonProperty("idempotentHint") Boolean idempotentHint,
+								   @JsonProperty("openWorldHint") Boolean openWorldHint,
+								   @JsonProperty("returnDirect") Boolean returnDirect) {
+	} // @formatter:on
+
 	/**
 	 * Represents a tool that the server provides. Tools enable servers to expose
 	 * executable functionality to the system. Through these tools, you can interact with
@@ -749,17 +760,23 @@ public final class McpSchema {
 	 * used by clients to improve the LLM's understanding of available tools.
 	 * @param inputSchema A JSON Schema object that describes the expected structure of
 	 * the arguments when calling this tool. This allows clients to validate tool
+	 * @param annotations Additional properties describing a Tool to clients.
 	 * arguments before sending them to the server.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Tool( // @formatter:off
-		@JsonProperty("name") String name,
-		@JsonProperty("description") String description,
-		@JsonProperty("inputSchema") JsonSchema inputSchema) {
+						@JsonProperty("name") String name,
+						@JsonProperty("description") String description,
+						@JsonProperty("inputSchema") JsonSchema inputSchema,
+						@JsonProperty("annotations") ToolAnnotations annotations) {
 
 		public Tool(String name, String description, String schema) {
-			this(name, description, parseSchema(schema));
+			this(name, description, parseSchema(schema), null);
+		}
+
+		public Tool(String name, String description, String schema, ToolAnnotations annotations) {
+			this(name, description, parseSchema(schema), annotations);
 		}
 
 	} // @formatter:on
