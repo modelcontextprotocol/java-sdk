@@ -4,17 +4,8 @@
 
 package io.modelcontextprotocol.client;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Consumer;
-import java.util.function.Function;
-
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpTransport;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
@@ -22,7 +13,16 @@ import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
 import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.Implementation;
 import io.modelcontextprotocol.spec.McpSchema.Root;
+import io.modelcontextprotocol.spec.McpTransport;
 import io.modelcontextprotocol.util.Assert;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import reactor.core.publisher.Mono;
 
 /**
@@ -178,6 +178,8 @@ public interface McpClient {
 		private Function<CreateMessageRequest, CreateMessageResult> samplingHandler;
 
 		private Function<ElicitRequest, ElicitResult> elicitationHandler;
+
+		private McpSyncTokenSupplier tokenSupplier = Optional::empty;
 
 		private SyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
@@ -375,6 +377,12 @@ public interface McpClient {
 			return this;
 		}
 
+		public SyncSpec tokenSupplier(McpSyncTokenSupplier tokenSupplier) {
+			Assert.notNull(tokenSupplier, "Token supplier must not be null");
+			this.tokenSupplier = tokenSupplier;
+			return this;
+		}
+
 		/**
 		 * Create an instance of {@link McpSyncClient} with the provided configurations or
 		 * sensible defaults.
@@ -388,7 +396,8 @@ public interface McpClient {
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
 			return new McpSyncClient(
-					new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout, asyncFeatures));
+					new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout, asyncFeatures),
+					this.tokenSupplier);
 		}
 
 	}

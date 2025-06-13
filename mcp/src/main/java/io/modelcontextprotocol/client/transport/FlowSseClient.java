@@ -121,11 +121,18 @@ public class FlowSseClient {
 	 * @throws RuntimeException if the connection fails with a non-200 status code
 	 */
 	public void subscribe(String url, SseEventHandler eventHandler) {
-		HttpRequest request = this.requestBuilder.uri(URI.create(url))
+		subscribe(url, null, eventHandler);
+	}
+
+	public void subscribe(String url, String bearerToken, SseEventHandler eventHandler) {
+		var builder = this.requestBuilder.uri(URI.create(url))
 			.header("Accept", "text/event-stream")
 			.header("Cache-Control", "no-cache")
-			.GET()
-			.build();
+			.GET();
+		if (bearerToken != null) {
+			builder.header("Authorization", "Bearer " + bearerToken);
+		}
+		HttpRequest request = builder.build();
 
 		StringBuilder eventBuilder = new StringBuilder();
 		AtomicReference<String> currentEventId = new AtomicReference<>();

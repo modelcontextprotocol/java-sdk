@@ -3,6 +3,16 @@
  */
 package io.modelcontextprotocol.client.transport;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.client.McpAsyncTokenSupplier;
+import io.modelcontextprotocol.client.transport.FlowSseClient.SseEvent;
+import io.modelcontextprotocol.spec.McpClientTransport;
+import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
+import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.Utils;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -15,16 +25,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
-
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.client.transport.FlowSseClient.SseEvent;
-import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
-import io.modelcontextprotocol.util.Assert;
-import io.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -43,6 +43,7 @@ import reactor.core.publisher.Mono;
  * <li>Handles endpoint discovery through SSE events</li>
  * <li>Manages message serialization/deserialization using Jackson</li>
  * <li>Provides graceful connection termination</li>
+ * <li>Supports OAuth2 authorization</li>
  * </ul>
  *
  * <p>
@@ -52,11 +53,19 @@ import reactor.core.publisher.Mono;
  * <li>'message' - Contains JSON-RPC message payload</li>
  * </ul>
  *
+ * <p>
+ * An optional {@link McpAsyncTokenSupplier} can be added to the reactive context, under
+ * key {@link TOKEN_SUPPLIER_CONTEXT_KEY}. If present, the publisher will be used to
+ * obtain an OAuth2 Token and add it to the Authorization header of the request.
+ *
  * @author Christian Tzolov
  * @see io.modelcontextprotocol.spec.McpTransport
  * @see io.modelcontextprotocol.spec.McpClientTransport
  */
 public class HttpClientSseClientTransport implements McpClientTransport {
+
+	/** Reactive Context key for the TokenPublisher */
+	public static final String TOKEN_SUPPLIER_CONTEXT_KEY = "io.modelcontextprotocol.client.transport.HttpClientSseClientTransport.TOKEN_SUPPLIER";
 
 	private static final Logger logger = LoggerFactory.getLogger(HttpClientSseClientTransport.class);
 
@@ -338,48 +347,54 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 */
 	@Override
 	public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
-		CompletableFuture<Void> future = new CompletableFuture<>();
-		connectionFuture.set(future);
+		return Mono.deferContextual(ctx -> {
+			CompletableFuture<Void> future = new CompletableFuture<>();
+			connectionFuture.set(future);
 
-		URI clientUri = Utils.resolveUri(this.baseUri, this.sseEndpoint);
-		sseClient.subscribe(clientUri.toString(), new FlowSseClient.SseEventHandler() {
-			@Override
-			public void onEvent(SseEvent event) {
-				if (isClosing) {
-					return;
+			URI clientUri = Utils.resolveUri(this.baseUri, this.sseEndpoint);
+			var eventHandler = new FlowSseClient.SseEventHandler() {
+				@Override
+				public void onEvent(SseEvent event) {
+					if (isClosing) {
+						return;
+					}
+
+					try {
+						if (ENDPOINT_EVENT_TYPE.equals(event.type())) {
+							String endpoint = event.data();
+							messageEndpoint.set(endpoint);
+							closeLatch.countDown();
+							future.complete(null);
+						}
+						else if (MESSAGE_EVENT_TYPE.equals(event.type())) {
+							JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, event.data());
+							handler.apply(Mono.just(message)).subscribe();
+						}
+						else {
+							logger.error("Received unrecognized SSE event type: {}", event.type());
+						}
+					}
+					catch (IOException e) {
+						logger.error("Error processing SSE event", e);
+						future.completeExceptionally(e);
+					}
 				}
 
-				try {
-					if (ENDPOINT_EVENT_TYPE.equals(event.type())) {
-						String endpoint = event.data();
-						messageEndpoint.set(endpoint);
-						closeLatch.countDown();
-						future.complete(null);
-					}
-					else if (MESSAGE_EVENT_TYPE.equals(event.type())) {
-						JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, event.data());
-						handler.apply(Mono.just(message)).subscribe();
-					}
-					else {
-						logger.error("Received unrecognized SSE event type: {}", event.type());
+				@Override
+				public void onError(Throwable error) {
+					if (!isClosing) {
+						logger.error("SSE connection error", error);
+						future.completeExceptionally(error);
 					}
 				}
-				catch (IOException e) {
-					logger.error("Error processing SSE event", e);
-					future.completeExceptionally(e);
-				}
-			}
+			};
 
-			@Override
-			public void onError(Throwable error) {
-				if (!isClosing) {
-					logger.error("SSE connection error", error);
-					future.completeExceptionally(error);
-				}
-			}
+			McpAsyncTokenSupplier tokenPublisher = ctx.getOrDefault(TOKEN_SUPPLIER_CONTEXT_KEY, Mono::empty);
+			return Mono.from(tokenPublisher.getToken())
+				.doOnNext(token -> sseClient.subscribe(clientUri.toString(), token, eventHandler))
+				.switchIfEmpty(Mono.fromRunnable(() -> sseClient.subscribe(clientUri.toString(), eventHandler)))
+				.then(Mono.fromFuture(future));
 		});
-
-		return Mono.fromFuture(future);
 	}
 
 	/**
@@ -415,17 +430,25 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		try {
 			String jsonText = this.objectMapper.writeValueAsString(message);
 			URI requestUri = Utils.resolveUri(baseUri, endpoint);
-			HttpRequest request = this.requestBuilder.uri(requestUri)
-				.POST(HttpRequest.BodyPublishers.ofString(jsonText))
-				.build();
 
-			return Mono.fromFuture(
-					httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding()).thenAccept(response -> {
-						if (response.statusCode() != 200 && response.statusCode() != 201 && response.statusCode() != 202
-								&& response.statusCode() != 206) {
-							logger.error("Error sending message: {}", response.statusCode());
-						}
-					}));
+			return Mono.deferContextual(ctx -> {
+				McpAsyncTokenSupplier tokenPublisher = ctx.getOrDefault(TOKEN_SUPPLIER_CONTEXT_KEY, Mono::empty);
+				return Mono.just(
+						this.requestBuilder.copy().uri(requestUri).POST(HttpRequest.BodyPublishers.ofString(jsonText)))
+					.flatMap(builder -> Mono.from(tokenPublisher.getToken())
+						.map(token -> builder.header("Authorization", "Bearer " + token))
+						.switchIfEmpty(Mono.just(builder)))
+					.map(HttpRequest.Builder::build)
+					.flatMap(request -> Mono
+						.fromFuture(httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding())
+							.thenAccept(response -> {
+								if (response.statusCode() != 200 && response.statusCode() != 201
+										&& response.statusCode() != 202 && response.statusCode() != 206) {
+									logger.error("Error sending message: {}", response.statusCode());
+								}
+							})));
+			});
+
 		}
 		catch (IOException e) {
 			if (!isClosing) {
