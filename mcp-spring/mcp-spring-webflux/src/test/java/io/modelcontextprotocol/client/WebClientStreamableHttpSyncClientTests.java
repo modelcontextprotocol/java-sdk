@@ -1,12 +1,12 @@
 package io.modelcontextprotocol.client;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.transport.WebClientStreamableHttpTransport;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import org.junit.jupiter.api.Timeout;
-import org.springframework.web.reactive.function.client.WebClient;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
+
+import org.springframework.web.reactive.function.client.WebClient;
 
 @Timeout(15)
 public class WebClientStreamableHttpSyncClientTests extends AbstractMcpSyncClientTests {
