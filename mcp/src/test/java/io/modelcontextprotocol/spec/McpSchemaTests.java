@@ -607,6 +607,43 @@ public class McpSchemaTests {
 	}
 
 	@Test
+	void testToolWithAnnotations() throws Exception {
+		String schemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"name": {
+							"type": "string"
+						},
+						"value": {
+							"type": "number"
+						}
+					},
+					"required": ["name"]
+				}
+				""";
+		McpSchema.ToolAnnotations annotations = new McpSchema.ToolAnnotations(
+				"A test tool",
+				false,
+				false,
+				false,
+				false,
+				false
+		);
+
+		McpSchema.Tool tool = new McpSchema.Tool("test-tool", "A test tool", schemaJson, annotations);
+
+		String value = mapper.writeValueAsString(tool);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+				.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+				.isObject()
+				.isEqualTo(
+						json("""
+							{"name":"test-tool","description":"A test tool","inputSchema":{"type":"object","properties":{"name":{"type":"string"},"value":{"type":"number"}},"required":["name"]},"annotations":{"title":"A test tool","readOnlyHint":false,"destructiveHint":false,"idempotentHint":false,"openWorldHint":false,"returnDirect":false}}"""));
+	}
+
+
+	@Test
 	void testCallToolRequest() throws Exception {
 		Map<String, Object> arguments = new HashMap<>();
 		arguments.put("name", "test");
