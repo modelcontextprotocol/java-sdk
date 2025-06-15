@@ -40,6 +40,7 @@ import reactor.test.StepVerifier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * Test suite for the {@link McpAsyncClient} that can be used with different
@@ -342,18 +343,34 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	@Test
-	@Disabled
 	void testReadResource() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.create(mcpAsyncClient.listResources()).consumeNextWith(resources -> {
-				if (!resources.resources().isEmpty()) {
-					Resource firstResource = resources.resources().get(0);
-					StepVerifier.create(mcpAsyncClient.readResource(firstResource)).consumeNextWith(result -> {
-						assertThat(result).isNotNull();
-						assertThat(result.contents()).isNotNull();
-					}).verifyComplete();
-				}
-			}).verifyComplete();
+		withClient(createMcpTransport(), client -> {
+			Flux<McpSchema.ReadResourceResult> resources = client.initialize()
+				.then(client.listResources(null))
+				.flatMapMany(r -> Flux.fromIterable(r.resources()))
+				.flatMap(r -> client.readResource(r));
+
+			StepVerifier.create(resources).consumeNextWith(resourceResult -> {
+				assertThat(resourceResult.contents()).allSatisfy(content -> {
+					if (content.mimeType().equals("text/plain")) {
+						McpSchema.TextResourceContents text = assertInstanceOf(McpSchema.TextResourceContents.class,
+								content);
+						assertThat(text.mimeType()).isEqualTo("text/plain");
+						assertThat(text.uri()).isNotEmpty();
+						assertThat(text.text()).isNotEmpty();
+					}
+					else if (content.mimeType().equals("application/octet-stream")) {
+						McpSchema.BlobResourceContents blob = assertInstanceOf(McpSchema.BlobResourceContents.class,
+								content);
+						assertThat(blob.mimeType()).isEqualTo("application/octet-stream");
+						assertThat(blob.uri()).isNotEmpty();
+						assertThat(blob.blob()).isNotEmpty();
+					}
+					else {
+						throw new IllegalArgumentException("Unexpected content type: " + content.mimeType());
+					}
+				});
+			}).expectNextCount(9).verifyComplete();
 		});
 	}
 

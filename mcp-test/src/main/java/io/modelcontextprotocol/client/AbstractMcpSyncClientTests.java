@@ -8,12 +8,14 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.BlobResourceContents;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
@@ -22,22 +24,25 @@ import io.modelcontextprotocol.spec.McpSchema.ListResourcesResult;
 import io.modelcontextprotocol.spec.McpSchema.ListToolsResult;
 import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
 import io.modelcontextprotocol.spec.McpSchema.Resource;
+import io.modelcontextprotocol.spec.McpSchema.ResourceContents;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpSchema.SubscribeRequest;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
+import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpSchema.UnsubscribeRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
-import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * Unit tests for MCP Client Session functionality.
@@ -46,6 +51,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * @author Dariusz Jędrzejczyk
  */
 public abstract class AbstractMcpSyncClientTests {
+
+	private static final Logger logger = LoggerFactory.getLogger(AbstractMcpSyncClientTests.class);
 
 	private static final String TEST_MESSAGE = "Hello MCP Spring AI!";
 
@@ -330,18 +337,72 @@ public abstract class AbstractMcpSyncClientTests {
 
 	@Test
 	void testReadResource() {
+		AtomicInteger readResourceCount = new AtomicInteger(0);
 		withClient(createMcpTransport(), mcpSyncClient -> {
 			mcpSyncClient.initialize();
 			ListResourcesResult resources = mcpSyncClient.listResources(null);
 
-			if (!resources.resources().isEmpty()) {
-				Resource firstResource = resources.resources().get(0);
-				ReadResourceResult result = mcpSyncClient.readResource(firstResource);
+			assertThat(resources).isNotNull();
+			assertThat(resources.resources()).isNotNull();
+
+			if (resources.resources().isEmpty()) {
+				throw new IllegalStateException("No resources available for testing readResource functionality");
+			}
+
+			// Test reading each resource individually for better error isolation
+			for (Resource resource : resources.resources()) {
+				ReadResourceResult result = mcpSyncClient.readResource(resource);
 
 				assertThat(result).isNotNull();
-				assertThat(result.contents()).isNotNull();
+				assertThat(result.contents()).isNotNull().isNotEmpty();
+
+				readResourceCount.incrementAndGet();
+
+				// Validate each content item
+				for (ResourceContents content : result.contents()) {
+					assertThat(content).isNotNull();
+					assertThat(content.uri()).isNotNull().isNotEmpty();
+					assertThat(content.mimeType()).isNotNull().isNotEmpty();
+
+					// Validate content based on its type with more comprehensive
+					// checks
+					switch (content.mimeType()) {
+						case "text/plain" -> {
+							TextResourceContents textContent = assertInstanceOf(TextResourceContents.class, content);
+							assertThat(textContent.text()).isNotNull().isNotEmpty();
+							// Verify URI consistency
+							assertThat(textContent.uri()).isEqualTo(resource.uri());
+						}
+						case "application/octet-stream" -> {
+							BlobResourceContents blobContent = assertInstanceOf(BlobResourceContents.class, content);
+							assertThat(blobContent.blob()).isNotNull().isNotEmpty();
+							// Verify URI consistency
+							assertThat(blobContent.uri()).isEqualTo(resource.uri());
+							// Validate base64 encoding format
+							assertThat(blobContent.blob()).matches("^[A-Za-z0-9+/]*={0,2}$");
+						}
+						default -> {
+							// More flexible handling of additional MIME types
+							// Log the unexpected type for debugging but don't fail
+							// the test
+							logger.warn("Warning: Encountered unexpected MIME type: {} for resource: {}",
+									content.mimeType(), resource.uri());
+
+							// Still validate basic properties
+							if (content instanceof TextResourceContents textContent) {
+								assertThat(textContent.text()).isNotNull();
+							}
+							else if (content instanceof BlobResourceContents blobContent) {
+								assertThat(blobContent.blob()).isNotNull();
+							}
+						}
+					}
+				}
 			}
 		});
+
+		// Assert that we read exactly 10 resources
+		assertThat(readResourceCount.get()).isEqualTo(10);
 	}
 
 	@Test
