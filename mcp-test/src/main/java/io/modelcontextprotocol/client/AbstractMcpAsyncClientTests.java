@@ -19,6 +19,8 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
+import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
+import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.spec.McpSchema.Prompt;
 import io.modelcontextprotocol.spec.McpSchema.Resource;
@@ -38,6 +40,7 @@ import reactor.test.StepVerifier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * Test suite for the {@link McpAsyncClient} that can be used with different
@@ -339,18 +342,36 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	@Test
-	@Disabled
 	void testReadResource() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.create(mcpAsyncClient.listResources()).consumeNextWith(resources -> {
-				if (!resources.resources().isEmpty()) {
-					Resource firstResource = resources.resources().get(0);
-					StepVerifier.create(mcpAsyncClient.readResource(firstResource)).consumeNextWith(result -> {
-						assertThat(result).isNotNull();
-						assertThat(result.contents()).isNotNull();
-					}).verifyComplete();
-				}
-			}).verifyComplete();
+		withClient(createMcpTransport(), client -> {
+			Flux<McpSchema.ReadResourceResult> resources = client.initialize()
+				.then(client.listResources(null))
+				.flatMapMany(r -> Flux.fromIterable(r.resources()))
+				.flatMap(r -> client.readResource(r));
+
+			StepVerifier.create(resources).consumeNextWith(resourceResult -> {
+				assertThat(resourceResult.contents()).allSatisfy(content -> {
+					if (content.mimeType().equals("text/plain")) {
+						McpSchema.TextResourceContents text = assertInstanceOf(McpSchema.TextResourceContents.class,
+								content);
+						assertThat(text.mimeType()).isEqualTo("text/plain");
+						assertThat(text.uri()).isNotEmpty();
+						assertThat(text.text()).isNotEmpty();
+					}
+					else if (content.mimeType().equals("application/octet-stream")) {
+						McpSchema.BlobResourceContents blob = assertInstanceOf(McpSchema.BlobResourceContents.class,
+								content);
+						assertThat(blob.mimeType()).isEqualTo("application/octet-stream");
+						assertThat(blob.uri()).isNotEmpty();
+						assertThat(blob.blob()).isNotEmpty();
+					}
+					else {
+						throw new IllegalArgumentException("Unexpected content type: " + content.mimeType());
+					}
+				});
+			})
+				.expectNextCount(9) // Expect 9 more elements
+				.verifyComplete();
 		});
 	}
 
@@ -425,6 +446,20 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	@Test
+	void testInitializeWithElicitationCapability() {
+		ClientCapabilities capabilities = ClientCapabilities.builder().elicitation().build();
+		ElicitResult elicitResult = ElicitResult.builder()
+			.message(ElicitResult.Action.ACCEPT)
+			.content(Map.of("foo", "bar"))
+			.build();
+		withClient(createMcpTransport(),
+				builder -> builder.capabilities(capabilities).elicitation(request -> Mono.just(elicitResult)),
+				client -> {
+					StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
+				});
+	}
+
+	@Test
 	void testInitializeWithAllCapabilities() {
 		var capabilities = ClientCapabilities.builder()
 			.experimental(Map.of("feature", "test"))
@@ -435,7 +470,11 @@ public abstract class AbstractMcpAsyncClientTests {
 		Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler = request -> Mono
 			.just(CreateMessageResult.builder().message("test").model("test-model").build());
 
-		withClient(createMcpTransport(), builder -> builder.capabilities(capabilities).sampling(samplingHandler),
+		Function<ElicitRequest, Mono<ElicitResult>> elicitationHandler = request -> Mono
+			.just(ElicitResult.builder().message(ElicitResult.Action.ACCEPT).content(Map.of("foo", "bar")).build());
+
+		withClient(createMcpTransport(),
+				builder -> builder.capabilities(capabilities).sampling(samplingHandler).elicitation(elicitationHandler),
 				client ->
 
 				StepVerifier.create(client.initialize()).assertNext(result -> {
