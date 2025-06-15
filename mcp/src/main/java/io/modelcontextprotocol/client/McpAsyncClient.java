@@ -8,12 +8,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpClientSession.NotificationHandler;
 import io.modelcontextprotocol.spec.McpClientSession.RequestHandler;
@@ -27,6 +29,7 @@ import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
 import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
+import io.modelcontextprotocol.spec.McpSchema.JsonSchema;
 import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
@@ -35,8 +38,11 @@ import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.modelcontextprotocol.server.McpServerFeatures;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
@@ -119,6 +125,11 @@ public class McpAsyncClient {
 	private final McpSchema.Implementation clientInfo;
 
 	/**
+	 * Cached tool output schemas.
+	 */
+	private final ConcurrentHashMap<String, Optional<JsonSchema>> toolsOutputSchemaCache;
+
+	/**
 	 * Roots define the boundaries of where servers can operate within the filesystem,
 	 * allowing them to understand which directories and files they have access to.
 	 * Servers can request the list of roots from supporting clients and receive
@@ -181,6 +192,7 @@ public class McpAsyncClient {
 		this.transport = transport;
 		this.roots = new ConcurrentHashMap<>(features.roots());
 		this.initializationTimeout = initializationTimeout;
+		this.toolsOutputSchemaCache = new ConcurrentHashMap<>();
 
 		// Request Handlers
 		Map<String, RequestHandler<?>> requestHandlers = new HashMap<>();
@@ -329,6 +341,14 @@ public class McpAsyncClient {
 	 */
 	public McpSchema.Implementation getClientInfo() {
 		return this.clientInfo;
+	}
+
+	/**
+	 * Get the cached tool output schemas.
+	 * @return The cached tool output schemas
+	 */
+	public ConcurrentHashMap<String, Optional<JsonSchema>> getToolsOutputSchemaCache() {
+		return this.toolsOutputSchemaCache;
 	}
 
 	/**
@@ -650,8 +670,13 @@ public class McpAsyncClient {
 			if (init.get().capabilities().tools() == null) {
 				return Mono.error(new McpError("Server does not provide tools capability"));
 			}
-			return init.mcpSession()
-				.sendRequest(McpSchema.METHOD_TOOLS_CALL, callToolRequest, CALL_TOOL_RESULT_TYPE_REF);
+			// Refresh tool output schema cache, if necessary, prior to making tool call
+			Mono<Void> refreshCacheMono = Mono.empty();
+			if (!this.toolsOutputSchemaCache.containsKey(callToolRequest.name())) {
+				refreshCacheMono = refreshToolOutputSchemaCache();
+			}
+			return refreshCacheMono.then(init.mcpSession()
+				.sendRequest(McpSchema.METHOD_TOOLS_CALL, callToolRequest, CALL_TOOL_RESULT_TYPE_REF));
 		});
 	}
 
@@ -675,7 +700,33 @@ public class McpAsyncClient {
 			}
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_TOOLS_LIST, new McpSchema.PaginatedRequest(cursor),
-						LIST_TOOLS_RESULT_TYPE_REF);
+						LIST_TOOLS_RESULT_TYPE_REF)
+				.doOnNext(result -> {
+					// Cache tools output schema
+					if (result.tools() != null) {
+						// Cache tools output schema
+						result.tools()
+							.forEach(tool -> this.toolsOutputSchemaCache.put(tool.name(),
+									Optional.ofNullable(tool.outputSchema())));
+					}
+				});
+		});
+	}
+
+	/**
+	 * Refreshes the tool output schema cache by fetching all tools from the server.
+	 * @return A Mono that completes when all tool output schemas have been cached
+	 */
+	private Mono<Void> refreshToolOutputSchemaCache() {
+		return this.withSession("refreshing tool output schema cache", init -> {
+
+			// Use expand operator to handle pagination in a reactive way
+			return this.listTools(null).expand(result -> {
+				if (result.nextCursor() != null) {
+					return this.listTools(result.nextCursor());
+				}
+				return Mono.empty();
+			}).then();
 		});
 	}
 

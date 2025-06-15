@@ -5,15 +5,29 @@
 package io.modelcontextprotocol.client;
 
 import java.time.Duration;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.networknt.schema.JsonSchema;
+import com.networknt.schema.JsonSchemaFactory;
+import com.networknt.schema.SpecVersion;
+import com.networknt.schema.ValidationMessage;
+
+import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
 import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
 import io.modelcontextprotocol.util.Assert;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * A synchronous client implementation for the Model Context Protocol (MCP) that wraps an
@@ -62,14 +76,28 @@ public class McpSyncClient implements AutoCloseable {
 
 	private final McpAsyncClient delegate;
 
+	/** JSON object mapper for message serialization/deserialization */
+	protected ObjectMapper objectMapper;
+
 	/**
 	 * Create a new McpSyncClient with the given delegate.
 	 * @param delegate the asynchronous kernel on top of which this synchronous client
 	 * provides a blocking API.
 	 */
 	McpSyncClient(McpAsyncClient delegate) {
+		this(delegate, new ObjectMapper());
+	}
+
+	/**
+	 * Create a new McpSyncClient with the given delegate.
+	 * @param delegate the asynchronous kernel on top of which this synchronous client
+	 * provides a blocking API.
+	 * @param objectMapper the object mapper for JSON serialization/deserialization
+	 */
+	McpSyncClient(McpAsyncClient delegate, ObjectMapper objectMapper) {
 		Assert.notNull(delegate, "The delegate can not be null");
 		this.delegate = delegate;
+		this.objectMapper = objectMapper;
 	}
 
 	/**
@@ -206,7 +234,8 @@ public class McpSyncClient implements AutoCloseable {
 	/**
 	 * Calls a tool provided by the server. Tools enable servers to expose executable
 	 * functionality that can interact with external systems, perform computations, and
-	 * take actions in the real world.
+	 * take actions in the real world. If tool contains an output schema, validates the
+	 * tool result structured content against the output schema.
 	 * @param callToolRequest The request containing: - name: The name of the tool to call
 	 * (must match a tool name from tools/list) - arguments: Arguments that conform to the
 	 * tool's input schema
@@ -215,7 +244,54 @@ public class McpSyncClient implements AutoCloseable {
 	 * Boolean indicating if the execution failed (true) or succeeded (false/absent)
 	 */
 	public McpSchema.CallToolResult callTool(McpSchema.CallToolRequest callToolRequest) {
-		return this.delegate.callTool(callToolRequest).block();
+		McpSchema.CallToolResult result = this.delegate.callTool(callToolRequest).block();
+		ConcurrentHashMap<String, Optional<McpSchema.JsonSchema>> toolsOutputSchemaCache = this.delegate
+			.getToolsOutputSchemaCache();
+		// Should not be triggered but added for completeness
+		if (!toolsOutputSchemaCache.containsKey(callToolRequest.name())) {
+			throw new McpError("Tool with name '" + callToolRequest.name() + "' not found");
+		}
+		Optional<McpSchema.JsonSchema> optOutputSchema = toolsOutputSchemaCache.get(callToolRequest.name());
+		if (result != null && optOutputSchema != null && optOutputSchema.isPresent()) {
+			if (result.structuredContent() == null) {
+				throw new McpError("CallToolResult validation failed: structuredContent is null and "
+						+ "does not match tool outputSchema.");
+			}
+			McpSchema.JsonSchema outputSchema = optOutputSchema.get();
+
+			try {
+				// Convert outputSchema to string
+				String outputSchemaString = this.objectMapper.writeValueAsString(outputSchema);
+
+				// Create JsonSchema validator
+				ObjectNode schemaNode = (ObjectNode) this.objectMapper.readTree(outputSchemaString);
+				// Set additional properties to false if not specified in output schema
+				if (!schemaNode.has("additionalProperties")) {
+					schemaNode.put("additionalProperties", false);
+				}
+				JsonSchema schema = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012)
+					.getSchema(schemaNode);
+
+				// Convert structured content in reult to JsonNode
+				JsonNode jsonNode = this.objectMapper.valueToTree(result.structuredContent());
+
+				// Validate outputSchema against structuredContent
+				Set<ValidationMessage> validationResult = schema.validate(jsonNode);
+
+				// Check if validation passed
+				if (!validationResult.isEmpty()) {
+					// Handle validation errors
+					throw new McpError(
+							"CallToolResult validation failed: structuredContent does not match tool outputSchema.");
+				}
+			}
+			catch (JsonProcessingException e) {
+				// Log warning if output schema can't be parsed to prevent erroring out
+				// for successful call tool request
+				logger.warn("Failed to validate CallToolResult: Error parsing tool outputSchema: {}", e);
+			}
+		}
+		return result;
 	}
 
 	/**
