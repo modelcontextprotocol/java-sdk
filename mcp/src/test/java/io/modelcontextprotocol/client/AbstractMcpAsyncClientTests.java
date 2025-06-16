@@ -80,7 +80,9 @@ public abstract class AbstractMcpAsyncClientTests {
 			McpClient.AsyncSpec builder = McpClient.async(transport)
 				.requestTimeout(getRequestTimeout())
 				.initializationTimeout(getInitializationTimeout())
-				.capabilities(ClientCapabilities.builder().roots(true).build());
+				.sampling(req -> Mono.just(new CreateMessageResult(McpSchema.Role.USER,
+						new McpSchema.TextContent("Oh, hi!"), "modelId", CreateMessageResult.StopReason.END_TURN)))
+				.capabilities(ClientCapabilities.builder().roots(true).sampling().build());
 			builder = customizer.apply(builder);
 			client.set(builder.build());
 		}).doesNotThrowAnyException();
@@ -181,6 +183,22 @@ public abstract class AbstractMcpAsyncClientTests {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			CallToolRequest callToolRequest = new CallToolRequest("echo", Map.of("message", ECHO_TEST_MESSAGE));
 
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.callTool(callToolRequest)))
+				.consumeNextWith(callToolResult -> {
+					assertThat(callToolResult).isNotNull().satisfies(result -> {
+						assertThat(result.content()).isNotNull();
+						assertThat(result.isError()).isNull();
+					});
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testSampling() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			CallToolRequest callToolRequest = new CallToolRequest("sampleLLM",
+					Map.of("prompt", "Hello MCP Spring AI!"));
 			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.callTool(callToolRequest)))
 				.consumeNextWith(callToolResult -> {
 					assertThat(callToolResult).isNotNull().satisfies(result -> {
