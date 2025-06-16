@@ -33,6 +33,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -40,6 +42,8 @@ import reactor.test.StepVerifier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * Test suite for the {@link McpAsyncClient} that can be used with different
@@ -202,6 +206,64 @@ public abstract class AbstractMcpAsyncClientTests {
 				.consumeErrorWith(
 						e -> assertThat(e).isInstanceOf(McpError.class).hasMessage("Unknown tool: nonexistent_tool"))
 				.verify();
+		});
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "success", "error", "debug" })
+	void testCallToolWithMessageAnnotations(String messageType) {
+		McpClientTransport transport = createMcpTransport();
+
+		withClient(transport, mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize()
+				.then(mcpAsyncClient.callTool(new McpSchema.CallToolRequest("annotatedMessage",
+						Map.of("messageType", messageType, "includeImage", true)))))
+				.consumeNextWith(result -> {
+					assertThat(result).isNotNull();
+					assertThat(result.isError()).isNotEqualTo(true);
+					assertThat(result.content()).isNotEmpty();
+					assertThat(result.content()).allSatisfy(content -> {
+						switch (content.type()) {
+							case "text":
+								McpSchema.TextContent textContent = assertInstanceOf(McpSchema.TextContent.class,
+										content);
+								assertThat(textContent.text()).isNotEmpty();
+								assertThat(textContent.annotations()).isNotNull();
+
+								switch (messageType) {
+									case "error":
+										assertThat(textContent.annotations().priority()).isEqualTo(1.0);
+										assertThat(textContent.annotations().audience())
+											.containsOnly(McpSchema.Role.USER, McpSchema.Role.ASSISTANT);
+										break;
+									case "success":
+										assertThat(textContent.annotations().priority()).isEqualTo(0.7);
+										assertThat(textContent.annotations().audience())
+											.containsExactly(McpSchema.Role.USER);
+										break;
+									case "debug":
+										assertThat(textContent.annotations().priority()).isEqualTo(0.3);
+										assertThat(textContent.annotations().audience())
+											.containsExactly(McpSchema.Role.ASSISTANT);
+										break;
+									default:
+										throw new IllegalStateException("Unexpected value: " + content.type());
+								}
+								break;
+							case "image":
+								McpSchema.ImageContent imageContent = assertInstanceOf(McpSchema.ImageContent.class,
+										content);
+								assertThat(imageContent.data()).isNotEmpty();
+								assertThat(imageContent.annotations()).isNotNull();
+								assertThat(imageContent.annotations().priority()).isEqualTo(0.5);
+								assertThat(imageContent.annotations().audience()).containsExactly(McpSchema.Role.USER);
+								break;
+							default:
+								fail("Unexpected content type: " + content.type());
+						}
+					});
+				})
+				.verifyComplete();
 		});
 	}
 
