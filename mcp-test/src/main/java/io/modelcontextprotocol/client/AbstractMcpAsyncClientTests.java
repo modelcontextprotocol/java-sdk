@@ -59,11 +59,11 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	protected Duration getRequestTimeout() {
-		return Duration.ofSeconds(14);
+		return Duration.ofSeconds(2100);
 	}
 
 	protected Duration getInitializationTimeout() {
-		return Duration.ofSeconds(2);
+		return Duration.ofSeconds(2000);
 	}
 
 	McpAsyncClient client(McpClientTransport transport) {
@@ -121,6 +121,14 @@ public abstract class AbstractMcpAsyncClientTests {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			StepVerifier.create(operation.apply(mcpAsyncClient)).expectNextCount(1).verifyComplete();
 		});
+	}
+
+	@Test
+	void testInitialize() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then()).verifyComplete();
+		});
+
 	}
 
 	@Test

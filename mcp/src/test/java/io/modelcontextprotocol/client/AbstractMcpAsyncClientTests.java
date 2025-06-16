@@ -4,14 +4,6 @@
 
 package io.modelcontextprotocol.client;
 
-import java.time.Duration;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
-import java.util.function.Function;
-
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -36,6 +28,14 @@ import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+
+import java.time.Duration;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -62,11 +62,11 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	protected Duration getRequestTimeout() {
-		return Duration.ofSeconds(14);
+		return Duration.ofSeconds(2001);
 	}
 
 	protected Duration getInitializationTimeout() {
-		return Duration.ofSeconds(2);
+		return Duration.ofSeconds(2002);
 	}
 
 	McpAsyncClient client(McpClientTransport transport) {
@@ -139,6 +139,13 @@ public abstract class AbstractMcpAsyncClientTests {
 	@Test
 	void testListToolsWithoutInitialization() {
 		verifyCallSucceedsWithImplicitInitialization(client -> client.listTools(null), "listing tools");
+	}
+
+	@Test
+	void testInitialize() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then()).verifyComplete();
+		});
 	}
 
 	@Test

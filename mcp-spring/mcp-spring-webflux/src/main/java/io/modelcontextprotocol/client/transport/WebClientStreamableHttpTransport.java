@@ -409,6 +409,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	private Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> parse(ServerSentEvent<String> event) {
 		if (MESSAGE_EVENT_TYPE.equals(event.event())) {
 			try {
+				System.out.println(event.id());
+				System.out.println(event.data());
 				// We don't support batching ATM and probably won't since the next version
 				// considers removing it.
 				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.objectMapper, event.data());
