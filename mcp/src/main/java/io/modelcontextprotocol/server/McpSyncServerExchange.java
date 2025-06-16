@@ -65,6 +65,24 @@ public class McpSyncServerExchange {
 	}
 
 	/**
+	 * Creates a new elicitation. MCP provides a standardized way for servers to request
+	 * additional information from users through the client during interactions. This flow
+	 * allows clients to maintain control over user interactions and data sharing while
+	 * enabling servers to gather necessary information dynamically. Servers can request
+	 * structured data from users with optional JSON schemas to validate responses.
+	 * @param elicitRequest The request to create a new elicitation
+	 * @return A result containing the elicitation response.
+	 * @see McpSchema.ElicitRequest
+	 * @see McpSchema.ElicitResult
+	 * @see <a href=
+	 * "https://spec.modelcontextprotocol.io/specification/client/elicitation/">Elicitation
+	 * Specification</a>
+	 */
+	public McpSchema.ElicitResult createElicitation(McpSchema.ElicitRequest elicitRequest) {
+		return this.exchange.createElicitation(elicitRequest).block();
+	}
+
+	/**
 	 * Retrieves the list of all roots provided by the client.
 	 * @return The list of roots result.
 	 */

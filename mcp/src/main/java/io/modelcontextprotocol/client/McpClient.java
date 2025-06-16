@@ -18,6 +18,8 @@ import io.modelcontextprotocol.spec.McpTransport;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
+import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
+import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.Implementation;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.util.Assert;
@@ -175,6 +177,8 @@ public interface McpClient {
 
 		private Function<CreateMessageRequest, CreateMessageResult> samplingHandler;
 
+		private Function<ElicitRequest, ElicitResult> elicitationHandler;
+
 		private SyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
 			this.transport = transport;
@@ -284,6 +288,21 @@ public interface McpClient {
 		}
 
 		/**
+		 * Sets a custom elicitation handler for processing elicitation message requests.
+		 * The elicitation handler can modify or validate messages before they are sent to
+		 * the server, enabling custom processing logic.
+		 * @param elicitationHandler A function that processes elicitation requests and
+		 * returns results. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if elicitationHandler is null
+		 */
+		public SyncSpec elicitation(Function<ElicitRequest, ElicitResult> elicitationHandler) {
+			Assert.notNull(elicitationHandler, "Elicitation handler must not be null");
+			this.elicitationHandler = elicitationHandler;
+			return this;
+		}
+
+		/**
 		 * Adds a consumer to be notified when the available tools change. This allows the
 		 * client to react to changes in the server's tool capabilities, such as tools
 		 * being added or removed.
@@ -364,7 +383,7 @@ public interface McpClient {
 		public McpSyncClient build() {
 			McpClientFeatures.Sync syncFeatures = new McpClientFeatures.Sync(this.clientInfo, this.capabilities,
 					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.promptsChangeConsumers,
-					this.loggingConsumers, this.samplingHandler);
+					this.loggingConsumers, this.samplingHandler, this.elicitationHandler);
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
@@ -413,6 +432,8 @@ public interface McpClient {
 		private final List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers = new ArrayList<>();
 
 		private Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler;
+
+		private Function<ElicitRequest, Mono<ElicitResult>> elicitationHandler;
 
 		private AsyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
@@ -523,6 +544,21 @@ public interface McpClient {
 		}
 
 		/**
+		 * Sets a custom elicitation handler for processing elicitation message requests.
+		 * The elicitation handler can modify or validate messages before they are sent to
+		 * the server, enabling custom processing logic.
+		 * @param elicitationHandler A function that processes elicitation requests and
+		 * returns results. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if elicitationHandler is null
+		 */
+		public AsyncSpec elicitation(Function<ElicitRequest, Mono<ElicitResult>> elicitationHandler) {
+			Assert.notNull(elicitationHandler, "Elicitation handler must not be null");
+			this.elicitationHandler = elicitationHandler;
+			return this;
+		}
+
+		/**
 		 * Adds a consumer to be notified when the available tools change. This allows the
 		 * client to react to changes in the server's tool capabilities, such as tools
 		 * being added or removed.
@@ -606,7 +642,7 @@ public interface McpClient {
 			return new McpAsyncClient(this.transport, this.requestTimeout, this.initializationTimeout,
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
 							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.promptsChangeConsumers,
-							this.loggingConsumers, this.samplingHandler));
+							this.loggingConsumers, this.samplingHandler, this.elicitationHandler));
 		}
 
 	}
