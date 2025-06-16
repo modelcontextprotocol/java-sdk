@@ -62,11 +62,11 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	protected Duration getRequestTimeout() {
-		return Duration.ofSeconds(2001);
+		return Duration.ofSeconds(14);
 	}
 
 	protected Duration getInitializationTimeout() {
-		return Duration.ofSeconds(2002);
+		return Duration.ofSeconds(2);
 	}
 
 	McpAsyncClient client(McpClientTransport transport) {
