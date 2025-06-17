@@ -4,14 +4,24 @@
 
 package io.modelcontextprotocol.client;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -31,18 +41,9 @@ import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpSchema.UnsubscribeRequest;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * Unit tests for MCP Client Session functionality.
@@ -128,9 +129,9 @@ public abstract class AbstractMcpSyncClientTests {
 
 	<T> void verifyCallSucceedsWithImplicitInitialization(Function<McpSyncClient, T> blockingOperation, String action) {
 		withClient(createMcpTransport(), mcpSyncClient -> {
-			StepVerifier.create(Mono.fromSupplier(() -> blockingOperation.apply(mcpSyncClient)))
-				.expectNextCount(1)
-				.verifyComplete();
+			StepVerifier.create(Mono.fromSupplier(() -> blockingOperation.apply(mcpSyncClient))
+				// Offload the blocking call to the real scheduler
+				.subscribeOn(Schedulers.boundedElastic())).expectNextCount(1).verifyComplete();
 		});
 	}
 
@@ -337,17 +338,17 @@ public abstract class AbstractMcpSyncClientTests {
 
 	@Test
 	void testReadResource() {
-		AtomicInteger readResourceCount = new AtomicInteger(0);
 		withClient(createMcpTransport(), mcpSyncClient -> {
+
+			int readResourceCount = 0;
+
 			mcpSyncClient.initialize();
 			ListResourcesResult resources = mcpSyncClient.listResources(null);
 
 			assertThat(resources).isNotNull();
 			assertThat(resources.resources()).isNotNull();
 
-			if (resources.resources().isEmpty()) {
-				throw new IllegalStateException("No resources available for testing readResource functionality");
-			}
+			assertThat(resources.resources()).isNotNull().isNotEmpty();
 
 			// Test reading each resource individually for better error isolation
 			for (Resource resource : resources.resources()) {
@@ -356,7 +357,7 @@ public abstract class AbstractMcpSyncClientTests {
 				assertThat(result).isNotNull();
 				assertThat(result.contents()).isNotNull().isNotEmpty();
 
-				readResourceCount.incrementAndGet();
+				readResourceCount++;
 
 				// Validate each content item
 				for (ResourceContents content : result.contents()) {
@@ -399,10 +400,10 @@ public abstract class AbstractMcpSyncClientTests {
 					}
 				}
 			}
-		});
 
-		// Assert that we read exactly 10 resources
-		assertThat(readResourceCount.get()).isEqualTo(10);
+			// Assert that we read exactly 10 resources
+			assertThat(readResourceCount).isEqualTo(10);
+		});
 	}
 
 	@Test
