@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -19,6 +20,8 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
+import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
+import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.spec.McpSchema.Prompt;
 import io.modelcontextprotocol.spec.McpSchema.Resource;
@@ -38,6 +41,7 @@ import reactor.test.StepVerifier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * Test suite for the {@link McpAsyncClient} that can be used with different
@@ -77,7 +81,9 @@ public abstract class AbstractMcpAsyncClientTests {
 			McpClient.AsyncSpec builder = McpClient.async(transport)
 				.requestTimeout(getRequestTimeout())
 				.initializationTimeout(getInitializationTimeout())
-				.capabilities(ClientCapabilities.builder().roots(true).build());
+				.sampling(req -> Mono.just(new CreateMessageResult(McpSchema.Role.USER,
+						new McpSchema.TextContent("Oh, hi!"), "modelId", CreateMessageResult.StopReason.END_TURN)))
+				.capabilities(ClientCapabilities.builder().roots(true).sampling().build());
 			builder = customizer.apply(builder);
 			client.set(builder.build());
 		}).doesNotThrowAnyException();
@@ -433,6 +439,20 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	@Test
+	void testInitializeWithElicitationCapability() {
+		ClientCapabilities capabilities = ClientCapabilities.builder().elicitation().build();
+		ElicitResult elicitResult = ElicitResult.builder()
+			.message(ElicitResult.Action.ACCEPT)
+			.content(Map.of("foo", "bar"))
+			.build();
+		withClient(createMcpTransport(),
+				builder -> builder.capabilities(capabilities).elicitation(request -> Mono.just(elicitResult)),
+				client -> {
+					StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
+				});
+	}
+
+	@Test
 	void testInitializeWithAllCapabilities() {
 		var capabilities = ClientCapabilities.builder()
 			.experimental(Map.of("feature", "test"))
@@ -443,7 +463,11 @@ public abstract class AbstractMcpAsyncClientTests {
 		Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler = request -> Mono
 			.just(CreateMessageResult.builder().message("test").model("test-model").build());
 
-		withClient(createMcpTransport(), builder -> builder.capabilities(capabilities).sampling(samplingHandler),
+		Function<ElicitRequest, Mono<ElicitResult>> elicitationHandler = request -> Mono
+			.just(ElicitResult.builder().message(ElicitResult.Action.ACCEPT).content(Map.of("foo", "bar")).build());
+
+		withClient(createMcpTransport(),
+				builder -> builder.capabilities(capabilities).sampling(samplingHandler).elicitation(elicitationHandler),
 				client ->
 
 				StepVerifier.create(client.initialize()).assertNext(result -> {
@@ -493,6 +517,54 @@ public abstract class AbstractMcpAsyncClientTests {
 				.expectErrorMatches(error -> error.getMessage().contains("Logging level must not be null"))
 				.verify();
 		});
+	}
+
+	@Test
+	void testSampling() {
+		McpClientTransport transport = createMcpTransport();
+
+		final String message = "Hello, world!";
+		final String response = "Goodbye, world!";
+		final int maxTokens = 100;
+
+		AtomicReference<String> receivedPrompt = new AtomicReference<>();
+		AtomicReference<String> receivedMessage = new AtomicReference<>();
+		AtomicInteger receivedMaxTokens = new AtomicInteger();
+
+		withClient(transport, spec -> spec.capabilities(McpSchema.ClientCapabilities.builder().sampling().build())
+			.sampling(request -> {
+				McpSchema.TextContent messageText = assertInstanceOf(McpSchema.TextContent.class,
+						request.messages().get(0).content());
+				receivedPrompt.set(request.systemPrompt());
+				receivedMessage.set(messageText.text());
+				receivedMaxTokens.set(request.maxTokens());
+
+				return Mono
+					.just(new McpSchema.CreateMessageResult(McpSchema.Role.USER, new McpSchema.TextContent(response),
+							"modelId", McpSchema.CreateMessageResult.StopReason.END_TURN));
+			}), client -> {
+				StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
+
+				StepVerifier.create(client.callTool(
+						new McpSchema.CallToolRequest("sampleLLM", Map.of("prompt", message, "maxTokens", maxTokens))))
+					.consumeNextWith(result -> {
+						// Verify tool response to ensure our sampling response was passed
+						// through
+						assertThat(result.content()).hasAtLeastOneElementOfType(McpSchema.TextContent.class);
+						assertThat(result.content()).allSatisfy(content -> {
+							if (!(content instanceof McpSchema.TextContent text))
+								return;
+
+							assertThat(text.text()).endsWith(response); // Prefixed
+						});
+
+						// Verify sampling request parameters received in our callback
+						assertThat(receivedPrompt.get()).isNotEmpty();
+						assertThat(receivedMessage.get()).endsWith(message); // Prefixed
+						assertThat(receivedMaxTokens.get()).isEqualTo(maxTokens);
+					})
+					.verifyComplete();
+			});
 	}
 
 }

@@ -1359,8 +1359,9 @@ public final class McpSchema {
 	@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
 	@JsonSubTypes({ @JsonSubTypes.Type(value = TextContent.class, name = "text"),
 			@JsonSubTypes.Type(value = ImageContent.class, name = "image"),
+			@JsonSubTypes.Type(value = AudioContent.class, name = "audio"),
 			@JsonSubTypes.Type(value = EmbeddedResource.class, name = "resource") })
-	public sealed interface Content permits TextContent, ImageContent, EmbeddedResource {
+	public sealed interface Content permits TextContent, ImageContent, AudioContent, EmbeddedResource {
 
 		default String type() {
 			if (this instanceof TextContent) {
@@ -1368,6 +1369,9 @@ public final class McpSchema {
 			}
 			else if (this instanceof ImageContent) {
 				return "image";
+			}
+			else if (this instanceof AudioContent) {
+				return "audio";
 			}
 			else if (this instanceof EmbeddedResource) {
 				return "resource";
@@ -1396,6 +1400,14 @@ public final class McpSchema {
 		@JsonProperty("priority") Double priority,
 		@JsonProperty("data") String data,
 		@JsonProperty("mimeType") String mimeType) implements Content { // @formatter:on
+	}
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record AudioContent( // @formatter:off
+		@JsonProperty("annotations") Annotations annotations,
+		@JsonProperty("data") String data,
+		@JsonProperty("mimeType") String mimeType) implements Annotated, Content { // @formatter:on
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
