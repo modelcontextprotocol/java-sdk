@@ -134,6 +134,18 @@ public final class McpSchema {
 
 	}
 
+	// ---------------------------
+	// JSON-RPC Protocol Headers
+	// ---------------------------
+	/**
+	 * Standard header name used in MCP JSON-RPC request and responses.
+	 */
+	public static final class Headers {
+
+		public static final String MCP_SESSION_ID = "Mcp-Session-Id";
+
+	}
+
 	public sealed interface Request permits InitializeRequest, CallToolRequest, CreateMessageRequest, ElicitRequest,
 			CompleteRequest, GetPromptRequest {
 
