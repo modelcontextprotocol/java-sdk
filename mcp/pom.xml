@@ -9,6 +9,7 @@
 		<version>0.11.3</version>
 	</parent>
 	<artifactId>mcp</artifactId>
+	<version>1.1.0</version>
 	<packaging>jar</packaging>
 	<name>Java MCP SDK</name>
 	<description>Java SDK implementation of the Model Context Protocol, enabling seamless integration with language models and AI tools</description>

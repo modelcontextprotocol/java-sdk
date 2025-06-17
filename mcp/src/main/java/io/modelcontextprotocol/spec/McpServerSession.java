@@ -136,6 +136,10 @@ public class McpServerSession implements McpLoggableSession {
 		return authentication;
 	}
 
+	public McpServerTransport getTransport() {
+		return transport;
+	}
+
 	/**
 	 * Called upon successful initialization sequence between the client and the server
 	 * with the client capabilities and information.
@@ -292,7 +296,7 @@ public class McpServerSession implements McpLoggableSession {
 				.onErrorResume(error -> Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
 						null, new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 								error.getMessage(), null)))); // TODO: add error message
-																// through the data field
+			// through the data field
 		});
 	}
 
