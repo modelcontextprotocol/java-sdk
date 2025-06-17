@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -38,6 +39,7 @@ import reactor.test.StepVerifier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * Unit tests for MCP Client Session functionality.
@@ -437,6 +439,50 @@ public abstract class AbstractMcpSyncClientTests {
 	void testLoggingWithNullNotification() {
 		withClient(createMcpTransport(), mcpSyncClient -> assertThatThrownBy(() -> mcpSyncClient.setLoggingLevel(null))
 			.hasMessageContaining("Logging level must not be null"));
+	}
+
+	@Test
+	void testSampling() {
+		McpClientTransport transport = createMcpTransport();
+
+		final String message = "Hello, world!";
+		final String response = "Goodbye, world!";
+		final int maxTokens = 100;
+
+		AtomicReference<String> receivedPrompt = new AtomicReference<>();
+		AtomicReference<String> receivedMessage = new AtomicReference<>();
+		AtomicInteger receivedMaxTokens = new AtomicInteger();
+
+		withClient(transport, spec -> spec.capabilities(McpSchema.ClientCapabilities.builder().sampling().build())
+			.sampling(request -> {
+				McpSchema.TextContent messageText = assertInstanceOf(McpSchema.TextContent.class,
+						request.messages().get(0).content());
+				receivedPrompt.set(request.systemPrompt());
+				receivedMessage.set(messageText.text());
+				receivedMaxTokens.set(request.maxTokens());
+
+				return new McpSchema.CreateMessageResult(McpSchema.Role.USER, new McpSchema.TextContent(response),
+						"modelId", McpSchema.CreateMessageResult.StopReason.END_TURN);
+			}), client -> {
+				client.initialize();
+
+				McpSchema.CallToolResult result = client.callTool(
+						new McpSchema.CallToolRequest("sampleLLM", Map.of("prompt", message, "maxTokens", maxTokens)));
+
+				// Verify tool response to ensure our sampling response was passed through
+				assertThat(result.content()).hasAtLeastOneElementOfType(McpSchema.TextContent.class);
+				assertThat(result.content()).allSatisfy(content -> {
+					if (!(content instanceof McpSchema.TextContent text))
+						return;
+
+					assertThat(text.text()).endsWith(response); // Prefixed
+				});
+
+				// Verify sampling request parameters received in our callback
+				assertThat(receivedPrompt.get()).isNotEmpty();
+				assertThat(receivedMessage.get()).endsWith(message); // Prefixed
+				assertThat(receivedMaxTokens.get()).isEqualTo(maxTokens);
+			});
 	}
 
 }

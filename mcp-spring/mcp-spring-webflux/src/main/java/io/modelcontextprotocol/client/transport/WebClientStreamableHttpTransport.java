@@ -127,13 +127,14 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	}
 
 	private DefaultMcpTransportSession createTransportSession() {
-		Supplier<Publisher<Void>> onClose = () -> {
-			DefaultMcpTransportSession transportSession = this.activeSession.get();
-			return transportSession.sessionId().isEmpty() ? Mono.empty()
-					: webClient.delete().uri(this.endpoint).headers(httpHeaders -> {
-						httpHeaders.add(MCP_SESSION_ID, transportSession.sessionId().get());
-					}).retrieve().toBodilessEntity().doOnError(e -> logger.info("Got response {}", e)).then();
-		};
+		Function<String, Publisher<Void>> onClose = sessionId -> sessionId == null ? Mono.empty()
+				: webClient.delete().uri(this.endpoint).headers(httpHeaders -> {
+					httpHeaders.add(MCP_SESSION_ID, sessionId);
+				})
+					.retrieve()
+					.toBodilessEntity()
+					.doOnError(e -> logger.warn("Got error when closing transport", e))
+					.then();
 		return new DefaultMcpTransportSession(onClose);
 	}
 
@@ -194,6 +195,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 				})
 				.exchangeToFlux(response -> {
 					if (isEventStream(response)) {
+						logger.debug("Established SSE stream via GET");
 						return eventStream(stream, response);
 					}
 					else if (isNotAllowed(response)) {
@@ -210,6 +212,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 						}).flux();
 					}
 				})
+				.flatMap(jsonrpcMessage -> this.handler.get().apply(Mono.just(jsonrpcMessage)))
 				.onErrorComplete(t -> {
 					this.handleException(t);
 					return true;
@@ -275,6 +278,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 						else {
 							MediaType mediaType = contentType.get();
 							if (mediaType.isCompatibleWith(MediaType.TEXT_EVENT_STREAM)) {
+								logger.debug("Established SSE stream via POST");
 								// communicate to caller that the message was delivered
 								sink.success();
 								// starting a stream
