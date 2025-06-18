@@ -42,6 +42,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.fail;
+import static org.junit.Assert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
@@ -158,6 +159,22 @@ public abstract class AbstractMcpSyncClientTests {
 				assertThat(result.tools()).isNotNull().isNotEmpty();
 
 				Tool firstTool = result.tools().get(0);
+				assertThat(firstTool.name()).isNotNull();
+				assertThat(firstTool.description()).isNotNull();
+			});
+		});
+	}
+
+	@Test
+	void testListAllTools() {
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			List<Tool> tools = mcpSyncClient.listAllTools();
+
+			assertThat(tools).isNotNull().satisfies(result -> {
+				assertThat(result).isNotEmpty();
+
+				Tool firstTool = result.get(0);
 				assertThat(firstTool.name()).isNotNull();
 				assertThat(firstTool.description()).isNotNull();
 			});
@@ -324,6 +341,22 @@ public abstract class AbstractMcpSyncClientTests {
 	}
 
 	@Test
+	void testListAllResources() {
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			List<Resource> resources = mcpSyncClient.listAllResources();
+
+			assertThat(resources).isNotNull().satisfies(result -> {
+				assertThat(result).isNotEmpty();
+
+				Resource firstResource = result.get(0);
+				assertThat(firstResource.uri()).isNotNull();
+				assertThat(firstResource.name()).isNotNull();
+			});
+		});
+	}
+
+	@Test
 	void testClientSessionState() {
 		withClient(createMcpTransport(), mcpSyncClient -> {
 			assertThat(mcpSyncClient).isNotNull();
@@ -418,6 +451,22 @@ public abstract class AbstractMcpSyncClientTests {
 
 			assertThat(result).isNotNull();
 			assertThat(result.resourceTemplates()).isNotNull();
+		});
+	}
+
+	@Test
+	void testListAllResourceTemplates() {
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			List<McpSchema.ResourceTemplate> resourceTemplates = mcpSyncClient.listAllResourceTemplates();
+
+			assertThat(resourceTemplates).isNotNull().satisfies(result -> {
+				assertThat(result).isNotEmpty();
+
+				McpSchema.ResourceTemplate firstResourceTemplate = result.get(0);
+				assertThat(firstResourceTemplate.name()).isNotNull();
+				assertThat(firstResourceTemplate.description()).isNotNull();
+			});
 		});
 	}
 

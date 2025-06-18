@@ -162,6 +162,22 @@ public abstract class AbstractMcpSyncClientTests {
 	}
 
 	@Test
+	void testListAllTools() {
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			List<Tool> tools = mcpSyncClient.listAllTools();
+
+			assertThat(tools).isNotNull().satisfies(result -> {
+				assertThat(result).isNotEmpty();
+
+				Tool firstTool = result.get(0);
+				assertThat(firstTool.name()).isNotNull();
+				assertThat(firstTool.description()).isNotNull();
+			});
+		});
+	}
+
+	@Test
 	void testCallToolsWithoutInitialization() {
 		verifyCallSucceedsWithImplicitInitialization(
 				client -> client.callTool(new CallToolRequest("add", Map.of("a", 3, "b", 4))), "calling tools");
@@ -321,6 +337,22 @@ public abstract class AbstractMcpSyncClientTests {
 	}
 
 	@Test
+	void testListAllResources() {
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			List<Resource> resources = mcpSyncClient.listAllResources();
+
+			assertThat(resources).isNotNull().satisfies(result -> {
+				assertThat(result).isNotEmpty();
+
+				Resource firstResource = result.get(0);
+				assertThat(firstResource.uri()).isNotNull();
+				assertThat(firstResource.name()).isNotNull();
+			});
+		});
+	}
+
+	@Test
 	void testClientSessionState() {
 		withClient(createMcpTransport(), mcpSyncClient -> {
 			assertThat(mcpSyncClient).isNotNull();
@@ -415,6 +447,22 @@ public abstract class AbstractMcpSyncClientTests {
 
 			assertThat(result).isNotNull();
 			assertThat(result.resourceTemplates()).isNotNull();
+		});
+	}
+
+	@Test
+	void testListAllResourceTemplates() {
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			List<McpSchema.ResourceTemplate> resourceTemplates = mcpSyncClient.listAllResourceTemplates();
+
+			assertThat(resourceTemplates).isNotNull().satisfies(result -> {
+				assertThat(result).isNotEmpty();
+
+				McpSchema.ResourceTemplate firstResourceTemplate = result.get(0);
+				assertThat(firstResourceTemplate.name()).isNotNull();
+				assertThat(firstResourceTemplate.description()).isNotNull();
+			});
 		});
 	}
 

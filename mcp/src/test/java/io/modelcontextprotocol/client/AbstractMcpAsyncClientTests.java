@@ -13,6 +13,18 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.fail;
+import org.junit.jupiter.api.AfterEach;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -30,21 +42,9 @@ import io.modelcontextprotocol.spec.McpSchema.SubscribeRequest;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpSchema.UnsubscribeRequest;
 import io.modelcontextprotocol.spec.McpTransport;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.fail;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * Test suite for the {@link McpAsyncClient} that can be used with different
@@ -158,6 +158,23 @@ public abstract class AbstractMcpAsyncClientTests {
 					Tool firstTool = result.tools().get(0);
 					assertThat(firstTool.name()).isNotNull();
 					assertThat(firstTool.description()).isNotNull();
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllTools() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listAllTools()))
+				.consumeNextWith(tools -> {
+					assertThat(tools).isNotNull().satisfies(result -> {
+						assertThat(result).isNotEmpty();
+
+						Tool firstTool = result.get(0);
+						assertThat(firstTool.name()).isNotNull();
+						assertThat(firstTool.description()).isNotNull();
+					});
 				})
 				.verifyComplete();
 		});
@@ -295,6 +312,23 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	@Test
+	void testListAllResources() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listAllResources()))
+				.consumeNextWith(resources -> {
+					assertThat(resources).isNotNull().satisfies(result -> {
+						assertThat(result).isNotEmpty();
+
+						Resource firstResource = result.get(0);
+						assertThat(firstResource.uri()).isNotNull();
+						assertThat(firstResource.name()).isNotNull();
+					});
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
 	void testMcpAsyncClientState() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			assertThat(mcpAsyncClient).isNotNull();
@@ -319,6 +353,23 @@ public abstract class AbstractMcpAsyncClientTests {
 							assertThat(firstPrompt.name()).isNotNull();
 							assertThat(firstPrompt.description()).isNotNull();
 						}
+					});
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllPrompts() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listAllPrompts()))
+				.consumeNextWith(prompts -> {
+					assertThat(prompts).isNotNull().satisfies(result -> {
+						assertThat(result).isNotEmpty();
+
+						Prompt firstPrompt = result.get(0);
+						assertThat(firstPrompt.name()).isNotNull();
+						assertThat(firstPrompt.description()).isNotNull();
 					});
 				})
 				.verifyComplete();
@@ -435,6 +486,23 @@ public abstract class AbstractMcpAsyncClientTests {
 				.consumeNextWith(result -> {
 					assertThat(result).isNotNull();
 					assertThat(result.resourceTemplates()).isNotNull();
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllResourceTemplates() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listAllResourceTemplates()))
+				.consumeNextWith(resourceTemplates -> {
+					assertThat(resourceTemplates).isNotNull().satisfies(result -> {
+						assertThat(result).isNotEmpty();
+
+						McpSchema.ResourceTemplate firstResourceTemplate = result.get(0);
+						assertThat(firstResourceTemplate.name()).isNotNull();
+						assertThat(firstResourceTemplate.description()).isNotNull();
+					});
 				})
 				.verifyComplete();
 		});

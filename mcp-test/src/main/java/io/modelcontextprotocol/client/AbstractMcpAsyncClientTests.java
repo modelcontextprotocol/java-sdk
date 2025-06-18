@@ -163,6 +163,23 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	@Test
+	void testListAllTools() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listAllTools()))
+				.consumeNextWith(tools -> {
+					assertThat(tools).isNotNull().satisfies(result -> {
+						assertThat(result).isNotEmpty();
+
+						Tool firstTool = result.get(0);
+						assertThat(firstTool.name()).isNotNull();
+						assertThat(firstTool.description()).isNotNull();
+					});
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
 	void testPingWithoutInitialization() {
 		verifyCallSucceedsWithImplicitInitialization(client -> client.ping(), "pinging the server");
 	}
@@ -294,6 +311,23 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	@Test
+	void testListAllResources() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listAllResources()))
+				.consumeNextWith(resources -> {
+					assertThat(resources).isNotNull().satisfies(result -> {
+						assertThat(result).isNotEmpty();
+
+						Resource firstResource = result.get(0);
+						assertThat(firstResource.uri()).isNotNull();
+						assertThat(firstResource.name()).isNotNull();
+					});
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
 	void testMcpAsyncClientState() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			assertThat(mcpAsyncClient).isNotNull();
@@ -318,6 +352,23 @@ public abstract class AbstractMcpAsyncClientTests {
 							assertThat(firstPrompt.name()).isNotNull();
 							assertThat(firstPrompt.description()).isNotNull();
 						}
+					});
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllPrompts() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listAllPrompts()))
+				.consumeNextWith(prompts -> {
+					assertThat(prompts).isNotNull().satisfies(result -> {
+						assertThat(result).isNotEmpty();
+
+						Prompt firstPrompt = result.get(0);
+						assertThat(firstPrompt.name()).isNotNull();
+						assertThat(firstPrompt.description()).isNotNull();
 					});
 				})
 				.verifyComplete();
@@ -434,6 +485,23 @@ public abstract class AbstractMcpAsyncClientTests {
 				.consumeNextWith(result -> {
 					assertThat(result).isNotNull();
 					assertThat(result.resourceTemplates()).isNotNull();
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllResourceTemplates() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listAllResourceTemplates()))
+				.consumeNextWith(resourceTemplates -> {
+					assertThat(resourceTemplates).isNotNull().satisfies(result -> {
+						assertThat(result).isNotEmpty();
+
+						McpSchema.ResourceTemplate firstResourceTemplate = result.get(0);
+						assertThat(firstResourceTemplate.name()).isNotNull();
+						assertThat(firstResourceTemplate.description()).isNotNull();
+					});
 				})
 				.verifyComplete();
 		});

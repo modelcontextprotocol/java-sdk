@@ -13,7 +13,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.core.type.TypeReference;
+
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpClientSession.NotificationHandler;
 import io.modelcontextprotocol.spec.McpClientSession.RequestHandler;
@@ -35,8 +39,6 @@ import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
@@ -656,7 +658,7 @@ public class McpAsyncClient {
 	}
 
 	/**
-	 * Retrieves the list of all tools provided by the server.
+	 * Retrieves the first page of tools provided by the server.
 	 * @return A Mono that emits the list of tools result.
 	 */
 	public Mono<McpSchema.ListToolsResult> listTools() {
@@ -679,18 +681,26 @@ public class McpAsyncClient {
 		});
 	}
 
-	private NotificationHandler asyncToolsChangeNotificationHandler(
-			List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers) {
-		// TODO: params are not used yet
-		return params -> this.listTools().expand(result -> {
+	/**
+	 * Retrieves list of all tools provided by the server after handling pagination.
+	 * @return A Mono that emits a list of all tools
+	 */
+	public Mono<List<McpSchema.Tool>> listAllTools() {
+		return this.listTools().expand(result -> {
 			if (result.nextCursor() != null) {
 				return this.listTools(result.nextCursor());
 			}
 			return Mono.empty();
-		}).reduce(new ArrayList<McpSchema.Tool>(), (allTools, result) -> {
+		}).reduce(new ArrayList<>(), (allTools, result) -> {
 			allTools.addAll(result.tools());
 			return allTools;
-		})
+		});
+	}
+
+	private NotificationHandler asyncToolsChangeNotificationHandler(
+			List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers) {
+		// TODO: params are not used yet
+		return params -> this.listAllTools()
 			.flatMap(allTools -> Flux.fromIterable(toolsChangeConsumers)
 				.flatMap(consumer -> consumer.apply(allTools))
 				.onErrorResume(error -> {
@@ -714,9 +724,9 @@ public class McpAsyncClient {
 	};
 
 	/**
-	 * Retrieves the list of all resources provided by the server. Resources represent any
-	 * kind of UTF-8 encoded data that an MCP server makes available to clients, such as
-	 * database records, API responses, log files, and more.
+	 * Retrieves the first page of resources provided by the server. Resources represent
+	 * any kind of UTF-8 encoded data that an MCP server makes available to clients, such
+	 * as database records, API responses, log files, and more.
 	 * @return A Mono that completes with the list of resources result.
 	 * @see McpSchema.ListResourcesResult
 	 * @see #readResource(McpSchema.Resource)
@@ -742,6 +752,26 @@ public class McpAsyncClient {
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_RESOURCES_LIST, new McpSchema.PaginatedRequest(cursor),
 						LIST_RESOURCES_RESULT_TYPE_REF);
+		});
+	}
+
+	/**
+	 * Retrieves the list of all resources provided by the server. Resources represent any
+	 * kind of UTF-8 encoded data that an MCP server makes available to clients, such as
+	 * database records, API responses, log files, and more.
+	 * @return A Mono that completes with list of all resources.
+	 * @see McpSchema.Resource
+	 * @see #readResource(McpSchema.Resource)
+	 */
+	public Mono<List<McpSchema.Resource>> listAllResources() {
+		return this.listResources().expand(result -> {
+			if (result.nextCursor() != null) {
+				return this.listResources(result.nextCursor());
+			}
+			return Mono.empty();
+		}).reduce(new ArrayList<>(), (allResources, result) -> {
+			allResources.addAll(result.resources());
+			return allResources;
 		});
 	}
 
@@ -777,7 +807,7 @@ public class McpAsyncClient {
 	}
 
 	/**
-	 * Retrieves the list of all resource templates provided by the server. Resource
+	 * Retrieves the first page of resource templates provided by the server. Resource
 	 * templates allow servers to expose parameterized resources using URI templates,
 	 * enabling dynamic resource access based on variable parameters.
 	 * @return A Mono that completes with the list of resource templates result.
@@ -803,6 +833,25 @@ public class McpAsyncClient {
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_RESOURCES_TEMPLATES_LIST, new McpSchema.PaginatedRequest(cursor),
 						LIST_RESOURCE_TEMPLATES_RESULT_TYPE_REF);
+		});
+	}
+
+	/**
+	 * Retrieves the list of all resource templates provided by the server. Resource
+	 * templates allow servers to expose parameterized resources using URI templates,
+	 * enabling dynamic resource access based on variable parameters.
+	 * @return A Mono that completes with the list of all resource templates.
+	 * @see McpSchema.ResourceTemplate
+	 */
+	public Mono<List<McpSchema.ResourceTemplate>> listAllResourceTemplates() {
+		return this.listResourceTemplates().expand(result -> {
+			if (result.nextCursor() != null) {
+				return this.listResourceTemplates(result.nextCursor());
+			}
+			return Mono.empty();
+		}).reduce(new ArrayList<>(), (allResourceTemplates, result) -> {
+			allResourceTemplates.addAll(result.resourceTemplates());
+			return allResourceTemplates;
 		});
 	}
 
@@ -855,7 +904,7 @@ public class McpAsyncClient {
 	};
 
 	/**
-	 * Retrieves the list of all prompts provided by the server.
+	 * Retrieves the first page of prompts provided by the server.
 	 * @return A Mono that completes with the list of prompts result.
 	 * @see McpSchema.ListPromptsResult
 	 * @see #getPrompt(GetPromptRequest)
@@ -874,6 +923,24 @@ public class McpAsyncClient {
 	public Mono<ListPromptsResult> listPrompts(String cursor) {
 		return this.withSession("listing prompts", init -> init.mcpSession()
 			.sendRequest(McpSchema.METHOD_PROMPT_LIST, new PaginatedRequest(cursor), LIST_PROMPTS_RESULT_TYPE_REF));
+	}
+
+	/**
+	 * Retrieves the list of all prompts provided by the server.
+	 * @return A Mono that completes with the list of all prompts.
+	 * @see McpSchema.Prompt
+	 * @see #getPrompt(GetPromptRequest)
+	 */
+	public Mono<List<McpSchema.Prompt>> listAllPrompts() {
+		return this.listPrompts().expand(result -> {
+			if (result.nextCursor() != null) {
+				return this.listPrompts(result.nextCursor());
+			}
+			return Mono.empty();
+		}).reduce(new ArrayList<>(), (allPrompts, result) -> {
+			allPrompts.addAll(result.prompts());
+			return allPrompts;
+		});
 	}
 
 	/**
