@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.util.annotation.Nullable;
 
 /**
  * Based on the <a href="http://www.jsonrpc.org/specification">JSON-RPC 2.0
@@ -51,6 +52,8 @@ public final class McpSchema {
 	public static final String METHOD_NOTIFICATION_INITIALIZED = "notifications/initialized";
 
 	public static final String METHOD_PING = "ping";
+
+	public static final String METHOD_NOTIFICATION_PROGRESS = "notifications/progress";
 
 	// Tool Methods
 	public static final String METHOD_TOOLS_LIST = "tools/list";
@@ -780,15 +783,22 @@ public final class McpSchema {
 	 * tools/list.
 	 * @param arguments Arguments to pass to the tool. These must conform to the tool's
 	 * input schema.
+	 * @param _meta Optional metadata about the request. This can include additional
+	 * information like `progressToken`
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record CallToolRequest(// @formatter:off
 		@JsonProperty("name") String name,
-		@JsonProperty("arguments") Map<String, Object> arguments) implements Request {
+		@JsonProperty("arguments") Map<String, Object> arguments,
+		@Nullable @JsonProperty("_meta") Map<String, Object> _meta) implements Request {
 
 		public CallToolRequest(String name, String jsonArguments) {
-			this(name, parseJsonArguments(jsonArguments));
+			this(name, parseJsonArguments(jsonArguments), null);
+		}
+
+		public CallToolRequest(String name, Map<String, Object> arguments) {
+			this(name, arguments, null);
 		}
 
 		private static Map<String, Object> parseJsonArguments(String jsonArguments) {
@@ -1207,11 +1217,23 @@ public final class McpSchema {
 	// ---------------------------
 	// Progress and Logging
 	// ---------------------------
+
+	/**
+	 * The Model Context Protocol (MCP) supports optional progress tracking for
+	 * long-running operations through notification messages. Either side can send
+	 * progress notifications to provide updates about operation status.
+	 *
+	 * @param progressToken The original progress token
+	 * @param progress The current progress value so far
+	 * @param total An optional “total” value
+	 * @param message An optional “message” value
+	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ProgressNotification(// @formatter:off
 		@JsonProperty("progressToken") String progressToken,
-		@JsonProperty("progress") double progress,
-		@JsonProperty("total") Double total) {
+		@JsonProperty("progress") Double progress,
+		@JsonProperty("total") Double total,
+	    @JsonProperty("message") String message) {
 	}// @formatter:on
 
 	/**
