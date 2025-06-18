@@ -1359,8 +1359,9 @@ public final class McpSchema {
 	@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
 	@JsonSubTypes({ @JsonSubTypes.Type(value = TextContent.class, name = "text"),
 			@JsonSubTypes.Type(value = ImageContent.class, name = "image"),
+			@JsonSubTypes.Type(value = AudioContent.class, name = "audio"),
 			@JsonSubTypes.Type(value = EmbeddedResource.class, name = "resource") })
-	public sealed interface Content permits TextContent, ImageContent, EmbeddedResource {
+	public sealed interface Content permits TextContent, ImageContent, AudioContent, EmbeddedResource {
 
 		default String type() {
 			if (this instanceof TextContent) {
@@ -1368,6 +1369,9 @@ public final class McpSchema {
 			}
 			else if (this instanceof ImageContent) {
 				return "image";
+			}
+			else if (this instanceof AudioContent) {
+				return "audio";
 			}
 			else if (this instanceof EmbeddedResource) {
 				return "resource";
@@ -1380,30 +1384,108 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record TextContent( // @formatter:off
-		@JsonProperty("audience") List<Role> audience,
-		@JsonProperty("priority") Double priority,
-		@JsonProperty("text") String text) implements Content { // @formatter:on
+		@JsonProperty("annotations") Annotations annotations,
+		@JsonProperty("text") String text) implements Annotated, Content { // @formatter:on
 
 		public TextContent(String content) {
-			this(null, null, content);
+			this(null, content);
+		}
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link TextContent#TextContent(Annotations, String)} instead.
+		 */
+		public TextContent(List<Role> audience, Double priority, String content) {
+			this(audience != null || priority != null ? new Annotations(audience, priority) : null, content);
+		}
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link TextContent#annotations()} instead.
+		 */
+		public List<Role> audience() {
+			return annotations == null ? null : annotations.audience();
+		}
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link TextContent#annotations()} instead.
+		 */
+		public Double priority() {
+			return annotations == null ? null : annotations.priority();
 		}
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ImageContent( // @formatter:off
-		@JsonProperty("audience") List<Role> audience,
-		@JsonProperty("priority") Double priority,
+		@JsonProperty("annotations") Annotations annotations,
 		@JsonProperty("data") String data,
-		@JsonProperty("mimeType") String mimeType) implements Content { // @formatter:on
+		@JsonProperty("mimeType") String mimeType) implements Annotated, Content { // @formatter:on
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link ImageContent#ImageContent(Annotations, String, String)} instead.
+		 */
+		public ImageContent(List<Role> audience, Double priority, String data, String mimeType) {
+			this(audience != null || priority != null ? new Annotations(audience, priority) : null, data, mimeType);
+		}
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link ImageContent#annotations()} instead.
+		 */
+		public List<Role> audience() {
+			return annotations == null ? null : annotations.audience();
+		}
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link ImageContent#annotations()} instead.
+		 */
+		public Double priority() {
+			return annotations == null ? null : annotations.priority();
+		}
+	}
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record AudioContent( // @formatter:off
+		@JsonProperty("annotations") Annotations annotations,
+		@JsonProperty("data") String data,
+		@JsonProperty("mimeType") String mimeType) implements Annotated, Content { // @formatter:on
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record EmbeddedResource( // @formatter:off
-		@JsonProperty("audience") List<Role> audience,
-		@JsonProperty("priority") Double priority,
-		@JsonProperty("resource") ResourceContents resource) implements Content { // @formatter:on
+		@JsonProperty("annotations") Annotations annotations,
+		@JsonProperty("resource") ResourceContents resource) implements Annotated, Content { // @formatter:on
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link EmbeddedResource#EmbeddedResource(Annotations, ResourceContents)}
+		 * instead.
+		 */
+		public EmbeddedResource(List<Role> audience, Double priority, ResourceContents resource) {
+			this(audience != null || priority != null ? new Annotations(audience, priority) : null, resource);
+		}
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link EmbeddedResource#annotations()} instead.
+		 */
+		public List<Role> audience() {
+			return annotations == null ? null : annotations.audience();
+		}
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link EmbeddedResource#annotations()} instead.
+		 */
+		public Double priority() {
+			return annotations == null ? null : annotations.priority();
+		}
 	}
 
 	// ---------------------------

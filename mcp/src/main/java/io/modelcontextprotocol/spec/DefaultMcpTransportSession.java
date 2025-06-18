@@ -10,7 +10,7 @@ import reactor.core.publisher.Mono;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Supplier;
+import java.util.function.Function;
 
 /**
  * Default implementation of {@link McpTransportSession} which manages the open
@@ -29,9 +29,9 @@ public class DefaultMcpTransportSession implements McpTransportSession<Disposabl
 
 	private final AtomicReference<String> sessionId = new AtomicReference<>();
 
-	private final Supplier<Publisher<Void>> onClose;
+	private final Function<String, Publisher<Void>> onClose;
 
-	public DefaultMcpTransportSession(Supplier<Publisher<Void>> onClose) {
+	public DefaultMcpTransportSession(Function<String, Publisher<Void>> onClose) {
 		this.onClose = onClose;
 	}
 
@@ -73,7 +73,8 @@ public class DefaultMcpTransportSession implements McpTransportSession<Disposabl
 
 	@Override
 	public Mono<Void> closeGracefully() {
-		return Mono.from(this.onClose.get()).then(Mono.fromRunnable(this.openConnections::dispose));
+		return Mono.from(this.onClose.apply(this.sessionId.get()))
+			.then(Mono.fromRunnable(this.openConnections::dispose));
 	}
 
 }
