@@ -10,6 +10,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -18,9 +21,8 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.modelcontextprotocol.util.Assert;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Based on the <a href="http://www.jsonrpc.org/specification">JSON-RPC 2.0
@@ -750,16 +752,25 @@ public final class McpSchema {
 	 * @param inputSchema A JSON Schema object that describes the expected structure of
 	 * the arguments when calling this tool. This allows clients to validate tool
 	 * arguments before sending them to the server.
+	 * @param outputSchema An optional JSON Schema object that describes the expected
+	 * output structure of this tool. If set, the clients must validate that the results
+	 * from that tool contain a `structuredContent` field whose contents validate against
+	 * the declared `outputSchema`.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Tool( // @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("description") String description,
-		@JsonProperty("inputSchema") JsonSchema inputSchema) {
+		@JsonProperty("inputSchema") JsonSchema inputSchema,
+		@JsonProperty("outputSchema") JsonSchema outputSchema) {
 
-		public Tool(String name, String description, String schema) {
-			this(name, description, parseSchema(schema));
+		public Tool(String name, String description, String inputSchema) {
+			this(name, description, parseSchema(inputSchema), null);
+		}
+	
+		public Tool(String name, String description, String inputSchema, String outputSchema) {
+			this(name, description, parseSchema(inputSchema), parseSchema(outputSchema));
 		}
 
 	} // @formatter:on
@@ -805,15 +816,19 @@ public final class McpSchema {
 	 * The server's response to a tools/call request from the client.
 	 *
 	 * @param content A list of content items representing the tool's output. Each item can be text, an image,
-	 *                or an embedded resource.
+	 * or an embedded resource.
 	 * @param isError If true, indicates that the tool execution failed and the content contains error information.
-	 *                If false or absent, indicates successful execution.
+	 * If false or absent, indicates successful execution.
+	 * @param structuredContent An optional map of structured content. If present, the client must validate that
+	 * the results from that tool contain a `structuredContent` field whose contents validate against the declared
+	 * `outputSchema`.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record CallToolResult( // @formatter:off
 		@JsonProperty("content") List<Content> content,
-		@JsonProperty("isError") Boolean isError) {
+		@JsonProperty("isError") Boolean isError,
+		@JsonProperty("structuredContent") Map<String, Object> structuredContent) {
 
 		/**
 		 * Creates a new instance of {@link CallToolResult} with a string containing the
@@ -825,7 +840,20 @@ public final class McpSchema {
 		 *                If false or absent, indicates successful execution.
 		 */
 		public CallToolResult(String content, Boolean isError) {
-			this(List.of(new TextContent(content)), isError);
+			this(List.of(new TextContent(content)), isError, null);
+		}
+
+		/**
+		 * Creates a new instance of {@link CallToolResult} with a string containing the
+		 * tool result.
+		 *
+		 * @param content The content of the tool result. This will be mapped to a one-sized list
+		 * 				  with a {@link TextContent} element.
+		 * @param isError If true, indicates that the tool execution failed and the content contains error information.
+		 *                If false or absent, indicates successful execution.
+		 */
+		public CallToolResult(List<Content> content, Boolean isError) {
+			this(content, isError, null);
 		}
 
 		/**
@@ -842,6 +870,7 @@ public final class McpSchema {
 		public static class Builder {
 			private List<Content> content = new ArrayList<>();
 			private Boolean isError;
+			private Map<String, Object> structuredContent;
 
 			/**
 			 * Sets the content list for the tool result.
@@ -864,6 +893,17 @@ public final class McpSchema {
 				textContent.stream()
 					.map(TextContent::new)
 					.forEach(this.content::add);
+				return this;
+			}
+
+			/**
+			 * Sets the structured content for the tool result.
+			 * @param structuredContent the structured content
+			 * @return this builder
+			 */
+			public Builder structuredContent(Map<String, Object> structuredContent) {
+				Assert.notNull(structuredContent, "structuredContent must not be null");
+				this.structuredContent = structuredContent;
 				return this;
 			}
 
@@ -907,7 +947,7 @@ public final class McpSchema {
 			 * @return a new CallToolResult instance
 			 */
 			public CallToolResult build() {
-				return new CallToolResult(content, isError);
+				return new CallToolResult(content, isError, structuredContent);
 			}
 		}
 
