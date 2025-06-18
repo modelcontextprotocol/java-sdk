@@ -13,6 +13,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.modelcontextprotocol.server.auth.middleware.AuthContext;
+import io.modelcontextprotocol.server.auth.middleware.AuthContextProvider;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
@@ -202,6 +205,11 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			return;
 		}
 
+		// Call the authentication hook
+		if (!authenticateRequest(request, response)) {
+			return; // Authentication failed, response already set
+		}
+
 		response.setContentType("text/event-stream");
 		response.setCharacterEncoding(UTF_8);
 		response.setHeader("Cache-Control", "no-cache");
@@ -214,9 +222,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 
 		PrintWriter writer = response.getWriter();
 
-		// Create a new session transport
-		HttpServletMcpSessionTransport sessionTransport = new HttpServletMcpSessionTransport(sessionId, asyncContext,
-				writer);
+		// Create a new session transport using the hook method
+		HttpServletMcpSessionTransport sessionTransport = createSessionTransport(sessionId, asyncContext, writer);
 
 		// Create a new session using the session factory
 		McpServerSession session = sessionFactory.create(sessionTransport);
@@ -357,16 +364,46 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	}
 
 	/**
+	 * Hook method for authentication. Subclasses can override this to provide
+	 * authentication.
+	 * @param request The HTTP servlet request
+	 * @param response The HTTP servlet response
+	 * @return true if authentication succeeded, false if it failed
+	 * @throws ServletException If a servlet-specific error occurs
+	 * @throws IOException If an I/O error occurs
+	 */
+	protected boolean authenticateRequest(HttpServletRequest request, HttpServletResponse response)
+			throws ServletException, IOException {
+		// Default implementation does no authentication
+		return true;
+	}
+
+	/**
+	 * Hook method to create a session transport. Subclasses can override this to provide
+	 * custom transport implementations.
+	 * @param sessionId The session ID
+	 * @param asyncContext The async context
+	 * @param writer The writer
+	 * @return A new session transport
+	 */
+	protected HttpServletMcpSessionTransport createSessionTransport(String sessionId, AsyncContext asyncContext,
+			PrintWriter writer) {
+		return new HttpServletMcpSessionTransport(sessionId, asyncContext, writer);
+	}
+
+	/**
 	 * Implementation of McpServerTransport for HttpServlet SSE sessions. This class
 	 * handles the transport-level communication for a specific client session.
 	 */
-	private class HttpServletMcpSessionTransport implements McpServerTransport {
+	protected class HttpServletMcpSessionTransport implements McpServerTransport, AuthContextProvider {
 
 		private final String sessionId;
 
 		private final AsyncContext asyncContext;
 
 		private final PrintWriter writer;
+
+		private AuthContext authContext;
 
 		/**
 		 * Creates a new session transport with the specified ID and SSE writer.
@@ -379,6 +416,16 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			this.asyncContext = asyncContext;
 			this.writer = writer;
 			logger.debug("Session transport {} initialized with SSE writer", sessionId);
+		}
+
+		@Override
+		public void setAuthContext(AuthContext authContext) {
+			this.authContext = authContext;
+		}
+
+		@Override
+		public AuthContext getAuthContext() {
+			return authContext;
 		}
 
 		/**
