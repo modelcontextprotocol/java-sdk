@@ -4,17 +4,32 @@
 
 package io.modelcontextprotocol.client;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.BlobResourceContents;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
@@ -23,23 +38,18 @@ import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
 import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.spec.McpSchema.Prompt;
+import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
 import io.modelcontextprotocol.spec.McpSchema.Resource;
+import io.modelcontextprotocol.spec.McpSchema.ResourceContents;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpSchema.SubscribeRequest;
+import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpSchema.UnsubscribeRequest;
 import io.modelcontextprotocol.spec.McpTransport;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Test suite for the {@link McpAsyncClient} that can be used with different
@@ -80,7 +90,9 @@ public abstract class AbstractMcpAsyncClientTests {
 			McpClient.AsyncSpec builder = McpClient.async(transport)
 				.requestTimeout(getRequestTimeout())
 				.initializationTimeout(getInitializationTimeout())
-				.capabilities(ClientCapabilities.builder().roots(true).build());
+				.sampling(req -> Mono.just(new CreateMessageResult(McpSchema.Role.USER,
+						new McpSchema.TextContent("Oh, hi!"), "modelId", CreateMessageResult.StopReason.END_TURN)))
+				.capabilities(ClientCapabilities.builder().roots(true).sampling().build());
 			builder = customizer.apply(builder);
 			client.set(builder.build());
 		}).doesNotThrowAnyException();
@@ -202,6 +214,64 @@ public abstract class AbstractMcpAsyncClientTests {
 				.consumeErrorWith(
 						e -> assertThat(e).isInstanceOf(McpError.class).hasMessage("Unknown tool: nonexistent_tool"))
 				.verify();
+		});
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "success", "error", "debug" })
+	void testCallToolWithMessageAnnotations(String messageType) {
+		McpClientTransport transport = createMcpTransport();
+
+		withClient(transport, mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize()
+				.then(mcpAsyncClient.callTool(new McpSchema.CallToolRequest("annotatedMessage",
+						Map.of("messageType", messageType, "includeImage", true)))))
+				.consumeNextWith(result -> {
+					assertThat(result).isNotNull();
+					assertThat(result.isError()).isNotEqualTo(true);
+					assertThat(result.content()).isNotEmpty();
+					assertThat(result.content()).allSatisfy(content -> {
+						switch (content.type()) {
+							case "text":
+								McpSchema.TextContent textContent = assertInstanceOf(McpSchema.TextContent.class,
+										content);
+								assertThat(textContent.text()).isNotEmpty();
+								assertThat(textContent.annotations()).isNotNull();
+
+								switch (messageType) {
+									case "error":
+										assertThat(textContent.annotations().priority()).isEqualTo(1.0);
+										assertThat(textContent.annotations().audience())
+											.containsOnly(McpSchema.Role.USER, McpSchema.Role.ASSISTANT);
+										break;
+									case "success":
+										assertThat(textContent.annotations().priority()).isEqualTo(0.7);
+										assertThat(textContent.annotations().audience())
+											.containsExactly(McpSchema.Role.USER);
+										break;
+									case "debug":
+										assertThat(textContent.annotations().priority()).isEqualTo(0.3);
+										assertThat(textContent.annotations().audience())
+											.containsExactly(McpSchema.Role.ASSISTANT);
+										break;
+									default:
+										throw new IllegalStateException("Unexpected value: " + content.type());
+								}
+								break;
+							case "image":
+								McpSchema.ImageContent imageContent = assertInstanceOf(McpSchema.ImageContent.class,
+										content);
+								assertThat(imageContent.data()).isNotEmpty();
+								assertThat(imageContent.annotations()).isNotNull();
+								assertThat(imageContent.annotations().priority()).isEqualTo(0.5);
+								assertThat(imageContent.annotations().audience()).containsExactly(McpSchema.Role.USER);
+								break;
+							default:
+								fail("Unexpected content type: " + content.type());
+						}
+					});
+				})
+				.verifyComplete();
 		});
 	}
 
@@ -342,18 +412,59 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	@Test
-	@Disabled
 	void testReadResource() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.create(mcpAsyncClient.listResources()).consumeNextWith(resources -> {
-				if (!resources.resources().isEmpty()) {
-					Resource firstResource = resources.resources().get(0);
-					StepVerifier.create(mcpAsyncClient.readResource(firstResource)).consumeNextWith(result -> {
-						assertThat(result).isNotNull();
-						assertThat(result.contents()).isNotNull();
-					}).verifyComplete();
+		withClient(createMcpTransport(), client -> {
+			Flux<McpSchema.ReadResourceResult> resources = client.initialize()
+				.then(client.listResources(null))
+				.flatMapMany(r -> Flux.fromIterable(r.resources()))
+				.flatMap(r -> client.readResource(r));
+
+			StepVerifier.create(resources).recordWith(ArrayList::new).consumeRecordedWith(readResourceResults -> {
+
+				for (ReadResourceResult result : readResourceResults) {
+
+					assertThat(result).isNotNull();
+					assertThat(result.contents()).isNotNull().isNotEmpty();
+
+					// Validate each content item
+					for (ResourceContents content : result.contents()) {
+						assertThat(content).isNotNull();
+						assertThat(content.uri()).isNotNull().isNotEmpty();
+						assertThat(content.mimeType()).isNotNull().isNotEmpty();
+
+						// Validate content based on its type with more comprehensive
+						// checks
+						switch (content.mimeType()) {
+							case "text/plain" -> {
+								TextResourceContents textContent = assertInstanceOf(TextResourceContents.class,
+										content);
+								assertThat(textContent.text()).isNotNull().isNotEmpty();
+								assertThat(textContent.uri()).isNotEmpty();
+							}
+							case "application/octet-stream" -> {
+								BlobResourceContents blobContent = assertInstanceOf(BlobResourceContents.class,
+										content);
+								assertThat(blobContent.blob()).isNotNull().isNotEmpty();
+								assertThat(blobContent.uri()).isNotNull().isNotEmpty();
+								// Validate base64 encoding format
+								assertThat(blobContent.blob()).matches("^[A-Za-z0-9+/]*={0,2}$");
+							}
+							default -> {
+
+								// Still validate basic properties
+								if (content instanceof TextResourceContents textContent) {
+									assertThat(textContent.text()).isNotNull();
+								}
+								else if (content instanceof BlobResourceContents blobContent) {
+									assertThat(blobContent.blob()).isNotNull();
+								}
+							}
+						}
+					}
 				}
-			}).verifyComplete();
+			})
+				.expectNextCount(10) // Expect 10 elements
+				.verifyComplete();
 		});
 	}
 
@@ -468,7 +579,6 @@ public abstract class AbstractMcpAsyncClientTests {
 	// ---------------------------------------
 	// Logging Tests
 	// ---------------------------------------
-
 	@Test
 	void testLoggingLevelsWithoutInitialization() {
 		verifyNotificationSucceedsWithImplicitInitialization(
@@ -506,6 +616,54 @@ public abstract class AbstractMcpAsyncClientTests {
 				.expectErrorMatches(error -> error.getMessage().contains("Logging level must not be null"))
 				.verify();
 		});
+	}
+
+	@Test
+	void testSampling() {
+		McpClientTransport transport = createMcpTransport();
+
+		final String message = "Hello, world!";
+		final String response = "Goodbye, world!";
+		final int maxTokens = 100;
+
+		AtomicReference<String> receivedPrompt = new AtomicReference<>();
+		AtomicReference<String> receivedMessage = new AtomicReference<>();
+		AtomicInteger receivedMaxTokens = new AtomicInteger();
+
+		withClient(transport, spec -> spec.capabilities(McpSchema.ClientCapabilities.builder().sampling().build())
+			.sampling(request -> {
+				McpSchema.TextContent messageText = assertInstanceOf(McpSchema.TextContent.class,
+						request.messages().get(0).content());
+				receivedPrompt.set(request.systemPrompt());
+				receivedMessage.set(messageText.text());
+				receivedMaxTokens.set(request.maxTokens());
+
+				return Mono
+					.just(new McpSchema.CreateMessageResult(McpSchema.Role.USER, new McpSchema.TextContent(response),
+							"modelId", McpSchema.CreateMessageResult.StopReason.END_TURN));
+			}), client -> {
+				StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
+
+				StepVerifier.create(client.callTool(
+						new McpSchema.CallToolRequest("sampleLLM", Map.of("prompt", message, "maxTokens", maxTokens))))
+					.consumeNextWith(result -> {
+						// Verify tool response to ensure our sampling response was passed
+						// through
+						assertThat(result.content()).hasAtLeastOneElementOfType(McpSchema.TextContent.class);
+						assertThat(result.content()).allSatisfy(content -> {
+							if (!(content instanceof McpSchema.TextContent text))
+								return;
+
+							assertThat(text.text()).endsWith(response); // Prefixed
+						});
+
+						// Verify sampling request parameters received in our callback
+						assertThat(receivedPrompt.get()).isNotEmpty();
+						assertThat(receivedMessage.get()).endsWith(message); // Prefixed
+						assertThat(receivedMaxTokens.get()).isEqualTo(maxTokens);
+					})
+					.verifyComplete();
+			});
 	}
 
 }
