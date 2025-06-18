@@ -12,6 +12,7 @@ import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
@@ -82,6 +83,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 */
 	public static final String DEFAULT_SSE_ENDPOINT = "/sse";
 
+	public static final String DEFAULT_CONTEXT_PATH = "";
+
 	public static final String DEFAULT_BASE_URL = "";
 
 	private final ObjectMapper objectMapper;
@@ -91,6 +94,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 * clients to send their JSON-RPC messages.
 	 */
 	private final String baseUrl;
+
+	private final String contextPath;
 
 	private final String messageEndpoint;
 
@@ -134,33 +139,38 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
 	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
-		this(objectMapper, DEFAULT_BASE_URL, messageEndpoint, sseEndpoint);
+		this(objectMapper, DEFAULT_CONTEXT_PATH, DEFAULT_BASE_URL, messageEndpoint, sseEndpoint);
 	}
 
 	/**
 	 * Constructs a new WebFlux SSE server transport provider instance.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 * of MCP messages. Must not be null.
+	 * @param contextPath The context path of the server.
 	 * @param baseUrl webflux message base path
 	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
 	 * messages. This endpoint will be communicated to clients during SSE connection
 	 * setup. Must not be null.
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
-	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
-			String sseEndpoint) {
+	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String contextPath, String baseUrl,
+			String messageEndpoint, String sseEndpoint) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
+		Assert.notNull(contextPath, "Context path must not be null");
 		Assert.notNull(baseUrl, "Message base path must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
+		Assert.hasText(messageEndpoint, "Message endpoint must not be empty");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
+		Assert.hasText(sseEndpoint, "SSE endpoint must not be empty");
 
 		this.objectMapper = objectMapper;
-		this.baseUrl = baseUrl;
+		this.contextPath = Utils.removeTrailingSlash(contextPath);
+		this.baseUrl = Utils.removeTrailingSlash(baseUrl);
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
 		this.routerFunction = RouterFunctions.route()
-			.GET(this.sseEndpoint, this::handleSseConnection)
-			.POST(this.messageEndpoint, this::handleMessage)
+			.GET(this.baseUrl + this.sseEndpoint, this::handleSseConnection)
+			.POST(this.baseUrl + this.messageEndpoint, this::handleMessage)
 			.build();
 	}
 
@@ -271,7 +281,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 				logger.debug("Sending initial endpoint event to session: {}", sessionId);
 				sink.next(ServerSentEvent.builder()
 					.event(ENDPOINT_EVENT_TYPE)
-					.data(this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId)
+					.data(this.contextPath + this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId)
 					.build());
 				sink.onCancel(() -> {
 					logger.debug("Session {} cancelled", sessionId);
@@ -391,6 +401,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 		private ObjectMapper objectMapper;
 
+		private String contextPath = DEFAULT_CONTEXT_PATH;
+
 		private String baseUrl = DEFAULT_BASE_URL;
 
 		private String messageEndpoint;
@@ -420,6 +432,18 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		public Builder basePath(String baseUrl) {
 			Assert.notNull(baseUrl, "basePath must not be null");
 			this.baseUrl = baseUrl;
+			return this;
+		}
+
+		/**
+		 * Sets the context path under which the server is running.
+		 * @param contextPath the context path.
+		 * @return this builder instance.
+		 * @throws IllegalArgumentException if contextPath is null
+		 */
+		public Builder contextPath(String contextPath) {
+			Assert.notNull(contextPath, "contextPath must not be null");
+			this.contextPath = contextPath;
 			return this;
 		}
 
@@ -457,7 +481,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			Assert.notNull(objectMapper, "ObjectMapper must be set");
 			Assert.notNull(messageEndpoint, "Message endpoint must be set");
 
-			return new WebFluxSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint);
+			return new WebFluxSseServerTransportProvider(objectMapper, contextPath, baseUrl, messageEndpoint,
+					sseEndpoint);
 		}
 
 	}
