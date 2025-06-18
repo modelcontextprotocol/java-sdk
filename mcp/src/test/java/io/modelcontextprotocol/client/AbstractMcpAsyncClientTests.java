@@ -154,6 +154,13 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	@Test
+	void testInitialize() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then()).verifyComplete();
+		});
+	}
+
+	@Test
 	void testListTools() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listTools(null)))

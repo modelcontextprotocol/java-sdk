@@ -1,6 +1,6 @@
 /*
-* Copyright 2024 - 2024 the original author or authors.
-*/
+ * Copyright 2024 - 2024 the original author or authors.
+ */
 package io.modelcontextprotocol.client.transport;
 
 import java.net.URI;
@@ -131,64 +131,7 @@ public class FlowSseClient {
 		AtomicReference<String> currentEventId = new AtomicReference<>();
 		AtomicReference<String> currentEventType = new AtomicReference<>("message");
 
-		Flow.Subscriber<String> lineSubscriber = new Flow.Subscriber<>() {
-			private Flow.Subscription subscription;
-
-			@Override
-			public void onSubscribe(Flow.Subscription subscription) {
-				this.subscription = subscription;
-				subscription.request(Long.MAX_VALUE);
-			}
-
-			@Override
-			public void onNext(String line) {
-				if (line.isEmpty()) {
-					// Empty line means end of event
-					if (eventBuilder.length() > 0) {
-						String eventData = eventBuilder.toString();
-						SseEvent event = new SseEvent(currentEventId.get(), currentEventType.get(), eventData.trim());
-						eventHandler.onEvent(event);
-						eventBuilder.setLength(0);
-					}
-				}
-				else {
-					if (line.startsWith("data:")) {
-						var matcher = EVENT_DATA_PATTERN.matcher(line);
-						if (matcher.find()) {
-							eventBuilder.append(matcher.group(1).trim()).append("\n");
-						}
-					}
-					else if (line.startsWith("id:")) {
-						var matcher = EVENT_ID_PATTERN.matcher(line);
-						if (matcher.find()) {
-							currentEventId.set(matcher.group(1).trim());
-						}
-					}
-					else if (line.startsWith("event:")) {
-						var matcher = EVENT_TYPE_PATTERN.matcher(line);
-						if (matcher.find()) {
-							currentEventType.set(matcher.group(1).trim());
-						}
-					}
-				}
-				subscription.request(1);
-			}
-
-			@Override
-			public void onError(Throwable throwable) {
-				eventHandler.onError(throwable);
-			}
-
-			@Override
-			public void onComplete() {
-				// Handle any remaining event data
-				if (eventBuilder.length() > 0) {
-					String eventData = eventBuilder.toString();
-					SseEvent event = new SseEvent(currentEventId.get(), currentEventType.get(), eventData.trim());
-					eventHandler.onEvent(event);
-				}
-			}
-		};
+		Flow.Subscriber<String> lineSubscriber = new SseEventSubscriber(eventHandler);
 
 		Function<Flow.Subscriber<String>, HttpResponse.BodySubscriber<Void>> subscriberFactory = subscriber -> HttpResponse.BodySubscribers
 			.fromLineSubscriber(subscriber);
@@ -205,6 +148,83 @@ public class FlowSseClient {
 			eventHandler.onError(throwable);
 			return null;
 		});
+	}
+
+	/**
+	 * Subscriber implementation for processing SSE event lines. This subscriber parses
+	 * incoming lines and accumulates them into complete events.
+	 */
+	public static class SseEventSubscriber implements Flow.Subscriber<String> {
+
+		private Flow.Subscription subscription;
+
+		private final SseEventHandler eventHandler;
+
+		private final StringBuilder eventBuilder = new StringBuilder();
+
+		private final AtomicReference<String> currentEventId = new AtomicReference<>();
+
+		private final AtomicReference<String> currentEventType = new AtomicReference<>("message");
+
+		public SseEventSubscriber(SseEventHandler eventHandler) {
+			this.eventHandler = eventHandler;
+		}
+
+		@Override
+		public void onSubscribe(Flow.Subscription subscription) {
+			this.subscription = subscription;
+			subscription.request(Long.MAX_VALUE);
+		}
+
+		@Override
+		public void onNext(String line) {
+			if (line.isEmpty()) {
+				// Empty line means end of event
+				if (eventBuilder.length() > 0) {
+					String eventData = eventBuilder.toString();
+					SseEvent event = new SseEvent(currentEventId.get(), currentEventType.get(), eventData.trim());
+					eventHandler.onEvent(event);
+					eventBuilder.setLength(0);
+				}
+			}
+			else {
+				if (line.startsWith("data:")) {
+					var matcher = EVENT_DATA_PATTERN.matcher(line);
+					if (matcher.find()) {
+						eventBuilder.append(matcher.group(1).trim()).append("\n");
+					}
+				}
+				else if (line.startsWith("id:")) {
+					var matcher = EVENT_ID_PATTERN.matcher(line);
+					if (matcher.find()) {
+						currentEventId.set(matcher.group(1).trim());
+					}
+				}
+				else if (line.startsWith("event:")) {
+					var matcher = EVENT_TYPE_PATTERN.matcher(line);
+					if (matcher.find()) {
+						currentEventType.set(matcher.group(1).trim());
+					}
+				}
+			}
+			subscription.request(1);
+		}
+
+		@Override
+		public void onError(Throwable throwable) {
+			eventHandler.onError(throwable);
+		}
+
+		@Override
+		public void onComplete() {
+			// Handle any remaining event data
+			if (!eventBuilder.isEmpty()) {
+				String eventData = eventBuilder.toString();
+				SseEvent event = new SseEvent(currentEventId.get(), currentEventType.get(), eventData.trim());
+				eventHandler.onEvent(event);
+			}
+		}
+
 	}
 
 }
