@@ -6,7 +6,7 @@
 
 	<groupId>io.modelcontextprotocol.sdk</groupId>
 	<artifactId>mcp-parent</artifactId>
-	<version>0.10.0-SNAPSHOT</version>
+	<version>0.11.0-SNAPSHOT</version>
 
 	<packaging>pom</packaging>
 	<url>https://github.com/modelcontextprotocol/java-sdk</url>
@@ -57,6 +57,7 @@
 		<java.version>17</java.version>
 		<maven.compiler.source>17</maven.compiler.source>
 		<maven.compiler.target>17</maven.compiler.target>
+		<surefireArgLine/>
 
 		<assert4j.version>3.26.3</assert4j.version>
 		<junit.version>5.10.2</junit.version>
@@ -165,11 +166,21 @@
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-dependency-plugin</artifactId>
+				<executions>
+					<execution>
+						<goals>
+							<goal>properties</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
 				<version>${maven-surefire-plugin.version}</version>
 				<configuration>
-					<argLine>${surefireArgLine}</argLine>
-
+					<argLine>${surefireArgLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
 					<useFile>false</useFile>
 					<trimStackTrace>false</trimStackTrace>
 
