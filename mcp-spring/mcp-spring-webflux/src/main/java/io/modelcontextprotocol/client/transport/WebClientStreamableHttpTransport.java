@@ -35,6 +35,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import static io.modelcontextprotocol.spec.McpSchema.Headers.LAST_EVENT_ID;
 import static io.modelcontextprotocol.spec.McpSchema.Headers.MCP_SESSION_ID;
 
 /**
@@ -190,7 +191,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 				.headers(httpHeaders -> {
 					transportSession.sessionId().ifPresent(id -> httpHeaders.add(MCP_SESSION_ID, id));
 					if (stream != null) {
-						stream.lastId().ifPresent(id -> httpHeaders.add("last-event-id", id));
+						stream.lastId().ifPresent(id -> httpHeaders.add(LAST_EVENT_ID, id));
 					}
 				})
 				.exchangeToFlux(response -> {

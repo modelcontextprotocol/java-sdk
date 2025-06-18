@@ -142,7 +142,17 @@ public final class McpSchema {
 	 */
 	public static final class Headers {
 
+		/**
+		 * The Model Context Protocol (MCP) session ID header name.
+		 */
 		public static final String MCP_SESSION_ID = "Mcp-Session-Id";
+
+		/**
+		 * The Last-Event-ID HTTP request header reports an EventSource object's last
+		 * event ID string to the server when the user agent is to reestablish the
+		 * connection.
+		 */
+		public static final String LAST_EVENT_ID = "Last-Event-ID";
 
 	}
 
