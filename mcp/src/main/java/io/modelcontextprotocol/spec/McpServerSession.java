@@ -59,6 +59,10 @@ public class McpServerSession implements McpLoggableSession {
 
 	private Authentication authentication;
 
+	private boolean proxySession = false;
+
+	boolean isExchangeEmitted = false;
+
 	private static final int STATE_UNINITIALIZED = 0;
 
 	private static final int STATE_INITIALIZING = 1;
@@ -138,6 +142,14 @@ public class McpServerSession implements McpLoggableSession {
 
 	public McpServerTransport getTransport() {
 		return transport;
+	}
+
+	public boolean isProxySession() {
+		return proxySession;
+	}
+
+	public void setProxySession(boolean proxySession) {
+		this.proxySession = proxySession;
 	}
 
 	/**
@@ -288,6 +300,11 @@ public class McpServerSession implements McpLoggableSession {
 									error.message(), error.data())));
 				}
 
+				if (proxySession && !isExchangeEmitted) {
+					exchangeSink
+						.tryEmitValue(new McpAsyncServerExchange(this, clientCapabilities.get(), clientInfo.get()));
+					isExchangeEmitted = true;
+				}
 				resultMono = this.exchangeSink.asMono()
 					.flatMap(exchange -> handler.handle(copyExchange(exchange, transportContext), request.params()));
 			}
@@ -315,6 +332,7 @@ public class McpServerSession implements McpLoggableSession {
 				// legacy SSE transport.
 				exchangeSink.tryEmitValue(new McpAsyncServerExchange(this.id, this, clientCapabilities.get(),
 						clientInfo.get(), transportContext));
+				isExchangeEmitted = true;
 			}
 
 			var handler = notificationHandlers.get(notification.method());
