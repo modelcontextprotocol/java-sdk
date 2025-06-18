@@ -40,17 +40,24 @@
                 <version>${project.version}</version>
             </dependency>
 
-            <!-- MCP Transport - WebFlux SSE -->
+            <!-- MCP Transport - Spring WebFlux SSE -->
             <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-spring-webflux</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
-            <!-- MCP Transport - WebMVC SSE -->
+            <!-- MCP Transport - Spring WebMVC SSE -->
             <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-spring-webmvc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- MCP Transport - Solon WebRx SSE -->
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-solon-webrx</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
