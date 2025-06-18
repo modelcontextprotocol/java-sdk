@@ -35,6 +35,9 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import static io.modelcontextprotocol.spec.McpSchema.Headers.LAST_EVENT_ID;
+import static io.modelcontextprotocol.spec.McpSchema.Headers.MCP_SESSION_ID;
+
 /**
  * An implementation of the Streamable HTTP protocol as defined by the
  * <code>2025-03-26</code> version of the MCP specification.
@@ -127,7 +130,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	private DefaultMcpTransportSession createTransportSession() {
 		Function<String, Publisher<Void>> onClose = sessionId -> sessionId == null ? Mono.empty()
 				: webClient.delete().uri(this.endpoint).headers(httpHeaders -> {
-					httpHeaders.add("mcp-session-id", sessionId);
+					httpHeaders.add(MCP_SESSION_ID, sessionId);
 				})
 					.retrieve()
 					.toBodilessEntity()
@@ -186,9 +189,9 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 				.uri(this.endpoint)
 				.accept(MediaType.TEXT_EVENT_STREAM)
 				.headers(httpHeaders -> {
-					transportSession.sessionId().ifPresent(id -> httpHeaders.add("mcp-session-id", id));
+					transportSession.sessionId().ifPresent(id -> httpHeaders.add(MCP_SESSION_ID, id));
 					if (stream != null) {
-						stream.lastId().ifPresent(id -> httpHeaders.add("last-event-id", id));
+						stream.lastId().ifPresent(id -> httpHeaders.add(LAST_EVENT_ID, id));
 					}
 				})
 				.exchangeToFlux(response -> {
@@ -246,12 +249,11 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 				.uri(this.endpoint)
 				.accept(MediaType.TEXT_EVENT_STREAM, MediaType.APPLICATION_JSON)
 				.headers(httpHeaders -> {
-					transportSession.sessionId().ifPresent(id -> httpHeaders.add("mcp-session-id", id));
+					transportSession.sessionId().ifPresent(id -> httpHeaders.add(MCP_SESSION_ID, id));
 				})
 				.bodyValue(message)
 				.exchangeToFlux(response -> {
-					if (transportSession
-						.markInitialized(response.headers().asHttpHeaders().getFirst("mcp-session-id"))) {
+					if (transportSession.markInitialized(response.headers().asHttpHeaders().getFirst(MCP_SESSION_ID))) {
 						// Once we have a session, we try to open an async stream for
 						// the server to send notifications and requests out-of-band.
 						reconnect(null).contextWrite(sink.contextView()).subscribe();
