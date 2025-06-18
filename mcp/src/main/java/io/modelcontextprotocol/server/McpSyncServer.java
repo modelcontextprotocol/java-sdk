@@ -72,6 +72,14 @@ public class McpSyncServer {
 	}
 
 	/**
+	 * Put a new tool handler or update an existing one.
+	 * @param toolHandler The tool handler to put
+	 */
+	public void putTool(McpServerFeatures.SyncToolSpecification toolHandler) {
+		this.asyncServer.putTool(McpServerFeatures.AsyncToolSpecification.fromSync(toolHandler)).block();
+	}
+
+	/**
 	 * Remove a tool handler.
 	 * @param toolName The name of the tool handler to remove
 	 */
@@ -88,6 +96,14 @@ public class McpSyncServer {
 	}
 
 	/**
+	 * Put a new resource handler or update an existing one.
+	 * @param resourceHandler The resource handler to put
+	 */
+	public void putResource(McpServerFeatures.SyncResourceSpecification resourceHandler) {
+		this.asyncServer.putResource(McpServerFeatures.AsyncResourceSpecification.fromSync(resourceHandler)).block();
+	}
+
+	/**
 	 * Remove a resource handler.
 	 * @param resourceUri The URI of the resource handler to remove
 	 */
@@ -101,6 +117,14 @@ public class McpSyncServer {
 	 */
 	public void addPrompt(McpServerFeatures.SyncPromptSpecification promptSpecification) {
 		this.asyncServer.addPrompt(McpServerFeatures.AsyncPromptSpecification.fromSync(promptSpecification)).block();
+	}
+
+	/**
+	 * Put a new prompt handler or update an existing one.
+	 * @param promptSpecification The prompt specification to put
+	 */
+	public void putPrompt(McpServerFeatures.SyncPromptSpecification promptSpecification) {
+		this.asyncServer.putPrompt(McpServerFeatures.AsyncPromptSpecification.fromSync(promptSpecification)).block();
 	}
 
 	/**
