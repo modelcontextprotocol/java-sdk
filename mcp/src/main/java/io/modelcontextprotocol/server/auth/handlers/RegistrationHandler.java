@@ -1,15 +1,14 @@
 package io.modelcontextprotocol.server.auth.handlers;
 
+import java.net.URI;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
 import io.modelcontextprotocol.auth.OAuthAuthorizationServerProvider;
 import io.modelcontextprotocol.auth.OAuthClientInformation;
 import io.modelcontextprotocol.auth.OAuthClientMetadata;
 import io.modelcontextprotocol.auth.exception.RegistrationException;
 import io.modelcontextprotocol.server.auth.settings.ClientRegistrationOptions;
-
-import java.net.URI;
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Handler for OAuth client registration requests.

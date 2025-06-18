@@ -4,13 +4,11 @@ import io.modelcontextprotocol.auth.AuthorizationParams;
 import io.modelcontextprotocol.auth.InvalidRedirectUriException;
 import io.modelcontextprotocol.auth.InvalidScopeException;
 import io.modelcontextprotocol.auth.OAuthAuthorizationServerProvider;
-import io.modelcontextprotocol.auth.OAuthClientInformation;
 import io.modelcontextprotocol.auth.exception.AuthorizeException;
 import io.modelcontextprotocol.server.auth.model.AuthorizationErrorResponse;
 import io.modelcontextprotocol.server.auth.util.UriUtils;
 
 import java.net.URI;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;

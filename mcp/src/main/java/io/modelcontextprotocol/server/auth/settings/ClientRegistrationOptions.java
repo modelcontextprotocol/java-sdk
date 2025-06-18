@@ -3,13 +3,13 @@ package io.modelcontextprotocol.server.auth.settings;
 import java.util.List;
 
 /**
- * Options for OAuth client registration.
+ * Options for client registration.
  */
 public class ClientRegistrationOptions {
 
 	private boolean enabled = true;
 
-	private boolean allowLocalhostRedirect = true;
+	private boolean allowLocalhostRedirect;
 
 	private List<String> validScopes;
 
@@ -30,33 +30,32 @@ public class ClientRegistrationOptions {
 	}
 
 	/**
-	 * Check if localhost redirect URIs are allowed.
-	 * @return true if localhost redirect URIs are allowed, false otherwise
+	 * Gets whether localhost redirects are allowed.
+	 * @return true if localhost redirects are allowed, false otherwise
 	 */
 	public boolean isAllowLocalhostRedirect() {
 		return allowLocalhostRedirect;
 	}
 
 	/**
-	 * Set whether localhost redirect URIs are allowed.
-	 * @param allowLocalhostRedirect true to allow localhost redirect URIs, false to
-	 * disallow
+	 * Sets whether localhost redirects are allowed.
+	 * @param allowLocalhostRedirect true to allow localhost redirects, false otherwise
 	 */
 	public void setAllowLocalhostRedirect(boolean allowLocalhostRedirect) {
 		this.allowLocalhostRedirect = allowLocalhostRedirect;
 	}
 
 	/**
-	 * Get the list of valid scopes.
-	 * @return the list of valid scopes
+	 * Gets the valid scopes.
+	 * @return the valid scopes
 	 */
 	public List<String> getValidScopes() {
 		return validScopes;
 	}
 
 	/**
-	 * Set the list of valid scopes.
-	 * @param validScopes the list of valid scopes
+	 * Sets the valid scopes.
+	 * @param validScopes the valid scopes
 	 */
 	public void setValidScopes(List<String> validScopes) {
 		this.validScopes = validScopes;

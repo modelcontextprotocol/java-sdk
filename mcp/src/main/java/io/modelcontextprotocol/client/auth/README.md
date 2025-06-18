@@ -6,7 +6,6 @@ This package provides an OAuth 2.0 client implementation for the MCP Java SDK, s
 
 - `OAuthClientProvider`: Main class that handles the OAuth 2.0 flow
 - `TokenStorage`: Interface for storing OAuth tokens and client information
-- `InMemoryTokenStorage`: Simple in-memory implementation of TokenStorage
 - `HttpClientAuthenticator`: Authenticator for HTTP requests using OAuth
 - `PkceUtils`: Utility class for PKCE operations
 - `AuthCallbackResult`: Class to hold the result of an OAuth authorization callback

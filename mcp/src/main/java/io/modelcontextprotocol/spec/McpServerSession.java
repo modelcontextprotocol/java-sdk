@@ -9,6 +9,9 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
+import io.modelcontextprotocol.server.auth.middleware.AuthContext;
+import io.modelcontextprotocol.server.auth.middleware.AuthContextProvider;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -242,7 +245,16 @@ public class McpServerSession implements McpSession {
 		return Mono.defer(() -> {
 			if (McpSchema.METHOD_NOTIFICATION_INITIALIZED.equals(notification.method())) {
 				this.state.lazySet(STATE_INITIALIZED);
-				exchangeSink.tryEmitValue(new McpAsyncServerExchange(this, clientCapabilities.get(), clientInfo.get()));
+
+				// Get auth context from transport if it supports it
+				AuthContext authContext = null;
+				if (transport instanceof AuthContextProvider authProvider) {
+					authContext = authProvider.getAuthContext();
+				}
+
+				exchangeSink.tryEmitValue(
+						new McpAsyncServerExchange(this, clientCapabilities.get(), clientInfo.get(), authContext));
+
 				return this.initNotificationHandler.handle();
 			}
 

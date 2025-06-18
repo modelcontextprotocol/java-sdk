@@ -5,6 +5,8 @@
 package io.modelcontextprotocol.server;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+
+import io.modelcontextprotocol.server.auth.middleware.AuthContext;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
@@ -28,6 +30,8 @@ public class McpAsyncServerExchange {
 
 	private final McpSchema.Implementation clientInfo;
 
+	private final AuthContext authContext;
+
 	private volatile LoggingLevel minLoggingLevel = LoggingLevel.INFO;
 
 	private static final TypeReference<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeReference<>() {
@@ -45,9 +49,23 @@ public class McpAsyncServerExchange {
 	 */
 	public McpAsyncServerExchange(McpServerSession session, McpSchema.ClientCapabilities clientCapabilities,
 			McpSchema.Implementation clientInfo) {
+		this(session, clientCapabilities, clientInfo, AuthContext.getCurrent());
+	}
+
+	/**
+	 * Create a new asynchronous exchange with the client and authentication context.
+	 * @param session The server session representing a 1-1 interaction.
+	 * @param clientCapabilities The client capabilities that define the supported
+	 * features and functionality.
+	 * @param clientInfo The client implementation information.
+	 * @param authContext The authentication context.
+	 */
+	public McpAsyncServerExchange(McpServerSession session, McpSchema.ClientCapabilities clientCapabilities,
+			McpSchema.Implementation clientInfo, AuthContext authContext) {
 		this.session = session;
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
+		this.authContext = authContext;
 	}
 
 	/**
@@ -143,6 +161,14 @@ public class McpAsyncServerExchange {
 
 	private boolean isNotificationForLevelAllowed(LoggingLevel loggingLevel) {
 		return loggingLevel.level() >= this.minLoggingLevel.level();
+	}
+
+	/**
+	 * Gets the authentication context for the current session.
+	 * @return The authentication context, or null if not authenticated
+	 */
+	public AuthContext getAuthContext() {
+		return authContext;
 	}
 
 }

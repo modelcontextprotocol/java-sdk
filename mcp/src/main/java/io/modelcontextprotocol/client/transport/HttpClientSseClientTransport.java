@@ -16,8 +16,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.modelcontextprotocol.client.transport.FlowSseClient.SseEvent;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
@@ -25,8 +29,6 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 /**
@@ -77,6 +79,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 
 	/** SSE client for handling server-sent events. Uses the /sse endpoint */
 	private final FlowSseClient sseClient;
+
+	private RequestResponseInterceptor requestInterceptor;
 
 	/**
 	 * HTTP client for sending messages to the server. Uses HTTP POST over the message
@@ -179,6 +183,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
 		Assert.notNull(httpClient, "httpClient must not be null");
 		Assert.notNull(requestBuilder, "requestBuilder must not be null");
+
 		this.baseUri = URI.create(baseUri);
 		this.sseEndpoint = sseEndpoint;
 		this.objectMapper = objectMapper;
@@ -186,6 +191,14 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		this.requestBuilder = requestBuilder;
 
 		this.sseClient = new FlowSseClient(this.httpClient, requestBuilder);
+	}
+
+	/**
+	 * Sets the request interceptor.
+	 * @param requestInterceptor the request interceptor
+	 */
+	void setRequestInterceptor(RequestResponseInterceptor requestInterceptor) {
+		this.requestInterceptor = requestInterceptor;
 	}
 
 	/**
@@ -214,6 +227,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 
 		private HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
 			.header("Content-Type", "application/json");
+
+		private RequestResponseInterceptor requestInterceptor;
 
 		/**
 		 * Creates a new builder instance.
@@ -313,12 +328,28 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		}
 
 		/**
+		 * Sets the request interceptor.
+		 * @param requestInterceptor the request interceptor
+		 * @return this builder
+		 */
+		public Builder requestInterceptor(RequestResponseInterceptor requestInterceptor) {
+			this.requestInterceptor = requestInterceptor;
+			return this;
+		}
+
+		/**
 		 * Builds a new {@link HttpClientSseClientTransport} instance.
 		 * @return a new transport instance
 		 */
 		public HttpClientSseClientTransport build() {
-			return new HttpClientSseClientTransport(clientBuilder.build(), requestBuilder, baseUri, sseEndpoint,
-					objectMapper);
+			HttpClientSseClientTransport transport = new HttpClientSseClientTransport(clientBuilder.build(),
+					requestBuilder, baseUri, sseEndpoint, objectMapper);
+
+			if (requestInterceptor != null) {
+				transport.setRequestInterceptor(requestInterceptor);
+			}
+
+			return transport;
 		}
 
 	}
@@ -342,6 +373,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		connectionFuture.set(future);
 
 		URI clientUri = Utils.resolveUri(this.baseUri, this.sseEndpoint);
+		logger.info("Connecting to {}", clientUri);
 		sseClient.subscribe(clientUri.toString(), new FlowSseClient.SseEventHandler() {
 			@Override
 			public void onEvent(SseEvent event) {
@@ -415,17 +447,35 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		try {
 			String jsonText = this.objectMapper.writeValueAsString(message);
 			URI requestUri = Utils.resolveUri(baseUri, endpoint);
-			HttpRequest request = this.requestBuilder.uri(requestUri)
-				.POST(HttpRequest.BodyPublishers.ofString(jsonText))
-				.build();
+			HttpRequest.Builder builder = this.requestBuilder.copy()
+				.uri(requestUri)
+				.POST(HttpRequest.BodyPublishers.ofString(jsonText));
 
-			return Mono.fromFuture(
-					httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding()).thenAccept(response -> {
-						if (response.statusCode() != 200 && response.statusCode() != 201 && response.statusCode() != 202
-								&& response.statusCode() != 206) {
-							logger.error("Error sending message: {}", response.statusCode());
-						}
-					}));
+			// Apply request interceptor if available
+			if (requestInterceptor != null) {
+				return Mono.fromFuture(requestInterceptor.interceptRequest(builder)
+					.thenCompose(request -> requestInterceptor.interceptResponse(request,
+							req -> httpClient.sendAsync(req, HttpResponse.BodyHandlers.discarding())
+								.thenApply(response -> {
+									if (response.statusCode() != 200 && response.statusCode() != 201
+											&& response.statusCode() != 202 && response.statusCode() != 206) {
+										logger.error("Error sending message: {}", response.statusCode());
+									}
+									return response;
+								})))
+					.thenApply(response -> null));
+			}
+			else {
+				// Original behavior without interceptor
+				HttpRequest request = builder.build();
+				return Mono.fromFuture(
+						httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding()).thenAccept(response -> {
+							if (response.statusCode() != 200 && response.statusCode() != 201
+									&& response.statusCode() != 202 && response.statusCode() != 206) {
+								logger.error("Error sending message: {}", response.statusCode());
+							}
+						}));
+			}
 		}
 		catch (IOException e) {
 			if (!isClosing) {

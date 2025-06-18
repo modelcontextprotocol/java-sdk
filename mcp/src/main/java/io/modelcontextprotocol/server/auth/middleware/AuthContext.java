@@ -9,6 +9,8 @@ public class AuthContext {
 
 	private final AccessToken accessToken;
 
+	private static final ThreadLocal<AuthContext> currentContext = new ThreadLocal<>();
+
 	/**
 	 * Creates a new AuthContext.
 	 * @param accessToken The authenticated access token.
@@ -40,6 +42,29 @@ public class AuthContext {
 	 */
 	public boolean hasScope(String scope) {
 		return accessToken != null && accessToken.getScopes().contains(scope);
+	}
+
+	/**
+	 * Sets the current auth context for this thread.
+	 * @param authContext The auth context to set
+	 */
+	public static void setCurrent(AuthContext authContext) {
+		currentContext.set(authContext);
+	}
+
+	/**
+	 * Gets the current auth context for this thread.
+	 * @return The current auth context, or null if not set
+	 */
+	public static AuthContext getCurrent() {
+		return currentContext.get();
+	}
+
+	/**
+	 * Clears the current auth context for this thread.
+	 */
+	public static void clearCurrent() {
+		currentContext.remove();
 	}
 
 }

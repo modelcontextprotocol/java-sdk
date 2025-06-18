@@ -104,6 +104,7 @@
 		<module>mcp-spring/mcp-spring-webflux</module>
 		<module>mcp-spring/mcp-spring-webmvc</module>
 		<module>mcp-test</module>
+		<module>examples/auth-example</module>
 	</modules>
 
 	<build>
