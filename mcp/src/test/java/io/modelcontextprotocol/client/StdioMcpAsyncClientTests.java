@@ -6,10 +6,11 @@ package io.modelcontextprotocol.client;
 
 import java.time.Duration;
 
+import org.junit.jupiter.api.Timeout;
+
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.spec.McpClientTransport;
-import org.junit.jupiter.api.Timeout;
 
 /**
  * Tests for the {@link McpAsyncClient} with {@link StdioClientTransport}.

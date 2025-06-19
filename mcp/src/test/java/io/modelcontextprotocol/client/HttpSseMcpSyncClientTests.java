@@ -4,11 +4,12 @@
 
 package io.modelcontextprotocol.client;
 
-import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
-import io.modelcontextprotocol.spec.McpClientTransport;
 import org.junit.jupiter.api.Timeout;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
+
+import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 
 /**
  * Tests for the {@link McpSyncClient} with {@link HttpClientSseClientTransport}.

@@ -4,9 +4,8 @@
 
 package io.modelcontextprotocol.spec;
 
-import java.util.Map;
-
 import com.fasterxml.jackson.core.type.TypeReference;
+
 import reactor.core.publisher.Mono;
 
 /**
