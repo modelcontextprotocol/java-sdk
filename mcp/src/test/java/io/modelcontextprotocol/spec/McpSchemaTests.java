@@ -829,6 +829,23 @@ public class McpSchemaTests {
 							{"role":"assistant","content":{"type":"text","text":"Assistant response"},"model":"gpt-4","stopReason":"endTurn"}"""));
 	}
 
+	@Test
+	void testCreateMessageResultUnknownStopReason() throws Exception {
+		String input = """
+				{"role":"assistant","content":{"type":"text","text":"Assistant response"},"model":"gpt-4","stopReason":"arbitrary value"}""";
+
+		McpSchema.CreateMessageResult value = mapper.readValue(input, McpSchema.CreateMessageResult.class);
+
+		McpSchema.TextContent expectedContent = new McpSchema.TextContent("Assistant response");
+		McpSchema.CreateMessageResult expected = McpSchema.CreateMessageResult.builder()
+			.role(McpSchema.Role.ASSISTANT)
+			.content(expectedContent)
+			.model("gpt-4")
+			.stopReason(McpSchema.CreateMessageResult.StopReason.UNKNOWN)
+			.build();
+		assertThat(value).isEqualTo(expected);
+	}
+
 	// Elicitation Tests
 
 	@Test

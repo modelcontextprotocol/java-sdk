@@ -6,10 +6,12 @@ package io.modelcontextprotocol.spec;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -1072,9 +1074,24 @@ public final class McpSchema {
 		@JsonProperty("stopReason") StopReason stopReason) {
 
 		public enum StopReason {
-			@JsonProperty("endTurn") END_TURN,
-			@JsonProperty("stopSequence") STOP_SEQUENCE,
-			@JsonProperty("maxTokens") MAX_TOKENS
+			@JsonProperty("endTurn") END_TURN("endTurn"),
+			@JsonProperty("stopSequence") STOP_SEQUENCE("stopSequence"),
+			@JsonProperty("maxTokens") MAX_TOKENS("maxTokens"),
+			UNKNOWN("unknown");
+
+			private final String value;
+
+			StopReason(String value) {
+				this.value = value;
+			}
+
+			@JsonCreator
+			private static StopReason of(String value) {
+				return Arrays.stream(StopReason.values())
+						.filter(stopReason -> stopReason.value.equals(value))
+						.findFirst()
+						.orElse(StopReason.UNKNOWN);
+			}
 		}
 
 		public static Builder builder() {
