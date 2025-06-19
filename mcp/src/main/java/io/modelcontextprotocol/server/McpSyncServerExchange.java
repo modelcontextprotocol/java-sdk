@@ -100,8 +100,8 @@ public class McpSyncServerExchange {
 	}
 
 	/**
-	 * Send a logging message notification to all connected clients. Messages below the
-	 * current minimum logging level will be filtered out.
+	 * Send a logging message notification to the client. Messages below the current
+	 * minimum logging level will be filtered out.
 	 * @param loggingMessageNotification The logging message to send
 	 */
 	public void loggingNotification(LoggingMessageNotification loggingMessageNotification) {
