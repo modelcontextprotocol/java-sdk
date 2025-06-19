@@ -4,11 +4,11 @@
 
 package io.modelcontextprotocol.util;
 
-import reactor.util.annotation.Nullable;
-
 import java.net.URI;
 import java.util.Collection;
 import java.util.Map;
+
+import reactor.util.annotation.Nullable;
 
 /**
  * Miscellaneous utility methods.
