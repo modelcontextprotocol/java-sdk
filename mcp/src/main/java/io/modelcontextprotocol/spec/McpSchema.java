@@ -482,6 +482,9 @@ public final class McpSchema {
 	 * by clients to improve the LLM's understanding of available resources. It can be
 	 * thought of like a "hint" to the model.
 	 * @param mimeType The MIME type of this resource, if known.
+	 * @param size The size of the raw resource content, in bytes (i.e., before base64
+	 * encoding or any tokenization), if known. This can be used by Hosts to display file
+	 * sizes and estimate context window usage.
 	 * @param annotations Optional annotations for the client. The client can use
 	 * annotations to inform how objects are used or displayed.
 	 */
@@ -492,7 +495,64 @@ public final class McpSchema {
 		@JsonProperty("name") String name,
 		@JsonProperty("description") String description,
 		@JsonProperty("mimeType") String mimeType,
+		@JsonProperty("size") Long size,
 		@JsonProperty("annotations") Annotations annotations) implements Annotated {
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link Resource#builder()} instead.
+		 */
+		@Deprecated
+		public Resource(String uri, String name, String description, String mimeType, Annotations annotations) {
+			this(uri, name, description, mimeType, null, annotations);
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private String uri;
+			private String name;
+			private String description;
+			private String mimeType;
+			private Long size;
+			private Annotations annotations;
+
+			public Builder uri(String uri) {
+				this.uri = uri;
+				return this;
+			}
+
+			public Builder name(String name) {
+				this.name = name;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder mimeType(String mimeType) {
+				this.mimeType = mimeType;
+				return this;
+			}
+
+			public Builder size(Long size) {
+				this.size = size;
+				return this;
+			}
+
+			public Builder annotations(Annotations annotations) {
+				this.annotations = annotations;
+				return this;
+			}
+
+			public Resource build() {
+				return new Resource(uri, name, description, mimeType, size, annotations);
+			}
+		}
 	} // @formatter:on
 
 	/**

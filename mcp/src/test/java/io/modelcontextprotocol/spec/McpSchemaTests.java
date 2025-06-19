@@ -296,6 +296,29 @@ public class McpSchemaTests {
 	}
 
 	@Test
+	void testResourceBuilder() throws Exception {
+		McpSchema.Annotations annotations = new McpSchema.Annotations(
+				Arrays.asList(McpSchema.Role.USER, McpSchema.Role.ASSISTANT), 0.8);
+
+		McpSchema.Resource resource = McpSchema.Resource.builder()
+			.uri("resource://test")
+			.name("Test Resource")
+			.description("A test resource")
+			.mimeType("text/plain")
+			.size(256L)
+			.annotations(annotations)
+			.build();
+
+		String value = mapper.writeValueAsString(resource);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"uri":"resource://test","name":"Test Resource","description":"A test resource","mimeType":"text/plain","size":256,"annotations":{"audience":["user","assistant"],"priority":0.8}}"""));
+	}
+
+	@Test
 	void testResourceTemplate() throws Exception {
 		McpSchema.Annotations annotations = new McpSchema.Annotations(Arrays.asList(McpSchema.Role.USER), 0.5);
 
