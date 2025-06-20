@@ -201,6 +201,9 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 */
 	@Override
 	public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
+		// TODO: Avoid eager connection opening and enable resilience
+		// -> upon disconnects, re-establish connection
+		// -> allow optimizing for eager connection start using a constructor flag
 		Flux<ServerSentEvent<String>> events = eventStream();
 		this.inboundSubscription = events.concatMap(event -> Mono.just(event).<JSONRPCMessage>handle((e, s) -> {
 			if (ENDPOINT_EVENT_TYPE.equals(event.event())) {
