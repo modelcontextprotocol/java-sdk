@@ -65,7 +65,8 @@
 		<junit.version>5.10.2</junit.version>
 		<mockito.version>5.17.0</mockito.version>
 		<testcontainers.version>1.20.4</testcontainers.version>
-		<byte-buddy.version>1.17.5</byte-buddy.version>		
+		<byte-buddy.version>1.17.5</byte-buddy.version>
+		<toxiproxy.version>1.21.0</toxiproxy.version>
 
 		<slf4j-api.version>2.0.16</slf4j-api.version>
 		<logback.version>1.5.15</logback.version>
