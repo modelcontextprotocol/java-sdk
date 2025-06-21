@@ -229,27 +229,27 @@ public class McpClientSession implements McpSession {
 	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {
 		String requestId = this.generateRequestId();
 
-		return Mono.deferContextual(ctx -> Mono.<McpSchema.JSONRPCResponse>create(sink -> {
+		return Mono.deferContextual(ctx -> Mono.<McpSchema.JSONRPCResponse>create(responseSink -> {
 			logger.debug("Sending message for method {}", method);
-			this.pendingResponses.put(requestId, sink);
+			this.pendingResponses.put(requestId, responseSink);
 			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, method,
 					requestId, requestParams);
 			this.transport.sendMessage(jsonrpcRequest).contextWrite(ctx).subscribe(v -> {
 			}, error -> {
 				this.pendingResponses.remove(requestId);
-				sink.error(error);
+				responseSink.error(error);
 			});
-		})).timeout(this.requestTimeout).handle((jsonRpcResponse, sink) -> {
+		})).timeout(this.requestTimeout).handle((jsonRpcResponse, resultSink) -> {
 			if (jsonRpcResponse.error() != null) {
 				logger.error("Error handling request: {}", jsonRpcResponse.error());
-				sink.error(new McpError(jsonRpcResponse.error()));
+				resultSink.error(new McpError(jsonRpcResponse.error()));
 			}
 			else {
 				if (typeRef.getType().equals(Void.class)) {
-					sink.complete();
+					resultSink.complete();
 				}
 				else {
-					sink.next(this.transport.unmarshalFrom(jsonRpcResponse.result(), typeRef));
+					resultSink.next(this.transport.unmarshalFrom(jsonRpcResponse.result(), typeRef));
 				}
 			}
 		});

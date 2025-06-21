@@ -387,7 +387,12 @@ public class McpAsyncClient {
 		return withSession("by explicit API call", init -> Mono.just(init.get()));
 	}
 
-	private Mono<McpSchema.InitializeResult> doInitialize(McpClientSession mcpClientSession) {
+	private Mono<McpSchema.InitializeResult> doInitialize(Initialization initializaiton) {
+
+		initializaiton.setMcpClientSession(this.sessionSupplier.get());
+
+		McpClientSession mcpClientSession = initializaiton.mcpSession();
+
 		String latestVersion = this.protocolVersions.get(this.protocolVersions.size() - 1);
 
 		McpSchema.InitializeRequest initializeRequest = new McpSchema.InitializeRequest(// @formatter:off
@@ -410,6 +415,9 @@ public class McpAsyncClient {
 
 			return mcpClientSession.sendNotification(McpSchema.METHOD_NOTIFICATION_INITIALIZED, null)
 				.thenReturn(initializeResult);
+		}).doOnNext(initializaiton::complete).onErrorResume(ex -> {
+			initializaiton.error(ex);
+			return Mono.error(ex);
 		});
 	}
 
@@ -477,15 +485,9 @@ public class McpAsyncClient {
 
 			boolean needsToInitialize = previous == null;
 			logger.debug(needsToInitialize ? "Initialization process started" : "Joining previous initialization");
-			if (needsToInitialize) {
-				newInit.setMcpClientSession(this.sessionSupplier.get());
-			}
 
-			Mono<McpSchema.InitializeResult> initializationJob = needsToInitialize
-					? doInitialize(newInit.mcpSession()).doOnNext(newInit::complete).onErrorResume(ex -> {
-						newInit.error(ex);
-						return Mono.error(ex);
-					}) : previous.await();
+			Mono<McpSchema.InitializeResult> initializationJob = needsToInitialize ? doInitialize(newInit)
+					: previous.await();
 
 			return initializationJob.map(initializeResult -> this.initializationRef.get())
 				.timeout(this.initializationTimeout)
