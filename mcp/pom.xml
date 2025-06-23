@@ -202,6 +202,13 @@
 			<scope>test</scope>
 		</dependency>
 
+		<!-- Json validator dependency -->
+		<dependency>
+			<groupId>com.networknt</groupId>
+			<artifactId>json-schema-validator</artifactId>
+			<version>1.5.7</version>
+		</dependency>
+
 	</dependencies>
 
 
