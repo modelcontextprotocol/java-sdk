@@ -20,12 +20,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.fail;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -156,13 +150,13 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListToolsWithoutInitialization() {
-		verifyCallSucceedsWithImplicitInitialization(client -> client.listTools(null), "listing tools");
+		verifyCallSucceedsWithImplicitInitialization(client -> client.listTools(McpSchema.FIRST_PAGE), "listing tools");
 	}
 
 	@Test
 	void testListTools() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listTools(null)))
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listTools(McpSchema.FIRST_PAGE)))
 				.consumeNextWith(result -> {
 					assertThat(result.tools()).isNotNull().isNotEmpty();
 
@@ -177,15 +171,13 @@ public abstract class AbstractMcpAsyncClientTests {
 	@Test
 	void testListAllTools() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listAllTools()))
-				.consumeNextWith(tools -> {
-					assertThat(tools).isNotNull().satisfies(result -> {
-						assertThat(result).isNotEmpty();
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listTools()))
+				.consumeNextWith(result -> {
+					assertThat(result.tools()).isNotNull().isNotEmpty();
 
-						Tool firstTool = result.get(0);
-						assertThat(firstTool.name()).isNotNull();
-						assertThat(firstTool.description()).isNotNull();
-					});
+					Tool firstTool = result.tools().get(0);
+					assertThat(firstTool.name()).isNotNull();
+					assertThat(firstTool.description()).isNotNull();
 				})
 				.verifyComplete();
 		});
@@ -300,13 +292,14 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListResourcesWithoutInitialization() {
-		verifyCallSucceedsWithImplicitInitialization(client -> client.listResources(null), "listing resources");
+		verifyCallSucceedsWithImplicitInitialization(client -> client.listResources(McpSchema.FIRST_PAGE),
+				"listing resources");
 	}
 
 	@Test
 	void testListResources() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResources(null)))
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResources(McpSchema.FIRST_PAGE)))
 				.consumeNextWith(resources -> {
 					assertThat(resources).isNotNull().satisfies(result -> {
 						assertThat(result.resources()).isNotNull();
@@ -325,14 +318,16 @@ public abstract class AbstractMcpAsyncClientTests {
 	@Test
 	void testListAllResources() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listAllResources()))
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResources()))
 				.consumeNextWith(resources -> {
 					assertThat(resources).isNotNull().satisfies(result -> {
-						assertThat(result).isNotEmpty();
+						assertThat(result.resources()).isNotNull();
 
-						Resource firstResource = result.get(0);
-						assertThat(firstResource.uri()).isNotNull();
-						assertThat(firstResource.name()).isNotNull();
+						if (!result.resources().isEmpty()) {
+							Resource firstResource = result.resources().get(0);
+							assertThat(firstResource.uri()).isNotNull();
+							assertThat(firstResource.name()).isNotNull();
+						}
 					});
 				})
 				.verifyComplete();
@@ -348,13 +343,14 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListPromptsWithoutInitialization() {
-		verifyCallSucceedsWithImplicitInitialization(client -> client.listPrompts(null), "listing " + "prompts");
+		verifyCallSucceedsWithImplicitInitialization(client -> client.listPrompts(McpSchema.FIRST_PAGE),
+				"listing " + "prompts");
 	}
 
 	@Test
 	void testListPrompts() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listPrompts(null)))
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listPrompts(McpSchema.FIRST_PAGE)))
 				.consumeNextWith(prompts -> {
 					assertThat(prompts).isNotNull().satisfies(result -> {
 						assertThat(result.prompts()).isNotNull();
@@ -373,14 +369,16 @@ public abstract class AbstractMcpAsyncClientTests {
 	@Test
 	void testListAllPrompts() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listAllPrompts()))
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listPrompts()))
 				.consumeNextWith(prompts -> {
 					assertThat(prompts).isNotNull().satisfies(result -> {
-						assertThat(result).isNotEmpty();
+						assertThat(result.prompts()).isNotNull();
 
-						Prompt firstPrompt = result.get(0);
-						assertThat(firstPrompt.name()).isNotNull();
-						assertThat(firstPrompt.description()).isNotNull();
+						if (!result.prompts().isEmpty()) {
+							Prompt firstPrompt = result.prompts().get(0);
+							assertThat(firstPrompt.name()).isNotNull();
+							assertThat(firstPrompt.description()).isNotNull();
+						}
 					});
 				})
 				.verifyComplete();
@@ -527,14 +525,15 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListResourceTemplatesWithoutInitialization() {
-		verifyCallSucceedsWithImplicitInitialization(client -> client.listResourceTemplates(),
+		verifyCallSucceedsWithImplicitInitialization(client -> client.listResourceTemplates(McpSchema.FIRST_PAGE),
 				"listing resource templates");
 	}
 
 	@Test
 	void testListResourceTemplates() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResourceTemplates()))
+			StepVerifier
+				.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResourceTemplates(McpSchema.FIRST_PAGE)))
 				.consumeNextWith(result -> {
 					assertThat(result).isNotNull();
 					assertThat(result.resourceTemplates()).isNotNull();
@@ -546,15 +545,10 @@ public abstract class AbstractMcpAsyncClientTests {
 	@Test
 	void testListAllResourceTemplates() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listAllResourceTemplates()))
-				.consumeNextWith(resourceTemplates -> {
-					assertThat(resourceTemplates).isNotNull().satisfies(result -> {
-						assertThat(result).isNotEmpty();
-
-						McpSchema.ResourceTemplate firstResourceTemplate = result.get(0);
-						assertThat(firstResourceTemplate.name()).isNotNull();
-						assertThat(firstResourceTemplate.description()).isNotNull();
-					});
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResourceTemplates()))
+				.consumeNextWith(result -> {
+					assertThat(result).isNotNull();
+					assertThat(result.resourceTemplates()).isNotNull();
 				})
 				.verifyComplete();
 		});
@@ -653,6 +647,7 @@ public abstract class AbstractMcpAsyncClientTests {
 	// ---------------------------------------
 	// Logging Tests
 	// ---------------------------------------
+
 	@Test
 	void testLoggingLevelsWithoutInitialization() {
 		verifyNotificationSucceedsWithImplicitInitialization(

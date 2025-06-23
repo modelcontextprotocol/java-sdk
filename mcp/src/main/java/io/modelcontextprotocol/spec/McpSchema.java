@@ -41,6 +41,8 @@ public final class McpSchema {
 
 	public static final String JSONRPC_VERSION = "2.0";
 
+	public static final String FIRST_PAGE = null;
+
 	// ---------------------------
 	// Method Names
 	// ---------------------------
