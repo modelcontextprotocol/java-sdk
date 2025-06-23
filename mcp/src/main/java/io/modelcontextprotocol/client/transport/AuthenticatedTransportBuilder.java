@@ -27,16 +27,28 @@ public final class AuthenticatedTransportBuilder {
 
 		HttpClientAuthenticator authenticator = new HttpClientAuthenticator(authProvider);
 
-		// Create a request customizer that authenticates requests
-		return builder.customizeRequest(requestBuilder -> {
+		// First, ensure token is available for the initial SSE connection
+		try {
+			authProvider.ensureToken().get();
+		}
+		catch (Exception e) {
+			System.err.println("Failed to ensure token: " + e.getMessage());
+		}
+
+		// Add authentication to initial requests (including SSE connection)
+		builder = builder.customizeRequest(requestBuilder -> {
 			String token = authProvider.getAccessToken();
 			if (token != null) {
 				requestBuilder.setHeader("Authorization", "Bearer " + token);
 			}
-		}).requestInterceptor(new RequestResponseInterceptor() {
+		});
+
+		// Add interceptor for dynamic token refresh and retry
+		return builder.requestInterceptor(new RequestResponseInterceptor() {
 			@Override
 			public CompletableFuture<HttpRequest> interceptRequest(HttpRequest.Builder requestBuilder) {
-				return authenticator.authenticate(requestBuilder).thenApply(HttpRequest.Builder::build);
+				// Skip setting the header here since it's already set by customizeRequest
+				return CompletableFuture.completedFuture(requestBuilder.build());
 			}
 
 			@Override

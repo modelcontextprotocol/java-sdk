@@ -5,41 +5,60 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * RFC 7591 OAuth 2.0 Dynamic Client Registration metadata. See
  * https://datatracker.ietf.org/doc/html/rfc7591#section-2 for the full specification.
  */
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class OAuthClientMetadata {
 
+	@JsonProperty("redirect_uris")
 	private List<URI> redirectUris;
 
+	@JsonProperty("token_endpoint_auth_method")
 	private String tokenEndpointAuthMethod;
 
+	@JsonProperty("grant_types")
 	private List<String> grantTypes;
 
+	@JsonProperty("response_types")
 	private List<String> responseTypes;
 
+	@JsonProperty("scope")
 	private String scope;
 
 	// Optional metadata fields
+	@JsonProperty("client_name")
 	private String clientName;
 
+	@JsonProperty("client_uri")
 	private URI clientUri;
 
+	@JsonProperty("logo_uri")
 	private URI logoUri;
 
+	@JsonProperty("contacts")
 	private List<String> contacts;
 
+	@JsonProperty("tos_uri")
 	private URI tosUri;
 
+	@JsonProperty("policy_uri")
 	private URI policyUri;
 
+	@JsonProperty("jwks_uri")
 	private URI jwksUri;
 
+	@JsonProperty("jwks")
 	private Object jwks;
 
+	@JsonProperty("software_id")
 	private String softwareId;
 
+	@JsonProperty("software_version")
 	private String softwareVersion;
 
 	public OAuthClientMetadata() {

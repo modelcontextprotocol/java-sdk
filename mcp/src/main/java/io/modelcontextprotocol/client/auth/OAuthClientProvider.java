@@ -74,7 +74,8 @@ public class OAuthClientProvider {
 	 */
 	public OAuthClientProvider(String serverUrl, OAuthClientMetadata clientMetadata, TokenStorage storage,
 			Function<String, CompletableFuture<Void>> redirectHandler,
-			Function<Void, CompletableFuture<AuthCallbackResult>> callbackHandler, Duration timeout) {
+			Function<Void, CompletableFuture<AuthCallbackResult>> callbackHandler, Duration timeout,
+			HttpClient httpClient) {
 
 		this.serverUrl = serverUrl;
 		this.clientMetadata = clientMetadata;
@@ -82,8 +83,26 @@ public class OAuthClientProvider {
 		this.redirectHandler = redirectHandler;
 		this.callbackHandler = callbackHandler;
 		this.timeout = timeout;
-		this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).build();
+		this.httpClient = httpClient != null ? httpClient
+				: HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).build();
 		this.objectMapper = new ObjectMapper();
+	}
+
+	/**
+	 * Creates a new OAuthClientProvider with default HTTP client.
+	 * @param serverUrl Base URL of the OAuth server
+	 * @param clientMetadata OAuth client metadata
+	 * @param storage Token storage implementation
+	 * @param redirectHandler Function to handle authorization URL (e.g., opening a
+	 * browser)
+	 * @param callbackHandler Function to wait for callback and return auth code and state
+	 * @param timeout Timeout for OAuth flow
+	 */
+	public OAuthClientProvider(String serverUrl, OAuthClientMetadata clientMetadata, TokenStorage storage,
+			Function<String, CompletableFuture<Void>> redirectHandler,
+			Function<Void, CompletableFuture<AuthCallbackResult>> callbackHandler, Duration timeout) {
+
+		this(serverUrl, clientMetadata, storage, redirectHandler, callbackHandler, timeout, null);
 	}
 
 	/**
@@ -251,6 +270,7 @@ public class OAuthClientProvider {
 	 * @return A CompletableFuture that resolves to the client information.
 	 */
 	private CompletableFuture<OAuthClientInformation> getOrRegisterClient() {
+		System.out.println("Client info: " + clientInfo);
 		if (clientInfo != null) {
 			return CompletableFuture.completedFuture(clientInfo);
 		}

@@ -208,6 +208,7 @@ public class OAuthHttpServletSseServerTransportProvider extends HttpServletSseSe
 	protected void doPost(HttpServletRequest request, HttpServletResponse response)
 			throws ServletException, IOException {
 
+		logger.info("Handling OAuth POST request: " + request.getRequestURI());
 		try {
 			String path = request.getRequestURI();
 
@@ -325,6 +326,8 @@ public class OAuthHttpServletSseServerTransportProvider extends HttpServletSseSe
 				params.put(key, values[0]);
 			}
 		});
+
+		System.out.println("TOKEN REQUEST PARAMS: " + params);
 
 		try {
 			io.modelcontextprotocol.auth.OAuthToken token = tokenHandler.handle(params).join();
