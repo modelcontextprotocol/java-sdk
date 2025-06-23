@@ -658,8 +658,8 @@ public class McpAsyncClient {
 	}
 
 	/**
-	 * Retrieves list of all tools provided by the server after handling pagination.
-	 * @return A Mono that emits a list of all tools result
+	 * Retrieves the list of all tools provided by the server.
+	 * @return A Mono that emits the list of all tools result
 	 */
 	public Mono<McpSchema.ListToolsResult> listTools() {
 		return this.listTools(McpSchema.FIRST_PAGE).expand(result -> {
@@ -719,7 +719,7 @@ public class McpAsyncClient {
 	 * Retrieves the list of all resources provided by the server. Resources represent any
 	 * kind of UTF-8 encoded data that an MCP server makes available to clients, such as
 	 * database records, API responses, log files, and more.
-	 * @return A Mono that completes with list of all resources result
+	 * @return A Mono that completes with the list of all resources result
 	 * @see McpSchema.ListResourcesResult
 	 * @see #readResource(McpSchema.Resource)
 	 */
