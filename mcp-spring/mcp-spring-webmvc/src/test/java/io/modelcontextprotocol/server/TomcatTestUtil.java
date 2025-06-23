@@ -3,13 +3,8 @@
 */
 package io.modelcontextprotocol.server;
 
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-
 import org.apache.catalina.Context;
 import org.apache.catalina.startup.Tomcat;
-
 import org.springframework.web.context.support.AnnotationConfigWebApplicationContext;
 import org.springframework.web.servlet.DispatcherServlet;
 

@@ -4,9 +4,10 @@
 
 package io.modelcontextprotocol.server;
 
+import org.junit.jupiter.api.Timeout;
+
 import io.modelcontextprotocol.server.transport.HttpServletSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
-import org.junit.jupiter.api.Timeout;
 
 /**
  * Tests for {@link McpSyncServer} using {@link HttpServletSseServerTransportProvider}.
