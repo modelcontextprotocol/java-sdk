@@ -4,7 +4,14 @@
 
 package io.modelcontextprotocol.client;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -13,9 +20,16 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.BlobResourceContents;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
@@ -24,27 +38,18 @@ import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
 import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.spec.McpSchema.Prompt;
+import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
 import io.modelcontextprotocol.spec.McpSchema.Resource;
+import io.modelcontextprotocol.spec.McpSchema.ResourceContents;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpSchema.SubscribeRequest;
+import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpSchema.UnsubscribeRequest;
 import io.modelcontextprotocol.spec.McpTransport;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.fail;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * Test suite for the {@link McpAsyncClient} that can be used with different
@@ -457,18 +462,59 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	@Test
-	@Disabled
 	void testReadResource() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.create(mcpAsyncClient.listResources()).consumeNextWith(resources -> {
-				if (!resources.resources().isEmpty()) {
-					Resource firstResource = resources.resources().get(0);
-					StepVerifier.create(mcpAsyncClient.readResource(firstResource)).consumeNextWith(result -> {
-						assertThat(result).isNotNull();
-						assertThat(result.contents()).isNotNull();
-					}).verifyComplete();
+		withClient(createMcpTransport(), client -> {
+			Flux<McpSchema.ReadResourceResult> resources = client.initialize()
+				.then(client.listResources(null))
+				.flatMapMany(r -> Flux.fromIterable(r.resources()))
+				.flatMap(r -> client.readResource(r));
+
+			StepVerifier.create(resources).recordWith(ArrayList::new).consumeRecordedWith(readResourceResults -> {
+
+				for (ReadResourceResult result : readResourceResults) {
+
+					assertThat(result).isNotNull();
+					assertThat(result.contents()).isNotNull().isNotEmpty();
+
+					// Validate each content item
+					for (ResourceContents content : result.contents()) {
+						assertThat(content).isNotNull();
+						assertThat(content.uri()).isNotNull().isNotEmpty();
+						assertThat(content.mimeType()).isNotNull().isNotEmpty();
+
+						// Validate content based on its type with more comprehensive
+						// checks
+						switch (content.mimeType()) {
+							case "text/plain" -> {
+								TextResourceContents textContent = assertInstanceOf(TextResourceContents.class,
+										content);
+								assertThat(textContent.text()).isNotNull().isNotEmpty();
+								assertThat(textContent.uri()).isNotEmpty();
+							}
+							case "application/octet-stream" -> {
+								BlobResourceContents blobContent = assertInstanceOf(BlobResourceContents.class,
+										content);
+								assertThat(blobContent.blob()).isNotNull().isNotEmpty();
+								assertThat(blobContent.uri()).isNotNull().isNotEmpty();
+								// Validate base64 encoding format
+								assertThat(blobContent.blob()).matches("^[A-Za-z0-9+/]*={0,2}$");
+							}
+							default -> {
+
+								// Still validate basic properties
+								if (content instanceof TextResourceContents textContent) {
+									assertThat(textContent.text()).isNotNull();
+								}
+								else if (content instanceof BlobResourceContents blobContent) {
+									assertThat(blobContent.blob()).isNotNull();
+								}
+							}
+						}
+					}
 				}
-			}).verifyComplete();
+			})
+				.expectNextCount(10) // Expect 10 elements
+				.verifyComplete();
 		});
 	}
 
