@@ -319,6 +319,36 @@ public class McpSchemaTests {
 	}
 
 	@Test
+	void testResourceBuilderUriRequired() {
+		McpSchema.Annotations annotations = new McpSchema.Annotations(
+				Arrays.asList(McpSchema.Role.USER, McpSchema.Role.ASSISTANT), 0.8);
+
+		McpSchema.Resource.Builder resourceBuilder = McpSchema.Resource.builder()
+			.name("Test Resource")
+			.description("A test resource")
+			.mimeType("text/plain")
+			.size(256L)
+			.annotations(annotations);
+
+		assertThatThrownBy(resourceBuilder::build).isInstanceOf(IllegalStateException.class);
+	}
+
+	@Test
+	void testResourceBuilderNameRequired() {
+		McpSchema.Annotations annotations = new McpSchema.Annotations(
+				Arrays.asList(McpSchema.Role.USER, McpSchema.Role.ASSISTANT), 0.8);
+
+		McpSchema.Resource.Builder resourceBuilder = McpSchema.Resource.builder()
+			.uri("resource://test")
+			.description("A test resource")
+			.mimeType("text/plain")
+			.size(256L)
+			.annotations(annotations);
+
+		assertThatThrownBy(resourceBuilder::build).isInstanceOf(IllegalStateException.class);
+	}
+
+	@Test
 	void testResourceTemplate() throws Exception {
 		McpSchema.Annotations annotations = new McpSchema.Annotations(Arrays.asList(McpSchema.Role.USER), 0.5);
 

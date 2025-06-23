@@ -550,6 +550,14 @@ public final class McpSchema {
 			}
 
 			public Resource build() {
+				if (uri == null) {
+					throw new IllegalStateException("uri cannot be null");
+				}
+
+				if (name == null) {
+					throw new IllegalStateException("name cannot be null");
+				}
+
 				return new Resource(uri, name, description, mimeType, size, annotations);
 			}
 		}
