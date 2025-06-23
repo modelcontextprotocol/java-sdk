@@ -1077,7 +1077,7 @@ public final class McpSchema {
 			@JsonProperty("endTurn") END_TURN("endTurn"),
 			@JsonProperty("stopSequence") STOP_SEQUENCE("stopSequence"),
 			@JsonProperty("maxTokens") MAX_TOKENS("maxTokens"),
-			UNKNOWN("unknown");
+			@JsonProperty("unknown") UNKNOWN("unknown");
 
 			private final String value;
 
