@@ -34,7 +34,7 @@ import reactor.core.publisher.Sinks;
 /**
  * Server-Sent Events (SSE) implementation of the
  * {@link io.modelcontextprotocol.spec.McpTransport} that follows the MCP HTTP with SSE
- * transport specification, using Java's HttpClient and FlowSseClient.
+ * transport specification, using Java's HttpClient.
  *
  * <p>
  * This transport implementation establishes a bidirectional communication channel between
@@ -91,13 +91,6 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 
 	/** Flag indicating if the transport is in closing state */
 	private volatile boolean isClosing = false;
-
-	// /** Latch for coordinating endpoint discovery */
-	// private final CountDownLatch closeLatch = new CountDownLatch(1);
-
-	// /** Holds the discovered message endpoint URL */
-	// private final AtomicReference<String> messageEndpoint = new
-	// AtomicReference<>();
 
 	/** Holds the SSE subscription disposable */
 	private final AtomicReference<Disposable> sseSubscription = new AtomicReference<>();
