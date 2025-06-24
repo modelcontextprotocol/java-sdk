@@ -173,4 +173,7 @@ public class McpAsyncServerExchange {
 		return loggingLevel.level() >= this.minLoggingLevel.level();
 	}
 
+    public String getSessionId() {
+        return this.session.getId();
+    }
 }
