@@ -191,6 +191,17 @@ public abstract class AbstractMcpSyncServerTests {
 	}
 
 	@Test
+	void testNotifyResourcesUpdated() {
+		var mcpSyncServer = McpServer.sync(createMcpTransportProvider()).serverInfo("test-server", "1.0.0").build();
+
+		assertThatCode(() -> mcpSyncServer
+			.notifyResourcesUpdated(new McpSchema.ResourcesUpdatedNotification(TEST_RESOURCE_URI)))
+			.doesNotThrowAnyException();
+
+		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+	}
+
+	@Test
 	void testAddResource() {
 		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")

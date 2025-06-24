@@ -65,6 +65,7 @@ class McpClientFeatures {
 	record Async(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 			Map<String, McpSchema.Root> roots, List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers,
 			List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers,
+			List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers,
 			List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers,
 			List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers,
 			Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler,
@@ -85,6 +86,7 @@ class McpClientFeatures {
 				Map<String, McpSchema.Root> roots,
 				List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers,
 				List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers,
+				List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers,
 				List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers,
 				List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers,
 				Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler,
@@ -101,6 +103,7 @@ class McpClientFeatures {
 
 			this.toolsChangeConsumers = toolsChangeConsumers != null ? toolsChangeConsumers : List.of();
 			this.resourcesChangeConsumers = resourcesChangeConsumers != null ? resourcesChangeConsumers : List.of();
+			this.resourcesUpdateConsumers = resourcesUpdateConsumers != null ? resourcesUpdateConsumers : List.of();
 			this.promptsChangeConsumers = promptsChangeConsumers != null ? promptsChangeConsumers : List.of();
 			this.loggingConsumers = loggingConsumers != null ? loggingConsumers : List.of();
 			this.samplingHandler = samplingHandler;
@@ -128,8 +131,13 @@ class McpClientFeatures {
 					.subscribeOn(Schedulers.boundedElastic()));
 			}
 
-			List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers = new ArrayList<>();
+			List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers = new ArrayList<>();
+			for (Consumer<List<McpSchema.ResourceContents>> consumer : syncSpec.resourcesUpdateConsumers()) {
+				resourcesUpdateConsumers.add(r -> Mono.<Void>fromRunnable(() -> consumer.accept(r))
+					.subscribeOn(Schedulers.boundedElastic()));
+			}
 
+			List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers = new ArrayList<>();
 			for (Consumer<List<McpSchema.Prompt>> consumer : syncSpec.promptsChangeConsumers()) {
 				promptsChangeConsumers.add(p -> Mono.<Void>fromRunnable(() -> consumer.accept(p))
 					.subscribeOn(Schedulers.boundedElastic()));
@@ -150,8 +158,8 @@ class McpClientFeatures {
 				.subscribeOn(Schedulers.boundedElastic());
 
 			return new Async(syncSpec.clientInfo(), syncSpec.clientCapabilities(), syncSpec.roots(),
-					toolsChangeConsumers, resourcesChangeConsumers, promptsChangeConsumers, loggingConsumers,
-					samplingHandler, elicitationHandler);
+					toolsChangeConsumers, resourcesChangeConsumers, resourcesUpdateConsumers, promptsChangeConsumers,
+					loggingConsumers, samplingHandler, elicitationHandler);
 		}
 	}
 
@@ -172,6 +180,7 @@ class McpClientFeatures {
 	public record Sync(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 			Map<String, McpSchema.Root> roots, List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers,
 			List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers,
+			List<Consumer<List<McpSchema.ResourceContents>>> resourcesUpdateConsumers,
 			List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers,
 			List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers,
 			Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler,
@@ -184,6 +193,7 @@ class McpClientFeatures {
 		 * @param roots the roots.
 		 * @param toolsChangeConsumers the tools change consumers.
 		 * @param resourcesChangeConsumers the resources change consumers.
+		 * @param resourcesUpdateConsumers the resource update consumers.
 		 * @param promptsChangeConsumers the prompts change consumers.
 		 * @param loggingConsumers the logging consumers.
 		 * @param samplingHandler the sampling handler.
@@ -192,6 +202,7 @@ class McpClientFeatures {
 		public Sync(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 				Map<String, McpSchema.Root> roots, List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers,
 				List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers,
+				List<Consumer<List<McpSchema.ResourceContents>>> resourcesUpdateConsumers,
 				List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers,
 				List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers,
 				Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler,
@@ -208,6 +219,7 @@ class McpClientFeatures {
 
 			this.toolsChangeConsumers = toolsChangeConsumers != null ? toolsChangeConsumers : List.of();
 			this.resourcesChangeConsumers = resourcesChangeConsumers != null ? resourcesChangeConsumers : List.of();
+			this.resourcesUpdateConsumers = resourcesUpdateConsumers != null ? resourcesUpdateConsumers : List.of();
 			this.promptsChangeConsumers = promptsChangeConsumers != null ? promptsChangeConsumers : List.of();
 			this.loggingConsumers = loggingConsumers != null ? loggingConsumers : List.of();
 			this.samplingHandler = samplingHandler;
