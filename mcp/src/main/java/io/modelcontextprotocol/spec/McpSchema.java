@@ -1615,11 +1615,19 @@ public final class McpSchema {
 	 *
 	 * @param roots An array of Root objects, each representing a root directory or file
 	 * that the server can operate on.
+	 * @param nextCursor An optional cursor for pagination. If present, indicates there
+	 * are more roots available. The client can use this cursor to request the next page
+	 * of results by sending a roots/list request with the cursor parameter set to this
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ListRootsResult( // @formatter:off
-		@JsonProperty("roots") List<Root> roots) {
+		@JsonProperty("roots") List<Root> roots,
+		@JsonProperty("nextCursor") String nextCursor) {
+		
+		public ListRootsResult(List<Root> roots) {
+			this(roots, null);
+		}
 	} // @formatter:on
 
 }

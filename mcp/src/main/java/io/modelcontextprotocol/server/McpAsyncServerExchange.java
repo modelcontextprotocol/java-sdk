@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol.server;
 
+import java.util.ArrayList;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -126,7 +128,16 @@ public class McpAsyncServerExchange {
 	 * @return A Mono that emits the list of roots result.
 	 */
 	public Mono<McpSchema.ListRootsResult> listRoots() {
-		return this.listRoots(null);
+
+		return this.listRoots(McpSchema.FIRST_PAGE).expand(result -> {
+			if (result.nextCursor() != null) {
+				return this.listRoots(result.nextCursor());
+			}
+			return Mono.empty();
+		}).reduce(new McpSchema.ListRootsResult(new ArrayList<>(), null), (allRootssResult, result) -> {
+			allRootssResult.roots().addAll(result.roots());
+			return allRootssResult;
+		});
 	}
 
 	/**

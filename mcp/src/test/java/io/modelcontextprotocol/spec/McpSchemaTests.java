@@ -984,7 +984,7 @@ public class McpSchemaTests {
 
 		McpSchema.Root root2 = new McpSchema.Root("file:///path/to/root2", "Second Root");
 
-		McpSchema.ListRootsResult result = new McpSchema.ListRootsResult(Arrays.asList(root1, root2));
+		McpSchema.ListRootsResult result = new McpSchema.ListRootsResult(Arrays.asList(root1, root2), "next-cursor");
 
 		String value = mapper.writeValueAsString(result);
 
@@ -993,7 +993,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"roots":[{"uri":"file:///path/to/root1","name":"First Root"},{"uri":"file:///path/to/root2","name":"Second Root"}]}"""));
+							{"roots":[{"uri":"file:///path/to/root1","name":"First Root"},{"uri":"file:///path/to/root2","name":"Second Root"}],"nextCursor":"next-cursor"}"""));
 
 	}
 
