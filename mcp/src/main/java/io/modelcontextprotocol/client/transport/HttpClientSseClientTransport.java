@@ -111,7 +111,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	/**
 	 * Creates a new transport instance with default HTTP client and object mapper.
 	 * @param baseUri the base URI of the MCP server
-	 * @deprecated Use {@link HttpClientSseClientTransport2#builder(String)} instead. This
+	 * @deprecated Use {@link HttpClientSseClientTransport#builder(String)} instead. This
 	 * constructor will be removed in future versions.
 	 */
 	@Deprecated(forRemoval = true)
@@ -125,7 +125,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 * @param baseUri the base URI of the MCP server
 	 * @param objectMapper the object mapper for JSON serialization/deserialization
 	 * @throws IllegalArgumentException if objectMapper or clientBuilder is null
-	 * @deprecated Use {@link HttpClientSseClientTransport2#builder(String)} instead. This
+	 * @deprecated Use {@link HttpClientSseClientTransport#builder(String)} instead. This
 	 * constructor will be removed in future versions.
 	 */
 	@Deprecated(forRemoval = true)
@@ -140,7 +140,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 * @param sseEndpoint the SSE endpoint path
 	 * @param objectMapper the object mapper for JSON serialization/deserialization
 	 * @throws IllegalArgumentException if objectMapper or clientBuilder is null
-	 * @deprecated Use {@link HttpClientSseClientTransport2#builder(String)} instead. This
+	 * @deprecated Use {@link HttpClientSseClientTransport#builder(String)} instead. This
 	 * constructor will be removed in future versions.
 	 */
 	@Deprecated(forRemoval = true)
@@ -158,7 +158,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 * @param sseEndpoint the SSE endpoint path
 	 * @param objectMapper the object mapper for JSON serialization/deserialization
 	 * @throws IllegalArgumentException if objectMapper, clientBuilder, or headers is null
-	 * @deprecated Use {@link HttpClientSseClientTransport2#builder(String)} instead. This
+	 * @deprecated Use {@link HttpClientSseClientTransport#builder(String)} instead. This
 	 * constructor will be removed in future versions.
 	 */
 	@Deprecated(forRemoval = true)
@@ -193,7 +193,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	}
 
 	/**
-	 * Creates a new builder for {@link HttpClientSseClientTransport2}.
+	 * Creates a new builder for {@link HttpClientSseClientTransport}.
 	 * @param baseUri the base URI of the MCP server
 	 * @return a new builder instance
 	 */
@@ -202,7 +202,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	}
 
 	/**
-	 * Builder for {@link HttpClientSseClientTransport2}.
+	 * Builder for {@link HttpClientSseClientTransport}.
 	 */
 	public static class Builder {
 
@@ -229,7 +229,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		/**
 		 * Creates a new builder with the specified base URI.
 		 * @param baseUri the base URI of the MCP server
-		 * @deprecated Use {@link HttpClientSseClientTransport2#builder(String)} instead.
+		 * @deprecated Use {@link HttpClientSseClientTransport#builder(String)} instead.
 		 * This constructor is deprecated and will be removed or made {@code protected} or
 		 * {@code private} in a future release.
 		 */
@@ -317,7 +317,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		}
 
 		/**
-		 * Builds a new {@link HttpClientSseClientTransport2} instance.
+		 * Builds a new {@link HttpClientSseClientTransport} instance.
 		 * @return a new transport instance
 		 */
 		public HttpClientSseClientTransport build() {
