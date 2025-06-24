@@ -9,6 +9,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
@@ -34,6 +36,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import reactor.core.publisher.Mono;
 import reactor.netty.DisposableServer;
 import reactor.netty.http.server.HttpServer;
 
@@ -42,6 +45,7 @@ import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.server.RouterFunctions;
+import reactor.test.StepVerifier;
 
 import static io.modelcontextprotocol.spec.McpSchema.ErrorCodes.INVALID_PARAMS;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -331,6 +335,226 @@ class WebFluxSseIntegrationTests {
 
 		}
 
+		mcpServer.closeGracefully().block();
+	}
+
+	// ---------------------------------------
+	// Elicitation Tests
+	// ---------------------------------------
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testCreateElicitationWithoutElicitationCapabilities(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+
+					exchange.createElicitation(mock(ElicitRequest.class)).block();
+
+					return Mono.just(mock(CallToolResult.class));
+				});
+
+		var server = McpServer.async(mcpServerTransportProvider).serverInfo("test-server", "1.0.0").tools(tool).build();
+
+		try (
+				// Create client without elicitation capabilities
+				var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0")).build()) {
+
+			assertThat(client.initialize()).isNotNull();
+
+			try {
+				client.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+			}
+			catch (McpError e) {
+				assertThat(e).isInstanceOf(McpError.class)
+					.hasMessage("Client must be configured with elicitation capabilities");
+			}
+		}
+		server.closeGracefully().block();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testCreateElicitationSuccess(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		Function<ElicitRequest, ElicitResult> elicitationHandler = request -> {
+			assertThat(request.message()).isNotEmpty();
+			assertThat(request.requestedSchema()).isNotNull();
+
+			return new ElicitResult(ElicitResult.Action.ACCEPT, Map.of("message", request.message()));
+		};
+
+		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
+				null);
+
+		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+
+					var elicitationRequest = ElicitRequest.builder()
+						.message("Test message")
+						.requestedSchema(
+								Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
+						.build();
+
+					StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
+						assertThat(result).isNotNull();
+						assertThat(result.action()).isEqualTo(ElicitResult.Action.ACCEPT);
+						assertThat(result.content().get("message")).isEqualTo("Test message");
+					}).verifyComplete();
+
+					return Mono.just(callResponse);
+				});
+
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.tools(tool)
+			.build();
+
+		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+			.capabilities(ClientCapabilities.builder().elicitation().build())
+			.elicitation(elicitationHandler)
+			.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+
+			assertThat(response).isNotNull();
+			assertThat(response).isEqualTo(callResponse);
+		}
+		mcpServer.closeGracefully().block();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testCreateElicitationWithRequestTimeoutSuccess(String clientType) {
+
+		// Client
+		var clientBuilder = clientBuilders.get(clientType);
+
+		Function<ElicitRequest, ElicitResult> elicitationHandler = request -> {
+			assertThat(request.message()).isNotEmpty();
+			assertThat(request.requestedSchema()).isNotNull();
+			try {
+				TimeUnit.SECONDS.sleep(2);
+			}
+			catch (InterruptedException e) {
+				throw new RuntimeException(e);
+			}
+			return new ElicitResult(ElicitResult.Action.ACCEPT, Map.of("message", request.message()));
+		};
+
+		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+			.capabilities(ClientCapabilities.builder().elicitation().build())
+			.elicitation(elicitationHandler)
+			.build();
+
+		// Server
+
+		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
+				null);
+
+		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+
+					var elicitationRequest = ElicitRequest.builder()
+						.message("Test message")
+						.requestedSchema(
+								Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
+						.build();
+
+					StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
+						assertThat(result).isNotNull();
+						assertThat(result.action()).isEqualTo(ElicitResult.Action.ACCEPT);
+						assertThat(result.content().get("message")).isEqualTo("Test message");
+					}).verifyComplete();
+
+					return Mono.just(callResponse);
+				});
+
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.requestTimeout(Duration.ofSeconds(3))
+			.tools(tool)
+			.build();
+
+		InitializeResult initResult = mcpClient.initialize();
+		assertThat(initResult).isNotNull();
+
+		CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+
+		assertThat(response).isNotNull();
+		assertThat(response).isEqualTo(callResponse);
+
+		mcpClient.closeGracefully();
+		mcpServer.closeGracefully().block();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testCreateElicitationWithRequestTimeoutFail(String clientType) {
+
+		// Client
+		var clientBuilder = clientBuilders.get(clientType);
+
+		Function<ElicitRequest, ElicitResult> elicitationHandler = request -> {
+			assertThat(request.message()).isNotEmpty();
+			assertThat(request.requestedSchema()).isNotNull();
+			try {
+				TimeUnit.SECONDS.sleep(2);
+			}
+			catch (InterruptedException e) {
+				throw new RuntimeException(e);
+			}
+			return new ElicitResult(ElicitResult.Action.ACCEPT, Map.of("message", request.message()));
+		};
+
+		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+			.capabilities(ClientCapabilities.builder().elicitation().build())
+			.elicitation(elicitationHandler)
+			.build();
+
+		// Server
+
+		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
+				null);
+
+		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+
+					var elicitationRequest = ElicitRequest.builder()
+						.message("Test message")
+						.requestedSchema(
+								Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
+						.build();
+
+					StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
+						assertThat(result).isNotNull();
+						assertThat(result.action()).isEqualTo(ElicitResult.Action.ACCEPT);
+						assertThat(result.content().get("message")).isEqualTo("Test message");
+					}).verifyComplete();
+
+					return Mono.just(callResponse);
+				});
+
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.requestTimeout(Duration.ofSeconds(1))
+			.tools(tool)
+			.build();
+
+		InitializeResult initResult = mcpClient.initialize();
+		assertThat(initResult).isNotNull();
+
+		assertThatExceptionOfType(McpError.class).isThrownBy(() -> {
+			mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+		}).withMessageContaining("within 1000ms");
+
+		mcpClient.closeGracefully();
 		mcpServer.closeGracefully().block();
 	}
 
@@ -788,9 +1012,11 @@ class WebFluxSseIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
-	void testLoggingNotification(String clientType) {
+	void testLoggingNotification(String clientType) throws InterruptedException {
+		int expectedNotificationsCount = 3;
+		CountDownLatch latch = new CountDownLatch(expectedNotificationsCount);
 		// Create a list to store received logging notifications
-		List<McpSchema.LoggingMessageNotification> receivedNotifications = new ArrayList<>();
+		List<McpSchema.LoggingMessageNotification> receivedNotifications = new CopyOnWriteArrayList<>();
 
 		var clientBuilder = clientBuilders.get(clientType);
 
@@ -846,6 +1072,7 @@ class WebFluxSseIntegrationTests {
 				// Create client with logging notification handler
 				var mcpClient = clientBuilder.loggingConsumer(notification -> {
 					receivedNotifications.add(notification);
+					latch.countDown();
 				}).build()) {
 
 			// Initialize client
@@ -861,31 +1088,28 @@ class WebFluxSseIntegrationTests {
 			assertThat(result.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
 			assertThat(((McpSchema.TextContent) result.content().get(0)).text()).isEqualTo("Logging test completed");
 
-			// Wait for notifications to be processed
-			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+			assertThat(latch.await(5, TimeUnit.SECONDS)).as("Should receive notifications in reasonable time").isTrue();
 
-				// Should have received 3 notifications (1 NOTICE and 2 ERROR)
-				assertThat(receivedNotifications).hasSize(3);
+			// Should have received 3 notifications (1 NOTICE and 2 ERROR)
+			assertThat(receivedNotifications).hasSize(expectedNotificationsCount);
 
-				Map<String, McpSchema.LoggingMessageNotification> notificationMap = receivedNotifications.stream()
-					.collect(Collectors.toMap(n -> n.data(), n -> n));
+			Map<String, McpSchema.LoggingMessageNotification> notificationMap = receivedNotifications.stream()
+				.collect(Collectors.toMap(n -> n.data(), n -> n));
 
-				// First notification should be NOTICE level
-				assertThat(notificationMap.get("Notice message").level()).isEqualTo(McpSchema.LoggingLevel.NOTICE);
-				assertThat(notificationMap.get("Notice message").logger()).isEqualTo("test-logger");
-				assertThat(notificationMap.get("Notice message").data()).isEqualTo("Notice message");
+			// First notification should be NOTICE level
+			assertThat(notificationMap.get("Notice message").level()).isEqualTo(McpSchema.LoggingLevel.NOTICE);
+			assertThat(notificationMap.get("Notice message").logger()).isEqualTo("test-logger");
+			assertThat(notificationMap.get("Notice message").data()).isEqualTo("Notice message");
 
-				// Second notification should be ERROR level
-				assertThat(notificationMap.get("Error message").level()).isEqualTo(McpSchema.LoggingLevel.ERROR);
-				assertThat(notificationMap.get("Error message").logger()).isEqualTo("test-logger");
-				assertThat(notificationMap.get("Error message").data()).isEqualTo("Error message");
+			// Second notification should be ERROR level
+			assertThat(notificationMap.get("Error message").level()).isEqualTo(McpSchema.LoggingLevel.ERROR);
+			assertThat(notificationMap.get("Error message").logger()).isEqualTo("test-logger");
+			assertThat(notificationMap.get("Error message").data()).isEqualTo("Error message");
 
-				// Third notification should be ERROR level
-				assertThat(notificationMap.get("Another error message").level())
-					.isEqualTo(McpSchema.LoggingLevel.ERROR);
-				assertThat(notificationMap.get("Another error message").logger()).isEqualTo("test-logger");
-				assertThat(notificationMap.get("Another error message").data()).isEqualTo("Another error message");
-			});
+			// Third notification should be ERROR level
+			assertThat(notificationMap.get("Another error message").level()).isEqualTo(McpSchema.LoggingLevel.ERROR);
+			assertThat(notificationMap.get("Another error message").logger()).isEqualTo("test-logger");
+			assertThat(notificationMap.get("Another error message").data()).isEqualTo("Another error message");
 		}
 		mcpServer.close();
 	}

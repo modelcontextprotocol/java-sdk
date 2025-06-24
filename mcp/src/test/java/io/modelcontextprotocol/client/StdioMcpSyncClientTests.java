@@ -33,12 +33,12 @@ class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 		ServerParameters stdioParams;
 		if (System.getProperty("os.name").toLowerCase().contains("win")) {
 			stdioParams = ServerParameters.builder("cmd.exe")
-				.args("/c", "npx.cmd", "-y", "@modelcontextprotocol/server-everything", "dir")
+				.args("/c", "npx.cmd", "-y", "@modelcontextprotocol/server-everything", "stdio")
 				.build();
 		}
 		else {
 			stdioParams = ServerParameters.builder("npx")
-				.args("-y", "@modelcontextprotocol/server-everything", "dir")
+				.args("-y", "@modelcontextprotocol/server-everything", "stdio")
 				.build();
 		}
 		return new StdioClientTransport(stdioParams);
@@ -68,7 +68,7 @@ class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 	}
 
 	protected Duration getInitializationTimeout() {
-		return Duration.ofSeconds(6);
+		return Duration.ofSeconds(10);
 	}
 
 }
