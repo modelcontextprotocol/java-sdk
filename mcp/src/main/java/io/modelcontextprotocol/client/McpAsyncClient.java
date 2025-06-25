@@ -11,7 +11,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,6 +41,7 @@ import io.modelcontextprotocol.util.Utils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
+import reactor.util.context.ContextView;
 
 /**
  * The Model Context Protocol (MCP) client implementation that provides asynchronous
@@ -161,7 +161,7 @@ public class McpAsyncClient {
 	 * The MCP session supplier that manages bidirectional JSON-RPC communication between
 	 * clients and servers.
 	 */
-	private final Supplier<McpClientSession> sessionSupplier;
+	private final Function<ContextView, McpClientSession> sessionSupplier;
 
 	/**
 	 * Create a new McpAsyncClient with the given transport and session request-response
@@ -268,8 +268,8 @@ public class McpAsyncClient {
 				asyncLoggingNotificationHandler(loggingConsumersFinal));
 
 		this.transport.setExceptionHandler(this::handleException);
-		this.sessionSupplier = () -> new McpClientSession(requestTimeout, transport, requestHandlers,
-				notificationHandlers);
+		this.sessionSupplier = ctx -> new McpClientSession(requestTimeout, transport, requestHandlers,
+				notificationHandlers, con -> con.contextWrite(ctx));
 
 	}
 
@@ -401,9 +401,8 @@ public class McpAsyncClient {
 		return withSession("by explicit API call", init -> Mono.just(init.get()));
 	}
 
-	private Mono<McpSchema.InitializeResult> doInitialize(Initialization initialization) {
-
-		initialization.setMcpClientSession(this.sessionSupplier.get());
+	private Mono<McpSchema.InitializeResult> doInitialize(Initialization initialization, ContextView ctx) {
+		initialization.setMcpClientSession(this.sessionSupplier.apply(ctx));
 
 		McpClientSession mcpClientSession = initialization.mcpSession();
 
@@ -493,14 +492,14 @@ public class McpAsyncClient {
 	 * @return A Mono that completes with the result of the operation
 	 */
 	private <T> Mono<T> withSession(String actionName, Function<Initialization, Mono<T>> operation) {
-		return Mono.defer(() -> {
+		return Mono.deferContextual(ctx -> {
 			Initialization newInit = Initialization.create();
 			Initialization previous = this.initializationRef.compareAndExchange(null, newInit);
 
 			boolean needsToInitialize = previous == null;
 			logger.debug(needsToInitialize ? "Initialization process started" : "Joining previous initialization");
 
-			Mono<McpSchema.InitializeResult> initializationJob = needsToInitialize ? doInitialize(newInit)
+			Mono<McpSchema.InitializeResult> initializationJob = needsToInitialize ? doInitialize(newInit, ctx)
 					: previous.await();
 
 			return initializationJob.map(initializeResult -> this.initializationRef.get())
