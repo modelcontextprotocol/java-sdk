@@ -70,6 +70,7 @@
 		<logback.version>1.5.15</logback.version>
 		<jackson.version>2.17.0</jackson.version>
 		<springframework.version>6.2.1</springframework.version>
+		<solon.version>3.3.0</solon.version>
 
 		<!-- plugin versions -->
 		<maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
@@ -102,6 +103,7 @@
 	<modules>
 		<module>mcp-bom</module>
 		<module>mcp</module>
+		<module>mcp-solon/mcp-solon-webrx</module>
 		<module>mcp-spring/mcp-spring-webflux</module>
 		<module>mcp-spring/mcp-spring-webmvc</module>
 		<module>mcp-test</module>
@@ -109,20 +111,6 @@
 
 	<build>
 		<plugins>
-			<plugin>
-				<groupId>io.spring.javaformat</groupId>
-				<artifactId>spring-javaformat-maven-plugin</artifactId>
-				<version>${spring-javaformat-maven-plugin.version}</version>
-				<executions>
-					<execution>
-						<phase>validate</phase>
-						<inherited>true</inherited>
-						<goals>
-							<goal>validate</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-site-plugin</artifactId>
@@ -335,6 +323,27 @@
 									</gpgArguments>
 									<passphrase>${env.MAVEN_GPG_PASSPHRASE}</passphrase>
 								</configuration>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+		<profile>
+			<id>spring-javaformat</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>io.spring.javaformat</groupId>
+						<artifactId>spring-javaformat-maven-plugin</artifactId>
+						<version>${spring-javaformat-maven-plugin.version}</version>
+						<executions>
+							<execution>
+								<phase>validate</phase>
+								<inherited>true</inherited>
+								<goals>
+									<goal>validate</goal>
+								</goals>
 							</execution>
 						</executions>
 					</plugin>
