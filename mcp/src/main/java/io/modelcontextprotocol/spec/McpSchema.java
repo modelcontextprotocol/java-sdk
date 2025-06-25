@@ -830,8 +830,8 @@ public final class McpSchema {
 	 * used by clients to improve the LLM's understanding of available tools.
 	 * @param inputSchema A JSON Schema object that describes the expected structure of
 	 * the arguments when calling this tool. This allows clients to validate tool
-	 * @param annotations Additional properties describing a Tool to clients. arguments
-	 * before sending them to the server.
+	 * arguments before sending them to the server.
+	 * @param annotations Additional properties describing a Tool to clients.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
