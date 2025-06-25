@@ -60,7 +60,7 @@ public class McpSchemaTests {
 				{"type":"WRONG","text":"XXX"}""", McpSchema.TextContent.class))
 			.isInstanceOf(InvalidTypeIdException.class)
 			.hasMessageContaining(
-					"Could not resolve type id 'WRONG' as a subtype of `io.modelcontextprotocol.spec.McpSchema$TextContent`: known type ids = [audio, image, resource, text]");
+					"Could not resolve type id 'WRONG' as a subtype of `io.modelcontextprotocol.spec.McpSchema$TextContent`: known type ids = [audio, image, resource, resource_link, text]");
 	}
 
 	@Test
@@ -166,6 +166,36 @@ public class McpSchemaTests {
 		assertThat(embeddedResource.resource().mimeType()).isEqualTo("application/octet-stream");
 		assertThat(((McpSchema.BlobResourceContents) embeddedResource.resource()).blob())
 			.isEqualTo("base64encodedblob");
+	}
+
+	@Test
+	void testResourceLink() throws Exception {
+		McpSchema.ResourceLink resourceLink = new McpSchema.ResourceLink("main.rs",
+				"Rust Software Application Main File", "file:///project/src/main.rs", "Primary application entry point",
+				"text/x-rust", null, null);
+		String value = mapper.writeValueAsString(resourceLink);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"type":"resource_link","name":"main.rs","title":"Rust Software Application Main File","uri":"file:///project/src/main.rs","description":"Primary application entry point","mimeType":"text/x-rust"}"""));
+	}
+
+	@Test
+	void testResourceLinkDeserialization() throws Exception {
+		McpSchema.ResourceLink resourceLink = mapper.readValue(
+				"""
+						{"type":"resource_link","name":"main.rs","title":"Rust Software Application Main File","uri":"file:///project/src/main.rs","description":"Primary application entry point","mimeType":"text/x-rust"}""",
+				McpSchema.ResourceLink.class);
+		assertThat(resourceLink).isNotNull();
+		assertThat(resourceLink.type()).isEqualTo("resource_link");
+		assertThat(resourceLink.name()).isEqualTo("main.rs");
+		assertThat(resourceLink.title()).isEqualTo("Rust Software Application Main File");
+		assertThat(resourceLink.uri()).isEqualTo("file:///project/src/main.rs");
+		assertThat(resourceLink.description()).isEqualTo("Primary application entry point");
+		assertThat(resourceLink.mimeType()).isEqualTo("text/x-rust");
 	}
 
 	// JSON-RPC Message Types Tests

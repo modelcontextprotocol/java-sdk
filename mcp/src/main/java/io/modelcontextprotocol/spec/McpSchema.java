@@ -1473,8 +1473,9 @@ public final class McpSchema {
 	@JsonSubTypes({ @JsonSubTypes.Type(value = TextContent.class, name = "text"),
 			@JsonSubTypes.Type(value = ImageContent.class, name = "image"),
 			@JsonSubTypes.Type(value = AudioContent.class, name = "audio"),
-			@JsonSubTypes.Type(value = EmbeddedResource.class, name = "resource") })
-	public sealed interface Content permits TextContent, ImageContent, AudioContent, EmbeddedResource {
+			@JsonSubTypes.Type(value = EmbeddedResource.class, name = "resource"),
+			@JsonSubTypes.Type(value = ResourceLink.class, name = "resource_link") })
+	public sealed interface Content permits TextContent, ImageContent, AudioContent, EmbeddedResource, ResourceLink {
 
 		default String type() {
 			if (this instanceof TextContent) {
@@ -1488,6 +1489,9 @@ public final class McpSchema {
 			}
 			else if (this instanceof EmbeddedResource) {
 				return "resource";
+			}
+			else if (this instanceof ResourceLink) {
+				return "resource_link";
 			}
 			throw new IllegalArgumentException("Unknown content type: " + this);
 		}
@@ -1599,6 +1603,18 @@ public final class McpSchema {
 		public Double priority() {
 			return annotations == null ? null : annotations.priority();
 		}
+	}
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ResourceLink( // @formatter:off
+		@JsonProperty("name") String name,
+		@JsonProperty("title") String title,
+		@JsonProperty("uri") String uri,
+		@JsonProperty("description") String description,
+		@JsonProperty("mimeType") String mimeType,
+		@JsonProperty("annotations") Annotations annotations,
+		@JsonProperty("size") Integer size) implements Annotated, Content { // @formatter:on
 	}
 
 	// ---------------------------
