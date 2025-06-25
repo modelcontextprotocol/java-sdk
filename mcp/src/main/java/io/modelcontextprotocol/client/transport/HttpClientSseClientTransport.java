@@ -9,6 +9,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -332,10 +333,13 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 				.GET()
 				.build();
 
-			Disposable connection = Flux
-				.<ResponseEvent>create(sseSink -> this.httpClient.sendAsync(request,
-						responseInfo -> ResponseSubscribers.sseToBodySubscriber(responseInfo, sseSink)))
-				.flatMap(responseEvent -> {
+			Disposable connection = Flux.<ResponseEvent>create(sseSink -> this.httpClient
+				.sendAsync(request, responseInfo -> ResponseSubscribers.sseToBodySubscriber(responseInfo, sseSink))
+				.exceptionallyCompose(e -> {
+					logger.warn("Error sending message", e);
+					sseSink.error(e);
+					return CompletableFuture.failedFuture(e);
+				})).flatMap(responseEvent -> {
 					if (isClosing) {
 						return Mono.empty();
 					}
@@ -375,24 +379,19 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 					return Flux.<McpSchema.JSONRPCMessage>error(
 							new RuntimeException("Failed to send message: " + responseEvent));
 
-				})
-				.flatMap(jsonRpcMessage -> handler.apply(Mono.just(jsonRpcMessage)))
-				.onErrorResume(t -> {
+				}).flatMap(jsonRpcMessage -> handler.apply(Mono.just(jsonRpcMessage))).onErrorResume(t -> {
 					if (!isClosing) {
 						logger.error("SSE connection error", t);
 						sink.error(t);
 					}
 					return Mono.empty();
 
-				})
-				.doFinally(s -> {
+				}).doFinally(s -> {
 					Disposable ref = this.sseSubscription.getAndSet(null);
 					if (ref != null && !ref.isDisposed()) {
 						ref.dispose();
 					}
-				})
-				.contextWrite(sink.contextView())
-				.subscribe();
+				}).contextWrite(sink.contextView()).subscribe();
 
 			this.sseSubscription.set(connection);
 		});
@@ -460,7 +459,11 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			.POST(HttpRequest.BodyPublishers.ofString(body))
 			.build();
 
-		return Mono.fromFuture(httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding()));
+		return Mono.fromFuture(
+				httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding()).exceptionallyCompose(e -> {
+					logger.warn("Error sending message", e);
+					return CompletableFuture.failedFuture(e);
+				}));
 	}
 
 	/**
