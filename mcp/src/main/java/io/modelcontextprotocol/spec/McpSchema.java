@@ -6,10 +6,12 @@ package io.modelcontextprotocol.spec;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -29,6 +31,7 @@ import org.slf4j.LoggerFactory;
  * Context Protocol Schema</a>.
  *
  * @author Christian Tzolov
+ * @author Luca Chang
  */
 public final class McpSchema {
 
@@ -40,6 +43,8 @@ public final class McpSchema {
 	public static final String LATEST_PROTOCOL_VERSION = "2024-11-05";
 
 	public static final String JSONRPC_VERSION = "2.0";
+
+	public static final String FIRST_PAGE = null;
 
 	// ---------------------------
 	// Method Names
@@ -65,6 +70,8 @@ public final class McpSchema {
 	public static final String METHOD_RESOURCES_READ = "resources/read";
 
 	public static final String METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED = "notifications/resources/list_changed";
+
+	public static final String METHOD_NOTIFICATION_RESOURCES_UPDATED = "notifications/resources/updated";
 
 	public static final String METHOD_RESOURCES_TEMPLATES_LIST = "resources/templates/list";
 
@@ -482,6 +489,9 @@ public final class McpSchema {
 	 * by clients to improve the LLM's understanding of available resources. It can be
 	 * thought of like a "hint" to the model.
 	 * @param mimeType The MIME type of this resource, if known.
+	 * @param size The size of the raw resource content, in bytes (i.e., before base64
+	 * encoding or any tokenization), if known. This can be used by Hosts to display file
+	 * sizes and estimate context window usage.
 	 * @param annotations Optional annotations for the client. The client can use
 	 * annotations to inform how objects are used or displayed.
 	 */
@@ -492,7 +502,67 @@ public final class McpSchema {
 		@JsonProperty("name") String name,
 		@JsonProperty("description") String description,
 		@JsonProperty("mimeType") String mimeType,
+		@JsonProperty("size") Long size,
 		@JsonProperty("annotations") Annotations annotations) implements Annotated {
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link Resource#builder()} instead.
+		 */
+		@Deprecated
+		public Resource(String uri, String name, String description, String mimeType, Annotations annotations) {
+			this(uri, name, description, mimeType, null, annotations);
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private String uri;
+			private String name;
+			private String description;
+			private String mimeType;
+			private Long size;
+			private Annotations annotations;
+
+			public Builder uri(String uri) {
+				this.uri = uri;
+				return this;
+			}
+
+			public Builder name(String name) {
+				this.name = name;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder mimeType(String mimeType) {
+				this.mimeType = mimeType;
+				return this;
+			}
+
+			public Builder size(Long size) {
+				this.size = size;
+				return this;
+			}
+
+			public Builder annotations(Annotations annotations) {
+				this.annotations = annotations;
+				return this;
+			}
+
+			public Resource build() {
+				Assert.hasText(uri, "uri must not be empty");
+				Assert.hasText(name, "name must not be empty");
+
+				return new Resource(uri, name, description, mimeType, size, annotations);
+			}
+		}
 	} // @formatter:on
 
 	/**
@@ -738,6 +808,17 @@ public final class McpSchema {
 		@JsonProperty("definitions") Map<String, Object> definitions) {
 	} // @formatter:on
 
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ToolAnnotations( // @formatter:off
+								   @JsonProperty("title")  String title,
+								   @JsonProperty("readOnlyHint")   Boolean readOnlyHint,
+								   @JsonProperty("destructiveHint") Boolean destructiveHint,
+								   @JsonProperty("idempotentHint") Boolean idempotentHint,
+								   @JsonProperty("openWorldHint") Boolean openWorldHint,
+								   @JsonProperty("returnDirect") Boolean returnDirect) {
+	} // @formatter:on
+
 	/**
 	 * Represents a tool that the server provides. Tools enable servers to expose
 	 * executable functionality to the system. Through these tools, you can interact with
@@ -749,17 +830,23 @@ public final class McpSchema {
 	 * used by clients to improve the LLM's understanding of available tools.
 	 * @param inputSchema A JSON Schema object that describes the expected structure of
 	 * the arguments when calling this tool. This allows clients to validate tool
-	 * arguments before sending them to the server.
+	 * @param annotations Additional properties describing a Tool to clients. arguments
+	 * before sending them to the server.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Tool( // @formatter:off
-		@JsonProperty("name") String name,
-		@JsonProperty("description") String description,
-		@JsonProperty("inputSchema") JsonSchema inputSchema) {
+						@JsonProperty("name") String name,
+						@JsonProperty("description") String description,
+						@JsonProperty("inputSchema") JsonSchema inputSchema,
+						@JsonProperty("annotations") ToolAnnotations annotations) {
 
 		public Tool(String name, String description, String schema) {
-			this(name, description, parseSchema(schema));
+			this(name, description, parseSchema(schema), null);
+		}
+
+		public Tool(String name, String description, String schema, ToolAnnotations annotations) {
+			this(name, description, parseSchema(schema), annotations);
 		}
 
 	} // @formatter:on
@@ -1072,9 +1159,24 @@ public final class McpSchema {
 		@JsonProperty("stopReason") StopReason stopReason) {
 
 		public enum StopReason {
-			@JsonProperty("endTurn") END_TURN,
-			@JsonProperty("stopSequence") STOP_SEQUENCE,
-			@JsonProperty("maxTokens") MAX_TOKENS
+			@JsonProperty("endTurn") END_TURN("endTurn"),
+			@JsonProperty("stopSequence") STOP_SEQUENCE("stopSequence"),
+			@JsonProperty("maxTokens") MAX_TOKENS("maxTokens"),
+			@JsonProperty("unknown") UNKNOWN("unknown");
+
+			private final String value;
+
+			StopReason(String value) {
+				this.value = value;
+			}
+
+			@JsonCreator
+			private static StopReason of(String value) {
+				return Arrays.stream(StopReason.values())
+						.filter(stopReason -> stopReason.value.equals(value))
+						.findFirst()
+						.orElse(StopReason.UNKNOWN);
+			}
 		}
 
 		public static Builder builder() {
@@ -1212,6 +1314,17 @@ public final class McpSchema {
 		@JsonProperty("progressToken") String progressToken,
 		@JsonProperty("progress") double progress,
 		@JsonProperty("total") Double total) {
+	}// @formatter:on
+
+	/**
+	 * The Model Context Protocol (MCP) provides a standardized way for servers to send
+	 * resources update message to clients.
+	 *
+	 * @param uri The updated resource uri.
+	 */
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ResourcesUpdatedNotification(// @formatter:off
+	   @JsonProperty("uri") String uri) {
 	}// @formatter:on
 
 	/**
@@ -1384,22 +1497,68 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record TextContent( // @formatter:off
-		@JsonProperty("audience") List<Role> audience,
-		@JsonProperty("priority") Double priority,
-		@JsonProperty("text") String text) implements Content { // @formatter:on
+		@JsonProperty("annotations") Annotations annotations,
+		@JsonProperty("text") String text) implements Annotated, Content { // @formatter:on
 
 		public TextContent(String content) {
-			this(null, null, content);
+			this(null, content);
+		}
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link TextContent#TextContent(Annotations, String)} instead.
+		 */
+		public TextContent(List<Role> audience, Double priority, String content) {
+			this(audience != null || priority != null ? new Annotations(audience, priority) : null, content);
+		}
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link TextContent#annotations()} instead.
+		 */
+		public List<Role> audience() {
+			return annotations == null ? null : annotations.audience();
+		}
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link TextContent#annotations()} instead.
+		 */
+		public Double priority() {
+			return annotations == null ? null : annotations.priority();
 		}
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ImageContent( // @formatter:off
-		@JsonProperty("audience") List<Role> audience,
-		@JsonProperty("priority") Double priority,
+		@JsonProperty("annotations") Annotations annotations,
 		@JsonProperty("data") String data,
-		@JsonProperty("mimeType") String mimeType) implements Content { // @formatter:on
+		@JsonProperty("mimeType") String mimeType) implements Annotated, Content { // @formatter:on
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link ImageContent#ImageContent(Annotations, String, String)} instead.
+		 */
+		public ImageContent(List<Role> audience, Double priority, String data, String mimeType) {
+			this(audience != null || priority != null ? new Annotations(audience, priority) : null, data, mimeType);
+		}
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link ImageContent#annotations()} instead.
+		 */
+		public List<Role> audience() {
+			return annotations == null ? null : annotations.audience();
+		}
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link ImageContent#annotations()} instead.
+		 */
+		public Double priority() {
+			return annotations == null ? null : annotations.priority();
+		}
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -1413,9 +1572,33 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record EmbeddedResource( // @formatter:off
-		@JsonProperty("audience") List<Role> audience,
-		@JsonProperty("priority") Double priority,
-		@JsonProperty("resource") ResourceContents resource) implements Content { // @formatter:on
+		@JsonProperty("annotations") Annotations annotations,
+		@JsonProperty("resource") ResourceContents resource) implements Annotated, Content { // @formatter:on
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link EmbeddedResource#EmbeddedResource(Annotations, ResourceContents)}
+		 * instead.
+		 */
+		public EmbeddedResource(List<Role> audience, Double priority, ResourceContents resource) {
+			this(audience != null || priority != null ? new Annotations(audience, priority) : null, resource);
+		}
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link EmbeddedResource#annotations()} instead.
+		 */
+		public List<Role> audience() {
+			return annotations == null ? null : annotations.audience();
+		}
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link EmbeddedResource#annotations()} instead.
+		 */
+		public Double priority() {
+			return annotations == null ? null : annotations.priority();
+		}
 	}
 
 	// ---------------------------

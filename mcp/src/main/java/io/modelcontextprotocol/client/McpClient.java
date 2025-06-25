@@ -171,6 +171,8 @@ public interface McpClient {
 
 		private final List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers = new ArrayList<>();
 
+		private final List<Consumer<List<McpSchema.ResourceContents>>> resourcesUpdateConsumers = new ArrayList<>();
+
 		private final List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers = new ArrayList<>();
 
 		private final List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers = new ArrayList<>();
@@ -382,8 +384,8 @@ public interface McpClient {
 		 */
 		public McpSyncClient build() {
 			McpClientFeatures.Sync syncFeatures = new McpClientFeatures.Sync(this.clientInfo, this.capabilities,
-					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.promptsChangeConsumers,
-					this.loggingConsumers, this.samplingHandler, this.elicitationHandler);
+					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
+					this.promptsChangeConsumers, this.loggingConsumers, this.samplingHandler, this.elicitationHandler);
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
@@ -426,6 +428,8 @@ public interface McpClient {
 		private final List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers = new ArrayList<>();
 
 		private final List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers = new ArrayList<>();
+
+		private final List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers = new ArrayList<>();
 
 		private final List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers = new ArrayList<>();
 
@@ -590,6 +594,23 @@ public interface McpClient {
 		}
 
 		/**
+		 * Adds a consumer to be notified when a specific resource is updated. This allows
+		 * the client to react to changes in individual resources, such as updates to
+		 * their content or metadata.
+		 * @param resourcesUpdateConsumer A consumer function that processes the updated
+		 * resource and returns a Mono indicating the completion of the processing. Must
+		 * not be null.
+		 * @return This builder instance for method chaining.
+		 * @throws IllegalArgumentException If the resourcesUpdateConsumer is null.
+		 */
+		public AsyncSpec resourcesUpdateConsumer(
+				Function<List<McpSchema.ResourceContents>, Mono<Void>> resourcesUpdateConsumer) {
+			Assert.notNull(resourcesUpdateConsumer, "Resources update consumer must not be null");
+			this.resourcesUpdateConsumers.add(resourcesUpdateConsumer);
+			return this;
+		}
+
+		/**
 		 * Adds a consumer to be notified when the available prompts change. This allows
 		 * the client to react to changes in the server's prompt templates, such as new
 		 * templates being added or existing ones being modified.
@@ -641,8 +662,9 @@ public interface McpClient {
 		public McpAsyncClient build() {
 			return new McpAsyncClient(this.transport, this.requestTimeout, this.initializationTimeout,
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
-							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.promptsChangeConsumers,
-							this.loggingConsumers, this.samplingHandler, this.elicitationHandler));
+							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
+							this.promptsChangeConsumers, this.loggingConsumers, this.samplingHandler,
+							this.elicitationHandler));
 		}
 
 	}

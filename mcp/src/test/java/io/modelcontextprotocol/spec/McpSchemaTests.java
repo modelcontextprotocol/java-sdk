@@ -3,23 +3,24 @@
 */
 package io.modelcontextprotocol.spec;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
-import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
-import net.javacrumbs.jsonunit.core.Option;
 import org.junit.jupiter.api.Test;
 
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
+
+import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
+import net.javacrumbs.jsonunit.core.Option;
 
 /**
  * @author Christian Tzolov
@@ -293,6 +294,59 @@ public class McpSchemaTests {
 			.isEqualTo(
 					json("""
 							{"uri":"resource://test","name":"Test Resource","description":"A test resource","mimeType":"text/plain","annotations":{"audience":["user","assistant"],"priority":0.8}}"""));
+	}
+
+	@Test
+	void testResourceBuilder() throws Exception {
+		McpSchema.Annotations annotations = new McpSchema.Annotations(
+				Arrays.asList(McpSchema.Role.USER, McpSchema.Role.ASSISTANT), 0.8);
+
+		McpSchema.Resource resource = McpSchema.Resource.builder()
+			.uri("resource://test")
+			.name("Test Resource")
+			.description("A test resource")
+			.mimeType("text/plain")
+			.size(256L)
+			.annotations(annotations)
+			.build();
+
+		String value = mapper.writeValueAsString(resource);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"uri":"resource://test","name":"Test Resource","description":"A test resource","mimeType":"text/plain","size":256,"annotations":{"audience":["user","assistant"],"priority":0.8}}"""));
+	}
+
+	@Test
+	void testResourceBuilderUriRequired() {
+		McpSchema.Annotations annotations = new McpSchema.Annotations(
+				Arrays.asList(McpSchema.Role.USER, McpSchema.Role.ASSISTANT), 0.8);
+
+		McpSchema.Resource.Builder resourceBuilder = McpSchema.Resource.builder()
+			.name("Test Resource")
+			.description("A test resource")
+			.mimeType("text/plain")
+			.size(256L)
+			.annotations(annotations);
+
+		assertThatThrownBy(resourceBuilder::build).isInstanceOf(java.lang.IllegalArgumentException.class);
+	}
+
+	@Test
+	void testResourceBuilderNameRequired() {
+		McpSchema.Annotations annotations = new McpSchema.Annotations(
+				Arrays.asList(McpSchema.Role.USER, McpSchema.Role.ASSISTANT), 0.8);
+
+		McpSchema.Resource.Builder resourceBuilder = McpSchema.Resource.builder()
+			.uri("resource://test")
+			.description("A test resource")
+			.mimeType("text/plain")
+			.size(256L)
+			.annotations(annotations);
+
+		assertThatThrownBy(resourceBuilder::build).isInstanceOf(java.lang.IllegalArgumentException.class);
 	}
 
 	@Test
@@ -629,6 +683,36 @@ public class McpSchemaTests {
 	}
 
 	@Test
+	void testToolWithAnnotations() throws Exception {
+		String schemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"name": {
+							"type": "string"
+						},
+						"value": {
+							"type": "number"
+						}
+					},
+					"required": ["name"]
+				}
+				""";
+		McpSchema.ToolAnnotations annotations = new McpSchema.ToolAnnotations("A test tool", false, false, false, false,
+				false);
+
+		McpSchema.Tool tool = new McpSchema.Tool("test-tool", "A test tool", schemaJson, annotations);
+
+		String value = mapper.writeValueAsString(tool);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"name":"test-tool","description":"A test tool","inputSchema":{"type":"object","properties":{"name":{"type":"string"},"value":{"type":"number"}},"required":["name"]},"annotations":{"title":"A test tool","readOnlyHint":false,"destructiveHint":false,"idempotentHint":false,"openWorldHint":false,"returnDirect":false}}"""));
+	}
+
+	@Test
 	void testCallToolRequest() throws Exception {
 		Map<String, Object> arguments = new HashMap<>();
 		arguments.put("name", "test");
@@ -827,6 +911,23 @@ public class McpSchemaTests {
 			.isEqualTo(
 					json("""
 							{"role":"assistant","content":{"type":"text","text":"Assistant response"},"model":"gpt-4","stopReason":"endTurn"}"""));
+	}
+
+	@Test
+	void testCreateMessageResultUnknownStopReason() throws Exception {
+		String input = """
+				{"role":"assistant","content":{"type":"text","text":"Assistant response"},"model":"gpt-4","stopReason":"arbitrary value"}""";
+
+		McpSchema.CreateMessageResult value = mapper.readValue(input, McpSchema.CreateMessageResult.class);
+
+		McpSchema.TextContent expectedContent = new McpSchema.TextContent("Assistant response");
+		McpSchema.CreateMessageResult expected = McpSchema.CreateMessageResult.builder()
+			.role(McpSchema.Role.ASSISTANT)
+			.content(expectedContent)
+			.model("gpt-4")
+			.stopReason(McpSchema.CreateMessageResult.StopReason.UNKNOWN)
+			.build();
+		assertThat(value).isEqualTo(expected);
 	}
 
 	// Elicitation Tests
