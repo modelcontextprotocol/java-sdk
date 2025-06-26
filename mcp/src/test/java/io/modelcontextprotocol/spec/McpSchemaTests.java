@@ -3,23 +3,22 @@
 */
 package io.modelcontextprotocol.spec;
 
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
 
 import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import net.javacrumbs.jsonunit.core.Option;
 
 /**
@@ -170,9 +169,8 @@ public class McpSchemaTests {
 
 	@Test
 	void testResourceLink() throws Exception {
-		McpSchema.ResourceLink resourceLink = new McpSchema.ResourceLink("main.rs",
-				"Rust Software Application Main File", "file:///project/src/main.rs", "Primary application entry point",
-				"text/x-rust", null, null);
+		McpSchema.ResourceLink resourceLink = new McpSchema.ResourceLink("main.rs", "file:///project/src/main.rs",
+				"Primary application entry point", "text/x-rust", null, null);
 		String value = mapper.writeValueAsString(resourceLink);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -180,19 +178,18 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"type":"resource_link","name":"main.rs","title":"Rust Software Application Main File","uri":"file:///project/src/main.rs","description":"Primary application entry point","mimeType":"text/x-rust"}"""));
+							{"type":"resource_link","name":"main.rs","uri":"file:///project/src/main.rs","description":"Primary application entry point","mimeType":"text/x-rust"}"""));
 	}
 
 	@Test
 	void testResourceLinkDeserialization() throws Exception {
 		McpSchema.ResourceLink resourceLink = mapper.readValue(
 				"""
-						{"type":"resource_link","name":"main.rs","title":"Rust Software Application Main File","uri":"file:///project/src/main.rs","description":"Primary application entry point","mimeType":"text/x-rust"}""",
+						{"type":"resource_link","name":"main.rs","uri":"file:///project/src/main.rs","description":"Primary application entry point","mimeType":"text/x-rust"}""",
 				McpSchema.ResourceLink.class);
 		assertThat(resourceLink).isNotNull();
 		assertThat(resourceLink.type()).isEqualTo("resource_link");
 		assertThat(resourceLink.name()).isEqualTo("main.rs");
-		assertThat(resourceLink.title()).isEqualTo("Rust Software Application Main File");
 		assertThat(resourceLink.uri()).isEqualTo("file:///project/src/main.rs");
 		assertThat(resourceLink.description()).isEqualTo("Primary application entry point");
 		assertThat(resourceLink.mimeType()).isEqualTo("text/x-rust");

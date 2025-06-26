@@ -479,6 +479,22 @@ public final class McpSchema {
 		@JsonProperty("priority") Double priority) {
 	} // @formatter:on
 
+	public interface ResourceType {
+
+		String uri();
+
+		String name();
+
+		String description();
+
+		String mimeType();
+
+		Long size();
+
+		Annotations annotations();
+
+	}
+
 	/**
 	 * A known resource that the server is capable of reading.
 	 *
@@ -503,7 +519,7 @@ public final class McpSchema {
 		@JsonProperty("description") String description,
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("size") Long size,
-		@JsonProperty("annotations") Annotations annotations) implements Annotated {
+		@JsonProperty("annotations") Annotations annotations) implements Annotated, ResourceType {
 
 		/**
 		 * @deprecated Only exists for backwards-compatibility purposes. Use
@@ -1609,12 +1625,68 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ResourceLink( // @formatter:off
 		@JsonProperty("name") String name,
-		@JsonProperty("title") String title,
 		@JsonProperty("uri") String uri,
 		@JsonProperty("description") String description,
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("annotations") Annotations annotations,
-		@JsonProperty("size") Integer size) implements Annotated, Content { // @formatter:on
+		@JsonProperty("size") Long size) implements Annotated, Content, ResourceType { // @formatter:on
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+
+			private String name;
+
+			private String uri;
+
+			private String description;
+
+			private String mimeType;
+
+			private Annotations annotations;
+
+			private Long size;
+
+			public Builder name(String name) {
+				this.name = name;
+				return this;
+			}
+
+			public Builder uri(String uri) {
+				this.uri = uri;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder mimeType(String mimeType) {
+				this.mimeType = mimeType;
+				return this;
+			}
+
+			public Builder annotations(Annotations annotations) {
+				this.annotations = annotations;
+				return this;
+			}
+
+			public Builder size(Long size) {
+				this.size = size;
+				return this;
+			}
+
+			public ResourceLink build() {
+				Assert.hasText(uri, "uri must not be empty");
+				Assert.hasText(name, "name must not be empty");
+
+				return new ResourceLink(name, uri, description, mimeType, annotations, size);
+			}
+
+		}
 	}
 
 	// ---------------------------
