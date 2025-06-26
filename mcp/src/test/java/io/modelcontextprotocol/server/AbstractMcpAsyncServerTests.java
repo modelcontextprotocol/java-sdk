@@ -137,6 +137,28 @@ public abstract class AbstractMcpAsyncServerTests {
 	}
 
 	@Test
+	void testPutTool() {
+		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.build();
+
+		Tool toolV1 = new McpSchema.Tool(TEST_TOOL_NAME, "Tool with version 1.0.0", emptyJsonSchema);
+
+		StepVerifier.create(mcpAsyncServer.putTool(new McpServerFeatures.AsyncToolSpecification(toolV1,
+				(exchange, args) -> Mono.just(new CallToolResult(List.of(), false)))))
+			.verifyComplete();
+
+		Tool toolV2 = new McpSchema.Tool(TEST_TOOL_NAME, "Tool with version 2.0.0", emptyJsonSchema);
+
+		StepVerifier.create(mcpAsyncServer.putTool(new McpServerFeatures.AsyncToolSpecification(toolV2,
+				(exchange, args) -> Mono.just(new CallToolResult(List.of(), false)))))
+			.verifyComplete();
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
 	void testRemoveTool() {
 		Tool too = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
 
@@ -212,7 +234,7 @@ public abstract class AbstractMcpAsyncServerTests {
 			.capabilities(ServerCapabilities.builder().resources(true, false).build())
 			.build();
 
-		Resource resource = new Resource(TEST_RESOURCE_URI, "Test Resource", "text/plain", "Test resource description",
+		Resource resource = new Resource(TEST_RESOURCE_URI, "Test Resource", "Test resource description", "text/plain",
 				null);
 		McpServerFeatures.AsyncResourceSpecification specification = new McpServerFeatures.AsyncResourceSpecification(
 				resource, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
@@ -244,7 +266,7 @@ public abstract class AbstractMcpAsyncServerTests {
 			.serverInfo("test-server", "1.0.0")
 			.build();
 
-		Resource resource = new Resource(TEST_RESOURCE_URI, "Test Resource", "text/plain", "Test resource description",
+		Resource resource = new Resource(TEST_RESOURCE_URI, "Test Resource", "Test resource description", "text/plain",
 				null);
 		McpServerFeatures.AsyncResourceSpecification specification = new McpServerFeatures.AsyncResourceSpecification(
 				resource, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
@@ -253,6 +275,28 @@ public abstract class AbstractMcpAsyncServerTests {
 			assertThat(error).isInstanceOf(McpError.class)
 				.hasMessage("Server must be configured with resource capabilities");
 		});
+	}
+
+	@Test
+	void testPutResource() {
+		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(true, false).build())
+			.build();
+
+		Resource resourceV1 = new Resource(TEST_RESOURCE_URI, "Test Resource", "Resource with version 1.0.0",
+				"text/plain", null);
+		McpServerFeatures.AsyncResourceSpecification specificationV1 = new McpServerFeatures.AsyncResourceSpecification(
+				resourceV1, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
+		StepVerifier.create(mcpAsyncServer.putResource(specificationV1)).verifyComplete();
+
+		Resource resourceV2 = new Resource(TEST_RESOURCE_URI, "Test Resource", "Resource with version 2.0.0",
+				"text/plain", null);
+		McpServerFeatures.AsyncResourceSpecification specificationV2 = new McpServerFeatures.AsyncResourceSpecification(
+				resourceV2, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
+		StepVerifier.create(mcpAsyncServer.putResource(specificationV2)).verifyComplete();
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
 	}
 
 	@Test
@@ -310,6 +354,28 @@ public abstract class AbstractMcpAsyncServerTests {
 			assertThat(error).isInstanceOf(McpError.class)
 				.hasMessage("Server must be configured with prompt capabilities");
 		});
+	}
+
+	@Test
+	void testPutPrompt() {
+		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().prompts(false).build())
+			.build();
+
+		Prompt promptV1 = new Prompt(TEST_PROMPT_NAME, "Prompt with version 1.0.0", List.of());
+		McpServerFeatures.AsyncPromptSpecification specificationV1 = new McpServerFeatures.AsyncPromptSpecification(
+				promptV1, (exchange, req) -> Mono.just(new GetPromptResult("Test prompt description", List
+					.of(new PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent("Test content"))))));
+
+		StepVerifier.create(mcpAsyncServer.putPrompt(specificationV1)).verifyComplete();
+
+		Prompt promptV2 = new Prompt(TEST_PROMPT_NAME, "Prompt with version 2.0.0", List.of());
+		McpServerFeatures.AsyncPromptSpecification specificationV2 = new McpServerFeatures.AsyncPromptSpecification(
+				promptV2, (exchange, req) -> Mono.just(new GetPromptResult("Test prompt description", List
+					.of(new PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent("Test content"))))));
+
+		StepVerifier.create(mcpAsyncServer.putPrompt(specificationV2)).verifyComplete();
 	}
 
 	@Test

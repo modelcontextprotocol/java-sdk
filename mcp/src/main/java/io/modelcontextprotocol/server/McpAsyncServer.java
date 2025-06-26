@@ -304,6 +304,44 @@ public class McpAsyncServer {
 	}
 
 	/**
+	 * Replaces an existing tool handler or adds a new one if it doesn't exist.
+	 * @param toolSpecification The tool specification to put
+	 * @return Mono that completes when clients have been notified of the change
+	 */
+	public Mono<Void> putTool(McpServerFeatures.AsyncToolSpecification toolSpecification) {
+		if (toolSpecification == null) {
+			return Mono.error(new McpError("Tool specification must not be null"));
+		}
+		if (toolSpecification.tool() == null) {
+			return Mono.error(new McpError("Tool must not be null"));
+		}
+		if (toolSpecification.call() == null) {
+			return Mono.error(new McpError("Tool call handler must not be null"));
+		}
+		if (this.serverCapabilities.tools() == null) {
+			return Mono.error(new McpError("Server must be configured with tool capabilities"));
+		}
+
+		return Mono.defer(() -> {
+			this.tools.replaceAll(asyncToolSpecification -> {
+				if (!asyncToolSpecification.tool().name().equals(toolSpecification.tool().name())) {
+					return asyncToolSpecification;
+				}
+				logger.debug("Replaced tool handler: {}", toolSpecification.tool().name());
+				return toolSpecification;
+			});
+			if (this.tools.addIfAbsent(toolSpecification)) {
+				logger.debug("Added tool handler: {}", toolSpecification.tool().name());
+			}
+
+			if (this.serverCapabilities.tools().listChanged()) {
+				return notifyToolsListChanged();
+			}
+			return Mono.empty();
+		});
+	}
+
+	/**
 	 * Remove a tool handler at runtime.
 	 * @param toolName The name of the tool handler to remove
 	 * @return Mono that completes when clients have been notified of the change
@@ -389,6 +427,34 @@ public class McpAsyncServer {
 						"Resource with URI '" + resourceSpecification.resource().uri() + "' already exists"));
 			}
 			logger.debug("Added resource handler: {}", resourceSpecification.resource().uri());
+			if (this.serverCapabilities.resources().listChanged()) {
+				return notifyResourcesListChanged();
+			}
+			return Mono.empty();
+		});
+	}
+
+	/**
+	 * Replaces an existing resource handler or adds a new one if it doesn't exist.
+	 * @param resourceSpecification The resource handler to put
+	 * @return Mono that completes when clients have been notified of the change
+	 */
+	public Mono<Void> putResource(McpServerFeatures.AsyncResourceSpecification resourceSpecification) {
+		if (resourceSpecification == null || resourceSpecification.resource() == null) {
+			return Mono.error(new McpError("Resource must not be null"));
+		}
+
+		if (this.serverCapabilities.resources() == null) {
+			return Mono.error(new McpError("Server must be configured with resource capabilities"));
+		}
+
+		return Mono.defer(() -> {
+			if (this.resources.put(resourceSpecification.resource().uri(), resourceSpecification) != null) {
+				logger.debug("Replaced resource handler: {}", resourceSpecification.resource().uri());
+			}
+			else {
+				logger.debug("Added resource handler: {}", resourceSpecification.resource().uri());
+			}
 			if (this.serverCapabilities.resources().listChanged()) {
 				return notifyResourcesListChanged();
 			}
@@ -522,6 +588,36 @@ public class McpAsyncServer {
 			// Servers that declared the listChanged capability SHOULD send a
 			// notification,
 			// when the list of available prompts changes
+			if (this.serverCapabilities.prompts().listChanged()) {
+				return notifyPromptsListChanged();
+			}
+			return Mono.empty();
+		});
+	}
+
+	/**
+	 * Replaces an existing prompt handler or adds a new one if it doesn't exist.
+	 * @param promptSpecification The prompt handler to put
+	 * @return Mono that completes when clients have been notified of the change
+	 */
+	public Mono<Void> putPrompt(McpServerFeatures.AsyncPromptSpecification promptSpecification) {
+		if (promptSpecification == null) {
+			return Mono.error(new McpError("Prompt specification must not be null"));
+		}
+		if (this.serverCapabilities.prompts() == null) {
+			return Mono.error(new McpError("Server must be configured with prompt capabilities"));
+		}
+
+		return Mono.defer(() -> {
+			if (this.prompts.put(promptSpecification.prompt().name(), promptSpecification) != null) {
+				logger.debug("Replaced prompt handler: {}", promptSpecification.prompt().name());
+			}
+			else {
+				logger.debug("Added prompt handler: {}", promptSpecification.prompt().name());
+			}
+
+			// Servers that declared the listChanged capability SHOULD send a
+			// notification, when the list of available prompts changes
 			if (this.serverCapabilities.prompts().listChanged()) {
 				return notifyPromptsListChanged();
 			}
