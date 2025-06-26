@@ -270,7 +270,6 @@ public class McpAsyncClient {
 		this.transport.setExceptionHandler(this::handleException);
 		this.sessionSupplier = ctx -> new McpClientSession(requestTimeout, transport, requestHandlers,
 				notificationHandlers, con -> con.contextWrite(ctx));
-
 	}
 
 	private void handleException(Throwable t) {
