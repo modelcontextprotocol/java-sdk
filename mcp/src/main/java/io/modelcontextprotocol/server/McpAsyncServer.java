@@ -4,30 +4,10 @@
 
 package io.modelcontextprotocol.server;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.function.BiFunction;
-
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.McpClientSession;
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
-import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
-import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
-import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
-import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
-import io.modelcontextprotocol.spec.McpServerSession;
-import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.*;
+import io.modelcontextprotocol.spec.McpSchema.*;
 import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.Utils;
@@ -35,6 +15,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.time.Duration;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiFunction;
 
 /**
  * The Model Context Protocol (MCP) server implementation that provides asynchronous
@@ -629,22 +615,20 @@ public class McpAsyncServer {
 	}
 
 	private McpServerSession.RequestHandler<Object> setLoggerRequestHandler() {
-		return (exchange, params) -> {
-			return Mono.defer(() -> {
+		return (exchange, params) -> Mono.defer(() -> {
 
-				SetLevelRequest newMinLoggingLevel = objectMapper.convertValue(params,
-						new TypeReference<SetLevelRequest>() {
-						});
+            SetLevelRequest newMinLoggingLevel = objectMapper.convertValue(params,
+                    new TypeReference<SetLevelRequest>() {
+                    });
 
-				exchange.setMinLoggingLevel(newMinLoggingLevel.level());
+            exchange.setMinLoggingLevel(newMinLoggingLevel.level());
 
-				// FIXME: this field is deprecated and should be removed together
-				// with the broadcasting loggingNotification.
-				this.minLoggingLevel = newMinLoggingLevel.level();
+            // FIXME: this field is deprecated and should be removed together
+            // with the broadcasting loggingNotification.
+            this.minLoggingLevel = newMinLoggingLevel.level();
 
-				return Mono.just(Map.of());
-			});
-		};
+            return Mono.just(Map.of());
+        });
 	}
 
 	private McpServerSession.RequestHandler<McpSchema.CompleteResult> completionCompleteRequestHandler() {
@@ -669,12 +653,10 @@ public class McpAsyncServer {
 				if (promptSpec == null) {
 					return Mono.error(new McpError("Prompt not found: " + promptReference.name()));
 				}
-				if (!promptSpec.prompt()
+				if (promptSpec.prompt()
 					.arguments()
 					.stream()
-					.filter(arg -> arg.name().equals(argumentName))
-					.findFirst()
-					.isPresent()) {
+					.noneMatch(arg -> arg.name().equals(argumentName))) {
 
 					return Mono.error(new McpError("Argument not found: " + argumentName));
 				}

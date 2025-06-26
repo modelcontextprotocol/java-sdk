@@ -4,15 +4,6 @@
 
 package io.modelcontextprotocol.server;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -22,6 +13,11 @@ import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
 import reactor.core.publisher.Mono;
+
+import java.time.Duration;
+import java.util.*;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 
 /**
  * Factory class for creating Model Context Protocol (MCP) servers. MCP servers expose
@@ -367,9 +363,7 @@ public interface McpServer {
 		 */
 		public AsyncSpecification tools(McpServerFeatures.AsyncToolSpecification... toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
-			for (McpServerFeatures.AsyncToolSpecification tool : toolSpecifications) {
-				this.tools.add(tool);
-			}
+            this.tools.addAll(Arrays.asList(toolSpecifications));
 			return this;
 		}
 
@@ -465,9 +459,7 @@ public interface McpServer {
 		 */
 		public AsyncSpecification resourceTemplates(ResourceTemplate... resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			for (ResourceTemplate resourceTemplate : resourceTemplates) {
-				this.resourceTemplates.add(resourceTemplate);
-			}
+            this.resourceTemplates.addAll(Arrays.asList(resourceTemplates));
 			return this;
 		}
 
@@ -858,9 +850,7 @@ public interface McpServer {
 		 */
 		public SyncSpecification tools(McpServerFeatures.SyncToolSpecification... toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
-			for (McpServerFeatures.SyncToolSpecification tool : toolSpecifications) {
-				this.tools.add(tool);
-			}
+            this.tools.addAll(Arrays.asList(toolSpecifications));
 			return this;
 		}
 
@@ -956,9 +946,7 @@ public interface McpServer {
 		 */
 		public SyncSpecification resourceTemplates(ResourceTemplate... resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			for (ResourceTemplate resourceTemplate : resourceTemplates) {
-				this.resourceTemplates.add(resourceTemplate);
-			}
+            this.resourceTemplates.addAll(Arrays.asList(resourceTemplates));
 			return this;
 		}
 
