@@ -23,6 +23,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -226,6 +230,9 @@ class McpAsyncServerExchangeTests {
 			.thenReturn(Mono.empty());
 
 		StepVerifier.create(exchange.loggingNotification(notification)).verifyComplete();
+
+		// Verify that sendNotification was called exactly once
+		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(notification));
 	}
 
 	@Test
@@ -241,6 +248,9 @@ class McpAsyncServerExchangeTests {
 
 		// When & Then - Should complete without sending notification
 		StepVerifier.create(exchange.loggingNotification(debugNotification)).verifyComplete();
+
+		// Verify that sendNotification was never called for filtered DEBUG level
+		verify(mockSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(debugNotification));
 	}
 
 	@Test
@@ -257,6 +267,9 @@ class McpAsyncServerExchangeTests {
 
 		StepVerifier.create(exchange.loggingNotification(debugNotification)).verifyComplete();
 
+		// Verify that sendNotification was never called for DEBUG level
+		verify(mockSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(debugNotification));
+
 		// Test INFO (should be filtered)
 		McpSchema.LoggingMessageNotification infoNotification = McpSchema.LoggingMessageNotification.builder()
 			.level(McpSchema.LoggingLevel.INFO)
@@ -265,6 +278,11 @@ class McpAsyncServerExchangeTests {
 			.build();
 
 		StepVerifier.create(exchange.loggingNotification(infoNotification)).verifyComplete();
+
+		// Verify that sendNotification was never called for INFO level
+		verify(mockSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(infoNotification));
+
+		reset(mockSession);
 
 		// Test WARNING (should be sent)
 		McpSchema.LoggingMessageNotification warningNotification = McpSchema.LoggingMessageNotification.builder()
@@ -278,6 +296,10 @@ class McpAsyncServerExchangeTests {
 
 		StepVerifier.create(exchange.loggingNotification(warningNotification)).verifyComplete();
 
+		// Verify that sendNotification was called exactly once for WARNING level
+		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE),
+				eq(warningNotification));
+
 		// Test ERROR (should be sent)
 		McpSchema.LoggingMessageNotification errorNotification = McpSchema.LoggingMessageNotification.builder()
 			.level(McpSchema.LoggingLevel.ERROR)
@@ -289,6 +311,10 @@ class McpAsyncServerExchangeTests {
 			.thenReturn(Mono.empty());
 
 		StepVerifier.create(exchange.loggingNotification(errorNotification)).verifyComplete();
+
+		// Verify that sendNotification was called exactly once for ERROR level
+		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE),
+				eq(errorNotification));
 	}
 
 	@Test
@@ -304,6 +330,9 @@ class McpAsyncServerExchangeTests {
 			.thenReturn(Mono.empty());
 
 		StepVerifier.create(exchange.loggingNotification(infoNotification)).verifyComplete();
+
+		// Verify that sendNotification was called exactly once for default level
+		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(infoNotification));
 	}
 
 	@Test
@@ -379,6 +408,10 @@ class McpAsyncServerExchangeTests {
 				assertThat(error).isInstanceOf(McpError.class)
 					.hasMessage("Client must be initialized. Call the initialize method first!");
 			});
+
+		// Verify that sendRequest was never called due to null capabilities
+		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), any(),
+				any(TypeReference.class));
 	}
 
 	@Test
@@ -399,6 +432,11 @@ class McpAsyncServerExchangeTests {
 			assertThat(error).isInstanceOf(McpError.class)
 				.hasMessage("Client must be configured with elicitation capabilities");
 		});
+
+		// Verify that sendRequest was never called due to missing elicitation
+		// capabilities
+		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), any(),
+				any(TypeReference.class));
 	}
 
 	@Test
@@ -543,6 +581,10 @@ class McpAsyncServerExchangeTests {
 				assertThat(error).isInstanceOf(McpError.class)
 					.hasMessage("Client must be initialized. Call the initialize method first!");
 			});
+
+		// Verify that sendRequest was never called due to null capabilities
+		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE), any(),
+				any(TypeReference.class));
 	}
 
 	@Test
@@ -564,6 +606,10 @@ class McpAsyncServerExchangeTests {
 			assertThat(error).isInstanceOf(McpError.class)
 				.hasMessage("Client must be configured with sampling capabilities");
 		});
+
+		// Verify that sendRequest was never called due to missing sampling capabilities
+		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE), any(),
+				any(TypeReference.class));
 	}
 
 	@Test
