@@ -154,7 +154,7 @@ public interface McpServer {
 	class AsyncSpecification {
 
 		private static final McpSchema.Implementation DEFAULT_SERVER_INFO = new McpSchema.Implementation("mcp-server",
-				"1.0.0");
+				null, "1.0.0");
 
 		private final McpServerTransportProvider transportProvider;
 
@@ -256,15 +256,16 @@ public interface McpServer {
 		 * is a convenience method alternative to
 		 * {@link #serverInfo(McpSchema.Implementation)}.
 		 * @param name The server name. Must not be null or empty.
+		 * @param title The server title. May be null or empty.
 		 * @param version The server version. Must not be null or empty.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if name or version is null or empty
 		 * @see #serverInfo(McpSchema.Implementation)
 		 */
-		public AsyncSpecification serverInfo(String name, String version) {
+		public AsyncSpecification serverInfo(String name, String title, String version) {
 			Assert.hasText(name, "Name must not be null or empty");
 			Assert.hasText(version, "Version must not be null or empty");
-			this.serverInfo = new McpSchema.Implementation(name, version);
+			this.serverInfo = new McpSchema.Implementation(name, title, version);
 			return this;
 		}
 
@@ -646,7 +647,7 @@ public interface McpServer {
 	class SyncSpecification {
 
 		private static final McpSchema.Implementation DEFAULT_SERVER_INFO = new McpSchema.Implementation("mcp-server",
-				"1.0.0");
+				null, "1.0.0");
 
 		private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
 
@@ -748,15 +749,16 @@ public interface McpServer {
 		 * is a convenience method alternative to
 		 * {@link #serverInfo(McpSchema.Implementation)}.
 		 * @param name The server name. Must not be null or empty.
+		 * @param title The server title. May be null or empty.
 		 * @param version The server version. Must not be null or empty.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if name or version is null or empty
 		 * @see #serverInfo(McpSchema.Implementation)
 		 */
-		public SyncSpecification serverInfo(String name, String version) {
+		public SyncSpecification serverInfo(String name, String title, String version) {
 			Assert.hasText(name, "Name must not be null or empty");
 			Assert.hasText(version, "Version must not be null or empty");
-			this.serverInfo = new McpSchema.Implementation(name, version);
+			this.serverInfo = new McpSchema.Implementation(name, title, version);
 			return this;
 		}
 

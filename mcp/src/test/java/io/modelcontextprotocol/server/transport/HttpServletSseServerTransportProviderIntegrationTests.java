@@ -117,11 +117,14 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 					return Mono.just(mock(CallToolResult.class));
 				});
 
-		var server = McpServer.async(mcpServerTransportProvider).serverInfo("test-server", "1.0.0").tools(tool).build();
+		var server = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", null, "1.0.0")
+			.tools(tool)
+			.build();
 
 		try (
 				// Create client without sampling capabilities
-				var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
+				var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample " + "client", null, "0.0.0"))
 					.build()) {
 
 			assertThat(client.initialize()).isNotNull();
@@ -178,11 +181,11 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 				});
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
-			.serverInfo("test-server", "1.0.0")
+			.serverInfo("test-server", null, "1.0.0")
 			.tools(tool)
 			.build();
 
-		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", null, "0.0.0"))
 			.capabilities(ClientCapabilities.builder().sampling().build())
 			.sampling(samplingHandler)
 			.build()) {
@@ -216,7 +219,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 					CreateMessageResult.StopReason.STOP_SEQUENCE);
 		};
 
-		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", null, "0.0.0"))
 			.capabilities(ClientCapabilities.builder().sampling().build())
 			.sampling(samplingHandler)
 			.build();
@@ -253,7 +256,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 				});
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
-			.serverInfo("test-server", "1.0.0")
+			.serverInfo("test-server", null, "1.0.0")
 			.requestTimeout(Duration.ofSeconds(3))
 			.tools(tool)
 			.build();
@@ -288,7 +291,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 					CreateMessageResult.StopReason.STOP_SEQUENCE);
 		};
 
-		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", null, "0.0.0"))
 			.capabilities(ClientCapabilities.builder().sampling().build())
 			.sampling(samplingHandler)
 			.build();
@@ -325,7 +328,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 				});
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
-			.serverInfo("test-server", "1.0.0")
+			.serverInfo("test-server", null, "1.0.0")
 			.requestTimeout(Duration.ofSeconds(1))
 			.tools(tool)
 			.build();
@@ -356,11 +359,15 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 					return Mono.just(mock(CallToolResult.class));
 				});
 
-		var server = McpServer.async(mcpServerTransportProvider).serverInfo("test-server", "1.0.0").tools(tool).build();
+		var server = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", null, "1.0.0")
+			.tools(tool)
+			.build();
 
 		try (
 				// Create client without elicitation capabilities
-				var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0")).build()) {
+				var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", null, "0.0.0"))
+					.build()) {
 
 			assertThat(client.initialize()).isNotNull();
 
@@ -407,11 +414,11 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 				});
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
-			.serverInfo("test-server", "1.0.0")
+			.serverInfo("test-server", null, "1.0.0")
 			.tools(tool)
 			.build();
 
-		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", null, "0.0.0"))
 			.capabilities(ClientCapabilities.builder().elicitation().build())
 			.elicitation(elicitationHandler)
 			.build()) {
@@ -444,7 +451,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 			return new ElicitResult(ElicitResult.Action.ACCEPT, Map.of("message", request.message()));
 		};
 
-		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", null, "0.0.0"))
 			.capabilities(ClientCapabilities.builder().elicitation().build())
 			.elicitation(elicitationHandler)
 			.build();
@@ -473,7 +480,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 				});
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
-			.serverInfo("test-server", "1.0.0")
+			.serverInfo("test-server", null, "1.0.0")
 			.requestTimeout(Duration.ofSeconds(3))
 			.tools(tool)
 			.build();
@@ -507,7 +514,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 			return new ElicitResult(ElicitResult.Action.ACCEPT, Map.of("message", request.message()));
 		};
 
-		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", null, "0.0.0"))
 			.capabilities(ClientCapabilities.builder().elicitation().build())
 			.elicitation(elicitationHandler)
 			.build();
@@ -536,7 +543,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 				});
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
-			.serverInfo("test-server", "1.0.0")
+			.serverInfo("test-server", null, "1.0.0")
 			.requestTimeout(Duration.ofSeconds(1))
 			.tools(tool)
 			.build();
@@ -904,7 +911,7 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 				});
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
-			.serverInfo("test-server", "1.0.0")
+			.serverInfo("test-server", null, "1.0.0")
 			.capabilities(ServerCapabilities.builder().logging().tools(true).build())
 			.tools(tool)
 			.build();

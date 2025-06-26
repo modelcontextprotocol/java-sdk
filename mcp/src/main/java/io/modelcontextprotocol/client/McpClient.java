@@ -66,7 +66,7 @@ import reactor.core.publisher.Mono;
  * McpClient.async(transport)
  *     .requestTimeout(Duration.ofSeconds(10))
  *     .capabilities(new ClientCapabilities(...))
- *     .clientInfo(new Implementation("My Client", "1.0.0"))
+ *     .clientInfo(new Implementation("My Client", "Title", "1.0.0"))
  *     .roots(new Root("file://workspace", "Workspace Files"))
  *     .toolsChangeConsumer(tools -> Mono.fromRunnable(() -> System.out.println("Tools updated: " + tools)))
  *     .resourcesChangeConsumer(resources -> Mono.fromRunnable(() -> System.out.println("Resources updated: " + resources)))
@@ -163,7 +163,7 @@ public interface McpClient {
 
 		private ClientCapabilities capabilities;
 
-		private Implementation clientInfo = new Implementation("Java SDK MCP Client", "1.0.0");
+		private Implementation clientInfo = new Implementation("Java SDK MCP Client", null, "1.0.0");
 
 		private final Map<String, Root> roots = new HashMap<>();
 
@@ -421,7 +421,7 @@ public interface McpClient {
 
 		private ClientCapabilities capabilities;
 
-		private Implementation clientInfo = new Implementation("Spring AI MCP Client", "0.3.1");
+		private Implementation clientInfo = new Implementation("Spring AI MCP Client", null, "0.3.1");
 
 		private final Map<String, Root> roots = new HashMap<>();
 

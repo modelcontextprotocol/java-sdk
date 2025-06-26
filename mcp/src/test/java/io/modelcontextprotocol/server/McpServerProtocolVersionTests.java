@@ -19,9 +19,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class McpServerProtocolVersionTests {
 
-	private static final McpSchema.Implementation SERVER_INFO = new McpSchema.Implementation("test-server", "1.0.0");
+	private static final McpSchema.Implementation SERVER_INFO = new McpSchema.Implementation("test-server", null,
+			"1.0.0");
 
-	private static final McpSchema.Implementation CLIENT_INFO = new McpSchema.Implementation("test-client", "1.0.0");
+	private static final McpSchema.Implementation CLIENT_INFO = new McpSchema.Implementation("test-client", null,
+			"1.0.0");
 
 	private McpSchema.JSONRPCRequest jsonRpcInitializeRequest(String requestId, String protocolVersion) {
 		return new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE, requestId,

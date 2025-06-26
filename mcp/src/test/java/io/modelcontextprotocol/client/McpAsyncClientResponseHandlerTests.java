@@ -30,7 +30,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class McpAsyncClientResponseHandlerTests {
 
-	private static final McpSchema.Implementation SERVER_INFO = new McpSchema.Implementation("test-server", "1.0.0");
+	private static final McpSchema.Implementation SERVER_INFO = new McpSchema.Implementation("test-server", null,
+			"1.0.0");
 
 	private static final McpSchema.ServerCapabilities SERVER_CAPABILITIES = McpSchema.ServerCapabilities.builder()
 		.tools(true)
@@ -57,7 +58,7 @@ class McpAsyncClientResponseHandlerTests {
 
 	@Test
 	void testSuccessfulInitialization() {
-		McpSchema.Implementation serverInfo = new McpSchema.Implementation("mcp-test-server", "0.0.1");
+		McpSchema.Implementation serverInfo = new McpSchema.Implementation("mcp-test-server", null, "0.0.1");
 		McpSchema.ServerCapabilities serverCapabilities = McpSchema.ServerCapabilities.builder()
 			.tools(false)
 			.resources(true, true) // Enable both resources and resource templates
