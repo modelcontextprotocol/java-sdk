@@ -167,7 +167,8 @@ public class DnsRebindingProtection {
 	 * <li>Configure allowlists using {@link #allowedHost(String)} and
 	 * {@link #allowedOrigin(String)}</li>
 	 * <li>Optionally enable/disable protection via
-	 * {@link #enableDnsRebindingProtection(boolean)}</li>
+	 * {@link #enableDnsRebindingProtection(boolean)}. Protection is default-enabled when
+	 * creating a builder.</li>
 	 * <li>Build final instance via {@link #build()}</li>
 	 * </ol>
 	 *
