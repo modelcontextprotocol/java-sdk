@@ -9,7 +9,7 @@ import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.junit.jupiter.api.Timeout;
 
 /**
- * Tests for {@link McpAsyncServer} using {@link StdioServerTransport}.
+ * Tests for {@link McpAsyncServer} using {@link StdioServerTransportProvider}.
  *
  * @author Christian Tzolov
  */
