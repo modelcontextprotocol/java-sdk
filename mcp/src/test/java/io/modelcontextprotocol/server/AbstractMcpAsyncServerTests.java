@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Test suite for the {@link McpAsyncServer} that can be used with different
- * {@link McpTransportProvider} implementations.
+ * {@link McpServerTransportProvider} implementations.
  *
  * @author Christian Tzolov
  */
