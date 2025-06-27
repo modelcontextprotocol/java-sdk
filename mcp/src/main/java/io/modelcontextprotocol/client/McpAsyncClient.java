@@ -271,6 +271,16 @@ public class McpAsyncClient {
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_MESSAGE,
 				asyncLoggingNotificationHandler(loggingConsumersFinal));
 
+		// Utility Progress Notification
+		List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumersFinal = new ArrayList<>();
+		progressConsumersFinal
+			.add((notification) -> Mono.fromRunnable(() -> logger.debug("Progress: {}", notification)));
+		if (!Utils.isEmpty(features.progressConsumers())) {
+			progressConsumersFinal.addAll(features.progressConsumers());
+		}
+		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_PROGRESS,
+				asyncProgressNotificationHandler(progressConsumersFinal));
+
 		this.transport.setExceptionHandler(this::handleException);
 		this.sessionSupplier = ctx -> new McpClientSession(requestTimeout, transport, requestHandlers,
 				notificationHandlers, con -> con.contextWrite(ctx));
@@ -976,6 +986,20 @@ public class McpAsyncClient {
 
 			return Flux.fromIterable(loggingConsumers)
 				.flatMap(consumer -> consumer.apply(loggingMessageNotification))
+				.then();
+		};
+	}
+
+	private NotificationHandler asyncProgressNotificationHandler(
+			List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers) {
+
+		return params -> {
+			McpSchema.ProgressNotification progressNotification = transport.unmarshalFrom(params,
+					new TypeReference<McpSchema.ProgressNotification>() {
+					});
+
+			return Flux.fromIterable(progressConsumers)
+				.flatMap(consumer -> consumer.apply(progressNotification))
 				.then();
 		};
 	}
