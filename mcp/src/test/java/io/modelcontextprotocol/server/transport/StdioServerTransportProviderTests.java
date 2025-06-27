@@ -71,7 +71,7 @@ class StdioServerTransportProviderTests {
 		sessionFactory = mock(McpServerSession.Factory.class);
 
 		// Configure mock behavior
-		when(sessionFactory.create(any(McpServerTransport.class))).thenReturn(mockSession);
+		when(sessionFactory.create(any(), any(McpServerTransport.class))).thenReturn(mockSession);
 		when(mockSession.closeGracefully()).thenReturn(Mono.empty());
 		when(mockSession.sendNotification(any(), any())).thenReturn(Mono.empty());
 
@@ -110,7 +110,7 @@ class StdioServerTransportProviderTests {
 		AtomicReference<McpSchema.JSONRPCMessage> capturedMessage = new AtomicReference<>();
 		CountDownLatch messageLatch = new CountDownLatch(1);
 
-		McpServerSession.Factory realSessionFactory = transport -> {
+		McpServerSession.Factory realSessionFactory = (id, transport) -> {
 			McpServerSession session = mock(McpServerSession.class);
 			when(session.handle(any())).thenAnswer(invocation -> {
 				capturedMessage.set(invocation.getArgument(0));
