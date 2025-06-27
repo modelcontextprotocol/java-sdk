@@ -162,10 +162,13 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				.build();
 
 			return Mono.fromFuture(() -> this.httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-				.exceptionallyCompose(e -> {
-					logger.warn("Error sending message", e);
-
-					return CompletableFuture.failedFuture(e);
+				.whenComplete((response, throwable) -> {
+					if (throwable != null) {
+						logger.warn("Error sending message", throwable);
+					}
+					else {
+						logger.debug("SSE connection established successfully");
+					}
 				})).doOnError(e -> logger.warn("Got error when closing transport", e)).then();
 		});
 	}
@@ -233,10 +236,14 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 			Disposable connection = Flux.<ResponseEvent>create(sseSink -> this.httpClient
 				.sendAsync(request, responseInfo -> ResponseSubscribers.sseToBodySubscriber(responseInfo, sseSink))
-				.exceptionallyCompose(e -> {
-					logger.warn("Error sending message", e);
-					sseSink.error(e);
-					return CompletableFuture.failedFuture(e);
+				.whenComplete((response, throwable) -> {
+					if (throwable != null) {
+						logger.warn("Error sending message", throwable);
+						sseSink.error(throwable);
+					}
+					else {
+						logger.debug("SSE connection established successfully");
+					}
 				})).flatMap(responseEvent -> {
 					int statusCode = responseEvent.responseInfo().statusCode();
 
@@ -369,10 +376,14 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 				// Create the async request with proper body subscriber selection
 				Mono.fromFuture(this.httpClient.sendAsync(request, this.toSendMessageBodySubscriber(responseEventSink))
-					.exceptionallyCompose(e -> {
-						logger.warn("Error sending message", e);
-						responseEventSink.error(e);
-						return CompletableFuture.failedFuture(e);
+					.whenComplete((response, throwable) -> {
+						if (throwable != null) {
+							logger.warn("Error sending message", throwable);
+							responseEventSink.error(throwable);
+						}
+						else {
+							logger.debug("SSE connection established successfully");
+						}
 					})).subscribe();
 
 			}).flatMap(responseEvent -> {

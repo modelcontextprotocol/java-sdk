@@ -20,7 +20,7 @@ import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.FluxSink;
 
-public class ResponseSubscribers {
+class ResponseSubscribers {
 
 	/**
 	 * Represents a Server-Sent Event with its standard fields.
@@ -328,7 +328,6 @@ public class ResponseSubscribers {
 
 		@Override
 		protected void hookOnNext(String line) {
-			System.out.println(">>>>>>>>>>>>>> Received line: " + line);
 		}
 
 		/**
