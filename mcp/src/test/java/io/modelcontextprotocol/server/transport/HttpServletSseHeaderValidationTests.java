@@ -63,18 +63,18 @@ class HttpServletSseHeaderValidationTests {
 	@Test
 	void testConnectionSucceedsWithValidHeaders() {
 		// Create DNS rebinding protection config that validates API key
-		DnsRebindingProtectionConfig dnsRebindingProtectionConfig = DnsRebindingProtectionConfig.builder()
+		DnsRebindingProtection dnsRebindingProtection = DnsRebindingProtection.builder()
 			.enableDnsRebindingProtection(false) // Disable Host/Origin validation for
 													// this test
 			.build();
 
 		// For this test, we'll need to use a custom transport provider implementation
-		// since DnsRebindingProtectionConfig doesn't support custom header validation
+		// since DnsRebindingProtection doesn't support custom header validation
 		transportProvider = HttpServletSseServerTransportProvider.builder()
 			.objectMapper(new ObjectMapper())
 			.messageEndpoint(MESSAGE_ENDPOINT)
 			.sseEndpoint(SSE_ENDPOINT)
-			.dnsRebindingProtectionConfig(dnsRebindingProtectionConfig)
+			.dnsRebindingProtection(dnsRebindingProtection)
 			.build();
 
 		startServer();
@@ -94,7 +94,7 @@ class HttpServletSseHeaderValidationTests {
 	@Test
 	void testConnectionFailsWithInvalidHeaders() {
 		// Create DNS rebinding protection config with restricted hosts
-		DnsRebindingProtectionConfig dnsRebindingProtectionConfig = DnsRebindingProtectionConfig.builder()
+		DnsRebindingProtection dnsRebindingProtection = DnsRebindingProtection.builder()
 			.allowedHost("valid-host.com")
 			.build();
 
@@ -103,7 +103,7 @@ class HttpServletSseHeaderValidationTests {
 			.objectMapper(new ObjectMapper())
 			.messageEndpoint(MESSAGE_ENDPOINT)
 			.sseEndpoint(SSE_ENDPOINT)
-			.dnsRebindingProtectionConfig(dnsRebindingProtectionConfig)
+			.dnsRebindingProtection(dnsRebindingProtection)
 			.build();
 
 		startServer();
@@ -127,7 +127,7 @@ class HttpServletSseHeaderValidationTests {
 		// Create DNS rebinding protection config with specific allowed origin but no
 		// allowed hosts
 		// This means any non-null host will be rejected
-		DnsRebindingProtectionConfig dnsRebindingProtectionConfig = DnsRebindingProtectionConfig.builder()
+		DnsRebindingProtection dnsRebindingProtection = DnsRebindingProtection.builder()
 			.allowedOrigin("http://allowed-origin.com")
 			.build();
 
@@ -136,7 +136,7 @@ class HttpServletSseHeaderValidationTests {
 			.objectMapper(new ObjectMapper())
 			.messageEndpoint(MESSAGE_ENDPOINT)
 			.sseEndpoint(SSE_ENDPOINT)
-			.dnsRebindingProtectionConfig(dnsRebindingProtectionConfig)
+			.dnsRebindingProtection(dnsRebindingProtection)
 			.build();
 
 		startServer();
@@ -161,7 +161,7 @@ class HttpServletSseHeaderValidationTests {
 		// Create DNS rebinding protection config with specific allowed hosts and origins
 		// Note: The Host header will include the port, so we need to allow
 		// "localhost:PORT"
-		DnsRebindingProtectionConfig dnsRebindingProtectionConfig = DnsRebindingProtectionConfig.builder()
+		DnsRebindingProtection dnsRebindingProtection = DnsRebindingProtection.builder()
 			.allowedHost("localhost:" + PORT)
 			.allowedOrigin("http://localhost:" + PORT)
 			.build();
@@ -171,7 +171,7 @@ class HttpServletSseHeaderValidationTests {
 			.objectMapper(new ObjectMapper())
 			.messageEndpoint(MESSAGE_ENDPOINT)
 			.sseEndpoint(SSE_ENDPOINT)
-			.dnsRebindingProtectionConfig(dnsRebindingProtectionConfig)
+			.dnsRebindingProtection(dnsRebindingProtection)
 			.build();
 
 		startServer();

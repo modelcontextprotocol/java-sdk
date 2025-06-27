@@ -104,7 +104,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	private McpServerSession.Factory sessionFactory;
 
 	/** DNS rebinding protection configuration */
-	private final DnsRebindingProtectionConfig dnsRebindingProtectionConfig;
+	private final DnsRebindingProtection dnsRebindingProtection;
 
 	/**
 	 * Creates a new HttpServletSseServerTransportProvider instance with a custom SSE
@@ -113,7 +113,9 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 * serialization/deserialization
 	 * @param messageEndpoint The endpoint path where clients will send their messages
 	 * @param sseEndpoint The endpoint path where clients will establish SSE connections
+	 * @deprecated Use {@link #builder()} instead.
 	 */
+	@Deprecated
 	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint,
 			String sseEndpoint) {
 		this(objectMapper, DEFAULT_BASE_URL, messageEndpoint, sseEndpoint, null);
@@ -127,10 +129,25 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 * @param baseUrl The base URL for the server transport
 	 * @param messageEndpoint The endpoint path where clients will send their messages
 	 * @param sseEndpoint The endpoint path where clients will establish SSE connections
+	 * @deprecated Use {@link #builder()} instead.
 	 */
+	@Deprecated
 	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint) {
 		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, null);
+	}
+
+	/**
+	 * Creates a new HttpServletSseServerTransportProvider instance with the default SSE
+	 * endpoint.
+	 * @param objectMapper The JSON object mapper to use for message
+	 * serialization/deserialization
+	 * @param messageEndpoint The endpoint path where clients will send their messages
+	 * @deprecated Use {@link #builder()} instead.
+	 */
+	@Deprecated
+	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint) {
+		this(objectMapper, messageEndpoint, DEFAULT_SSE_ENDPOINT);
 	}
 
 	/**
@@ -141,27 +158,16 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 * @param baseUrl The base URL for the server transport
 	 * @param messageEndpoint The endpoint path where clients will send their messages
 	 * @param sseEndpoint The endpoint path where clients will establish SSE connections
-	 * @param dnsRebindingProtectionConfig The DNS rebinding protection configuration (may
-	 * be null)
+	 * @param dnsRebindingProtection The DNS rebinding protection configuration (may be
+	 * null)
 	 */
-	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
-			String sseEndpoint, DnsRebindingProtectionConfig dnsRebindingProtectionConfig) {
+	private HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+			String sseEndpoint, DnsRebindingProtection dnsRebindingProtection) {
 		this.objectMapper = objectMapper;
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
-		this.dnsRebindingProtectionConfig = dnsRebindingProtectionConfig;
-	}
-
-	/**
-	 * Creates a new HttpServletSseServerTransportProvider instance with the default SSE
-	 * endpoint.
-	 * @param objectMapper The JSON object mapper to use for message
-	 * serialization/deserialization
-	 * @param messageEndpoint The endpoint path where clients will send their messages
-	 */
-	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint) {
-		this(objectMapper, messageEndpoint, DEFAULT_SSE_ENDPOINT);
+		this.dnsRebindingProtection = dnsRebindingProtection;
 	}
 
 	/**
@@ -223,15 +229,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		}
 
 		// Validate headers if DNS rebinding protection is configured
-		if (dnsRebindingProtectionConfig != null) {
-			String hostHeader = request.getHeader("Host");
-			String originHeader = request.getHeader("Origin");
-			if (!dnsRebindingProtectionConfig.validate(hostHeader, originHeader)) {
-				logger.warn("DNS rebinding protection validation failed - Host: '{}', Origin: '{}'", hostHeader,
-						originHeader);
-				response.sendError(HttpServletResponse.SC_FORBIDDEN, "DNS rebinding protection validation failed");
-				return;
-			}
+		if (!validateDnsRebindingProtection(request, response)) {
+			return;
 		}
 
 		response.setContentType("text/event-stream");
@@ -293,15 +292,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		}
 
 		// Validate headers for POST requests if DNS rebinding protection is configured
-		if (dnsRebindingProtectionConfig != null) {
-			String hostHeader = request.getHeader("Host");
-			String originHeader = request.getHeader("Origin");
-			if (!dnsRebindingProtectionConfig.validate(hostHeader, originHeader)) {
-				logger.warn("DNS rebinding protection validation failed - Host: '{}', Origin: '{}'", hostHeader,
-						originHeader);
-				response.sendError(HttpServletResponse.SC_FORBIDDEN, "DNS rebinding protection validation failed");
-				return;
-			}
+		if (!validateDnsRebindingProtection(request, response)) {
+			return;
 		}
 
 		// Get the session ID from the request parameter
@@ -377,6 +369,37 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		logger.debug("Initiating graceful shutdown with {} active sessions", sessions.size());
 
 		return Flux.fromIterable(sessions.values()).flatMap(McpServerSession::closeGracefully).then();
+	}
+
+	/**
+	 * Validates DNS rebinding protection for the given request and sends an error
+	 * response if validation fails.
+	 * <p>
+	 * Uses {@link HttpServletRequest#getServerName()} and
+	 * {@link HttpServletRequest#getServerPort()} instead of the Host header for HTTP/2
+	 * compatibility.
+	 * @param request The HTTP servlet request
+	 * @param response The HTTP servlet response
+	 * @return true if validation passed (or no validation needed), false if validation
+	 * failed and error was sent
+	 * @throws IOException If an I/O error occurs while sending error response
+	 */
+	private boolean validateDnsRebindingProtection(HttpServletRequest request, HttpServletResponse response)
+			throws IOException {
+		if (dnsRebindingProtection != null) {
+			String serverName = request.getServerName();
+			int serverPort = request.getServerPort();
+			String hostValue = serverPort == 80 || serverPort == 443 ? serverName : serverName + ":" + serverPort;
+
+			String originHeader = request.getHeader("Origin");
+			if (!dnsRebindingProtection.isValid(hostValue, originHeader)) {
+				logger.warn("DNS rebinding protection validation failed - Host: '{}', Origin: '{}'", hostValue,
+						originHeader);
+				response.sendError(HttpServletResponse.SC_FORBIDDEN, "DNS rebinding protection validation failed");
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -527,7 +550,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 
 		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
 
-		private DnsRebindingProtectionConfig dnsRebindingProtectionConfig;
+		private DnsRebindingProtection dnsRebindingProtection;
 
 		/**
 		 * Sets the JSON object mapper to use for message serialization/deserialization.
@@ -581,9 +604,9 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		 * @param config The DNS rebinding protection configuration
 		 * @return This builder instance for method chaining
 		 */
-		public Builder dnsRebindingProtectionConfig(DnsRebindingProtectionConfig config) {
+		public Builder dnsRebindingProtection(DnsRebindingProtection config) {
 			Assert.notNull(config, "DNS rebinding protection config must not be null");
-			this.dnsRebindingProtectionConfig = config;
+			this.dnsRebindingProtection = config;
 			return this;
 		}
 
@@ -601,7 +624,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 				throw new IllegalStateException("MessageEndpoint must be set");
 			}
 			return new HttpServletSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint,
-					dnsRebindingProtectionConfig);
+					dnsRebindingProtection);
 		}
 
 	}
