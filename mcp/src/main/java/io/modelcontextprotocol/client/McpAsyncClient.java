@@ -5,6 +5,7 @@ package io.modelcontextprotocol.client;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -186,6 +187,9 @@ public class McpAsyncClient {
 
 		// Request Handlers
 		Map<String, RequestHandler<?>> requestHandlers = new HashMap<>();
+
+		// Ping MUST respond with an empty data, but not NULL response.
+		requestHandlers.put(McpSchema.METHOD_PING, params -> Mono.just(Map.of()));
 
 		// Roots List Request Handler
 		if (this.clientCapabilities.roots() != null) {
@@ -674,15 +678,13 @@ public class McpAsyncClient {
 	 * @return A Mono that emits the list of all tools result
 	 */
 	public Mono<McpSchema.ListToolsResult> listTools() {
-		return this.listTools(McpSchema.FIRST_PAGE).expand(result -> {
-			if (result.nextCursor() != null) {
-				return this.listTools(result.nextCursor());
-			}
-			return Mono.empty();
-		}).reduce(new McpSchema.ListToolsResult(new ArrayList<>(), null), (allToolsResult, result) -> {
-			allToolsResult.tools().addAll(result.tools());
-			return allToolsResult;
-		});
+		return this.listTools(McpSchema.FIRST_PAGE)
+			.expand(result -> (result.nextCursor() != null) ? this.listTools(result.nextCursor()) : Mono.empty())
+			.reduce(new McpSchema.ListToolsResult(new ArrayList<>(), null), (allToolsResult, result) -> {
+				allToolsResult.tools().addAll(result.tools());
+				return allToolsResult;
+			})
+			.map(result -> new McpSchema.ListToolsResult(Collections.unmodifiableList(result.tools()), null));
 	}
 
 	/**
@@ -736,15 +738,13 @@ public class McpAsyncClient {
 	 * @see #readResource(McpSchema.Resource)
 	 */
 	public Mono<McpSchema.ListResourcesResult> listResources() {
-		return this.listResources(McpSchema.FIRST_PAGE).expand(result -> {
-			if (result.nextCursor() != null) {
-				return this.listResources(result.nextCursor());
-			}
-			return Mono.empty();
-		}).reduce(new McpSchema.ListResourcesResult(new ArrayList<>(), null), (allResourcesResult, result) -> {
-			allResourcesResult.resources().addAll(result.resources());
-			return allResourcesResult;
-		});
+		return this.listResources(McpSchema.FIRST_PAGE)
+			.expand(result -> (result.nextCursor() != null) ? this.listResources(result.nextCursor()) : Mono.empty())
+			.reduce(new McpSchema.ListResourcesResult(new ArrayList<>(), null), (allResourcesResult, result) -> {
+				allResourcesResult.resources().addAll(result.resources());
+				return allResourcesResult;
+			})
+			.map(result -> new McpSchema.ListResourcesResult(Collections.unmodifiableList(result.resources()), null));
 	}
 
 	/**
@@ -806,17 +806,16 @@ public class McpAsyncClient {
 	 * @see McpSchema.ListResourceTemplatesResult
 	 */
 	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates() {
-		return this.listResourceTemplates(McpSchema.FIRST_PAGE).expand(result -> {
-			if (result.nextCursor() != null) {
-				return this.listResourceTemplates(result.nextCursor());
-			}
-			return Mono.empty();
-		})
+		return this.listResourceTemplates(McpSchema.FIRST_PAGE)
+			.expand(result -> (result.nextCursor() != null) ? this.listResourceTemplates(result.nextCursor())
+					: Mono.empty())
 			.reduce(new McpSchema.ListResourceTemplatesResult(new ArrayList<>(), null),
 					(allResourceTemplatesResult, result) -> {
 						allResourceTemplatesResult.resourceTemplates().addAll(result.resourceTemplates());
 						return allResourceTemplatesResult;
-					});
+					})
+			.map(result -> new McpSchema.ListResourceTemplatesResult(
+					Collections.unmodifiableList(result.resourceTemplates()), null));
 	}
 
 	/**
@@ -911,15 +910,13 @@ public class McpAsyncClient {
 	 * @see #getPrompt(GetPromptRequest)
 	 */
 	public Mono<ListPromptsResult> listPrompts() {
-		return this.listPrompts(McpSchema.FIRST_PAGE).expand(result -> {
-			if (result.nextCursor() != null) {
-				return this.listPrompts(result.nextCursor());
-			}
-			return Mono.empty();
-		}).reduce(new ListPromptsResult(new ArrayList<>(), null), (allPromptsResult, result) -> {
-			allPromptsResult.prompts().addAll(result.prompts());
-			return allPromptsResult;
-		});
+		return this.listPrompts(McpSchema.FIRST_PAGE)
+			.expand(result -> (result.nextCursor() != null) ? this.listPrompts(result.nextCursor()) : Mono.empty())
+			.reduce(new ListPromptsResult(new ArrayList<>(), null), (allPromptsResult, result) -> {
+				allPromptsResult.prompts().addAll(result.prompts());
+				return allPromptsResult;
+			})
+			.map(result -> new McpSchema.ListPromptsResult(Collections.unmodifiableList(result.prompts()), null));
 	}
 
 	/**

@@ -486,6 +486,28 @@ public final class McpSchema {
 	} // @formatter:on
 
 	/**
+	 * A common interface for resource content, which includes metadata about the resource
+	 * such as its URI, name, description, MIME type, size, and annotations. This
+	 * interface is implemented by both {@link Resource} and {@link ResourceLink} to
+	 * provide a consistent way to access resource metadata.
+	 */
+	public interface ResourceContent {
+
+		String uri();
+
+		String name();
+
+		String description();
+
+		String mimeType();
+
+		Long size();
+
+		Annotations annotations();
+
+	}
+
+	/**
 	 * A known resource that the server is capable of reading.
 	 *
 	 * @param uri the URI of the resource.
@@ -514,7 +536,7 @@ public final class McpSchema {
 		@JsonProperty("description") String description,
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("size") Long size,
-		@JsonProperty("annotations") Annotations annotations) implements Annotated {
+		@JsonProperty("annotations") Annotations annotations) implements Annotated, ResourceContent {
 
 		/**
 		 * @deprecated Only exists for backwards-compatibility purposes. Use
@@ -1785,8 +1807,9 @@ public final class McpSchema {
 	@JsonSubTypes({ @JsonSubTypes.Type(value = TextContent.class, name = "text"),
 			@JsonSubTypes.Type(value = ImageContent.class, name = "image"),
 			@JsonSubTypes.Type(value = AudioContent.class, name = "audio"),
-			@JsonSubTypes.Type(value = EmbeddedResource.class, name = "resource") })
-	public sealed interface Content permits TextContent, ImageContent, AudioContent, EmbeddedResource {
+			@JsonSubTypes.Type(value = EmbeddedResource.class, name = "resource"),
+			@JsonSubTypes.Type(value = ResourceLink.class, name = "resource_link") })
+	public sealed interface Content permits TextContent, ImageContent, AudioContent, EmbeddedResource, ResourceLink {
 
 		default String type() {
 			if (this instanceof TextContent) {
@@ -1800,6 +1823,9 @@ public final class McpSchema {
 			}
 			else if (this instanceof EmbeddedResource) {
 				return "resource";
+			}
+			else if (this instanceof ResourceLink) {
+				return "resource_link";
 			}
 			throw new IllegalArgumentException("Unknown content type: " + this);
 		}
@@ -1910,6 +1936,90 @@ public final class McpSchema {
 		 */
 		public Double priority() {
 			return annotations == null ? null : annotations.priority();
+		}
+	}
+
+	/**
+	 * A known resource that the server is capable of reading.
+	 *
+	 * @param uri the URI of the resource.
+	 * @param name A human-readable name for this resource. This can be used by clients to
+	 * populate UI elements.
+	 * @param description A description of what this resource represents. This can be used
+	 * by clients to improve the LLM's understanding of available resources. It can be
+	 * thought of like a "hint" to the model.
+	 * @param mimeType The MIME type of this resource, if known.
+	 * @param size The size of the raw resource content, in bytes (i.e., before base64
+	 * encoding or any tokenization), if known. This can be used by Hosts to display file
+	 * sizes and estimate context window usage.
+	 * @param annotations Optional annotations for the client. The client can use
+	 * annotations to inform how objects are used or displayed.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ResourceLink( // @formatter:off
+		@JsonProperty("name") String name,
+		@JsonProperty("uri") String uri,
+		@JsonProperty("description") String description,
+		@JsonProperty("mimeType") String mimeType,
+		@JsonProperty("size") Long size,
+		@JsonProperty("annotations") Annotations annotations) implements Annotated, Content, ResourceContent { // @formatter:on
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+
+			private String name;
+
+			private String uri;
+
+			private String description;
+
+			private String mimeType;
+
+			private Annotations annotations;
+
+			private Long size;
+
+			public Builder name(String name) {
+				this.name = name;
+				return this;
+			}
+
+			public Builder uri(String uri) {
+				this.uri = uri;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder mimeType(String mimeType) {
+				this.mimeType = mimeType;
+				return this;
+			}
+
+			public Builder annotations(Annotations annotations) {
+				this.annotations = annotations;
+				return this;
+			}
+
+			public Builder size(Long size) {
+				this.size = size;
+				return this;
+			}
+
+			public ResourceLink build() {
+				Assert.hasText(uri, "uri must not be empty");
+				Assert.hasText(name, "name must not be empty");
+
+				return new ResourceLink(name, uri, description, mimeType, size, annotations);
+			}
+
 		}
 	}
 

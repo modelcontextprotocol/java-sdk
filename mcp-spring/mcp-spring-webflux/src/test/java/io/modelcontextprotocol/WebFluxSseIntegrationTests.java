@@ -432,12 +432,6 @@ class WebFluxSseIntegrationTests {
 		Function<ElicitRequest, ElicitResult> elicitationHandler = request -> {
 			assertThat(request.message()).isNotEmpty();
 			assertThat(request.requestedSchema()).isNotNull();
-			try {
-				TimeUnit.SECONDS.sleep(2);
-			}
-			catch (InterruptedException e) {
-				throw new RuntimeException(e);
-			}
 			return new ElicitResult(ElicitResult.Action.ACCEPT, Map.of("message", request.message()));
 		};
 
@@ -491,14 +485,18 @@ class WebFluxSseIntegrationTests {
 	@ValueSource(strings = { "httpclient", "webflux" })
 	void testCreateElicitationWithRequestTimeoutFail(String clientType) {
 
+		var latch = new CountDownLatch(1);
 		// Client
 		var clientBuilder = clientBuilders.get(clientType);
 
 		Function<ElicitRequest, ElicitResult> elicitationHandler = request -> {
 			assertThat(request.message()).isNotEmpty();
 			assertThat(request.requestedSchema()).isNotNull();
+
 			try {
-				TimeUnit.SECONDS.sleep(2);
+				if (!latch.await(2, TimeUnit.SECONDS)) {
+					throw new RuntimeException("Timeout waiting for elicitation processing");
+				}
 			}
 			catch (InterruptedException e) {
 				throw new RuntimeException(e);
@@ -536,7 +534,7 @@ class WebFluxSseIntegrationTests {
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
-			.requestTimeout(Duration.ofSeconds(1))
+			.requestTimeout(Duration.ofSeconds(1)) // 1 second.
 			.tools(tool)
 			.build();
 
