@@ -462,14 +462,14 @@ public class McpAsyncServer {
 			.filter(uri -> uri.contains("{"))
 			.map(uri -> {
 				var resource = this.resources.get(uri).resource();
-                return ResourceTemplate.builder()
-                        .uriTemplate(resource.uri())
-                        .name(resource.name())
-                        .title(resource.title())
-                        .description(resource.description())
-                        .mimeType(resource.mimeType())
-                        .annotations(resource.annotations())
-                        .build();
+				return ResourceTemplate.builder()
+					.uriTemplate(resource.uri())
+					.name(resource.name())
+					.title(resource.title())
+					.description(resource.description())
+					.mimeType(resource.mimeType())
+					.annotations(resource.annotations())
+					.build();
 			})
 			.toList();
 
@@ -731,10 +731,10 @@ public class McpAsyncServer {
 
 		McpSchema.CompleteReference ref = switch (refType) {
 			case "ref/prompt" -> McpSchema.PromptReference.builder()
-					.type(refType)
-					.name((String) refMap.get("name"))
-					.title((String) refMap.get("title"))
-					.build();
+				.type(refType)
+				.name((String) refMap.get("name"))
+				.title((String) refMap.get("title"))
+				.build();
 			case "ref/resource" -> new McpSchema.ResourceReference(refType, (String) refMap.get("uri"));
 			default -> throw new IllegalArgumentException("Invalid ref type: " + refType);
 		};

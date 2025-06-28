@@ -285,13 +285,13 @@ public class McpSchemaTests {
 				Arrays.asList(McpSchema.Role.USER, McpSchema.Role.ASSISTANT), 0.8);
 
 		McpSchema.Resource resource = McpSchema.Resource.builder()
-				.uri("resource://test")
-				.name("Test Resource")
-				.title("A Test Resource")
-				.mimeType("text/plain")
-				.description("A test resource")
-				.annotations(annotations)
-				.build();
+			.uri("resource://test")
+			.name("Test Resource")
+			.title("A Test Resource")
+			.mimeType("text/plain")
+			.description("A test resource")
+			.annotations(annotations)
+			.build();
 
 		String value = mapper.writeValueAsString(resource);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -403,7 +403,7 @@ public class McpSchemaTests {
 		McpSchema.Resource resource1 = McpSchema.Resource.builder()
 			.uri("resource://test1")
 			.name("Test Resource 1")
-//			.title("The first test resource") // No Title
+			// .title("The first test resource") // No Title
 			.description("First test resource")
 			.mimeType("text/plain")
 			.build();
@@ -441,7 +441,7 @@ public class McpSchemaTests {
 		McpSchema.ResourceTemplate template2 = McpSchema.ResourceTemplate.builder()
 			.uriTemplate("resource://{param}/test2")
 			.name("Test Template 2")
-//			.title("Second Test Template") // No Title
+			// .title("Second Test Template") // No Title
 			.description("Second test template")
 			.mimeType("application/json")
 			.build();
@@ -539,18 +539,18 @@ public class McpSchemaTests {
 	@Test
 	void testListPromptsResult() throws Exception {
 		McpSchema.PromptArgument arg = McpSchema.PromptArgument.builder()
-				.name("arg")
-				.title("Arg")
-				.description("An argument")
-				.required(true)
-				.build();
+			.name("arg")
+			.title("Arg")
+			.description("An argument")
+			.required(true)
+			.build();
 
 		McpSchema.Prompt prompt1 = McpSchema.Prompt.builder()
-				.name("prompt1")
-				.title("A first prompt")
-				.description("First prompt")
-				.arguments(Collections.singletonList(arg))
-				.build();
+			.name("prompt1")
+			.title("A first prompt")
+			.description("First prompt")
+			.arguments(Collections.singletonList(arg))
+			.build();
 
 		// - No Title Prompt
 		McpSchema.Prompt prompt2 = new McpSchema.Prompt("prompt2", "Second prompt", Collections.emptyList());
@@ -708,11 +708,11 @@ public class McpSchemaTests {
 				""";
 
 		McpSchema.Tool tool = McpSchema.Tool.builder()
-				.name("test-tool")
-				.title("Test Tool")
-				.description("A test tool")
-				.inputSchema(schemaJson)
-				.build();
+			.name("test-tool")
+			.title("Test Tool")
+			.description("A test tool")
+			.inputSchema(schemaJson)
+			.build();
 
 		String value = mapper.writeValueAsString(tool);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -747,11 +747,11 @@ public class McpSchemaTests {
 				""";
 
 		McpSchema.Tool tool = McpSchema.Tool.builder()
-				.name("addressTool")
-				.title("Address Tool")
-				.description("Handles addresses")
-				.inputSchema(complexSchemaJson)
-				.build();
+			.name("addressTool")
+			.title("Address Tool")
+			.description("Handles addresses")
+			.inputSchema(complexSchemaJson)
+			.build();
 
 		// Serialize the tool to a string
 		String serialized = mapper.writeValueAsString(tool);
@@ -790,12 +790,12 @@ public class McpSchemaTests {
 				false);
 
 		McpSchema.Tool tool = McpSchema.Tool.builder()
-				.name("test-tool")
-				.title("Test Tool")
-				.description("A test tool")
-				.inputSchema(schemaJson)
-				.annotations(annotations)
-				.build();
+			.name("test-tool")
+			.title("Test Tool")
+			.description("A test tool")
+			.inputSchema(schemaJson)
+			.annotations(annotations)
+			.build();
 
 		String value = mapper.writeValueAsString(tool);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -1062,11 +1062,11 @@ public class McpSchemaTests {
 
 	@Test
 	void testRoot() throws Exception {
-		McpSchema.Root root =  McpSchema.Root.builder()
-				.uri("file:///path/to/root")
-				.name("Test Root")
-				.title("A test root")
-				.build();
+		McpSchema.Root root = McpSchema.Root.builder()
+			.uri("file:///path/to/root")
+			.name("Test Root")
+			.title("A test root")
+			.build();
 
 		String value = mapper.writeValueAsString(root);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -1079,18 +1079,16 @@ public class McpSchemaTests {
 	@Test
 	void testListRootsResult() throws Exception {
 		McpSchema.Root root1 = McpSchema.Root.builder()
-				.uri("file:///path/to/root1")
-				.name("First Root")
-				.title("First Root Title")
-				.build();
-
+			.uri("file:///path/to/root1")
+			.name("First Root")
+			.title("First Root Title")
+			.build();
 
 		McpSchema.Root root2 = McpSchema.Root.builder()
-				.uri("file:///path/to/root2")
-				.name("Second Root")
-//				.title("Second Root Title") // no title
-				.build();
-
+			.uri("file:///path/to/root2")
+			.name("Second Root")
+			// .title("Second Root Title") // no title
+			.build();
 
 		McpSchema.ListRootsResult result = new McpSchema.ListRootsResult(Arrays.asList(root1, root2), "next-cursor");
 

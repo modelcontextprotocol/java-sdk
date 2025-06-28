@@ -208,13 +208,13 @@ class McpAsyncClientResponseHandlerTests {
 
 		// Create a mock resources list that the server will return
 		McpSchema.Resource mockResource = McpSchema.Resource.builder()
-				.uri("test://resource")
-				.name("Test Resource")
-				.title("A Test Resource")
-				.description("A test resource")
-				.mimeType("text/plain")
-				.annotations(null)
-				.build();
+			.uri("test://resource")
+			.name("Test Resource")
+			.title("A Test Resource")
+			.description("A test resource")
+			.mimeType("text/plain")
+			.annotations(null)
+			.build();
 		McpSchema.ListResourcesResult mockResourcesResult = new McpSchema.ListResourcesResult(List.of(mockResource),
 				null);
 
@@ -259,11 +259,11 @@ class McpAsyncClientResponseHandlerTests {
 
 		// Create a mock prompts list that the server will return
 		McpSchema.Prompt mockPrompt = McpSchema.Prompt.builder()
-				.name("test-prompt")
-				.title("Test Prompt")
-				.description("Test Prompt Description")
-				.arguments(List.of(new McpSchema.PromptArgument("arg1", "Test argument", true)))
-				.build();
+			.name("test-prompt")
+			.title("Test Prompt")
+			.description("Test Prompt Description")
+			.arguments(List.of(new McpSchema.PromptArgument("arg1", "Test argument", true)))
+			.build();
 
 		McpSchema.ListPromptsResult mockPromptsResult = new McpSchema.ListPromptsResult(List.of(mockPrompt), null);
 
