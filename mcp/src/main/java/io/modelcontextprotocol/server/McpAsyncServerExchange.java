@@ -42,6 +42,9 @@ public class McpAsyncServerExchange {
 	private static final TypeReference<McpSchema.ElicitResult> ELICITATION_RESULT_TYPE_REF = new TypeReference<>() {
 	};
 
+	public static final TypeReference<Object> OBJECT_TYPE_REF = new TypeReference<>() {
+	};
+
 	/**
 	 * Create a new asynchronous exchange with the client.
 	 * @param session The server session representing a 1-1 interaction.
@@ -132,9 +135,9 @@ public class McpAsyncServerExchange {
 
 		// @formatter:off
 		return this.listRoots(McpSchema.FIRST_PAGE)
-			.expand(result -> (result.nextCursor() != null) ? 
+			.expand(result -> (result.nextCursor() != null) ?
 					this.listRoots(result.nextCursor()) : Mono.empty())
-			.reduce(new McpSchema.ListRootsResult(new ArrayList<>(), null), 
+			.reduce(new McpSchema.ListRootsResult(new ArrayList<>(), null),
 				(allRootsResult, result) -> {
 					allRootsResult.roots().addAll(result.roots());
 					return allRootsResult;
@@ -172,6 +175,14 @@ public class McpAsyncServerExchange {
 			}
 			return Mono.empty();
 		});
+	}
+
+	/**
+	 * Sends a ping request to the client.
+	 * @return A Mono that completes with clients's ping response
+	 */
+	public Mono<Object> ping() {
+		return this.session.sendRequest(McpSchema.METHOD_PING, null, OBJECT_TYPE_REF);
 	}
 
 	/**
