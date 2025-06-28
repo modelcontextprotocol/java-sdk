@@ -1081,6 +1081,11 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder inputSchema(String inputSchema) {
+				this.inputSchema = parseSchema(inputSchema);
+				return this;
+			}
+
 			public Builder annotations(ToolAnnotations annotations) {
 				this.annotations = annotations;
 				return this;
@@ -1677,15 +1682,51 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record PromptReference(// @formatter:off
 		@JsonProperty("type") String type,
-		@JsonProperty("name") String name) implements McpSchema.CompleteReference {
+		@JsonProperty("name") String name,
+		@JsonProperty("title") String title) implements McpSchema.CompleteReference {
 
 		public PromptReference(String name) {
-			this("ref/prompt", name);
+			this("ref/prompt", name, null);
+		}
+
+		public PromptReference(String type, String name) {
+			this(type, name, null);
 		}
 
 		@Override
 		public String identifier() {
 			return name();
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private String type = "ref/prompt";
+			private String name;
+			private String title;
+
+			private Builder(){
+			}
+
+			public Builder type(String type) {
+				this.type = type;
+				return this;
+			}
+
+			public Builder name(String name) {
+				this.name = name;
+				return this;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+			public PromptReference build() {
+				return new PromptReference(type, name, title);
+			}
 		}
 	}// @formatter:on
 

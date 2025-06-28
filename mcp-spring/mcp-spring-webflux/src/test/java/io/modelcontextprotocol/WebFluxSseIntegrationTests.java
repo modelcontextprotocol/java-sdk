@@ -998,8 +998,12 @@ class WebFluxSseIntegrationTests {
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.prompts(new McpServerFeatures.SyncPromptSpecification(
-					new Prompt("code_review", "this is code review prompt",
-							List.of(new PromptArgument("language", "string", false))),
+					Prompt.builder()
+							.name("code_review")
+							.title("Request Code Review")
+							.description("this is code review prompt")
+							.arguments(List.of(new PromptArgument("language", "string", false)))
+							.build(),
 					(mcpSyncServerExchange, getPromptRequest) -> null))
 			.completions(new McpServerFeatures.SyncCompletionSpecification(
 					new McpSchema.PromptReference("ref/prompt", "code_review"), completionHandler))
@@ -1010,7 +1014,11 @@ class WebFluxSseIntegrationTests {
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
 
-			CompleteRequest request = new CompleteRequest(new PromptReference("ref/prompt", "code_review"),
+			CompleteRequest request = new CompleteRequest(PromptReference.builder()
+					.type("ref/prompt")
+					.name("code_review")
+					.title("Request Code Review")
+					.build(),
 					new CompleteRequest.CompleteArgument("language", "py"));
 
 			CompleteResult result = mcpClient.completeCompletion(request);

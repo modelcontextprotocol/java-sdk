@@ -359,8 +359,13 @@ public class McpSchemaTests {
 	void testResourceTemplate() throws Exception {
 		McpSchema.Annotations annotations = new McpSchema.Annotations(Arrays.asList(McpSchema.Role.USER), 0.5);
 
-		McpSchema.ResourceTemplate template = new McpSchema.ResourceTemplate("resource://{param}/test", "Test Template",
-				"A test resource template", "text/plain", annotations);
+		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
+			.uriTemplate("resource://{param}/test")
+			.name("Test Template")
+			.description("A test resource template")
+			.mimeType("text/plain")
+			.annotations(annotations)
+			.build();
 
 		String value = mapper.writeValueAsString(template);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -372,11 +377,33 @@ public class McpSchemaTests {
 	}
 
 	@Test
+	void testResourceTemplateWithAllFields() throws Exception {
+		McpSchema.Annotations annotations = new McpSchema.Annotations(Arrays.asList(McpSchema.Role.USER), 0.5);
+
+		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
+			.uriTemplate("resource://{param}/test")
+			.name("Test Template")
+			.title("Test Resource Template")
+			.description("A test resource template")
+			.mimeType("text/plain")
+			.annotations(annotations)
+			.build();
+
+		String value = mapper.writeValueAsString(template);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"uriTemplate":"resource://{param}/test","name":"Test Template","title":"Test Resource Template","description":"A test resource template","mimeType":"text/plain","annotations":{"audience":["user"],"priority":0.5}}"""));
+	}
+
+	@Test
 	void testListResourcesResult() throws Exception {
 		McpSchema.Resource resource1 = McpSchema.Resource.builder()
 			.uri("resource://test1")
 			.name("Test Resource 1")
-			.title("The first test resource")
+//			.title("The first test resource") // No Title
 			.description("First test resource")
 			.mimeType("text/plain")
 			.build();
@@ -398,16 +425,26 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"resources":[{"uri":"resource://test1","name":"Test Resource 1","title":"The first test resource","description":"First test resource","mimeType":"text/plain"},{"uri":"resource://test2","name":"Test Resource 2","title":"The second test resource","description":"Second test resource","mimeType":"application/json"}],"nextCursor":"next-cursor"}"""));
+							{"resources":[{"uri":"resource://test1","name":"Test Resource 1","description":"First test resource","mimeType":"text/plain"},{"uri":"resource://test2","name":"Test Resource 2","title":"The second test resource","description":"Second test resource","mimeType":"application/json"}],"nextCursor":"next-cursor"}"""));
 	}
 
 	@Test
 	void testListResourceTemplatesResult() throws Exception {
-		McpSchema.ResourceTemplate template1 = new McpSchema.ResourceTemplate("resource://{param}/test1",
-				"Test Template 1", "First test template", "text/plain", null);
+		McpSchema.ResourceTemplate template1 = McpSchema.ResourceTemplate.builder()
+			.uriTemplate("resource://{param}/test1")
+			.name("Test Template 1")
+			.title("First Test Template")
+			.description("First test template")
+			.mimeType("text/plain")
+			.build();
 
-		McpSchema.ResourceTemplate template2 = new McpSchema.ResourceTemplate("resource://{param}/test2",
-				"Test Template 2", "Second test template", "application/json", null);
+		McpSchema.ResourceTemplate template2 = McpSchema.ResourceTemplate.builder()
+			.uriTemplate("resource://{param}/test2")
+			.name("Test Template 2")
+//			.title("Second Test Template") // No Title
+			.description("Second test template")
+			.mimeType("application/json")
+			.build();
 
 		McpSchema.ListResourceTemplatesResult result = new McpSchema.ListResourceTemplatesResult(
 				Arrays.asList(template1, template2), "next-cursor");
@@ -418,7 +455,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"resourceTemplates":[{"uriTemplate":"resource://{param}/test1","name":"Test Template 1","description":"First test template","mimeType":"text/plain"},{"uriTemplate":"resource://{param}/test2","name":"Test Template 2","description":"Second test template","mimeType":"application/json"}],"nextCursor":"next-cursor"}"""));
+							{"resourceTemplates":[{"uriTemplate":"resource://{param}/test1","name":"Test Template 1","title":"First Test Template","description":"First test template","mimeType":"text/plain"},{"uriTemplate":"resource://{param}/test2","name":"Test Template 2","description":"Second test template","mimeType":"application/json"}],"nextCursor":"next-cursor"}"""));
 	}
 
 	@Test
@@ -456,11 +493,25 @@ public class McpSchemaTests {
 
 	@Test
 	void testPrompt() throws Exception {
-		McpSchema.PromptArgument arg1 = new McpSchema.PromptArgument("arg1", "First argument", true);
+		McpSchema.PromptArgument arg1 = McpSchema.PromptArgument.builder()
+			.name("arg1")
+			.title("Arg1")
+			.description("First argument")
+			.required(true)
+			.build();
 
-		McpSchema.PromptArgument arg2 = new McpSchema.PromptArgument("arg2", "Second argument", false);
+		McpSchema.PromptArgument arg2 = McpSchema.PromptArgument.builder()
+			.name("arg2")
+			.description("Second argument")
+			.required(false)
+			.build();
 
-		McpSchema.Prompt prompt = new McpSchema.Prompt("test-prompt", "A test prompt", Arrays.asList(arg1, arg2));
+		McpSchema.Prompt prompt = McpSchema.Prompt.builder()
+			.name("test-prompt")
+			.title("Test Prompt")
+			.description("A test prompt")
+			.arguments(Arrays.asList(arg1, arg2))
+			.build();
 
 		String value = mapper.writeValueAsString(prompt);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -468,7 +519,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"name":"test-prompt","description":"A test prompt","arguments":[{"name":"arg1","description":"First argument","required":true},{"name":"arg2","description":"Second argument","required":false}]}"""));
+							{"name":"test-prompt","title":"Test Prompt","description":"A test prompt","arguments":[{"name":"arg1","title":"Arg1","description":"First argument","required":true},{"name":"arg2","description":"Second argument","required":false}]}"""));
 	}
 
 	@Test
@@ -487,10 +538,21 @@ public class McpSchemaTests {
 
 	@Test
 	void testListPromptsResult() throws Exception {
-		McpSchema.PromptArgument arg = new McpSchema.PromptArgument("arg", "An argument", true);
+		McpSchema.PromptArgument arg = McpSchema.PromptArgument.builder()
+				.name("arg")
+				.title("Arg")
+				.description("An argument")
+				.required(true)
+				.build();
 
-		McpSchema.Prompt prompt1 = new McpSchema.Prompt("prompt1", "First prompt", Collections.singletonList(arg));
+		McpSchema.Prompt prompt1 = McpSchema.Prompt.builder()
+				.name("prompt1")
+				.title("A first prompt")
+				.description("First prompt")
+				.arguments(Collections.singletonList(arg))
+				.build();
 
+		// - No Title Prompt
 		McpSchema.Prompt prompt2 = new McpSchema.Prompt("prompt2", "Second prompt", Collections.emptyList());
 
 		McpSchema.ListPromptsResult result = new McpSchema.ListPromptsResult(Arrays.asList(prompt1, prompt2),
@@ -502,7 +564,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"prompts":[{"name":"prompt1","description":"First prompt","arguments":[{"name":"arg","description":"An argument","required":true}]},{"name":"prompt2","description":"Second prompt","arguments":[]}],"nextCursor":"next-cursor"}"""));
+							{"prompts":[{"name":"prompt1","title":"A first prompt","description":"First prompt","arguments":[{"name":"arg","title":"Arg","description":"An argument","required":true}]},{"name":"prompt2","description":"Second prompt","arguments":[]}],"nextCursor":"next-cursor"}"""));
 	}
 
 	@Test
@@ -645,7 +707,12 @@ public class McpSchemaTests {
 				}
 				""";
 
-		McpSchema.Tool tool = new McpSchema.Tool("test-tool", "A test tool", schemaJson);
+		McpSchema.Tool tool = McpSchema.Tool.builder()
+				.name("test-tool")
+				.title("Test Tool")
+				.description("A test tool")
+				.inputSchema(schemaJson)
+				.build();
 
 		String value = mapper.writeValueAsString(tool);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -653,7 +720,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"name":"test-tool","description":"A test tool","inputSchema":{"type":"object","properties":{"name":{"type":"string"},"value":{"type":"number"}},"required":["name"]}}"""));
+							{"name":"test-tool","title":"Test Tool","description":"A test tool","inputSchema":{"type":"object","properties":{"name":{"type":"string"},"value":{"type":"number"}},"required":["name"]}}"""));
 	}
 
 	@Test
@@ -679,7 +746,12 @@ public class McpSchemaTests {
 				}
 				""";
 
-		McpSchema.Tool tool = new McpSchema.Tool("addressTool", "Handles addresses", complexSchemaJson);
+		McpSchema.Tool tool = McpSchema.Tool.builder()
+				.name("addressTool")
+				.title("Address Tool")
+				.description("Handles addresses")
+				.inputSchema(complexSchemaJson)
+				.build();
 
 		// Serialize the tool to a string
 		String serialized = mapper.writeValueAsString(tool);
@@ -717,7 +789,13 @@ public class McpSchemaTests {
 		McpSchema.ToolAnnotations annotations = new McpSchema.ToolAnnotations("A test tool", false, false, false, false,
 				false);
 
-		McpSchema.Tool tool = new McpSchema.Tool("test-tool", "A test tool", schemaJson, annotations);
+		McpSchema.Tool tool = McpSchema.Tool.builder()
+				.name("test-tool")
+				.title("Test Tool")
+				.description("A test tool")
+				.inputSchema(schemaJson)
+				.annotations(annotations)
+				.build();
 
 		String value = mapper.writeValueAsString(tool);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -725,7 +803,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"name":"test-tool","description":"A test tool","inputSchema":{"type":"object","properties":{"name":{"type":"string"},"value":{"type":"number"}},"required":["name"]},"annotations":{"title":"A test tool","readOnlyHint":false,"destructiveHint":false,"idempotentHint":false,"openWorldHint":false,"returnDirect":false}}"""));
+							{"name":"test-tool","title":"Test Tool","description":"A test tool","inputSchema":{"type":"object","properties":{"name":{"type":"string"},"value":{"type":"number"}},"required":["name"]},"annotations":{"title":"A test tool","readOnlyHint":false,"destructiveHint":false,"idempotentHint":false,"openWorldHint":false,"returnDirect":false}}"""));
 	}
 
 	@Test
@@ -984,21 +1062,35 @@ public class McpSchemaTests {
 
 	@Test
 	void testRoot() throws Exception {
-		McpSchema.Root root = new McpSchema.Root("file:///path/to/root", "Test Root");
+		McpSchema.Root root =  McpSchema.Root.builder()
+				.uri("file:///path/to/root")
+				.name("Test Root")
+				.title("A test root")
+				.build();
 
 		String value = mapper.writeValueAsString(root);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
 			.isEqualTo(json("""
-					{"uri":"file:///path/to/root","name":"Test Root"}"""));
+					{"uri":"file:///path/to/root","name":"Test Root","title":"A test root"}"""));
 	}
 
 	@Test
 	void testListRootsResult() throws Exception {
-		McpSchema.Root root1 = new McpSchema.Root("file:///path/to/root1", "First Root");
+		McpSchema.Root root1 = McpSchema.Root.builder()
+				.uri("file:///path/to/root1")
+				.name("First Root")
+				.title("First Root Title")
+				.build();
 
-		McpSchema.Root root2 = new McpSchema.Root("file:///path/to/root2", "Second Root");
+
+		McpSchema.Root root2 = McpSchema.Root.builder()
+				.uri("file:///path/to/root2")
+				.name("Second Root")
+//				.title("Second Root Title") // no title
+				.build();
+
 
 		McpSchema.ListRootsResult result = new McpSchema.ListRootsResult(Arrays.asList(root1, root2), "next-cursor");
 
@@ -1009,7 +1101,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"roots":[{"uri":"file:///path/to/root1","name":"First Root"},{"uri":"file:///path/to/root2","name":"Second Root"}],"nextCursor":"next-cursor"}"""));
+							{"roots":[{"uri":"file:///path/to/root1","name":"First Root","title":"First Root Title"},{"uri":"file:///path/to/root2","name":"Second Root"}],"nextCursor":"next-cursor"}"""));
 
 	}
 
