@@ -324,6 +324,9 @@ public final class McpSchema {
 			private Sampling sampling;
 			private Elicitation elicitation;
 
+			private Builder(){
+			}
+
 			public Builder experimental(Map<String, Object> experimental) {
 				this.experimental = experimental;
 				return this;
@@ -396,6 +399,9 @@ public final class McpSchema {
 			private PromptCapabilities prompts;
 			private ResourceCapabilities resources;
 			private ToolCapabilities tools;
+
+			private Builder(){
+			}
 
 			public Builder completions() {
 				this.completions = new CompletionCapabilities();
@@ -483,8 +489,12 @@ public final class McpSchema {
 	 * A known resource that the server is capable of reading.
 	 *
 	 * @param uri the URI of the resource.
-	 * @param name A human-readable name for this resource. This can be used by clients to
-	 * populate UI elements.
+	 * @param name Intended for programmatic or logical use, but used as a display name in
+	 * past specs or fallback (if title isn't present).
+	 * @param title Intended for UI and end-user contexts — optimized to be human-readable
+	 * and easily understood, even by those unfamiliar with domain-specific terminology.
+	 * If not provided, the name should be used for display (where annotations.title
+	 * should be given precedence over using the name).
 	 * @param description A description of what this resource represents. This can be used
 	 * by clients to improve the LLM's understanding of available resources. It can be
 	 * thought of like a "hint" to the model.
@@ -500,6 +510,7 @@ public final class McpSchema {
 	public record Resource( // @formatter:off
 		@JsonProperty("uri") String uri,
 		@JsonProperty("name") String name,
+		@JsonProperty("title") String title,
 		@JsonProperty("description") String description,
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("size") Long size,
@@ -511,7 +522,7 @@ public final class McpSchema {
 		 */
 		@Deprecated
 		public Resource(String uri, String name, String description, String mimeType, Annotations annotations) {
-			this(uri, name, description, mimeType, null, annotations);
+			this(uri, name, null, description, mimeType, null, annotations);
 		}
 
 		public static Builder builder() {
@@ -521,10 +532,14 @@ public final class McpSchema {
 		public static class Builder {
 			private String uri;
 			private String name;
+			private String title;
 			private String description;
 			private String mimeType;
 			private Long size;
 			private Annotations annotations;
+
+			private Builder(){
+			}
 
 			public Builder uri(String uri) {
 				this.uri = uri;
@@ -533,6 +548,11 @@ public final class McpSchema {
 
 			public Builder name(String name) {
 				this.name = name;
+				return this;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
 				return this;
 			}
 
@@ -560,7 +580,7 @@ public final class McpSchema {
 				Assert.hasText(uri, "uri must not be empty");
 				Assert.hasText(name, "name must not be empty");
 
-				return new Resource(uri, name, description, mimeType, size, annotations);
+				return new Resource(uri, name, title, description, mimeType, size, annotations);
 			}
 		}
 	} // @formatter:on
@@ -573,6 +593,10 @@ public final class McpSchema {
 	 * resource.
 	 * @param name A human-readable name for this resource. This can be used by clients to
 	 * populate UI elements.
+	 * @param title Intended for UI and end-user contexts — optimized to be human-readable
+	 * and easily understood, even by those unfamiliar with domain-specific terminology.
+	 * If not provided, the name should be used for display (where annotations.title
+	 * should be given precedence over using the name).
 	 * @param description A description of what this resource represents. This can be used
 	 * by clients to improve the LLM's understanding of available resources. It can be
 	 * thought of like a "hint" to the model.
@@ -586,9 +610,69 @@ public final class McpSchema {
 	public record ResourceTemplate( // @formatter:off
 		@JsonProperty("uriTemplate") String uriTemplate,
 		@JsonProperty("name") String name,
+		@JsonProperty("title") String title,
 		@JsonProperty("description") String description,
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("annotations") Annotations annotations) implements Annotated {
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link ResourceTemplate#builder()} instead.
+		 */
+		@Deprecated
+		public ResourceTemplate(String uriTemplate, String name, String description, String mimeType, Annotations annotations) {
+			this(uriTemplate, name, null, description, mimeType, annotations);
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private String uriTemplate;
+			private String name;
+			private String title;
+			private String description;
+			private String mimeType;
+			private Annotations annotations;
+
+			private Builder(){
+			}
+
+			public Builder uriTemplate(String uriTemplate) {
+				this.uriTemplate = uriTemplate;
+				return this;
+			}
+
+			public Builder name(String name) {
+				this.name = name;
+				return this;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder mimeType(String mimeType) {
+				this.mimeType = mimeType;
+				return this;
+			}
+
+			public Builder annotations(Annotations annotations) {
+				this.annotations = annotations;
+				return this;
+			}
+
+			public ResourceTemplate build() {
+				return new ResourceTemplate(uriTemplate, name, title, description, mimeType, annotations);
+			}
+		}
 	} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -698,6 +782,10 @@ public final class McpSchema {
 	 * A prompt or prompt template that the server offers.
 	 *
 	 * @param name The name of the prompt or prompt template.
+	 * @param title Intended for UI and end-user contexts — optimized to be human-readable
+	 * and easily understood, even by those unfamiliar with domain-specific terminology.
+	 * If not provided, the name should be used for display (where annotations.title
+	 * should be given precedence over using the name).
 	 * @param description An optional description of what this prompt provides.
 	 * @param arguments A list of arguments to use for templating the prompt.
 	 */
@@ -705,8 +793,55 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Prompt( // @formatter:off
 		@JsonProperty("name") String name,
+		@JsonProperty("title") String title,
 		@JsonProperty("description") String description,
 		@JsonProperty("arguments") List<PromptArgument> arguments) {
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link Prompt#builder()} instead.
+		 */
+		@Deprecated
+		public Prompt(String name, String description, List<PromptArgument> arguments) {
+			this(name, null, description, arguments);
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private String name;
+			private String title;
+			private String description;
+			private List<PromptArgument> arguments;
+
+			private Builder(){
+			}
+
+			public Builder name(String name) {
+				this.name = name;
+				return this;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder arguments(List<PromptArgument> arguments) {
+				this.arguments = arguments;
+				return this;
+			}
+			public Prompt build() {
+				return new Prompt(name, title, description, arguments);
+			}
+		}
 	} // @formatter:on
 
 	/**
@@ -720,8 +855,56 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record PromptArgument( // @formatter:off
 		@JsonProperty("name") String name,
+		@JsonProperty("title") String title,
 		@JsonProperty("description") String description,
 		@JsonProperty("required") Boolean required) {
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link PromptArgument#builder()} instead.
+		 */
+		@Deprecated
+		public PromptArgument(String name, String description, Boolean required) {
+			this(name, null, description, required);
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private String name;
+			private String title;
+			private String description;
+			private Boolean required;
+
+			private Builder(){
+			}
+
+			public Builder name(String name) {
+				this.name = name;
+				return this;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder required(Boolean required) {
+				this.required = required;
+				return this;
+			}
+
+			public PromptArgument build() {
+				return new PromptArgument(name, title, description, required);
+			}
+		}
 	}// @formatter:on
 
 	/**
@@ -826,6 +1009,10 @@ public final class McpSchema {
 	 *
 	 * @param name A unique identifier for the tool. This name is used when calling the
 	 * tool.
+	 * @param title Intended for UI and end-user contexts — optimized to be human-readable
+	 * and easily understood, even by those unfamiliar with domain-specific terminology.
+	 * If not provided, the name should be used for display (except for tools, where
+	 * annotations.title should be given precedence over using the name).
 	 * @param description A human-readable description of what the tool does. This can be
 	 * used by clients to improve the LLM's understanding of available tools.
 	 * @param inputSchema A JSON Schema object that describes the expected structure of
@@ -837,18 +1024,72 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Tool( // @formatter:off
 						@JsonProperty("name") String name,
+						@JsonProperty("title") String title,
 						@JsonProperty("description") String description,
 						@JsonProperty("inputSchema") JsonSchema inputSchema,
 						@JsonProperty("annotations") ToolAnnotations annotations) {
 
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link Tool#builder()} instead.
+		 */
+		@Deprecated
 		public Tool(String name, String description, String schema) {
-			this(name, description, parseSchema(schema), null);
+			this(name, null, description, parseSchema(schema), null);
 		}
 
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link Tool#builder()} instead.
+		 */
+		@Deprecated
 		public Tool(String name, String description, String schema, ToolAnnotations annotations) {
-			this(name, description, parseSchema(schema), annotations);
+			this(name, null, description, parseSchema(schema), annotations);
 		}
 
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private String name;
+			private String title;
+			private String description;
+			private JsonSchema inputSchema;
+			private ToolAnnotations annotations;
+
+			private Builder(){
+			}
+
+			public Builder name(String name) {
+				this.name = name;
+				return this;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder inputSchema(JsonSchema inputSchema) {
+				this.inputSchema = inputSchema;
+				return this;
+			}
+
+			public Builder annotations(ToolAnnotations annotations) {
+				this.annotations = annotations;
+				return this;
+			}
+
+			public Tool build() {
+				return new Tool(name, title, description, inputSchema, annotations);
+			}
+		}
 	} // @formatter:on
 
 	private static JsonSchema parseSchema(String schema) {
@@ -929,6 +1170,9 @@ public final class McpSchema {
 		public static class Builder {
 			private List<Content> content = new ArrayList<>();
 			private Boolean isError;
+
+			private Builder(){
+			}
 
 			/**
 			 * Sets the content list for the tool result.
@@ -1021,6 +1265,9 @@ public final class McpSchema {
 		private Double speedPriority;
 		private Double intelligencePriority;
 
+		private Builder(){
+		}
+
 		public Builder hints(List<ModelHint> hints) {
 			this.hints = hints;
 			return this;
@@ -1102,6 +1349,9 @@ public final class McpSchema {
 			private int maxTokens;
 			private List<String> stopSequences;
 			private Map<String, Object> metadata;
+
+			private Builder(){
+			}
 
 			public Builder messages(List<SamplingMessage> messages) {
 				this.messages = messages;
@@ -1189,6 +1439,9 @@ public final class McpSchema {
 			private String model;
 			private StopReason stopReason = StopReason.END_TURN;
 
+			private Builder(){
+			}
+
 			public Builder role(Role role) {
 				this.role = role;
 				return this;
@@ -1241,6 +1494,9 @@ public final class McpSchema {
 			private String message;
 			private Map<String, Object> requestedSchema;
 
+			private Builder(){
+			}
+
 			public Builder message(String message) {
 				this.message = message;
 				return this;
@@ -1276,6 +1532,9 @@ public final class McpSchema {
 		public static class Builder {
 			private Action action;
 			private Map<String, Object> content;
+
+			private Builder(){
+			}
 
 			public Builder message(Action action) {
 				this.action = action;
@@ -1351,6 +1610,9 @@ public final class McpSchema {
 			private LoggingLevel level = LoggingLevel.INFO;
 			private String logger = "server";
 			private String data;
+
+			private Builder(){
+			}
 
 			public Builder level(LoggingLevel level) {
 				this.level = level;
@@ -1613,12 +1875,57 @@ public final class McpSchema {
 	 * @param name An optional name for the root. This can be used to provide a
 	 * human-readable identifier for the root, which may be useful for display purposes or
 	 * for referencing the root in other parts of the application.
+	 * @param title Intended for UI and end-user contexts — optimized to be human-readable
+	 * and easily understood, even by those unfamiliar with domain-specific terminology.
+	 * If not provided, the name should be used for display (where annotations.title
+	 * should be given precedence over using the name).
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Root( // @formatter:off
 		@JsonProperty("uri") String uri,
-		@JsonProperty("name") String name) {
+		@JsonProperty("name") String name,
+		@JsonProperty("title") String title) {
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link Root#builder()} instead.
+		 */
+		@Deprecated
+		public Root(String uri, String name){
+			this(uri, name, null);
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+			private String uri;
+			private String name;
+			private String title;
+
+			private Builder() {
+			}
+
+			public Builder uri(String uri) {
+				this.uri = uri;
+				return this;
+			}
+
+			public Builder name(String name) {
+				this.name = name;
+				return this;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+			public Root build() {
+				return new Root(uri, name, title);
+			}
+		}
 	} // @formatter:on
 
 	/**

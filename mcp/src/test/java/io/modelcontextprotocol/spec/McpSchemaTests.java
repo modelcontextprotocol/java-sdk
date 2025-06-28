@@ -284,8 +284,14 @@ public class McpSchemaTests {
 		McpSchema.Annotations annotations = new McpSchema.Annotations(
 				Arrays.asList(McpSchema.Role.USER, McpSchema.Role.ASSISTANT), 0.8);
 
-		McpSchema.Resource resource = new McpSchema.Resource("resource://test", "Test Resource", "A test resource",
-				"text/plain", annotations);
+		McpSchema.Resource resource = McpSchema.Resource.builder()
+				.uri("resource://test")
+				.name("Test Resource")
+				.title("A Test Resource")
+				.mimeType("text/plain")
+				.description("A test resource")
+				.annotations(annotations)
+				.build();
 
 		String value = mapper.writeValueAsString(resource);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -293,7 +299,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"uri":"resource://test","name":"Test Resource","description":"A test resource","mimeType":"text/plain","annotations":{"audience":["user","assistant"],"priority":0.8}}"""));
+							{"uri":"resource://test","name":"Test Resource","title":"A Test Resource","description":"A test resource","mimeType":"text/plain","annotations":{"audience":["user","assistant"],"priority":0.8}}"""));
 	}
 
 	@Test
@@ -367,11 +373,21 @@ public class McpSchemaTests {
 
 	@Test
 	void testListResourcesResult() throws Exception {
-		McpSchema.Resource resource1 = new McpSchema.Resource("resource://test1", "Test Resource 1",
-				"First test resource", "text/plain", null);
+		McpSchema.Resource resource1 = McpSchema.Resource.builder()
+			.uri("resource://test1")
+			.name("Test Resource 1")
+			.title("The first test resource")
+			.description("First test resource")
+			.mimeType("text/plain")
+			.build();
 
-		McpSchema.Resource resource2 = new McpSchema.Resource("resource://test2", "Test Resource 2",
-				"Second test resource", "application/json", null);
+		McpSchema.Resource resource2 = McpSchema.Resource.builder()
+			.uri("resource://test2")
+			.name("Test Resource 2")
+			.title("The second test resource")
+			.description("Second test resource")
+			.mimeType("application/json")
+			.build();
 
 		McpSchema.ListResourcesResult result = new McpSchema.ListResourcesResult(Arrays.asList(resource1, resource2),
 				"next-cursor");
@@ -382,7 +398,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"resources":[{"uri":"resource://test1","name":"Test Resource 1","description":"First test resource","mimeType":"text/plain"},{"uri":"resource://test2","name":"Test Resource 2","description":"Second test resource","mimeType":"application/json"}],"nextCursor":"next-cursor"}"""));
+							{"resources":[{"uri":"resource://test1","name":"Test Resource 1","title":"The first test resource","description":"First test resource","mimeType":"text/plain"},{"uri":"resource://test2","name":"Test Resource 2","title":"The second test resource","description":"Second test resource","mimeType":"application/json"}],"nextCursor":"next-cursor"}"""));
 	}
 
 	@Test

@@ -207,8 +207,14 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Create a mock resources list that the server will return
-		McpSchema.Resource mockResource = new McpSchema.Resource("test://resource", "Test Resource", "A test resource",
-				"text/plain", null);
+		McpSchema.Resource mockResource = McpSchema.Resource.builder()
+				.uri("test://resource")
+				.name("Test Resource")
+				.title("A Test Resource")
+				.description("A test resource")
+				.mimeType("text/plain")
+				.annotations(null)
+				.build();
 		McpSchema.ListResourcesResult mockResourcesResult = new McpSchema.ListResourcesResult(List.of(mockResource),
 				null);
 
@@ -229,6 +235,7 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(receivedResources).hasSize(1);
 		assertThat(receivedResources.get(0).uri()).isEqualTo("test://resource");
 		assertThat(receivedResources.get(0).name()).isEqualTo("Test Resource");
+		assertThat(receivedResources.get(0).title()).isEqualTo("A Test Resource");
 		assertThat(receivedResources.get(0).description()).isEqualTo("A test resource");
 
 		asyncMcpClient.closeGracefully();
