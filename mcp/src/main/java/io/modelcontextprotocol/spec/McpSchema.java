@@ -1047,6 +1047,15 @@ public final class McpSchema {
 			this(name, null, description, parseSchema(schema), annotations);
 		}
 
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link Tool#builder()} instead.
+		 */
+		@Deprecated
+		public Tool(String name, String description, JsonSchema inputSchema, ToolAnnotations annotations) {
+			this(name, null, description, inputSchema, annotations);
+		}
+
 		public static Builder builder() {
 			return new Builder();
 		}
