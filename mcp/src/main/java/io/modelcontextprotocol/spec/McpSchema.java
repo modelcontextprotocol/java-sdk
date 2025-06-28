@@ -437,6 +437,7 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Implementation(// @formatter:off
 		@JsonProperty("name") String name,
+		@JsonProperty("title") String title,
 		@JsonProperty("version") String version) {
 	} // @formatter:on
 

@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 
 class McpAsyncClientTests {
 
-	public static final McpSchema.Implementation MOCK_SERVER_INFO = new McpSchema.Implementation("test-server",
+	public static final McpSchema.Implementation MOCK_SERVER_INFO = new McpSchema.Implementation("test-server", null,
 			"1.0.0");
 
 	public static final McpSchema.ServerCapabilities MOCK_SERVER_CAPABILITIES = McpSchema.ServerCapabilities.builder()

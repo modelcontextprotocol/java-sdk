@@ -24,7 +24,8 @@ class McpClientProtocolVersionTests {
 
 	private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
 
-	private static final McpSchema.Implementation CLIENT_INFO = new McpSchema.Implementation("test-client", "1.0.0");
+	private static final McpSchema.Implementation CLIENT_INFO = new McpSchema.Implementation("test-client", null,
+			"1.0.0");
 
 	@Test
 	void shouldUseLatestVersionByDefault() {
@@ -45,7 +46,7 @@ class McpClientProtocolVersionTests {
 
 				transport.simulateIncomingMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
 						new McpSchema.InitializeResult(McpSchema.LATEST_PROTOCOL_VERSION, null,
-								new McpSchema.Implementation("test-server", "1.0.0"), null),
+								new McpSchema.Implementation("test-server", null, "1.0.0"), null),
 						null));
 			}).assertNext(result -> {
 				assertThat(result.protocolVersion()).isEqualTo(McpSchema.LATEST_PROTOCOL_VERSION);
@@ -78,10 +79,12 @@ class McpClientProtocolVersionTests {
 				McpSchema.InitializeRequest initRequest = (McpSchema.InitializeRequest) request.params();
 				assertThat(initRequest.protocolVersion()).isIn(List.of(oldVersion, McpSchema.LATEST_PROTOCOL_VERSION));
 
-				transport.simulateIncomingMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-						new McpSchema.InitializeResult(oldVersion, null,
-								new McpSchema.Implementation("test-server", "1.0.0"), null),
-						null));
+				transport
+					.simulateIncomingMessage(
+							new McpSchema.JSONRPCResponse(
+									McpSchema.JSONRPC_VERSION, request.id(), new McpSchema.InitializeResult(oldVersion,
+											null, new McpSchema.Implementation("test-server", null, "1.0.0"), null),
+									null));
 			}).assertNext(result -> {
 				assertThat(result.protocolVersion()).isEqualTo(oldVersion);
 			}).verifyComplete();
@@ -109,7 +112,7 @@ class McpClientProtocolVersionTests {
 
 				transport.simulateIncomingMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
 						new McpSchema.InitializeResult(unsupportedVersion, null,
-								new McpSchema.Implementation("test-server", "1.0.0"), null),
+								new McpSchema.Implementation("test-server", null, "1.0.0"), null),
 						null));
 			}).expectError(McpError.class).verify();
 		}
@@ -142,7 +145,7 @@ class McpClientProtocolVersionTests {
 
 				transport.simulateIncomingMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
 						new McpSchema.InitializeResult(latestVersion, null,
-								new McpSchema.Implementation("test-server", "1.0.0"), null),
+								new McpSchema.Implementation("test-server", null, "1.0.0"), null),
 						null));
 			}).assertNext(result -> {
 				assertThat(result.protocolVersion()).isEqualTo(latestVersion);

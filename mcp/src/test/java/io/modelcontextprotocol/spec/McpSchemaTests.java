@@ -268,7 +268,7 @@ public class McpSchemaTests {
 			.sampling()
 			.build();
 
-		McpSchema.Implementation clientInfo = new McpSchema.Implementation("test-client", "1.0.0");
+		McpSchema.Implementation clientInfo = new McpSchema.Implementation("test-client", null, "1.0.0");
 
 		McpSchema.InitializeRequest request = new McpSchema.InitializeRequest("2024-11-05", capabilities, clientInfo);
 
@@ -290,7 +290,7 @@ public class McpSchemaTests {
 			.tools(true)
 			.build();
 
-		McpSchema.Implementation serverInfo = new McpSchema.Implementation("test-server", "1.0.0");
+		McpSchema.Implementation serverInfo = new McpSchema.Implementation("test-server", null, "1.0.0");
 
 		McpSchema.InitializeResult result = new McpSchema.InitializeResult("2024-11-05", capabilities, serverInfo,
 				"Server initialized successfully");
