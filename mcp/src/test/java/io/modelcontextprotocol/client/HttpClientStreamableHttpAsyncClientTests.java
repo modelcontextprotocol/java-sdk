@@ -1,17 +1,16 @@
 package io.modelcontextprotocol.client;
 
 import org.junit.jupiter.api.Timeout;
-import org.springframework.web.reactive.function.client.WebClient;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 
-import io.modelcontextprotocol.client.transport.WebClientStreamableHttpTransport;
+import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.spec.McpClientTransport;
 
 @Timeout(15)
-public class WebClientStreamableHttpAsyncClientTests extends AbstractMcpAsyncClientTests {
+public class HttpClientStreamableHttpAsyncClientTests extends AbstractMcpAsyncClientTests {
 
-	static String host = "http://localhost:3001";
+	private String host = "http://localhost:3001";
 
 	// Uses the https://github.com/tzolov/mcp-everything-server-docker-image
 	@SuppressWarnings("resource")
@@ -23,7 +22,8 @@ public class WebClientStreamableHttpAsyncClientTests extends AbstractMcpAsyncCli
 
 	@Override
 	protected McpClientTransport createMcpTransport() {
-		return WebClientStreamableHttpTransport.builder(WebClient.builder().baseUrl(host)).build();
+
+		return HttpClientStreamableHttpTransport.builder(host).build();
 	}
 
 	@Override

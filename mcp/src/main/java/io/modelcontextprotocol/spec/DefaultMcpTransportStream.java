@@ -61,14 +61,19 @@ public class DefaultMcpTransportStream<CONNECTION> implements McpTransportStream
 	@Override
 	public Publisher<McpSchema.JSONRPCMessage> consumeSseStream(
 			Publisher<Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>>> eventStream) {
-		return Flux.deferContextual(ctx -> Flux.from(eventStream).doOnError(e -> {
-			if (resumable && !(e instanceof McpTransportSessionNotFoundException)) {
-				Mono.from(reconnect.apply(this)).contextWrite(ctx).subscribe();
-			}
-		}).doOnNext(idAndMessage -> idAndMessage.getT1().ifPresent(id -> {
-			String previousId = this.lastId.getAndSet(id);
-			logger.debug("Updating last id {} -> {} for stream {}", previousId, id, this.streamId);
-		})).flatMapIterable(Tuple2::getT2));
+
+		// @formatter:off
+		return Flux.deferContextual(ctx -> Flux.from(eventStream)
+			.doOnNext(idAndMessage -> idAndMessage.getT1().ifPresent(id -> {
+				String previousId = this.lastId.getAndSet(id);
+				logger.debug("Updating last id {} -> {} for stream {}", previousId, id, this.streamId);
+			}))
+			.doOnError(e -> {
+				if (resumable && !(e instanceof McpTransportSessionNotFoundException)) {
+					Mono.from(reconnect.apply(this)).contextWrite(ctx).subscribe();
+				}
+			})
+			.flatMapIterable(Tuple2::getT2)); // @formatter:on
 	}
 
 }
