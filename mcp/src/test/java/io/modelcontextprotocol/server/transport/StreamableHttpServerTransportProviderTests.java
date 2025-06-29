@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpStreamableHttpServerSession;
+import io.modelcontextprotocol.spec.McpServerSession;
 import jakarta.servlet.AsyncContext;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletInputStream;
@@ -49,15 +49,15 @@ class StreamableHttpServerTransportProviderTests {
 
 	private ObjectMapper objectMapper;
 
-	private McpStreamableHttpServerSession.Factory sessionFactory;
+	private McpServerSession.StreamableHttpSessionFactory sessionFactory;
 
-	private McpStreamableHttpServerSession mockSession;
+	private McpServerSession mockSession;
 
 	@BeforeEach
 	void setUp() {
 		objectMapper = new ObjectMapper();
-		mockSession = mock(McpStreamableHttpServerSession.class);
-		sessionFactory = mock(McpStreamableHttpServerSession.Factory.class);
+		mockSession = mock(McpServerSession.class);
+		sessionFactory = mock(McpServerSession.StreamableHttpSessionFactory.class);
 
 		when(sessionFactory.create(anyString())).thenReturn(mockSession);
 		when(mockSession.getId()).thenReturn("test-session-id");
@@ -73,7 +73,7 @@ class StreamableHttpServerTransportProviderTests {
 		// Test session creation directly through the getOrCreateSession method
 		String sessionId = "test-session-123";
 
-		McpStreamableHttpServerSession session = transportProvider.getOrCreateSession(sessionId, true);
+		McpServerSession session = transportProvider.getOrCreateSession(sessionId, true);
 
 		assertThat(session).isNotNull();
 		verify(sessionFactory).create(sessionId);
@@ -257,8 +257,8 @@ class StreamableHttpServerTransportProviderTests {
 		String sessionId2 = "session-2";
 
 		// Create separate mock sessions for each ID
-		McpStreamableHttpServerSession mockSession1 = mock(McpStreamableHttpServerSession.class);
-		McpStreamableHttpServerSession mockSession2 = mock(McpStreamableHttpServerSession.class);
+		McpServerSession mockSession1 = mock(McpServerSession.class);
+		McpServerSession mockSession2 = mock(McpServerSession.class);
 		when(mockSession1.getId()).thenReturn(sessionId1);
 		when(mockSession2.getId()).thenReturn(sessionId2);
 		when(mockSession1.closeGracefully()).thenReturn(Mono.empty());
@@ -270,8 +270,8 @@ class StreamableHttpServerTransportProviderTests {
 		when(sessionFactory.create(sessionId1)).thenReturn(mockSession1);
 		when(sessionFactory.create(sessionId2)).thenReturn(mockSession2);
 
-		McpStreamableHttpServerSession session1 = transportProvider.getOrCreateSession(sessionId1, true);
-		McpStreamableHttpServerSession session2 = transportProvider.getOrCreateSession(sessionId2, true);
+		McpServerSession session1 = transportProvider.getOrCreateSession(sessionId1, true);
+		McpServerSession session2 = transportProvider.getOrCreateSession(sessionId2, true);
 
 		assertThat(session1).isNotNull();
 		assertThat(session2).isNotNull();
@@ -285,8 +285,8 @@ class StreamableHttpServerTransportProviderTests {
 	void shouldReuseExistingSession() {
 		String sessionId = "test-session-123";
 
-		McpStreamableHttpServerSession session1 = transportProvider.getOrCreateSession(sessionId, true);
-		McpStreamableHttpServerSession session2 = transportProvider.getOrCreateSession(sessionId, false);
+		McpServerSession session1 = transportProvider.getOrCreateSession(sessionId, true);
+		McpServerSession session2 = transportProvider.getOrCreateSession(sessionId, false);
 
 		assertThat(session1).isSameAs(session2);
 		verify(sessionFactory, times(1)).create(sessionId);

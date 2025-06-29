@@ -15,7 +15,7 @@ import java.util.function.Supplier;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.modelcontextprotocol.server.transport.StreamableHttpServerTransportProvider;
-import io.modelcontextprotocol.spec.McpStreamableHttpServerSession;
+import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
@@ -86,7 +86,7 @@ public class McpAsyncStreamableHttpServer {
 	 * Sets up the request handlers for standard MCP methods.
 	 */
 	private void setupRequestHandlers() {
-		Map<String, McpStreamableHttpServerSession.RequestHandler<?>> requestHandlers = new HashMap<>();
+		Map<String, McpServerSession.RequestHandler<?>> requestHandlers = new HashMap<>();
 
 		// Ping handler
 		requestHandlers.put(McpSchema.METHOD_PING, (exchange, params) -> Mono.just(Map.of()));
@@ -123,15 +123,15 @@ public class McpAsyncStreamableHttpServer {
 		this.requestHandlers = requestHandlers;
 	}
 
-	private Map<String, McpStreamableHttpServerSession.RequestHandler<?>> requestHandlers;
+	private Map<String, McpServerSession.RequestHandler<?>> requestHandlers;
 
-	private Map<String, McpStreamableHttpServerSession.NotificationHandler> notificationHandlers;
+	private Map<String, McpServerSession.NotificationHandler> notificationHandlers;
 
 	/**
 	 * Sets up notification handlers.
 	 */
 	private void setupNotificationHandlers() {
-		Map<String, McpStreamableHttpServerSession.NotificationHandler> handlers = new HashMap<>();
+		Map<String, McpServerSession.NotificationHandler> handlers = new HashMap<>();
 
 		handlers.put(McpSchema.METHOD_NOTIFICATION_INITIALIZED, (exchange, params) -> {
 			logger.info("[INIT] Received initialized notification - initialization complete!");
@@ -150,7 +150,7 @@ public class McpAsyncStreamableHttpServer {
 	private void setupSessionFactory() {
 		setupNotificationHandlers();
 
-		httpTransportProvider.setStreamableHttpSessionFactory(sessionId -> new McpStreamableHttpServerSession(sessionId,
+		httpTransportProvider.setStreamableHttpSessionFactory(sessionId -> new McpServerSession(sessionId,
 				requestTimeout, this::handleInitializeRequest, Mono::empty, requestHandlers, notificationHandlers));
 	}
 
@@ -181,7 +181,7 @@ public class McpAsyncStreamableHttpServer {
 	}
 
 	// Request handler creation methods
-	private McpStreamableHttpServerSession.RequestHandler<McpSchema.ListToolsResult> createToolsListHandler() {
+	private McpServerSession.RequestHandler<McpSchema.ListToolsResult> createToolsListHandler() {
 		return (exchange, params) -> {
 			var regularTools = features.tools().stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList();
 			var streamingTools = features.streamTools()
@@ -194,8 +194,8 @@ public class McpAsyncStreamableHttpServer {
 		};
 	}
 
-	private McpStreamableHttpServerSession.RequestHandler<McpSchema.CallToolResult> createToolsCallHandler() {
-		return new McpStreamableHttpServerSession.StreamingRequestHandler<McpSchema.CallToolResult>() {
+	private McpServerSession.RequestHandler<McpSchema.CallToolResult> createToolsCallHandler() {
+		return new McpServerSession.StreamingRequestHandler<McpSchema.CallToolResult>() {
 			@Override
 			public Mono<McpSchema.CallToolResult> handle(McpAsyncServerExchange exchange, Object params) {
 				var callToolRequest = objectMapper.convertValue(params, McpSchema.CallToolRequest.class);
@@ -252,7 +252,7 @@ public class McpAsyncStreamableHttpServer {
 		};
 	}
 
-	private McpStreamableHttpServerSession.RequestHandler<McpSchema.ListResourcesResult> createResourcesListHandler() {
+	private McpServerSession.RequestHandler<McpSchema.ListResourcesResult> createResourcesListHandler() {
 		return (exchange, params) -> {
 			var resources = features.resources()
 				.values()
@@ -263,7 +263,7 @@ public class McpAsyncStreamableHttpServer {
 		};
 	}
 
-	private McpStreamableHttpServerSession.RequestHandler<McpSchema.ReadResourceResult> createResourcesReadHandler() {
+	private McpServerSession.RequestHandler<McpSchema.ReadResourceResult> createResourcesReadHandler() {
 		return (exchange, params) -> {
 			var resourceRequest = objectMapper.convertValue(params, McpSchema.ReadResourceRequest.class);
 			var resourceUri = resourceRequest.uri();
@@ -278,12 +278,12 @@ public class McpAsyncStreamableHttpServer {
 		};
 	}
 
-	private McpStreamableHttpServerSession.RequestHandler<McpSchema.ListResourceTemplatesResult> createResourceTemplatesListHandler() {
+	private McpServerSession.RequestHandler<McpSchema.ListResourceTemplatesResult> createResourceTemplatesListHandler() {
 		return (exchange, params) -> Mono
 			.just(new McpSchema.ListResourceTemplatesResult(features.resourceTemplates(), null));
 	}
 
-	private McpStreamableHttpServerSession.RequestHandler<McpSchema.ListPromptsResult> createPromptsListHandler() {
+	private McpServerSession.RequestHandler<McpSchema.ListPromptsResult> createPromptsListHandler() {
 		return (exchange, params) -> {
 			var prompts = features.prompts()
 				.values()
@@ -294,7 +294,7 @@ public class McpAsyncStreamableHttpServer {
 		};
 	}
 
-	private McpStreamableHttpServerSession.RequestHandler<McpSchema.GetPromptResult> createPromptsGetHandler() {
+	private McpServerSession.RequestHandler<McpSchema.GetPromptResult> createPromptsGetHandler() {
 		return (exchange, params) -> {
 			var promptRequest = objectMapper.convertValue(params, McpSchema.GetPromptRequest.class);
 
@@ -308,7 +308,7 @@ public class McpAsyncStreamableHttpServer {
 		};
 	}
 
-	private McpStreamableHttpServerSession.RequestHandler<Object> createLoggingSetLevelHandler() {
+	private McpServerSession.RequestHandler<Object> createLoggingSetLevelHandler() {
 		return (exchange, params) -> {
 			var setLevelRequest = objectMapper.convertValue(params, McpSchema.SetLevelRequest.class);
 			exchange.setMinLoggingLevel(setLevelRequest.level());
@@ -316,7 +316,7 @@ public class McpAsyncStreamableHttpServer {
 		};
 	}
 
-	private McpStreamableHttpServerSession.RequestHandler<McpSchema.CompleteResult> createCompletionCompleteHandler() {
+	private McpServerSession.RequestHandler<McpSchema.CompleteResult> createCompletionCompleteHandler() {
 		return (exchange, params) -> {
 			var completeRequest = objectMapper.convertValue(params, McpSchema.CompleteRequest.class);
 
@@ -330,7 +330,7 @@ public class McpAsyncStreamableHttpServer {
 		};
 	}
 
-	private McpStreamableHttpServerSession.NotificationHandler createRootsListChangedHandler() {
+	private McpServerSession.NotificationHandler createRootsListChangedHandler() {
 		return (exchange, params) -> {
 			var rootsChangeConsumers = features.rootsChangeConsumers();
 			if (rootsChangeConsumers.isEmpty()) {
@@ -418,8 +418,8 @@ public class McpAsyncStreamableHttpServer {
 	 * transport.
 	 *
 	 * <p>
-	 * This builder provides a fluent API for configuring Streamable HTTP MCP
-	 * servers with enhanced features:
+	 * This builder provides a fluent API for configuring Streamable HTTP MCP servers with
+	 * enhanced features:
 	 * <ul>
 	 * <li>Single session class managing all transport streams</li>
 	 * <li>Resource management and lifecycle handling</li>
