@@ -4,6 +4,9 @@
 
 package io.modelcontextprotocol.server;
 
+import java.util.ArrayList;
+import java.util.Collections;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -34,6 +37,9 @@ public class McpAsyncServerExchange {
 	};
 
 	private static final TypeReference<McpSchema.ListRootsResult> LIST_ROOTS_RESULT_TYPE_REF = new TypeReference<>() {
+	};
+
+	private static final TypeReference<McpSchema.ElicitResult> ELICITATION_RESULT_TYPE_REF = new TypeReference<>() {
 	};
 
 	/**
@@ -94,11 +100,48 @@ public class McpAsyncServerExchange {
 	}
 
 	/**
+	 * Creates a new elicitation. MCP provides a standardized way for servers to request
+	 * additional information from users through the client during interactions. This flow
+	 * allows clients to maintain control over user interactions and data sharing while
+	 * enabling servers to gather necessary information dynamically. Servers can request
+	 * structured data from users with optional JSON schemas to validate responses.
+	 * @param elicitRequest The request to create a new elicitation
+	 * @return A Mono that completes when the elicitation has been resolved.
+	 * @see McpSchema.ElicitRequest
+	 * @see McpSchema.ElicitResult
+	 * @see <a href=
+	 * "https://spec.modelcontextprotocol.io/specification/client/elicitation/">Elicitation
+	 * Specification</a>
+	 */
+	public Mono<McpSchema.ElicitResult> createElicitation(McpSchema.ElicitRequest elicitRequest) {
+		if (this.clientCapabilities == null) {
+			return Mono.error(new McpError("Client must be initialized. Call the initialize method first!"));
+		}
+		if (this.clientCapabilities.elicitation() == null) {
+			return Mono.error(new McpError("Client must be configured with elicitation capabilities"));
+		}
+		return this.session.sendRequest(McpSchema.METHOD_ELICITATION_CREATE, elicitRequest,
+				ELICITATION_RESULT_TYPE_REF);
+	}
+
+	/**
 	 * Retrieves the list of all roots provided by the client.
 	 * @return A Mono that emits the list of roots result.
 	 */
 	public Mono<McpSchema.ListRootsResult> listRoots() {
-		return this.listRoots(null);
+
+		// @formatter:off
+		return this.listRoots(McpSchema.FIRST_PAGE)
+			.expand(result -> (result.nextCursor() != null) ? 
+					this.listRoots(result.nextCursor()) : Mono.empty())
+			.reduce(new McpSchema.ListRootsResult(new ArrayList<>(), null), 
+				(allRootsResult, result) -> {
+					allRootsResult.roots().addAll(result.roots());
+					return allRootsResult;
+				})
+			.map(result -> new McpSchema.ListRootsResult(Collections.unmodifiableList(result.roots()),
+					result.nextCursor()));
+		// @formatter:on
 	}
 
 	/**
@@ -112,8 +155,8 @@ public class McpAsyncServerExchange {
 	}
 
 	/**
-	 * Send a logging message notification to all connected clients. Messages below the
-	 * current minimum logging level will be filtered out.
+	 * Send a logging message notification to the client. Messages below the current
+	 * minimum logging level will be filtered out.
 	 * @param loggingMessageNotification The logging message to send
 	 * @return A Mono that completes when the notification has been sent
 	 */

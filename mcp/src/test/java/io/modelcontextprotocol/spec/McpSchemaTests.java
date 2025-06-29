@@ -9,17 +9,17 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
-import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
-import net.javacrumbs.jsonunit.core.Option;
-import org.junit.jupiter.api.Test;
-
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
+
+import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
+import net.javacrumbs.jsonunit.core.Option;
 
 /**
  * @author Christian Tzolov
@@ -59,7 +59,7 @@ public class McpSchemaTests {
 				{"type":"WRONG","text":"XXX"}""", McpSchema.TextContent.class))
 			.isInstanceOf(InvalidTypeIdException.class)
 			.hasMessageContaining(
-					"Could not resolve type id 'WRONG' as a subtype of `io.modelcontextprotocol.spec.McpSchema$TextContent`: known type ids = [image, resource, text]");
+					"Could not resolve type id 'WRONG' as a subtype of `io.modelcontextprotocol.spec.McpSchema$TextContent`: known type ids = [audio, image, resource, resource_link, text]");
 	}
 
 	@Test
@@ -82,6 +82,28 @@ public class McpSchemaTests {
 		assertThat(imageContent.type()).isEqualTo("image");
 		assertThat(imageContent.data()).isEqualTo("base64encodeddata");
 		assertThat(imageContent.mimeType()).isEqualTo("image/png");
+	}
+
+	@Test
+	void testAudioContent() throws Exception {
+		McpSchema.AudioContent audioContent = new McpSchema.AudioContent(null, "base64encodeddata", "audio/wav");
+		String value = mapper.writeValueAsString(audioContent);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"type":"audio","data":"base64encodeddata","mimeType":"audio/wav"}"""));
+	}
+
+	@Test
+	void testAudioContentDeserialization() throws Exception {
+		McpSchema.AudioContent audioContent = mapper.readValue("""
+				{"type":"audio","data":"base64encodeddata","mimeType":"audio/wav"}""", McpSchema.AudioContent.class);
+		assertThat(audioContent).isNotNull();
+		assertThat(audioContent.type()).isEqualTo("audio");
+		assertThat(audioContent.data()).isEqualTo("base64encodeddata");
+		assertThat(audioContent.mimeType()).isEqualTo("audio/wav");
 	}
 
 	@Test
@@ -143,6 +165,34 @@ public class McpSchemaTests {
 		assertThat(embeddedResource.resource().mimeType()).isEqualTo("application/octet-stream");
 		assertThat(((McpSchema.BlobResourceContents) embeddedResource.resource()).blob())
 			.isEqualTo("base64encodedblob");
+	}
+
+	@Test
+	void testResourceLink() throws Exception {
+		McpSchema.ResourceLink resourceLink = new McpSchema.ResourceLink("main.rs", "file:///project/src/main.rs",
+				"Primary application entry point", "text/x-rust", null, null);
+		String value = mapper.writeValueAsString(resourceLink);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"type":"resource_link","name":"main.rs","uri":"file:///project/src/main.rs","description":"Primary application entry point","mimeType":"text/x-rust"}"""));
+	}
+
+	@Test
+	void testResourceLinkDeserialization() throws Exception {
+		McpSchema.ResourceLink resourceLink = mapper.readValue(
+				"""
+						{"type":"resource_link","name":"main.rs","uri":"file:///project/src/main.rs","description":"Primary application entry point","mimeType":"text/x-rust"}""",
+				McpSchema.ResourceLink.class);
+		assertThat(resourceLink).isNotNull();
+		assertThat(resourceLink.type()).isEqualTo("resource_link");
+		assertThat(resourceLink.name()).isEqualTo("main.rs");
+		assertThat(resourceLink.uri()).isEqualTo("file:///project/src/main.rs");
+		assertThat(resourceLink.description()).isEqualTo("Primary application entry point");
+		assertThat(resourceLink.mimeType()).isEqualTo("text/x-rust");
 	}
 
 	// JSON-RPC Message Types Tests
@@ -271,6 +321,59 @@ public class McpSchemaTests {
 			.isEqualTo(
 					json("""
 							{"uri":"resource://test","name":"Test Resource","description":"A test resource","mimeType":"text/plain","annotations":{"audience":["user","assistant"],"priority":0.8}}"""));
+	}
+
+	@Test
+	void testResourceBuilder() throws Exception {
+		McpSchema.Annotations annotations = new McpSchema.Annotations(
+				Arrays.asList(McpSchema.Role.USER, McpSchema.Role.ASSISTANT), 0.8);
+
+		McpSchema.Resource resource = McpSchema.Resource.builder()
+			.uri("resource://test")
+			.name("Test Resource")
+			.description("A test resource")
+			.mimeType("text/plain")
+			.size(256L)
+			.annotations(annotations)
+			.build();
+
+		String value = mapper.writeValueAsString(resource);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"uri":"resource://test","name":"Test Resource","description":"A test resource","mimeType":"text/plain","size":256,"annotations":{"audience":["user","assistant"],"priority":0.8}}"""));
+	}
+
+	@Test
+	void testResourceBuilderUriRequired() {
+		McpSchema.Annotations annotations = new McpSchema.Annotations(
+				Arrays.asList(McpSchema.Role.USER, McpSchema.Role.ASSISTANT), 0.8);
+
+		McpSchema.Resource.Builder resourceBuilder = McpSchema.Resource.builder()
+			.name("Test Resource")
+			.description("A test resource")
+			.mimeType("text/plain")
+			.size(256L)
+			.annotations(annotations);
+
+		assertThatThrownBy(resourceBuilder::build).isInstanceOf(java.lang.IllegalArgumentException.class);
+	}
+
+	@Test
+	void testResourceBuilderNameRequired() {
+		McpSchema.Annotations annotations = new McpSchema.Annotations(
+				Arrays.asList(McpSchema.Role.USER, McpSchema.Role.ASSISTANT), 0.8);
+
+		McpSchema.Resource.Builder resourceBuilder = McpSchema.Resource.builder()
+			.uri("resource://test")
+			.description("A test resource")
+			.mimeType("text/plain")
+			.size(256L)
+			.annotations(annotations);
+
+		assertThatThrownBy(resourceBuilder::build).isInstanceOf(java.lang.IllegalArgumentException.class);
 	}
 
 	@Test
@@ -607,6 +710,36 @@ public class McpSchemaTests {
 	}
 
 	@Test
+	void testToolWithAnnotations() throws Exception {
+		String schemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"name": {
+							"type": "string"
+						},
+						"value": {
+							"type": "number"
+						}
+					},
+					"required": ["name"]
+				}
+				""";
+		McpSchema.ToolAnnotations annotations = new McpSchema.ToolAnnotations("A test tool", false, false, false, false,
+				false);
+
+		McpSchema.Tool tool = new McpSchema.Tool("test-tool", "A test tool", schemaJson, annotations);
+
+		String value = mapper.writeValueAsString(tool);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"name":"test-tool","description":"A test tool","inputSchema":{"type":"object","properties":{"name":{"type":"string"},"value":{"type":"number"}},"required":["name"]},"annotations":{"title":"A test tool","readOnlyHint":false,"destructiveHint":false,"idempotentHint":false,"openWorldHint":false,"returnDirect":false}}"""));
+	}
+
+	@Test
 	void testCallToolRequest() throws Exception {
 		Map<String, Object> arguments = new HashMap<>();
 		arguments.put("name", "test");
@@ -807,6 +940,57 @@ public class McpSchemaTests {
 							{"role":"assistant","content":{"type":"text","text":"Assistant response"},"model":"gpt-4","stopReason":"endTurn"}"""));
 	}
 
+	@Test
+	void testCreateMessageResultUnknownStopReason() throws Exception {
+		String input = """
+				{"role":"assistant","content":{"type":"text","text":"Assistant response"},"model":"gpt-4","stopReason":"arbitrary value"}""";
+
+		McpSchema.CreateMessageResult value = mapper.readValue(input, McpSchema.CreateMessageResult.class);
+
+		McpSchema.TextContent expectedContent = new McpSchema.TextContent("Assistant response");
+		McpSchema.CreateMessageResult expected = McpSchema.CreateMessageResult.builder()
+			.role(McpSchema.Role.ASSISTANT)
+			.content(expectedContent)
+			.model("gpt-4")
+			.stopReason(McpSchema.CreateMessageResult.StopReason.UNKNOWN)
+			.build();
+		assertThat(value).isEqualTo(expected);
+	}
+
+	// Elicitation Tests
+
+	@Test
+	void testCreateElicitationRequest() throws Exception {
+		McpSchema.ElicitRequest request = McpSchema.ElicitRequest.builder()
+			.requestedSchema(Map.of("type", "object", "required", List.of("a"), "properties",
+					Map.of("foo", Map.of("type", "string"))))
+			.build();
+
+		String value = mapper.writeValueAsString(request);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"requestedSchema":{"properties":{"foo":{"type":"string"}},"required":["a"],"type":"object"}}"""));
+	}
+
+	@Test
+	void testCreateElicitationResult() throws Exception {
+		McpSchema.ElicitResult result = McpSchema.ElicitResult.builder()
+			.content(Map.of("foo", "bar"))
+			.message(McpSchema.ElicitResult.Action.ACCEPT)
+			.build();
+
+		String value = mapper.writeValueAsString(result);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"action":"accept","content":{"foo":"bar"}}"""));
+	}
+
 	// Roots Tests
 
 	@Test
@@ -827,7 +1011,7 @@ public class McpSchemaTests {
 
 		McpSchema.Root root2 = new McpSchema.Root("file:///path/to/root2", "Second Root");
 
-		McpSchema.ListRootsResult result = new McpSchema.ListRootsResult(Arrays.asList(root1, root2));
+		McpSchema.ListRootsResult result = new McpSchema.ListRootsResult(Arrays.asList(root1, root2), "next-cursor");
 
 		String value = mapper.writeValueAsString(result);
 
@@ -836,7 +1020,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"roots":[{"uri":"file:///path/to/root1","name":"First Root"},{"uri":"file:///path/to/root2","name":"Second Root"}]}"""));
+							{"roots":[{"uri":"file:///path/to/root1","name":"First Root"},{"uri":"file:///path/to/root2","name":"Second Root"}],"nextCursor":"next-cursor"}"""));
 
 	}
 
