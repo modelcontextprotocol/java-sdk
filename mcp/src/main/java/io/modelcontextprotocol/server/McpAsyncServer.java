@@ -348,9 +348,31 @@ public class McpAsyncServer {
 
 	private McpServerSession.RequestHandler<CallToolResult> toolsCallRequestHandler() {
 		return (exchange, params) -> {
-			McpSchema.CallToolRequest callToolRequest = objectMapper.convertValue(params,
-					new TypeReference<McpSchema.CallToolRequest>() {
-					});
+			// Handle the conversion based on what we actually receive
+			McpSchema.CallToolRequest callToolRequest;
+			
+			if (params instanceof McpSchema.CallToolRequest) {
+				// Already the correct type
+				callToolRequest = (McpSchema.CallToolRequest) params;
+			}
+			else if (params instanceof java.util.Map) {
+				// This is the expected case - params is a Map representing the CallToolRequest
+				try {
+					callToolRequest = objectMapper.convertValue(params, McpSchema.CallToolRequest.class);
+				}
+				catch (Exception e) {
+					throw new IllegalArgumentException("Invalid params for tools/call: " + params, e);
+				}
+			}
+			else {
+				// Unknown type - try generic conversion
+				try {
+					callToolRequest = objectMapper.convertValue(params, McpSchema.CallToolRequest.class);
+				}
+				catch (Exception e) {
+					throw new IllegalArgumentException("Cannot convert params to CallToolRequest: " + params, e);
+				}
+			}
 
 			Optional<McpServerFeatures.AsyncToolSpecification> toolSpecification = this.tools.stream()
 				.filter(tr -> callToolRequest.name().equals(tr.tool().name()))
