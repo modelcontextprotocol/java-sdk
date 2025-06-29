@@ -101,6 +101,7 @@ public abstract class AbstractMcpAsyncServerTests {
 			""";
 
 	@Test
+	@Deprecated
 	void testAddTool() {
 		Tool newTool = new McpSchema.Tool("new-tool", "New test tool", emptyJsonSchema);
 		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
@@ -116,6 +117,22 @@ public abstract class AbstractMcpAsyncServerTests {
 	}
 
 	@Test
+	void testAddToolCall() {
+		Tool newTool = new McpSchema.Tool("new-tool", "New test tool", emptyJsonSchema);
+		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.build();
+
+		StepVerifier.create(mcpAsyncServer.addTool(new McpServerFeatures.AsyncToolCallSpecification(newTool,
+				(exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))))
+			.verifyComplete();
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	@Deprecated
 	void testAddDuplicateTool() {
 		Tool duplicateTool = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
 
@@ -128,6 +145,27 @@ public abstract class AbstractMcpAsyncServerTests {
 		StepVerifier
 			.create(mcpAsyncServer.addTool(new McpServerFeatures.AsyncToolSpecification(duplicateTool,
 					(exchange, args) -> Mono.just(new CallToolResult(List.of(), false)))))
+			.verifyErrorSatisfies(error -> {
+				assertThat(error).isInstanceOf(McpError.class)
+					.hasMessage("Tool with name '" + TEST_TOOL_NAME + "' already exists");
+			});
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testAddDuplicateToolCall() {
+		Tool duplicateTool = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
+
+		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.toolCall(duplicateTool, (exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+			.build();
+
+		StepVerifier
+			.create(mcpAsyncServer.addTool(new McpServerFeatures.AsyncToolCallSpecification(duplicateTool,
+					(exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))))
 			.verifyErrorSatisfies(error -> {
 				assertThat(error).isInstanceOf(McpError.class)
 					.hasMessage("Tool with name '" + TEST_TOOL_NAME + "' already exists");

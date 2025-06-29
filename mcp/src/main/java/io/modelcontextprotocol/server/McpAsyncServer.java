@@ -92,7 +92,7 @@ public class McpAsyncServer {
 
 	private final String instructions;
 
-	private final CopyOnWriteArrayList<McpServerFeatures.AsyncToolSpecification> tools = new CopyOnWriteArrayList<>();
+	private final CopyOnWriteArrayList<McpServerFeatures.AsyncToolCallSpecification> tools = new CopyOnWriteArrayList<>();
 
 	private final CopyOnWriteArrayList<McpSchema.ResourceTemplate> resourceTemplates = new CopyOnWriteArrayList<>();
 
@@ -271,15 +271,27 @@ public class McpAsyncServer {
 	 * Add a new tool specification at runtime.
 	 * @param toolSpecification The tool specification to add
 	 * @return Mono that completes when clients have been notified of the change
+	 * @deprecated Use {@link #addTool(McpServerFeatures.AsyncToolCallSpecification)}
+	 * instead.
 	 */
+	@Deprecated
 	public Mono<Void> addTool(McpServerFeatures.AsyncToolSpecification toolSpecification) {
-		if (toolSpecification == null) {
+		return addTool(toolSpecification.toToolCall());
+	}
+
+	/**
+	 * Add a new tool call specification at runtime.
+	 * @param toolCallSpecification The tool specification to add
+	 * @return Mono that completes when clients have been notified of the change
+	 */
+	public Mono<Void> addTool(McpServerFeatures.AsyncToolCallSpecification toolCallSpecification) {
+		if (toolCallSpecification == null) {
 			return Mono.error(new McpError("Tool specification must not be null"));
 		}
-		if (toolSpecification.tool() == null) {
+		if (toolCallSpecification.tool() == null) {
 			return Mono.error(new McpError("Tool must not be null"));
 		}
-		if (toolSpecification.call() == null) {
+		if (toolCallSpecification.call() == null) {
 			return Mono.error(new McpError("Tool call handler must not be null"));
 		}
 		if (this.serverCapabilities.tools() == null) {
@@ -288,13 +300,13 @@ public class McpAsyncServer {
 
 		return Mono.defer(() -> {
 			// Check for duplicate tool names
-			if (this.tools.stream().anyMatch(th -> th.tool().name().equals(toolSpecification.tool().name()))) {
+			if (this.tools.stream().anyMatch(th -> th.tool().name().equals(toolCallSpecification.tool().name()))) {
 				return Mono
-					.error(new McpError("Tool with name '" + toolSpecification.tool().name() + "' already exists"));
+					.error(new McpError("Tool with name '" + toolCallSpecification.tool().name() + "' already exists"));
 			}
 
-			this.tools.add(toolSpecification);
-			logger.debug("Added tool handler: {}", toolSpecification.tool().name());
+			this.tools.add(toolCallSpecification);
+			logger.debug("Added tool handler: {}", toolCallSpecification.tool().name());
 
 			if (this.serverCapabilities.tools().listChanged()) {
 				return notifyToolsListChanged();
@@ -340,7 +352,7 @@ public class McpAsyncServer {
 
 	private McpServerSession.RequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
 		return (exchange, params) -> {
-			List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList();
+			List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolCallSpecification::tool).toList();
 
 			return Mono.just(new McpSchema.ListToolsResult(tools, null));
 		};
@@ -352,7 +364,7 @@ public class McpAsyncServer {
 					new TypeReference<McpSchema.CallToolRequest>() {
 					});
 
-			Optional<McpServerFeatures.AsyncToolSpecification> toolSpecification = this.tools.stream()
+			Optional<McpServerFeatures.AsyncToolCallSpecification> toolSpecification = this.tools.stream()
 				.filter(tr -> callToolRequest.name().equals(tr.tool().name()))
 				.findAny();
 
@@ -360,7 +372,7 @@ public class McpAsyncServer {
 				return Mono.error(new McpError("Tool not found: " + callToolRequest.name()));
 			}
 
-			return toolSpecification.map(tool -> tool.call().apply(exchange, callToolRequest.arguments()))
+			return toolSpecification.map(tool -> tool.call().apply(exchange, callToolRequest))
 				.orElse(Mono.error(new McpError("Tool not found: " + callToolRequest.name())));
 		};
 	}
