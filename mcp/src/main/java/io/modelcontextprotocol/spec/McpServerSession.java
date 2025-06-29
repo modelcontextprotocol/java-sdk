@@ -170,13 +170,13 @@ public class McpServerSession implements McpSession {
 			}
 			else if (message instanceof McpSchema.JSONRPCRequest request) {
 				logger.debug("Received request: {}", request);
-				return handleIncomingRequest(request).onErrorResume(error -> {
-					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
-							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-									error.getMessage(), null));
-					// TODO: Should the error go to SSE or back as POST return?
-					return this.transport.sendMessage(errorResponse).then(Mono.empty());
-				}).flatMap(this.transport::sendMessage);
+				return handleIncomingRequest(request).flatMap(response -> this.transport.sendMessage(response))
+					.onErrorResume(error -> {
+						var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
+								new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+										error.getMessage(), null));
+						return this.transport.sendMessage(errorResponse);
+					});
 			}
 			else if (message instanceof McpSchema.JSONRPCNotification notification) {
 				// TODO handle errors for communication to without initialization
