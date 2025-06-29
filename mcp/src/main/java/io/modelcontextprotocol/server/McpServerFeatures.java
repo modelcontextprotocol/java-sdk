@@ -39,7 +39,7 @@ public class McpServerFeatures {
 	 * @param instructions The server instructions text
 	 */
 	record Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-			List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
+			List<McpServerFeatures.AsyncToolCallSpecification> tools, Map<String, AsyncResourceSpecification> resources,
 			List<McpSchema.ResourceTemplate> resourceTemplates,
 			Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
@@ -59,8 +59,8 @@ public class McpServerFeatures {
 		 * @param instructions The server instructions text
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-				List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
-				List<McpSchema.ResourceTemplate> resourceTemplates,
+				List<McpServerFeatures.AsyncToolCallSpecification> tools,
+				Map<String, AsyncResourceSpecification> resources, List<McpSchema.ResourceTemplate> resourceTemplates,
 				Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
 				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
@@ -99,9 +99,9 @@ public class McpServerFeatures {
 		 * user.
 		 */
 		static Async fromSync(Sync syncSpec) {
-			List<McpServerFeatures.AsyncToolSpecification> tools = new ArrayList<>();
+			List<McpServerFeatures.AsyncToolCallSpecification> tools = new ArrayList<>();
 			for (var tool : syncSpec.tools()) {
-				tools.add(AsyncToolSpecification.fromSync(tool));
+				tools.add(AsyncToolCallSpecification.fromSync(tool));
 			}
 
 			Map<String, AsyncResourceSpecification> resources = new HashMap<>();
@@ -146,7 +146,7 @@ public class McpServerFeatures {
 	 * @param instructions The server instructions text
 	 */
 	record Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-			List<McpServerFeatures.SyncToolSpecification> tools,
+			List<McpServerFeatures.SyncToolCallSpecification> tools,
 			Map<String, McpServerFeatures.SyncResourceSpecification> resources,
 			List<McpSchema.ResourceTemplate> resourceTemplates,
 			Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
@@ -166,7 +166,7 @@ public class McpServerFeatures {
 		 * @param instructions The server instructions text
 		 */
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-				List<McpServerFeatures.SyncToolSpecification> tools,
+				List<McpServerFeatures.SyncToolCallSpecification> tools,
 				Map<String, McpServerFeatures.SyncResourceSpecification> resources,
 				List<McpSchema.ResourceTemplate> resourceTemplates,
 				Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
@@ -213,21 +213,21 @@ public class McpServerFeatures {
 	 * </ul>
 	 *
 	 * <p>
-	 * Example tool specification: <pre>{@code
+	 * Example tool specification:
+	 *
+	 * <pre>{@code
 	 * new McpServerFeatures.AsyncToolSpecification(
-	 *     new Tool(
-	 *         "calculator",
-	 *         "Performs mathematical calculations",
-	 *         new JsonSchemaObject()
-	 *             .required("expression")
-	 *             .property("expression", JsonSchemaType.STRING)
-	 *     ),
-	 *     (exchange, args) -> {
-	 *         String expr = (String) args.get("expression");
-	 *         return Mono.fromSupplier(() -> evaluate(expr))
-	 *             .map(result -> new CallToolResult("Result: " + result));
-	 *     }
-	 * )
+	 * 		new Tool(
+	 * 				"calculator",
+	 * 				"Performs mathematical calculations",
+	 * 				new JsonSchemaObject()
+	 * 						.required("expression")
+	 * 						.property("expression", JsonSchemaType.STRING)),
+	 * 		(exchange, args) -> {
+	 * 			String expr = (String) args.get("expression");
+	 * 			return Mono.fromSupplier(() -> evaluate(expr))
+	 * 					.map(result -> new CallToolResult("Result: " + result));
+	 * 		})
 	 * }</pre>
 	 *
 	 * @param tool The tool definition including name, description, and parameter schema
@@ -235,9 +235,16 @@ public class McpServerFeatures {
 	 * returning results. The function's first argument is an
 	 * {@link McpAsyncServerExchange} upon which the server can interact with the
 	 * connected client. The second arguments is a map of tool arguments.
+	 * @deprecated Use {@link AsyncToolCallSpecification} instead.
 	 */
+	@Deprecated
 	public record AsyncToolSpecification(McpSchema.Tool tool,
 			BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> call) {
+
+		public AsyncToolCallSpecification toToolCall() {
+			return new AsyncToolCallSpecification(tool, (exchange, toolReq) -> call.apply(exchange, toolReq.arguments())
+				.subscribeOn(Schedulers.boundedElastic()));
+		}
 
 		static AsyncToolSpecification fromSync(SyncToolSpecification tool) {
 			// FIXME: This is temporary, proper validation should be implemented
@@ -247,6 +254,81 @@ public class McpServerFeatures {
 			return new AsyncToolSpecification(tool.tool(),
 					(exchange, map) -> Mono
 						.fromCallable(() -> tool.call().apply(new McpSyncServerExchange(exchange), map))
+						.subscribeOn(Schedulers.boundedElastic()));
+		}
+	}
+
+	/**
+	 * Specification of a tool with its asynchronous handler function. Tools are the
+	 * primary way for MCP servers to expose functionality to AI models. Each tool
+	 * represents a specific capability, such as:
+	 * <ul>
+	 * <li>Performing calculations
+	 * <li>Accessing external APIs
+	 * <li>Querying databases
+	 * <li>Manipulating files
+	 * <li>Executing system commands
+	 * </ul>
+	 *
+	 * <p>
+	 * Example tool specification:
+	 *
+	 * <pre>{@code
+	 * new McpServerFeatures.AsyncToolCallSpecification(
+	 * 		new Tool(
+	 * 				"calculator",
+	 * 				"Performs mathematical calculations",
+	 * 				new JsonSchemaObject()
+	 * 						.required("expression")
+	 * 						.property("expression", JsonSchemaType.STRING)),
+	 * 		(exchange, request) -> Mono.fromSupplier(() -> evaluate(request.getArguments().get("expression")))
+	 * 				.map(result -> new CallToolResult("Result: " + result)))
+	 * }</pre>
+	 *
+	 * @param tool The tool definition including name, description, and parameter schema
+	 * @param call The function that implements the tool's logic, receiving arguments and
+	 * returning results.
+	 */
+	public record AsyncToolCallSpecification(McpSchema.Tool tool,
+			BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> call) {
+
+		/**
+		 * Converts a synchronous {@link SyncToolCallSpecification} into an
+		 * {@link AsyncToolCallSpecification} by wrapping the handler in a bounded elastic
+		 * scheduler for safe non-blocking execution.
+		 * @param tool the synchronous tool call specification
+		 * @return an asynchronous wrapper of the provided sync specification, or
+		 * {@code null} if input is null
+		 */
+		static AsyncToolCallSpecification fromSync(SyncToolCallSpecification tool) {
+			if (tool == null) {
+				return null;
+			}
+			return new AsyncToolCallSpecification(tool.tool(),
+					(exchange, callToolRequest) -> Mono
+						.fromCallable(() -> tool.call().apply(new McpSyncServerExchange(exchange), callToolRequest))
+						.subscribeOn(Schedulers.boundedElastic()));
+		}
+
+		/**
+		 * Converts a synchronous {@link SyncToolSpecification} into an
+		 * {@link AsyncToolCallSpecification} by wrapping the handler in a bounded elastic
+		 * scheduler for safe non-blocking execution.
+		 * @param tool the synchronous tool specification
+		 * @deprecated the {@link SyncToolSpecification} is deprecated, use
+		 * {@link SyncToolCallSpecification} instead.
+		 * @return an asynchronous wrapper of the provided sync specification, or
+		 * {@code null} if input is null
+		 */
+		@Deprecated
+		static AsyncToolCallSpecification fromSync(SyncToolSpecification tool) {
+			// FIXME: This is temporary, proper validation should be implemented
+			if (tool == null) {
+				return null;
+			}
+			return new AsyncToolCallSpecification(tool.tool(),
+					(exchange, callToolRequest) -> Mono.fromCallable(
+							() -> tool.call().apply(new McpSyncServerExchange(exchange), callToolRequest.arguments()))
 						.subscribeOn(Schedulers.boundedElastic()));
 		}
 	}
@@ -263,13 +345,13 @@ public class McpServerFeatures {
 	 * </ul>
 	 *
 	 * <p>
-	 * Example resource specification: <pre>{@code
+	 * Example resource specification:
+	 *
+	 * <pre>{@code
 	 * new McpServerFeatures.AsyncResourceSpecification(
-	 *     new Resource("docs", "Documentation files", "text/markdown"),
-	 *     (exchange, request) ->
-	 *         Mono.fromSupplier(() -> readFile(request.getPath()))
-	 *             .map(ReadResourceResult::new)
-	 * )
+	 * 		new Resource("docs", "Documentation files", "text/markdown"),
+	 * 		(exchange, request) -> Mono.fromSupplier(() -> readFile(request.getPath()))
+	 * 				.map(ReadResourceResult::new))
 	 * }</pre>
 	 *
 	 * @param resource The resource definition including name, description, and MIME type
@@ -305,16 +387,16 @@ public class McpServerFeatures {
 	 * </ul>
 	 *
 	 * <p>
-	 * Example prompt specification: <pre>{@code
+	 * Example prompt specification:
+	 *
+	 * <pre>{@code
 	 * new McpServerFeatures.AsyncPromptSpecification(
-	 *     new Prompt("analyze", "Code analysis template"),
-	 *     (exchange, request) -> {
-	 *         String code = request.getArguments().get("code");
-	 *         return Mono.just(new GetPromptResult(
-	 *             "Analyze this code:\n\n" + code + "\n\nProvide feedback on:"
-	 *         ));
-	 *     }
-	 * )
+	 * 		new Prompt("analyze", "Code analysis template"),
+	 * 		(exchange, request) -> {
+	 * 			String code = request.getArguments().get("code");
+	 * 			return Mono.just(new GetPromptResult(
+	 * 					"Analyze this code:\n\n" + code + "\n\nProvide feedback on:"));
+	 * 		})
 	 * }</pre>
 	 *
 	 * @param prompt The prompt definition including name and description
@@ -379,31 +461,23 @@ public class McpServerFeatures {
 
 	/**
 	 * Specification of a tool with its synchronous handler function. Tools are the
-	 * primary way for MCP servers to expose functionality to AI models. Each tool
-	 * represents a specific capability, such as:
-	 * <ul>
-	 * <li>Performing calculations
-	 * <li>Accessing external APIs
-	 * <li>Querying databases
-	 * <li>Manipulating files
-	 * <li>Executing system commands
-	 * </ul>
+	 * primary way for MCP servers to expose functionality to AI models.
 	 *
 	 * <p>
-	 * Example tool specification: <pre>{@code
+	 * Example tool specification:
+	 *
+	 * <pre>{@code
 	 * new McpServerFeatures.SyncToolSpecification(
-	 *     new Tool(
-	 *         "calculator",
-	 *         "Performs mathematical calculations",
-	 *         new JsonSchemaObject()
-	 *             .required("expression")
-	 *             .property("expression", JsonSchemaType.STRING)
-	 *     ),
-	 *     (exchange, args) -> {
-	 *         String expr = (String) args.get("expression");
-	 *         return new CallToolResult("Result: " + evaluate(expr));
-	 *     }
-	 * )
+	 * 		new Tool(
+	 * 				"calculator",
+	 * 				"Performs mathematical calculations",
+	 * 				new JsonSchemaObject()
+	 * 						.required("expression")
+	 * 						.property("expression", JsonSchemaType.STRING)),
+	 * 		(exchange, args) -> {
+	 * 			String expr = (String) args.get("expression");
+	 * 			return new CallToolResult("Result: " + evaluate(expr));
+	 * 		})
 	 * }</pre>
 	 *
 	 * @param tool The tool definition including name, description, and parameter schema
@@ -411,9 +485,43 @@ public class McpServerFeatures {
 	 * returning results. The function's first argument is an
 	 * {@link McpSyncServerExchange} upon which the server can interact with the connected
 	 * client. The second arguments is a map of arguments passed to the tool.
+	 * @deprecated Use {@link SyncToolCallSpecification} instead.
 	 */
+	@Deprecated
 	public record SyncToolSpecification(McpSchema.Tool tool,
 			BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> call) {
+
+		public SyncToolCallSpecification toToolCall() {
+			return new SyncToolCallSpecification(tool,
+					(exchange, toolReq) -> call.apply(exchange, toolReq.arguments()));
+		}
+	}
+
+	/**
+	 * Specification of a tool with its synchronous handler function. Tools are the
+	 * primary way for MCP servers to expose functionality to AI models.
+	 *
+	 * <p>
+	 * Example tool specification:
+	 *
+	 * <pre>{@code
+	 * new McpServerFeatures.SyncToolCallSpecification(
+	 * 		new Tool(
+	 * 				"calculator",
+	 * 				"Performs mathematical calculations",
+	 * 				new JsonSchemaObject()
+	 * 						.required("expression")
+	 * 						.property("expression", JsonSchemaType.STRING)),
+	 * 		(exchange,
+	 * 				request) -> new CallToolResult("Result: " + evaluate(request.getArguments().get("expression"))))
+	 * }</pre>
+	 *
+	 * @param tool The tool definition including name, description, and parameter schema
+	 * @param call The function that implements the tool's logic, receiving arguments and
+	 * returning results.
+	 */
+	public record SyncToolCallSpecification(McpSchema.Tool tool,
+			BiFunction<McpSyncServerExchange, McpSchema.CallToolRequest, McpSchema.CallToolResult> call) {
 	}
 
 	/**
@@ -428,14 +536,15 @@ public class McpServerFeatures {
 	 * </ul>
 	 *
 	 * <p>
-	 * Example resource specification: <pre>{@code
+	 * Example resource specification:
+	 *
+	 * <pre>{@code
 	 * new McpServerFeatures.SyncResourceSpecification(
-	 *     new Resource("docs", "Documentation files", "text/markdown"),
-	 *     (exchange, request) -> {
-	 *         String content = readFile(request.getPath());
-	 *         return new ReadResourceResult(content);
-	 *     }
-	 * )
+	 * 		new Resource("docs", "Documentation files", "text/markdown"),
+	 * 		(exchange, request) -> {
+	 * 			String content = readFile(request.getPath());
+	 * 			return new ReadResourceResult(content);
+	 * 		})
 	 * }</pre>
 	 *
 	 * @param resource The resource definition including name, description, and MIME type
@@ -460,16 +569,16 @@ public class McpServerFeatures {
 	 * </ul>
 	 *
 	 * <p>
-	 * Example prompt specification: <pre>{@code
+	 * Example prompt specification:
+	 *
+	 * <pre>{@code
 	 * new McpServerFeatures.SyncPromptSpecification(
-	 *     new Prompt("analyze", "Code analysis template"),
-	 *     (exchange, request) -> {
-	 *         String code = request.getArguments().get("code");
-	 *         return new GetPromptResult(
-	 *             "Analyze this code:\n\n" + code + "\n\nProvide feedback on:"
-	 *         );
-	 *     }
-	 * )
+	 * 		new Prompt("analyze", "Code analysis template"),
+	 * 		(exchange, request) -> {
+	 * 			String code = request.getArguments().get("code");
+	 * 			return new GetPromptResult(
+	 * 					"Analyze this code:\n\n" + code + "\n\nProvide feedback on:");
+	 * 		})
 	 * }</pre>
 	 *
 	 * @param prompt The prompt definition including name and description

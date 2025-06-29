@@ -108,6 +108,7 @@ public abstract class AbstractMcpSyncServerTests {
 			""";
 
 	@Test
+	@Deprecated
 	void testAddTool() {
 		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
@@ -123,6 +124,22 @@ public abstract class AbstractMcpSyncServerTests {
 	}
 
 	@Test
+	void testAddToolCall() {
+		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.build();
+
+		Tool newTool = new McpSchema.Tool("new-tool", "New test tool", emptyJsonSchema);
+		assertThatCode(() -> mcpSyncServer.addTool(new McpServerFeatures.SyncToolCallSpecification(newTool,
+				(exchange, request) -> new CallToolResult(List.of(), false))))
+			.doesNotThrowAnyException();
+
+		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+	}
+
+	@Test
+	@Deprecated
 	void testAddDuplicateTool() {
 		Tool duplicateTool = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
 
@@ -134,6 +151,24 @@ public abstract class AbstractMcpSyncServerTests {
 
 		assertThatThrownBy(() -> mcpSyncServer.addTool(new McpServerFeatures.SyncToolSpecification(duplicateTool,
 				(exchange, args) -> new CallToolResult(List.of(), false))))
+			.isInstanceOf(McpError.class)
+			.hasMessage("Tool with name '" + TEST_TOOL_NAME + "' already exists");
+
+		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testAddDuplicateToolCall() {
+		Tool duplicateTool = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
+
+		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.toolCall(duplicateTool, (exchange, request) -> new CallToolResult(List.of(), false))
+			.build();
+
+		assertThatThrownBy(() -> mcpSyncServer.addTool(new McpServerFeatures.SyncToolCallSpecification(duplicateTool,
+				(exchange, request) -> new CallToolResult(List.of(), false))))
 			.isInstanceOf(McpError.class)
 			.hasMessage("Tool with name '" + TEST_TOOL_NAME + "' already exists");
 

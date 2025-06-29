@@ -66,9 +66,20 @@ public class McpSyncServer {
 	/**
 	 * Add a new tool handler.
 	 * @param toolHandler The tool handler to add
+	 * @deprecated Use {@link #addTool(McpServerFeatures.SyncToolCallSpecification)}
+	 * instead.
 	 */
+	@Deprecated
 	public void addTool(McpServerFeatures.SyncToolSpecification toolHandler) {
-		this.asyncServer.addTool(McpServerFeatures.AsyncToolSpecification.fromSync(toolHandler)).block();
+		this.addTool(toolHandler.toToolCall());
+	}
+
+	/**
+	 * Add a new tool handler.
+	 * @param toolHandler The tool handler to add
+	 */
+	public void addTool(McpServerFeatures.SyncToolCallSpecification toolHandler) {
+		this.asyncServer.addTool(McpServerFeatures.AsyncToolCallSpecification.fromSync(toolHandler)).block();
 	}
 
 	/**
