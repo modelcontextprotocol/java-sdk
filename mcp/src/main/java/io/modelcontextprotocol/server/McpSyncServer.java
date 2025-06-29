@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.server;
 
+import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.util.Assert;
@@ -68,7 +69,7 @@ public class McpSyncServer {
 	 * @param toolHandler The tool handler to add
 	 */
 	public void addTool(McpServerFeatures.SyncToolSpecification toolHandler) {
-		this.asyncServer.addTool(McpServerFeatures.AsyncToolSpecification.fromSync(toolHandler)).block();
+		this.asyncServer.addTool(AsyncToolSpecification.fromSync(toolHandler)).block();
 	}
 
 	/**
