@@ -230,6 +230,28 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	}
 
 	/**
+	 * Sends a heartbeat (ping) to all connected clients to keep connections alive. This
+	 * method sends ping notifications to all active sessions without expecting a
+	 * response, which helps prevent connection timeouts.
+	 * @return A Mono that completes when heartbeat has been sent to all sessions
+	 */
+	public Mono<Void> sendHeartbeat() {
+		if (sessions.isEmpty()) {
+			logger.debug("No active sessions to send heartbeat to");
+			return Mono.empty();
+		}
+
+		logger.debug("Sending heartbeat to {} active sessions", sessions.size());
+
+		return Flux.fromIterable(sessions.values())
+				.flatMap(session -> session.sendNotification(McpSchema.METHOD_PING, null)
+						.doOnSuccess(v -> logger.trace("Heartbeat sent successfully to session {}", session.getId()))
+						.doOnError(e -> logger.warn("Heartbeat failed for session {}: {}", session.getId(), e.getMessage()))
+						.onErrorComplete()) // Continue with other sessions even if one fails
+				.then();
+	}
+
+	/**
 	 * Returns the WebFlux router function that defines the transport's HTTP endpoints.
 	 * This router function should be integrated into the application's web configuration.
 	 *
