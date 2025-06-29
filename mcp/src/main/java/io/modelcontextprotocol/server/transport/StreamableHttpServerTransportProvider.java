@@ -21,10 +21,12 @@ import java.util.function.Supplier;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.modelcontextprotocol.spec.McpStreamableHttpServerSession;
+import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
@@ -115,7 +117,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 	private final Supplier<String> sessionIdProvider;
 
 	/** Sessions map, keyed by Session ID */
-	private final Map<String, McpStreamableHttpServerSession> sessions = new ConcurrentHashMap<>();
+	private final Map<String, McpServerSession> sessions = new ConcurrentHashMap<>();
 
 	/** Flag indicating if the transport is in the process of shutting down */
 	private final AtomicBoolean isClosing = new AtomicBoolean(false);
@@ -126,7 +128,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 	/** Callback interface for session lifecycle and errors */
 	private SessionHandler sessionHandler;
 
-	private McpStreamableHttpServerSession.Factory streamableHttpSessionFactory;
+	private McpServerSession.StreamableHttpSessionFactory streamableHttpSessionFactory;
 
 	/**
 	 * <ul>
@@ -161,10 +163,10 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 
 	@Override
 	public void setSessionFactory(McpServerSession.Factory sessionFactory) {
-		// This method is required by the interface but not used in this implementation
+		// Required but not used for this implementation
 	}
 
-	public void setStreamableHttpSessionFactory(McpStreamableHttpServerSession.Factory sessionFactory) {
+	public void setStreamableHttpSessionFactory(McpServerSession.StreamableHttpSessionFactory sessionFactory) {
 		this.streamableHttpSessionFactory = sessionFactory;
 	}
 
@@ -234,7 +236,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 			return;
 		}
 
-		McpStreamableHttpServerSession session = sessions.get(sessionId);
+		McpServerSession session = sessions.get(sessionId);
 		if (session == null) {
 			handleSessionNotFound(sessionId, request, response);
 			return;
@@ -251,12 +253,11 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 		asyncContext.setTimeout(0);
 
 		String lastEventId = request.getHeader(LAST_EVENT_ID_HEADER);
-		String transportId = "sse-" + request.getRequestId();
 
 		SseTransport sseTransport = new SseTransport(objectMapper, response, asyncContext, lastEventId);
-		session.registerTransport(transportId, sseTransport);
+		session.registerTransport(session.LISTENING_TRANSPORT, sseTransport);
 
-		logger.debug("Registered SSE transport {} for session {}", transportId, sessionId);
+		logger.debug("Registered SSE transport {} for session {}", session.LISTENING_TRANSPORT, sessionId);
 	}
 
 	@Override
@@ -320,7 +321,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 						return;
 					}
 
-					McpStreamableHttpServerSession session = getOrCreateSession(sessionId, isInitializeRequest);
+					McpServerSession session = getOrCreateSession(sessionId, isInitializeRequest);
 					if (session == null) {
 						logger.error("Failed to create session for sessionId: {}", sessionId);
 						handleSessionNotFound(sessionId, request, response);
@@ -331,9 +332,28 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 
 					response.setHeader(SESSION_ID_HEADER, sessionId);
 
-					// Determine response type and create appropriate transport
+					// Determine response type and create appropriate transport if needed
 					ResponseType responseType = detectResponseType(message, session);
-					String transportId = "req-" + request.getRequestId();
+					final String transportId;
+					final Object id;
+					if (message instanceof JSONRPCRequest req) {
+						id = req.id();
+					}
+					else if (message instanceof JSONRPCResponse resp) {
+						id = resp.id();
+					}
+					else {
+						id = null;
+					}
+					if (id instanceof String) {
+						transportId = (String) id;
+					}
+					else if (id instanceof Integer) {
+						transportId = id.toString();
+					}
+					else {
+						transportId = null;
+					}
 
 					if (responseType == ResponseType.STREAM) {
 						logger.debug("Handling STREAM response type");
@@ -356,8 +376,11 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 							logger.debug("Not setting content type for notification (empty response expected)");
 						}
 
-						HttpTransport httpTransport = new HttpTransport(objectMapper, response, asyncContext);
-						session.registerTransport(transportId, httpTransport);
+						if (transportId != null) { // Not needed for notifications (null
+													// transportId)
+							HttpTransport httpTransport = new HttpTransport(objectMapper, response, asyncContext);
+							session.registerTransport(transportId, httpTransport);
+						}
 					}
 
 					// Handle the message
@@ -367,7 +390,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 					// For notifications, we need to handle the HTTP response manually
 					// since no JSON response is sent
 					if (message instanceof McpSchema.JSONRPCNotification) {
-						session.handleMessage(message, transportId).doOnSuccess(v -> {
+						session.handle(message).doOnSuccess(v -> {
 							logger.debug("Message handling completed successfully for transport: {}", transportId);
 							logger.debug("[NOTIFICATION] Sending empty HTTP response for notification");
 							try {
@@ -391,7 +414,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 					}
 					else {
 						// For requests, let the transport handle the response
-						session.handleMessage(message, transportId)
+						session.handle(message)
 							.doOnSuccess(v -> logger.info("Message handling completed successfully for transport: {}",
 									transportId))
 							.doOnError(e -> logger.error("Error in message handling: {}", e.getMessage(), e))
@@ -444,7 +467,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 			return;
 		}
 
-		McpStreamableHttpServerSession session = sessions.remove(sessionId);
+		McpServerSession session = sessions.remove(sessionId);
 		if (session == null) {
 			handleSessionNotFound(sessionId, request, response);
 			return;
@@ -495,8 +518,8 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 		return true;
 	}
 
-	protected McpStreamableHttpServerSession getOrCreateSession(String sessionId, boolean createIfMissing) {
-		McpStreamableHttpServerSession session = sessions.get(sessionId);
+	protected McpServerSession getOrCreateSession(String sessionId, boolean createIfMissing) {
+		McpServerSession session = sessions.get(sessionId);
 		logger.debug("Looking for session: {}, found: {}", sessionId, session != null);
 		if (session == null && createIfMissing) {
 			logger.debug("Creating new session: {}", sessionId);
@@ -510,7 +533,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 		return session;
 	}
 
-	private ResponseType detectResponseType(McpSchema.JSONRPCMessage message, McpStreamableHttpServerSession session) {
+	private ResponseType detectResponseType(McpSchema.JSONRPCMessage message, McpServerSession session) {
 		if (message instanceof McpSchema.JSONRPCRequest request) {
 			if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
 				return ResponseType.IMMEDIATE;
@@ -518,7 +541,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 
 			// Check if handler returns Flux (streaming) or Mono (immediate)
 			var handler = session.getRequestHandler(request.method());
-			if (handler != null && handler instanceof McpStreamableHttpServerSession.StreamingRequestHandler) {
+			if (handler != null && handler instanceof McpServerSession.StreamingRequestHandler) {
 				return ResponseType.STREAM;
 			}
 			return ResponseType.IMMEDIATE;

@@ -58,12 +58,12 @@ class StreamableHttpTransportIntegrationTest {
 		// Set up session factory with proper server capabilities
 		McpSchema.ServerCapabilities serverCapabilities = new McpSchema.ServerCapabilities(null, null, null, null, null,
 				null);
-		serverTransportProvider.setStreamableHttpSessionFactory(
-				sessionId -> new io.modelcontextprotocol.spec.McpStreamableHttpServerSession(sessionId,
-						java.time.Duration.ofSeconds(30),
-						request -> reactor.core.publisher.Mono.just(new McpSchema.InitializeResult("2025-06-18",
-								serverCapabilities, new McpSchema.Implementation("Test Server", "1.0.0"), null)),
-						() -> reactor.core.publisher.Mono.empty(), java.util.Map.of(), java.util.Map.of()));
+		serverTransportProvider
+			.setStreamableHttpSessionFactory(sessionId -> new io.modelcontextprotocol.spec.McpServerSession(sessionId,
+					java.time.Duration.ofSeconds(30),
+					request -> reactor.core.publisher.Mono.just(new McpSchema.InitializeResult("2025-06-18",
+							serverCapabilities, new McpSchema.Implementation("Test Server", "1.0.0"), null)),
+					() -> reactor.core.publisher.Mono.empty(), java.util.Map.of(), java.util.Map.of()));
 
 		tomcat = TomcatTestUtil.createTomcatServer("", PORT, serverTransportProvider);
 		try {
@@ -132,14 +132,14 @@ class StreamableHttpTransportIntegrationTest {
 		McpSchema.ServerCapabilities serverCapabilities = new McpSchema.ServerCapabilities(null, null, null, null, null,
 				new McpSchema.ServerCapabilities.ToolCapabilities(true));
 		serverTransportProvider
-			.setStreamableHttpSessionFactory(sessionId -> new io.modelcontextprotocol.spec.McpStreamableHttpServerSession(
-					sessionId, java.time.Duration.ofSeconds(30),
+			.setStreamableHttpSessionFactory(sessionId -> new io.modelcontextprotocol.spec.McpServerSession(sessionId,
+					java.time.Duration.ofSeconds(30),
 					request -> reactor.core.publisher.Mono.just(new McpSchema.InitializeResult("2025-06-18",
 							serverCapabilities, new McpSchema.Implementation("Test Server", "1.0.0"), null)),
 					() -> reactor.core.publisher.Mono.empty(),
 					java.util.Map.of("tools/call",
-							(io.modelcontextprotocol.spec.McpStreamableHttpServerSession.RequestHandler<CallToolResult>) (
-									exchange, params) -> tool.call().apply(exchange, (Map<String, Object>) params)),
+							(io.modelcontextprotocol.spec.McpServerSession.RequestHandler<CallToolResult>) (exchange,
+									params) -> tool.call().apply(exchange, (Map<String, Object>) params)),
 					java.util.Map.of()));
 
 		var mcpClient = clientBuilder.build();
@@ -174,12 +174,12 @@ class StreamableHttpTransportIntegrationTest {
 		McpSchema.ServerCapabilities serverCapabilities = new McpSchema.ServerCapabilities(null, null, null, null, null,
 				new McpSchema.ServerCapabilities.ToolCapabilities(true));
 		serverTransportProvider
-			.setStreamableHttpSessionFactory(sessionId -> new io.modelcontextprotocol.spec.McpStreamableHttpServerSession(
-					sessionId, java.time.Duration.ofSeconds(30),
+			.setStreamableHttpSessionFactory(sessionId -> new io.modelcontextprotocol.spec.McpServerSession(sessionId,
+					java.time.Duration.ofSeconds(30),
 					request -> reactor.core.publisher.Mono.just(new McpSchema.InitializeResult("2025-06-18",
 							serverCapabilities, new McpSchema.Implementation("Test Server", "1.0.0"), null)),
 					() -> reactor.core.publisher.Mono.empty(), java.util.Map.of("tools/call",
-							(io.modelcontextprotocol.spec.McpStreamableHttpServerSession.StreamingRequestHandler<CallToolResult>) new io.modelcontextprotocol.spec.McpStreamableHttpServerSession.StreamingRequestHandler<CallToolResult>() {
+							(io.modelcontextprotocol.spec.McpServerSession.StreamingRequestHandler<CallToolResult>) new io.modelcontextprotocol.spec.McpServerSession.StreamingRequestHandler<CallToolResult>() {
 								@Override
 								public Mono<CallToolResult> handle(
 										io.modelcontextprotocol.server.McpAsyncServerExchange exchange, Object params) {
