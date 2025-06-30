@@ -15,8 +15,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -28,11 +32,10 @@ import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -86,6 +89,8 @@ public class McpAsyncServer {
 
 	private final ObjectMapper objectMapper;
 
+	private final JsonSchemaValidator jsonSchemaValidator;
+
 	private final McpSchema.ServerCapabilities serverCapabilities;
 
 	private final McpSchema.Implementation serverInfo;
@@ -119,18 +124,19 @@ public class McpAsyncServer {
 	 */
 	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
-			McpUriTemplateManagerFactory uriTemplateManagerFactory) {
+			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.objectMapper = objectMapper;
 		this.serverInfo = features.serverInfo();
 		this.serverCapabilities = features.serverCapabilities();
 		this.instructions = features.instructions();
-		this.tools.addAll(features.tools());
+		this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, features.tools()));
 		this.resources.putAll(features.resources());
 		this.resourceTemplates.addAll(features.resourceTemplates());
 		this.prompts.putAll(features.prompts());
 		this.completions.putAll(features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
+		this.jsonSchemaValidator = jsonSchemaValidator;
 
 		Map<String, McpServerSession.RequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -286,21 +292,151 @@ public class McpAsyncServer {
 			return Mono.error(new McpError("Server must be configured with tool capabilities"));
 		}
 
+		var wrappedToolSpecification = withStructuredOutputHandling(this.jsonSchemaValidator, toolSpecification);
+
 		return Mono.defer(() -> {
 			// Check for duplicate tool names
-			if (this.tools.stream().anyMatch(th -> th.tool().name().equals(toolSpecification.tool().name()))) {
-				return Mono
-					.error(new McpError("Tool with name '" + toolSpecification.tool().name() + "' already exists"));
+			if (this.tools.stream().anyMatch(th -> th.tool().name().equals(wrappedToolSpecification.tool().name()))) {
+				return Mono.error(
+						new McpError("Tool with name '" + wrappedToolSpecification.tool().name() + "' already exists"));
 			}
 
-			this.tools.add(toolSpecification);
-			logger.debug("Added tool handler: {}", toolSpecification.tool().name());
+			this.tools.add(wrappedToolSpecification);
+			logger.debug("Added tool handler: {}", wrappedToolSpecification.tool().name());
 
 			if (this.serverCapabilities.tools().listChanged()) {
 				return notifyToolsListChanged();
 			}
 			return Mono.empty();
 		});
+	}
+
+	static class StructuredOutputCallToolHandler
+			implements BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> {
+
+		private final BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> delegateCallToolResult;
+
+		private final JsonSchemaValidator jsonSchemaValidator;
+
+		private final Map<String, Object> outputSchema;
+
+		public StructuredOutputCallToolHandler(JsonSchemaValidator jsonSchemaValidator,
+				Map<String, Object> outputSchema,
+				BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> delegateHandler) {
+
+			Assert.notNull(jsonSchemaValidator, "JsonSchemaValidator must not be null");
+			Assert.notNull(delegateHandler, "Delegate call tool result handler must not be null");
+
+			this.delegateCallToolResult = delegateHandler;
+			this.outputSchema = outputSchema;
+			this.jsonSchemaValidator = jsonSchemaValidator;
+		}
+
+		@Override
+		public Mono<CallToolResult> apply(McpAsyncServerExchange exchange, Map<String, Object> arguments) {
+
+			return this.delegateCallToolResult.apply(exchange, arguments).map(result -> {
+
+				if (outputSchema == null) {
+					if (result.structuredContent() != null) {
+						logger.warn(
+								"Tool call with no outputSchema is not expected to have a result with structured content, but got: {}",
+								result.structuredContent());
+					}
+					// Pass through. No validation is required if no output schema is
+					// provided.
+					return result;
+				}
+
+				// If an output schema is provided, servers MUST provide structured
+				// results that conform to this schema.
+				// https://modelcontextprotocol.io/specification/2025-06-18/server/tools#output-schema
+				if (result.structuredContent() == null) {
+					logger.warn("Tool call with non-empty outputSchema MUST have a result with structured content");
+					// if (!Utils.isEmpty(result.content())) {
+					// // TODO If the tesult.content() contains json text we can try to
+					// // convert it into a structured content (Experimental)
+					// var tc = result.content().stream().filter(c -> c instanceof
+					// McpSchema.TextContent).findFirst();
+					// if (tc.isPresent()) {
+					// try {
+					// Map<String, Object> structuredOutput = new
+					// ObjectMapper().readValue(
+					// ((TextContent) tc.get()).text(), new TypeReference<Map<String,
+					// Object>>() {
+					// });
+
+					// // Overwrite the result with the structured content
+					// // generated from the text content.
+					// result = new CallToolResult(result.content(), result.isError(),
+					// structuredOutput);
+
+					// }
+					// catch (Exception e) {
+					// logger.warn("Failed to parse text content as structured content:
+					// {}", e.getMessage());
+					// return new CallToolResult(
+					// "Failed to parse text content as structured content: " +
+					// e.getMessage(), true);
+					// }
+
+					// }
+					// }
+					return new CallToolResult(
+							"Tool call with non-empty outputSchema must have a result with structured content", true);
+				}
+
+				// Validate the result against the output schema
+				var validation = this.jsonSchemaValidator.validate(outputSchema, result.structuredContent());
+
+				if (!validation.valid()) {
+					logger.warn("Tool call result validation failed: {}", validation.errorMessage());
+					return new CallToolResult(validation.errorMessage(), true);
+				}
+
+				if (Utils.isEmpty(result.content())) {
+					// For backwards compatibility, a tool that returns structured
+					// content SHOULD also return functionally equivalent unstructured
+					// content. (For example, serialized JSON can be returned in a
+					// TextContent block.)
+					// https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content
+
+					return new CallToolResult(List.of(new McpSchema.TextContent(validation.jsonStructuredOutput())),
+							result.isError(), result.structuredContent());
+				}
+
+				return result;
+			});
+		}
+
+	}
+
+	static List<McpServerFeatures.AsyncToolSpecification> withStructuredOutputHandling(
+			JsonSchemaValidator jsonSchemaValidator, List<McpServerFeatures.AsyncToolSpecification> tools) {
+
+		if (Utils.isEmpty(tools)) {
+			return tools;
+		}
+
+		return tools.stream().map(tool -> withStructuredOutputHandling(jsonSchemaValidator, tool)).toList();
+	}
+
+	static McpServerFeatures.AsyncToolSpecification withStructuredOutputHandling(
+			JsonSchemaValidator jsonSchemaValidator, McpServerFeatures.AsyncToolSpecification toolSpecification) {
+
+		if (toolSpecification.call() instanceof StructuredOutputCallToolHandler) {
+			// If the tool is already wrapped, return it as is
+			return toolSpecification;
+		}
+
+		if (toolSpecification.tool().outputSchema() == null) {
+			// If the tool does not have an output schema, return it as is
+			return toolSpecification;
+		}
+
+		return new McpServerFeatures.AsyncToolSpecification(toolSpecification.tool(),
+				new StructuredOutputCallToolHandler(jsonSchemaValidator, toolSpecification.tool().outputSchema(),
+						toolSpecification.call()));
 	}
 
 	/**
