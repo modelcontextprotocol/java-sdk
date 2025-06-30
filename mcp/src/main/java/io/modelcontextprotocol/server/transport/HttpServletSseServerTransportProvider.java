@@ -215,8 +215,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		PrintWriter writer = response.getWriter();
 
 		// Create a new session transport
-		HttpServletMcpSessionTransport sessionTransport = new HttpServletMcpSessionTransport(sessionId, asyncContext,
-				writer);
+		HttpServletMcpSessionTransport sessionTransport = new HttpServletMcpSessionTransport(
+				McpServerSession.LISTENING_TRANSPORT, asyncContext, writer);
 
 		// Create a new session using the session factory
 		McpServerSession session = sessionFactory.create(sessionTransport);

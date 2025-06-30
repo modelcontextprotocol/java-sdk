@@ -12,6 +12,7 @@ import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
+import io.modelcontextprotocol.spec.McpSession;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
@@ -25,7 +26,7 @@ import reactor.core.publisher.Mono;
  */
 public class McpAsyncServerExchange {
 
-	private final McpServerSession session;
+	private final McpSession session;
 
 	private final McpSchema.ClientCapabilities clientCapabilities;
 
@@ -132,9 +133,9 @@ public class McpAsyncServerExchange {
 
 		// @formatter:off
 		return this.listRoots(McpSchema.FIRST_PAGE)
-			.expand(result -> (result.nextCursor() != null) ? 
+			.expand(result -> (result.nextCursor() != null) ?
 					this.listRoots(result.nextCursor()) : Mono.empty())
-			.reduce(new McpSchema.ListRootsResult(new ArrayList<>(), null), 
+			.reduce(new McpSchema.ListRootsResult(new ArrayList<>(), null),
 				(allRootsResult, result) -> {
 					allRootsResult.roots().addAll(result.roots());
 					return allRootsResult;
