@@ -61,7 +61,7 @@ class StreamableHttpTransportIntegrationTest {
 		serverTransportProvider
 			.setStreamableHttpSessionFactory(sessionId -> new io.modelcontextprotocol.spec.McpServerSession(sessionId,
 					java.time.Duration.ofSeconds(30),
-					request -> reactor.core.publisher.Mono.just(new McpSchema.InitializeResult("2025-06-18",
+					request -> reactor.core.publisher.Mono.just(new McpSchema.InitializeResult("2024-11-05",
 							serverCapabilities, new McpSchema.Implementation("Test Server", "1.0.0"), null)),
 					() -> reactor.core.publisher.Mono.empty(), java.util.Map.of(), java.util.Map.of()));
 
@@ -134,7 +134,7 @@ class StreamableHttpTransportIntegrationTest {
 		serverTransportProvider
 			.setStreamableHttpSessionFactory(sessionId -> new io.modelcontextprotocol.spec.McpServerSession(sessionId,
 					java.time.Duration.ofSeconds(30),
-					request -> reactor.core.publisher.Mono.just(new McpSchema.InitializeResult("2025-06-18",
+					request -> reactor.core.publisher.Mono.just(new McpSchema.InitializeResult("2024-11-05",
 							serverCapabilities, new McpSchema.Implementation("Test Server", "1.0.0"), null)),
 					() -> reactor.core.publisher.Mono.empty(),
 					java.util.Map.of("tools/call",
@@ -176,7 +176,7 @@ class StreamableHttpTransportIntegrationTest {
 		serverTransportProvider
 			.setStreamableHttpSessionFactory(sessionId -> new io.modelcontextprotocol.spec.McpServerSession(sessionId,
 					java.time.Duration.ofSeconds(30),
-					request -> reactor.core.publisher.Mono.just(new McpSchema.InitializeResult("2025-06-18",
+					request -> reactor.core.publisher.Mono.just(new McpSchema.InitializeResult("2024-11-05",
 							serverCapabilities, new McpSchema.Implementation("Test Server", "1.0.0"), null)),
 					() -> reactor.core.publisher.Mono.empty(), java.util.Map.of("tools/call",
 							(io.modelcontextprotocol.spec.McpServerSession.StreamingRequestHandler<CallToolResult>) new io.modelcontextprotocol.spec.McpServerSession.StreamingRequestHandler<CallToolResult>() {
@@ -215,7 +215,7 @@ class StreamableHttpTransportIntegrationTest {
 		AtomicReference<String> sessionId = new AtomicReference<>();
 
 		WebClient webClient = WebClient.create("http://localhost:" + PORT);
-		String initMessage = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"Test\",\"version\":\"1.0\"}}}";
+		String initMessage = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"Test\",\"version\":\"1.0\"}}}";
 
 		// Initialize and get session ID
 		webClient.post()

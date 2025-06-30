@@ -88,6 +88,7 @@ public class McpServerSession implements McpSession {
 		this.notificationHandlers = notificationHandlers;
 	}
 
+	// Alternate constructor used by StreamableHttp servers
 	public McpServerSession(String id, Duration requestTimeout, InitRequestHandler initHandler,
 			InitNotificationHandler initNotificationHandler, Map<String, RequestHandler<?>> requestHandlers,
 			Map<String, NotificationHandler> notificationHandlers) {
@@ -201,6 +202,10 @@ public class McpServerSession implements McpSession {
 			else if (typeRef.getType().equals(Void.class)) {
 				sink.complete();
 			}
+			else {
+				T result = listeningTransport.unmarshalFrom(jsonRpcResponse.result(), typeRef);
+				sink.next(result);
+			}
 		});
 	}
 
@@ -238,25 +243,39 @@ public class McpServerSession implements McpSession {
 			}
 			else if (message instanceof McpSchema.JSONRPCRequest request) {
 				logger.debug("Received request: {}", request);
-				String transportId;
-				if (request.id() instanceof String) {
-					transportId = (String) request.id();
-				}
-				else if (request.id() instanceof Integer) {
-					transportId = request.id().toString();
+				final McpServerTransport finalListeningTransport = listeningTransport;
+				final String transportId;
+				if (transports.isEmpty()) {
+					transportId = LISTENING_TRANSPORT;
 				}
 				else {
-					logger.error("Invalid request ID: {}", request.id());
-					return Mono.empty();
-					// I think I'm missing some handling here. Please advise.
+					if (request.id() instanceof String) {
+						transportId = (String) request.id();
+					}
+					else if (request.id() instanceof Integer) {
+						transportId = request.id().toString();
+					}
+					else {
+						logger.error("Invalid request ID: {}", request.id());
+						return Mono.empty();
+						// I think I'm missing some handling here. Please advise.
+					}
 				}
 				return handleIncomingRequest(request).onErrorResume(error -> {
 					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
 							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 									error.getMessage(), null));
-					// TODO: Should the error go to SSE or back as POST return?
-					return this.transports.get(transportId).sendMessage(errorResponse).then(Mono.empty());
-				}).flatMap(this.transports.get(transportId)::sendMessage);
+					McpServerTransport transport = getTransport(transportId);
+					return transport != null ? transport.sendMessage(errorResponse).then(Mono.empty()) : Mono.empty();
+				}).flatMap(response -> {
+					McpServerTransport transport = getTransport(transportId);
+					if (transport != null) {
+						return transport.sendMessage(response);
+					}
+					else {
+						return Mono.error(new RuntimeException("Transport not found: " + transportId));
+					}
+				});
 			}
 			else if (message instanceof McpSchema.JSONRPCNotification notification) {
 				// TODO handle errors for communication to without initialization
@@ -283,9 +302,11 @@ public class McpServerSession implements McpSession {
 			Mono<?> resultMono;
 			if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
 				// TODO handle situation where already initialized!
-				McpSchema.InitializeRequest initializeRequest = transports.get(request.id())
+				McpSchema.InitializeRequest initializeRequest = transports.isEmpty() ? listeningTransport
 					.unmarshalFrom(request.params(), new TypeReference<McpSchema.InitializeRequest>() {
-					});
+					}) : transports.get(request.id())
+						.unmarshalFrom(request.params(), new TypeReference<McpSchema.InitializeRequest>() {
+						});
 
 				this.state.lazySet(STATE_INITIALIZING);
 				this.init(initializeRequest.capabilities(), initializeRequest.clientInfo());

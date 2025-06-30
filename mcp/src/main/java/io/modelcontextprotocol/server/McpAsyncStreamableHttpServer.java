@@ -26,19 +26,43 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
- * Streamable HTTP-based MCP server implementation that uses a single session class to
- * manage all streams and transports efficiently.
+ * The Model Context Protocol (MCP) server implementation that provides asynchronous
+ * communication using Project Reactor's Mono and Flux types.
  *
  * <p>
- * Featuring:
+ * This server implements the MCP specification, enabling AI models to expose tools,
+ * resources, and prompts through a standardized interface. Key features include:
  * <ul>
- * <li>Single session class manages all transport streams</li>
- * <li>Simplified transport registration and management</li>
- * <li>Clear separation of concerns between session and transport</li>
- * <li>Efficient resource management</li>
- * <li>API for handling both immediate and streaming responses</li>
+ * <li>Asynchronous communication using reactive programming patterns
+ * <li>Dynamic tool registration and management
+ * <li>Resource handling with URI-based addressing
+ * <li>Prompt template management
+ * <li>Real-time client notifications for state changes
+ * <li>Structured logging with configurable severity levels
+ * <li>Support for client-side AI model sampling
  * </ul>
  *
+ * <p>
+ * The server follows a lifecycle:
+ * <ol>
+ * <li>Initialization - Accepts client connections and negotiates capabilities
+ * <li>Normal Operation - Handles client requests and sends notifications
+ * <li>Graceful Shutdown - Ensures clean connection termination
+ * </ol>
+ *
+ * <p>
+ * This implementation uses Project Reactor for non-blocking operations, making it
+ * suitable for high-throughput scenarios and reactive applications. All operations return
+ * Mono or Flux types that can be composed into reactive pipelines.
+ *
+ * <p>
+ * The server supports runtime modification of its capabilities through methods like
+ * {@link #addTool}, {@link #addResource}, and {@link #addPrompt}, automatically notifying
+ * connected clients of changes when configured to do so.
+ *
+ * @author Christian Tzolov
+ * @author Dariusz Jędrzejczyk
+ * @author Jihoon Kim
  * @author Zachary German
  */
 public class McpAsyncStreamableHttpServer {
