@@ -83,6 +83,15 @@
 			<artifactId>reactor-core</artifactId>
 		</dependency>
 
+		<!-- Json validator dependency.  
+		NOTE: If you provide JsonSchemaValidator implementation that does not depend on this library, 
+		you can exclude this dependency from your project. -->
+		<dependency>
+			<groupId>com.networknt</groupId>
+			<artifactId>json-schema-validator</artifactId>
+			<version>${json-schema-validator.version}</version>
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework</groupId>
 			<artifactId>spring-webmvc</artifactId>

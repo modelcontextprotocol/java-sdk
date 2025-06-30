@@ -47,6 +47,10 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertWith;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
+
+import net.javacrumbs.jsonunit.core.Option;
 
 class WebFluxSseIntegrationTests {
 
@@ -1021,6 +1025,252 @@ class WebFluxSseIntegrationTests {
 		}
 
 		mcpServer.close();
+	}
+
+	// ---------------------------------------
+	// Tool Structured Output Schema Tests
+	// ---------------------------------------
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testStructuredOutputValidationSuccess(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Create a tool with output schema
+		Map<String, Object> outputSchema = Map.of(
+				"type", "object", "properties", Map.of("result", Map.of("type", "number"), "operation",
+						Map.of("type", "string"), "timestamp", Map.of("type", "string")),
+				"required", List.of("result", "operation"));
+
+		Tool calculatorTool = new Tool("calculator", "Performs mathematical calculations", (McpSchema.JsonSchema) null,
+				outputSchema, (McpSchema.ToolAnnotations) null);
+
+		McpServerFeatures.SyncToolSpecification tool = new McpServerFeatures.SyncToolSpecification(calculatorTool,
+				(exchange, request) -> {
+					String expression = (String) request.getOrDefault("expression", "2 + 3");
+					double result = evaluateExpression(expression);
+					return CallToolResult.builder()
+						.structuredContent(
+								Map.of("result", result, "operation", expression, "timestamp", "2024-01-01T10:00:00Z"))
+						.build();
+				});
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Verify tool is listed with output schema
+			var toolsList = mcpClient.listTools();
+			assertThat(toolsList.tools()).hasSize(1);
+			assertThat(toolsList.tools().get(0).name()).isEqualTo("calculator");
+			// Note: outputSchema might be null in sync server, but validation still works
+
+			// Call tool with valid structured output
+			CallToolResult response = mcpClient
+				.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3")));
+
+			assertThat(response).isNotNull();
+			assertThat(response.isError()).isFalse();
+			assertThat(response.content()).hasSize(1);
+			assertThat(response.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
+
+			assertThatJson(((McpSchema.TextContent) response.content().get(0)).text()).when(Option.IGNORING_ARRAY_ORDER)
+				.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+				.isObject()
+				.isEqualTo(json("""
+						{"result":5.0,"operation":"2 + 3","timestamp":"2024-01-01T10:00:00Z"}"""));
+
+			assertThat(response.structuredContent()).isNotNull();
+			assertThatJson(response.structuredContent()).when(Option.IGNORING_ARRAY_ORDER)
+				.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+				.isObject()
+				.isEqualTo(json("""
+						{"result":5.0,"operation":"2 + 3","timestamp":"2024-01-01T10:00:00Z"}"""));
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testStructuredOutputValidationFailure(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Create a tool with output schema
+		Map<String, Object> outputSchema = Map.of("type", "object", "properties",
+				Map.of("result", Map.of("type", "number"), "operation", Map.of("type", "string")), "required",
+				List.of("result", "operation"));
+
+		Tool calculatorTool = new Tool("calculator", "Performs mathematical calculations", (McpSchema.JsonSchema) null,
+				outputSchema, (McpSchema.ToolAnnotations) null);
+
+		McpServerFeatures.SyncToolSpecification tool = new McpServerFeatures.SyncToolSpecification(calculatorTool,
+				(exchange, request) -> {
+					// Return invalid structured output. Result should be number, missing
+					// operation
+					return CallToolResult.builder()
+						.addTextContent("Invalid calculation")
+						.structuredContent(Map.of("result", "not-a-number", "extra", "field"))
+						.build();
+				});
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Call tool with invalid structured output
+			CallToolResult response = mcpClient
+				.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3")));
+
+			assertThat(response).isNotNull();
+			assertThat(response.isError()).isTrue();
+			assertThat(response.content()).hasSize(1);
+			assertThat(response.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
+
+			String errorMessage = ((McpSchema.TextContent) response.content().get(0)).text();
+			assertThat(errorMessage).contains("Validation failed");
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testStructuredOutputMissingStructuredContent(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Create a tool with output schema
+		Map<String, Object> outputSchema = Map.of("type", "object", "properties",
+				Map.of("result", Map.of("type", "number")), "required", List.of("result"));
+
+		Tool calculatorTool = new Tool("calculator", "Performs mathematical calculations", (McpSchema.JsonSchema) null,
+				outputSchema, (McpSchema.ToolAnnotations) null);
+
+		McpServerFeatures.SyncToolSpecification tool = new McpServerFeatures.SyncToolSpecification(calculatorTool,
+				(exchange, request) -> {
+					// Return result without structured content but tool has output schema
+					return CallToolResult.builder().addTextContent("Calculation completed").build();
+				});
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Call tool that should return structured content but doesn't
+			CallToolResult response = mcpClient
+				.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3")));
+
+			assertThat(response).isNotNull();
+			assertThat(response.isError()).isTrue();
+			assertThat(response.content()).hasSize(1);
+			assertThat(response.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
+
+			String errorMessage = ((McpSchema.TextContent) response.content().get(0)).text();
+			assertThat(errorMessage)
+				.isEqualTo("Tool call with non-empty outputSchema must have a result with structured content");
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testStructuredOutputRuntimeToolAddition(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Start server without tools
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Initially no tools
+			assertThat(mcpClient.listTools().tools()).isEmpty();
+
+			// Add tool with output schema at runtime
+			Map<String, Object> outputSchema = Map.of("type", "object", "properties",
+					Map.of("message", Map.of("type", "string"), "count", Map.of("type", "integer")), "required",
+					List.of("message", "count"));
+
+			Tool dynamicTool = new Tool("dynamic-tool", "Dynamically added tool", (McpSchema.JsonSchema) null,
+					outputSchema, (McpSchema.ToolAnnotations) null);
+
+			McpServerFeatures.SyncToolSpecification toolSpec = new McpServerFeatures.SyncToolSpecification(dynamicTool,
+					(exchange, request) -> {
+						int count = (Integer) request.getOrDefault("count", 1);
+						return CallToolResult.builder()
+							.addTextContent("Dynamic tool executed " + count + " times")
+							.structuredContent(Map.of("message", "Dynamic execution", "count", count))
+							.build();
+					});
+
+			// Add tool to server
+			mcpServer.addTool(toolSpec);
+
+			// Wait for tool list change notification
+			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+				assertThat(mcpClient.listTools().tools()).hasSize(1);
+			});
+
+			// Verify tool was added with output schema
+			var toolsList = mcpClient.listTools();
+			assertThat(toolsList.tools()).hasSize(1);
+			assertThat(toolsList.tools().get(0).name()).isEqualTo("dynamic-tool");
+			// Note: outputSchema might be null in sync server, but validation still works
+
+			// Call dynamically added tool
+			CallToolResult response = mcpClient
+				.callTool(new McpSchema.CallToolRequest("dynamic-tool", Map.of("count", 3)));
+
+			assertThat(response).isNotNull();
+			assertThat(response.isError()).isFalse();
+			assertThat(response.content()).hasSize(1);
+			assertThat(response.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
+			assertThat(((McpSchema.TextContent) response.content().get(0)).text())
+				.isEqualTo("Dynamic tool executed 3 times");
+
+			assertThat(response.structuredContent()).isNotNull();
+			assertThatJson(response.structuredContent()).when(Option.IGNORING_ARRAY_ORDER)
+				.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+				.isObject()
+				.isEqualTo(json("""
+						{"count":3,"message":"Dynamic execution"}"""));
+		}
+
+		mcpServer.close();
+	}
+
+	private double evaluateExpression(String expression) {
+		// Simple expression evaluator for testing
+		return switch (expression) {
+			case "2 + 3" -> 5.0;
+			case "10 * 2" -> 20.0;
+			case "7 + 8" -> 15.0;
+			case "5 + 3" -> 8.0;
+			default -> 0.0;
+		};
 	}
 
 }

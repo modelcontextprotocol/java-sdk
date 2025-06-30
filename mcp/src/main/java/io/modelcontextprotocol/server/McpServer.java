@@ -166,6 +166,8 @@ public interface McpServer {
 
 		private McpSchema.ServerCapabilities serverCapabilities;
 
+		private JsonSchemaValidator jsonSchemaValidator;
+
 		private String instructions;
 
 		/**
@@ -625,6 +627,20 @@ public interface McpServer {
 		}
 
 		/**
+		 * Sets the JSON schema validator to use for validating tool and resource schemas.
+		 * This ensures that the server's tools and resources conform to the expected
+		 * schema definitions.
+		 * @param jsonSchemaValidator The validator to use. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if jsonSchemaValidator is null
+		 */
+		public AsyncSpecification jsonSchemaValidator(JsonSchemaValidator jsonSchemaValidator) {
+			Assert.notNull(jsonSchemaValidator, "JsonSchemaValidator must not be null");
+			this.jsonSchemaValidator = jsonSchemaValidator;
+			return this;
+		}
+
+		/**
 		 * Builds an asynchronous MCP server that provides non-blocking operations.
 		 * @return A new instance of {@link McpAsyncServer} configured with this builder's
 		 * settings.
@@ -634,8 +650,10 @@ public interface McpServer {
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
 					this.instructions);
 			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
+			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
+					: new DefaultJsonSchemaValidator(mapper);
 			return new McpAsyncServer(this.transportProvider, mapper, features, this.requestTimeout,
-					this.uriTemplateManagerFactory);
+					this.uriTemplateManagerFactory, jsonSchemaValidator);
 		}
 
 	}
@@ -679,6 +697,8 @@ public interface McpServer {
 		private final Map<String, McpServerFeatures.SyncResourceSpecification> resources = new HashMap<>();
 
 		private final List<ResourceTemplate> resourceTemplates = new ArrayList<>();
+
+		private JsonSchemaValidator jsonSchemaValidator;
 
 		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
@@ -1116,6 +1136,12 @@ public interface McpServer {
 			return this;
 		}
 
+		public SyncSpecification jsonSchemaValidator(JsonSchemaValidator jsonSchemaValidator) {
+			Assert.notNull(jsonSchemaValidator, "JsonSchemaValidator must not be null");
+			this.jsonSchemaValidator = jsonSchemaValidator;
+			return this;
+		}
+
 		/**
 		 * Builds a synchronous MCP server that provides blocking operations.
 		 * @return A new instance of {@link McpSyncServer} configured with this builder's
@@ -1127,8 +1153,11 @@ public interface McpServer {
 					this.rootsChangeHandlers, this.instructions);
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures);
 			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
+			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
+					: new DefaultJsonSchemaValidator(mapper);
+
 			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures, this.requestTimeout,
-					this.uriTemplateManagerFactory);
+					this.uriTemplateManagerFactory, jsonSchemaValidator);
 
 			return new McpSyncServer(asyncServer);
 		}

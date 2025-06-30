@@ -830,15 +830,25 @@ public final class McpSchema {
 		@JsonProperty("definitions") Map<String, Object> definitions) {
 	} // @formatter:on
 
+	/**
+	 * Additional properties describing a Tool to clients.
+	 *
+	 * NOTE: all properties in ToolAnnotations are **hints**. They are not guaranteed to
+	 * provide a faithful description of tool behavior (including descriptive properties
+	 * like `title`).
+	 *
+	 * Clients should never make tool use decisions based on ToolAnnotations received from
+	 * untrusted servers.
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ToolAnnotations( // @formatter:off
-								   @JsonProperty("title")  String title,
-								   @JsonProperty("readOnlyHint")   Boolean readOnlyHint,
-								   @JsonProperty("destructiveHint") Boolean destructiveHint,
-								   @JsonProperty("idempotentHint") Boolean idempotentHint,
-								   @JsonProperty("openWorldHint") Boolean openWorldHint,
-								   @JsonProperty("returnDirect") Boolean returnDirect) {
+		@JsonProperty("title")  String title,
+		@JsonProperty("readOnlyHint")   Boolean readOnlyHint,
+		@JsonProperty("destructiveHint") Boolean destructiveHint,
+		@JsonProperty("idempotentHint") Boolean idempotentHint,
+		@JsonProperty("openWorldHint") Boolean openWorldHint,
+		@JsonProperty("returnDirect") Boolean returnDirect) {
 	} // @formatter:on
 
 	/**
@@ -852,26 +862,44 @@ public final class McpSchema {
 	 * used by clients to improve the LLM's understanding of available tools.
 	 * @param inputSchema A JSON Schema object that describes the expected structure of
 	 * the arguments when calling this tool. This allows clients to validate tool
-	 * @param annotations Additional properties describing a Tool to clients. arguments
-	 * before sending them to the server.
+	 * @param outputSchema An optional JSON Schema object defining the structure of the
+	 * tool's output returned in the structuredContent field of a CallToolResult.
+	 * @param annotations Optional additional tool information.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Tool( // @formatter:off
-						@JsonProperty("name") String name,
-						@JsonProperty("description") String description,
-						@JsonProperty("inputSchema") JsonSchema inputSchema,
-						@JsonProperty("annotations") ToolAnnotations annotations) {
+		@JsonProperty("name") String name,
+		@JsonProperty("description") String description,
+		@JsonProperty("inputSchema") JsonSchema inputSchema,
+		@JsonProperty("outputSchema") Map<String, Object> outputSchema,
+		@JsonProperty("annotations") ToolAnnotations annotations) {
 
-		public Tool(String name, String description, String schema) {
-			this(name, description, parseSchema(schema), null);
+		public Tool(String name, String description, JsonSchema inputSchema, ToolAnnotations annotations) {
+			this(name, description, inputSchema, null, annotations);
+		}
+
+		public Tool(String name, String description, String inputSchema) {
+			this(name, description, parseSchema(inputSchema), null, null);
 		}
 
 		public Tool(String name, String description, String schema, ToolAnnotations annotations) {
-			this(name, description, parseSchema(schema), annotations);
+			this(name, description, parseSchema(schema), null, annotations);
 		}
 
+		public Tool(String name, String description, String inputSchema, String outputSchema, ToolAnnotations annotations) {
+			this(name, description, parseSchema(inputSchema), schemaToMap(outputSchema), annotations);
+		}
 	} // @formatter:on
+
+	private static Map<String, Object> schemaToMap(String schema) {
+		try {
+			return OBJECT_MAPPER.readValue(schema, MAP_TYPE_REF);
+		}
+		catch (IOException e) {
+			throw new IllegalArgumentException("Invalid schema: " + schema, e);
+		}
+	}
 
 	private static JsonSchema parseSchema(String schema) {
 		try {
@@ -917,12 +945,19 @@ public final class McpSchema {
 	 *                or an embedded resource.
 	 * @param isError If true, indicates that the tool execution failed and the content contains error information.
 	 *                If false or absent, indicates successful execution.
+	 * @param structuredContent An optional JSON object that represents the structured result of the tool call.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record CallToolResult( // @formatter:off
 		@JsonProperty("content") List<Content> content,
-		@JsonProperty("isError") Boolean isError) {
+		@JsonProperty("isError") Boolean isError,
+		@JsonProperty("structuredContent") Map<String, Object> structuredContent) {
+
+		// backwards compatibility constructor
+		public CallToolResult(List<Content> content, Boolean isError) {
+			this(content, isError, null);
+		}
 
 		/**
 		 * Creates a new instance of {@link CallToolResult} with a string containing the
@@ -950,7 +985,8 @@ public final class McpSchema {
 		 */
 		public static class Builder {
 			private List<Content> content = new ArrayList<>();
-			private Boolean isError;
+			private Boolean isError = false;
+			private Map<String, Object> structuredContent;
 
 			/**
 			 * Sets the content list for the tool result.
@@ -960,6 +996,22 @@ public final class McpSchema {
 			public Builder content(List<Content> content) {
 				Assert.notNull(content, "content must not be null");
 				this.content = content;
+				return this;
+			}
+
+			public Builder structuredContent(Map<String, Object> structuredContent) {
+				Assert.notNull(structuredContent, "structuredContent must not be null");
+				this.structuredContent = structuredContent;
+				return this;
+			}
+
+			public Builder structuredContent(String structuredContent) {
+				Assert.hasText(structuredContent, "structuredContent must not be empty");
+				try {
+					this.structuredContent = OBJECT_MAPPER.readValue(structuredContent, MAP_TYPE_REF);
+				} catch (IOException e) {
+					throw new IllegalArgumentException("Invalid structured content: " + structuredContent, e);
+				}
 				return this;
 			}
 
@@ -1016,7 +1068,7 @@ public final class McpSchema {
 			 * @return a new CallToolResult instance
 			 */
 			public CallToolResult build() {
-				return new CallToolResult(content, isError);
+				return new CallToolResult(content, isError, structuredContent);
 			}
 		}
 
@@ -1246,7 +1298,7 @@ public final class McpSchema {
 	/**
 	 * Used by the server to send an elicitation to the client.
 	 *
-	 * @param message The body of the elicitation message.
+	 * @param errorMessage The body of the elicitation message.
 	 * @param requestedSchema The elicitation response schema that must be satisfied.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
