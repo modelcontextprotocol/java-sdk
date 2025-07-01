@@ -121,7 +121,8 @@ public class FlowSseClient {
 	 * @throws RuntimeException if the connection fails with a non-200 status code
 	 */
 	public void subscribe(String url, SseEventHandler eventHandler) {
-		HttpRequest request = this.requestBuilder.uri(URI.create(url))
+		HttpRequest request = this.requestBuilder.copy()
+			.uri(URI.create(url))
 			.header("Accept", "text/event-stream")
 			.header("Cache-Control", "no-cache")
 			.GET()
