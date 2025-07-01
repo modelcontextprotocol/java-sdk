@@ -154,6 +154,76 @@ public abstract class AbstractMcpAsyncServerTests {
 	}
 
 	@Test
+	void testAddDuplicateToolCall() {
+		Tool duplicateTool = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
+
+		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.toolCall(duplicateTool, (exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+			.build();
+
+		StepVerifier
+			.create(mcpAsyncServer.addTool(new McpServerFeatures.AsyncToolCallSpecification(duplicateTool,
+					(exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))))
+			.verifyErrorSatisfies(error -> {
+				assertThat(error).isInstanceOf(McpError.class)
+					.hasMessage("Tool with name '" + TEST_TOOL_NAME + "' already exists");
+			});
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testDuplicateToolCallDuringBuilding() {
+		Tool duplicateTool = new Tool("duplicate-build-toolcall", "Duplicate toolcall during building",
+				emptyJsonSchema);
+
+		assertThatThrownBy(() -> McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.toolCall(duplicateTool, (exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+			.toolCall(duplicateTool, (exchange, request) -> Mono.just(new CallToolResult(List.of(), false))) // Duplicate!
+			.build()).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Tool with name 'duplicate-build-toolcall' is already registered.");
+	}
+
+	@Test
+	void testDuplicateToolsInBatchListRegistration() {
+		Tool duplicateTool = new Tool("batch-list-tool", "Duplicate tool in batch list", emptyJsonSchema);
+		List<McpServerFeatures.AsyncToolCallSpecification> specs = List.of(
+				new McpServerFeatures.AsyncToolCallSpecification(duplicateTool,
+						(exchange, request) -> Mono.just(new CallToolResult(List.of(), false))),
+				new McpServerFeatures.AsyncToolCallSpecification(duplicateTool,
+						(exchange, request) -> Mono.just(new CallToolResult(List.of(), false))) // Duplicate!
+		);
+
+		assertThatThrownBy(() -> McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.toolCalls(specs)
+			.build()).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Tool with name 'batch-list-tool' is already registered.");
+	}
+
+	@Test
+	void testDuplicateToolsInBatchVarargsRegistration() {
+		Tool duplicateTool = new Tool("batch-varargs-tool", "Duplicate tool in batch varargs", emptyJsonSchema);
+
+		assertThatThrownBy(() -> McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.toolCalls(
+					new McpServerFeatures.AsyncToolCallSpecification(duplicateTool,
+							(exchange, request) -> Mono.just(new CallToolResult(List.of(), false))),
+					new McpServerFeatures.AsyncToolCallSpecification(duplicateTool,
+							(exchange, request) -> Mono.just(new CallToolResult(List.of(), false))) // Duplicate!
+			)
+			.build()).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Tool with name 'batch-varargs-tool' is already registered.");
+	}
+
+	@Test
 	void testRemoveTool() {
 		Tool too = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
 

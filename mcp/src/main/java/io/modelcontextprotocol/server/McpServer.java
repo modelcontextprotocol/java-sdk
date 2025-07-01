@@ -208,6 +208,12 @@ public interface McpServer {
 			this.transportProvider = transportProvider;
 		}
 
+		private void AssertNotDupplicateTool(String toolName) {
+			if (this.tools.stream().anyMatch(toolSpec -> toolSpec.tool().name().equals(toolName))) {
+				throw new IllegalArgumentException("Tool with name '" + toolName + "' is already registered.");
+			}
+		}
+
 		/**
 		 * Sets the URI template manager factory to use for creating URI templates. This
 		 * allows for custom URI template parsing and variable extraction.
@@ -329,6 +335,7 @@ public interface McpServer {
 				BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<CallToolResult>> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
+			AssertNotDupplicateTool(tool.name());
 
 			this.tools.add(new McpServerFeatures.AsyncToolSpecification(tool, handler).toToolCall());
 
@@ -353,6 +360,7 @@ public interface McpServer {
 
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
+			AssertNotDupplicateTool(tool.name());
 
 			this.tools.add(new McpServerFeatures.AsyncToolCallSpecification(tool, handler));
 
@@ -374,6 +382,12 @@ public interface McpServer {
 		@Deprecated
 		public AsyncSpecification tools(List<McpServerFeatures.AsyncToolSpecification> toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
+
+			for (var tool : toolSpecifications) {
+				AssertNotDupplicateTool(tool.tool().name());
+				this.tools.add(tool.toToolCall());
+			}
+
 			this.tools.addAll(toolSpecifications.stream().map(s -> s.toToolCall()).toList());
 			return this;
 		}
@@ -390,7 +404,11 @@ public interface McpServer {
 		 */
 		public AsyncSpecification toolCalls(List<McpServerFeatures.AsyncToolCallSpecification> toolCallSpecifications) {
 			Assert.notNull(toolCallSpecifications, "Tool handlers list must not be null");
-			this.tools.addAll(toolCallSpecifications);
+
+			for (var tool : toolCallSpecifications) {
+				AssertNotDupplicateTool(tool.tool().name());
+				this.tools.add(tool);
+			}
 			return this;
 		}
 
@@ -415,7 +433,9 @@ public interface McpServer {
 		@Deprecated
 		public AsyncSpecification tools(McpServerFeatures.AsyncToolSpecification... toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
+
 			for (McpServerFeatures.AsyncToolSpecification tool : toolSpecifications) {
+				AssertNotDupplicateTool(tool.tool().name());
 				this.tools.add(tool.toToolCall());
 			}
 			return this;
@@ -430,7 +450,9 @@ public interface McpServer {
 		 */
 		public AsyncSpecification toolCalls(McpServerFeatures.AsyncToolCallSpecification... toolCallSpecifications) {
 			Assert.notNull(toolCallSpecifications, "Tool handlers list must not be null");
+
 			for (McpServerFeatures.AsyncToolCallSpecification tool : toolCallSpecifications) {
+				AssertNotDupplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
 			return this;
@@ -763,6 +785,12 @@ public interface McpServer {
 			this.transportProvider = transportProvider;
 		}
 
+		private void AssertNotDupplicateTool(String toolName) {
+			if (this.tools.stream().anyMatch(toolSpec -> toolSpec.tool().name().equals(toolName))) {
+				throw new IllegalArgumentException("Tool with name '" + toolName + "' is already registered.");
+			}
+		}
+
 		/**
 		 * Sets the URI template manager factory to use for creating URI templates. This
 		 * allows for custom URI template parsing and variable extraction.
@@ -883,6 +911,7 @@ public interface McpServer {
 				BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
+			AssertNotDupplicateTool(tool.name());
 
 			this.tools.add(new McpServerFeatures.SyncToolSpecification(tool, handler).toToolCall());
 
@@ -906,6 +935,7 @@ public interface McpServer {
 				BiFunction<McpSyncServerExchange, McpSchema.CallToolRequest, McpSchema.CallToolResult> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
+			AssertNotDupplicateTool(tool.name());
 
 			this.tools.add(new McpServerFeatures.SyncToolCallSpecification(tool, handler));
 
@@ -927,7 +957,14 @@ public interface McpServer {
 		@Deprecated
 		public SyncSpecification tools(List<McpServerFeatures.SyncToolSpecification> toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
-			this.tools.addAll(toolSpecifications.stream().map(s -> s.toToolCall()).toList());
+
+			for (var tool : toolSpecifications) {
+				String toolName = tool.tool().name();
+				AssertNotDupplicateTool(toolName); // Check against existing tools
+				this.tools.add(tool.toToolCall()); // Add the tool call specification
+													// directly
+			}
+
 			return this;
 		}
 
@@ -942,7 +979,12 @@ public interface McpServer {
 		 */
 		public SyncSpecification toolCalls(List<McpServerFeatures.SyncToolCallSpecification> toolCallSpecifications) {
 			Assert.notNull(toolCallSpecifications, "Tool handlers list must not be null");
-			this.tools.addAll(toolCallSpecifications);
+
+			for (var tool : toolCallSpecifications) {
+				AssertNotDupplicateTool(tool.tool().name());
+				this.tools.add(tool);
+			}
+
 			return this;
 		}
 
@@ -969,7 +1011,9 @@ public interface McpServer {
 		@Deprecated
 		public SyncSpecification tools(McpServerFeatures.SyncToolSpecification... toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
+
 			for (McpServerFeatures.SyncToolSpecification tool : toolSpecifications) {
+				AssertNotDupplicateTool(tool.tool().name());
 				this.tools.add(tool.toToolCall());
 			}
 			return this;
@@ -985,7 +1029,9 @@ public interface McpServer {
 		 */
 		public SyncSpecification toolCalls(McpServerFeatures.SyncToolCallSpecification... toolCallSpecifications) {
 			Assert.notNull(toolCallSpecifications, "Tool handlers list must not be null");
+
 			for (McpServerFeatures.SyncToolCallSpecification tool : toolCallSpecifications) {
+				AssertNotDupplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
 			return this;
