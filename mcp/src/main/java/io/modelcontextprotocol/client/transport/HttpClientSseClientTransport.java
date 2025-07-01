@@ -421,10 +421,10 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 				.build();
 
 			return Mono.fromFuture(
-					httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding()).thenAccept(response -> {
+					httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenAccept(response -> {
 						if (response.statusCode() != 200 && response.statusCode() != 201 && response.statusCode() != 202
 								&& response.statusCode() != 206) {
-							logger.error("Error sending message: {}", response.statusCode());
+							logger.error("Error sending message, code: {}, body: {}", response.statusCode(), response.body());
 						}
 					}));
 		}
