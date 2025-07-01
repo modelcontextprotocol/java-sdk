@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.modelcontextprotocol.server.transport.StreamableHttpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpServerSession;
+import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
@@ -54,11 +55,6 @@ import reactor.core.publisher.Mono;
  * This implementation uses Project Reactor for non-blocking operations, making it
  * suitable for high-throughput scenarios and reactive applications. All operations return
  * Mono or Flux types that can be composed into reactive pipelines.
- *
- * <p>
- * The server supports runtime modification of its capabilities through methods like
- * {@link #addTool}, {@link #addResource}, and {@link #addPrompt}, automatically notifying
- * connected clients of changes when configured to do so.
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
@@ -104,6 +100,10 @@ public class McpAsyncStreamableHttpServer {
 
 		setupRequestHandlers();
 		setupSessionFactory();
+	}
+
+	public McpServerTransportProvider getTransportProvider() {
+		return this.httpTransportProvider;
 	}
 
 	/**
@@ -438,20 +438,7 @@ public class McpAsyncStreamableHttpServer {
 	}
 
 	/**
-	 * Builder for creating instances of McpAsyncStreamableHttpServer with Streamable HTTP
-	 * transport.
-	 *
-	 * <p>
-	 * This builder provides a fluent API for configuring Streamable HTTP MCP servers with
-	 * enhanced features:
-	 * <ul>
-	 * <li>Single session class managing all transport streams</li>
-	 * <li>Resource management and lifecycle handling</li>
-	 * <li>Clean separation between session and transport concerns</li>
-	 * <li>Support for both immediate and streaming responses</li>
-	 * </ul>
-	 *
-	 * @author Zachary German
+	 * Builder for creating instances of McpAsyncServer
 	 */
 	public static class Builder {
 
