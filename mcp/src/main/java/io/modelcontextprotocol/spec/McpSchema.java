@@ -144,9 +144,7 @@ public final class McpSchema {
 	public sealed interface Request permits InitializeRequest, CallToolRequest, CreateMessageRequest, ElicitRequest,
 			CompleteRequest, GetPromptRequest, PaginatedRequest, ReadResourceRequest {
 
-		default Map<String, Object> meta() {
-			return null;
-		}
+		Map<String, Object> meta();
 
 		default String progressToken() {
 			if (meta() != null && meta().containsKey("progressToken")) {
@@ -248,7 +246,12 @@ public final class McpSchema {
 	public record InitializeRequest( // @formatter:off
                 @JsonProperty("protocolVersion") String protocolVersion,
                 @JsonProperty("capabilities") ClientCapabilities capabilities,
-                @JsonProperty("clientInfo") Implementation clientInfo) implements Request {
+                @JsonProperty("clientInfo") Implementation clientInfo,
+				@JsonProperty("_meta") Map<String, Object> meta) implements Request {
+			
+			public InitializeRequest(String protocolVersion, ClientCapabilities capabilities, Implementation clientInfo) {
+				this(protocolVersion, capabilities, clientInfo, null);
+			}
         } // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
