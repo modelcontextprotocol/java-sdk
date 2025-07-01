@@ -5,7 +5,6 @@
 package io.modelcontextprotocol.server;
 
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 
 /**
@@ -106,6 +105,14 @@ public class McpSyncServerExchange {
 	 */
 	public void loggingNotification(LoggingMessageNotification loggingMessageNotification) {
 		this.exchange.loggingNotification(loggingMessageNotification).block();
+	}
+
+	/**
+	 * Sends a ping request to the client.
+	 * @return A Mono that completes with clients's ping response
+	 */
+	public void ping() {
+		this.exchange.ping().block();
 	}
 
 }

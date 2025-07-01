@@ -1028,4 +1028,61 @@ class WebFluxSseIntegrationTests {
 		mcpServer.close();
 	}
 
+	// ---------------------------------------
+	// Ping Tests
+	// ---------------------------------------
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testPingSuccess(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Create server with a tool that uses ping functionality
+		AtomicReference<String> executionOrder = new AtomicReference<>("");
+
+		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("ping-async-test", "Test ping async behavior", emptyJsonSchema),
+				(exchange, request) -> {
+
+					executionOrder.set(executionOrder.get() + "1");
+
+					// Test async ping behavior
+					return exchange.ping().doOnNext(result -> {
+
+						assertThat(result).isNotNull();
+						// Ping should return an empty object or map
+						assertThat(result).isInstanceOf(Map.class);
+
+						executionOrder.set(executionOrder.get() + "2");
+						assertThat(result).isNotNull();
+					}).then(Mono.fromCallable(() -> {
+						executionOrder.set(executionOrder.get() + "3");
+						return new CallToolResult("Async ping test completed", false);
+					}));
+				});
+
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			// Initialize client
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Call the tool that tests ping async behavior
+			CallToolResult result = mcpClient.callTool(new McpSchema.CallToolRequest("ping-async-test", Map.of()));
+			assertThat(result).isNotNull();
+			assertThat(result.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
+			assertThat(((McpSchema.TextContent) result.content().get(0)).text()).isEqualTo("Async ping test completed");
+
+			// Verify execution order
+			assertThat(executionOrder.get()).isEqualTo("123");
+		}
+
+		mcpServer.closeGracefully().block();
+	}
+
 }
