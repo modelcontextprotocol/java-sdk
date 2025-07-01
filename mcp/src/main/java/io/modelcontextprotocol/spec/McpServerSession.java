@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
+import io.modelcontextprotocol.spec.SseEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -56,13 +57,19 @@ public class McpServerSession implements McpSession {
 
 	private final AtomicReference<McpSchema.Implementation> clientInfo = new AtomicReference<>();
 
-	private static final int STATE_UNINITIALIZED = 0;
+	public static final int STATE_UNINITIALIZED = 0;
 
-	private static final int STATE_INITIALIZING = 1;
+	public static final int STATE_INITIALIZING = 1;
 
-	private static final int STATE_INITIALIZED = 2;
+	public static final int STATE_INITIALIZED = 2;
 
 	private final AtomicInteger state = new AtomicInteger(STATE_UNINITIALIZED);
+
+	private final AtomicLong eventCounter = new AtomicLong(0);
+
+	private final Map<String, String> eventTransports = new ConcurrentHashMap<>();
+
+	private final Map<String, Map<String, SseEvent>> transportEventHistories = new ConcurrentHashMap<>();
 
 	/**
 	 * Creates a new server session with the given parameters and the transport to use.
@@ -96,11 +103,37 @@ public class McpServerSession implements McpSession {
 	}
 
 	/**
+	 * Retrieve the session initialization state
+	 * @return session initialization state
+	 */
+	public int getState() {
+		return state.intValue();
+	}
+
+	/**
 	 * Retrieve the session id.
 	 * @return session id
 	 */
 	public String getId() {
 		return this.id;
+	}
+
+	public String incrementAndGetEventId(String transportId) {
+		final String eventId = String.valueOf(eventCounter.incrementAndGet());
+		eventTransports.put(eventId, transportId);
+		return eventId;
+	}
+
+	public String getTransportIdForEvent(String eventId) {
+		return eventTransports.get(eventId);
+	}
+
+	public void setTransportEventHistory(String transportId, Map<String, SseEvent> eventHistory) {
+		transportEventHistories.put(transportId, eventHistory);
+	}
+
+	public Map<String, SseEvent> getTransportEventHistory(String transportId) {
+		return transportEventHistories.get(transportId);
 	}
 
 	/**
@@ -256,9 +289,8 @@ public class McpServerSession implements McpSession {
 						transportId = request.id().toString();
 					}
 					else {
-						logger.error("Invalid request ID: {}", request.id());
-						return Mono.empty();
-						// I think I'm missing some handling here. Please advise.
+						logger.error("Invalid request ID: {}", String.valueOf(request.id()));
+						return Mono.error(new RuntimeException("Invalid request ID: " + String.valueOf(request.id())));
 					}
 				}
 				return handleIncomingRequest(request).onErrorResume(error -> {

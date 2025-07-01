@@ -71,7 +71,7 @@ class StreamableHttpServerTransportProviderTests {
 	@Test
 	void shouldCreateSessionOnFirstRequest() {
 		// Test session creation directly through the getOrCreateSession method
-		String sessionId = "test-session-123";
+		String sessionId = "test-session-1";
 
 		McpServerSession session = transportProvider.getOrCreateSession(sessionId, true);
 
@@ -87,7 +87,7 @@ class StreamableHttpServerTransportProviderTests {
 		StringWriter stringWriter = new StringWriter();
 		PrintWriter printWriter = new PrintWriter(stringWriter);
 
-		String sessionId = "test-session-123";
+		String sessionId = "test-session-2";
 		when(request.getRequestURI()).thenReturn("/mcp");
 		when(request.getMethod()).thenReturn("GET");
 		when(request.getHeader("Accept")).thenReturn("text/event-stream");
@@ -110,7 +110,7 @@ class StreamableHttpServerTransportProviderTests {
 
 	@Test
 	void shouldNotifyClients() {
-		String sessionId = "test-session-123";
+		String sessionId = "test-session-3";
 		transportProvider.getOrCreateSession(sessionId, true);
 
 		String method = "test/notification";
@@ -124,7 +124,7 @@ class StreamableHttpServerTransportProviderTests {
 
 	@Test
 	void shouldCloseGracefully() {
-		String sessionId = "test-session-123";
+		String sessionId = "test-session-4";
 		transportProvider.getOrCreateSession(sessionId, true);
 
 		StepVerifier.create(transportProvider.closeGracefully()).verifyComplete();
@@ -215,7 +215,7 @@ class StreamableHttpServerTransportProviderTests {
 		HttpServletRequest request = mock(HttpServletRequest.class);
 		HttpServletResponse response = mock(HttpServletResponse.class);
 
-		String sessionId = "test-session-123";
+		String sessionId = "test-session-5";
 		when(request.getRequestURI()).thenReturn("/mcp");
 		when(request.getMethod()).thenReturn("DELETE");
 		when(request.getHeader("Mcp-Session-Id")).thenReturn(sessionId);
@@ -283,7 +283,7 @@ class StreamableHttpServerTransportProviderTests {
 
 	@Test
 	void shouldReuseExistingSession() {
-		String sessionId = "test-session-123";
+		String sessionId = "test-session-6";
 
 		McpServerSession session1 = transportProvider.getOrCreateSession(sessionId, true);
 		McpServerSession session2 = transportProvider.getOrCreateSession(sessionId, false);

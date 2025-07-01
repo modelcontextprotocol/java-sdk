@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -30,6 +31,7 @@ import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.SseEvent;
 import io.modelcontextprotocol.util.Assert;
 import jakarta.servlet.AsyncContext;
 import jakarta.servlet.ReadListener;
@@ -89,6 +91,8 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 
 	public static final String ALLOW_ORIGIN_DEFAULT_VALUE = "*";
 
+	public static final String PROTOCOL_VERSION_HEADER = "MCP-Protocol-Version";
+
 	public static final String CACHE_CONTROL_HEADER = "Cache-Control";
 
 	public static final String CONNECTION_HEADER = "Connection";
@@ -117,7 +121,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 	private final Supplier<String> sessionIdProvider;
 
 	/** Sessions map, keyed by Session ID */
-	private final Map<String, McpServerSession> sessions = new ConcurrentHashMap<>();
+	private static final Map<String, McpServerSession> sessions = new ConcurrentHashMap<>();
 
 	/** Flag indicating if the transport is in the process of shutting down */
 	private final AtomicBoolean isClosing = new AtomicBoolean(false);
@@ -128,6 +132,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 	/** Callback interface for session lifecycle and errors */
 	private SessionHandler sessionHandler;
 
+	/** Factory for McpServerSession takes session IDs */
 	private McpServerSession.StreamableHttpSessionFactory streamableHttpSessionFactory;
 
 	/**
@@ -242,6 +247,13 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 			return;
 		}
 
+		// Delayed until version negotiation is implemented.
+		/*
+		 * if (session.getState().equals(session.STATE_INITIALIZED) &&
+		 * request.getHeader(PROTOCOL_VERSION_HEADER) == null) {
+		 * sendErrorResponse(response, "Protocol version missing in request header"); }
+		 */
+
 		// Set up SSE connection
 		response.setContentType(TEXT_EVENT_STREAM);
 		response.setCharacterEncoding(UTF_8);
@@ -254,10 +266,18 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 
 		String lastEventId = request.getHeader(LAST_EVENT_ID_HEADER);
 
-		SseTransport sseTransport = new SseTransport(objectMapper, response, asyncContext, lastEventId);
-		session.registerTransport(session.LISTENING_TRANSPORT, sseTransport);
-
-		logger.debug("Registered SSE transport {} for session {}", session.LISTENING_TRANSPORT, sessionId);
+		if (lastEventId == null) { // Just opening a listening stream
+			SseTransport sseTransport = new SseTransport(objectMapper, response, asyncContext, lastEventId,
+					session.LISTENING_TRANSPORT, sessionId);
+			session.registerTransport(session.LISTENING_TRANSPORT, sseTransport);
+			logger.debug("Registered SSE transport {} for session {}", session.LISTENING_TRANSPORT, sessionId);
+		}
+		else { // Asking for a stream to replay events from a previous request
+			SseTransport sseTransport = new SseTransport(objectMapper, response, asyncContext, lastEventId,
+					request.getRequestId(), sessionId);
+			session.registerTransport(request.getRequestId(), sseTransport);
+			logger.debug("Registered SSE transport {} for session {}", session.LISTENING_TRANSPORT, sessionId);
+		}
 	}
 
 	@Override
@@ -328,6 +348,15 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 						asyncContext.complete();
 						return;
 					}
+
+					// Delayed until version negotiation is implemented.
+					/*
+					 * if (session.getState().equals(session.STATE_INITIALIZED) &&
+					 * request.getHeader(PROTOCOL_VERSION_HEADER) == null) {
+					 * sendErrorResponse(response,
+					 * "Protocol version missing in request header"); }
+					 */
+
 					logger.debug("Using session: {}", sessionId);
 
 					response.setHeader(SESSION_ID_HEADER, sessionId);
@@ -362,7 +391,8 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 						response.setHeader(CACHE_CONTROL_HEADER, CACHE_CONTROL_NO_CACHE);
 						response.setHeader(CONNECTION_HEADER, CONNECTION_KEEP_ALIVE);
 
-						SseTransport sseTransport = new SseTransport(objectMapper, response, asyncContext, null);
+						SseTransport sseTransport = new SseTransport(objectMapper, response, asyncContext, null,
+								transportId, sessionId);
 						session.registerTransport(transportId, sseTransport);
 					}
 					else {
@@ -650,13 +680,17 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 
 		private final Map<String, SseEvent> eventHistory = new ConcurrentHashMap<>();
 
-		private final AtomicLong eventCounter = new AtomicLong(0);
+		private final String id;
+
+		private final String sessionId;
 
 		public SseTransport(ObjectMapper objectMapper, HttpServletResponse response, AsyncContext asyncContext,
-				String lastEventId) {
+				String lastEventId, String transportId, String sessionId) {
 			this.objectMapper = objectMapper;
 			this.response = response;
 			this.asyncContext = asyncContext;
+			this.id = transportId;
+			this.sessionId = sessionId;
 
 			setupSseStream(lastEventId);
 		}
@@ -710,9 +744,19 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 
 		private void replayEventsAfter(String lastEventId) {
 			try {
-				long lastId = Long.parseLong(lastEventId);
-				for (long i = lastId + 1; i <= eventCounter.get(); i++) {
-					SseEvent event = eventHistory.get(String.valueOf(i));
+				McpServerSession session = sessions.get(sessionId);
+				String transportIdOfLastEventId = session.getTransportIdForEvent(lastEventId);
+				Map<String, SseEvent> transportEventHistory = session
+					.getTransportEventHistory(transportIdOfLastEventId);
+				List<String> eventIds = transportEventHistory.keySet()
+					.stream()
+					.map(Long::parseLong)
+					.filter(key -> key > Long.parseLong(lastEventId))
+					.sorted()
+					.map(String::valueOf)
+					.collect(Collectors.toList());
+				for (String eventId : eventIds) {
+					SseEvent event = transportEventHistory.get(eventId);
 					if (event != null) {
 						eventSink.tryEmitNext(event);
 					}
@@ -727,7 +771,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 		public Mono<Void> sendMessage(JSONRPCMessage message) {
 			try {
 				String jsonText = objectMapper.writeValueAsString(message);
-				String eventId = String.valueOf(eventCounter.incrementAndGet());
+				String eventId = sessions.get(sessionId).incrementAndGetEventId(id);
 				SseEvent event = new SseEvent(eventId, MESSAGE_EVENT_TYPE, jsonText);
 
 				eventHistory.put(eventId, event);
@@ -737,6 +781,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 				if (message instanceof McpSchema.JSONRPCResponse) {
 					logger.debug("Completing SSE stream after sending response");
 					eventSink.tryEmitComplete();
+					sessions.get(sessionId).setTransportEventHistory(id, eventHistory);
 				}
 
 				return Mono.empty();
@@ -754,7 +799,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 			return messageStream.doOnNext(message -> {
 				try {
 					String jsonText = objectMapper.writeValueAsString(message);
-					String eventId = String.valueOf(eventCounter.incrementAndGet());
+					String eventId = sessions.get(sessionId).incrementAndGetEventId(id);
 					SseEvent event = new SseEvent(eventId, MESSAGE_EVENT_TYPE, jsonText);
 
 					eventHistory.put(eventId, event);
@@ -768,6 +813,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 			}).doOnComplete(() -> {
 				logger.debug("Completing SSE stream after sending all stream messages");
 				eventSink.tryEmitComplete();
+				sessions.get(sessionId).setTransportEventHistory(id, eventHistory);
 			}).then();
 		}
 
@@ -780,11 +826,9 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 		public Mono<Void> closeGracefully() {
 			return Mono.fromRunnable(() -> {
 				eventSink.tryEmitComplete();
+				sessions.get(sessionId).setTransportEventHistory(id, eventHistory);
 				logger.debug("SSE transport closed gracefully");
 			});
-		}
-
-		private record SseEvent(String id, String event, String data) {
 		}
 
 	}
