@@ -18,7 +18,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -31,11 +30,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Tests for {@link McpAsyncServerExchange}.
+ * Tests for {@link McpSyncServerExchange}.
  *
  * @author Christian Tzolov
  */
-class McpAsyncServerExchangeTests {
+class McpSyncServerExchangeTests {
 
 	@Mock
 	private McpServerSession mockSession;
@@ -44,7 +43,9 @@ class McpAsyncServerExchangeTests {
 
 	private McpSchema.Implementation clientInfo;
 
-	private McpAsyncServerExchange exchange;
+	private McpAsyncServerExchange asyncExchange;
+
+	private McpSyncServerExchange exchange;
 
 	@BeforeEach
 	void setUp() {
@@ -54,7 +55,8 @@ class McpAsyncServerExchangeTests {
 
 		clientInfo = new McpSchema.Implementation("test-client", "1.0.0");
 
-		exchange = new McpAsyncServerExchange(mockSession, clientCapabilities, clientInfo);
+		asyncExchange = new McpAsyncServerExchange(mockSession, clientCapabilities, clientInfo);
+		exchange = new McpSyncServerExchange(asyncExchange);
 	}
 
 	@Test
@@ -68,18 +70,18 @@ class McpAsyncServerExchangeTests {
 				any(TypeReference.class)))
 			.thenReturn(Mono.just(singlePageResult));
 
-		StepVerifier.create(exchange.listRoots()).assertNext(result -> {
-			assertThat(result.roots()).hasSize(2);
-			assertThat(result.roots().get(0).uri()).isEqualTo("file:///home/user/project1");
-			assertThat(result.roots().get(0).name()).isEqualTo("Project 1");
-			assertThat(result.roots().get(1).uri()).isEqualTo("file:///home/user/project2");
-			assertThat(result.roots().get(1).name()).isEqualTo("Project 2");
-			assertThat(result.nextCursor()).isNull();
+		McpSchema.ListRootsResult result = exchange.listRoots();
 
-			// Verify that the returned list is unmodifiable
-			assertThatThrownBy(() -> result.roots().add(new McpSchema.Root("file:///test", "Test")))
-				.isInstanceOf(UnsupportedOperationException.class);
-		}).verifyComplete();
+		assertThat(result.roots()).hasSize(2);
+		assertThat(result.roots().get(0).uri()).isEqualTo("file:///home/user/project1");
+		assertThat(result.roots().get(0).name()).isEqualTo("Project 1");
+		assertThat(result.roots().get(1).uri()).isEqualTo("file:///home/user/project2");
+		assertThat(result.roots().get(1).name()).isEqualTo("Project 2");
+		assertThat(result.nextCursor()).isNull();
+
+		// Verify that the returned list is unmodifiable
+		assertThatThrownBy(() -> result.roots().add(new McpSchema.Root("file:///test", "Test")))
+			.isInstanceOf(UnsupportedOperationException.class);
 	}
 
 	@Test
@@ -100,17 +102,17 @@ class McpAsyncServerExchangeTests {
 				any(TypeReference.class)))
 			.thenReturn(Mono.just(page2Result));
 
-		StepVerifier.create(exchange.listRoots()).assertNext(result -> {
-			assertThat(result.roots()).hasSize(3);
-			assertThat(result.roots().get(0).uri()).isEqualTo("file:///home/user/project1");
-			assertThat(result.roots().get(1).uri()).isEqualTo("file:///home/user/project2");
-			assertThat(result.roots().get(2).uri()).isEqualTo("file:///home/user/project3");
-			assertThat(result.nextCursor()).isNull();
+		McpSchema.ListRootsResult result = exchange.listRoots();
 
-			// Verify that the returned list is unmodifiable
-			assertThatThrownBy(() -> result.roots().add(new McpSchema.Root("file:///test", "Test")))
-				.isInstanceOf(UnsupportedOperationException.class);
-		}).verifyComplete();
+		assertThat(result.roots()).hasSize(3);
+		assertThat(result.roots().get(0).uri()).isEqualTo("file:///home/user/project1");
+		assertThat(result.roots().get(1).uri()).isEqualTo("file:///home/user/project2");
+		assertThat(result.roots().get(2).uri()).isEqualTo("file:///home/user/project3");
+		assertThat(result.nextCursor()).isNull();
+
+		// Verify that the returned list is unmodifiable
+		assertThatThrownBy(() -> result.roots().add(new McpSchema.Root("file:///test", "Test")))
+			.isInstanceOf(UnsupportedOperationException.class);
 	}
 
 	@Test
@@ -122,14 +124,14 @@ class McpAsyncServerExchangeTests {
 				any(TypeReference.class)))
 			.thenReturn(Mono.just(emptyResult));
 
-		StepVerifier.create(exchange.listRoots()).assertNext(result -> {
-			assertThat(result.roots()).isEmpty();
-			assertThat(result.nextCursor()).isNull();
+		McpSchema.ListRootsResult result = exchange.listRoots();
 
-			// Verify that the returned list is unmodifiable
-			assertThatThrownBy(() -> result.roots().add(new McpSchema.Root("file:///test", "Test")))
-				.isInstanceOf(UnsupportedOperationException.class);
-		}).verifyComplete();
+		assertThat(result.roots()).isEmpty();
+		assertThat(result.nextCursor()).isNull();
+
+		// Verify that the returned list is unmodifiable
+		assertThatThrownBy(() -> result.roots().add(new McpSchema.Root("file:///test", "Test")))
+			.isInstanceOf(UnsupportedOperationException.class);
 	}
 
 	@Test
@@ -142,11 +144,11 @@ class McpAsyncServerExchangeTests {
 				any(TypeReference.class)))
 			.thenReturn(Mono.just(result));
 
-		StepVerifier.create(exchange.listRoots("someCursor")).assertNext(listResult -> {
-			assertThat(listResult.roots()).hasSize(1);
-			assertThat(listResult.roots().get(0).uri()).isEqualTo("file:///home/user/project3");
-			assertThat(listResult.nextCursor()).isEqualTo("nextCursor");
-		}).verifyComplete();
+		McpSchema.ListRootsResult listResult = exchange.listRoots("someCursor");
+
+		assertThat(listResult.roots()).hasSize(1);
+		assertThat(listResult.roots().get(0).uri()).isEqualTo("file:///home/user/project3");
+		assertThat(listResult.nextCursor()).isEqualTo("nextCursor");
 	}
 
 	@Test
@@ -157,9 +159,7 @@ class McpAsyncServerExchangeTests {
 			.thenReturn(Mono.error(new RuntimeException("Network error")));
 
 		// When & Then
-		StepVerifier.create(exchange.listRoots()).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(RuntimeException.class).hasMessage("Network error");
-		});
+		assertThatThrownBy(() -> exchange.listRoots()).isInstanceOf(RuntimeException.class).hasMessage("Network error");
 	}
 
 	@Test
@@ -181,20 +181,20 @@ class McpAsyncServerExchangeTests {
 				any(TypeReference.class)))
 			.thenReturn(Mono.just(page2Result));
 
-		StepVerifier.create(exchange.listRoots()).assertNext(result -> {
-			// Verify the accumulated result is correct
-			assertThat(result.roots()).hasSize(2);
+		McpSchema.ListRootsResult result = exchange.listRoots();
 
-			// Verify that the returned list is unmodifiable
-			assertThatThrownBy(() -> result.roots().add(new McpSchema.Root("file:///test", "Test")))
-				.isInstanceOf(UnsupportedOperationException.class);
+		// Verify the accumulated result is correct
+		assertThat(result.roots()).hasSize(2);
 
-			// Verify that clear() also throws UnsupportedOperationException
-			assertThatThrownBy(() -> result.roots().clear()).isInstanceOf(UnsupportedOperationException.class);
+		// Verify that the returned list is unmodifiable
+		assertThatThrownBy(() -> result.roots().add(new McpSchema.Root("file:///test", "Test")))
+			.isInstanceOf(UnsupportedOperationException.class);
 
-			// Verify that remove() also throws UnsupportedOperationException
-			assertThatThrownBy(() -> result.roots().remove(0)).isInstanceOf(UnsupportedOperationException.class);
-		}).verifyComplete();
+		// Verify that clear() also throws UnsupportedOperationException
+		assertThatThrownBy(() -> result.roots().clear()).isInstanceOf(UnsupportedOperationException.class);
+
+		// Verify that remove() also throws UnsupportedOperationException
+		assertThatThrownBy(() -> result.roots().remove(0)).isInstanceOf(UnsupportedOperationException.class);
 	}
 
 	@Test
@@ -213,9 +213,8 @@ class McpAsyncServerExchangeTests {
 
 	@Test
 	void testLoggingNotificationWithNullMessage() {
-		StepVerifier.create(exchange.loggingNotification(null)).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(McpError.class).hasMessage("Logging message must not be null");
-		});
+		assertThatThrownBy(() -> exchange.loggingNotification(null)).isInstanceOf(McpError.class)
+			.hasMessage("Logging message must not be null");
 	}
 
 	@Test
@@ -230,7 +229,7 @@ class McpAsyncServerExchangeTests {
 		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(notification)))
 			.thenReturn(Mono.empty());
 
-		StepVerifier.create(exchange.loggingNotification(notification)).verifyComplete();
+		exchange.loggingNotification(notification);
 
 		// Verify that sendNotification was called exactly once
 		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(notification));
@@ -239,7 +238,7 @@ class McpAsyncServerExchangeTests {
 	@Test
 	void testLoggingNotificationWithFilteredLevel() {
 		// Given - Set minimum level to WARNING, send DEBUG message
-		exchange.setMinLoggingLevel(McpSchema.LoggingLevel.WARNING);
+		asyncExchange.setMinLoggingLevel(McpSchema.LoggingLevel.WARNING);
 
 		McpSchema.LoggingMessageNotification debugNotification = McpSchema.LoggingMessageNotification.builder()
 			.level(McpSchema.LoggingLevel.DEBUG)
@@ -248,7 +247,7 @@ class McpAsyncServerExchangeTests {
 			.build();
 
 		// When & Then - Should complete without sending notification
-		StepVerifier.create(exchange.loggingNotification(debugNotification)).verifyComplete();
+		exchange.loggingNotification(debugNotification);
 
 		// Verify that sendNotification was never called for filtered DEBUG level
 		verify(mockSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(debugNotification));
@@ -257,7 +256,7 @@ class McpAsyncServerExchangeTests {
 	@Test
 	void testLoggingNotificationLevelFiltering() {
 		// Given - Set minimum level to WARNING
-		exchange.setMinLoggingLevel(McpSchema.LoggingLevel.WARNING);
+		asyncExchange.setMinLoggingLevel(McpSchema.LoggingLevel.WARNING);
 
 		// Test DEBUG (should be filtered)
 		McpSchema.LoggingMessageNotification debugNotification = McpSchema.LoggingMessageNotification.builder()
@@ -266,7 +265,7 @@ class McpAsyncServerExchangeTests {
 			.data("Debug message")
 			.build();
 
-		StepVerifier.create(exchange.loggingNotification(debugNotification)).verifyComplete();
+		exchange.loggingNotification(debugNotification);
 
 		// Verify that sendNotification was never called for DEBUG level
 		verify(mockSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(debugNotification));
@@ -278,7 +277,7 @@ class McpAsyncServerExchangeTests {
 			.data("Info message")
 			.build();
 
-		StepVerifier.create(exchange.loggingNotification(infoNotification)).verifyComplete();
+		exchange.loggingNotification(infoNotification);
 
 		// Verify that sendNotification was never called for INFO level
 		verify(mockSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(infoNotification));
@@ -295,7 +294,7 @@ class McpAsyncServerExchangeTests {
 		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(warningNotification)))
 			.thenReturn(Mono.empty());
 
-		StepVerifier.create(exchange.loggingNotification(warningNotification)).verifyComplete();
+		exchange.loggingNotification(warningNotification);
 
 		// Verify that sendNotification was called exactly once for WARNING level
 		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE),
@@ -311,7 +310,7 @@ class McpAsyncServerExchangeTests {
 		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(errorNotification)))
 			.thenReturn(Mono.empty());
 
-		StepVerifier.create(exchange.loggingNotification(errorNotification)).verifyComplete();
+		exchange.loggingNotification(errorNotification);
 
 		// Verify that sendNotification was called exactly once for ERROR level
 		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE),
@@ -330,7 +329,7 @@ class McpAsyncServerExchangeTests {
 		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(infoNotification)))
 			.thenReturn(Mono.empty());
 
-		StepVerifier.create(exchange.loggingNotification(infoNotification)).verifyComplete();
+		exchange.loggingNotification(infoNotification);
 
 		// Verify that sendNotification was called exactly once for default level
 		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(infoNotification));
@@ -348,16 +347,8 @@ class McpAsyncServerExchangeTests {
 		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(notification)))
 			.thenReturn(Mono.error(new RuntimeException("Session error")));
 
-		StepVerifier.create(exchange.loggingNotification(notification)).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(RuntimeException.class).hasMessage("Session error");
-		});
-	}
-
-	@Test
-	void testSetMinLoggingLevelWithNullValue() {
-		// When & Then
-		assertThatThrownBy(() -> exchange.setMinLoggingLevel(null)).isInstanceOf(IllegalArgumentException.class)
-			.hasMessage("minLoggingLevel must not be null");
+		assertThatThrownBy(() -> exchange.loggingNotification(notification)).isInstanceOf(RuntimeException.class)
+			.hasMessage("Session error");
 	}
 
 	@Test
@@ -368,7 +359,7 @@ class McpAsyncServerExchangeTests {
 				McpSchema.LoggingLevel.CRITICAL, McpSchema.LoggingLevel.ALERT, McpSchema.LoggingLevel.EMERGENCY };
 
 		// Set minimum level to WARNING
-		exchange.setMinLoggingLevel(McpSchema.LoggingLevel.WARNING);
+		asyncExchange.setMinLoggingLevel(McpSchema.LoggingLevel.WARNING);
 
 		for (McpSchema.LoggingLevel level : levels) {
 			McpSchema.LoggingMessageNotification notification = McpSchema.LoggingMessageNotification.builder()
@@ -382,11 +373,11 @@ class McpAsyncServerExchangeTests {
 				when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(notification)))
 					.thenReturn(Mono.empty());
 
-				StepVerifier.create(exchange.loggingNotification(notification)).verifyComplete();
+				exchange.loggingNotification(notification);
 			}
 			else {
 				// Should be filtered (completes without sending)
-				StepVerifier.create(exchange.loggingNotification(notification)).verifyComplete();
+				exchange.loggingNotification(notification);
 			}
 		}
 	}
@@ -398,17 +389,18 @@ class McpAsyncServerExchangeTests {
 	@Test
 	void testCreateElicitationWithNullCapabilities() {
 		// Given - Create exchange with null capabilities
-		McpAsyncServerExchange exchangeWithNullCapabilities = new McpAsyncServerExchange(mockSession, null, clientInfo);
+		McpAsyncServerExchange asyncExchangeWithNullCapabilities = new McpAsyncServerExchange(mockSession, null,
+				clientInfo);
+		McpSyncServerExchange exchangeWithNullCapabilities = new McpSyncServerExchange(
+				asyncExchangeWithNullCapabilities);
 
 		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
 			.message("Please provide your name")
 			.build();
 
-		StepVerifier.create(exchangeWithNullCapabilities.createElicitation(elicitRequest))
-			.verifyErrorSatisfies(error -> {
-				assertThat(error).isInstanceOf(McpError.class)
-					.hasMessage("Client must be initialized. Call the initialize method first!");
-			});
+		assertThatThrownBy(() -> exchangeWithNullCapabilities.createElicitation(elicitRequest))
+			.isInstanceOf(McpError.class)
+			.hasMessage("Client must be initialized. Call the initialize method first!");
 
 		// Verify that sendRequest was never called due to null capabilities
 		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), any(),
@@ -422,17 +414,17 @@ class McpAsyncServerExchangeTests {
 			.roots(true)
 			.build();
 
-		McpAsyncServerExchange exchangeWithoutElicitation = new McpAsyncServerExchange(mockSession,
+		McpAsyncServerExchange asyncExchangeWithoutElicitation = new McpAsyncServerExchange(mockSession,
 				capabilitiesWithoutElicitation, clientInfo);
+		McpSyncServerExchange exchangeWithoutElicitation = new McpSyncServerExchange(asyncExchangeWithoutElicitation);
 
 		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
 			.message("Please provide your name")
 			.build();
 
-		StepVerifier.create(exchangeWithoutElicitation.createElicitation(elicitRequest)).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(McpError.class)
-				.hasMessage("Client must be configured with elicitation capabilities");
-		});
+		assertThatThrownBy(() -> exchangeWithoutElicitation.createElicitation(elicitRequest))
+			.isInstanceOf(McpError.class)
+			.hasMessage("Client must be configured with elicitation capabilities");
 
 		// Verify that sendRequest was never called due to missing elicitation
 		// capabilities
@@ -447,8 +439,9 @@ class McpAsyncServerExchangeTests {
 			.elicitation()
 			.build();
 
-		McpAsyncServerExchange exchangeWithElicitation = new McpAsyncServerExchange(mockSession,
+		McpAsyncServerExchange asyncExchangeWithElicitation = new McpAsyncServerExchange(mockSession,
 				capabilitiesWithElicitation, clientInfo);
+		McpSyncServerExchange exchangeWithElicitation = new McpSyncServerExchange(asyncExchangeWithElicitation);
 
 		// Create a complex elicit request with schema
 		java.util.Map<String, Object> requestedSchema = new java.util.HashMap<>();
@@ -475,13 +468,13 @@ class McpAsyncServerExchangeTests {
 				any(TypeReference.class)))
 			.thenReturn(Mono.just(expectedResult));
 
-		StepVerifier.create(exchangeWithElicitation.createElicitation(elicitRequest)).assertNext(result -> {
-			assertThat(result).isEqualTo(expectedResult);
-			assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
-			assertThat(result.content()).isNotNull();
-			assertThat(result.content().get("name")).isEqualTo("John Doe");
-			assertThat(result.content().get("age")).isEqualTo(30);
-		}).verifyComplete();
+		McpSchema.ElicitResult result = exchangeWithElicitation.createElicitation(elicitRequest);
+
+		assertThat(result).isEqualTo(expectedResult);
+		assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+		assertThat(result.content()).isNotNull();
+		assertThat(result.content().get("name")).isEqualTo("John Doe");
+		assertThat(result.content().get("age")).isEqualTo(30);
 	}
 
 	@Test
@@ -491,8 +484,9 @@ class McpAsyncServerExchangeTests {
 			.elicitation()
 			.build();
 
-		McpAsyncServerExchange exchangeWithElicitation = new McpAsyncServerExchange(mockSession,
+		McpAsyncServerExchange asyncExchangeWithElicitation = new McpAsyncServerExchange(mockSession,
 				capabilitiesWithElicitation, clientInfo);
+		McpSyncServerExchange exchangeWithElicitation = new McpSyncServerExchange(asyncExchangeWithElicitation);
 
 		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
 			.message("Please provide sensitive information")
@@ -506,10 +500,10 @@ class McpAsyncServerExchangeTests {
 				any(TypeReference.class)))
 			.thenReturn(Mono.just(expectedResult));
 
-		StepVerifier.create(exchangeWithElicitation.createElicitation(elicitRequest)).assertNext(result -> {
-			assertThat(result).isEqualTo(expectedResult);
-			assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.DECLINE);
-		}).verifyComplete();
+		McpSchema.ElicitResult result = exchangeWithElicitation.createElicitation(elicitRequest);
+
+		assertThat(result).isEqualTo(expectedResult);
+		assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.DECLINE);
 	}
 
 	@Test
@@ -519,8 +513,9 @@ class McpAsyncServerExchangeTests {
 			.elicitation()
 			.build();
 
-		McpAsyncServerExchange exchangeWithElicitation = new McpAsyncServerExchange(mockSession,
+		McpAsyncServerExchange asyncExchangeWithElicitation = new McpAsyncServerExchange(mockSession,
 				capabilitiesWithElicitation, clientInfo);
+		McpSyncServerExchange exchangeWithElicitation = new McpSyncServerExchange(asyncExchangeWithElicitation);
 
 		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
 			.message("Please provide your information")
@@ -534,10 +529,10 @@ class McpAsyncServerExchangeTests {
 				any(TypeReference.class)))
 			.thenReturn(Mono.just(expectedResult));
 
-		StepVerifier.create(exchangeWithElicitation.createElicitation(elicitRequest)).assertNext(result -> {
-			assertThat(result).isEqualTo(expectedResult);
-			assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.CANCEL);
-		}).verifyComplete();
+		McpSchema.ElicitResult result = exchangeWithElicitation.createElicitation(elicitRequest);
+
+		assertThat(result).isEqualTo(expectedResult);
+		assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.CANCEL);
 	}
 
 	@Test
@@ -547,8 +542,9 @@ class McpAsyncServerExchangeTests {
 			.elicitation()
 			.build();
 
-		McpAsyncServerExchange exchangeWithElicitation = new McpAsyncServerExchange(mockSession,
+		McpAsyncServerExchange asyncExchangeWithElicitation = new McpAsyncServerExchange(mockSession,
 				capabilitiesWithElicitation, clientInfo);
+		McpSyncServerExchange exchangeWithElicitation = new McpSyncServerExchange(asyncExchangeWithElicitation);
 
 		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
 			.message("Please provide your name")
@@ -558,9 +554,9 @@ class McpAsyncServerExchangeTests {
 				any(TypeReference.class)))
 			.thenReturn(Mono.error(new RuntimeException("Session communication error")));
 
-		StepVerifier.create(exchangeWithElicitation.createElicitation(elicitRequest)).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(RuntimeException.class).hasMessage("Session communication error");
-		});
+		assertThatThrownBy(() -> exchangeWithElicitation.createElicitation(elicitRequest))
+			.isInstanceOf(RuntimeException.class)
+			.hasMessage("Session communication error");
 	}
 
 	// ---------------------------------------
@@ -570,18 +566,19 @@ class McpAsyncServerExchangeTests {
 	@Test
 	void testCreateMessageWithNullCapabilities() {
 
-		McpAsyncServerExchange exchangeWithNullCapabilities = new McpAsyncServerExchange(mockSession, null, clientInfo);
+		McpAsyncServerExchange asyncExchangeWithNullCapabilities = new McpAsyncServerExchange(mockSession, null,
+				clientInfo);
+		McpSyncServerExchange exchangeWithNullCapabilities = new McpSyncServerExchange(
+				asyncExchangeWithNullCapabilities);
 
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
 			.messages(Arrays
 				.asList(new McpSchema.SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("Hello, world!"))))
 			.build();
 
-		StepVerifier.create(exchangeWithNullCapabilities.createMessage(createMessageRequest))
-			.verifyErrorSatisfies(error -> {
-				assertThat(error).isInstanceOf(McpError.class)
-					.hasMessage("Client must be initialized. Call the initialize method first!");
-			});
+		assertThatThrownBy(() -> exchangeWithNullCapabilities.createMessage(createMessageRequest))
+			.isInstanceOf(McpError.class)
+			.hasMessage("Client must be initialized. Call the initialize method first!");
 
 		// Verify that sendRequest was never called due to null capabilities
 		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE), any(),
@@ -595,18 +592,18 @@ class McpAsyncServerExchangeTests {
 			.roots(true)
 			.build();
 
-		McpAsyncServerExchange exchangeWithoutSampling = new McpAsyncServerExchange(mockSession,
+		McpAsyncServerExchange asyncExchangeWithoutSampling = new McpAsyncServerExchange(mockSession,
 				capabilitiesWithoutSampling, clientInfo);
+		McpSyncServerExchange exchangeWithoutSampling = new McpSyncServerExchange(asyncExchangeWithoutSampling);
 
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
 			.messages(Arrays
 				.asList(new McpSchema.SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("Hello, world!"))))
 			.build();
 
-		StepVerifier.create(exchangeWithoutSampling.createMessage(createMessageRequest)).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(McpError.class)
-				.hasMessage("Client must be configured with sampling capabilities");
-		});
+		assertThatThrownBy(() -> exchangeWithoutSampling.createMessage(createMessageRequest))
+			.isInstanceOf(McpError.class)
+			.hasMessage("Client must be configured with sampling capabilities");
 
 		// Verify that sendRequest was never called due to missing sampling capabilities
 		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE), any(),
@@ -620,8 +617,9 @@ class McpAsyncServerExchangeTests {
 			.sampling()
 			.build();
 
-		McpAsyncServerExchange exchangeWithSampling = new McpAsyncServerExchange(mockSession, capabilitiesWithSampling,
-				clientInfo);
+		McpAsyncServerExchange asyncExchangeWithSampling = new McpAsyncServerExchange(mockSession,
+				capabilitiesWithSampling, clientInfo);
+		McpSyncServerExchange exchangeWithSampling = new McpSyncServerExchange(asyncExchangeWithSampling);
 
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
 			.messages(Arrays
@@ -639,14 +637,14 @@ class McpAsyncServerExchangeTests {
 				any(TypeReference.class)))
 			.thenReturn(Mono.just(expectedResult));
 
-		StepVerifier.create(exchangeWithSampling.createMessage(createMessageRequest)).assertNext(result -> {
-			assertThat(result).isEqualTo(expectedResult);
-			assertThat(result.role()).isEqualTo(McpSchema.Role.ASSISTANT);
-			assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
-			assertThat(((McpSchema.TextContent) result.content()).text()).isEqualTo("Hello! How can I help you today?");
-			assertThat(result.model()).isEqualTo("gpt-4");
-			assertThat(result.stopReason()).isEqualTo(McpSchema.CreateMessageResult.StopReason.END_TURN);
-		}).verifyComplete();
+		McpSchema.CreateMessageResult result = exchangeWithSampling.createMessage(createMessageRequest);
+
+		assertThat(result).isEqualTo(expectedResult);
+		assertThat(result.role()).isEqualTo(McpSchema.Role.ASSISTANT);
+		assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
+		assertThat(((McpSchema.TextContent) result.content()).text()).isEqualTo("Hello! How can I help you today?");
+		assertThat(result.model()).isEqualTo("gpt-4");
+		assertThat(result.stopReason()).isEqualTo(McpSchema.CreateMessageResult.StopReason.END_TURN);
 	}
 
 	@Test
@@ -656,8 +654,9 @@ class McpAsyncServerExchangeTests {
 			.sampling()
 			.build();
 
-		McpAsyncServerExchange exchangeWithSampling = new McpAsyncServerExchange(mockSession, capabilitiesWithSampling,
-				clientInfo);
+		McpAsyncServerExchange asyncExchangeWithSampling = new McpAsyncServerExchange(mockSession,
+				capabilitiesWithSampling, clientInfo);
+		McpSyncServerExchange exchangeWithSampling = new McpSyncServerExchange(asyncExchangeWithSampling);
 
 		// Create request with image content
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
@@ -677,11 +676,11 @@ class McpAsyncServerExchangeTests {
 				any(TypeReference.class)))
 			.thenReturn(Mono.just(expectedResult));
 
-		StepVerifier.create(exchangeWithSampling.createMessage(createMessageRequest)).assertNext(result -> {
-			assertThat(result).isEqualTo(expectedResult);
-			assertThat(result.role()).isEqualTo(McpSchema.Role.ASSISTANT);
-			assertThat(result.model()).isEqualTo("gpt-4-vision");
-		}).verifyComplete();
+		McpSchema.CreateMessageResult result = exchangeWithSampling.createMessage(createMessageRequest);
+
+		assertThat(result).isEqualTo(expectedResult);
+		assertThat(result.role()).isEqualTo(McpSchema.Role.ASSISTANT);
+		assertThat(result.model()).isEqualTo("gpt-4-vision");
 	}
 
 	@Test
@@ -691,8 +690,9 @@ class McpAsyncServerExchangeTests {
 			.sampling()
 			.build();
 
-		McpAsyncServerExchange exchangeWithSampling = new McpAsyncServerExchange(mockSession, capabilitiesWithSampling,
-				clientInfo);
+		McpAsyncServerExchange asyncExchangeWithSampling = new McpAsyncServerExchange(mockSession,
+				capabilitiesWithSampling, clientInfo);
+		McpSyncServerExchange exchangeWithSampling = new McpSyncServerExchange(asyncExchangeWithSampling);
 
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
 			.messages(Arrays
@@ -703,9 +703,9 @@ class McpAsyncServerExchangeTests {
 				any(TypeReference.class)))
 			.thenReturn(Mono.error(new RuntimeException("Session communication error")));
 
-		StepVerifier.create(exchangeWithSampling.createMessage(createMessageRequest)).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(RuntimeException.class).hasMessage("Session communication error");
-		});
+		assertThatThrownBy(() -> exchangeWithSampling.createMessage(createMessageRequest))
+			.isInstanceOf(RuntimeException.class)
+			.hasMessage("Session communication error");
 	}
 
 	@Test
@@ -715,8 +715,9 @@ class McpAsyncServerExchangeTests {
 			.sampling()
 			.build();
 
-		McpAsyncServerExchange exchangeWithSampling = new McpAsyncServerExchange(mockSession, capabilitiesWithSampling,
-				clientInfo);
+		McpAsyncServerExchange asyncExchangeWithSampling = new McpAsyncServerExchange(mockSession,
+				capabilitiesWithSampling, clientInfo);
+		McpSyncServerExchange exchangeWithSampling = new McpSyncServerExchange(asyncExchangeWithSampling);
 
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
 			.messages(Arrays.asList(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -735,10 +736,10 @@ class McpAsyncServerExchangeTests {
 				any(TypeReference.class)))
 			.thenReturn(Mono.just(expectedResult));
 
-		StepVerifier.create(exchangeWithSampling.createMessage(createMessageRequest)).assertNext(result -> {
-			assertThat(result).isEqualTo(expectedResult);
-			assertThat(((McpSchema.TextContent) result.content()).text()).contains("context");
-		}).verifyComplete();
+		McpSchema.CreateMessageResult result = exchangeWithSampling.createMessage(createMessageRequest);
+
+		assertThat(result).isEqualTo(expectedResult);
+		assertThat(((McpSchema.TextContent) result.content()).text()).contains("context");
 	}
 
 	// ---------------------------------------
@@ -753,10 +754,7 @@ class McpAsyncServerExchangeTests {
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class)))
 			.thenReturn(Mono.just(expectedResponse));
 
-		StepVerifier.create(exchange.ping()).assertNext(result -> {
-			assertThat(result).isEqualTo(expectedResponse);
-			assertThat(result).isInstanceOf(java.util.Map.class);
-		}).verifyComplete();
+		exchange.ping();
 
 		// Verify that sendRequest was called with correct parameters
 		verify(mockSession, times(1)).sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class));
@@ -770,9 +768,7 @@ class McpAsyncServerExchangeTests {
 			.thenReturn(Mono.error(mcpError));
 
 		// When & Then
-		StepVerifier.create(exchange.ping()).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(McpError.class).hasMessage("Server unavailable");
-		});
+		assertThatThrownBy(() -> exchange.ping()).isInstanceOf(McpError.class).hasMessage("Server unavailable");
 
 		verify(mockSession, times(1)).sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class));
 	}
@@ -785,14 +781,10 @@ class McpAsyncServerExchangeTests {
 			.thenReturn(Mono.just(Map.of()));
 
 		// First call
-		StepVerifier.create(exchange.ping()).assertNext(result -> {
-			assertThat(result).isInstanceOf(Map.class);
-		}).verifyComplete();
+		exchange.ping();
 
 		// Second call
-		StepVerifier.create(exchange.ping()).assertNext(result -> {
-			assertThat(result).isInstanceOf(Map.class);
-		}).verifyComplete();
+		exchange.ping();
 
 		// Verify that sendRequest was called twice
 		verify(mockSession, times(2)).sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class));
