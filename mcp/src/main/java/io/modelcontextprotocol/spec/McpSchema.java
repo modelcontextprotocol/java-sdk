@@ -1070,8 +1070,8 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Tool( // @formatter:off
 				@JsonProperty("name") String name,
+				@JsonProperty("title") String title,
 				@JsonProperty("description") String description,
-                @JsonProperty("title") String title,
 				@JsonProperty("inputSchema") JsonSchema inputSchema,
 				@JsonProperty("annotations") ToolAnnotations annotations) {
 
