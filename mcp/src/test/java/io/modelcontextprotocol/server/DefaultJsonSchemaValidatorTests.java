@@ -490,16 +490,15 @@ class DefaultJsonSchemaValidatorTests {
 		Map<String, Object> schema = Map.of("type", "object");
 		Map<String, Object> structuredContent = Map.of("key", "value");
 
-		when(mockObjectMapper.writeValueAsString(any()))
-			.thenThrow(new com.fasterxml.jackson.core.JsonProcessingException("Mock JSON processing error") {
-			});
+		// This will trigger our null check and throw JsonProcessingException
+		when(mockObjectMapper.valueToTree(any())).thenReturn(null);
 
 		ValidationResponse response = validatorWithMockMapper.validate(schema, structuredContent);
 
 		assertFalse(response.valid());
 		assertNotNull(response.errorMessage());
 		assertTrue(response.errorMessage().contains("Error parsing tool JSON Schema"));
-		assertTrue(response.errorMessage().contains("Mock JSON processing error"));
+		assertTrue(response.errorMessage().contains("Failed to convert schema to JsonNode"));
 	}
 
 	@ParameterizedTest

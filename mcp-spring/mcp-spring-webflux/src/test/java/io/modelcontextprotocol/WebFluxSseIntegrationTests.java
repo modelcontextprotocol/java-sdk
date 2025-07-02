@@ -1184,8 +1184,8 @@ class WebFluxSseIntegrationTests {
 			assertThat(response.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
 
 			String errorMessage = ((McpSchema.TextContent) response.content().get(0)).text();
-			assertThat(errorMessage)
-				.isEqualTo("Tool call with non-empty outputSchema must have a result with structured content");
+			assertThat(errorMessage).isEqualTo(
+					"Response missing structured content which is expected when calling tool with non-empty outputSchema");
 		}
 
 		mcpServer.close();

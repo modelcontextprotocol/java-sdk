@@ -311,7 +311,7 @@ public class McpAsyncServer {
 		});
 	}
 
-	static class StructuredOutputCallToolHandler
+	private static class StructuredOutputCallToolHandler
 			implements BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> {
 
 		private final BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> delegateCallToolResult;
@@ -352,38 +352,11 @@ public class McpAsyncServer {
 				// results that conform to this schema.
 				// https://modelcontextprotocol.io/specification/2025-06-18/server/tools#output-schema
 				if (result.structuredContent() == null) {
-					logger.warn("Tool call with non-empty outputSchema MUST have a result with structured content");
-					// if (!Utils.isEmpty(result.content())) {
-					// // TODO If the tesult.content() contains json text we can try to
-					// // convert it into a structured content (Experimental)
-					// var tc = result.content().stream().filter(c -> c instanceof
-					// McpSchema.TextContent).findFirst();
-					// if (tc.isPresent()) {
-					// try {
-					// Map<String, Object> structuredOutput = new
-					// ObjectMapper().readValue(
-					// ((TextContent) tc.get()).text(), new TypeReference<Map<String,
-					// Object>>() {
-					// });
-
-					// // Overwrite the result with the structured content
-					// // generated from the text content.
-					// result = new CallToolResult(result.content(), result.isError(),
-					// structuredOutput);
-
-					// }
-					// catch (Exception e) {
-					// logger.warn("Failed to parse text content as structured content:
-					// {}", e.getMessage());
-					// return new CallToolResult(
-					// "Failed to parse text content as structured content: " +
-					// e.getMessage(), true);
-					// }
-
-					// }
-					// }
+					logger.warn(
+							"Response missing structured content which is expected when calling tool with non-empty outputSchema");
 					return new CallToolResult(
-							"Tool call with non-empty outputSchema must have a result with structured content", true);
+							"Response missing structured content which is expected when calling tool with non-empty outputSchema",
+							true);
 				}
 
 				// Validate the result against the output schema
@@ -411,7 +384,7 @@ public class McpAsyncServer {
 
 	}
 
-	static List<McpServerFeatures.AsyncToolSpecification> withStructuredOutputHandling(
+	private static List<McpServerFeatures.AsyncToolSpecification> withStructuredOutputHandling(
 			JsonSchemaValidator jsonSchemaValidator, List<McpServerFeatures.AsyncToolSpecification> tools) {
 
 		if (Utils.isEmpty(tools)) {
@@ -421,7 +394,7 @@ public class McpAsyncServer {
 		return tools.stream().map(tool -> withStructuredOutputHandling(jsonSchemaValidator, tool)).toList();
 	}
 
-	static McpServerFeatures.AsyncToolSpecification withStructuredOutputHandling(
+	private static McpServerFeatures.AsyncToolSpecification withStructuredOutputHandling(
 			JsonSchemaValidator jsonSchemaValidator, McpServerFeatures.AsyncToolSpecification toolSpecification) {
 
 		if (toolSpecification.call() instanceof StructuredOutputCallToolHandler) {
