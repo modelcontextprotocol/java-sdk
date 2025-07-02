@@ -1447,11 +1447,16 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record CompleteRequest(// @formatter:off
 		@JsonProperty("ref") McpSchema.CompleteReference ref,
-		@JsonProperty("argument") CompleteArgument argument) implements Request {
+		@JsonProperty("argument") CompleteArgument argument,
+		@JsonProperty("context") CompleteContext context) implements Request {
 
 		public record CompleteArgument(
 			@JsonProperty("name") String name,
 			@JsonProperty("value") String value) {
+		}
+
+		public record CompleteContext(
+			@JsonProperty("arguments") Map<String, String> arguments) {
 		}// @formatter:on
 	}
 

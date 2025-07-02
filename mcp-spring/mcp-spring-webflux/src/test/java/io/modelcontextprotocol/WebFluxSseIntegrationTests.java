@@ -1011,7 +1011,7 @@ class WebFluxSseIntegrationTests {
 			assertThat(initResult).isNotNull();
 
 			CompleteRequest request = new CompleteRequest(new PromptReference("ref/prompt", "code_review"),
-					new CompleteRequest.CompleteArgument("language", "py"));
+					new CompleteRequest.CompleteArgument("language", "py"), null);
 
 			CompleteResult result = mcpClient.completeCompletion(request);
 

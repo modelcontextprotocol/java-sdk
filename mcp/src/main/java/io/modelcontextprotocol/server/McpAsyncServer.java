@@ -721,6 +721,7 @@ public class McpAsyncServer {
 		Map<String, Object> params = (Map<String, Object>) object;
 		Map<String, Object> refMap = (Map<String, Object>) params.get("ref");
 		Map<String, Object> argMap = (Map<String, Object>) params.get("argument");
+		Map<String, Object> contextMap = (Map<String, Object>) params.get("context");
 
 		String refType = (String) refMap.get("type");
 
@@ -735,7 +736,13 @@ public class McpAsyncServer {
 		McpSchema.CompleteRequest.CompleteArgument argument = new McpSchema.CompleteRequest.CompleteArgument(argName,
 				argValue);
 
-		return new McpSchema.CompleteRequest(ref, argument);
+		McpSchema.CompleteRequest.CompleteContext context = null;
+		if (contextMap != null) {
+			Map<String, String> arguments = (Map<String, String>) contextMap.get("arguments");
+			context = new McpSchema.CompleteRequest.CompleteContext(arguments);
+		}
+
+		return new McpSchema.CompleteRequest(ref, argument, context);
 	}
 
 	/**
