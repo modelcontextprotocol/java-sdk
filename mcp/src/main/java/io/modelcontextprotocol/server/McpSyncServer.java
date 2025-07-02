@@ -7,6 +7,7 @@ package io.modelcontextprotocol.server;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.util.Assert;
+import reactor.util.annotation.Nullable;
 
 /**
  * A synchronous implementation of the Model Context Protocol (MCP) server that wraps
@@ -132,6 +133,15 @@ public class McpSyncServer {
 	 */
 	public McpSchema.Implementation getServerInfo() {
 		return this.asyncServer.getServerInfo();
+	}
+
+	/**
+	 * Get the server instructions if available
+	 * @return The preset instructions for communication with the server
+	 */
+	@Nullable
+	public String getInstructions() {
+		return this.getAsyncServer().getInstructions();
 	}
 
 	/**
