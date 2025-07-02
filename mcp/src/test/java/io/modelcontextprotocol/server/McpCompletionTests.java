@@ -34,6 +34,7 @@ import io.modelcontextprotocol.spec.McpError;
 
 /**
  * Tests for completion functionality with context support.
+ * @author Surbhi Bansal
  */
 class McpCompletionTests {
 

@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
  *
  * @author Christian Tzolov
  * @author Luca Chang
+ * @author Surbhi Bansal
  */
 public final class McpSchema {
 
