@@ -14,6 +14,9 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.modelcontextprotocol.spec.DefaultJsonSchemaValidator;
+import io.modelcontextprotocol.spec.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;

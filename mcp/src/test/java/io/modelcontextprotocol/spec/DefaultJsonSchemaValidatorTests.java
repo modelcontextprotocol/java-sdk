@@ -1,7 +1,7 @@
 /*
  * Copyright 2024-2024 the original author or authors.
  */
-package io.modelcontextprotocol.server;
+package io.modelcontextprotocol.spec;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -26,7 +26,8 @@ import org.mockito.MockitoAnnotations;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.modelcontextprotocol.server.JsonSchemaValidator.ValidationResponse;
+import io.modelcontextprotocol.spec.DefaultJsonSchemaValidator;
+import io.modelcontextprotocol.spec.JsonSchemaValidator.ValidationResponse;
 
 /**
  * Tests for {@link DefaultJsonSchemaValidator}.
