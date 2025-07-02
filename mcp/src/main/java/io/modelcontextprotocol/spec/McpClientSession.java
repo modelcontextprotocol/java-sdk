@@ -6,6 +6,7 @@ package io.modelcontextprotocol.spec;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.util.Assert;
+import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -16,6 +17,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 
 /**
  * Default implementation of the MCP (Model Context Protocol) session that manages
@@ -99,9 +101,27 @@ public class McpClientSession implements McpSession {
 	 * @param transport Transport implementation for message exchange
 	 * @param requestHandlers Map of method names to request handlers
 	 * @param notificationHandlers Map of method names to notification handlers
+	 * @deprecated Use
+	 * {@link #McpClientSession(Duration, McpClientTransport, Map, Map, Function)}
 	 */
+	@Deprecated
 	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
 			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
+		this(requestTimeout, transport, requestHandlers, notificationHandlers, Function.identity());
+	}
+
+	/**
+	 * Creates a new McpClientSession with the specified configuration and handlers.
+	 * @param requestTimeout Duration to wait for responses
+	 * @param transport Transport implementation for message exchange
+	 * @param requestHandlers Map of method names to request handlers
+	 * @param notificationHandlers Map of method names to notification handlers
+	 * @param connectHook Hook that allows transforming the connection Publisher prior to
+	 * subscribing
+	 */
+	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
+			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers,
+			Function<? super Mono<Void>, ? extends Publisher<Void>> connectHook) {
 
 		Assert.notNull(requestTimeout, "The requestTimeout can not be null");
 		Assert.notNull(transport, "The transport can not be null");
@@ -113,7 +133,7 @@ public class McpClientSession implements McpSession {
 		this.requestHandlers.putAll(requestHandlers);
 		this.notificationHandlers.putAll(notificationHandlers);
 
-		this.transport.connect(mono -> mono.doOnNext(this::handle)).subscribe();
+		this.transport.connect(mono -> mono.doOnNext(this::handle)).transform(connectHook).subscribe();
 	}
 
 	private void dismissPendingResponses() {
@@ -229,27 +249,27 @@ public class McpClientSession implements McpSession {
 	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {
 		String requestId = this.generateRequestId();
 
-		return Mono.deferContextual(ctx -> Mono.<McpSchema.JSONRPCResponse>create(sink -> {
+		return Mono.deferContextual(ctx -> Mono.<McpSchema.JSONRPCResponse>create(pendingResponseSink -> {
 			logger.debug("Sending message for method {}", method);
-			this.pendingResponses.put(requestId, sink);
+			this.pendingResponses.put(requestId, pendingResponseSink);
 			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, method,
 					requestId, requestParams);
 			this.transport.sendMessage(jsonrpcRequest).contextWrite(ctx).subscribe(v -> {
 			}, error -> {
 				this.pendingResponses.remove(requestId);
-				sink.error(error);
+				pendingResponseSink.error(error);
 			});
-		})).timeout(this.requestTimeout).handle((jsonRpcResponse, sink) -> {
+		})).timeout(this.requestTimeout).handle((jsonRpcResponse, deliveredResponseSink) -> {
 			if (jsonRpcResponse.error() != null) {
 				logger.error("Error handling request: {}", jsonRpcResponse.error());
-				sink.error(new McpError(jsonRpcResponse.error()));
+				deliveredResponseSink.error(new McpError(jsonRpcResponse.error()));
 			}
 			else {
 				if (typeRef.getType().equals(Void.class)) {
-					sink.complete();
+					deliveredResponseSink.complete();
 				}
 				else {
-					sink.next(this.transport.unmarshalFrom(jsonRpcResponse.result(), typeRef));
+					deliveredResponseSink.next(this.transport.unmarshalFrom(jsonRpcResponse.result(), typeRef));
 				}
 			}
 		});

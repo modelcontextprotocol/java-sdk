@@ -194,6 +194,18 @@ public abstract class AbstractMcpAsyncServerTests {
 	}
 
 	@Test
+	void testNotifyResourcesUpdated() {
+		var mcpAsyncServer = McpServer.async(createMcpTransportProvider()).serverInfo("test-server", "1.0.0").build();
+
+		StepVerifier
+			.create(mcpAsyncServer
+				.notifyResourcesUpdated(new McpSchema.ResourcesUpdatedNotification(TEST_RESOURCE_URI)))
+			.verifyComplete();
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
 	void testAddResource() {
 		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")

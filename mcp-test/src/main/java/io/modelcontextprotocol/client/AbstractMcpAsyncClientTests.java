@@ -4,7 +4,14 @@
 
 package io.modelcontextprotocol.client;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -13,9 +20,16 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.BlobResourceContents;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
@@ -24,27 +38,18 @@ import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
 import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.spec.McpSchema.Prompt;
+import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
 import io.modelcontextprotocol.spec.McpSchema.Resource;
+import io.modelcontextprotocol.spec.McpSchema.ResourceContents;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpSchema.SubscribeRequest;
+import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpSchema.UnsubscribeRequest;
 import io.modelcontextprotocol.spec.McpTransport;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.fail;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * Test suite for the {@link McpAsyncClient} that can be used with different
@@ -144,19 +149,48 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListToolsWithoutInitialization() {
-		verifyCallSucceedsWithImplicitInitialization(client -> client.listTools(null), "listing tools");
+		verifyCallSucceedsWithImplicitInitialization(client -> client.listTools(McpSchema.FIRST_PAGE), "listing tools");
 	}
 
 	@Test
 	void testListTools() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listTools(null)))
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listTools(McpSchema.FIRST_PAGE)))
 				.consumeNextWith(result -> {
 					assertThat(result.tools()).isNotNull().isNotEmpty();
 
 					Tool firstTool = result.tools().get(0);
 					assertThat(firstTool.name()).isNotNull();
 					assertThat(firstTool.description()).isNotNull();
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllTools() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listTools()))
+				.consumeNextWith(result -> {
+					assertThat(result.tools()).isNotNull().isNotEmpty();
+
+					Tool firstTool = result.tools().get(0);
+					assertThat(firstTool.name()).isNotNull();
+					assertThat(firstTool.description()).isNotNull();
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllToolsReturnsImmutableList() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listTools()))
+				.consumeNextWith(result -> {
+					assertThat(result.tools()).isNotNull();
+					// Verify that the returned list is immutable
+					assertThatThrownBy(() -> result.tools().add(new Tool("test", "test", "{\"type\":\"object\"}")))
+						.isInstanceOf(UnsupportedOperationException.class);
 				})
 				.verifyComplete();
 		});
@@ -271,13 +305,14 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListResourcesWithoutInitialization() {
-		verifyCallSucceedsWithImplicitInitialization(client -> client.listResources(null), "listing resources");
+		verifyCallSucceedsWithImplicitInitialization(client -> client.listResources(McpSchema.FIRST_PAGE),
+				"listing resources");
 	}
 
 	@Test
 	void testListResources() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResources(null)))
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResources(McpSchema.FIRST_PAGE)))
 				.consumeNextWith(resources -> {
 					assertThat(resources).isNotNull().satisfies(result -> {
 						assertThat(result.resources()).isNotNull();
@@ -294,6 +329,40 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	@Test
+	void testListAllResources() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResources()))
+				.consumeNextWith(resources -> {
+					assertThat(resources).isNotNull().satisfies(result -> {
+						assertThat(result.resources()).isNotNull();
+
+						if (!result.resources().isEmpty()) {
+							Resource firstResource = result.resources().get(0);
+							assertThat(firstResource.uri()).isNotNull();
+							assertThat(firstResource.name()).isNotNull();
+						}
+					});
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllResourcesReturnsImmutableList() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResources()))
+				.consumeNextWith(result -> {
+					assertThat(result.resources()).isNotNull();
+					// Verify that the returned list is immutable
+					assertThatThrownBy(
+							() -> result.resources().add(Resource.builder().uri("test://uri").name("test").build()))
+						.isInstanceOf(UnsupportedOperationException.class);
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
 	void testMcpAsyncClientState() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			assertThat(mcpAsyncClient).isNotNull();
@@ -302,13 +371,14 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testListPromptsWithoutInitialization() {
-		verifyCallSucceedsWithImplicitInitialization(client -> client.listPrompts(null), "listing " + "prompts");
+		verifyCallSucceedsWithImplicitInitialization(client -> client.listPrompts(McpSchema.FIRST_PAGE),
+				"listing " + "prompts");
 	}
 
 	@Test
 	void testListPrompts() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listPrompts(null)))
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listPrompts(McpSchema.FIRST_PAGE)))
 				.consumeNextWith(prompts -> {
 					assertThat(prompts).isNotNull().satisfies(result -> {
 						assertThat(result.prompts()).isNotNull();
@@ -319,6 +389,39 @@ public abstract class AbstractMcpAsyncClientTests {
 							assertThat(firstPrompt.description()).isNotNull();
 						}
 					});
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllPrompts() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listPrompts()))
+				.consumeNextWith(prompts -> {
+					assertThat(prompts).isNotNull().satisfies(result -> {
+						assertThat(result.prompts()).isNotNull();
+
+						if (!result.prompts().isEmpty()) {
+							Prompt firstPrompt = result.prompts().get(0);
+							assertThat(firstPrompt.name()).isNotNull();
+							assertThat(firstPrompt.description()).isNotNull();
+						}
+					});
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllPromptsReturnsImmutableList() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listPrompts()))
+				.consumeNextWith(result -> {
+					assertThat(result.prompts()).isNotNull();
+					// Verify that the returned list is immutable
+					assertThatThrownBy(() -> result.prompts().add(new Prompt("test", "test", null)))
+						.isInstanceOf(UnsupportedOperationException.class);
 				})
 				.verifyComplete();
 		});
@@ -406,34 +509,103 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	@Test
-	@Disabled
 	void testReadResource() {
-		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.create(mcpAsyncClient.listResources()).consumeNextWith(resources -> {
-				if (!resources.resources().isEmpty()) {
-					Resource firstResource = resources.resources().get(0);
-					StepVerifier.create(mcpAsyncClient.readResource(firstResource)).consumeNextWith(result -> {
-						assertThat(result).isNotNull();
-						assertThat(result.contents()).isNotNull();
-					}).verifyComplete();
+		withClient(createMcpTransport(), client -> {
+			Flux<McpSchema.ReadResourceResult> resources = client.initialize()
+				.then(client.listResources(null))
+				.flatMapMany(r -> Flux.fromIterable(r.resources()))
+				.flatMap(r -> client.readResource(r));
+
+			StepVerifier.create(resources).recordWith(ArrayList::new).consumeRecordedWith(readResourceResults -> {
+
+				for (ReadResourceResult result : readResourceResults) {
+
+					assertThat(result).isNotNull();
+					assertThat(result.contents()).isNotNull().isNotEmpty();
+
+					// Validate each content item
+					for (ResourceContents content : result.contents()) {
+						assertThat(content).isNotNull();
+						assertThat(content.uri()).isNotNull().isNotEmpty();
+						assertThat(content.mimeType()).isNotNull().isNotEmpty();
+
+						// Validate content based on its type with more comprehensive
+						// checks
+						switch (content.mimeType()) {
+							case "text/plain" -> {
+								TextResourceContents textContent = assertInstanceOf(TextResourceContents.class,
+										content);
+								assertThat(textContent.text()).isNotNull().isNotEmpty();
+								assertThat(textContent.uri()).isNotEmpty();
+							}
+							case "application/octet-stream" -> {
+								BlobResourceContents blobContent = assertInstanceOf(BlobResourceContents.class,
+										content);
+								assertThat(blobContent.blob()).isNotNull().isNotEmpty();
+								assertThat(blobContent.uri()).isNotNull().isNotEmpty();
+								// Validate base64 encoding format
+								assertThat(blobContent.blob()).matches("^[A-Za-z0-9+/]*={0,2}$");
+							}
+							default -> {
+
+								// Still validate basic properties
+								if (content instanceof TextResourceContents textContent) {
+									assertThat(textContent.text()).isNotNull();
+								}
+								else if (content instanceof BlobResourceContents blobContent) {
+									assertThat(blobContent.blob()).isNotNull();
+								}
+							}
+						}
+					}
 				}
-			}).verifyComplete();
+			})
+				.expectNextCount(10) // Expect 10 elements
+				.verifyComplete();
 		});
 	}
 
 	@Test
 	void testListResourceTemplatesWithoutInitialization() {
-		verifyCallSucceedsWithImplicitInitialization(client -> client.listResourceTemplates(),
+		verifyCallSucceedsWithImplicitInitialization(client -> client.listResourceTemplates(McpSchema.FIRST_PAGE),
 				"listing resource templates");
 	}
 
 	@Test
 	void testListResourceTemplates() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier
+				.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResourceTemplates(McpSchema.FIRST_PAGE)))
+				.consumeNextWith(result -> {
+					assertThat(result).isNotNull();
+					assertThat(result.resourceTemplates()).isNotNull();
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllResourceTemplates() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResourceTemplates()))
 				.consumeNextWith(result -> {
 					assertThat(result).isNotNull();
 					assertThat(result.resourceTemplates()).isNotNull();
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllResourceTemplatesReturnsImmutableList() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResourceTemplates()))
+				.consumeNextWith(result -> {
+					assertThat(result.resourceTemplates()).isNotNull();
+					// Verify that the returned list is immutable
+					assertThatThrownBy(() -> result.resourceTemplates()
+						.add(new McpSchema.ResourceTemplate("test://template", "test", null, null, null)))
+						.isInstanceOf(UnsupportedOperationException.class);
 				})
 				.verifyComplete();
 		});

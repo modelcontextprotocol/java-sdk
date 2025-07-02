@@ -4,6 +4,9 @@
 
 package io.modelcontextprotocol.server;
 
+import java.util.ArrayList;
+import java.util.Collections;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -37,6 +40,9 @@ public class McpAsyncServerExchange {
 	};
 
 	private static final TypeReference<McpSchema.ElicitResult> ELICITATION_RESULT_TYPE_REF = new TypeReference<>() {
+	};
+
+	public static final TypeReference<Object> OBJECT_TYPE_REF = new TypeReference<>() {
 	};
 
 	/**
@@ -126,7 +132,19 @@ public class McpAsyncServerExchange {
 	 * @return A Mono that emits the list of roots result.
 	 */
 	public Mono<McpSchema.ListRootsResult> listRoots() {
-		return this.listRoots(null);
+
+		// @formatter:off
+		return this.listRoots(McpSchema.FIRST_PAGE)
+			.expand(result -> (result.nextCursor() != null) ?
+					this.listRoots(result.nextCursor()) : Mono.empty())
+			.reduce(new McpSchema.ListRootsResult(new ArrayList<>(), null),
+				(allRootsResult, result) -> {
+					allRootsResult.roots().addAll(result.roots());
+					return allRootsResult;
+				})
+			.map(result -> new McpSchema.ListRootsResult(Collections.unmodifiableList(result.roots()),
+					result.nextCursor()));
+		// @formatter:on
 	}
 
 	/**
@@ -140,8 +158,8 @@ public class McpAsyncServerExchange {
 	}
 
 	/**
-	 * Send a logging message notification to all connected clients. Messages below the
-	 * current minimum logging level will be filtered out.
+	 * Send a logging message notification to the client. Messages below the current
+	 * minimum logging level will be filtered out.
 	 * @param loggingMessageNotification The logging message to send
 	 * @return A Mono that completes when the notification has been sent
 	 */
@@ -157,6 +175,14 @@ public class McpAsyncServerExchange {
 			}
 			return Mono.empty();
 		});
+	}
+
+	/**
+	 * Sends a ping request to the client.
+	 * @return A Mono that completes with clients's ping response
+	 */
+	public Mono<Object> ping() {
+		return this.session.sendRequest(McpSchema.METHOD_PING, null, OBJECT_TYPE_REF);
 	}
 
 	/**
