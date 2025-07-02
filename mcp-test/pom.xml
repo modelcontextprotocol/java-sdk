@@ -11,7 +11,7 @@
 	<artifactId>mcp-test</artifactId>
 	<packaging>jar</packaging>
 	<name>Tests for the Java MCP SDK</name>
-	<description>Provides some shared test fasilities for the MCP Java SDK</description>
+	<description>Provides some shared test facilities for the MCP Java SDK</description>
 	<url>https://github.com/modelcontextprotocol/java-sdk</url>
 
 	<scm>
