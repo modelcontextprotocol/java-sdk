@@ -10,5 +10,7 @@ import java.lang.annotation.Target;
 public @interface ToolResult {
 
 	String description() default "";
+	
+	boolean required() default true;
 
 }

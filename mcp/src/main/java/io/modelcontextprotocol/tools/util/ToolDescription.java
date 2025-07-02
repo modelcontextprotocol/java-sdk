@@ -1,5 +1,6 @@
 package io.modelcontextprotocol.tools.util;
 
+import java.io.Serializable;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.Collections;
@@ -12,7 +13,7 @@ import io.modelcontextprotocol.tools.annotation.Tool;
 import io.modelcontextprotocol.tools.annotation.ToolAnnotations;
 
 public record ToolDescription(String name, String description, List<ToolParamDescription> toolParamDescriptions,
-		ToolResultDescription resultDescription, ToolAnnotationsDescription toolAnnotationsDescription) {
+		ToolResultDescription resultDescription, ToolAnnotationsDescription toolAnnotationsDescription) implements Serializable {
 
 	public static List<ToolDescription> fromClass(Class<?> clazz) {
 		return Arrays.asList(clazz.getMethods()).stream().map(m -> {

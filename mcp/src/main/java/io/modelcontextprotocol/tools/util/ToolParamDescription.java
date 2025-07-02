@@ -1,5 +1,6 @@
 package io.modelcontextprotocol.tools.util;
 
+import java.io.Serializable;
 import java.lang.reflect.Parameter;
 import java.util.Arrays;
 import java.util.Collections;
@@ -9,7 +10,7 @@ import java.util.stream.Collectors;
 
 import io.modelcontextprotocol.tools.annotation.ToolParam;
 
-public record ToolParamDescription(String name, String description, boolean required, Parameter parameter) {
+public record ToolParamDescription(String name, String description, boolean required) implements Serializable {
 
 	public static List<ToolParamDescription> fromParameters(Parameter[] parameters) {
 		return parameters != null ? Arrays.asList(parameters).stream().map(p -> {
@@ -19,7 +20,7 @@ public record ToolParamDescription(String name, String description, boolean requ
 				if ("".equals(name)) {
 					name = p.getName();
 				}
-				return new ToolParamDescription(name, tp.description(), tp.required(), p);
+				return new ToolParamDescription(name, tp.description(), tp.required());
 			}
 			return null;
 		}).filter(Objects::nonNull).collect(Collectors.toList()) : Collections.emptyList();

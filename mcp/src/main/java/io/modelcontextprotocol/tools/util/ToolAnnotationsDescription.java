@@ -1,5 +1,7 @@
 package io.modelcontextprotocol.tools.util;
 
+import java.io.Serializable;
+
 import io.modelcontextprotocol.tools.annotation.ToolAnnotations;
 
 /**
@@ -8,7 +10,7 @@ import io.modelcontextprotocol.tools.annotation.ToolAnnotations;
  * "https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/schema/draft/schema.json#L2164">here</a>
  */
 public record ToolAnnotationsDescription(boolean destructiveHint, boolean idempotentHint, boolean openWorldHint,
-		boolean readOnlyHint, String title) {
+		boolean readOnlyHint, String title) implements Serializable {
 
 	public static ToolAnnotationsDescription fromAnnotations(ToolAnnotations annotations) {
 		if (annotations != null) {
