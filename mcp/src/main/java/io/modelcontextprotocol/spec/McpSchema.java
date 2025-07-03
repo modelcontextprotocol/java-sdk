@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
  *
  * @author Christian Tzolov
  * @author Luca Chang
+ * @author Surbhi Bansal
  */
 public final class McpSchema {
 
@@ -451,7 +452,12 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Implementation(// @formatter:off
                 @JsonProperty("name") String name,
-                @JsonProperty("version") String version) {
+				@JsonProperty("title") String title,
+                @JsonProperty("version") String version) implements BaseMetadata {
+					
+				public Implementation(String name, String version) {
+					this(name, null, version);
+				}
         } // @formatter:on
 
 	// Existing Enums and Base Types (from previous implementation)
@@ -499,11 +505,9 @@ public final class McpSchema {
 	 * interface is implemented by both {@link Resource} and {@link ResourceLink} to
 	 * provide a consistent way to access resource metadata.
 	 */
-	public interface ResourceContent {
+	public interface ResourceContent extends BaseMetadata {
 
 		String uri();
-
-		String name();
 
 		String description();
 
@@ -512,6 +516,28 @@ public final class McpSchema {
 		Long size();
 
 		Annotations annotations();
+
+	}
+
+	/**
+	 * Base interface for metadata with name (identifier) and title (display name)
+	 * properties.
+	 */
+	public interface BaseMetadata {
+
+		/**
+		 * Intended for programmatic or logical use, but used as a display name in past
+		 * specs or fallback (if title isn't present).
+		 */
+		String name();
+
+		/**
+		 * Intended for UI and end-user contexts — optimized to be human-readable and
+		 * easily understood, even by those unfamiliar with domain-specific terminology.
+		 *
+		 * If not provided, the name should be used for display.
+		 */
+		String title();
 
 	}
 
@@ -536,6 +562,7 @@ public final class McpSchema {
 	public record Resource( // @formatter:off
                 @JsonProperty("uri") String uri,
                 @JsonProperty("name") String name,
+				@JsonProperty("title") String title,
                 @JsonProperty("description") String description,
                 @JsonProperty("mimeType") String mimeType,
                 @JsonProperty("size") Long size,
@@ -547,7 +574,7 @@ public final class McpSchema {
                  */
                 @Deprecated
                 public Resource(String uri, String name, String description, String mimeType, Annotations annotations) {
-                        this(uri, name, description, mimeType, null, annotations);
+                        this(uri, name, null, description, mimeType, null, annotations);
                 }
 
                 public static Builder builder() {
@@ -557,6 +584,7 @@ public final class McpSchema {
                 public static class Builder {
                         private String uri;
                         private String name;
+						private String title;
                         private String description;
                         private String mimeType;
                         private Long size;
@@ -571,6 +599,11 @@ public final class McpSchema {
                                 this.name = name;
                                 return this;
                         }
+
+						public Builder title(String title) {
+								this.title = title;
+								return this;
+						}
 
                         public Builder description(String description) {
                                 this.description = description;
@@ -596,7 +629,7 @@ public final class McpSchema {
                                 Assert.hasText(uri, "uri must not be empty");
                                 Assert.hasText(name, "name must not be empty");
 
-                                return new Resource(uri, name, description, mimeType, size, annotations);
+                                return new Resource(uri, name, title, description, mimeType, size, annotations);
                         }
                 }
         } // @formatter:on
@@ -622,9 +655,10 @@ public final class McpSchema {
 	public record ResourceTemplate( // @formatter:off
                 @JsonProperty("uriTemplate") String uriTemplate,
                 @JsonProperty("name") String name,
+				@JsonProperty("title") String title,
                 @JsonProperty("description") String description,
                 @JsonProperty("mimeType") String mimeType,
-                @JsonProperty("annotations") Annotations annotations) implements Annotated {
+                @JsonProperty("annotations") Annotations annotations) implements Annotated, BaseMetadata {
         } // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -746,8 +780,9 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Prompt( // @formatter:off
                 @JsonProperty("name") String name,
+				@JsonProperty("title") String title,
                 @JsonProperty("description") String description,
-                @JsonProperty("arguments") List<PromptArgument> arguments) {
+                @JsonProperty("arguments") List<PromptArgument> arguments) implements BaseMetadata {
         } // @formatter:on
 
 	/**
@@ -761,8 +796,9 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record PromptArgument( // @formatter:off
                 @JsonProperty("name") String name,
+				@JsonProperty("title") String title,
                 @JsonProperty("description") String description,
-                @JsonProperty("required") Boolean required) {
+                @JsonProperty("required") Boolean required) implements BaseMetadata {
         }// @formatter:on
 
 	/**
@@ -883,16 +919,60 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Tool( // @formatter:off
 				@JsonProperty("name") String name,
+				@JsonProperty("title") String title,
 				@JsonProperty("description") String description,
 				@JsonProperty("inputSchema") JsonSchema inputSchema,
-				@JsonProperty("annotations") ToolAnnotations annotations) {
+				@JsonProperty("annotations") ToolAnnotations annotations) implements BaseMetadata {
 
                 public Tool(String name, String description, String schema) {
-                        this(name, description, parseSchema(schema), null);
+                        this(name, null, description, parseSchema(schema), null);
                 }
 
                 public Tool(String name, String description, String schema, ToolAnnotations annotations) {
-                        this(name, description, parseSchema(schema), annotations);
+                        this(name, null, description, parseSchema(schema), annotations);
+                }
+
+				public static Builder builder() {
+                        return new Builder();
+                }
+
+                public static class Builder {
+                        private String name;
+						private String title;
+                        private String description;
+                        private JsonSchema inputSchema;
+                        private ToolAnnotations annotations;
+
+                        public Builder name(String name) {
+                                this.name = name;
+                                return this;
+                        }
+
+						public Builder title(String title) {
+								this.title = title;
+								return this;
+						}
+
+                        public Builder description(String description) {
+                                this.description = description;
+                                return this;
+                        }
+
+						public Builder inputSchema(JsonSchema inputSchema) {
+								this.inputSchema = inputSchema;
+								return this;
+						}
+
+                        public Builder annotations(ToolAnnotations annotations) {
+                                this.annotations = annotations;
+                                return this;
+                        }
+
+                        public Tool build() {
+                                Assert.hasText(name, "name must not be empty");
+
+                                return new Tool(name, title, description, inputSchema, annotations);
+                        }
                 }
 
         } // @formatter:on
@@ -1579,10 +1659,11 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record PromptReference(// @formatter:off
                 @JsonProperty("type") String type,
-                @JsonProperty("name") String name) implements McpSchema.CompleteReference {
+                @JsonProperty("name") String name,
+				@JsonProperty("title") String title ) implements McpSchema.CompleteReference, BaseMetadata {
 
                 public PromptReference(String name) {
-                        this("ref/prompt", name);
+                        this("ref/prompt", name, null);
                 }
 
                 @Override
@@ -1794,6 +1875,7 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ResourceLink( // @formatter:off
                 @JsonProperty("name") String name,
+				@JsonProperty("title") String title,
                 @JsonProperty("uri") String uri,
                 @JsonProperty("description") String description,
                 @JsonProperty("mimeType") String mimeType,
@@ -1808,6 +1890,8 @@ public final class McpSchema {
 
 			private String name;
 
+			private String title;
+
 			private String uri;
 
 			private String description;
@@ -1820,6 +1904,11 @@ public final class McpSchema {
 
 			public Builder name(String name) {
 				this.name = name;
+				return this;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
 				return this;
 			}
 
@@ -1852,7 +1941,7 @@ public final class McpSchema {
 				Assert.hasText(uri, "uri must not be empty");
 				Assert.hasText(name, "name must not be empty");
 
-				return new ResourceLink(name, uri, description, mimeType, size, annotations);
+				return new ResourceLink(name, title, uri, description, mimeType, size, annotations);
 			}
 
 		}

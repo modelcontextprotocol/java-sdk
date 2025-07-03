@@ -207,8 +207,8 @@ public class McpSchemaTests {
 
 	@Test
 	void testResourceLink() throws Exception {
-		McpSchema.ResourceLink resourceLink = new McpSchema.ResourceLink("main.rs", "file:///project/src/main.rs",
-				"Primary application entry point", "text/x-rust", null, null);
+		McpSchema.ResourceLink resourceLink = new McpSchema.ResourceLink("main.rs", "Main file",
+				"file:///project/src/main.rs", "Primary application entry point", "text/x-rust", null, null);
 		String value = mapper.writeValueAsString(resourceLink);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -216,7 +216,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"type":"resource_link","name":"main.rs","uri":"file:///project/src/main.rs","description":"Primary application entry point","mimeType":"text/x-rust"}"""));
+							{"type":"resource_link","name":"main.rs","title":"Main file","uri":"file:///project/src/main.rs","description":"Primary application entry point","mimeType":"text/x-rust"}"""));
 	}
 
 	@Test
@@ -419,7 +419,7 @@ public class McpSchemaTests {
 		McpSchema.Annotations annotations = new McpSchema.Annotations(Arrays.asList(McpSchema.Role.USER), 0.5);
 
 		McpSchema.ResourceTemplate template = new McpSchema.ResourceTemplate("resource://{param}/test", "Test Template",
-				"A test resource template", "text/plain", annotations);
+				"Test Template", "A test resource template", "text/plain", annotations);
 
 		String value = mapper.writeValueAsString(template);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -427,7 +427,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"uriTemplate":"resource://{param}/test","name":"Test Template","description":"A test resource template","mimeType":"text/plain","annotations":{"audience":["user"],"priority":0.5}}"""));
+							{"uriTemplate":"resource://{param}/test","name":"Test Template","title":"Test Template","description":"A test resource template","mimeType":"text/plain","annotations":{"audience":["user"],"priority":0.5}}"""));
 	}
 
 	@Test
@@ -453,10 +453,10 @@ public class McpSchemaTests {
 	@Test
 	void testListResourceTemplatesResult() throws Exception {
 		McpSchema.ResourceTemplate template1 = new McpSchema.ResourceTemplate("resource://{param}/test1",
-				"Test Template 1", "First test template", "text/plain", null);
+				"Test Template 1", "Test Template 1", "First test template", "text/plain", null);
 
 		McpSchema.ResourceTemplate template2 = new McpSchema.ResourceTemplate("resource://{param}/test2",
-				"Test Template 2", "Second test template", "application/json", null);
+				"Test Template 2", "Test Template 2", "Second test template", "application/json", null);
 
 		McpSchema.ListResourceTemplatesResult result = new McpSchema.ListResourceTemplatesResult(
 				Arrays.asList(template1, template2), "next-cursor");
@@ -467,7 +467,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"resourceTemplates":[{"uriTemplate":"resource://{param}/test1","name":"Test Template 1","description":"First test template","mimeType":"text/plain"},{"uriTemplate":"resource://{param}/test2","name":"Test Template 2","description":"Second test template","mimeType":"application/json"}],"nextCursor":"next-cursor"}"""));
+							{"resourceTemplates":[{"uriTemplate":"resource://{param}/test1","name":"Test Template 1","title":"Test Template 1","description":"First test template","mimeType":"text/plain"},{"uriTemplate":"resource://{param}/test2","name":"Test Template 2","title":"Test Template 2","description":"Second test template","mimeType":"application/json"}],"nextCursor":"next-cursor"}"""));
 	}
 
 	@Test
@@ -535,11 +535,13 @@ public class McpSchemaTests {
 
 	@Test
 	void testPrompt() throws Exception {
-		McpSchema.PromptArgument arg1 = new McpSchema.PromptArgument("arg1", "First argument", true);
+		McpSchema.PromptArgument arg1 = new McpSchema.PromptArgument("arg1", "First argument", "First argument", true);
 
-		McpSchema.PromptArgument arg2 = new McpSchema.PromptArgument("arg2", "Second argument", false);
+		McpSchema.PromptArgument arg2 = new McpSchema.PromptArgument("arg2", "Second argument", "Second argument",
+				false);
 
-		McpSchema.Prompt prompt = new McpSchema.Prompt("test-prompt", "A test prompt", Arrays.asList(arg1, arg2));
+		McpSchema.Prompt prompt = new McpSchema.Prompt("test-prompt", "Test Prompt", "A test prompt",
+				Arrays.asList(arg1, arg2));
 
 		String value = mapper.writeValueAsString(prompt);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -547,7 +549,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"name":"test-prompt","description":"A test prompt","arguments":[{"name":"arg1","description":"First argument","required":true},{"name":"arg2","description":"Second argument","required":false}]}"""));
+							{"name":"test-prompt","title":"Test Prompt","description":"A test prompt","arguments":[{"name":"arg1","title":"First argument","description":"First argument","required":true},{"name":"arg2","title":"Second argument","description":"Second argument","required":false}]}"""));
 	}
 
 	@Test
@@ -566,11 +568,13 @@ public class McpSchemaTests {
 
 	@Test
 	void testListPromptsResult() throws Exception {
-		McpSchema.PromptArgument arg = new McpSchema.PromptArgument("arg", "An argument", true);
+		McpSchema.PromptArgument arg = new McpSchema.PromptArgument("arg", "Argument", "An argument", true);
 
-		McpSchema.Prompt prompt1 = new McpSchema.Prompt("prompt1", "First prompt", Collections.singletonList(arg));
+		McpSchema.Prompt prompt1 = new McpSchema.Prompt("prompt1", "First prompt", "First prompt",
+				Collections.singletonList(arg));
 
-		McpSchema.Prompt prompt2 = new McpSchema.Prompt("prompt2", "Second prompt", Collections.emptyList());
+		McpSchema.Prompt prompt2 = new McpSchema.Prompt("prompt2", "Second prompt", "Second prompt",
+				Collections.emptyList());
 
 		McpSchema.ListPromptsResult result = new McpSchema.ListPromptsResult(Arrays.asList(prompt1, prompt2),
 				"next-cursor");
@@ -581,7 +585,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"prompts":[{"name":"prompt1","description":"First prompt","arguments":[{"name":"arg","description":"An argument","required":true}]},{"name":"prompt2","description":"Second prompt","arguments":[]}],"nextCursor":"next-cursor"}"""));
+							{"prompts":[{"name":"prompt1","title":"First prompt","description":"First prompt","arguments":[{"name":"arg","title":"Argument","description":"An argument","required":true}]},{"name":"prompt2","title":"Second prompt","description":"Second prompt","arguments":[]}],"nextCursor":"next-cursor"}"""));
 	}
 
 	@Test

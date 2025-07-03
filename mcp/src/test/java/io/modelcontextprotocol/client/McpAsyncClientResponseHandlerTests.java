@@ -251,8 +251,8 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Create a mock prompts list that the server will return
-		McpSchema.Prompt mockPrompt = new McpSchema.Prompt("test-prompt", "Test Prompt Description",
-				List.of(new McpSchema.PromptArgument("arg1", "Test argument", true)));
+		McpSchema.Prompt mockPrompt = new McpSchema.Prompt("test-prompt", "Test Prompt", "Test Prompt Description",
+				List.of(new McpSchema.PromptArgument("arg1", "Test argument", "Test argument", true)));
 		McpSchema.ListPromptsResult mockPromptsResult = new McpSchema.ListPromptsResult(List.of(mockPrompt), null);
 
 		// Simulate server sending prompts/list_changed notification
