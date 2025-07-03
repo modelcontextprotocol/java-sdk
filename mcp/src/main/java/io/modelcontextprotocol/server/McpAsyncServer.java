@@ -88,11 +88,15 @@ public class McpAsyncServer {
 
 	private final McpSchema.ServerCapabilities serverCapabilities;
 
+	private final boolean isStreamableHttp;
+
 	private final McpSchema.Implementation serverInfo;
 
 	private final String instructions;
 
 	private final CopyOnWriteArrayList<McpServerFeatures.AsyncToolSpecification> tools = new CopyOnWriteArrayList<>();
+
+	private final CopyOnWriteArrayList<McpServerFeatures.AsyncStreamingToolSpecification> streamTools = new CopyOnWriteArrayList<>();
 
 	private final CopyOnWriteArrayList<McpSchema.ResourceTemplate> resourceTemplates = new CopyOnWriteArrayList<>();
 
@@ -119,7 +123,7 @@ public class McpAsyncServer {
 	 */
 	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
-			McpUriTemplateManagerFactory uriTemplateManagerFactory) {
+			McpUriTemplateManagerFactory uriTemplateManagerFactory, boolean isStreamableHttp) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.objectMapper = objectMapper;
 		this.serverInfo = features.serverInfo();
@@ -131,6 +135,7 @@ public class McpAsyncServer {
 		this.prompts.putAll(features.prompts());
 		this.completions.putAll(features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
+		this.isStreamableHttp = isStreamableHttp;
 
 		Map<String, McpServerSession.RequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -183,9 +188,16 @@ public class McpAsyncServer {
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED,
 				asyncRootsListChangedNotificationHandler(rootsChangeConsumers));
 
-		mcpTransportProvider.setSessionFactory(
-				transport -> new McpServerSession(UUID.randomUUID().toString(), requestTimeout, transport,
-						this::asyncInitializeRequestHandler, Mono::empty, requestHandlers, notificationHandlers));
+		mcpTransportProvider.setSessionFactory(listeningTransport -> new McpServerSession(UUID.randomUUID().toString(),
+				requestTimeout, listeningTransport, this::asyncInitializeRequestHandler, Mono::empty, requestHandlers,
+				notificationHandlers));
+	}
+
+	// Alternate constructor for HTTP+SSE servers (past spec)
+	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
+			McpServerFeatures.Async features, Duration requestTimeout,
+			McpUriTemplateManagerFactory uriTemplateManagerFactory) {
+		this(mcpTransportProvider, objectMapper, features, requestTimeout, uriTemplateManagerFactory, false);
 	}
 
 	// ---------------------------------------
@@ -214,7 +226,6 @@ public class McpAsyncServer {
 						"Client requested unsupported protocol version: {}, so the server will suggest the {} version instead",
 						initializeRequest.protocolVersion(), serverProtocolVersion);
 			}
-
 			return Mono.just(new McpSchema.InitializeResult(serverProtocolVersion, this.serverCapabilities,
 					this.serverInfo, this.instructions));
 		});
@@ -331,6 +342,69 @@ public class McpAsyncServer {
 	}
 
 	/**
+	 * Add a new tool specification at runtime.
+	 * @param toolSpecification The tool specification to add
+	 * @return Mono that completes when clients have been notified of the change
+	 */
+	public Mono<Void> addStreamTool(McpServerFeatures.AsyncStreamingToolSpecification toolSpecification) {
+		if (toolSpecification == null) {
+			return Mono.error(new McpError("Tool specification must not be null"));
+		}
+		if (toolSpecification.tool() == null) {
+			return Mono.error(new McpError("Tool must not be null"));
+		}
+		if (toolSpecification.call() == null) {
+			return Mono.error(new McpError("Tool call handler must not be null"));
+		}
+		if (this.serverCapabilities.tools() == null) {
+			return Mono.error(new McpError("Server must be configured with tool capabilities"));
+		}
+
+		return Mono.defer(() -> {
+			// Check for duplicate tool names
+			if (this.streamTools.stream().anyMatch(th -> th.tool().name().equals(toolSpecification.tool().name()))) {
+				return Mono
+					.error(new McpError("Tool with name '" + toolSpecification.tool().name() + "' already exists"));
+			}
+
+			this.streamTools.add(toolSpecification);
+			logger.debug("Added tool handler: {}", toolSpecification.tool().name());
+
+			if (this.serverCapabilities.tools().listChanged()) {
+				return notifyToolsListChanged();
+			}
+			return Mono.empty();
+		});
+	}
+
+	/**
+	 * Remove a tool handler at runtime.
+	 * @param toolName The name of the tool handler to remove
+	 * @return Mono that completes when clients have been notified of the change
+	 */
+	public Mono<Void> removeStreamTool(String toolName) {
+		if (toolName == null) {
+			return Mono.error(new McpError("Tool name must not be null"));
+		}
+		if (this.serverCapabilities.tools() == null) {
+			return Mono.error(new McpError("Server must be configured with tool capabilities"));
+		}
+
+		return Mono.defer(() -> {
+			boolean removed = this.tools
+				.removeIf(toolSpecification -> toolSpecification.tool().name().equals(toolName));
+			if (removed) {
+				logger.debug("Removed tool handler: {}", toolName);
+				if (this.serverCapabilities.tools().listChanged()) {
+					return notifyToolsListChanged();
+				}
+				return Mono.empty();
+			}
+			return Mono.error(new McpError("Tool with name '" + toolName + "' not found"));
+		});
+	}
+
+	/**
 	 * Notifies clients that the list of available tools has changed.
 	 * @return A Mono that completes when all clients have been notified
 	 */
@@ -340,29 +414,97 @@ public class McpAsyncServer {
 
 	private McpServerSession.RequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
 		return (exchange, params) -> {
-			List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList();
+			List<Tool> tools = new ArrayList<>();
+			tools.addAll(this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList());
+			tools.addAll(
+					this.streamTools.stream().map(McpServerFeatures.AsyncStreamingToolSpecification::tool).toList());
 
 			return Mono.just(new McpSchema.ListToolsResult(tools, null));
 		};
 	}
 
 	private McpServerSession.RequestHandler<CallToolResult> toolsCallRequestHandler() {
-		return (exchange, params) -> {
-			McpSchema.CallToolRequest callToolRequest = objectMapper.convertValue(params,
-					new TypeReference<McpSchema.CallToolRequest>() {
-					});
+		if (isStreamableHttp) {
+			return new McpServerSession.StreamingRequestHandler<CallToolResult>() {
+				@Override
+				public Mono<CallToolResult> handle(McpAsyncServerExchange exchange, Object params) {
+					var callToolRequest = objectMapper.convertValue(params, McpSchema.CallToolRequest.class);
 
-			Optional<McpServerFeatures.AsyncToolSpecification> toolSpecification = this.tools.stream()
-				.filter(tr -> callToolRequest.name().equals(tr.tool().name()))
-				.findAny();
+					// Check regular tools first
+					var regularTool = tools.stream()
+						.filter(tool -> callToolRequest.name().equals(tool.tool().name()))
+						.findFirst();
 
-			if (toolSpecification.isEmpty()) {
+					if (regularTool.isPresent()) {
+						return regularTool.get().call().apply(exchange, callToolRequest.arguments());
+					}
+
+					// Check streaming tools (take first result)
+					var streamingTool = streamTools.stream()
+						.filter(tool -> callToolRequest.name().equals(tool.tool().name()))
+						.findFirst();
+
+					if (streamingTool.isPresent()) {
+						return streamingTool.get().call().apply(exchange, callToolRequest.arguments()).next();
+					}
+
+					return Mono.error(new McpError("Tool not found: " + callToolRequest.name()));
+				}
+
+				@Override
+				public Flux<CallToolResult> handleStreaming(McpAsyncServerExchange exchange, Object params) {
+					var callToolRequest = objectMapper.convertValue(params, McpSchema.CallToolRequest.class);
+
+					// Check streaming tools first (preferred for streaming)
+					var streamingTool = streamTools.stream()
+						.filter(tool -> callToolRequest.name().equals(tool.tool().name()))
+						.findFirst();
+
+					if (streamingTool.isPresent()) {
+						return streamingTool.get().call().apply(exchange, callToolRequest.arguments());
+					}
+
+					// Fallback to regular tools (convert Mono to Flux)
+					var regularTool = tools.stream()
+						.filter(tool -> callToolRequest.name().equals(tool.tool().name()))
+						.findFirst();
+
+					if (regularTool.isPresent()) {
+						return regularTool.get().call().apply(exchange, callToolRequest.arguments()).flux();
+					}
+
+					return Flux.error(new McpError("Tool not found: " + callToolRequest.name()));
+				}
+			};
+		}
+		else {
+			return (exchange, params) -> {
+				McpSchema.CallToolRequest callToolRequest = objectMapper.convertValue(params,
+						new TypeReference<McpSchema.CallToolRequest>() {
+						});
+
+				// Check regular tools first
+				Optional<McpServerFeatures.AsyncToolSpecification> toolSpecification = this.tools.stream()
+					.filter(tr -> callToolRequest.name().equals(tr.tool().name()))
+					.findAny();
+
+				if (toolSpecification.isPresent()) {
+					return toolSpecification.get().call().apply(exchange, callToolRequest.arguments());
+				}
+
+				// Check streaming tools (take first result)
+				Optional<McpServerFeatures.AsyncStreamingToolSpecification> streamToolSpecification = this.streamTools
+					.stream()
+					.filter(tr -> callToolRequest.name().equals(tr.tool().name()))
+					.findAny();
+
+				if (streamToolSpecification.isPresent()) {
+					return streamToolSpecification.get().call().apply(exchange, callToolRequest.arguments()).next();
+				}
+
 				return Mono.error(new McpError("Tool not found: " + callToolRequest.name()));
-			}
-
-			return toolSpecification.map(tool -> tool.call().apply(exchange, callToolRequest.arguments()))
-				.orElse(Mono.error(new McpError("Tool not found: " + callToolRequest.name())));
-		};
+			};
+		}
 	}
 
 	// ---------------------------------------

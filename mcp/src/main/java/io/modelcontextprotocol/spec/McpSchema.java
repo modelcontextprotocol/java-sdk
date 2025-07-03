@@ -40,6 +40,7 @@ public final class McpSchema {
 	private McpSchema() {
 	}
 
+	// TODO: Changing this breaks initialization for quite a few tests (fix).
 	public static final String LATEST_PROTOCOL_VERSION = "2024-11-05";
 
 	public static final String JSONRPC_VERSION = "2.0";
@@ -200,7 +201,6 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	// TODO: batching support
 	// @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
 	public record JSONRPCRequest( // @formatter:off
                         @JsonProperty("jsonrpc") String jsonrpc,
@@ -211,7 +211,6 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	// TODO: batching support
 	// @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
 	public record JSONRPCNotification( // @formatter:off
                         @JsonProperty("jsonrpc") String jsonrpc,
@@ -221,7 +220,6 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	// TODO: batching support
 	// @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
 	public record JSONRPCResponse( // @formatter:off
                         @JsonProperty("jsonrpc") String jsonrpc,
