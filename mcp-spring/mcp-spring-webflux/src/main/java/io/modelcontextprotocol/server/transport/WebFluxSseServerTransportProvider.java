@@ -1,6 +1,7 @@
 package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -111,6 +112,11 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	private volatile boolean isClosing = false;
 
 	/**
+	 * DNS rebinding protection configuration.
+	 */
+	private final DnsRebindingProtection dnsRebindingProtection;
+
+	/**
 	 * Constructs a new WebFlux SSE server transport provider instance with the default
 	 * SSE endpoint.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
@@ -118,8 +124,10 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
 	 * messages. This endpoint will be communicated to clients during SSE connection
 	 * setup. Must not be null.
+	 * @deprecated Use {@link #builder()} instead.
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
+	@Deprecated
 	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint) {
 		this(objectMapper, messageEndpoint, DEFAULT_SSE_ENDPOINT);
 	}
@@ -131,10 +139,12 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
 	 * messages. This endpoint will be communicated to clients during SSE connection
 	 * setup. Must not be null.
+	 * @deprecated Use {@link #builder()} instead.
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
+	@Deprecated
 	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
-		this(objectMapper, DEFAULT_BASE_URL, messageEndpoint, sseEndpoint);
+		this(objectMapper, DEFAULT_BASE_URL, messageEndpoint, sseEndpoint, null);
 	}
 
 	/**
@@ -145,10 +155,31 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
 	 * messages. This endpoint will be communicated to clients during SSE connection
 	 * setup. Must not be null.
+	 * @deprecated Use {@link #builder()} instead.
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
+	@Deprecated
 	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint) {
+		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, null);
+	}
+
+	/**
+	 * Constructs a new WebFlux SSE server transport provider instance with optional DNS
+	 * rebinding protection.
+	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
+	 * of MCP messages. Must not be null.
+	 * @param baseUrl webflux message base path
+	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
+	 * messages. This endpoint will be communicated to clients during SSE connection
+	 * setup. Must not be null.
+	 * @param sseEndpoint The endpoint URI where clients establish their SSE connections.
+	 * @param dnsRebindingProtection The DNS rebinding protection configuration (may be
+	 * null).
+	 * @throws IllegalArgumentException if required parameters are null
+	 */
+	private WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+			String sseEndpoint, DnsRebindingProtection dnsRebindingProtection) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(baseUrl, "Message base path must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
@@ -158,6 +189,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
+		this.dnsRebindingProtection = dnsRebindingProtection;
 		this.routerFunction = RouterFunctions.route()
 			.GET(this.sseEndpoint, this::handleSseConnection)
 			.POST(this.messageEndpoint, this::handleMessage)
@@ -256,6 +288,12 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
 		}
 
+		// Validate headers
+		Mono<ServerResponse> validationError = validateDnsRebindingProtection(request);
+		if (validationError != null) {
+			return validationError;
+		}
+
 		return ServerResponse.ok()
 			.contentType(MediaType.TEXT_EVENT_STREAM)
 			.body(Flux.<ServerSentEvent<?>>create(sink -> {
@@ -298,6 +336,19 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	private Mono<ServerResponse> handleMessage(ServerRequest request) {
 		if (isClosing) {
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
+		}
+
+		// Always validate Content-Type for POST requests
+		String contentType = request.headers().contentType().map(MediaType::toString).orElse(null);
+		if (contentType == null || !contentType.toLowerCase().startsWith("application/json")) {
+			logger.warn("Invalid Content-Type header: '{}'", contentType);
+			return ServerResponse.badRequest().bodyValue(new McpError("Content-Type must be application/json"));
+		}
+
+		// Validate headers for POST requests if DNS rebinding protection is configured
+		Mono<ServerResponse> validationError = validateDnsRebindingProtection(request);
+		if (validationError != null) {
+			return validationError;
 		}
 
 		if (request.queryParam("sessionId").isEmpty()) {
@@ -397,6 +448,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
 
+		private DnsRebindingProtection dnsRebindingProtection;
+
 		/**
 		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
@@ -448,6 +501,22 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		}
 
 		/**
+		 * Sets the DNS rebinding protection configuration.
+		 * <p>
+		 * When set, this configuration will be used to create a header validator that
+		 * enforces DNS rebinding protection rules. This will override any previously set
+		 * header validator.
+		 * @param config The DNS rebinding protection configuration
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if config is null
+		 */
+		public Builder dnsRebindingProtection(DnsRebindingProtection config) {
+			Assert.notNull(config, "DNS rebinding protection config must not be null");
+			this.dnsRebindingProtection = config;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link WebFluxSseServerTransportProvider} with the
 		 * configured settings.
 		 * @return A new WebFluxSseServerTransportProvider instance
@@ -457,9 +526,30 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			Assert.notNull(objectMapper, "ObjectMapper must be set");
 			Assert.notNull(messageEndpoint, "Message endpoint must be set");
 
-			return new WebFluxSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint);
+			return new WebFluxSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint,
+					dnsRebindingProtection);
 		}
 
+	}
+
+	/**
+	 * Validates DNS rebinding protection for the given request.
+	 * @param request The incoming server request
+	 * @return A ServerResponse with forbidden status if validation fails, or null if
+	 * validation passes
+	 */
+	private Mono<ServerResponse> validateDnsRebindingProtection(ServerRequest request) {
+		if (dnsRebindingProtection != null) {
+			String hostHeader = request.headers().asHttpHeaders().getFirst("Host");
+			String originHeader = request.headers().asHttpHeaders().getFirst("Origin");
+			if (!dnsRebindingProtection.isValid(hostHeader, originHeader)) {
+				logger.warn("DNS rebinding protection validation failed - Host: '{}', Origin: '{}'", hostHeader,
+						originHeader);
+				return ServerResponse.status(HttpStatus.FORBIDDEN)
+					.bodyValue("DNS rebinding protection validation failed");
+			}
+		}
+		return null;
 	}
 
 }
