@@ -288,7 +288,7 @@ public abstract class AbstractMcpSyncServerTests {
 			.serverInfo("test-server", "1.0.0")
 			.build();
 
-		Prompt prompt = new Prompt(TEST_PROMPT_NAME, "Test Prompt", List.of());
+		Prompt prompt = new Prompt(TEST_PROMPT_NAME, "Test Prompt", "Test Prompt", List.of());
 		McpServerFeatures.SyncPromptSpecification specification = new McpServerFeatures.SyncPromptSpecification(prompt,
 				(exchange, req) -> new GetPromptResult("Test prompt description", List
 					.of(new PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent("Test content")))));
@@ -309,7 +309,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testRemovePrompt() {
-		Prompt prompt = new Prompt(TEST_PROMPT_NAME, "Test Prompt", List.of());
+		Prompt prompt = new Prompt(TEST_PROMPT_NAME, "Test Prompt", "Test Prompt", List.of());
 		McpServerFeatures.SyncPromptSpecification specification = new McpServerFeatures.SyncPromptSpecification(prompt,
 				(exchange, req) -> new GetPromptResult("Test prompt description", List
 					.of(new PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent("Test content")))));
