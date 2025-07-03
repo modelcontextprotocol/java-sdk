@@ -123,16 +123,12 @@ class ResponseSubscribers {
 		protected void hookOnSubscribe(Subscription subscription) {
 
 			sink.onRequest(n -> {
-				if (subscription != null) {
-					subscription.request(n);
-				}
+				subscription.request(n);
 			});
 
 			// Register disposal callback to cancel subscription when Flux is disposed
 			sink.onDispose(() -> {
-				if (subscription != null) {
-					subscription.cancel();
-				}
+				subscription.cancel();
 			});
 		}
 
