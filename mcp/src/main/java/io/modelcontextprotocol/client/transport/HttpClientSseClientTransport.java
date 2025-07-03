@@ -336,7 +336,6 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			Disposable connection = Flux.<ResponseEvent>create(sseSink -> this.httpClient
 				.sendAsync(request, responseInfo -> ResponseSubscribers.sseToBodySubscriber(responseInfo, sseSink))
 				.exceptionallyCompose(e -> {
-					logger.warn("Error sending message", e);
 					sseSink.error(e);
 					return CompletableFuture.failedFuture(e);
 				})).flatMap(responseEvent -> {
@@ -386,6 +385,9 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 					}
 					return Mono.empty();
 
+				}).onErrorComplete(t -> {
+					logger.warn("SSE stream observed an error", t);
+					return true;
 				}).doFinally(s -> {
 					Disposable ref = this.sseSubscription.getAndSet(null);
 					if (ref != null && !ref.isDisposed()) {
@@ -459,11 +461,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			.POST(HttpRequest.BodyPublishers.ofString(body))
 			.build();
 
-		return Mono.fromFuture(
-				httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding()).exceptionallyCompose(e -> {
-					logger.warn("Error sending message", e);
-					return CompletableFuture.failedFuture(e);
-				}));
+		return Mono.fromFuture(httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding()));
 	}
 
 	/**

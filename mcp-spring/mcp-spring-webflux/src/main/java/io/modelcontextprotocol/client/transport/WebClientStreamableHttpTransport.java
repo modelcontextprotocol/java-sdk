@@ -129,11 +129,10 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		Function<String, Publisher<Void>> onClose = sessionId -> sessionId == null ? Mono.empty()
 				: webClient.delete().uri(this.endpoint).headers(httpHeaders -> {
 					httpHeaders.add("mcp-session-id", sessionId);
-				})
-					.retrieve()
-					.toBodilessEntity()
-					.doOnError(e -> logger.warn("Got error when closing transport", e))
-					.then();
+				}).retrieve().toBodilessEntity().onErrorComplete(e -> {
+					logger.warn("Got error when closing transport", e);
+					return true;
+				}).then();
 		return new DefaultMcpTransportSession(onClose);
 	}
 
@@ -305,12 +304,12 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 					}
 				})
 				.flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage)))
-				.onErrorResume(t -> {
+				.onErrorComplete(t -> {
 					// handle the error first
 					this.handleException(t);
 					// inform the caller of sendMessage
 					sink.error(t);
-					return Flux.empty();
+					return true;
 				})
 				.doFinally(s -> {
 					Disposable ref = disposableRef.getAndSet(null);

@@ -141,14 +141,18 @@ public class McpClientSession implements McpSession {
 				var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
 						new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 								error.getMessage(), null));
-				return this.transport.sendMessage(errorResponse).then(Mono.empty());
-			}).flatMap(this.transport::sendMessage).subscribe();
+				return Mono.just(errorResponse);
+			}).flatMap(this.transport::sendMessage).onErrorComplete(t -> {
+				logger.warn("Issue sending response to the client, ", t);
+				return true;
+			}).subscribe();
 		}
 		else if (message instanceof McpSchema.JSONRPCNotification notification) {
 			logger.debug("Received notification: {}", notification);
-			handleIncomingNotification(notification)
-				.doOnError(error -> logger.error("Error handling notification: {}", error.getMessage()))
-				.subscribe();
+			handleIncomingNotification(notification).onErrorComplete(t -> {
+				logger.error("Error handling notification: {}", t.getMessage());
+				return true;
+			}).subscribe();
 		}
 		else {
 			logger.warn("Received unknown message type: {}", message);
@@ -171,11 +175,7 @@ public class McpClientSession implements McpSession {
 			}
 
 			return handler.handle(request.params())
-				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
-				.onErrorResume(error -> Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-						null, new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-								error.getMessage(), null)))); // TODO: add error message
-																// through the data field
+				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null));
 		});
 	}
 

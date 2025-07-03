@@ -138,7 +138,10 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			this.handler.set(handler);
 			if (openConnectionOnStartup) {
 				logger.debug("Eagerly opening connection on startup");
-				return this.reconnect(null).then();
+				return this.reconnect(null).onErrorComplete(t -> {
+					logger.warn("Eager connect failed ", t);
+					return true;
+				}).then();
 			}
 			return Mono.empty();
 		});
@@ -151,26 +154,14 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	}
 
 	private Publisher<Void> createDelete(String sessionId) {
+		HttpRequest request = this.requestBuilder.copy()
+			.uri(Utils.resolveUri(this.baseUri, this.endpoint))
+			.header("Cache-Control", "no-cache")
+			.header("mcp-session-id", sessionId)
+			.DELETE()
+			.build();
 
-		return Mono.defer(() -> { // Do we need to defer this?
-
-			HttpRequest request = this.requestBuilder.copy()
-				.uri(Utils.resolveUri(this.baseUri, this.endpoint))
-				.header("Cache-Control", "no-cache")
-				.header("mcp-session-id", sessionId)
-				.DELETE()
-				.build();
-
-			return Mono.fromFuture(() -> this.httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-				.whenComplete((response, throwable) -> {
-					if (throwable != null) {
-						logger.warn("Error sending message", throwable);
-					}
-					else {
-						logger.debug("SSE connection established successfully");
-					}
-				})).doOnError(e -> logger.warn("Got error when closing transport", e)).then();
-		});
+		return Mono.fromFuture(() -> this.httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())).then();
 	}
 
 	@Override
@@ -238,7 +229,6 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				.sendAsync(request, responseInfo -> ResponseSubscribers.sseToBodySubscriber(responseInfo, sseSink))
 				.whenComplete((response, throwable) -> {
 					if (throwable != null) {
-						logger.warn("Error sending message", throwable);
 						sseSink.error(throwable);
 					}
 					else {
@@ -378,13 +368,12 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				Mono.fromFuture(this.httpClient.sendAsync(request, this.toSendMessageBodySubscriber(responseEventSink))
 					.whenComplete((response, throwable) -> {
 						if (throwable != null) {
-							logger.warn("Error sending message", throwable);
 							responseEventSink.error(throwable);
 						}
 						else {
 							logger.debug("SSE connection established successfully");
 						}
-					})).subscribe();
+					})).onErrorComplete().subscribe();
 
 			}).flatMap(responseEvent -> {
 				if (transportSession.markInitialized(
@@ -467,12 +456,12 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 				return Flux.<McpSchema.JSONRPCMessage>error(
 						new RuntimeException("Failed to send message: " + responseEvent));
-			}).flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage))).onErrorResume(t -> {
+			}).flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage))).onErrorComplete(t -> {
 				// handle the error first
 				this.handleException(t);
 				// inform the caller of sendMessage
 				messageSink.error(t);
-				return Flux.empty();
+				return true;
 			}).doFinally(s -> {
 				logger.debug("SendMessage finally: {}", s);
 				Disposable ref = disposableRef.getAndSet(null);

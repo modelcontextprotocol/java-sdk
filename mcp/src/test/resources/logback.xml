@@ -16,9 +16,6 @@
 
     <!-- Spec package -->
     <logger name="org.springframework.ai.mcp.spec" level="INFO"/>
-    
-    <logger name="io.modelcontextprotocol.spec.McpClientSession" level="DEBUG"/>
-    <logger name="io.modelcontextprotocol.client.transport" level="DEBUG"/>
 
     <!-- Root logger -->
     <root level="INFO">

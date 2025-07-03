@@ -22,7 +22,7 @@ public class HttpClientStreamableHttpAsyncClientResiliencyTests extends Abstract
 	}
 
 	@Test
-	void testPingWithEaxctExceptionType() {
+	void testPingWithExactExceptionType() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.initialize()).expectNextCount(1).verifyComplete();
 
