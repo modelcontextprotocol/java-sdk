@@ -3,7 +3,6 @@
 */
 package io.modelcontextprotocol.client.transport;
 
-import java.io.IOException;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodySubscriber;
 import java.net.http.HttpResponse.ResponseInfo;
@@ -13,10 +12,6 @@ import java.util.regex.Pattern;
 import org.reactivestreams.FlowAdapters;
 import org.reactivestreams.Subscription;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.FluxSink;
 
@@ -29,36 +24,41 @@ class ResponseSubscribers {
 	 * @param event the event type, may be {@code null} (defaults to "message")
 	 * @param data the event payload data, never {@code null}
 	 */
-	public static record SseEvent(String id, String event, String data) {
+	record SseEvent(String id, String event, String data) {
 	}
 
-	public record ResponseEvent(ResponseInfo responseInfo, SseEvent sseEvent, JSONRPCMessage jsonRpcMessage) {
+	sealed interface ResponseEvent permits SseResponseEvent, AggregateResponseEvent, DummyEvent {
 
-		public ResponseEvent(ResponseInfo responseInfo, SseEvent sseEvent) {
-			this(responseInfo, sseEvent, null);
-		}
+		ResponseInfo responseInfo();
 
-		public ResponseEvent(ResponseInfo responseInfo, JSONRPCMessage jsonRpcMessage) {
-			this(responseInfo, null, jsonRpcMessage);
-		}
 	}
 
-	public static BodySubscriber<Void> sseToBodySubscriber(ResponseInfo responseInfo, FluxSink<ResponseEvent> sink) {
+	record DummyEvent(ResponseInfo responseInfo) implements ResponseEvent {
+
+	}
+
+	record SseResponseEvent(ResponseInfo responseInfo, SseEvent sseEvent) implements ResponseEvent {
+	}
+
+	record AggregateResponseEvent(ResponseInfo responseInfo, String data) implements ResponseEvent {
+	}
+
+	static BodySubscriber<Void> sseToBodySubscriber(ResponseInfo responseInfo, FluxSink<ResponseEvent> sink) {
 		return HttpResponse.BodySubscribers
 			.fromLineSubscriber(FlowAdapters.toFlowSubscriber(new SseLineSubscriber(responseInfo, sink)));
 	}
 
-	public static BodySubscriber<Void> jsonoBodySubscriber(ResponseInfo responseInfo, FluxSink<ResponseEvent> sink) {
+	static BodySubscriber<Void> aggregateBodySubscriber(ResponseInfo responseInfo, FluxSink<ResponseEvent> sink) {
 		return HttpResponse.BodySubscribers
-			.fromLineSubscriber(FlowAdapters.toFlowSubscriber(new JsonLineSubscriber(responseInfo, sink)));
+			.fromLineSubscriber(FlowAdapters.toFlowSubscriber(new AggregateSubscriber(responseInfo, sink)));
 	}
 
-	public static BodySubscriber<Void> bodylessBodySubscriber(ResponseInfo responseInfo, FluxSink<ResponseEvent> sink) {
+	static BodySubscriber<Void> bodilessBodySubscriber(ResponseInfo responseInfo, FluxSink<ResponseEvent> sink) {
 		return HttpResponse.BodySubscribers
-			.fromLineSubscriber(FlowAdapters.toFlowSubscriber(new BodylessResponseLineSubscriber(responseInfo, sink)));
+			.fromLineSubscriber(FlowAdapters.toFlowSubscriber(new BodilessResponseLineSubscriber(responseInfo, sink)));
 	}
 
-	public static class SseLineSubscriber extends BaseSubscriber<String> {
+	static class SseLineSubscriber extends BaseSubscriber<String> {
 
 		/**
 		 * Pattern to extract data content from SSE "data:" lines.
@@ -150,7 +150,7 @@ class ResponseSubscribers {
 					String eventData = this.eventBuilder.toString();
 					SseEvent sseEvent = new SseEvent(currentEventId.get(), currentEventType.get(), eventData.trim());
 
-					this.sink.next(new ResponseEvent(responseInfo, sseEvent));
+					this.sink.next(new SseResponseEvent(responseInfo, sseEvent));
 					this.eventBuilder.setLength(0);
 				}
 			}
@@ -184,7 +184,7 @@ class ResponseSubscribers {
 			if (this.eventBuilder.length() > 0) {
 				String eventData = this.eventBuilder.toString();
 				SseEvent sseEvent = new SseEvent(currentEventId.get(), currentEventType.get(), eventData.trim());
-				this.sink.next(new ResponseEvent(responseInfo, sseEvent));
+				this.sink.next(new SseResponseEvent(responseInfo, sseEvent));
 			}
 			this.sink.complete();
 		}
@@ -200,9 +200,7 @@ class ResponseSubscribers {
 
 	}
 
-	public static class JsonLineSubscriber extends BaseSubscriber<String> {
-
-		private ObjectMapper objectMapper = new ObjectMapper();
+	static class AggregateSubscriber extends BaseSubscriber<String> {
 
 		/**
 		 * The sink for emitting parsed response events.
@@ -225,7 +223,7 @@ class ResponseSubscribers {
 		 * @param sink the {@link FluxSink} to emit parsed {@link ResponseEvent} objects
 		 * to
 		 */
-		public JsonLineSubscriber(ResponseInfo responseInfo, FluxSink<ResponseEvent> sink) {
+		public AggregateSubscriber(ResponseInfo responseInfo, FluxSink<ResponseEvent> sink) {
 			this.sink = sink;
 			this.eventBuilder = new StringBuilder();
 			this.responseInfo = responseInfo;
@@ -237,19 +235,10 @@ class ResponseSubscribers {
 		 */
 		@Override
 		protected void hookOnSubscribe(Subscription subscription) {
-
-			sink.onRequest(n -> {
-				if (subscription != null) {
-					subscription.request(n);
-				}
-			});
+			sink.onRequest(subscription::request);
 
 			// Register disposal callback to cancel subscription when Flux is disposed
-			sink.onDispose(() -> {
-				if (subscription != null) {
-					subscription.cancel();
-				}
-			});
+			sink.onDispose(subscription::cancel);
 		}
 
 		/**
@@ -267,15 +256,8 @@ class ResponseSubscribers {
 		@Override
 		protected void hookOnComplete() {
 			if (this.eventBuilder.length() > 0) {
-				String jsonData = this.eventBuilder.toString();
-				try {
-					McpSchema.JSONRPCMessage jsonRpcResponse = McpSchema.deserializeJsonRpcMessage(objectMapper,
-							jsonData);
-					this.sink.next(new ResponseEvent(responseInfo, jsonRpcResponse));
-				}
-				catch (IOException e) {
-					sink.error(e);
-				}
+				String data = this.eventBuilder.toString();
+				this.sink.next(new AggregateResponseEvent(responseInfo, data));
 			}
 			this.sink.complete();
 		}
@@ -291,7 +273,7 @@ class ResponseSubscribers {
 
 	}
 
-	public static class BodylessResponseLineSubscriber extends BaseSubscriber<String> {
+	static class BodilessResponseLineSubscriber extends BaseSubscriber<String> {
 
 		/**
 		 * The sink for emitting parsed response events.
@@ -300,7 +282,7 @@ class ResponseSubscribers {
 
 		private final ResponseInfo responseInfo;
 
-		public BodylessResponseLineSubscriber(ResponseInfo responseInfo, FluxSink<ResponseEvent> sink) {
+		public BodilessResponseLineSubscriber(ResponseInfo responseInfo, FluxSink<ResponseEvent> sink) {
 			this.sink = sink;
 			this.responseInfo = responseInfo;
 		}
@@ -313,21 +295,13 @@ class ResponseSubscribers {
 		protected void hookOnSubscribe(Subscription subscription) {
 
 			sink.onRequest(n -> {
-				if (subscription != null) {
-					subscription.request(n);
-				}
+				subscription.request(n);
 			});
 
 			// Register disposal callback to cancel subscription when Flux is disposed
 			sink.onDispose(() -> {
-				if (subscription != null) {
-					subscription.cancel();
-				}
+				subscription.cancel();
 			});
-		}
-
-		@Override
-		protected void hookOnNext(String line) {
 		}
 
 		/**
@@ -335,7 +309,11 @@ class ResponseSubscribers {
 		 */
 		@Override
 		protected void hookOnComplete() {
-			this.sink.next(new ResponseEvent(responseInfo, new SseEvent(null, null, null)));
+			// emit dummy event to be able to inspect the response info
+			// this is a shortcut allowing for a more streamlined processing using
+			// operator composition instead of having to deal with the CompletableFuture
+			// along the Subscriber for inspecting the result
+			this.sink.next(new DummyEvent(responseInfo));
 			this.sink.complete();
 		}
 

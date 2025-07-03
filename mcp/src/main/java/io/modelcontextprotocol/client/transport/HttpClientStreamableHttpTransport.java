@@ -13,7 +13,6 @@ import java.net.http.HttpResponse.BodyHandler;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -60,7 +59,7 @@ import reactor.util.function.Tuples;
  * "https://modelcontextprotocol.io/specification/2024-11-05/basic/transports#http-with-sse">"HTTP
  * with SSE" transport</a>. In order to communicate over the phased-out
  * <code>2024-11-05</code> protocol, use {@link HttpClientSseClientTransport} or
- * {@link WebFluxSseClientTransport}.
+ * {@code WebFluxSseClientTransport}.
  * </p>
  *
  * @author Christian Tzolov
@@ -234,7 +233,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					else {
 						logger.debug("SSE connection established successfully");
 					}
-				})).flatMap(responseEvent -> {
+				}))
+				.map(responseEvent -> (ResponseSubscribers.SseResponseEvent) responseEvent)
+				.flatMap(responseEvent -> {
 					int statusCode = responseEvent.responseInfo().statusCode();
 
 					if (statusCode >= 200 && statusCode < 300) {
@@ -319,12 +320,11 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			else if (contentType.contains(APPLICATION_JSON)) {
 				// For JSON responses and others, use string subscriber
 				logger.debug("Received response, using string subscriber");
-				return ResponseSubscribers.jsonoBodySubscriber(responseInfo, sink);
+				return ResponseSubscribers.aggregateBodySubscriber(responseInfo, sink);
 			}
 
 			logger.debug("Received Bodyless response, using discarding subscriber");
-			// return HttpResponse.BodySubscribers.discarding();
-			return ResponseSubscribers.bodylessBodySubscriber(responseInfo, sink);
+			return ResponseSubscribers.bodilessBodySubscriber(responseInfo, sink);
 		};
 
 		return responseBodyHandler;
@@ -404,34 +404,42 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						return Flux.empty();
 					}
 					else if (contentType.contains(TEXT_EVENT_STREAM)) {
-						try {
-							// We don't support batching ATM and probably won't since the
-							// next version considers removing it.
-							McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.objectMapper,
-									responseEvent.sseEvent().data());
+						return Flux.just(((ResponseSubscribers.SseResponseEvent) responseEvent).sseEvent())
+							.flatMap(sseEvent -> {
+								try {
+									// We don't support batching ATM and probably won't
+									// since the
+									// next version considers removing it.
+									McpSchema.JSONRPCMessage message = McpSchema
+										.deserializeJsonRpcMessage(this.objectMapper, sseEvent.data());
 
-							Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> idWithMessages = Tuples
-								.of(Optional.ofNullable(responseEvent.sseEvent().id()), List.of(message));
+									Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> idWithMessages = Tuples
+										.of(Optional.ofNullable(sseEvent.id()), List.of(message));
 
-							McpTransportStream<Disposable> sessionStream = new DefaultMcpTransportStream<>(
-									this.resumableStreams, this::reconnect);
+									McpTransportStream<Disposable> sessionStream = new DefaultMcpTransportStream<>(
+											this.resumableStreams, this::reconnect);
 
-							logger.debug("Connected stream {}", sessionStream.streamId());
+									logger.debug("Connected stream {}", sessionStream.streamId());
 
-							messageSink.success();
+									messageSink.success();
 
-							return Flux.from(sessionStream.consumeSseStream(Flux.just(idWithMessages)));
-
-						}
-						catch (IOException ioException) {
-							return Flux.<McpSchema.JSONRPCMessage>error(
-									new McpError("Error parsing JSON-RPC message: " + responseEvent.sseEvent().data()));
-						}
+									return Flux.from(sessionStream.consumeSseStream(Flux.just(idWithMessages)));
+								}
+								catch (IOException ioException) {
+									return Flux.<McpSchema.JSONRPCMessage>error(
+											new McpError("Error parsing JSON-RPC message: " + sseEvent.data()));
+								}
+							});
 					}
 					else if (contentType.contains(APPLICATION_JSON)) {
-						McpSchema.JSONRPCMessage jsonRpcResponse = responseEvent.jsonRpcMessage();
 						messageSink.success();
-						return Flux.just(jsonRpcResponse); // ???
+						String data = ((ResponseSubscribers.AggregateResponseEvent) responseEvent).data();
+						try {
+							return Mono.just(McpSchema.deserializeJsonRpcMessage(objectMapper, data));
+						}
+						catch (IOException e) {
+							return Mono.error(e);
+						}
 					}
 					logger.warn("Unknown media type {} returned for POST in session {}", contentType,
 							sessionRepresentation);
@@ -489,9 +497,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	 */
 	public static class Builder {
 
-		private ObjectMapper objectMapper;
+		private final String baseUri;
 
-		private String baseUri;
+		private ObjectMapper objectMapper;
 
 		private HttpClient.Builder clientBuilder = HttpClient.newBuilder()
 			.version(HttpClient.Version.HTTP_1_1)

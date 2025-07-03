@@ -338,7 +338,9 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 				.exceptionallyCompose(e -> {
 					sseSink.error(e);
 					return CompletableFuture.failedFuture(e);
-				})).flatMap(responseEvent -> {
+				}))
+				.map(responseEvent -> (ResponseSubscribers.SseResponseEvent) responseEvent)
+				.flatMap(responseEvent -> {
 					if (isClosing) {
 						return Mono.empty();
 					}
@@ -378,22 +380,23 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 					return Flux.<McpSchema.JSONRPCMessage>error(
 							new RuntimeException("Failed to send message: " + responseEvent));
 
-				}).flatMap(jsonRpcMessage -> handler.apply(Mono.just(jsonRpcMessage))).onErrorResume(t -> {
+				})
+				.flatMap(jsonRpcMessage -> handler.apply(Mono.just(jsonRpcMessage)))
+				.onErrorComplete(t -> {
 					if (!isClosing) {
-						logger.error("SSE connection error", t);
+						logger.warn("SSE stream observed an error", t);
 						sink.error(t);
 					}
-					return Mono.empty();
-
-				}).onErrorComplete(t -> {
-					logger.warn("SSE stream observed an error", t);
 					return true;
-				}).doFinally(s -> {
+				})
+				.doFinally(s -> {
 					Disposable ref = this.sseSubscription.getAndSet(null);
 					if (ref != null && !ref.isDisposed()) {
 						ref.dispose();
 					}
-				}).contextWrite(sink.contextView()).subscribe();
+				})
+				.contextWrite(sink.contextView())
+				.subscribe();
 
 			this.sseSubscription.set(connection);
 		});
@@ -417,28 +420,19 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 				return Mono.empty();
 			}
 
-			try {
-				return this.serializeMessage(message)
-					.flatMap(body -> sendHttpPost(messageEndpointUri, body))
-					.doOnNext(response -> {
-						if (response.statusCode() != 200 && response.statusCode() != 201 && response.statusCode() != 202
-								&& response.statusCode() != 206) {
-							logger.error("Error sending message: {}", response.statusCode());
-						}
-					})
-					.doOnError(error -> {
-						if (!isClosing) {
-							logger.error("Error sending message: {}", error.getMessage());
-						}
-					})
-					.then();
-			}
-			catch (Exception e) {
-				if (!isClosing) {
-					return Mono.error(new RuntimeException("Failed to serialize message", e));
-				}
-				return Mono.empty();
-			}
+			return this.serializeMessage(message)
+				.flatMap(body -> sendHttpPost(messageEndpointUri, body))
+				.doOnNext(response -> {
+					if (response.statusCode() != 200 && response.statusCode() != 201 && response.statusCode() != 202
+							&& response.statusCode() != 206) {
+						logger.error("Error sending message: {}", response.statusCode());
+					}
+				})
+				.doOnError(error -> {
+					if (!isClosing) {
+						logger.error("Error sending message: {}", error.getMessage());
+					}
+				});
 		}).then();
 
 	}
@@ -449,6 +443,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 				return Mono.just(objectMapper.writeValueAsString(message));
 			}
 			catch (IOException e) {
+				// TODO: why McpError and not RuntimeException?
 				return Mono.error(new McpError("Failed to serialize message"));
 			}
 		});
@@ -461,6 +456,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			.POST(HttpRequest.BodyPublishers.ofString(body))
 			.build();
 
+		// TODO: why discard the body?
 		return Mono.fromFuture(httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding()));
 	}
 
