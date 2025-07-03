@@ -4,7 +4,7 @@
 
 package io.modelcontextprotocol.client;
 
-import java.util.concurrent.CompletionException;
+import java.io.IOException;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -28,7 +28,7 @@ public class HttpClientStreamableHttpAsyncClientResiliencyTests extends Abstract
 
 			disconnect();
 
-			StepVerifier.create(mcpAsyncClient.ping()).expectError(CompletionException.class).verify();
+			StepVerifier.create(mcpAsyncClient.ping()).expectError(IOException.class).verify();
 
 			reconnect();
 

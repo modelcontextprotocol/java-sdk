@@ -13,6 +13,7 @@ import java.net.http.HttpResponse.BodyHandler;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -135,7 +136,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	public Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
 		return Mono.deferContextual(ctx -> {
 			this.handler.set(handler);
-			if (openConnectionOnStartup) {
+			if (this.openConnectionOnStartup) {
 				logger.debug("Eagerly opening connection on startup");
 				return this.reconnect(null).onErrorComplete(t -> {
 					logger.warn("Eager connect failed ", t);
@@ -286,6 +287,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 				}).<McpSchema
 						.JSONRPCMessage>flatMap(jsonrpcMessage -> this.handler.get().apply(Mono.just(jsonrpcMessage)))
+				.onErrorMap(CompletionException.class, t -> t.getCause())
 				.onErrorComplete(t -> {
 					this.handleException(t);
 					return true;
@@ -373,7 +375,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						else {
 							logger.debug("SSE connection established successfully");
 						}
-					})).onErrorComplete().subscribe();
+					})).onErrorMap(CompletionException.class, t -> t.getCause()).onErrorComplete().subscribe();
 
 			}).flatMap(responseEvent -> {
 				if (transportSession.markInitialized(
@@ -464,19 +466,25 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 				return Flux.<McpSchema.JSONRPCMessage>error(
 						new RuntimeException("Failed to send message: " + responseEvent));
-			}).flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage))).onErrorComplete(t -> {
-				// handle the error first
-				this.handleException(t);
-				// inform the caller of sendMessage
-				messageSink.error(t);
-				return true;
-			}).doFinally(s -> {
-				logger.debug("SendMessage finally: {}", s);
-				Disposable ref = disposableRef.getAndSet(null);
-				if (ref != null) {
-					transportSession.removeConnection(ref);
-				}
-			}).contextWrite(messageSink.contextView()).subscribe();
+			})
+				.flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage)))
+				.onErrorMap(CompletionException.class, t -> t.getCause())
+				.onErrorComplete(t -> {
+					// handle the error first
+					this.handleException(t);
+					// inform the caller of sendMessage
+					messageSink.error(t);
+					return true;
+				})
+				.doFinally(s -> {
+					logger.debug("SendMessage finally: {}", s);
+					Disposable ref = disposableRef.getAndSet(null);
+					if (ref != null) {
+						transportSession.removeConnection(ref);
+					}
+				})
+				.contextWrite(messageSink.contextView())
+				.subscribe();
 
 			disposableRef.set(connection);
 			transportSession.addConnection(connection);

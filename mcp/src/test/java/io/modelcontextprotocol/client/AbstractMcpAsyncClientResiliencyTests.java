@@ -1,3 +1,6 @@
+/*
+ * Copyright 2024-2024 the original author or authors.
+ */
 package io.modelcontextprotocol.client;
 
 import eu.rekawek.toxiproxy.Proxy;
@@ -35,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  *
  * @author Dariusz Jędrzejczyk
  */
+// KEEP IN SYNC with the class in mcp-test module
 public abstract class AbstractMcpAsyncClientResiliencyTests {
 
 	private static final Logger logger = LoggerFactory.getLogger(AbstractMcpAsyncClientResiliencyTests.class);

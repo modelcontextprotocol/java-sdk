@@ -15,15 +15,20 @@ import org.reactivestreams.Subscription;
 import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.FluxSink;
 
+/**
+ * Utility class providing various {@link BodySubscriber} implementations for handling
+ * different types of HTTP response bodies in the context of Model Context Protocol (MCP)
+ * clients.
+ *
+ * <p>
+ * Defines subscribers for processing Server-Sent Events (SSE), aggregate responses, and
+ * bodiless responses.
+ *
+ * @author Christian Tzolov
+ * @author Dariusz Jędrzejczyk
+ */
 class ResponseSubscribers {
 
-	/**
-	 * Represents a Server-Sent Event with its standard fields.
-	 *
-	 * @param id the event ID, may be {@code null}
-	 * @param event the event type, may be {@code null} (defaults to "message")
-	 * @param data the event payload data, never {@code null}
-	 */
 	record SseEvent(String id, String event, String data) {
 	}
 
@@ -115,10 +120,6 @@ class ResponseSubscribers {
 			this.responseInfo = responseInfo;
 		}
 
-		/**
-		 * Initializes the subscription and sets up disposal callback.
-		 * @param subscription the {@link Subscription} to the upstream line source
-		 */
 		@Override
 		protected void hookOnSubscribe(Subscription subscription) {
 
@@ -132,12 +133,6 @@ class ResponseSubscribers {
 			});
 		}
 
-		/**
-		 * Processes each line from the SSE stream according to the SSE protocol. Empty
-		 * lines trigger event emission, other lines are parsed for data, id, or event
-		 * type.
-		 * @param line the line to process from the SSE stream
-		 */
 		@Override
 		protected void hookOnNext(String line) {
 			if (line.isEmpty()) {
@@ -172,9 +167,6 @@ class ResponseSubscribers {
 			}
 		}
 
-		/**
-		 * Called when the upstream line source completes normally.
-		 */
 		@Override
 		protected void hookOnComplete() {
 			if (this.eventBuilder.length() > 0) {
@@ -185,10 +177,6 @@ class ResponseSubscribers {
 			this.sink.complete();
 		}
 
-		/**
-		 * Called when an error occurs in the upstream line source.
-		 * @param throwable the error that occurred
-		 */
 		@Override
 		protected void hookOnError(Throwable throwable) {
 			this.sink.error(throwable);
@@ -225,10 +213,6 @@ class ResponseSubscribers {
 			this.responseInfo = responseInfo;
 		}
 
-		/**
-		 * Initializes the subscription and sets up disposal callback.
-		 * @param subscription the {@link Subscription} to the upstream line source
-		 */
 		@Override
 		protected void hookOnSubscribe(Subscription subscription) {
 			sink.onRequest(subscription::request);
@@ -237,18 +221,11 @@ class ResponseSubscribers {
 			sink.onDispose(subscription::cancel);
 		}
 
-		/**
-		 * Aggregate each line from the Http response.
-		 * @param line next line to process from the Http response
-		 */
 		@Override
 		protected void hookOnNext(String line) {
 			this.eventBuilder.append(line).append("\n");
 		}
 
-		/**
-		 * Called when the upstream line source completes normally.
-		 */
 		@Override
 		protected void hookOnComplete() {
 			if (this.eventBuilder.length() > 0) {
@@ -258,10 +235,6 @@ class ResponseSubscribers {
 			this.sink.complete();
 		}
 
-		/**
-		 * Called when an error occurs in the upstream line source.
-		 * @param throwable the error that occurred
-		 */
 		@Override
 		protected void hookOnError(Throwable throwable) {
 			this.sink.error(throwable);
@@ -283,10 +256,6 @@ class ResponseSubscribers {
 			this.responseInfo = responseInfo;
 		}
 
-		/**
-		 * Initializes the subscription and sets up disposal callback.
-		 * @param subscription the {@link Subscription} to the upstream line source
-		 */
 		@Override
 		protected void hookOnSubscribe(Subscription subscription) {
 
@@ -300,9 +269,6 @@ class ResponseSubscribers {
 			});
 		}
 
-		/**
-		 * Called when the upstream line source completes normally.
-		 */
 		@Override
 		protected void hookOnComplete() {
 			// emit dummy event to be able to inspect the response info
@@ -313,10 +279,6 @@ class ResponseSubscribers {
 			this.sink.complete();
 		}
 
-		/**
-		 * Called when an error occurs in the upstream line source.
-		 * @param throwable the error that occurred
-		 */
 		@Override
 		protected void hookOnError(Throwable throwable) {
 			this.sink.error(throwable);
