@@ -41,7 +41,8 @@ public class MockMcpServerTransportProvider implements McpServerTransportProvide
 	@Override
 	public void setSessionFactory(Factory sessionFactory) {
 
-		session = sessionFactory.create(transport);
+		String sessionId = sessionFactory.generateId();
+		session = sessionFactory.create(sessionId, transport);
 	}
 
 	@Override
