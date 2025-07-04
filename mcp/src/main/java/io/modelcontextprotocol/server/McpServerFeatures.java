@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2025 the original author or authors.
  */
 
 package io.modelcontextprotocol.server;
@@ -95,28 +95,30 @@ public class McpServerFeatures {
 		 * blocking code offloading to prevent accidental blocking of the non-blocking
 		 * transport.
 		 * @param syncSpec a potentially blocking, synchronous specification.
+		 * @param immediateExecution when true, do not offload. Do NOT set to true when
+		 * using a non-blocking transport.
 		 * @return a specification which is protected from blocking calls specified by the
 		 * user.
 		 */
-		static Async fromSync(Sync syncSpec) {
+		static Async fromSync(Sync syncSpec, boolean immediateExecution) {
 			List<McpServerFeatures.AsyncToolSpecification> tools = new ArrayList<>();
 			for (var tool : syncSpec.tools()) {
-				tools.add(AsyncToolSpecification.fromSync(tool));
+				tools.add(AsyncToolSpecification.fromSync(tool, immediateExecution));
 			}
 
 			Map<String, AsyncResourceSpecification> resources = new HashMap<>();
 			syncSpec.resources().forEach((key, resource) -> {
-				resources.put(key, AsyncResourceSpecification.fromSync(resource));
+				resources.put(key, AsyncResourceSpecification.fromSync(resource, immediateExecution));
 			});
 
 			Map<String, AsyncPromptSpecification> prompts = new HashMap<>();
 			syncSpec.prompts().forEach((key, prompt) -> {
-				prompts.put(key, AsyncPromptSpecification.fromSync(prompt));
+				prompts.put(key, AsyncPromptSpecification.fromSync(prompt, immediateExecution));
 			});
 
 			Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions = new HashMap<>();
 			syncSpec.completions().forEach((key, completion) -> {
-				completions.put(key, AsyncCompletionSpecification.fromSync(completion));
+				completions.put(key, AsyncCompletionSpecification.fromSync(completion, immediateExecution));
 			});
 
 			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootChangeConsumers = new ArrayList<>();
@@ -239,15 +241,15 @@ public class McpServerFeatures {
 	public record AsyncToolSpecification(McpSchema.Tool tool,
 			BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> call) {
 
-		static AsyncToolSpecification fromSync(SyncToolSpecification tool) {
+		static AsyncToolSpecification fromSync(SyncToolSpecification tool, boolean immediate) {
 			// FIXME: This is temporary, proper validation should be implemented
 			if (tool == null) {
 				return null;
 			}
-			return new AsyncToolSpecification(tool.tool(),
-					(exchange, map) -> Mono
-						.fromCallable(() -> tool.call().apply(new McpSyncServerExchange(exchange), map))
-						.subscribeOn(Schedulers.boundedElastic()));
+			return new AsyncToolSpecification(tool.tool(), (exchange, map) -> {
+				var toolResult = Mono.fromCallable(() -> tool.call().apply(new McpSyncServerExchange(exchange), map));
+				return immediate ? toolResult : toolResult.subscribeOn(Schedulers.boundedElastic());
+			});
 		}
 	}
 
@@ -281,15 +283,16 @@ public class McpServerFeatures {
 	public record AsyncResourceSpecification(McpSchema.Resource resource,
 			BiFunction<McpAsyncServerExchange, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
 
-		static AsyncResourceSpecification fromSync(SyncResourceSpecification resource) {
+		static AsyncResourceSpecification fromSync(SyncResourceSpecification resource, boolean immediateExecution) {
 			// FIXME: This is temporary, proper validation should be implemented
 			if (resource == null) {
 				return null;
 			}
-			return new AsyncResourceSpecification(resource.resource(),
-					(exchange, req) -> Mono
-						.fromCallable(() -> resource.readHandler().apply(new McpSyncServerExchange(exchange), req))
-						.subscribeOn(Schedulers.boundedElastic()));
+			return new AsyncResourceSpecification(resource.resource(), (exchange, req) -> {
+				var resourceResult = Mono
+					.fromCallable(() -> resource.readHandler().apply(new McpSyncServerExchange(exchange), req));
+				return immediateExecution ? resourceResult : resourceResult.subscribeOn(Schedulers.boundedElastic());
+			});
 		}
 	}
 
@@ -327,15 +330,16 @@ public class McpServerFeatures {
 	public record AsyncPromptSpecification(McpSchema.Prompt prompt,
 			BiFunction<McpAsyncServerExchange, McpSchema.GetPromptRequest, Mono<McpSchema.GetPromptResult>> promptHandler) {
 
-		static AsyncPromptSpecification fromSync(SyncPromptSpecification prompt) {
+		static AsyncPromptSpecification fromSync(SyncPromptSpecification prompt, boolean immediateExecution) {
 			// FIXME: This is temporary, proper validation should be implemented
 			if (prompt == null) {
 				return null;
 			}
-			return new AsyncPromptSpecification(prompt.prompt(),
-					(exchange, req) -> Mono
-						.fromCallable(() -> prompt.promptHandler().apply(new McpSyncServerExchange(exchange), req))
-						.subscribeOn(Schedulers.boundedElastic()));
+			return new AsyncPromptSpecification(prompt.prompt(), (exchange, req) -> {
+				var promptResult = Mono
+					.fromCallable(() -> prompt.promptHandler().apply(new McpSyncServerExchange(exchange), req));
+				return immediateExecution ? promptResult : promptResult.subscribeOn(Schedulers.boundedElastic());
+			});
 		}
 	}
 
@@ -366,14 +370,17 @@ public class McpServerFeatures {
 		 * @return an asynchronous wrapper of the provided sync specification, or
 		 * {@code null} if input is null
 		 */
-		static AsyncCompletionSpecification fromSync(SyncCompletionSpecification completion) {
+		static AsyncCompletionSpecification fromSync(SyncCompletionSpecification completion,
+				boolean immediateExecution) {
 			if (completion == null) {
 				return null;
 			}
-			return new AsyncCompletionSpecification(completion.referenceKey(),
-					(exchange, request) -> Mono.fromCallable(
-							() -> completion.completionHandler().apply(new McpSyncServerExchange(exchange), request))
-						.subscribeOn(Schedulers.boundedElastic()));
+			return new AsyncCompletionSpecification(completion.referenceKey(), (exchange, request) -> {
+				var completionResult = Mono.fromCallable(
+						() -> completion.completionHandler().apply(new McpSyncServerExchange(exchange), request));
+				return immediateExecution ? completionResult
+						: completionResult.subscribeOn(Schedulers.boundedElastic());
+			});
 		}
 	}
 
