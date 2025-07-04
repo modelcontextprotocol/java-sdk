@@ -35,6 +35,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.annotation.Nullable;
 
 /**
  * The Model Context Protocol (MCP) server implementation that provides asynchronous
@@ -234,6 +235,15 @@ public class McpAsyncServer {
 	 */
 	public McpSchema.Implementation getServerInfo() {
 		return this.serverInfo;
+	}
+
+	/**
+	 * Get the server instructions if available
+	 * @return The preset instructions for communication with the server
+	 */
+	@Nullable
+	public String getInstructions() {
+		return this.instructions;
 	}
 
 	/**
