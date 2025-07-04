@@ -207,8 +207,14 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Create a mock resources list that the server will return
-		McpSchema.Resource mockResource = new McpSchema.Resource("test://resource", "Test Resource", "A test resource",
-				"text/plain", null);
+		McpSchema.Resource mockResource = McpSchema.Resource.builder()
+			.uri("test://resource")
+			.name("Test Resource")
+			.title("A Test Resource")
+			.description("A test resource")
+			.mimeType("text/plain")
+			.annotations(null)
+			.build();
 		McpSchema.ListResourcesResult mockResourcesResult = new McpSchema.ListResourcesResult(List.of(mockResource),
 				null);
 
@@ -229,6 +235,7 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(receivedResources).hasSize(1);
 		assertThat(receivedResources.get(0).uri()).isEqualTo("test://resource");
 		assertThat(receivedResources.get(0).name()).isEqualTo("Test Resource");
+		assertThat(receivedResources.get(0).title()).isEqualTo("A Test Resource");
 		assertThat(receivedResources.get(0).description()).isEqualTo("A test resource");
 
 		asyncMcpClient.closeGracefully();
@@ -251,8 +258,13 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Create a mock prompts list that the server will return
-		McpSchema.Prompt mockPrompt = new McpSchema.Prompt("test-prompt", "Test Prompt Description",
-				List.of(new McpSchema.PromptArgument("arg1", "Test argument", true)));
+		McpSchema.Prompt mockPrompt = McpSchema.Prompt.builder()
+			.name("test-prompt")
+			.title("Test Prompt")
+			.description("Test Prompt Description")
+			.arguments(List.of(new McpSchema.PromptArgument("arg1", "Test argument", true)))
+			.build();
+
 		McpSchema.ListPromptsResult mockPromptsResult = new McpSchema.ListPromptsResult(List.of(mockPrompt), null);
 
 		// Simulate server sending prompts/list_changed notification
@@ -271,6 +283,7 @@ class McpAsyncClientResponseHandlerTests {
 		// Verify the consumer received the expected prompts
 		assertThat(receivedPrompts).hasSize(1);
 		assertThat(receivedPrompts.get(0).name()).isEqualTo("test-prompt");
+		assertThat(receivedPrompts.get(0).title()).isEqualTo("Test Prompt");
 		assertThat(receivedPrompts.get(0).description()).isEqualTo("Test Prompt Description");
 		assertThat(receivedPrompts.get(0).arguments()).hasSize(1);
 		assertThat(receivedPrompts.get(0).arguments().get(0).name()).isEqualTo("arg1");
