@@ -32,6 +32,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 
 import org.springframework.context.annotation.Bean;
@@ -96,9 +97,11 @@ class WebMvcSseIntegrationTests {
 
 	@AfterEach
 	public void after() {
+		reactor.netty.http.HttpResources.disposeLoopsAndConnections();
 		if (mcpServerTransportProvider != null) {
 			mcpServerTransportProvider.closeGracefully().block();
 		}
+		Schedulers.shutdownNow();
 		if (tomcatServer.appContext() != null) {
 			tomcatServer.appContext().close();
 		}
@@ -774,6 +777,33 @@ class WebMvcSseIntegrationTests {
 			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
 
 			assertThat(response).isNotNull().isEqualTo(callResponse);
+		}
+
+		mcpServer.close();
+	}
+
+	@Test
+	void testThrowingToolCallIsCaughtBeforeTimeout() {
+		McpSyncServer mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(new McpServerFeatures.SyncToolSpecification(
+					new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+						// We trigger a timeout on blocking read, raising an exception
+						Mono.never().block(Duration.ofSeconds(1));
+						return null;
+					}))
+			.build();
+
+		try (var mcpClient = clientBuilder.requestTimeout(Duration.ofMillis(6666)).build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// We expect the tool call to fail immediately with the exception raised by
+			// the offending tool
+			// instead of getting back a timeout.
+			assertThatExceptionOfType(McpError.class)
+				.isThrownBy(() -> mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of())))
+				.withMessageContaining("Timeout on blocking read");
 		}
 
 		mcpServer.close();
