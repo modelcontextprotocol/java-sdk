@@ -34,7 +34,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * @author Christian Tzolov
  */
-// KEEP IN SYNC with the class in mcp-test module
 public abstract class AbstractMcpAsyncServerTests {
 
 	private static final String TEST_TOOL_NAME = "test-tool";
@@ -102,6 +101,7 @@ public abstract class AbstractMcpAsyncServerTests {
 			""";
 
 	@Test
+	@Deprecated
 	void testAddTool() {
 		Tool newTool = new McpSchema.Tool("new-tool", "New test tool", emptyJsonSchema);
 		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
@@ -117,6 +117,23 @@ public abstract class AbstractMcpAsyncServerTests {
 	}
 
 	@Test
+	void testAddToolCall() {
+		Tool newTool = new McpSchema.Tool("new-tool", "New test tool", emptyJsonSchema);
+		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.build();
+
+		StepVerifier.create(mcpAsyncServer.addTool(McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(newTool)
+			.callTool((exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+			.build())).verifyComplete();
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	@Deprecated
 	void testAddDuplicateTool() {
 		Tool duplicateTool = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
 
@@ -138,13 +155,90 @@ public abstract class AbstractMcpAsyncServerTests {
 	}
 
 	@Test
+	void testAddDuplicateToolCall() {
+		Tool duplicateTool = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
+
+		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.toolCall(duplicateTool, (exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+			.build();
+
+		StepVerifier.create(mcpAsyncServer.addTool(McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(duplicateTool)
+			.callTool((exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+			.build())).verifyErrorSatisfies(error -> {
+				assertThat(error).isInstanceOf(McpError.class)
+					.hasMessage("Tool with name '" + TEST_TOOL_NAME + "' already exists");
+			});
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testDuplicateToolCallDuringBuilding() {
+		Tool duplicateTool = new Tool("duplicate-build-toolcall", "Duplicate toolcall during building",
+				emptyJsonSchema);
+
+		assertThatThrownBy(() -> McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.toolCall(duplicateTool, (exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+			.toolCall(duplicateTool, (exchange, request) -> Mono.just(new CallToolResult(List.of(), false))) // Duplicate!
+			.build()).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Tool with name 'duplicate-build-toolcall' is already registered.");
+	}
+
+	@Test
+	void testDuplicateToolsInBatchListRegistration() {
+		Tool duplicateTool = new Tool("batch-list-tool", "Duplicate tool in batch list", emptyJsonSchema);
+		List<McpServerFeatures.AsyncToolSpecification> specs = List.of(
+				McpServerFeatures.AsyncToolSpecification.builder()
+					.tool(duplicateTool)
+					.callTool((exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+					.build(),
+				McpServerFeatures.AsyncToolSpecification.builder()
+					.tool(duplicateTool)
+					.callTool((exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+					.build() // Duplicate!
+		);
+
+		assertThatThrownBy(() -> McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(specs)
+			.build()).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Tool with name 'batch-list-tool' is already registered.");
+	}
+
+	@Test
+	void testDuplicateToolsInBatchVarargsRegistration() {
+		Tool duplicateTool = new Tool("batch-varargs-tool", "Duplicate tool in batch varargs", emptyJsonSchema);
+
+		assertThatThrownBy(() -> McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(McpServerFeatures.AsyncToolSpecification.builder()
+				.tool(duplicateTool)
+				.callTool((exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+				.build(),
+					McpServerFeatures.AsyncToolSpecification.builder()
+						.tool(duplicateTool)
+						.callTool((exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+						.build() // Duplicate!
+			)
+			.build()).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Tool with name 'batch-varargs-tool' is already registered.");
+	}
+
+	@Test
 	void testRemoveTool() {
 		Tool too = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
 
 		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
-			.tool(too, (exchange, args) -> Mono.just(new CallToolResult(List.of(), false)))
+			.toolCall(too, (exchange, args) -> Mono.just(new CallToolResult(List.of(), false)))
 			.build();
 
 		StepVerifier.create(mcpAsyncServer.removeTool(TEST_TOOL_NAME)).verifyComplete();
@@ -173,7 +267,7 @@ public abstract class AbstractMcpAsyncServerTests {
 		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
-			.tool(too, (exchange, args) -> Mono.just(new CallToolResult(List.of(), false)))
+			.toolCall(too, (exchange, args) -> Mono.just(new CallToolResult(List.of(), false)))
 			.build();
 
 		StepVerifier.create(mcpAsyncServer.notifyToolsListChanged()).verifyComplete();

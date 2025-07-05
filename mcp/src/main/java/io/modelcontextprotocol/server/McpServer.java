@@ -82,12 +82,16 @@ import reactor.core.publisher.Mono;
  *     .capabilities(new ServerCapabilities(...))
  *     // Register tools
  *     .tools(
- *         new McpServerFeatures.AsyncToolSpecification(calculatorTool,
- *             (exchange, args) -> Mono.fromSupplier(() -> calculate(args))
- *                 .map(result -> new CallToolResult("Result: " + result))),
- *         new McpServerFeatures.AsyncToolSpecification(weatherTool,
- *             (exchange, args) -> Mono.fromSupplier(() -> getWeather(args))
- *                 .map(result -> new CallToolResult("Weather: " + result)))
+ *         McpServerFeatures.AsyncToolSpecification.builder()
+ * 			.tool(calculatorTool)
+ *   	    .callTool((exchange, args) -> Mono.fromSupplier(() -> calculate(args.arguments()))
+ *                 .map(result -> new CallToolResult("Result: " + result))))
+ *.         .build(),
+ *         McpServerFeatures.AsyncToolSpecification.builder()
+ * 	        .tool((weatherTool)
+ *          .callTool((exchange, args) -> Mono.fromSupplier(() -> getWeather(args.arguments()))
+ *                 .map(result -> new CallToolResult("Weather: " + result))))
+ *          .build()
  *     )
  *     // Register resources
  *     .resources(
@@ -321,13 +325,42 @@ public interface McpServer {
 		 * map of arguments passed to the tool.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if tool or handler is null
+		 * @deprecated Use {@link #toolCall(McpSchema.Tool, BiFunction)} instead for tool
+		 * calls that require a request object.
 		 */
+		@Deprecated
 		public AsyncSpecification tool(McpSchema.Tool tool,
 				BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<CallToolResult>> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
+			assertNoDuplicateTool(tool.name());
 
 			this.tools.add(new McpServerFeatures.AsyncToolSpecification(tool, handler));
+
+			return this;
+		}
+
+		/**
+		 * Adds a single tool with its implementation handler to the server. This is a
+		 * convenience method for registering individual tools without creating a
+		 * {@link McpServerFeatures.AsyncToolCallSpecification} explicitly.
+		 * @param tool The tool definition including name, description, and schema. Must
+		 * not be null.
+		 * @param handler The function that implements the tool's logic. Must not be null.
+		 * The function's first argument is an {@link McpAsyncServerExchange} upon which
+		 * the server can interact with the connected client. The second argument is the
+		 * {@link McpSchema.CallToolRequest} object containing the tool call
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if tool or handler is null
+		 */
+		public AsyncSpecification toolCall(McpSchema.Tool tool,
+				BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<CallToolResult>> handler) {
+
+			Assert.notNull(tool, "Tool must not be null");
+			Assert.notNull(handler, "Handler must not be null");
+			assertNoDuplicateTool(tool.name());
+
+			this.tools.add(McpServerFeatures.AsyncToolSpecification.builder().tool(tool).callTool(handler).build());
 
 			return this;
 		}
@@ -344,7 +377,12 @@ public interface McpServer {
 		 */
 		public AsyncSpecification tools(List<McpServerFeatures.AsyncToolSpecification> toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
-			this.tools.addAll(toolSpecifications);
+
+			for (var tool : toolSpecifications) {
+				assertNoDuplicateTool(tool.tool().name());
+				this.tools.add(tool);
+			}
+
 			return this;
 		}
 
@@ -355,22 +393,29 @@ public interface McpServer {
 		 * <p>
 		 * Example usage: <pre>{@code
 		 * .tools(
-		 *     new McpServerFeatures.AsyncToolSpecification(calculatorTool, calculatorHandler),
-		 *     new McpServerFeatures.AsyncToolSpecification(weatherTool, weatherHandler),
-		 *     new McpServerFeatures.AsyncToolSpecification(fileManagerTool, fileManagerHandler)
+		 *     McpServerFeatures.AsyncToolSpecification.builder().tool(calculatorTool).callTool(calculatorHandler).build(),
+		 *     McpServerFeatures.AsyncToolSpecification.builder().tool(weatherTool).callTool(weatherHandler).build(),
+		 *     McpServerFeatures.AsyncToolSpecification.builder().tool(fileManagerTool).callTool(fileManagerHandler).build()
 		 * )
 		 * }</pre>
 		 * @param toolSpecifications The tool specifications to add. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if toolSpecifications is null
-		 * @see #tools(List)
 		 */
 		public AsyncSpecification tools(McpServerFeatures.AsyncToolSpecification... toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
+
 			for (McpServerFeatures.AsyncToolSpecification tool : toolSpecifications) {
+				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
 			return this;
+		}
+
+		private void assertNoDuplicateTool(String toolName) {
+			if (this.tools.stream().anyMatch(toolSpec -> toolSpec.tool().name().equals(toolName))) {
+				throw new IllegalArgumentException("Tool with name '" + toolName + "' is already registered.");
+			}
 		}
 
 		/**
@@ -812,13 +857,41 @@ public interface McpServer {
 		 * list of arguments passed to the tool.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if tool or handler is null
+		 * @deprecated Use {@link #toolCall(McpSchema.Tool, BiFunction)} instead for tool
+		 * calls that require a request object.
 		 */
+		@Deprecated
 		public SyncSpecification tool(McpSchema.Tool tool,
 				BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
+			assertNoDuplicateTool(tool.name());
 
 			this.tools.add(new McpServerFeatures.SyncToolSpecification(tool, handler));
+
+			return this;
+		}
+
+		/**
+		 * Adds a single tool with its implementation handler to the server. This is a
+		 * convenience method for registering individual tools without creating a
+		 * {@link McpServerFeatures.SyncToolSpecification} explicitly.
+		 * @param tool The tool definition including name, description, and schema. Must
+		 * not be null.
+		 * @param handler The function that implements the tool's logic. Must not be null.
+		 * The function's first argument is an {@link McpSyncServerExchange} upon which
+		 * the server can interact with the connected client. The second argument is the
+		 * list of arguments passed to the tool.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if tool or handler is null
+		 */
+		public SyncSpecification toolCall(McpSchema.Tool tool,
+				BiFunction<McpSyncServerExchange, McpSchema.CallToolRequest, McpSchema.CallToolResult> handler) {
+			Assert.notNull(tool, "Tool must not be null");
+			Assert.notNull(handler, "Handler must not be null");
+			assertNoDuplicateTool(tool.name());
+
+			this.tools.add(new McpServerFeatures.SyncToolSpecification(tool, null, handler));
 
 			return this;
 		}
@@ -835,7 +908,13 @@ public interface McpServer {
 		 */
 		public SyncSpecification tools(List<McpServerFeatures.SyncToolSpecification> toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
-			this.tools.addAll(toolSpecifications);
+
+			for (var tool : toolSpecifications) {
+				String toolName = tool.tool().name();
+				assertNoDuplicateTool(toolName); // Check against existing tools
+				this.tools.add(tool);
+			}
+
 			return this;
 		}
 
@@ -858,10 +937,18 @@ public interface McpServer {
 		 */
 		public SyncSpecification tools(McpServerFeatures.SyncToolSpecification... toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
+
 			for (McpServerFeatures.SyncToolSpecification tool : toolSpecifications) {
+				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
 			return this;
+		}
+
+		private void assertNoDuplicateTool(String toolName) {
+			if (this.tools.stream().anyMatch(toolSpec -> toolSpec.tool().name().equals(toolName))) {
+				throw new IllegalArgumentException("Tool with name '" + toolName + "' is already registered.");
+			}
 		}
 
 		/**
