@@ -11,7 +11,6 @@ import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -48,6 +47,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.util.context.Context;
+
+import static java.util.Objects.requireNonNullElse;
 
 /**
  * MCP Streamable HTTP transport provider that uses a single session class to manage all
@@ -147,9 +148,9 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 	 */
 	public StreamableHttpServerTransportProvider(ObjectMapper objectMapper, String mcpEndpoint,
 			Supplier<String> sessionIdProvider) {
-		this.objectMapper = Objects.requireNonNullElse(objectMapper, DEFAULT_OBJECT_MAPPER);
-		this.mcpEndpoint = Objects.requireNonNullElse(mcpEndpoint, DEFAULT_MCP_ENDPOINT);
-		this.sessionIdProvider = Objects.requireNonNullElse(sessionIdProvider, DEFAULT_SESSION_ID_PROVIDER);
+		this.objectMapper = requireNonNullElse(objectMapper, DEFAULT_OBJECT_MAPPER);
+		this.mcpEndpoint = requireNonNullElse(mcpEndpoint, DEFAULT_MCP_ENDPOINT);
+		this.sessionIdProvider = requireNonNullElse(sessionIdProvider, DEFAULT_SESSION_ID_PROVIDER);
 	}
 
 	/**
@@ -276,7 +277,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 			SseTransport sseTransport = new SseTransport(objectMapper, response, asyncContext, lastEventId,
 					request.getRequestId(), sessionId);
 			session.registerTransport(request.getRequestId(), sseTransport);
-			logger.debug("Registered SSE transport {} for session {}", session.LISTENING_TRANSPORT, sessionId);
+			logger.debug("Registered SSE transport {} for session {}", request.getRequestId(), sessionId);
 		}
 	}
 
@@ -364,21 +365,11 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 					// Determine response type and create appropriate transport if needed
 					ResponseType responseType = detectResponseType(message, session);
 					final String transportId;
-					final Object id;
 					if (message instanceof JSONRPCRequest req) {
-						id = req.id();
+						transportId = req.id().toString();
 					}
 					else if (message instanceof JSONRPCResponse resp) {
-						id = resp.id();
-					}
-					else {
-						id = null;
-					}
-					if (id instanceof String) {
-						transportId = (String) id;
-					}
-					else if (id instanceof Integer) {
-						transportId = id.toString();
+						transportId = resp.id().toString();
 					}
 					else {
 						transportId = null;
@@ -761,6 +752,8 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 						eventSink.tryEmitNext(event);
 					}
 				}
+				logger.debug("Completing SSE stream after replaying events");
+				eventSink.tryEmitComplete();
 			}
 			catch (NumberFormatException e) {
 				logger.warn("Invalid last event ID: {}", lastEventId);

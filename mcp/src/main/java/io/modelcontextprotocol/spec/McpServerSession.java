@@ -13,6 +13,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.spec.SseEvent;
+import io.modelcontextprotocol.spec.McpSchema.McpId;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -28,7 +30,7 @@ public class McpServerSession implements McpSession {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpServerSession.class);
 
-	private final ConcurrentHashMap<Object, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<McpId, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
 
 	private final ConcurrentHashMap<String, McpServerTransport> transports = new ConcurrentHashMap<>();
 
@@ -118,20 +120,42 @@ public class McpServerSession implements McpSession {
 		return this.id;
 	}
 
+	/**
+	 * Increments the session-specific event counter, maps it to the given transport ID
+	 * for replayability support, then returns the event ID
+	 * @param transportId
+	 * @return an event ID unique to the session
+	 */
 	public String incrementAndGetEventId(String transportId) {
 		final String eventId = String.valueOf(eventCounter.incrementAndGet());
 		eventTransports.put(eventId, transportId);
 		return eventId;
 	}
 
+	/**
+	 * Used for replayability support to get the transport ID of a given event ID
+	 * @param eventId
+	 * @return The ID of the transport instance that the given event ID was sent over
+	 */
 	public String getTransportIdForEvent(String eventId) {
 		return eventTransports.get(eventId);
 	}
 
+	/**
+	 * Used for replayability support to set the event history of a given transport ID
+	 * @param transportId
+	 * @param eventHistory
+	 */
 	public void setTransportEventHistory(String transportId, Map<String, SseEvent> eventHistory) {
 		transportEventHistories.put(transportId, eventHistory);
 	}
 
+	/**
+	 * Used for replayability support to retrieve the entire event history for a given
+	 * transport ID
+	 * @param transportId
+	 * @return Map of SseEvent objects, keyed by event ID
+	 */
 	public Map<String, SseEvent> getTransportEventHistory(String transportId) {
 		return transportEventHistories.get(transportId);
 	}
@@ -203,8 +227,8 @@ public class McpServerSession implements McpSession {
 		return this.clientInfo.get();
 	}
 
-	private String generateRequestId() {
-		return this.id + "-" + this.requestCounter.getAndIncrement();
+	private McpId generateRequestId() {
+		return McpId.of(this.id + "-" + this.requestCounter.getAndIncrement());
 	}
 
 	/**
@@ -216,7 +240,7 @@ public class McpServerSession implements McpSession {
 
 	@Override
 	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {
-		String requestId = this.generateRequestId();
+		McpId requestId = this.generateRequestId();
 
 		return Mono.<McpSchema.JSONRPCResponse>create(sink -> {
 			this.pendingResponses.put(requestId, sink);
@@ -276,22 +300,12 @@ public class McpServerSession implements McpSession {
 			}
 			else if (message instanceof McpSchema.JSONRPCRequest request) {
 				logger.debug("Received request: {}", request);
-				final McpServerTransport finalListeningTransport = listeningTransport;
 				final String transportId;
 				if (transports.isEmpty()) {
 					transportId = LISTENING_TRANSPORT;
 				}
 				else {
-					if (request.id() instanceof String) {
-						transportId = (String) request.id();
-					}
-					else if (request.id() instanceof Integer) {
-						transportId = request.id().toString();
-					}
-					else {
-						logger.error("Invalid request ID: {}", String.valueOf(request.id()));
-						return Mono.error(new RuntimeException("Invalid request ID: " + String.valueOf(request.id())));
-					}
+					transportId = request.id().toString();
 				}
 				return handleIncomingRequest(request).onErrorResume(error -> {
 					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
@@ -336,7 +350,7 @@ public class McpServerSession implements McpSession {
 				// TODO handle situation where already initialized!
 				McpSchema.InitializeRequest initializeRequest = transports.isEmpty() ? listeningTransport
 					.unmarshalFrom(request.params(), new TypeReference<McpSchema.InitializeRequest>() {
-					}) : transports.get(request.id())
+					}) : transports.get(String.valueOf(request.id()))
 						.unmarshalFrom(request.params(), new TypeReference<McpSchema.InitializeRequest>() {
 						});
 
@@ -355,6 +369,9 @@ public class McpServerSession implements McpSession {
 									error.message(), error.data())));
 				}
 
+				// We would need to add request.id() as a parameter to handler.handle() if
+				// we want client-request-driven requests/notifications to go to the
+				// related stream
 				resultMono = this.exchangeSink.asMono().flatMap(exchange -> handler.handle(exchange, request.params()));
 			}
 			return resultMono

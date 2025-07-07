@@ -12,6 +12,8 @@ import java.util.function.Function;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
+import io.modelcontextprotocol.spec.McpSchema.McpId;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -161,7 +163,7 @@ class WebFluxSseClientTransportTests {
 	@Test
 	void testMessageProcessing() {
 		// Create a test message
-		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
+		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", McpId.of("test-id"),
 				Map.of("key", "value"));
 
 		// Simulate receiving the message
@@ -192,7 +194,7 @@ class WebFluxSseClientTransportTests {
 				""");
 
 		// Create and send a request message
-		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
+		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", McpId.of("test-id"),
 				Map.of("key", "value"));
 
 		// Verify message handling
@@ -216,7 +218,7 @@ class WebFluxSseClientTransportTests {
 				""");
 
 		// Create and send a request message
-		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
+		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", McpId.of("test-id"),
 				Map.of("key", "value"));
 
 		// Verify message handling
@@ -246,7 +248,7 @@ class WebFluxSseClientTransportTests {
 		StepVerifier.create(transport.closeGracefully()).verifyComplete();
 
 		// Create a test message
-		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
+		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", McpId.of("test-id"),
 				Map.of("key", "value"));
 
 		// Verify message is not processed after shutdown
@@ -292,10 +294,10 @@ class WebFluxSseClientTransportTests {
 				""");
 
 		// Create and send corresponding messages
-		JSONRPCRequest message1 = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "method1", "id1",
+		JSONRPCRequest message1 = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "method1", McpId.of("id1"),
 				Map.of("key", "value1"));
 
-		JSONRPCRequest message2 = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "method2", "id2",
+		JSONRPCRequest message2 = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "method2", McpId.of("id2"),
 				Map.of("key", "value2"));
 
 		// Verify both messages are processed
