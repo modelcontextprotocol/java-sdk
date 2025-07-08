@@ -20,7 +20,9 @@ import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
+import reactor.test.scheduler.VirtualTimeScheduler;
 import reactor.util.context.Context;
 import reactor.util.context.ContextView;
 
@@ -34,13 +36,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Tests for {@link LifecyleInitializer}.
+ * Tests for {@link LifecycleInitializer}.
  */
-class LifecyleInitializerTests {
+class LifecycleInitializerTests {
 
 	private static final Duration INITIALIZATION_TIMEOUT = Duration.ofSeconds(5);
-
-	private static final Duration SHORT_TIMEOUT = Duration.ofMillis(100);
 
 	private static final McpSchema.ClientCapabilities CLIENT_CAPABILITIES = McpSchema.ClientCapabilities.builder()
 		.build();
@@ -54,56 +54,56 @@ class LifecyleInitializerTests {
 			"Test instructions");
 
 	@Mock
-	private McpClientSession mockSession;
+	private McpClientSession mockClientSession;
 
 	@Mock
 	private Function<ContextView, McpClientSession> mockSessionSupplier;
 
-	private LifecyleInitializer initializer;
+	private LifecycleInitializer initializer;
 
 	@BeforeEach
 	void setUp() {
 		MockitoAnnotations.openMocks(this);
 
-		when(mockSessionSupplier.apply(any(ContextView.class))).thenReturn(mockSession);
-		when(mockSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any()))
+		when(mockSessionSupplier.apply(any(ContextView.class))).thenReturn(mockClientSession);
+		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any()))
 			.thenReturn(Mono.just(MOCK_INIT_RESULT));
-		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_INITIALIZED), any()))
+		when(mockClientSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_INITIALIZED), any()))
 			.thenReturn(Mono.empty());
-		when(mockSession.closeGracefully()).thenReturn(Mono.empty());
+		when(mockClientSession.closeGracefully()).thenReturn(Mono.empty());
 
-		initializer = new LifecyleInitializer(CLIENT_CAPABILITIES, CLIENT_INFO, PROTOCOL_VERSIONS,
+		initializer = new LifecycleInitializer(CLIENT_CAPABILITIES, CLIENT_INFO, PROTOCOL_VERSIONS,
 				INITIALIZATION_TIMEOUT, mockSessionSupplier);
 	}
 
 	@Test
 	void constructorShouldValidateParameters() {
-		assertThatThrownBy(() -> new LifecyleInitializer(null, CLIENT_INFO, PROTOCOL_VERSIONS, INITIALIZATION_TIMEOUT,
+		assertThatThrownBy(() -> new LifecycleInitializer(null, CLIENT_INFO, PROTOCOL_VERSIONS, INITIALIZATION_TIMEOUT,
 				mockSessionSupplier))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("Client capabilities must not be null");
 
-		assertThatThrownBy(() -> new LifecyleInitializer(CLIENT_CAPABILITIES, null, PROTOCOL_VERSIONS,
+		assertThatThrownBy(() -> new LifecycleInitializer(CLIENT_CAPABILITIES, null, PROTOCOL_VERSIONS,
 				INITIALIZATION_TIMEOUT, mockSessionSupplier))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("Client info must not be null");
 
-		assertThatThrownBy(() -> new LifecyleInitializer(CLIENT_CAPABILITIES, CLIENT_INFO, null, INITIALIZATION_TIMEOUT,
-				mockSessionSupplier))
-			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("Protocol versions must not be empty");
-
-		assertThatThrownBy(() -> new LifecyleInitializer(CLIENT_CAPABILITIES, CLIENT_INFO, List.of(),
+		assertThatThrownBy(() -> new LifecycleInitializer(CLIENT_CAPABILITIES, CLIENT_INFO, null,
 				INITIALIZATION_TIMEOUT, mockSessionSupplier))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("Protocol versions must not be empty");
 
-		assertThatThrownBy(() -> new LifecyleInitializer(CLIENT_CAPABILITIES, CLIENT_INFO, PROTOCOL_VERSIONS, null,
+		assertThatThrownBy(() -> new LifecycleInitializer(CLIENT_CAPABILITIES, CLIENT_INFO, List.of(),
+				INITIALIZATION_TIMEOUT, mockSessionSupplier))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("Protocol versions must not be empty");
+
+		assertThatThrownBy(() -> new LifecycleInitializer(CLIENT_CAPABILITIES, CLIENT_INFO, PROTOCOL_VERSIONS, null,
 				mockSessionSupplier))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("Initialization timeout must not be null");
 
-		assertThatThrownBy(() -> new LifecyleInitializer(CLIENT_CAPABILITIES, CLIENT_INFO, PROTOCOL_VERSIONS,
+		assertThatThrownBy(() -> new LifecycleInitializer(CLIENT_CAPABILITIES, CLIENT_INFO, PROTOCOL_VERSIONS,
 				INITIALIZATION_TIMEOUT, null))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("Session supplier must not be null");
@@ -119,15 +119,16 @@ class LifecyleInitializerTests {
 			})
 			.verifyComplete();
 
-		verify(mockSession).sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(McpSchema.InitializeRequest.class), any());
-		verify(mockSession).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_INITIALIZED), eq(null));
+		verify(mockClientSession).sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(McpSchema.InitializeRequest.class),
+				any());
+		verify(mockClientSession).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_INITIALIZED), eq(null));
 	}
 
 	@Test
 	void shouldUseLatestProtocolVersionInInitializeRequest() {
 		AtomicReference<McpSchema.InitializeRequest> capturedRequest = new AtomicReference<>();
 
-		when(mockSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenAnswer(invocation -> {
+		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenAnswer(invocation -> {
 			capturedRequest.set((McpSchema.InitializeRequest) invocation.getArgument(1));
 			return Mono.just(MOCK_INIT_RESULT);
 		});
@@ -149,26 +150,34 @@ class LifecyleInitializerTests {
 				McpSchema.ServerCapabilities.builder().build(), new McpSchema.Implementation("test-server", "1.0.0"),
 				"Test instructions");
 
-		when(mockSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any()))
+		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any()))
 			.thenReturn(Mono.just(unsupportedResult));
 
 		StepVerifier.create(initializer.withIntitialization("test", init -> Mono.just(init.initializeResult())))
 			.expectError(McpError.class)
 			.verify();
 
-		verify(mockSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_INITIALIZED), any());
+		verify(mockClientSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_INITIALIZED), any());
 	}
 
 	@Test
 	void shouldTimeoutOnSlowInitialization() {
-		LifecyleInitializer shortTimeoutInitializer = new LifecyleInitializer(CLIENT_CAPABILITIES, CLIENT_INFO,
-				PROTOCOL_VERSIONS, SHORT_TIMEOUT, mockSessionSupplier);
+		VirtualTimeScheduler virtualTimeScheduler = VirtualTimeScheduler.getOrSet();
 
-		when(mockSession.<McpSchema.InitializeResult>sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any()))
-			.thenReturn(Mono.just(MOCK_INIT_RESULT).delayElement(Duration.ofSeconds(1)));
+		Duration INITIALIZE_TIMEOUT = Duration.ofSeconds(1);
+		Duration SLOW_RESPONSE_DELAY = Duration.ofSeconds(5);
+
+		LifecycleInitializer shortTimeoutInitializer = new LifecycleInitializer(CLIENT_CAPABILITIES, CLIENT_INFO,
+				PROTOCOL_VERSIONS, INITIALIZE_TIMEOUT, mockSessionSupplier);
+
+		when(mockClientSession.<McpSchema.InitializeResult>sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any()))
+			.thenReturn(Mono.just(MOCK_INIT_RESULT).delayElement(SLOW_RESPONSE_DELAY, virtualTimeScheduler));
 
 		StepVerifier
-			.create(shortTimeoutInitializer.withIntitialization("test", init -> Mono.just(init.initializeResult())))
+			.withVirtualTime(() -> shortTimeoutInitializer.withIntitialization("test",
+					init -> Mono.just(init.initializeResult())), () -> virtualTimeScheduler, Long.MAX_VALUE)
+			.expectSubscription()
+			.expectNoEvent(INITIALIZE_TIMEOUT)
 			.expectError(McpError.class)
 			.verify();
 	}
@@ -187,7 +196,7 @@ class LifecyleInitializerTests {
 
 		// Verify session was created only once
 		verify(mockSessionSupplier, times(1)).apply(any(ContextView.class));
-		verify(mockSession, times(1)).sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any());
+		verify(mockClientSession, times(1)).sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any());
 	}
 
 	@Test
@@ -196,13 +205,17 @@ class LifecyleInitializerTests {
 
 		when(mockSessionSupplier.apply(any(ContextView.class))).thenAnswer(invocation -> {
 			sessionCreationCount.incrementAndGet();
-			return mockSession;
+			return mockClientSession;
 		});
 
-		// Start multiple concurrent initializations
-		Mono<String> init1 = initializer.withIntitialization("test1", init -> Mono.just("result1"));
-		Mono<String> init2 = initializer.withIntitialization("test2", init -> Mono.just("result2"));
-		Mono<String> init3 = initializer.withIntitialization("test3", init -> Mono.just("result3"));
+		// Start multiple concurrent initializations using subscribeOn with parallel
+		// scheduler
+		Mono<String> init1 = initializer.withIntitialization("test1", init -> Mono.just("result1"))
+			.subscribeOn(Schedulers.parallel());
+		Mono<String> init2 = initializer.withIntitialization("test2", init -> Mono.just("result2"))
+			.subscribeOn(Schedulers.parallel());
+		Mono<String> init3 = initializer.withIntitialization("test3", init -> Mono.just("result3"))
+			.subscribeOn(Schedulers.parallel());
 
 		StepVerifier.create(Mono.zip(init1, init2, init3)).assertNext(tuple -> {
 			assertThat(tuple.getT1()).isEqualTo("result1");
@@ -212,12 +225,12 @@ class LifecyleInitializerTests {
 
 		// Should only create one session despite concurrent requests
 		assertThat(sessionCreationCount.get()).isEqualTo(1);
-		verify(mockSession, times(1)).sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any());
+		verify(mockClientSession, times(1)).sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any());
 	}
 
 	@Test
 	void shouldHandleInitializationFailure() {
-		when(mockSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any()))
+		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any()))
 			.thenReturn(Mono.error(new RuntimeException("Connection failed")));
 
 		StepVerifier.create(initializer.withIntitialization("test", init -> Mono.just(init.initializeResult())))
@@ -230,27 +243,24 @@ class LifecyleInitializerTests {
 
 	@Test
 	void shouldHandleTransportSessionNotFoundException() {
-		// Simulate a successful initialization first
+		// successful initialization first
 		StepVerifier.create(initializer.withIntitialization("test", init -> Mono.just(init.initializeResult())))
 			.expectNext(MOCK_INIT_RESULT)
 			.verifyComplete();
 
 		assertThat(initializer.isInitialized()).isTrue();
 
-		// Simulate transport session not found exception
+		// Simulate transport session not found
 		initializer.handleException(new McpTransportSessionNotFoundException("Session not found"));
 
-		// The exception handling resets the initialization state and triggers
-		// re-initialization
-		// We need to wait a bit for the async re-initialization to start
-		try {
-			Thread.sleep(10); // Small delay to allow async processing
-		}
-		catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-		}
+		assertThat(initializer.isInitialized()).isTrue();
 
-		verify(mockSession).close();
+		// Verify that the session was closed and re-initialized
+		verify(mockClientSession).close();
+
+		// Verify session was created 2 times (once for initial and once for
+		// re-initialization)
+		verify(mockSessionSupplier, times(2)).apply(any(ContextView.class));
 	}
 
 	@Test
@@ -267,26 +277,25 @@ class LifecyleInitializerTests {
 
 		// Should still be initialized
 		assertThat(initializer.isInitialized()).isTrue();
-		verify(mockSession, never()).close();
+		verify(mockClientSession, never()).close();
+		// Verify that the session was not re-created
+		verify(mockSessionSupplier, times(1)).apply(any(ContextView.class));
 	}
 
 	@Test
 	void shouldCloseGracefully() {
-		// Initialize first
 		StepVerifier.create(initializer.withIntitialization("test", init -> Mono.just(init.initializeResult())))
 			.expectNext(MOCK_INIT_RESULT)
 			.verifyComplete();
 
-		// Close gracefully
 		StepVerifier.create(initializer.closeGracefully()).verifyComplete();
 
-		verify(mockSession).closeGracefully();
+		verify(mockClientSession).closeGracefully();
 		assertThat(initializer.isInitialized()).isFalse();
 	}
 
 	@Test
 	void shouldCloseImmediately() {
-		// Initialize first
 		StepVerifier.create(initializer.withIntitialization("test", init -> Mono.just(init.initializeResult())))
 			.expectNext(MOCK_INIT_RESULT)
 			.verifyComplete();
@@ -294,7 +303,7 @@ class LifecyleInitializerTests {
 		// Close immediately
 		initializer.close();
 
-		verify(mockSession).close();
+		verify(mockClientSession).close();
 		assertThat(initializer.isInitialized()).isFalse();
 	}
 
@@ -305,8 +314,8 @@ class LifecyleInitializerTests {
 
 		StepVerifier.create(initializer.closeGracefully()).verifyComplete();
 
-		verify(mockSession, never()).close();
-		verify(mockSession, never()).closeGracefully();
+		verify(mockClientSession, never()).close();
+		verify(mockClientSession, never()).closeGracefully();
 	}
 
 	@Test
@@ -316,7 +325,7 @@ class LifecyleInitializerTests {
 
 		AtomicReference<McpSchema.InitializeRequest> capturedRequest = new AtomicReference<>();
 
-		when(mockSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenAnswer(invocation -> {
+		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenAnswer(invocation -> {
 			capturedRequest.set((McpSchema.InitializeRequest) invocation.getArgument(1));
 			return Mono.just(new McpSchema.InitializeResult("4.0.0", McpSchema.ServerCapabilities.builder().build(),
 					new McpSchema.Implementation("test-server", "1.0.0"), "Test instructions"));
@@ -339,7 +348,7 @@ class LifecyleInitializerTests {
 
 		when(mockSessionSupplier.apply(any(ContextView.class))).thenAnswer(invocation -> {
 			capturedContext.set(invocation.getArgument(0));
-			return mockSession;
+			return mockClientSession;
 		});
 
 		StepVerifier
@@ -355,7 +364,7 @@ class LifecyleInitializerTests {
 	@Test
 	void shouldProvideAccessToMcpSessionAndInitializeResult() {
 		StepVerifier.create(initializer.withIntitialization("test", init -> {
-			assertThat(init.mcpSession()).isEqualTo(mockSession);
+			assertThat(init.mcpSession()).isEqualTo(mockClientSession);
 			assertThat(init.initializeResult()).isEqualTo(MOCK_INIT_RESULT);
 			return Mono.just("success");
 		})).expectNext("success").verifyComplete();
@@ -363,15 +372,15 @@ class LifecyleInitializerTests {
 
 	@Test
 	void shouldHandleNotificationFailure() {
-		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_INITIALIZED), any()))
+		when(mockClientSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_INITIALIZED), any()))
 			.thenReturn(Mono.error(new RuntimeException("Notification failed")));
 
 		StepVerifier.create(initializer.withIntitialization("test", init -> Mono.just(init.initializeResult())))
 			.expectError(RuntimeException.class)
 			.verify();
 
-		verify(mockSession).sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any());
-		verify(mockSession).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_INITIALIZED), eq(null));
+		verify(mockClientSession).sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any());
+		verify(mockClientSession).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_INITIALIZED), eq(null));
 	}
 
 	@Test
@@ -397,7 +406,7 @@ class LifecyleInitializerTests {
 
 		// Verify two separate initializations occurred
 		verify(mockSessionSupplier, times(2)).apply(any(ContextView.class));
-		verify(mockSession, times(2)).sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any());
+		verify(mockClientSession, times(2)).sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any());
 	}
 
 }

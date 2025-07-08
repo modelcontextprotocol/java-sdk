@@ -145,7 +145,7 @@ public class McpAsyncClient {
 	/**
 	 * The lifecycle initializer that manages the client-server connection initialization.
 	 */
-	private LifecyleInitializer initializer;
+	private final LifecycleInitializer initializer;
 
 	/**
 	 * Create a new McpAsyncClient with the given transport and session request-response
@@ -253,7 +253,7 @@ public class McpAsyncClient {
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_MESSAGE,
 				asyncLoggingNotificationHandler(loggingConsumersFinal));
 
-		this.initializer = new LifecyleInitializer(clientCapabilities, clientInfo,
+		this.initializer = new LifecycleInitializer(clientCapabilities, clientInfo,
 				List.of(McpSchema.LATEST_PROTOCOL_VERSION), initializationTimeout,
 				ctx -> new McpClientSession(requestTimeout, transport, requestHandlers, notificationHandlers,
 						con -> con.contextWrite(ctx)));

@@ -72,9 +72,9 @@ import reactor.util.context.ContextView;
  * the initialized notification</li>
  * </ul>
  */
-public class LifecyleInitializer {
+class LifecycleInitializer {
 
-	private static final Logger logger = LoggerFactory.getLogger(LifecyleInitializer.class);
+	private static final Logger logger = LoggerFactory.getLogger(LifecycleInitializer.class);
 
 	/**
 	 * The MCP session supplier that manages bidirectional JSON-RPC communication between
@@ -95,7 +95,7 @@ public class LifecyleInitializer {
 	 */
 	private final Duration initializationTimeout;
 
-	public LifecyleInitializer(McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
+	public LifecycleInitializer(McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
 			List<String> protocolVersions, Duration initializationTimeout,
 			Function<ContextView, McpClientSession> sessionSupplier) {
 
@@ -233,7 +233,7 @@ public class LifecyleInitializer {
 	}
 
 	public boolean isInitialized() {
-		return currentInitializationResult() != null;
+		return this.currentInitializationResult() != null;
 	}
 
 	public McpSchema.InitializeResult currentInitializationResult() {
