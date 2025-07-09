@@ -10,6 +10,8 @@ import java.util.UUID;
 import io.modelcontextprotocol.MockMcpServerTransport;
 import io.modelcontextprotocol.MockMcpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.McpId;
+
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -23,7 +25,7 @@ class McpServerProtocolVersionTests {
 
 	private static final McpSchema.Implementation CLIENT_INFO = new McpSchema.Implementation("test-client", "1.0.0");
 
-	private McpSchema.JSONRPCRequest jsonRpcInitializeRequest(String requestId, String protocolVersion) {
+	private McpSchema.JSONRPCRequest jsonRpcInitializeRequest(McpId requestId, String protocolVersion) {
 		return new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE, requestId,
 				new McpSchema.InitializeRequest(protocolVersion, null, CLIENT_INFO));
 	}
@@ -34,7 +36,7 @@ class McpServerProtocolVersionTests {
 		var transportProvider = new MockMcpServerTransportProvider(serverTransport);
 		McpAsyncServer server = McpServer.async(transportProvider).serverInfo(SERVER_INFO).build();
 
-		String requestId = UUID.randomUUID().toString();
+		McpId requestId = McpId.of(UUID.randomUUID().toString());
 
 		transportProvider
 			.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, McpSchema.LATEST_PROTOCOL_VERSION));
@@ -60,7 +62,7 @@ class McpServerProtocolVersionTests {
 
 		server.setProtocolVersions(List.of(oldVersion, McpSchema.LATEST_PROTOCOL_VERSION));
 
-		String requestId = UUID.randomUUID().toString();
+		McpId requestId = McpId.of(UUID.randomUUID().toString());
 
 		transportProvider.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, oldVersion));
 
@@ -83,7 +85,7 @@ class McpServerProtocolVersionTests {
 
 		McpAsyncServer server = McpServer.async(transportProvider).serverInfo(SERVER_INFO).build();
 
-		String requestId = UUID.randomUUID().toString();
+		McpId requestId = McpId.of(UUID.randomUUID().toString());
 
 		transportProvider.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, unsupportedVersion));
 
@@ -111,7 +113,8 @@ class McpServerProtocolVersionTests {
 
 		server.setProtocolVersions(List.of(oldVersion, middleVersion, latestVersion));
 
-		String requestId = UUID.randomUUID().toString();
+		McpId requestId = McpId.of(UUID.randomUUID().toString());
+
 		transportProvider.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, latestVersion));
 
 		McpSchema.JSONRPCMessage response = serverTransport.getLastSentMessage();

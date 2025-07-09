@@ -15,7 +15,7 @@ public class McpError extends RuntimeException {
 	}
 
 	public McpError(Object error) {
-		super(error.toString());
+		super(String.valueOf(error));
 	}
 
 	public JSONRPCError getJsonRpcError() {

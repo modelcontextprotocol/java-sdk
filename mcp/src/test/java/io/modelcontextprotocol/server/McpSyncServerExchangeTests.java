@@ -55,7 +55,7 @@ class McpSyncServerExchangeTests {
 
 		clientInfo = new McpSchema.Implementation("test-client", "1.0.0");
 
-		asyncExchange = new McpAsyncServerExchange(mockSession, clientCapabilities, clientInfo);
+		asyncExchange = new McpAsyncServerExchange(mockSession, clientCapabilities, clientInfo, "test-transport");
 		exchange = new McpSyncServerExchange(asyncExchange);
 	}
 
@@ -67,7 +67,7 @@ class McpSyncServerExchangeTests {
 		McpSchema.ListRootsResult singlePageResult = new McpSchema.ListRootsResult(roots, null);
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), any(McpSchema.PaginatedRequest.class),
-				any(TypeReference.class)))
+				any(TypeReference.class), eq("test-transport")))
 			.thenReturn(Mono.just(singlePageResult));
 
 		McpSchema.ListRootsResult result = exchange.listRoots();
@@ -95,11 +95,11 @@ class McpSyncServerExchangeTests {
 		McpSchema.ListRootsResult page2Result = new McpSchema.ListRootsResult(page2Roots, null);
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), eq(new McpSchema.PaginatedRequest(null)),
-				any(TypeReference.class)))
+				any(TypeReference.class), eq("test-transport")))
 			.thenReturn(Mono.just(page1Result));
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), eq(new McpSchema.PaginatedRequest("cursor1")),
-				any(TypeReference.class)))
+				any(TypeReference.class), eq("test-transport")))
 			.thenReturn(Mono.just(page2Result));
 
 		McpSchema.ListRootsResult result = exchange.listRoots();
@@ -121,7 +121,7 @@ class McpSyncServerExchangeTests {
 		McpSchema.ListRootsResult emptyResult = new McpSchema.ListRootsResult(new ArrayList<>(), null);
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), any(McpSchema.PaginatedRequest.class),
-				any(TypeReference.class)))
+				any(TypeReference.class), eq("test-transport")))
 			.thenReturn(Mono.just(emptyResult));
 
 		McpSchema.ListRootsResult result = exchange.listRoots();
@@ -141,7 +141,7 @@ class McpSyncServerExchangeTests {
 		McpSchema.ListRootsResult result = new McpSchema.ListRootsResult(roots, "nextCursor");
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), eq(new McpSchema.PaginatedRequest("someCursor")),
-				any(TypeReference.class)))
+				any(TypeReference.class), eq("test-transport")))
 			.thenReturn(Mono.just(result));
 
 		McpSchema.ListRootsResult listResult = exchange.listRoots("someCursor");
@@ -155,7 +155,7 @@ class McpSyncServerExchangeTests {
 	void testListRootsWithError() {
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), any(McpSchema.PaginatedRequest.class),
-				any(TypeReference.class)))
+				any(TypeReference.class), eq("test-transport")))
 			.thenReturn(Mono.error(new RuntimeException("Network error")));
 
 		// When & Then
@@ -174,11 +174,11 @@ class McpSyncServerExchangeTests {
 		McpSchema.ListRootsResult page2Result = new McpSchema.ListRootsResult(page2Roots, null);
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), eq(new McpSchema.PaginatedRequest(null)),
-				any(TypeReference.class)))
+				any(TypeReference.class), eq("test-transport")))
 			.thenReturn(Mono.just(page1Result));
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), eq(new McpSchema.PaginatedRequest("cursor1")),
-				any(TypeReference.class)))
+				any(TypeReference.class), eq("test-transport")))
 			.thenReturn(Mono.just(page2Result));
 
 		McpSchema.ListRootsResult result = exchange.listRoots();
@@ -226,13 +226,15 @@ class McpSyncServerExchangeTests {
 			.data("Test error message")
 			.build();
 
-		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(notification)))
+		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(notification),
+				eq("test-transport")))
 			.thenReturn(Mono.empty());
 
 		exchange.loggingNotification(notification);
 
 		// Verify that sendNotification was called exactly once
-		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(notification));
+		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(notification),
+				eq("test-transport"));
 	}
 
 	@Test
@@ -250,7 +252,8 @@ class McpSyncServerExchangeTests {
 		exchange.loggingNotification(debugNotification);
 
 		// Verify that sendNotification was never called for filtered DEBUG level
-		verify(mockSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(debugNotification));
+		verify(mockSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(debugNotification),
+				eq("test-transport"));
 	}
 
 	@Test
@@ -268,7 +271,8 @@ class McpSyncServerExchangeTests {
 		exchange.loggingNotification(debugNotification);
 
 		// Verify that sendNotification was never called for DEBUG level
-		verify(mockSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(debugNotification));
+		verify(mockSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(debugNotification),
+				eq("test-transport"));
 
 		// Test INFO (should be filtered)
 		McpSchema.LoggingMessageNotification infoNotification = McpSchema.LoggingMessageNotification.builder()
@@ -280,7 +284,8 @@ class McpSyncServerExchangeTests {
 		exchange.loggingNotification(infoNotification);
 
 		// Verify that sendNotification was never called for INFO level
-		verify(mockSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(infoNotification));
+		verify(mockSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(infoNotification),
+				eq("test-transport"));
 
 		reset(mockSession);
 
@@ -291,14 +296,15 @@ class McpSyncServerExchangeTests {
 			.data("Warning message")
 			.build();
 
-		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(warningNotification)))
+		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(warningNotification),
+				eq("test-transport")))
 			.thenReturn(Mono.empty());
 
 		exchange.loggingNotification(warningNotification);
 
 		// Verify that sendNotification was called exactly once for WARNING level
 		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE),
-				eq(warningNotification));
+				eq(warningNotification), eq("test-transport"));
 
 		// Test ERROR (should be sent)
 		McpSchema.LoggingMessageNotification errorNotification = McpSchema.LoggingMessageNotification.builder()
@@ -307,14 +313,15 @@ class McpSyncServerExchangeTests {
 			.data("Error message")
 			.build();
 
-		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(errorNotification)))
+		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(errorNotification),
+				eq("test-transport")))
 			.thenReturn(Mono.empty());
 
 		exchange.loggingNotification(errorNotification);
 
 		// Verify that sendNotification was called exactly once for ERROR level
-		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE),
-				eq(errorNotification));
+		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(errorNotification),
+				eq("test-transport"));
 	}
 
 	@Test
@@ -326,13 +333,15 @@ class McpSyncServerExchangeTests {
 			.data("Info message")
 			.build();
 
-		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(infoNotification)))
+		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(infoNotification),
+				eq("test-transport")))
 			.thenReturn(Mono.empty());
 
 		exchange.loggingNotification(infoNotification);
 
 		// Verify that sendNotification was called exactly once for default level
-		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(infoNotification));
+		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(infoNotification),
+				eq("test-transport"));
 	}
 
 	@Test
@@ -344,7 +353,8 @@ class McpSyncServerExchangeTests {
 			.data("Test error message")
 			.build();
 
-		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(notification)))
+		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(notification),
+				eq("test-transport")))
 			.thenReturn(Mono.error(new RuntimeException("Session error")));
 
 		assertThatThrownBy(() -> exchange.loggingNotification(notification)).isInstanceOf(RuntimeException.class)
@@ -370,7 +380,8 @@ class McpSyncServerExchangeTests {
 
 			if (level.level() >= McpSchema.LoggingLevel.WARNING.level()) {
 				// Should be sent
-				when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(notification)))
+				when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(notification),
+						eq("test-transport")))
 					.thenReturn(Mono.empty());
 
 				exchange.loggingNotification(notification);
@@ -390,7 +401,7 @@ class McpSyncServerExchangeTests {
 	void testCreateElicitationWithNullCapabilities() {
 		// Given - Create exchange with null capabilities
 		McpAsyncServerExchange asyncExchangeWithNullCapabilities = new McpAsyncServerExchange(mockSession, null,
-				clientInfo);
+				clientInfo, "test-transport");
 		McpSyncServerExchange exchangeWithNullCapabilities = new McpSyncServerExchange(
 				asyncExchangeWithNullCapabilities);
 
@@ -404,7 +415,7 @@ class McpSyncServerExchangeTests {
 
 		// Verify that sendRequest was never called due to null capabilities
 		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), any(),
-				any(TypeReference.class));
+				any(TypeReference.class), any());
 	}
 
 	@Test
@@ -415,7 +426,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		McpAsyncServerExchange asyncExchangeWithoutElicitation = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithoutElicitation, clientInfo);
+				capabilitiesWithoutElicitation, clientInfo, "test-transport");
 		McpSyncServerExchange exchangeWithoutElicitation = new McpSyncServerExchange(asyncExchangeWithoutElicitation);
 
 		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
@@ -429,7 +440,7 @@ class McpSyncServerExchangeTests {
 		// Verify that sendRequest was never called due to missing elicitation
 		// capabilities
 		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), any(),
-				any(TypeReference.class));
+				any(TypeReference.class), any());
 	}
 
 	@Test
@@ -440,7 +451,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		McpAsyncServerExchange asyncExchangeWithElicitation = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithElicitation, clientInfo);
+				capabilitiesWithElicitation, clientInfo, "test-transport");
 		McpSyncServerExchange exchangeWithElicitation = new McpSyncServerExchange(asyncExchangeWithElicitation);
 
 		// Create a complex elicit request with schema
@@ -465,7 +476,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitRequest),
-				any(TypeReference.class)))
+				any(TypeReference.class), eq("test-transport")))
 			.thenReturn(Mono.just(expectedResult));
 
 		McpSchema.ElicitResult result = exchangeWithElicitation.createElicitation(elicitRequest);
@@ -485,7 +496,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		McpAsyncServerExchange asyncExchangeWithElicitation = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithElicitation, clientInfo);
+				capabilitiesWithElicitation, clientInfo, "test-transport");
 		McpSyncServerExchange exchangeWithElicitation = new McpSyncServerExchange(asyncExchangeWithElicitation);
 
 		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
@@ -497,7 +508,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitRequest),
-				any(TypeReference.class)))
+				any(TypeReference.class), eq("test-transport")))
 			.thenReturn(Mono.just(expectedResult));
 
 		McpSchema.ElicitResult result = exchangeWithElicitation.createElicitation(elicitRequest);
@@ -514,7 +525,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		McpAsyncServerExchange asyncExchangeWithElicitation = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithElicitation, clientInfo);
+				capabilitiesWithElicitation, clientInfo, "test-transport");
 		McpSyncServerExchange exchangeWithElicitation = new McpSyncServerExchange(asyncExchangeWithElicitation);
 
 		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
@@ -526,7 +537,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitRequest),
-				any(TypeReference.class)))
+				any(TypeReference.class), eq("test-transport")))
 			.thenReturn(Mono.just(expectedResult));
 
 		McpSchema.ElicitResult result = exchangeWithElicitation.createElicitation(elicitRequest);
@@ -543,7 +554,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		McpAsyncServerExchange asyncExchangeWithElicitation = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithElicitation, clientInfo);
+				capabilitiesWithElicitation, clientInfo, "test-transport");
 		McpSyncServerExchange exchangeWithElicitation = new McpSyncServerExchange(asyncExchangeWithElicitation);
 
 		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
@@ -551,7 +562,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitRequest),
-				any(TypeReference.class)))
+				any(TypeReference.class), eq("test-transport")))
 			.thenReturn(Mono.error(new RuntimeException("Session communication error")));
 
 		assertThatThrownBy(() -> exchangeWithElicitation.createElicitation(elicitRequest))
@@ -567,7 +578,7 @@ class McpSyncServerExchangeTests {
 	void testCreateMessageWithNullCapabilities() {
 
 		McpAsyncServerExchange asyncExchangeWithNullCapabilities = new McpAsyncServerExchange(mockSession, null,
-				clientInfo);
+				clientInfo, "test-transport");
 		McpSyncServerExchange exchangeWithNullCapabilities = new McpSyncServerExchange(
 				asyncExchangeWithNullCapabilities);
 
@@ -582,7 +593,7 @@ class McpSyncServerExchangeTests {
 
 		// Verify that sendRequest was never called due to null capabilities
 		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE), any(),
-				any(TypeReference.class));
+				any(TypeReference.class), any());
 	}
 
 	@Test
@@ -593,7 +604,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		McpAsyncServerExchange asyncExchangeWithoutSampling = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithoutSampling, clientInfo);
+				capabilitiesWithoutSampling, clientInfo, "test-transport");
 		McpSyncServerExchange exchangeWithoutSampling = new McpSyncServerExchange(asyncExchangeWithoutSampling);
 
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
@@ -607,7 +618,7 @@ class McpSyncServerExchangeTests {
 
 		// Verify that sendRequest was never called due to missing sampling capabilities
 		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE), any(),
-				any(TypeReference.class));
+				any(TypeReference.class), any());
 	}
 
 	@Test
@@ -618,7 +629,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		McpAsyncServerExchange asyncExchangeWithSampling = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithSampling, clientInfo);
+				capabilitiesWithSampling, clientInfo, "test-transport");
 		McpSyncServerExchange exchangeWithSampling = new McpSyncServerExchange(asyncExchangeWithSampling);
 
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
@@ -634,7 +645,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE), eq(createMessageRequest),
-				any(TypeReference.class)))
+				any(TypeReference.class), eq("test-transport")))
 			.thenReturn(Mono.just(expectedResult));
 
 		McpSchema.CreateMessageResult result = exchangeWithSampling.createMessage(createMessageRequest);
@@ -655,7 +666,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		McpAsyncServerExchange asyncExchangeWithSampling = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithSampling, clientInfo);
+				capabilitiesWithSampling, clientInfo, "test-transport");
 		McpSyncServerExchange exchangeWithSampling = new McpSyncServerExchange(asyncExchangeWithSampling);
 
 		// Create request with image content
@@ -673,7 +684,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE), eq(createMessageRequest),
-				any(TypeReference.class)))
+				any(TypeReference.class), eq("test-transport")))
 			.thenReturn(Mono.just(expectedResult));
 
 		McpSchema.CreateMessageResult result = exchangeWithSampling.createMessage(createMessageRequest);
@@ -691,7 +702,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		McpAsyncServerExchange asyncExchangeWithSampling = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithSampling, clientInfo);
+				capabilitiesWithSampling, clientInfo, "test-transport");
 		McpSyncServerExchange exchangeWithSampling = new McpSyncServerExchange(asyncExchangeWithSampling);
 
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
@@ -700,7 +711,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE), eq(createMessageRequest),
-				any(TypeReference.class)))
+				any(TypeReference.class), eq("test-transport")))
 			.thenReturn(Mono.error(new RuntimeException("Session communication error")));
 
 		assertThatThrownBy(() -> exchangeWithSampling.createMessage(createMessageRequest))
@@ -716,7 +727,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		McpAsyncServerExchange asyncExchangeWithSampling = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithSampling, clientInfo);
+				capabilitiesWithSampling, clientInfo, "test-transport");
 		McpSyncServerExchange exchangeWithSampling = new McpSyncServerExchange(asyncExchangeWithSampling);
 
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
@@ -733,7 +744,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE), eq(createMessageRequest),
-				any(TypeReference.class)))
+				any(TypeReference.class), eq("test-transport")))
 			.thenReturn(Mono.just(expectedResult));
 
 		McpSchema.CreateMessageResult result = exchangeWithSampling.createMessage(createMessageRequest);
@@ -751,32 +762,37 @@ class McpSyncServerExchangeTests {
 
 		java.util.Map<String, Object> expectedResponse = java.util.Map.of();
 
-		when(mockSession.sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class)))
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class),
+				eq("test-transport")))
 			.thenReturn(Mono.just(expectedResponse));
 
 		exchange.ping();
 
 		// Verify that sendRequest was called with correct parameters
-		verify(mockSession, times(1)).sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class));
+		verify(mockSession, times(1)).sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class),
+				eq("test-transport"));
 	}
 
 	@Test
 	void testPingWithMcpError() {
 		// Given - Mock an MCP-specific error during ping
 		McpError mcpError = new McpError("Server unavailable");
-		when(mockSession.sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class)))
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class),
+				eq("test-transport")))
 			.thenReturn(Mono.error(mcpError));
 
 		// When & Then
 		assertThatThrownBy(() -> exchange.ping()).isInstanceOf(McpError.class).hasMessage("Server unavailable");
 
-		verify(mockSession, times(1)).sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class));
+		verify(mockSession, times(1)).sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class),
+				eq("test-transport"));
 	}
 
 	@Test
 	void testPingMultipleCalls() {
 
-		when(mockSession.sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class)))
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class),
+				eq("test-transport")))
 			.thenReturn(Mono.just(Map.of()))
 			.thenReturn(Mono.just(Map.of()));
 
@@ -787,7 +803,8 @@ class McpSyncServerExchangeTests {
 		exchange.ping();
 
 		// Verify that sendRequest was called twice
-		verify(mockSession, times(2)).sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class));
+		verify(mockSession, times(2)).sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class),
+				eq("test-transport"));
 	}
 
 }

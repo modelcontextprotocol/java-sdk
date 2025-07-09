@@ -5,6 +5,8 @@
 package io.modelcontextprotocol.spec;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+
+import io.modelcontextprotocol.spec.McpSchema.McpId;
 import io.modelcontextprotocol.util.Assert;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
@@ -47,7 +49,7 @@ public class McpClientSession implements McpSession {
 	private final McpClientTransport transport;
 
 	/** Map of pending responses keyed by request ID */
-	private final ConcurrentHashMap<Object, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<McpId, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
 
 	/** Map of request handlers keyed by method name */
 	private final ConcurrentHashMap<String, RequestHandler<?>> requestHandlers = new ConcurrentHashMap<>();
@@ -231,10 +233,10 @@ public class McpClientSession implements McpSession {
 	/**
 	 * Generates a unique request ID in a non-blocking way. Combines a session-specific
 	 * prefix with an atomic counter to ensure uniqueness.
-	 * @return A unique request ID string
+	 * @return A unique request ID from String
 	 */
-	private String generateRequestId() {
-		return this.sessionPrefix + "-" + this.requestCounter.getAndIncrement();
+	private McpId generateRequestId() {
+		return McpId.of(this.sessionPrefix + "-" + this.requestCounter.getAndIncrement());
 	}
 
 	/**
@@ -247,7 +249,7 @@ public class McpClientSession implements McpSession {
 	 */
 	@Override
 	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {
-		String requestId = this.generateRequestId();
+		McpId requestId = this.generateRequestId();
 
 		return Mono.deferContextual(ctx -> Mono.<McpSchema.JSONRPCResponse>create(pendingResponseSink -> {
 			logger.debug("Sending message for method {}", method);

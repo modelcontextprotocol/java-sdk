@@ -9,6 +9,8 @@ import java.util.Map;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.MockMcpClientTransport;
+import io.modelcontextprotocol.spec.McpSchema.McpId;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -144,7 +146,7 @@ class McpClientSessionTests {
 
 		// Simulate incoming request
 		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, ECHO_METHOD,
-				"test-id", echoMessage);
+				McpId.of("test-id"), echoMessage);
 		transport.simulateIncomingMessage(request);
 
 		// Verify response
@@ -179,7 +181,7 @@ class McpClientSessionTests {
 	void testUnknownMethodHandling() {
 		// Simulate incoming request for unknown method
 		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, "unknown.method",
-				"test-id", null);
+				McpId.of("test-id"), null);
 		transport.simulateIncomingMessage(request);
 
 		// Verify error response

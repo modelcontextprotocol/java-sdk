@@ -18,11 +18,24 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Based on the <a href="http://www.jsonrpc.org/specification">JSON-RPC 2.0
@@ -32,6 +45,7 @@ import org.slf4j.LoggerFactory;
  *
  * @author Christian Tzolov
  * @author Luca Chang
+ * @author Zachary German
  */
 public final class McpSchema {
 
@@ -40,6 +54,7 @@ public final class McpSchema {
 	private McpSchema() {
 	}
 
+	// TODO: Changing this breaks initialization for quite a few tests (fix).
 	public static final String LATEST_PROTOCOL_VERSION = "2024-11-05";
 
 	public static final String JSONRPC_VERSION = "2.0";
@@ -141,6 +156,103 @@ public final class McpSchema {
 
 	}
 
+	/**
+	 * MCP ID wrapper: MUST be non-null String or Number.
+	 */
+	@JsonSerialize(using = McpId.Serializer.class)
+	@JsonDeserialize(using = McpId.Deserializer.class)
+	public static final class McpId {
+
+		private final Object value;
+
+		public McpId(String value) {
+			this.value = requireNonNull(value, "'id' must not be null");
+		}
+
+		public McpId(Number value) {
+			this.value = requireNonNull(value, "'id' must not be null");
+		}
+
+		public static McpId of(Object raw) {
+			if (raw instanceof String s)
+				return new McpId(s);
+			if (raw instanceof Number n)
+				return new McpId(n);
+			throw new IllegalArgumentException("MCP 'id' must be String or Number");
+		}
+
+		public boolean isString() {
+			return value instanceof String;
+		}
+
+		public boolean isNumber() {
+			return value instanceof Number;
+		}
+
+		public String asString() {
+			return (String) value;
+		}
+
+		public Number asNumber() {
+			return (Number) value;
+		}
+
+		public Object raw() {
+			return value;
+		}
+
+		@Override
+		public String toString() {
+			return String.valueOf(value);
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o)
+				return true;
+			if (o == null || getClass() != o.getClass())
+				return false;
+			McpId mcpId = (McpId) o;
+			return value.equals(mcpId.value);
+		}
+
+		@Override
+		public int hashCode() {
+			return value.hashCode();
+		}
+
+		public static class Deserializer extends JsonDeserializer<McpId> {
+
+			@Override
+			public McpId deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+				JsonToken t = p.getCurrentToken();
+				if (t == JsonToken.VALUE_STRING) {
+					return new McpId(p.getText());
+				}
+				else if (t.isNumeric()) {
+					return new McpId(p.getNumberValue());
+				}
+				throw JsonMappingException.from(p, "MCP 'id' must be a non-null String or Number");
+			}
+
+		}
+
+		public static class Serializer extends JsonSerializer<McpId> {
+
+			@Override
+			public void serialize(McpId id, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+				if (id.isString()) {
+					gen.writeString(id.asString());
+				}
+				else {
+					gen.writeNumber(id.asNumber().toString());
+				}
+			}
+
+		}
+
+	}
+
 	public sealed interface Request permits InitializeRequest, CallToolRequest, CreateMessageRequest, ElicitRequest,
 			CompleteRequest, GetPromptRequest, PaginatedRequest, ReadResourceRequest {
 
@@ -200,18 +312,16 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	// TODO: batching support
 	// @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
 	public record JSONRPCRequest( // @formatter:off
                         @JsonProperty("jsonrpc") String jsonrpc,
                         @JsonProperty("method") String method,
-                        @JsonProperty("id") Object id,
+                        @JsonProperty("id") McpId id,
                         @JsonProperty("params") Object params) implements JSONRPCMessage {
         } // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	// TODO: batching support
 	// @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
 	public record JSONRPCNotification( // @formatter:off
                         @JsonProperty("jsonrpc") String jsonrpc,
@@ -221,11 +331,10 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	// TODO: batching support
 	// @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
 	public record JSONRPCResponse( // @formatter:off
                         @JsonProperty("jsonrpc") String jsonrpc,
-                        @JsonProperty("id") Object id,
+                        @JsonProperty("id") McpId id,
                         @JsonProperty("result") Object result,
                         @JsonProperty("error") JSONRPCError error) implements JSONRPCMessage {
 
