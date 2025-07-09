@@ -778,6 +778,7 @@ public class McpAsyncServer {
 						new TypeReference<SetLevelRequest>() {
 						});
 
+				// This will update both the exchange and session logging levels
 				exchange.setMinLoggingLevel(newMinLoggingLevel.level());
 
 				// FIXME: this field is deprecated and should be removed together

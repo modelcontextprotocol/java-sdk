@@ -45,18 +45,22 @@ public class McpAsyncServerExchange {
 	public static final TypeReference<Object> OBJECT_TYPE_REF = new TypeReference<>() {
 	};
 
+	private final String transportId;
+
 	/**
 	 * Create a new asynchronous exchange with the client.
 	 * @param session The server session representing a 1-1 interaction.
 	 * @param clientCapabilities The client capabilities that define the supported
 	 * features and functionality.
 	 * @param clientInfo The client implementation information.
+	 * @param transportId The transport ID to use for outgoing messages
 	 */
 	public McpAsyncServerExchange(McpServerSession session, McpSchema.ClientCapabilities clientCapabilities,
-			McpSchema.Implementation clientInfo) {
+			McpSchema.Implementation clientInfo, String transportId) {
 		this.session = session;
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
+		this.transportId = transportId;
 	}
 
 	/**
@@ -99,7 +103,7 @@ public class McpAsyncServerExchange {
 			return Mono.error(new McpError("Client must be configured with sampling capabilities"));
 		}
 		return this.session.sendRequest(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, createMessageRequest,
-				CREATE_MESSAGE_RESULT_TYPE_REF);
+				CREATE_MESSAGE_RESULT_TYPE_REF, transportId);
 	}
 
 	/**
@@ -123,8 +127,8 @@ public class McpAsyncServerExchange {
 		if (this.clientCapabilities.elicitation() == null) {
 			return Mono.error(new McpError("Client must be configured with elicitation capabilities"));
 		}
-		return this.session.sendRequest(McpSchema.METHOD_ELICITATION_CREATE, elicitRequest,
-				ELICITATION_RESULT_TYPE_REF);
+		return this.session.sendRequest(McpSchema.METHOD_ELICITATION_CREATE, elicitRequest, ELICITATION_RESULT_TYPE_REF,
+				transportId);
 	}
 
 	/**
@@ -154,7 +158,7 @@ public class McpAsyncServerExchange {
 	 */
 	public Mono<McpSchema.ListRootsResult> listRoots(String cursor) {
 		return this.session.sendRequest(McpSchema.METHOD_ROOTS_LIST, new McpSchema.PaginatedRequest(cursor),
-				LIST_ROOTS_RESULT_TYPE_REF);
+				LIST_ROOTS_RESULT_TYPE_REF, transportId);
 	}
 
 	/**
@@ -171,7 +175,8 @@ public class McpAsyncServerExchange {
 
 		return Mono.defer(() -> {
 			if (this.isNotificationForLevelAllowed(loggingMessageNotification.level())) {
-				return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_MESSAGE, loggingMessageNotification);
+				return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_MESSAGE, loggingMessageNotification,
+						transportId);
 			}
 			return Mono.empty();
 		});
@@ -182,7 +187,7 @@ public class McpAsyncServerExchange {
 	 * @return A Mono that completes with clients's ping response
 	 */
 	public Mono<Object> ping() {
-		return this.session.sendRequest(McpSchema.METHOD_PING, null, OBJECT_TYPE_REF);
+		return this.session.sendRequest(McpSchema.METHOD_PING, null, OBJECT_TYPE_REF, transportId);
 	}
 
 	/**
@@ -190,9 +195,11 @@ public class McpAsyncServerExchange {
 	 * filtered out.
 	 * @param minLoggingLevel The minimum logging level
 	 */
-	void setMinLoggingLevel(LoggingLevel minLoggingLevel) {
+	public void setMinLoggingLevel(LoggingLevel minLoggingLevel) {
 		Assert.notNull(minLoggingLevel, "minLoggingLevel must not be null");
 		this.minLoggingLevel = minLoggingLevel;
+		// Also update the session level for future exchanges
+		this.session.setMinLoggingLevel(minLoggingLevel);
 	}
 
 	private boolean isNotificationForLevelAllowed(LoggingLevel loggingLevel) {

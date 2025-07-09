@@ -14,6 +14,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.spec.SseEvent;
 import io.modelcontextprotocol.spec.McpSchema.McpId;
+import io.modelcontextprotocol.spec.McpError;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,8 +54,6 @@ public class McpServerSession implements McpSession {
 
 	private final Map<String, NotificationHandler> notificationHandlers;
 
-	private final Sinks.One<McpAsyncServerExchange> exchangeSink = Sinks.one();
-
 	private final AtomicReference<McpSchema.ClientCapabilities> clientCapabilities = new AtomicReference<>();
 
 	private final AtomicReference<McpSchema.Implementation> clientInfo = new AtomicReference<>();
@@ -72,6 +71,8 @@ public class McpServerSession implements McpSession {
 	private final Map<String, String> eventTransports = new ConcurrentHashMap<>();
 
 	private final Map<String, Map<String, SseEvent>> transportEventHistories = new ConcurrentHashMap<>();
+
+	private volatile McpSchema.LoggingLevel minLoggingLevel = McpSchema.LoggingLevel.INFO;
 
 	/**
 	 * Creates a new server session with the given parameters and the transport to use.
@@ -102,6 +103,16 @@ public class McpServerSession implements McpSession {
 			InitNotificationHandler initNotificationHandler, Map<String, RequestHandler<?>> requestHandlers,
 			Map<String, NotificationHandler> notificationHandlers) {
 		this(id, requestTimeout, null, initHandler, initNotificationHandler, requestHandlers, notificationHandlers);
+	}
+
+	/**
+	 * Updates the session's minimum logging level for all future exchanges.
+	 */
+	public void setMinLoggingLevel(McpSchema.LoggingLevel level) {
+		if (level != null) {
+			this.minLoggingLevel = level;
+			logger.debug("Updated session {} minimum logging level to {}", id, level);
+		}
 	}
 
 	/**
@@ -240,14 +251,26 @@ public class McpServerSession implements McpSession {
 
 	@Override
 	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {
-		McpId requestId = this.generateRequestId();
+		return sendRequest(method, requestParams, typeRef, LISTENING_TRANSPORT);
+	}
 
+	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef, String transportId) {
+		McpServerTransport transport = getTransport(transportId);
+		if (transport == null) {
+			// Fallback to listening transport if specific transport not found
+			transport = getTransport(LISTENING_TRANSPORT);
+			if (transport == null) {
+				return Mono.error(new RuntimeException("Transport not found: " + transportId));
+			}
+		}
+
+		final McpServerTransport finalTransport = transport;
+		McpId requestId = this.generateRequestId();
 		return Mono.<McpSchema.JSONRPCResponse>create(sink -> {
 			this.pendingResponses.put(requestId, sink);
 			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, method,
 					requestId, requestParams);
-
-			Flux.from(listeningTransport.sendMessage(jsonrpcRequest)).subscribe(v -> {
+			Flux.from(finalTransport.sendMessage(jsonrpcRequest)).subscribe(v -> {
 			}, error -> {
 				this.pendingResponses.remove(requestId);
 				sink.error(error);
@@ -260,7 +283,7 @@ public class McpServerSession implements McpSession {
 				sink.complete();
 			}
 			else {
-				T result = listeningTransport.unmarshalFrom(jsonRpcResponse.result(), typeRef);
+				T result = finalTransport.unmarshalFrom(jsonRpcResponse.result(), typeRef);
 				sink.next(result);
 			}
 		});
@@ -268,9 +291,21 @@ public class McpServerSession implements McpSession {
 
 	@Override
 	public Mono<Void> sendNotification(String method, Object params) {
+		return sendNotification(method, params, LISTENING_TRANSPORT);
+	}
+
+	public Mono<Void> sendNotification(String method, Object params, String transportId) {
+		McpServerTransport transport = getTransport(transportId);
+		if (transport == null) {
+			// Fallback to listening transport if specific transport not found
+			transport = getTransport(LISTENING_TRANSPORT);
+			if (transport == null) {
+				return Mono.error(new RuntimeException("Transport not found: " + transportId));
+			}
+		}
 		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
 				method, params);
-		return this.listeningTransport.sendMessage(jsonrpcNotification);
+		return transport.sendMessage(jsonrpcNotification);
 	}
 
 	/**
@@ -300,26 +335,20 @@ public class McpServerSession implements McpSession {
 			}
 			else if (message instanceof McpSchema.JSONRPCRequest request) {
 				logger.debug("Received request: {}", request);
-				final String transportId;
-				if (transports.isEmpty()) {
-					transportId = LISTENING_TRANSPORT;
-				}
-				else {
-					transportId = request.id().toString();
-				}
+				final String transportId = determineTransportId(request);
 				return handleIncomingRequest(request).onErrorResume(error -> {
 					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
 							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 									error.getMessage(), null));
-					McpServerTransport transport = getTransport(transportId);
+					McpServerTransport transport = getTransportWithFallback(transportId);
 					return transport != null ? transport.sendMessage(errorResponse).then(Mono.empty()) : Mono.empty();
 				}).flatMap(response -> {
-					McpServerTransport transport = getTransport(transportId);
+					McpServerTransport transport = getTransportWithFallback(transportId);
 					if (transport != null) {
 						return transport.sendMessage(response);
 					}
 					else {
-						return Mono.error(new RuntimeException("Transport not found: " + transportId));
+						return Mono.error(new RuntimeException("No transport available"));
 					}
 				});
 			}
@@ -369,10 +398,10 @@ public class McpServerSession implements McpSession {
 									error.message(), error.data())));
 				}
 
-				// We would need to add request.id() as a parameter to handler.handle() if
-				// we want client-request-driven requests/notifications to go to the
-				// related stream
-				resultMono = this.exchangeSink.asMono().flatMap(exchange -> handler.handle(exchange, request.params()));
+				McpAsyncServerExchange requestExchange = new McpAsyncServerExchange(this, clientCapabilities.get(),
+						clientInfo.get(), determineTransportId(request));
+				requestExchange.setMinLoggingLevel(minLoggingLevel);
+				resultMono = handler.handle(requestExchange, request.params());
 			}
 			return resultMono
 				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
@@ -392,7 +421,6 @@ public class McpServerSession implements McpSession {
 		return Mono.defer(() -> {
 			if (McpSchema.METHOD_NOTIFICATION_INITIALIZED.equals(notification.method())) {
 				this.state.lazySet(STATE_INITIALIZED);
-				exchangeSink.tryEmitValue(new McpAsyncServerExchange(this, clientCapabilities.get(), clientInfo.get()));
 				return this.initNotificationHandler.handle();
 			}
 
@@ -401,7 +429,10 @@ public class McpServerSession implements McpSession {
 				logger.error("No handler registered for notification method: {}", notification.method());
 				return Mono.empty();
 			}
-			return this.exchangeSink.asMono().flatMap(exchange -> handler.handle(exchange, notification.params()));
+			McpAsyncServerExchange notificationExchange = new McpAsyncServerExchange(this, clientCapabilities.get(),
+					clientInfo.get(), LISTENING_TRANSPORT);
+			notificationExchange.setMinLoggingLevel(minLoggingLevel);
+			return handler.handle(notificationExchange, notification.params());
 		});
 	}
 
@@ -410,6 +441,32 @@ public class McpServerSession implements McpSession {
 
 	private MethodNotFoundError getMethodNotFoundError(String method) {
 		return new MethodNotFoundError(method, "Method not found: " + method, null);
+	}
+
+	/**
+	 * Determines the appropriate transport ID for a request. Uses request ID for
+	 * per-request routing only if a transport with that ID exists, otherwise falls back
+	 * to listening transport.
+	 */
+	private String determineTransportId(McpSchema.JSONRPCRequest request) {
+		String requestTransportId = request.id().toString();
+		// Check if a transport exists for this specific request ID
+		if (getTransport(requestTransportId) != null) {
+			return requestTransportId;
+		}
+		// Fallback to listening transport
+		return LISTENING_TRANSPORT;
+	}
+
+	/**
+	 * Gets a transport with fallback to listening transport.
+	 */
+	private McpServerTransport getTransportWithFallback(String transportId) {
+		McpServerTransport transport = getTransport(transportId);
+		if (transport == null) {
+			transport = getTransport(LISTENING_TRANSPORT);
+		}
+		return transport;
 	}
 
 	@Override
