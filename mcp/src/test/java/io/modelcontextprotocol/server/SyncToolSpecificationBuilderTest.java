@@ -37,19 +37,19 @@ class SyncToolSpecificationBuilderTest {
 
 		McpServerFeatures.SyncToolSpecification specification = McpServerFeatures.SyncToolSpecification.builder()
 			.tool(tool)
-			.callTool((exchange, request) -> new CallToolResult(List.of(new TextContent("Test result")), false))
+			.callHandler((exchange, request) -> new CallToolResult(List.of(new TextContent("Test result")), false))
 			.build();
 
 		assertThat(specification).isNotNull();
 		assertThat(specification.tool()).isEqualTo(tool);
-		assertThat(specification.callTool()).isNotNull();
+		assertThat(specification.callHandler()).isNotNull();
 		assertThat(specification.call()).isNull(); // deprecated field should be null
 	}
 
 	@Test
 	void builderShouldThrowExceptionWhenToolIsNull() {
 		assertThatThrownBy(() -> McpServerFeatures.SyncToolSpecification.builder()
-			.callTool((exchange, request) -> new CallToolResult(List.of(), false))
+			.callHandler((exchange, request) -> new CallToolResult(List.of(), false))
 			.build()).isInstanceOf(IllegalArgumentException.class).hasMessage("Tool must not be null");
 	}
 
@@ -69,7 +69,7 @@ class SyncToolSpecificationBuilderTest {
 
 		// Then - verify method chaining returns the same builder instance
 		assertThat(builder.tool(tool)).isSameAs(builder);
-		assertThat(builder.callTool((exchange, request) -> new CallToolResult(List.of(), false))).isSameAs(builder);
+		assertThat(builder.callHandler((exchange, request) -> new CallToolResult(List.of(), false))).isSameAs(builder);
 	}
 
 	@Test
@@ -79,14 +79,14 @@ class SyncToolSpecificationBuilderTest {
 
 		McpServerFeatures.SyncToolSpecification specification = McpServerFeatures.SyncToolSpecification.builder()
 			.tool(tool)
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 				// Simple test implementation
 				return new CallToolResult(List.of(new TextContent(expectedResult)), false);
 			})
 			.build();
 
 		CallToolRequest request = new CallToolRequest("calculator", Map.of());
-		CallToolResult result = specification.callTool().apply(null, request);
+		CallToolResult result = specification.callHandler().apply(null, request);
 
 		assertThat(result).isNotNull();
 		assertThat(result.content()).hasSize(1);

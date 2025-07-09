@@ -135,7 +135,7 @@ public abstract class AbstractMcpSyncServerTests {
 		Tool newTool = new McpSchema.Tool("new-tool", "New test tool", emptyJsonSchema);
 		assertThatCode(() -> mcpSyncServer.addTool(McpServerFeatures.SyncToolSpecification.builder()
 			.tool(newTool)
-			.callTool((exchange, request) -> new CallToolResult(List.of(), false))
+			.callHandler((exchange, request) -> new CallToolResult(List.of(), false))
 			.build())).doesNotThrowAnyException();
 
 		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
@@ -172,7 +172,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 		assertThatThrownBy(() -> mcpSyncServer.addTool(McpServerFeatures.SyncToolSpecification.builder()
 			.tool(duplicateTool)
-			.callTool((exchange, request) -> new CallToolResult(List.of(), false))
+			.callHandler((exchange, request) -> new CallToolResult(List.of(), false))
 			.build())).isInstanceOf(McpError.class)
 			.hasMessage("Tool with name '" + TEST_TOOL_NAME + "' already exists");
 
@@ -199,11 +199,11 @@ public abstract class AbstractMcpSyncServerTests {
 		List<McpServerFeatures.SyncToolSpecification> specs = List.of(
 				McpServerFeatures.SyncToolSpecification.builder()
 					.tool(duplicateTool)
-					.callTool((exchange, request) -> new CallToolResult(List.of(), false))
+					.callHandler((exchange, request) -> new CallToolResult(List.of(), false))
 					.build(),
 				McpServerFeatures.SyncToolSpecification.builder()
 					.tool(duplicateTool)
-					.callTool((exchange, request) -> new CallToolResult(List.of(), false))
+					.callHandler((exchange, request) -> new CallToolResult(List.of(), false))
 					.build() // Duplicate!
 		);
 
@@ -224,11 +224,11 @@ public abstract class AbstractMcpSyncServerTests {
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(McpServerFeatures.SyncToolSpecification.builder()
 				.tool(duplicateTool)
-				.callTool((exchange, request) -> new CallToolResult(List.of(), false))
+				.callHandler((exchange, request) -> new CallToolResult(List.of(), false))
 				.build(),
 					McpServerFeatures.SyncToolSpecification.builder()
 						.tool(duplicateTool)
-						.callTool((exchange, request) -> new CallToolResult(List.of(), false))
+						.callHandler((exchange, request) -> new CallToolResult(List.of(), false))
 						.build() // Duplicate!
 			)
 			.build()).isInstanceOf(IllegalArgumentException.class)

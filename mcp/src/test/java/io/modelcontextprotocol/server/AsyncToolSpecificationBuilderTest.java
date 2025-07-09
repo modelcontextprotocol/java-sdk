@@ -149,7 +149,7 @@ class AsyncToolSpecificationBuilderTest {
 		// Create a sync tool specification
 		McpServerFeatures.SyncToolSpecification syncSpec = McpServerFeatures.SyncToolSpecification.builder()
 			.tool(tool)
-			.callTool((exchange, request) -> new CallToolResult(List.of(new TextContent(expectedResult)), false))
+			.callHandler((exchange, request) -> new CallToolResult(List.of(new TextContent(expectedResult)), false))
 			.build();
 
 		// Convert to async using fromSync

@@ -343,7 +343,7 @@ public interface McpServer {
 		/**
 		 * Adds a single tool with its implementation handler to the server. This is a
 		 * convenience method for registering individual tools without creating a
-		 * {@link McpServerFeatures.AsyncToolCallSpecification} explicitly.
+		 * {@link McpServerFeatures.AsyncToolSpecification} explicitly.
 		 * @param tool The tool definition including name, description, and schema. Must
 		 * not be null.
 		 * @param handler The function that implements the tool's logic. Must not be null.

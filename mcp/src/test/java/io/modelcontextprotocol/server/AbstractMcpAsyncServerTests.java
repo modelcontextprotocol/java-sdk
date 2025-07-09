@@ -239,7 +239,7 @@ public abstract class AbstractMcpAsyncServerTests {
 		var mcpAsyncServer = McpServer.async(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
-			.toolCall(too, (exchange, args) -> Mono.just(new CallToolResult(List.of(), false)))
+			.toolCall(too, (exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
 			.build();
 
 		StepVerifier.create(mcpAsyncServer.removeTool(TEST_TOOL_NAME)).verifyComplete();

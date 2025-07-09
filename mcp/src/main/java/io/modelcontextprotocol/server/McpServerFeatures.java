@@ -207,9 +207,8 @@ public class McpServerFeatures {
 	 * represents a specific capability.
 	 *
 	 * @param tool The tool definition including name, description, and parameter schema
-	 * @param call Deprecated. Uset he {@link AsyncToolCallSpecification#callTool}
-	 * instead.
-	 * @param callTool The function that implements the tool's logic, receiving a
+	 * @param call Deprecated. Uset he {@link AsyncToolSpecification#callTool} instead.
+	 * @param callHandler The function that implements the tool's logic, receiving a
 	 * {@link McpAsyncServerExchange} and a
 	 * {@link io.modelcontextprotocol.spec.McpSchema.CallToolRequest} and returning
 	 * results. The function's first argument is an {@link McpAsyncServerExchange} upon
@@ -221,7 +220,7 @@ public class McpServerFeatures {
 			BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> callTool) {
 
 		/**
-		 * @deprecated Use {@link #AsyncToolSpecification(McpSchema.Tool, null,
+		 * @deprecated Use {@link AsyncToolSpecification(McpSchema.Tool, null,
 		 * BiFunction)} instead.
 		 **/
 		@Deprecated
@@ -241,7 +240,7 @@ public class McpServerFeatures {
 						.fromCallable(() -> syncToolSpec.call().apply(new McpSyncServerExchange(exchange), map))
 						.subscribeOn(Schedulers.boundedElastic()) : null,
 					(exchange, req) -> Mono
-						.fromCallable(() -> syncToolSpec.callTool().apply(new McpSyncServerExchange(exchange), req))
+						.fromCallable(() -> syncToolSpec.callHandler().apply(new McpSyncServerExchange(exchange), req))
 						.subscribeOn(Schedulers.boundedElastic()));
 		}
 
@@ -448,10 +447,10 @@ public class McpServerFeatures {
 	 * }</pre>
 	 *
 	 * @param tool The tool definition including name, description, and parameter schema
-	 * @param (deprecated) call The function that implements the tool's logic, receiving
+	 * @param call (Deprected) The function that implements the tool's logic, receiving
 	 * arguments and returning results. The function's first argument is an
 	 * {@link McpSyncServerExchange} upon which the server can interact with the connected
-	 * @param callTool The function that implements the tool's logic, receiving a
+	 * @param callHandler The function that implements the tool's logic, receiving a
 	 * {@link McpSyncServerExchange} and a
 	 * {@link io.modelcontextprotocol.spec.McpSchema.CallToolRequest} and returning
 	 * results. The function's first argument is an {@link McpSyncServerExchange} upon
@@ -460,7 +459,7 @@ public class McpServerFeatures {
 	 */
 	public record SyncToolSpecification(McpSchema.Tool tool,
 			@Deprecated BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> call,
-			BiFunction<McpSyncServerExchange, CallToolRequest, McpSchema.CallToolResult> callTool) {
+			BiFunction<McpSyncServerExchange, CallToolRequest, McpSchema.CallToolResult> callHandler) {
 
 		@Deprecated
 		public SyncToolSpecification(McpSchema.Tool tool,
@@ -475,7 +474,7 @@ public class McpServerFeatures {
 
 			private McpSchema.Tool tool;
 
-			private BiFunction<McpSyncServerExchange, CallToolRequest, McpSchema.CallToolResult> callTool;
+			private BiFunction<McpSyncServerExchange, CallToolRequest, McpSchema.CallToolResult> callHandler;
 
 			/**
 			 * Sets the tool definition.
@@ -490,12 +489,12 @@ public class McpServerFeatures {
 
 			/**
 			 * Sets the call tool handler function.
-			 * @param callTool The function that implements the tool's logic
+			 * @param callHandler The function that implements the tool's logic
 			 * @return this builder instance
 			 */
-			public Builder callTool(
-					BiFunction<McpSyncServerExchange, CallToolRequest, McpSchema.CallToolResult> callTool) {
-				this.callTool = callTool;
+			public Builder callHandler(
+					BiFunction<McpSyncServerExchange, CallToolRequest, McpSchema.CallToolResult> callHandler) {
+				this.callHandler = callHandler;
 				return this;
 			}
 
@@ -506,9 +505,9 @@ public class McpServerFeatures {
 			 */
 			public SyncToolSpecification build() {
 				Assert.notNull(tool, "Tool must not be null");
-				Assert.notNull(callTool, "CallTool function must not be null");
+				Assert.notNull(callHandler, "CallTool function must not be null");
 
-				return new SyncToolSpecification(tool, null, callTool);
+				return new SyncToolSpecification(tool, null, callHandler);
 			}
 
 		}

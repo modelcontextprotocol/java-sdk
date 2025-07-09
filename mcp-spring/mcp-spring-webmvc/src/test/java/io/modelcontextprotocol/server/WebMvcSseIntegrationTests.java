@@ -637,7 +637,7 @@ class WebMvcSseIntegrationTests {
 
 		McpServerFeatures.SyncToolSpecification tool = McpServerFeatures.SyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 
 				exchange.listRoots(); // try to list roots
 
@@ -766,7 +766,7 @@ class WebMvcSseIntegrationTests {
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 				// perform a blocking call to a remote service
 				String response = RestClient.create()
 					.get()
@@ -804,7 +804,7 @@ class WebMvcSseIntegrationTests {
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 				// perform a blocking call to a remote service
 				String response = RestClient.create()
 					.get()
@@ -857,7 +857,7 @@ class WebMvcSseIntegrationTests {
 			// Add a new tool
 			McpServerFeatures.SyncToolSpecification tool2 = McpServerFeatures.SyncToolSpecification.builder()
 				.tool(new McpSchema.Tool("tool2", "tool2 description", emptyJsonSchema))
-				.callTool((exchange, request) -> callResponse)
+				.callHandler((exchange, request) -> callResponse)
 				.build();
 
 			mcpServer.addTool(tool2);
