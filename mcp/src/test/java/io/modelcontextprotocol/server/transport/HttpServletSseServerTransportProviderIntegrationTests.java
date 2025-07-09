@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 - 2024 the original author or authors.
+ * Copyright 2024 - 2025 the original author or authors.
  */
 package io.modelcontextprotocol.server.transport;
 
@@ -37,7 +37,6 @@ import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -46,6 +45,7 @@ import org.springframework.web.client.RestClient;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 
@@ -728,6 +728,9 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
 				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+					assertThat(McpTestServletFilter.getThreadLocalValue())
+						.as("blocking code exectuion should be offloaded")
+						.isNull();
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
 						.get()
@@ -753,6 +756,37 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 
 			assertThat(response).isNotNull();
 			assertThat(response).isEqualTo(callResponse);
+		}
+
+		mcpServer.close();
+	}
+
+	@Test
+	void testToolCallImmediateExecution() {
+		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+					var threadLocalValue = McpTestServletFilter.getThreadLocalValue();
+					return CallToolResult.builder()
+						.addTextContent(threadLocalValue != null ? threadLocalValue : "<unset>")
+						.build();
+				});
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool1)
+			.immediateExecution(true)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			mcpClient.initialize();
+
+			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+
+			assertThat(response).isNotNull();
+			assertThat(response.content()).first()
+				.asInstanceOf(type(McpSchema.TextContent.class))
+				.extracting(McpSchema.TextContent::text)
+				.isEqualTo(McpTestServletFilter.THREAD_LOCAL_VALUE);
 		}
 
 		mcpServer.close();

@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2025 the original author or authors.
  */
 
 package io.modelcontextprotocol.server;
@@ -695,6 +695,8 @@ public interface McpServer {
 
 		private Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
 
+		private boolean immediateExecution = false;
+
 		private SyncSpecification(McpServerTransportProvider transportProvider) {
 			Assert.notNull(transportProvider, "Transport provider must not be null");
 			this.transportProvider = transportProvider;
@@ -1117,6 +1119,22 @@ public interface McpServer {
 		}
 
 		/**
+		 * Enable on "immediate execution" of the operations on the underlying
+		 * {@link McpAsyncServer}. Defaults to false, which does blocking code offloading
+		 * to prevent accidental blocking of the non-blocking transport.
+		 * <p>
+		 * Do NOT set to true if the underlying transport is a non-blocking
+		 * implementation.
+		 * @param immediateExecution When true, do not offload work asynchronously.
+		 * @return This builder instance for method chaining.
+		 *
+		 */
+		public SyncSpecification immediateExecution(boolean immediateExecution) {
+			this.immediateExecution = immediateExecution;
+			return this;
+		}
+
+		/**
 		 * Builds a synchronous MCP server that provides blocking operations.
 		 * @return A new instance of {@link McpSyncServer} configured with this builder's
 		 * settings.
@@ -1125,12 +1143,13 @@ public interface McpServer {
 			McpServerFeatures.Sync syncFeatures = new McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,
 					this.tools, this.resources, this.resourceTemplates, this.prompts, this.completions,
 					this.rootsChangeHandlers, this.instructions);
-			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures);
+			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures,
+					this.immediateExecution);
 			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
 			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures, this.requestTimeout,
 					this.uriTemplateManagerFactory);
 
-			return new McpSyncServer(asyncServer);
+			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
 	}
