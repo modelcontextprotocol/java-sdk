@@ -54,13 +54,27 @@ public class McpSyncServer {
 	 */
 	private final McpAsyncServer asyncServer;
 
+	private final boolean immediateExecution;
+
 	/**
 	 * Creates a new synchronous server that wraps the provided async server.
 	 * @param asyncServer The async server to wrap
 	 */
 	public McpSyncServer(McpAsyncServer asyncServer) {
+		this(asyncServer, false);
+	}
+
+	/**
+	 * Creates a new synchronous server that wraps the provided async server.
+	 * @param asyncServer The async server to wrap
+	 * @param immediateExecution Tools, prompts, and resources handlers execute work
+	 * without blocking code offloading. Do NOT set to true if the {@code asyncServer}'s
+	 * transport is non-blocking.
+	 */
+	public McpSyncServer(McpAsyncServer asyncServer, boolean immediateExecution) {
 		Assert.notNull(asyncServer, "Async server must not be null");
 		this.asyncServer = asyncServer;
+		this.immediateExecution = immediateExecution;
 	}
 
 	/**
@@ -68,7 +82,9 @@ public class McpSyncServer {
 	 * @param toolHandler The tool handler to add
 	 */
 	public void addTool(McpServerFeatures.SyncToolSpecification toolHandler) {
-		this.asyncServer.addTool(McpServerFeatures.AsyncToolSpecification.fromSync(toolHandler)).block();
+		this.asyncServer
+			.addTool(McpServerFeatures.AsyncToolSpecification.fromSync(toolHandler, this.immediateExecution))
+			.block();
 	}
 
 	/**
@@ -84,7 +100,10 @@ public class McpSyncServer {
 	 * @param resourceHandler The resource handler to add
 	 */
 	public void addResource(McpServerFeatures.SyncResourceSpecification resourceHandler) {
-		this.asyncServer.addResource(McpServerFeatures.AsyncResourceSpecification.fromSync(resourceHandler)).block();
+		this.asyncServer
+			.addResource(
+					McpServerFeatures.AsyncResourceSpecification.fromSync(resourceHandler, this.immediateExecution))
+			.block();
 	}
 
 	/**
@@ -100,7 +119,10 @@ public class McpSyncServer {
 	 * @param promptSpecification The prompt specification to add
 	 */
 	public void addPrompt(McpServerFeatures.SyncPromptSpecification promptSpecification) {
-		this.asyncServer.addPrompt(McpServerFeatures.AsyncPromptSpecification.fromSync(promptSpecification)).block();
+		this.asyncServer
+			.addPrompt(
+					McpServerFeatures.AsyncPromptSpecification.fromSync(promptSpecification, this.immediateExecution))
+			.block();
 	}
 
 	/**
