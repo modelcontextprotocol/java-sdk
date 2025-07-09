@@ -212,8 +212,14 @@ public abstract class AbstractMcpAsyncServerTests {
 			.capabilities(ServerCapabilities.builder().resources(true, false).build())
 			.build();
 
-		Resource resource = new Resource(TEST_RESOURCE_URI, "Test Resource", "text/plain", "Test resource description",
-				null);
+		Resource resource = Resource.builder()
+			.uri(TEST_RESOURCE_URI)
+			.name("Test Resource")
+			.title("A Test Resource")
+			.mimeType("text/plain")
+			.description("Test resource description")
+			.annotations(null)
+			.build();
 		McpServerFeatures.AsyncResourceSpecification specification = new McpServerFeatures.AsyncResourceSpecification(
 				resource, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
 
@@ -244,8 +250,15 @@ public abstract class AbstractMcpAsyncServerTests {
 			.serverInfo("test-server", "1.0.0")
 			.build();
 
-		Resource resource = new Resource(TEST_RESOURCE_URI, "Test Resource", "text/plain", "Test resource description",
-				null);
+		Resource resource = Resource.builder()
+			.uri(TEST_RESOURCE_URI)
+			.name("Test Resource")
+			.title("A Test Resource")
+			.mimeType("text/plain")
+			.description("Test resource description")
+			.annotations(null)
+			.build();
+
 		McpServerFeatures.AsyncResourceSpecification specification = new McpServerFeatures.AsyncResourceSpecification(
 				resource, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
 
@@ -301,7 +314,13 @@ public abstract class AbstractMcpAsyncServerTests {
 			.serverInfo("test-server", "1.0.0")
 			.build();
 
-		Prompt prompt = new Prompt(TEST_PROMPT_NAME, "Test Prompt", List.of());
+		Prompt prompt = Prompt.builder()
+			.name(TEST_PROMPT_NAME)
+			.title("A Test Prompt")
+			.description("Test Prompt")
+			.arguments(List.of())
+			.build();
+
 		McpServerFeatures.AsyncPromptSpecification specification = new McpServerFeatures.AsyncPromptSpecification(
 				prompt, (exchange, req) -> Mono.just(new GetPromptResult("Test prompt description", List
 					.of(new PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent("Test content"))))));
@@ -329,7 +348,13 @@ public abstract class AbstractMcpAsyncServerTests {
 	void testRemovePrompt() {
 		String TEST_PROMPT_NAME_TO_REMOVE = "TEST_PROMPT_NAME678";
 
-		Prompt prompt = new Prompt(TEST_PROMPT_NAME_TO_REMOVE, "Test Prompt", List.of());
+		Prompt prompt = Prompt.builder()
+			.name(TEST_PROMPT_NAME_TO_REMOVE)
+			.title("Test Prompt Name 678")
+			.description("Test Prompt")
+			.arguments(List.of())
+			.build();
+
 		McpServerFeatures.AsyncPromptSpecification specification = new McpServerFeatures.AsyncPromptSpecification(
 				prompt, (exchange, req) -> Mono.just(new GetPromptResult("Test prompt description", List
 					.of(new PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent("Test content"))))));
