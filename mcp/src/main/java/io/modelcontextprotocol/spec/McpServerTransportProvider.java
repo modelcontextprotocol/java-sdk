@@ -44,7 +44,7 @@ public interface McpServerTransportProvider {
 	 * @param method the name of the notification method to be called on the clients
 	 * @param params parameters to be sent with the notification
 	 * @return a Mono that completes when the notification has been broadcast
-	 * @see McpSession#sendNotification(String, Map)
+	 * @see McpSession#sendNotification(String, Object)
 	 */
 	Mono<Void> notifyClients(String method, Object params);
 

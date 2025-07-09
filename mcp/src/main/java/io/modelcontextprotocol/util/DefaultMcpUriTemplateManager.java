@@ -30,7 +30,8 @@ public class DefaultMcpUriTemplateManager implements McpUriTemplateManager {
 
 	/**
 	 * Constructor for DefaultMcpUriTemplateManager.
-	 * @param uriTemplate The URI template to be used for variable extraction
+	 * @param uriTemplate The URI template to be used for variable extraction should be in
+	 * the format {variableName}
 	 */
 	public DefaultMcpUriTemplateManager(String uriTemplate) {
 		if (uriTemplate == null || uriTemplate.isEmpty()) {
@@ -41,8 +42,6 @@ public class DefaultMcpUriTemplateManager implements McpUriTemplateManager {
 
 	/**
 	 * Extract URI variable names from a URI template.
-	 * @param uriTemplate The URI template containing variables in the format
-	 * {variableName}
 	 * @return A list of variable names extracted from the template
 	 * @throws IllegalArgumentException if duplicate variable names are found
 	 */
