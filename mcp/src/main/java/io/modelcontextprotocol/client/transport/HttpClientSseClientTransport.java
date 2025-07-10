@@ -14,6 +14,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse.JSONRPCError;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -426,6 +428,9 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 					if (response.statusCode() != 200 && response.statusCode() != 201 && response.statusCode() != 202
 							&& response.statusCode() != 206) {
 						logger.error("Error sending message: {}", response.statusCode());
+						throw new McpError(new JSONRPCError(ErrorCodes.INVALID_REQUEST,
+								String.format("The server returned a %s status code", response.statusCode()),
+								response.statusCode()));
 					}
 				})
 				.doOnError(error -> {
