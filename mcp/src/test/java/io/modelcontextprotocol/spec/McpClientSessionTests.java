@@ -47,7 +47,7 @@ class McpClientSessionTests {
 	void setUp() {
 		transport = new MockMcpClientTransport();
 		session = new McpClientSession(TIMEOUT, transport, Map.of(),
-				Map.of(TEST_NOTIFICATION, params -> Mono.fromRunnable(() -> logger.info("Status update: " + params))));
+				Map.of(TEST_NOTIFICATION, params -> Mono.fromRunnable(() -> logger.info("Status update: {}", params))));
 	}
 
 	@AfterEach
