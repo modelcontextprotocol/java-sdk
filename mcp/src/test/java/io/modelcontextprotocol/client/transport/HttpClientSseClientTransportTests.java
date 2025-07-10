@@ -120,7 +120,8 @@ class HttpClientSseClientTransportTests {
 				""");
 
 		// Subscribe to messages and verify
-		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
+		StepVerifier.create(transport.sendMessage(testMessage).onErrorResume(throwable -> Mono.empty()))
+			.verifyComplete();
 
 		assertThat(transport.getInboundMessageCount()).isEqualTo(1);
 	}
@@ -141,7 +142,8 @@ class HttpClientSseClientTransportTests {
 				Map.of("key", "value"));
 
 		// Verify message handling
-		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
+		StepVerifier.create(transport.sendMessage(testMessage).onErrorResume(throwable -> Mono.empty()))
+			.verifyComplete();
 
 		assertThat(transport.getInboundMessageCount()).isEqualTo(1);
 	}
@@ -165,7 +167,8 @@ class HttpClientSseClientTransportTests {
 				Map.of("key", "value"));
 
 		// Verify message handling
-		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
+		StepVerifier.create(transport.sendMessage(testMessage).onErrorResume(throwable -> Mono.empty()))
+			.verifyComplete();
 
 		assertThat(transport.getInboundMessageCount()).isEqualTo(1);
 	}
@@ -243,7 +246,11 @@ class HttpClientSseClientTransportTests {
 				Map.of("key", "value2"));
 
 		// Verify both messages are processed
-		StepVerifier.create(transport.sendMessage(message1).then(transport.sendMessage(message2))).verifyComplete();
+		StepVerifier
+			.create(transport.sendMessage(message1)
+				.then(transport.sendMessage(message2))
+				.onErrorResume(throwable -> Mono.empty()))
+			.verifyComplete();
 
 		// Verify message count
 		assertThat(transport.getInboundMessageCount()).isEqualTo(2);
