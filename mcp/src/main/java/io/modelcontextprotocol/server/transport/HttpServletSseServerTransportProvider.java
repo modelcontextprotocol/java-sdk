@@ -7,7 +7,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -208,7 +207,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		response.setHeader("Connection", "keep-alive");
 		response.setHeader("Access-Control-Allow-Origin", "*");
 
-		String sessionId = UUID.randomUUID().toString();
+		String sessionId = sessionFactory.generateId();
 		AsyncContext asyncContext = request.startAsync();
 		asyncContext.setTimeout(0);
 
@@ -219,7 +218,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 				writer);
 
 		// Create a new session using the session factory
-		McpServerSession session = sessionFactory.create(sessionTransport);
+		McpServerSession session = sessionFactory.create(sessionId, sessionTransport);
 		this.sessions.put(sessionId, session);
 
 		// Send initial endpoint event
