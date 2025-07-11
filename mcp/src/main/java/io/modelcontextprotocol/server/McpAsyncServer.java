@@ -269,17 +269,17 @@ public class McpAsyncServer {
 
 	/**
 	 * Add a new tool call specification at runtime.
-	 * @param toolCallSpecification The tool specification to add
+	 * @param toolSpecification The tool specification to add
 	 * @return Mono that completes when clients have been notified of the change
 	 */
-	public Mono<Void> addTool(McpServerFeatures.AsyncToolSpecification toolCallSpecification) {
-		if (toolCallSpecification == null) {
+	public Mono<Void> addTool(McpServerFeatures.AsyncToolSpecification toolSpecification) {
+		if (toolSpecification == null) {
 			return Mono.error(new McpError("Tool specification must not be null"));
 		}
-		if (toolCallSpecification.tool() == null) {
+		if (toolSpecification.tool() == null) {
 			return Mono.error(new McpError("Tool must not be null"));
 		}
-		if (toolCallSpecification.call() == null && toolCallSpecification.callHandler() == null) {
+		if (toolSpecification.call() == null && toolSpecification.callHandler() == null) {
 			return Mono.error(new McpError("Tool call handler must not be null"));
 		}
 		if (this.serverCapabilities.tools() == null) {
@@ -288,13 +288,13 @@ public class McpAsyncServer {
 
 		return Mono.defer(() -> {
 			// Check for duplicate tool names
-			if (this.tools.stream().anyMatch(th -> th.tool().name().equals(toolCallSpecification.tool().name()))) {
+			if (this.tools.stream().anyMatch(th -> th.tool().name().equals(toolSpecification.tool().name()))) {
 				return Mono
-					.error(new McpError("Tool with name '" + toolCallSpecification.tool().name() + "' already exists"));
+					.error(new McpError("Tool with name '" + toolSpecification.tool().name() + "' already exists"));
 			}
 
-			this.tools.add(toolCallSpecification);
-			logger.debug("Added tool handler: {}", toolCallSpecification.tool().name());
+			this.tools.add(toolSpecification);
+			logger.debug("Added tool handler: {}", toolSpecification.tool().name());
 
 			if (this.serverCapabilities.tools().listChanged()) {
 				return notifyToolsListChanged();

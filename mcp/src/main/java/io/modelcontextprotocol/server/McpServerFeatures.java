@@ -439,7 +439,7 @@ public class McpServerFeatures {
 	 * 				new JsonSchemaObject()
 	 * 						.required("expression")
 	 * 						.property("expression", JsonSchemaType.STRING)))
-	 * 		.toolCall((exchange, req) -> {
+	 * 		.toolHandler((exchange, req) -> {
 	 * 			String expr = (String) req.arguments().get("expression");
 	 * 			return new CallToolResult("Result: " + evaluate(expr));
 	 * 		}))
