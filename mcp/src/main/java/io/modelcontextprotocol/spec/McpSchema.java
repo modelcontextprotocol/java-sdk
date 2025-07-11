@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
  * @author Christian Tzolov
  * @author Luca Chang
  * @author Surbhi Bansal
+ * @author Anurag Pant
  */
 public final class McpSchema {
 
@@ -142,8 +143,9 @@ public final class McpSchema {
 
 	}
 
-	public sealed interface Request permits InitializeRequest, CallToolRequest, CreateMessageRequest, ElicitRequest,
-			CompleteRequest, GetPromptRequest, PaginatedRequest, ReadResourceRequest {
+	public sealed interface Request
+			permits InitializeRequest, CallToolRequest, CreateMessageRequest, ElicitRequest, CompleteRequest,
+			GetPromptRequest, ReadResourceRequest, SubscribeRequest, UnsubscribeRequest, PaginatedRequest {
 
 		Map<String, Object> meta();
 
@@ -153,6 +155,21 @@ public final class McpSchema {
 			}
 			return null;
 		}
+
+	}
+
+	public sealed interface Result permits InitializeResult, ListResourcesResult, ListResourceTemplatesResult,
+			ReadResourceResult, ListPromptsResult, GetPromptResult, ListToolsResult, CallToolResult,
+			CreateMessageResult, ElicitResult, CompleteResult, ListRootsResult {
+
+		Map<String, Object> meta();
+
+	}
+
+	public sealed interface Notification
+			permits ProgressNotification, LoggingMessageNotification, ResourcesUpdatedNotification {
+
+		Map<String, Object> meta();
 
 	}
 
@@ -201,7 +218,6 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	// TODO: batching support
 	// @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
 	public record JSONRPCRequest( // @formatter:off
 						@JsonProperty("jsonrpc") String jsonrpc,
@@ -261,7 +277,13 @@ public final class McpSchema {
 				@JsonProperty("protocolVersion") String protocolVersion,
 				@JsonProperty("capabilities") ServerCapabilities capabilities,
 				@JsonProperty("serverInfo") Implementation serverInfo,
-				@JsonProperty("instructions") String instructions) {
+				@JsonProperty("instructions") String instructions,
+				@JsonProperty("_meta") Map<String, Object> meta) implements Result {
+
+			public InitializeResult(String protocolVersion, ServerCapabilities capabilities,
+					Implementation serverInfo, String instructions) {
+				this(protocolVersion, capabilities, serverInfo, instructions, null);
+			}
 		} // @formatter:on
 
 	/**
@@ -566,6 +588,7 @@ public final class McpSchema {
 	 * sizes and estimate context window usage.
 	 * @param annotations Optional annotations for the client. The client can use
 	 * annotations to inform how objects are used or displayed.
+	 * @param meta Additional metadata related to this resource.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -576,7 +599,8 @@ public final class McpSchema {
 				@JsonProperty("description") String description,
 				@JsonProperty("mimeType") String mimeType,
 				@JsonProperty("size") Long size,
-				@JsonProperty("annotations") Annotations annotations) implements Annotated, ResourceContent {// @formatter:on
+				@JsonProperty("annotations") Annotations annotations,
+				@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, ResourceContent {// @formatter:on
 
 		/**
 		 * @deprecated Only exists for backwards-compatibility purposes. Use
@@ -584,7 +608,7 @@ public final class McpSchema {
 		 */
 		@Deprecated
 		public Resource(String uri, String name, String description, String mimeType, Annotations annotations) {
-			this(uri, name, null, description, mimeType, null, annotations);
+			this(uri, name, null, description, mimeType, null, annotations, null);
 		}
 
 		public static Builder builder() {
@@ -606,6 +630,8 @@ public final class McpSchema {
 			private Long size;
 
 			private Annotations annotations;
+
+			private Map<String, Object> meta;
 
 			public Builder uri(String uri) {
 				this.uri = uri;
@@ -642,11 +668,16 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
 			public Resource build() {
 				Assert.hasText(uri, "uri must not be empty");
 				Assert.hasText(name, "name must not be empty");
 
-				return new Resource(uri, name, title, description, mimeType, size, annotations);
+				return new Resource(uri, name, title, description, mimeType, size, annotations, meta);
 			}
 
 		}
@@ -654,7 +685,6 @@ public final class McpSchema {
 
 	/**
 	 * Resource templates allow servers to expose parameterized resources using URI
-	 * templates.
 	 *
 	 * @param uriTemplate A URI template that can be used to generate URIs for this
 	 * resource.
@@ -668,30 +698,50 @@ public final class McpSchema {
 	 * @param annotations Optional annotations for the client. The client can use
 	 * annotations to inform how objects are used or displayed.
 	 * @see <a href="https://datatracker.ietf.org/doc/html/rfc6570">RFC 6570</a>
+	 * @param meta Additional metadata related to this resource template.
+	 * "https://modelcontextprotocol.io/specification/2025-06-18/basic/index#meta">Specification</a>
+	 * for notes on _meta usage
+	 *
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ResourceTemplate( // @formatter:off
-				@JsonProperty("uriTemplate") String uriTemplate,
-				@JsonProperty("name") String name,
-				@JsonProperty("title") String title,
-				@JsonProperty("description") String description,
-				@JsonProperty("mimeType") String mimeType,
-				@JsonProperty("annotations") Annotations annotations) implements Annotated, BaseMetadata {
-		} // @formatter:on
+			@JsonProperty("uriTemplate") String uriTemplate,
+			@JsonProperty("name") String name,
+			@JsonProperty("title") String title,
+			@JsonProperty("description") String description,
+			@JsonProperty("mimeType") String mimeType,
+			@JsonProperty("annotations") Annotations annotations,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, BaseMetadata {
+
+		public ResourceTemplate(String uri, String name, String title, String description, String mimeType, Annotations annotations) {
+			this(uri, name, title, description, mimeType, annotations, null);
+		}
+	} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ListResourcesResult( // @formatter:off
 				@JsonProperty("resources") List<Resource> resources,
-				@JsonProperty("nextCursor") String nextCursor) {
+				@JsonProperty("nextCursor") String nextCursor,
+				@JsonProperty("_meta") Map<String, Object> meta) implements Result {
+
+			public ListResourcesResult(List<Resource> resources, String nextCursor) {
+				this(resources, nextCursor, null);
+			}
 		} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ListResourceTemplatesResult( // @formatter:off
 				@JsonProperty("resourceTemplates") List<ResourceTemplate> resourceTemplates,
-				@JsonProperty("nextCursor") String nextCursor) {
+				@JsonProperty("nextCursor") String nextCursor,
+				@JsonProperty("_meta") Map<String, Object> meta) implements Result {
+
+			public ListResourceTemplatesResult(List<ResourceTemplate> resourceTemplates,
+				String nextCursor) {
+				this(resourceTemplates, nextCursor, null);
+			}
 		} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -708,7 +758,12 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ReadResourceResult( // @formatter:off
-				@JsonProperty("contents") List<ResourceContents> contents){
+				@JsonProperty("contents") List<ResourceContents> contents,
+				@JsonProperty("_meta") Map<String, Object> meta) implements Result {
+
+			public ReadResourceResult(List<ResourceContents> contents) {
+				this(contents, null);
+			}
 		} // @formatter:on
 
 	/**
@@ -717,17 +772,27 @@ public final class McpSchema {
 	 *
 	 * @param uri the URI of the resource to subscribe to. The URI can use any protocol;
 	 * it is up to the server how to interpret it.
+	 * @param meta Additional metadata related to this prompt.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record SubscribeRequest( // @formatter:off
-				@JsonProperty("uri") String uri){
+				@JsonProperty("uri") String uri,
+				@JsonProperty("_meta") Map<String, Object> meta) implements Request {
+			public SubscribeRequest(String uri) {
+				this(uri, null);
+			}
 		} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record UnsubscribeRequest( // @formatter:off
-				@JsonProperty("uri") String uri){
+				@JsonProperty("uri") String uri,
+				@JsonProperty("_meta") Map<String, Object> meta) implements Request {
+
+			public UnsubscribeRequest(String uri) {
+				this(uri, null);
+			}
 		} // @formatter:on
 
 	/**
@@ -750,6 +815,14 @@ public final class McpSchema {
 		 */
 		String mimeType();
 
+		/**
+		 * @see <a href=
+		 * "https://modelcontextprotocol.io/specification/2025-06-18/basic/index#meta">Specification</a>
+		 * for notes on _meta usage
+		 * @return additional metadata related to this resource.
+		 */
+		Map<String, Object> meta();
+
 	}
 
 	/**
@@ -759,13 +832,19 @@ public final class McpSchema {
 	 * @param mimeType the MIME type of this resource.
 	 * @param text the text of the resource. This must only be set if the resource can
 	 * actually be represented as text (not binary data).
+	 * @param meta Additional metadata related to this resource content.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record TextResourceContents( // @formatter:off
 				@JsonProperty("uri") String uri,
 				@JsonProperty("mimeType") String mimeType,
-				@JsonProperty("text") String text) implements ResourceContents {
+				@JsonProperty("text") String text,
+				@JsonProperty("_meta") Map<String, Object> meta) implements ResourceContents {
+
+			public TextResourceContents(String uri, String mimeType, String text) {
+				this(uri, mimeType, text, null);
+			}
 		} // @formatter:on
 
 	/**
@@ -776,13 +855,19 @@ public final class McpSchema {
 	 * @param blob a base64-encoded string representing the binary data of the resource.
 	 * This must only be set if the resource can actually be represented as binary data
 	 * (not text).
+	 * @param meta Additional metadata related to this resource content.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record BlobResourceContents( // @formatter:off
 				@JsonProperty("uri") String uri,
 				@JsonProperty("mimeType") String mimeType,
-				@JsonProperty("blob") String blob) implements ResourceContents {
+				@JsonProperty("blob") String blob,
+				@JsonProperty("_meta") Map<String, Object> meta) implements ResourceContents {
+
+			public BlobResourceContents(String uri, String mimeType, String blob) {
+				this(uri, mimeType, blob, null);
+			}
 		} // @formatter:on
 
 	// ---------------------------
@@ -795,6 +880,7 @@ public final class McpSchema {
 	 * @param title An optional title for the prompt.
 	 * @param description An optional description of what this prompt provides.
 	 * @param arguments A list of arguments to use for templating the prompt.
+	 * @param meta Additional metadata related to this prompt.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -802,8 +888,13 @@ public final class McpSchema {
 				@JsonProperty("name") String name,
 				@JsonProperty("title") String title,
 				@JsonProperty("description") String description,
-				@JsonProperty("arguments") List<PromptArgument> arguments) implements BaseMetadata {
-		} // @formatter:on
+				@JsonProperty("arguments") List<PromptArgument> arguments,
+				@JsonProperty("_meta") Map<String, Object> meta) implements BaseMetadata {
+
+		public Prompt(String name, String title, String description, List<PromptArgument> arguments) {
+			this(name, title, description, arguments, null);
+		}
+	} // @formatter:on
 
 	/**
 	 * Describes an argument that a prompt can accept.
@@ -816,11 +907,11 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record PromptArgument( // @formatter:off
-				@JsonProperty("name") String name,
-				@JsonProperty("title") String title,
-				@JsonProperty("description") String description,
-				@JsonProperty("required") Boolean required) implements BaseMetadata {
-		}// @formatter:on
+			@JsonProperty("name") String name,
+			@JsonProperty("title") String title,
+			@JsonProperty("description") String description,
+			@JsonProperty("required") Boolean required) implements BaseMetadata {
+	}// @formatter:on
 
 	/**
 	 * Describes a message returned as part of a prompt.
@@ -834,9 +925,9 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record PromptMessage( // @formatter:off
-				@JsonProperty("role") Role role,
-				@JsonProperty("content") Content content) {
-		} // @formatter:on
+			@JsonProperty("role") Role role,
+			@JsonProperty("content") Content content) {
+	} // @formatter:on
 
 	/**
 	 * The server's response to a prompts/list request from the client.
@@ -844,44 +935,57 @@ public final class McpSchema {
 	 * @param prompts A list of prompts that the server provides.
 	 * @param nextCursor An optional cursor for pagination. If present, indicates there
 	 * are more prompts available.
+	 * @param meta Additional metadata related to this result.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ListPromptsResult( // @formatter:off
-				@JsonProperty("prompts") List<Prompt> prompts,
-				@JsonProperty("nextCursor") String nextCursor) {
-		}// @formatter:on
+			@JsonProperty("prompts") List<Prompt> prompts,
+			@JsonProperty("nextCursor") String nextCursor,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Result {
+
+		public ListPromptsResult(List<Prompt> prompts, String nextCursor) {
+			this(prompts, nextCursor, null);
+		}
+	}// @formatter:on
 
 	/**
 	 * Used by the client to get a prompt provided by the server.
 	 *
 	 * @param name The name of the prompt or prompt template.
 	 * @param arguments Arguments to use for templating the prompt.
+	 * @param meta Additional metadata related to this request.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record GetPromptRequest(// @formatter:off
-				@JsonProperty("name") String name,
-				@JsonProperty("arguments") Map<String, Object> arguments,
-				@JsonProperty("_meta") Map<String, Object> meta) implements Request {
+			@JsonProperty("name") String name,
+			@JsonProperty("arguments") Map<String, Object> arguments,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Request {
 
-				public GetPromptRequest(String name, Map<String, Object> arguments) {
-						this(name, arguments, null);
-				}
-		}// @formatter:off
+			public GetPromptRequest(String name, Map<String, Object> arguments) {
+					this(name, arguments, null);
+			}
+	}// @formatter:on
 
-		/**
-		 * The server's response to a prompts/get request from the client.
-		 *
-		 * @param description An optional description for the prompt.
-		 * @param messages A list of messages to display as part of the prompt.
-		 */
-		@JsonInclude(JsonInclude.Include.NON_ABSENT)
-		@JsonIgnoreProperties(ignoreUnknown = true)
-		public record GetPromptResult( // @formatter:off
-				@JsonProperty("description") String description,
-				@JsonProperty("messages") List<PromptMessage> messages) {
-		} // @formatter:on
+	/**
+	 * The server's response to a prompts/get request from the client.
+	 *
+	 * @param description An optional description for the prompt.
+	 * @param messages A list of messages to display as part of the prompt.
+	 * @param meta Additional metadata related to this result.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record GetPromptResult( // @formatter:off
+			@JsonProperty("description") String description,
+			@JsonProperty("messages") List<PromptMessage> messages,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Result {
+
+		public GetPromptResult(String description, List<PromptMessage> messages) {
+			this(description, messages, null);
+		}
+	} // @formatter:on
 
 	// ---------------------------
 	// Tool Interfaces
@@ -892,35 +996,41 @@ public final class McpSchema {
 	 * @param tools A list of tools that the server provides.
 	 * @param nextCursor An optional cursor for pagination. If present, indicates there
 	 * are more tools available.
+	 * @param meta Additional metadata related to this result.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ListToolsResult( // @formatter:off
-				@JsonProperty("tools") List<Tool> tools,
-				@JsonProperty("nextCursor") String nextCursor) {
-		}// @formatter:on
+			@JsonProperty("tools") List<Tool> tools,
+			@JsonProperty("nextCursor") String nextCursor,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Result {
+
+		public ListToolsResult(List<Tool> tools, String nextCursor) {
+			this(tools, nextCursor, null);
+		}
+	}// @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record JsonSchema( // @formatter:off
-				@JsonProperty("type") String type,
-				@JsonProperty("properties") Map<String, Object> properties,
-				@JsonProperty("required") List<String> required,
-				@JsonProperty("additionalProperties") Boolean additionalProperties,
-				@JsonProperty("$defs") Map<String, Object> defs,
-				@JsonProperty("definitions") Map<String, Object> definitions) {
-		} // @formatter:on
+			@JsonProperty("type") String type,
+			@JsonProperty("properties") Map<String, Object> properties,
+			@JsonProperty("required") List<String> required,
+			@JsonProperty("additionalProperties") Boolean additionalProperties,
+			@JsonProperty("$defs") Map<String, Object> defs,
+			@JsonProperty("definitions") Map<String, Object> definitions) {
+	} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ToolAnnotations( // @formatter:off
-				@JsonProperty("title")  String title,
-				@JsonProperty("readOnlyHint")   Boolean readOnlyHint,
-				@JsonProperty("destructiveHint") Boolean destructiveHint,
-				@JsonProperty("idempotentHint") Boolean idempotentHint,
-				@JsonProperty("openWorldHint") Boolean openWorldHint,
-				@JsonProperty("returnDirect") Boolean returnDirect) {
-		} // @formatter:on
+			@JsonProperty("title")  String title,
+			@JsonProperty("readOnlyHint")   Boolean readOnlyHint,
+			@JsonProperty("destructiveHint") Boolean destructiveHint,
+			@JsonProperty("idempotentHint") Boolean idempotentHint,
+			@JsonProperty("openWorldHint") Boolean openWorldHint,
+			@JsonProperty("returnDirect") Boolean returnDirect) {
+	} // @formatter:on
 
 	/**
 	 * Represents a tool that the server provides. Tools enable servers to expose
@@ -940,18 +1050,23 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Tool( // @formatter:off
-				@JsonProperty("name") String name,
-				@JsonProperty("title") String title,
-				@JsonProperty("description") String description,
-				@JsonProperty("inputSchema") JsonSchema inputSchema,
-				@JsonProperty("annotations") ToolAnnotations annotations) implements BaseMetadata { // @formatter:on
+			@JsonProperty("name") String name,
+			@JsonProperty("title") String title,
+			@JsonProperty("description") String description,
+			@JsonProperty("inputSchema") JsonSchema inputSchema,
+			@JsonProperty("annotations") ToolAnnotations annotations,
+			@JsonProperty("_meta") Map<String, Object> meta) implements BaseMetadata { // @formatter:on
 
 		public Tool(String name, String description, String schema) {
-			this(name, null, description, parseSchema(schema), null);
+			this(name, null, description, parseSchema(schema), null, null);
 		}
 
 		public Tool(String name, String description, String schema, ToolAnnotations annotations) {
-			this(name, null, description, parseSchema(schema), annotations);
+			this(name, null, description, parseSchema(schema), annotations, null);
+		}
+
+		public Tool(String name, String title, String description, JsonSchema schema, ToolAnnotations annotations) {
+			this(name, title, description, schema, annotations, null);
 		}
 
 		public static Builder builder() {
@@ -969,6 +1084,8 @@ public final class McpSchema {
 			private JsonSchema inputSchema;
 
 			private ToolAnnotations annotations;
+
+			private Map<String, Object> meta;
 
 			public Builder name(String name) {
 				this.name = name;
@@ -995,10 +1112,15 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
 			public Tool build() {
 				Assert.hasText(name, "name must not be empty");
 
-				return new Tool(name, title, description, inputSchema, annotations);
+				return new Tool(name, title, description, inputSchema, annotations, meta);
 			}
 
 		}
@@ -1021,185 +1143,204 @@ public final class McpSchema {
 	 * tools/list.
 	 * @param arguments Arguments to pass to the tool. These must conform to the tool's
 	 * input schema.
+	 * @param meta Additional metadata related to this request.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record CallToolRequest(// @formatter:off
-				@JsonProperty("name") String name,
-				@JsonProperty("arguments") Map<String, Object> arguments,
-				@JsonProperty("_meta") Map<String, Object> meta) implements Request {
+			@JsonProperty("name") String name,
+			@JsonProperty("arguments") Map<String, Object> arguments,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Request {
 
-				public CallToolRequest(String name, String jsonArguments) {
-						this(name, parseJsonArguments(jsonArguments), null);
-				}
-				public CallToolRequest(String name, Map<String, Object> arguments) {
-						this(name, arguments, null);
-				}
+			public CallToolRequest(String name, String jsonArguments) {
+					this(name, parseJsonArguments(jsonArguments), null);
+			}
+			public CallToolRequest(String name, Map<String, Object> arguments) {
+					this(name, arguments, null);
+			}
 
-				private static Map<String, Object> parseJsonArguments(String jsonArguments) {
-						try {
-								return OBJECT_MAPPER.readValue(jsonArguments, MAP_TYPE_REF);
-						}
-						catch (IOException e) {
-								throw new IllegalArgumentException("Invalid arguments: " + jsonArguments, e);
-						}
-				}
+			private static Map<String, Object> parseJsonArguments(String jsonArguments) {
+					try {
+							return OBJECT_MAPPER.readValue(jsonArguments, MAP_TYPE_REF);
+					}
+					catch (IOException e) {
+							throw new IllegalArgumentException("Invalid arguments: " + jsonArguments, e);
+					}
+			}
 
-				public static Builder builder() {
-						return new Builder();
-				}
+			public static Builder builder() {
+					return new Builder();
+			}
 
-				public static class Builder {
-						private String name;
-						private Map<String, Object> arguments;
-						private Map<String, Object> meta;
+			public static class Builder {
+					private String name;
+					private Map<String, Object> arguments;
+					private Map<String, Object> meta;
 
-						public Builder name(String name) {
-								this.name = name;
-								return this;
-						}
+					public Builder name(String name) {
+							this.name = name;
+							return this;
+					}
 
-						public Builder arguments(Map<String, Object> arguments) {
-								this.arguments = arguments;
-								return this;
-						}
+					public Builder arguments(Map<String, Object> arguments) {
+							this.arguments = arguments;
+							return this;
+					}
 
-						public Builder arguments(String jsonArguments) {
-								this.arguments = parseJsonArguments(jsonArguments);
-								return this;
-						}
+					public Builder arguments(String jsonArguments) {
+							this.arguments = parseJsonArguments(jsonArguments);
+							return this;
+					}
 
-						public Builder meta(Map<String, Object> meta) {
-								this.meta = meta;
-								return this;
-						}
+					public Builder meta(Map<String, Object> meta) {
+							this.meta = meta;
+							return this;
+					}
 
-						public Builder progressToken(String progressToken) {
-								if (this.meta == null) {
-										this.meta = new HashMap<>();
-								}
-								this.meta.put("progressToken", progressToken);
-								return this;
-						}
+					public Builder progressToken(String progressToken) {
+							if (this.meta == null) {
+									this.meta = new HashMap<>();
+							}
+							this.meta.put("progressToken", progressToken);
+							return this;
+					}
 
-						public CallToolRequest build() {
-								Assert.hasText(name, "name must not be empty");
-								return new CallToolRequest(name, arguments, meta);
-						}
-				}
-		}// @formatter:off
+					public CallToolRequest build() {
+							Assert.hasText(name, "name must not be empty");
+							return new CallToolRequest(name, arguments, meta);
+					}
+			}
+	}// @formatter:on
+
+	/**
+	 * The server's response to a tools/call request from the client.
+	 *
+	 * @param content A list of content items representing the tool's output. Each item
+	 * can be text, an image, or an embedded resource.
+	 * @param isError If true, indicates that the tool execution failed and the content
+	 * contains error information. If false or absent, indicates successful execution.
+	 * @param meta Additional metadata related to this result.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record CallToolResult( // @formatter:off
+		@JsonProperty("content") List<Content> content,
+		@JsonProperty("isError") Boolean isError,
+		@JsonProperty("_meta") Map<String, Object> meta) implements Result {
+
+		public CallToolResult(List<Content> content, Boolean isError) {
+			this(content, isError, null);
+		}
 
 		/**
-		 * The server's response to a tools/call request from the client.
+		 * Creates a new instance of {@link CallToolResult} with a string containing the
+		 * tool result.
 		 *
-		 * @param content A list of content items representing the tool's output. Each item can be text, an image,
-		 *                or an embedded resource.
+		 * @param content The content of the tool result. This will be mapped to a one-sized list
+		 * 				  with a {@link TextContent} element.
 		 * @param isError If true, indicates that the tool execution failed and the content contains error information.
 		 *                If false or absent, indicates successful execution.
+		 * @param meta Additional metadata related to this result.
 		 */
-		@JsonInclude(JsonInclude.Include.NON_ABSENT)
-		@JsonIgnoreProperties(ignoreUnknown = true)
-		public record CallToolResult( // @formatter:off
-				@JsonProperty("content") List<Content> content,
-				@JsonProperty("isError") Boolean isError) {
+		public CallToolResult(String content, Boolean isError) {
+				this(List.of(new TextContent(content)), isError, null);
+		}
 
-				/**
-				 * Creates a new instance of {@link CallToolResult} with a string containing the
-				 * tool result.
-				 *
-				 * @param content The content of the tool result. This will be mapped to a one-sized list
-				 * 				  with a {@link TextContent} element.
-				 * @param isError If true, indicates that the tool execution failed and the content contains error information.
-				 *                If false or absent, indicates successful execution.
-				 */
-				public CallToolResult(String content, Boolean isError) {
-						this(List.of(new TextContent(content)), isError);
-				}
+		/**
+		 * Creates a builder for {@link CallToolResult}.
+		 * @return a new builder instance
+		 */
+		public static Builder builder() {
+				return new Builder();
+		}
 
-				/**
-				 * Creates a builder for {@link CallToolResult}.
-				 * @return a new builder instance
-				 */
-				public static Builder builder() {
-						return new Builder();
-				}
+			/**
+			 * Builder for {@link CallToolResult}.
+			 */
+			public static class Builder {
+					private List<Content> content = new ArrayList<>();
+					private Boolean isError;
+					private Map<String, Object> meta;
 
-				/**
-				 * Builder for {@link CallToolResult}.
-				 */
-				public static class Builder {
-						private List<Content> content = new ArrayList<>();
-						private Boolean isError;
+					/**
+					 * Sets the content list for the tool result.
+					 * @param content the content list
+					 * @return this builder
+					 */
+					public Builder content(List<Content> content) {
+							Assert.notNull(content, "content must not be null");
+							this.content = content;
+							return this;
+					}
 
-						/**
-						 * Sets the content list for the tool result.
-						 * @param content the content list
-						 * @return this builder
-						 */
-						public Builder content(List<Content> content) {
-								Assert.notNull(content, "content must not be null");
-								this.content = content;
-								return this;
-						}
+					/**
+					 * Sets the text content for the tool result.
+					 * @param textContent the text content
+					 * @return this builder
+					 */
+					public Builder textContent(List<String> textContent) {
+							Assert.notNull(textContent, "textContent must not be null");
+							textContent.stream()
+									.map(TextContent::new)
+									.forEach(this.content::add);
+							return this;
+					}
 
-						/**
-						 * Sets the text content for the tool result.
-						 * @param textContent the text content
-						 * @return this builder
-						 */
-						public Builder textContent(List<String> textContent) {
-								Assert.notNull(textContent, "textContent must not be null");
-								textContent.stream()
-										.map(TextContent::new)
-										.forEach(this.content::add);
-								return this;
-						}
+					/**
+					 * Adds a content item to the tool result.
+					 * @param contentItem the content item to add
+					 * @return this builder
+					 */
+					public Builder addContent(Content contentItem) {
+							Assert.notNull(contentItem, "contentItem must not be null");
+							if (this.content == null) {
+									this.content = new ArrayList<>();
+							}
+							this.content.add(contentItem);
+							return this;
+					}
 
-						/**
-						 * Adds a content item to the tool result.
-						 * @param contentItem the content item to add
-						 * @return this builder
-						 */
-						public Builder addContent(Content contentItem) {
-								Assert.notNull(contentItem, "contentItem must not be null");
-								if (this.content == null) {
-										this.content = new ArrayList<>();
-								}
-								this.content.add(contentItem);
-								return this;
-						}
+					/**
+					 * Adds a text content item to the tool result.
+					 * @param text the text content
+					 * @return this builder
+					 */
+					public Builder addTextContent(String text) {
+							Assert.notNull(text, "text must not be null");
+							return addContent(new TextContent(text));
+					}
 
-						/**
-						 * Adds a text content item to the tool result.
-						 * @param text the text content
-						 * @return this builder
-						 */
-						public Builder addTextContent(String text) {
-								Assert.notNull(text, "text must not be null");
-								return addContent(new TextContent(text));
-						}
+					/**
+					 * Sets whether the tool execution resulted in an error.
+					 * @param isError true if the tool execution failed, false otherwise
+					 * @return this builder
+					 */
+					public Builder isError(Boolean isError) {
+							Assert.notNull(isError, "isError must not be null");
+							this.isError = isError;
+							return this;
+					}
 
-						/**
-						 * Sets whether the tool execution resulted in an error.
-						 * @param isError true if the tool execution failed, false otherwise
-						 * @return this builder
-						 */
-						public Builder isError(Boolean isError) {
-								Assert.notNull(isError, "isError must not be null");
-								this.isError = isError;
-								return this;
-						}
+					/**
+					 * Sets the metadata for the tool result.
+					 * @param meta metadata
+					 * @return this builder
+					 */
+					public Builder meta(Map<String, Object> meta) {
+						this.meta = meta;
+						return this;
+					}
 
-						/**
-						 * Builds a new {@link CallToolResult} instance.
-						 * @return a new CallToolResult instance
-						 */
-						public CallToolResult build() {
-								return new CallToolResult(content, isError);
-						}
-				}
+					/**
+					 * Builds a new {@link CallToolResult} instance.
+					 * @return a new CallToolResult instance
+					 */
+					public CallToolResult build() {
+							return new CallToolResult(content, isError, meta);
+					}
+			}
 
-		} // @formatter:on
+	} // @formatter:on
 
 	// ---------------------------
 	// Sampling Interfaces
@@ -1207,53 +1348,53 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ModelPreferences(// @formatter:off
-		@JsonProperty("hints") List<ModelHint> hints,
-		@JsonProperty("costPriority") Double costPriority,
-		@JsonProperty("speedPriority") Double speedPriority,
-		@JsonProperty("intelligencePriority") Double intelligencePriority) {
+	@JsonProperty("hints") List<ModelHint> hints,
+	@JsonProperty("costPriority") Double costPriority,
+	@JsonProperty("speedPriority") Double speedPriority,
+	@JsonProperty("intelligencePriority") Double intelligencePriority) {
 
-		public static Builder builder() {
-				return new Builder();
-		}
+	public static Builder builder() {
+			return new Builder();
+	}
 
-		public static class Builder {
-				private List<ModelHint> hints;
-				private Double costPriority;
-				private Double speedPriority;
-				private Double intelligencePriority;
+	public static class Builder {
+			private List<ModelHint> hints;
+			private Double costPriority;
+			private Double speedPriority;
+			private Double intelligencePriority;
 
-				public Builder hints(List<ModelHint> hints) {
-						this.hints = hints;
-						return this;
-				}
+			public Builder hints(List<ModelHint> hints) {
+					this.hints = hints;
+					return this;
+			}
 
-				public Builder addHint(String name) {
-						if (this.hints == null) {
-								this.hints = new ArrayList<>();
-						}
-						this.hints.add(new ModelHint(name));
-						return this;
-				}
+			public Builder addHint(String name) {
+					if (this.hints == null) {
+							this.hints = new ArrayList<>();
+					}
+					this.hints.add(new ModelHint(name));
+					return this;
+			}
 
-				public Builder costPriority(Double costPriority) {
-						this.costPriority = costPriority;
-						return this;
-				}
+			public Builder costPriority(Double costPriority) {
+					this.costPriority = costPriority;
+					return this;
+			}
 
-				public Builder speedPriority(Double speedPriority) {
-						this.speedPriority = speedPriority;
-						return this;
-				}
+			public Builder speedPriority(Double speedPriority) {
+					this.speedPriority = speedPriority;
+					return this;
+			}
 
-				public Builder intelligencePriority(Double intelligencePriority) {
-						this.intelligencePriority = intelligencePriority;
-						return this;
-				}
+			public Builder intelligencePriority(Double intelligencePriority) {
+					this.intelligencePriority = intelligencePriority;
+					return this;
+			}
 
-				public ModelPreferences build() {
-						return new ModelPreferences(hints, costPriority, speedPriority, intelligencePriority);
-				}
-		}
+			public ModelPreferences build() {
+					return new ModelPreferences(hints, costPriority, speedPriority, intelligencePriority);
+			}
+	}
 } // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -1267,114 +1408,114 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record SamplingMessage(// @formatter:off
-				@JsonProperty("role") Role role,
-				@JsonProperty("content") Content content) {
-		} // @formatter:on
+			@JsonProperty("role") Role role,
+			@JsonProperty("content") Content content) {
+	} // @formatter:on
 
 	// Sampling and Message Creation
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record CreateMessageRequest(// @formatter:off
-				@JsonProperty("messages") List<SamplingMessage> messages,
-				@JsonProperty("modelPreferences") ModelPreferences modelPreferences,
-				@JsonProperty("systemPrompt") String systemPrompt,
-				@JsonProperty("includeContext") ContextInclusionStrategy includeContext,
-				@JsonProperty("temperature") Double temperature,
-				@JsonProperty("maxTokens") int maxTokens,
-				@JsonProperty("stopSequences") List<String> stopSequences,
-				@JsonProperty("metadata") Map<String, Object> metadata,
-				@JsonProperty("_meta") Map<String, Object> meta) implements Request {
+			@JsonProperty("messages") List<SamplingMessage> messages,
+			@JsonProperty("modelPreferences") ModelPreferences modelPreferences,
+			@JsonProperty("systemPrompt") String systemPrompt,
+			@JsonProperty("includeContext") ContextInclusionStrategy includeContext,
+			@JsonProperty("temperature") Double temperature,
+			@JsonProperty("maxTokens") int maxTokens,
+			@JsonProperty("stopSequences") List<String> stopSequences,
+			@JsonProperty("metadata") Map<String, Object> metadata,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Request {
 
-				
-				// backwards compatibility constructor
-				public CreateMessageRequest(List<SamplingMessage> messages, ModelPreferences modelPreferences,
-											String systemPrompt, ContextInclusionStrategy includeContext,
-											Double temperature, int maxTokens, List<String> stopSequences,
-											Map<String, Object> metadata) {
-						this(messages, modelPreferences, systemPrompt, includeContext, temperature, maxTokens,
-								stopSequences, metadata, null);
-				}
+			
+	// backwards compatibility constructor
+	public CreateMessageRequest(List<SamplingMessage> messages, ModelPreferences modelPreferences,
+								String systemPrompt, ContextInclusionStrategy includeContext,
+								Double temperature, int maxTokens, List<String> stopSequences,
+								Map<String, Object> metadata) {
+			this(messages, modelPreferences, systemPrompt, includeContext, temperature, maxTokens,
+					stopSequences, metadata, null);
+	}
 
-				public enum ContextInclusionStrategy {
-						@JsonProperty("none") NONE,
-						@JsonProperty("thisServer") THIS_SERVER,
-						@JsonProperty("allServers") ALL_SERVERS
-				}
+			public enum ContextInclusionStrategy {
+					@JsonProperty("none") NONE,
+					@JsonProperty("thisServer") THIS_SERVER,
+					@JsonProperty("allServers") ALL_SERVERS
+			}
 
-				public static Builder builder() {
-						return new Builder();
-				}
+			public static Builder builder() {
+					return new Builder();
+			}
 
-				public static class Builder {
-						private List<SamplingMessage> messages;
-						private ModelPreferences modelPreferences;
-						private String systemPrompt;
-						private ContextInclusionStrategy includeContext;
-						private Double temperature;
-						private int maxTokens;
-						private List<String> stopSequences;
-						private Map<String, Object> metadata;
-						private Map<String, Object> meta;
+			public static class Builder {
+					private List<SamplingMessage> messages;
+					private ModelPreferences modelPreferences;
+					private String systemPrompt;
+					private ContextInclusionStrategy includeContext;
+					private Double temperature;
+					private int maxTokens;
+					private List<String> stopSequences;
+					private Map<String, Object> metadata;
+					private Map<String, Object> meta;
 
-						public Builder messages(List<SamplingMessage> messages) {
-								this.messages = messages;
-								return this;
-						}
+					public Builder messages(List<SamplingMessage> messages) {
+							this.messages = messages;
+							return this;
+					}
 
-						public Builder modelPreferences(ModelPreferences modelPreferences) {
-								this.modelPreferences = modelPreferences;
-								return this;
-						}
+					public Builder modelPreferences(ModelPreferences modelPreferences) {
+							this.modelPreferences = modelPreferences;
+							return this;
+					}
 
-						public Builder systemPrompt(String systemPrompt) {
-								this.systemPrompt = systemPrompt;
-								return this;
-						}
+					public Builder systemPrompt(String systemPrompt) {
+							this.systemPrompt = systemPrompt;
+							return this;
+					}
 
-						public Builder includeContext(ContextInclusionStrategy includeContext) {
-								this.includeContext = includeContext;
-								return this;
-						}
+					public Builder includeContext(ContextInclusionStrategy includeContext) {
+							this.includeContext = includeContext;
+							return this;
+					}
 
-						public Builder temperature(Double temperature) {
-								this.temperature = temperature;
-								return this;
-						}
+					public Builder temperature(Double temperature) {
+							this.temperature = temperature;
+							return this;
+					}
 
-						public Builder maxTokens(int maxTokens) {
-								this.maxTokens = maxTokens;
-								return this;
-						}
+					public Builder maxTokens(int maxTokens) {
+							this.maxTokens = maxTokens;
+							return this;
+					}
 
-						public Builder stopSequences(List<String> stopSequences) {
-								this.stopSequences = stopSequences;
-								return this;
-						}
+					public Builder stopSequences(List<String> stopSequences) {
+							this.stopSequences = stopSequences;
+							return this;
+					}
 
-						public Builder metadata(Map<String, Object> metadata) {
-								this.metadata = metadata;
-								return this;
-						}
+					public Builder metadata(Map<String, Object> metadata) {
+							this.metadata = metadata;
+							return this;
+					}
 
-						public Builder meta(Map<String, Object> meta) {
-								this.meta = meta;
-								return this;
-						}
+					public Builder meta(Map<String, Object> meta) {
+							this.meta = meta;
+							return this;
+					}
 
-						public Builder progressToken(String progressToken) {
-								if (this.meta == null) {
-										this.meta = new HashMap<>();
-								}
-								this.meta.put("progressToken", progressToken);
-								return this;
-						}
+					public Builder progressToken(String progressToken) {
+							if (this.meta == null) {
+									this.meta = new HashMap<>();
+							}
+							this.meta.put("progressToken", progressToken);
+							return this;
+					}
 
-						public CreateMessageRequest build() {
-								return new CreateMessageRequest(messages, modelPreferences, systemPrompt,
-										includeContext, temperature, maxTokens, stopSequences, metadata, meta);
-						}
-				}
-		}// @formatter:on
+					public CreateMessageRequest build() {
+							return new CreateMessageRequest(messages, modelPreferences, systemPrompt,
+									includeContext, temperature, maxTokens, stopSequences, metadata, meta);
+					}
+			}
+	}// @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1382,7 +1523,8 @@ public final class McpSchema {
 				@JsonProperty("role") Role role,
 				@JsonProperty("content") Content content,
 				@JsonProperty("model") String model,
-				@JsonProperty("stopReason") StopReason stopReason) {
+				@JsonProperty("stopReason") StopReason stopReason,
+				@JsonProperty("_meta") Map<String, Object> meta) implements Result {
 
 				public enum StopReason {
 						@JsonProperty("endTurn") END_TURN("endTurn"),
@@ -1405,6 +1547,11 @@ public final class McpSchema {
 						}
 				}
 
+				public CreateMessageResult(Role role, Content content, String model,
+					StopReason stopReason) {
+						this(role, content, model, stopReason, null);
+				}
+
 				public static Builder builder() {
 						return new Builder();
 				}
@@ -1414,6 +1561,7 @@ public final class McpSchema {
 						private Content content;
 						private String model;
 						private StopReason stopReason = StopReason.END_TURN;
+						private Map<String, Object> meta;
 
 						public Builder role(Role role) {
 								this.role = role;
@@ -1440,8 +1588,13 @@ public final class McpSchema {
 								return this;
 						}
 
+						public Builder meta(Map<String, Object> meta) {
+								this.meta = meta;
+								return this;
+						}
+
 						public CreateMessageResult build() {
-								return new CreateMessageResult(role, content, model, stopReason);
+								return new CreateMessageResult(role, content, model, stopReason, meta);
 						}
 				}
 		}// @formatter:on
@@ -1452,92 +1605,105 @@ public final class McpSchema {
 	 *
 	 * @param message The body of the elicitation message.
 	 * @param requestedSchema The elicitation response schema that must be satisfied.
+	 * @param meta Additional metadata related to this request.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ElicitRequest(// @formatter:off
-				@JsonProperty("message") String message,
-				@JsonProperty("requestedSchema") Map<String, Object> requestedSchema,
-				@JsonProperty("_meta") Map<String, Object> meta) implements Request {
+			@JsonProperty("message") String message,
+			@JsonProperty("requestedSchema") Map<String, Object> requestedSchema,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Request {
 
-				// backwards compatibility constructor
-				public ElicitRequest(String message, Map<String, Object> requestedSchema) {
-						this(message, requestedSchema, null);
-				}
+			// backwards compatibility constructor
+			public ElicitRequest(String message, Map<String, Object> requestedSchema) {
+				this(message, requestedSchema, null);
+			}
 
-				public static Builder builder() {
-						return new Builder();
-				}
+			public static Builder builder() {
+					return new Builder();
+			}
 
-				public static class Builder {
-						private String message;
-						private Map<String, Object> requestedSchema;
-						private Map<String, Object> meta;
+			public static class Builder {
+					private String message;
+					private Map<String, Object> requestedSchema;
+					private Map<String, Object> meta;
 
-						public Builder message(String message) {
-								this.message = message;
-								return this;
-						}
+					public Builder message(String message) {
+							this.message = message;
+							return this;
+					}
 
-						public Builder requestedSchema(Map<String, Object> requestedSchema) {
-								this.requestedSchema = requestedSchema;
-								return this;
-						}
+					public Builder requestedSchema(Map<String, Object> requestedSchema) {
+							this.requestedSchema = requestedSchema;
+							return this;
+					}
 
-						public Builder meta(Map<String, Object> meta) {
-								this.meta = meta;
-								return this;
-						}
+					public Builder meta(Map<String, Object> meta) {
+							this.meta = meta;
+							return this;
+					}
 
-						public Builder progressToken(String progressToken) {
-								if (this.meta == null) {
-										this.meta = new HashMap<>();
-								}
-								this.meta.put("progressToken", progressToken);
-								return this;
-						}
+					public Builder progressToken(String progressToken) {
+							if (this.meta == null) {
+									this.meta = new HashMap<>();
+							}
+							this.meta.put("progressToken", progressToken);
+							return this;
+					}
 
-						public ElicitRequest build() {
-								return new ElicitRequest(message, requestedSchema, meta);
-						}
-				}
-		}// @formatter:on
+					public ElicitRequest build() {
+							return new ElicitRequest(message, requestedSchema, meta);
+					}
+			}
+	}// @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ElicitResult(// @formatter:off
-				@JsonProperty("action") Action action,
-				@JsonProperty("content") Map<String, Object> content) {
+			@JsonProperty("action") Action action,
+			@JsonProperty("content") Map<String, Object> content,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Result {
 
-				public enum Action {
-						@JsonProperty("accept") ACCEPT,
-						@JsonProperty("decline") DECLINE,
-						@JsonProperty("cancel") CANCEL
-				}
+			public enum Action {
+					@JsonProperty("accept") ACCEPT,
+					@JsonProperty("decline") DECLINE,
+					@JsonProperty("cancel") CANCEL
+			}
 
-				public static Builder builder() {
-						return new Builder();
-				}
+			public ElicitResult(Action action, Map<String, Object> content) {
+					this(action, content, null);
+			}
 
-				public static class Builder {
-						private Action action;
-						private Map<String, Object> content;
+			public static Builder builder() {
+					return new Builder();
+			}
 
-						public Builder message(Action action) {
-								this.action = action;
-								return this;
-						}
+			public static class Builder {
+					private Action action;
+					private Map<String, Object> content;
+					private Map<String, Object> meta;
 
-						public Builder content(Map<String, Object> content) {
-								this.content = content;
-								return this;
-						}
+					public Builder message(Action action) {
+							this.action = action;
+							return this;
+					}
 
-						public ElicitResult build() {
-								return new ElicitResult(action, content);
-						}
-				}
-		}// @formatter:on
+					public Builder content(Map<String, Object> content) {
+							this.content = content;
+							return this;
+					}
+
+					public Builder meta(Map<String, Object> meta) {
+							this.meta = meta;
+							return this;
+					}
+
+
+					public ElicitResult build() {
+							return new ElicitResult(action, content, meta);
+					}
+			}
+	}// @formatter:on
 
 	// ---------------------------
 	// Pagination Interfaces
@@ -1545,8 +1711,9 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record PaginatedRequest(// @formatter:off
-				@JsonProperty("cursor") String cursor,
-				@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
+
+			@JsonProperty("cursor") String cursor,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
 		public PaginatedRequest(String cursor) {
 			this(cursor, null);
@@ -1578,26 +1745,38 @@ public final class McpSchema {
 	 * @param progress A value indicating the current progress.
 	 * @param total An optional total amount of work to be done, if known.
 	 * @param message An optional message providing additional context about the progress.
+	 * @param meta Additional metadata related to this notification.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ProgressNotification(// @formatter:off
-				@JsonProperty("progressToken") String progressToken,
-				@JsonProperty("progress") Double progress,
-				@JsonProperty("total") Double total,
-				@JsonProperty("message") String message) {
-		}// @formatter:on
+			@JsonProperty("progressToken") String progressToken,
+			@JsonProperty("progress") Double progress,
+			@JsonProperty("total") Double total,
+			@JsonProperty("message") String message,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Notification {
+
+			public ProgressNotification(String progressToken, double progress, Double total, String message) {
+					this(progressToken, progress, total, message, null);
+			}
+	}// @formatter:on
 
 	/**
 	 * The Model Context Protocol (MCP) provides a standardized way for servers to send
 	 * resources update message to clients.
 	 *
 	 * @param uri The updated resource uri.
+	 * @param meta Additional metadata related to this notification.
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ResourcesUpdatedNotification(// @formatter:off
-		   @JsonProperty("uri") String uri) {
-		}// @formatter:on
+		@JsonProperty("uri") String uri,
+		@JsonProperty("_meta") Map<String, Object> meta) implements Notification {
+
+		public ResourcesUpdatedNotification(String uri) {
+			this(uri, null);
+		}
+	}// @formatter:on
 
 	/**
 	 * The Model Context Protocol (MCP) provides a standardized way for servers to send
@@ -1608,64 +1787,76 @@ public final class McpSchema {
 	 * @param level The severity levels. The minimum log level is set by the client.
 	 * @param logger The logger that generated the message.
 	 * @param data JSON-serializable logging data.
+	 * @param meta Additional metadata related to this notification.
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record LoggingMessageNotification(// @formatter:off
-				@JsonProperty("level") LoggingLevel level,
-				@JsonProperty("logger") String logger,
-				@JsonProperty("data") String data) {
+			@JsonProperty("level") LoggingLevel level,
+			@JsonProperty("logger") String logger,
+			@JsonProperty("data") String data,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Notification {
 
-				public static Builder builder() {
-						return new Builder();
-				}
+			public LoggingMessageNotification(LoggingLevel level, String logger, String data) {
+					this(level, logger, data, null);
+			}
 
-				public static class Builder {
-						private LoggingLevel level = LoggingLevel.INFO;
-						private String logger = "server";
-						private String data;
+			public static Builder builder() {
+					return new Builder();
+			}
 
-						public Builder level(LoggingLevel level) {
-								this.level = level;
-								return this;
-						}
+			public static class Builder {
+					private LoggingLevel level = LoggingLevel.INFO;
+					private String logger = "server";
+					private String data;
+					private Map<String, Object> meta;
 
-						public Builder logger(String logger) {
-								this.logger = logger;
-								return this;
-						}
+					public Builder level(LoggingLevel level) {
+							this.level = level;
+							return this;
+					}
 
-						public Builder data(String data) {
-								this.data = data;
-								return this;
-						}
+					public Builder logger(String logger) {
+							this.logger = logger;
+							return this;
+					}
 
-						public LoggingMessageNotification build() {
-								return new LoggingMessageNotification(level, logger, data);
-						}
-				}
-		}// @formatter:on
+					public Builder data(String data) {
+							this.data = data;
+							return this;
+					}
+
+					public Builder meta(Map<String, Object> meta) {
+							this.meta = meta;
+							return this;
+					}
+
+					public LoggingMessageNotification build() {
+							return new LoggingMessageNotification(level, logger, data, meta);
+					}
+			}
+	}// @formatter:on
 
 	public enum LoggingLevel {// @formatter:off
-				@JsonProperty("debug") DEBUG(0),
-				@JsonProperty("info") INFO(1),
-				@JsonProperty("notice") NOTICE(2),
-				@JsonProperty("warning") WARNING(3),
-				@JsonProperty("error") ERROR(4),
-				@JsonProperty("critical") CRITICAL(5),
-				@JsonProperty("alert") ALERT(6),
-				@JsonProperty("emergency") EMERGENCY(7);
+			@JsonProperty("debug") DEBUG(0),
+			@JsonProperty("info") INFO(1),
+			@JsonProperty("notice") NOTICE(2),
+			@JsonProperty("warning") WARNING(3),
+			@JsonProperty("error") ERROR(4),
+			@JsonProperty("critical") CRITICAL(5),
+			@JsonProperty("alert") ALERT(6),
+			@JsonProperty("emergency") EMERGENCY(7);
 
-				private final int level;
+			private final int level;
 
-				LoggingLevel(int level) {
-						this.level = level;
-				}
+			LoggingLevel(int level) {
+					this.level = level;
+			}
 
-				public int level() {
-						return level;
-				}
+			public int level() {
+					return level;
+			}
 
-		} // @formatter:on
+	} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1686,62 +1877,67 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record PromptReference(// @formatter:off
-				@JsonProperty("type") String type,
-				@JsonProperty("name") String name,
-				@JsonProperty("title") String title ) implements McpSchema.CompleteReference, BaseMetadata {
+			@JsonProperty("type") String type,
+			@JsonProperty("name") String name,
+			@JsonProperty("title") String title ) implements McpSchema.CompleteReference, BaseMetadata {
 
-				public PromptReference(String name) {
-						this("ref/prompt", name, null);
-				}
+			public PromptReference(String name) {
+					this("ref/prompt", name, null);
+			}
 
-				@Override
-				public String identifier() {
-						return name();
-				}
-		}// @formatter:on
+			@Override
+			public String identifier() {
+					return name();
+			}
+	}// @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ResourceReference(// @formatter:off
-				@JsonProperty("type") String type,
-				@JsonProperty("uri") String uri) implements McpSchema.CompleteReference {
+			@JsonProperty("type") String type,
+			@JsonProperty("uri") String uri) implements McpSchema.CompleteReference {
 
-				public ResourceReference(String uri) {
-						this("ref/resource", uri);
-				}
+			public ResourceReference(String uri) {
+					this("ref/resource", uri);
+			}
 
-				@Override
-				public String identifier() {
-						return uri();
-				}
-		}// @formatter:on
+			@Override
+			public String identifier() {
+					return uri();
+			}
+	}// @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record CompleteRequest(// @formatter:off
-				@JsonProperty("ref") McpSchema.CompleteReference ref,
-				@JsonProperty("argument") CompleteArgument argument,
-				@JsonProperty("_meta") Map<String, Object> meta) implements Request {
+			@JsonProperty("ref") McpSchema.CompleteReference ref,
+			@JsonProperty("argument") CompleteArgument argument,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Request {
 
-				public CompleteRequest(McpSchema.CompleteReference ref, CompleteArgument argument) {
-						this(ref, argument, null);
-				}
+			public CompleteRequest(McpSchema.CompleteReference ref, CompleteArgument argument) {
+					this(ref, argument, null);
+			}
 
-				public record CompleteArgument(
-						@JsonProperty("name") String name,
-						@JsonProperty("value") String value) {
-				}// @formatter:on
+			public record CompleteArgument(
+					@JsonProperty("name") String name,
+					@JsonProperty("value") String value) {
+			}// @formatter:on
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record CompleteResult(@JsonProperty("completion") CompleteCompletion completion) { // @formatter:off
+	public record CompleteResult(@JsonProperty("completion") CompleteCompletion completion,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:off
 
-				public record CompleteCompletion(
-						@JsonProperty("values") List<String> values,
-						@JsonProperty("total") Integer total,
-						@JsonProperty("hasMore") Boolean hasMore) {
-				}// @formatter:on
+			public CompleteResult(CompleteCompletion completion) {
+				this(completion, null);
+			}
+
+			public record CompleteCompletion(
+					@JsonProperty("values") List<String> values,
+					@JsonProperty("total") Integer total,
+					@JsonProperty("hasMore") Boolean hasMore) {
+			}// @formatter:on
 	}
 
 	// ---------------------------
@@ -1754,6 +1950,8 @@ public final class McpSchema {
 			@JsonSubTypes.Type(value = EmbeddedResource.class, name = "resource"),
 			@JsonSubTypes.Type(value = ResourceLink.class, name = "resource_link") })
 	public sealed interface Content permits TextContent, ImageContent, AudioContent, EmbeddedResource, ResourceLink {
+
+		Map<String, Object> meta();
 
 		default String type() {
 			if (this instanceof TextContent) {
@@ -1779,11 +1977,16 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record TextContent( // @formatter:off
-				@JsonProperty("annotations") Annotations annotations,
-				@JsonProperty("text") String text) implements Annotated, Content { // @formatter:on
+			@JsonProperty("annotations") Annotations annotations,
+			@JsonProperty("text") String text,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Content { // @formatter:on
+
+		public TextContent(Annotations annotations, String content) {
+			this(annotations, content, null);
+		}
 
 		public TextContent(String content) {
-			this(null, content);
+			this(null, content, null);
 		}
 
 		/**
@@ -1791,7 +1994,7 @@ public final class McpSchema {
 		 * {@link TextContent#TextContent(Annotations, String)} instead.
 		 */
 		public TextContent(List<Role> audience, Double priority, String content) {
-			this(audience != null || priority != null ? new Annotations(audience, priority) : null, content);
+			this(audience != null || priority != null ? new Annotations(audience, priority) : null, content, null);
 		}
 
 		/**
@@ -1814,16 +2017,22 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ImageContent( // @formatter:off
-				@JsonProperty("annotations") Annotations annotations,
-				@JsonProperty("data") String data,
-				@JsonProperty("mimeType") String mimeType) implements Annotated, Content { // @formatter:on
+			@JsonProperty("annotations") Annotations annotations,
+			@JsonProperty("data") String data,
+			@JsonProperty("mimeType") String mimeType,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Content { // @formatter:on
+
+		public ImageContent(Annotations annotations, String data, String mimeType) {
+			this(annotations, data, mimeType, null);
+		}
 
 		/**
 		 * @deprecated Only exists for backwards-compatibility purposes. Use
 		 * {@link ImageContent#ImageContent(Annotations, String, String)} instead.
 		 */
 		public ImageContent(List<Role> audience, Double priority, String data, String mimeType) {
-			this(audience != null || priority != null ? new Annotations(audience, priority) : null, data, mimeType);
+			this(audience != null || priority != null ? new Annotations(audience, priority) : null, data, mimeType,
+					null);
 		}
 
 		/**
@@ -1846,16 +2055,26 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record AudioContent( // @formatter:off
-				@JsonProperty("annotations") Annotations annotations,
-				@JsonProperty("data") String data,
-				@JsonProperty("mimeType") String mimeType) implements Annotated, Content { // @formatter:on
+			@JsonProperty("annotations") Annotations annotations,
+			@JsonProperty("data") String data,
+			@JsonProperty("mimeType") String mimeType,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Content { // @formatter:on
+
+		public AudioContent(Annotations annotations, String data, String mimeType) {
+			this(annotations, data, mimeType, null);
+		}
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record EmbeddedResource( // @formatter:off
-				@JsonProperty("annotations") Annotations annotations,
-				@JsonProperty("resource") ResourceContents resource) implements Annotated, Content { // @formatter:on
+			@JsonProperty("annotations") Annotations annotations,
+			@JsonProperty("resource") ResourceContents resource,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Content { // @formatter:on
+
+		public EmbeddedResource(Annotations annotations, ResourceContents resource) {
+			this(annotations, resource, null);
+		}
 
 		/**
 		 * @deprecated Only exists for backwards-compatibility purposes. Use
@@ -1863,7 +2082,7 @@ public final class McpSchema {
 		 * instead.
 		 */
 		public EmbeddedResource(List<Role> audience, Double priority, ResourceContents resource) {
-			this(audience != null || priority != null ? new Annotations(audience, priority) : null, resource);
+			this(audience != null || priority != null ? new Annotations(audience, priority) : null, resource, null);
 		}
 
 		/**
@@ -1899,17 +2118,24 @@ public final class McpSchema {
 	 * sizes and estimate context window usage.
 	 * @param annotations Optional annotations for the client. The client can use
 	 * annotations to inform how objects are used or displayed.
+	 * @param meta Additional metadata related to this resource link.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ResourceLink( // @formatter:off
-				@JsonProperty("name") String name,
-				@JsonProperty("title") String title,
-				@JsonProperty("uri") String uri,
-				@JsonProperty("description") String description,
-				@JsonProperty("mimeType") String mimeType,
-				@JsonProperty("size") Long size,
-				@JsonProperty("annotations") Annotations annotations) implements Annotated, Content, ResourceContent { // @formatter:on
+			@JsonProperty("name") String name,
+			@JsonProperty("title") String title,
+			@JsonProperty("uri") String uri,
+			@JsonProperty("description") String description,
+			@JsonProperty("mimeType") String mimeType,
+			@JsonProperty("size") Long size,
+			@JsonProperty("annotations") Annotations annotations,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Content, ResourceContent { // @formatter:on
+
+		public ResourceLink(String name, String title, String uri, String description, String mimeType, Long size,
+				Annotations annotations) {
+			this(name, title, uri, description, mimeType, size, annotations, null);
+		}
 
 		public static Builder builder() {
 			return new Builder();
@@ -1930,6 +2156,8 @@ public final class McpSchema {
 			private Annotations annotations;
 
 			private Long size;
+
+			private Map<String, Object> meta;
 
 			public Builder name(String name) {
 				this.name = name;
@@ -1966,11 +2194,16 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
 			public ResourceLink build() {
 				Assert.hasText(uri, "uri must not be empty");
 				Assert.hasText(name, "name must not be empty");
 
-				return new ResourceLink(name, title, uri, description, mimeType, size, annotations);
+				return new ResourceLink(name, title, uri, description, mimeType, size, annotations, meta);
 			}
 
 		}
@@ -1988,13 +2221,19 @@ public final class McpSchema {
 	 * @param name An optional name for the root. This can be used to provide a
 	 * human-readable identifier for the root, which may be useful for display purposes or
 	 * for referencing the root in other parts of the application.
+	 * @param meta Additional metadata related to this notification.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Root( // @formatter:off
-				@JsonProperty("uri") String uri,
-				@JsonProperty("name") String name) {
-		} // @formatter:on
+			@JsonProperty("uri") String uri,
+			@JsonProperty("name") String name,
+			@JsonProperty("_meta") Map<String, Object> meta) {
+
+		public Root(String uri, String name) {
+			this(uri, name, null);
+		}
+	} // @formatter:on
 
 	/**
 	 * The client's response to a roots/list request from the server. This result contains
@@ -2006,15 +2245,22 @@ public final class McpSchema {
 	 * @param nextCursor An optional cursor for pagination. If present, indicates there
 	 * are more roots available. The client can use this cursor to request the next page
 	 * of results by sending a roots/list request with the cursor parameter set to this
+	 * @param meta Additional metadata related toAdditional metadata related to this
+	 * result.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ListRootsResult( // @formatter:off
 				@JsonProperty("roots") List<Root> roots,
-				@JsonProperty("nextCursor") String nextCursor) {
+				@JsonProperty("nextCursor") String nextCursor,
+				@JsonProperty("_meta") Map<String, Object> meta) implements Result {
 
 				public ListRootsResult(List<Root> roots) {
 						this(roots, null);
+				}
+
+				public ListRootsResult(List<Root> roots, String nextCursor) {
+					this(roots, nextCursor, null);
 				}
 		} // @formatter:on
 
