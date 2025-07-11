@@ -39,20 +39,20 @@ class AsyncToolSpecificationBuilderTest {
 
 		McpServerFeatures.AsyncToolSpecification specification = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(tool)
-			.callTool((exchange, request) -> Mono
+			.callHandler((exchange, request) -> Mono
 				.just(new CallToolResult(List.of(new TextContent("Test result")), false)))
 			.build();
 
 		assertThat(specification).isNotNull();
 		assertThat(specification.tool()).isEqualTo(tool);
-		assertThat(specification.callTool()).isNotNull();
+		assertThat(specification.callHandler()).isNotNull();
 		assertThat(specification.call()).isNull(); // deprecated field should be null
 	}
 
 	@Test
 	void builderShouldThrowExceptionWhenToolIsNull() {
 		assertThatThrownBy(() -> McpServerFeatures.AsyncToolSpecification.builder()
-			.callTool((exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+			.callHandler((exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
 			.build()).isInstanceOf(IllegalArgumentException.class).hasMessage("Tool must not be null");
 	}
 
@@ -62,7 +62,7 @@ class AsyncToolSpecificationBuilderTest {
 
 		assertThatThrownBy(() -> McpServerFeatures.AsyncToolSpecification.builder().tool(tool).build())
 			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessage("CallTool function must not be null");
+			.hasMessage("Call handler function must not be null");
 	}
 
 	@Test
@@ -72,7 +72,7 @@ class AsyncToolSpecificationBuilderTest {
 
 		// Then - verify method chaining returns the same builder instance
 		assertThat(builder.tool(tool)).isSameAs(builder);
-		assertThat(builder.callTool((exchange, request) -> Mono.just(new CallToolResult(List.of(), false))))
+		assertThat(builder.callHandler((exchange, request) -> Mono.just(new CallToolResult(List.of(), false))))
 			.isSameAs(builder);
 	}
 
@@ -83,13 +83,13 @@ class AsyncToolSpecificationBuilderTest {
 
 		McpServerFeatures.AsyncToolSpecification specification = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(tool)
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 				return Mono.just(new CallToolResult(List.of(new TextContent(expectedResult)), false));
 			})
 			.build();
 
 		CallToolRequest request = new CallToolRequest("calculator", Map.of());
-		Mono<CallToolResult> resultMono = specification.callTool().apply(null, request);
+		Mono<CallToolResult> resultMono = specification.callHandler().apply(null, request);
 
 		StepVerifier.create(resultMono).assertNext(result -> {
 			assertThat(result).isNotNull();
@@ -114,12 +114,12 @@ class AsyncToolSpecificationBuilderTest {
 		assertThat(specification).isNotNull();
 		assertThat(specification.tool()).isEqualTo(tool);
 		assertThat(specification.call()).isNotNull(); // deprecated field should be set
-		assertThat(specification.callTool()).isNotNull(); // should be automatically
-															// created
+		assertThat(specification.callHandler()).isNotNull(); // should be automatically
+																// created
 
 		// Test that the callTool function works (it should delegate to the call function)
 		CallToolRequest request = new CallToolRequest("deprecated-tool", Map.of("arg1", "value1"));
-		Mono<CallToolResult> resultMono = specification.callTool().apply(null, request);
+		Mono<CallToolResult> resultMono = specification.callHandler().apply(null, request);
 
 		StepVerifier.create(resultMono).assertNext(result -> {
 			assertThat(result).isNotNull();
@@ -158,13 +158,13 @@ class AsyncToolSpecificationBuilderTest {
 
 		assertThat(asyncSpec).isNotNull();
 		assertThat(asyncSpec.tool()).isEqualTo(tool);
-		assertThat(asyncSpec.callTool()).isNotNull();
+		assertThat(asyncSpec.callHandler()).isNotNull();
 		assertThat(asyncSpec.call()).isNull(); // should be null since sync spec doesn't
 												// have deprecated call
 
 		// Test that the converted async specification works correctly
 		CallToolRequest request = new CallToolRequest("sync-tool", Map.of("param", "value"));
-		Mono<CallToolResult> resultMono = asyncSpec.callTool().apply(null, request);
+		Mono<CallToolResult> resultMono = asyncSpec.callHandler().apply(null, request);
 
 		StepVerifier.create(resultMono).assertNext(result -> {
 			assertThat(result).isNotNull();
@@ -193,13 +193,13 @@ class AsyncToolSpecificationBuilderTest {
 
 		assertThat(asyncSpec).isNotNull();
 		assertThat(asyncSpec.tool()).isEqualTo(tool);
-		assertThat(asyncSpec.callTool()).isNotNull();
+		assertThat(asyncSpec.callHandler()).isNotNull();
 		assertThat(asyncSpec.call()).isNotNull(); // should be set since sync spec has
 													// deprecated call
 
 		// Test that the converted async specification works correctly via callTool
 		CallToolRequest request = new CallToolRequest("sync-deprecated-tool", Map.of("param", "value"));
-		Mono<CallToolResult> resultMono = asyncSpec.callTool().apply(nullExchange, request);
+		Mono<CallToolResult> resultMono = asyncSpec.callHandler().apply(nullExchange, request);
 
 		StepVerifier.create(resultMono).assertNext(result -> {
 			assertThat(result).isNotNull();

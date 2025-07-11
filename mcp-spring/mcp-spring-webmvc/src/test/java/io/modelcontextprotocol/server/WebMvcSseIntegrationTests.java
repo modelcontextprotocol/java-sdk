@@ -122,7 +122,7 @@ class WebMvcSseIntegrationTests {
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 				exchange.createMessage(mock(McpSchema.CreateMessageRequest.class)).block();
 				return Mono.just(mock(CallToolResult.class));
 			})
@@ -169,7 +169,7 @@ class WebMvcSseIntegrationTests {
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 
 				var createMessageRequest = McpSchema.CreateMessageRequest.builder()
 					.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -247,7 +247,7 @@ class WebMvcSseIntegrationTests {
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 
 				var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
 					.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -321,7 +321,7 @@ class WebMvcSseIntegrationTests {
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 
 				var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
 					.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -372,7 +372,7 @@ class WebMvcSseIntegrationTests {
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 
 				exchange.createElicitation(mock(McpSchema.ElicitRequest.class)).block();
 
@@ -415,7 +415,7 @@ class WebMvcSseIntegrationTests {
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 
 				var elicitationRequest = McpSchema.ElicitRequest.builder()
 					.message("Test message")
@@ -484,7 +484,7 @@ class WebMvcSseIntegrationTests {
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 
 				var elicitationRequest = McpSchema.ElicitRequest.builder()
 					.message("Test message")
@@ -550,7 +550,7 @@ class WebMvcSseIntegrationTests {
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 
 				var elicitationRequest = McpSchema.ElicitRequest.builder()
 					.message("Test message")

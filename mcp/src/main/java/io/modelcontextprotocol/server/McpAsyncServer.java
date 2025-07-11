@@ -279,7 +279,7 @@ public class McpAsyncServer {
 		if (toolCallSpecification.tool() == null) {
 			return Mono.error(new McpError("Tool must not be null"));
 		}
-		if (toolCallSpecification.call() == null && toolCallSpecification.callTool() == null) {
+		if (toolCallSpecification.call() == null && toolCallSpecification.callHandler() == null) {
 			return Mono.error(new McpError("Tool call handler must not be null"));
 		}
 		if (this.serverCapabilities.tools() == null) {
@@ -360,7 +360,7 @@ public class McpAsyncServer {
 				return Mono.error(new McpError("Tool not found: " + callToolRequest.name()));
 			}
 
-			return toolSpecification.map(tool -> tool.callTool().apply(exchange, callToolRequest))
+			return toolSpecification.map(tool -> tool.callHandler().apply(exchange, callToolRequest))
 				.orElse(Mono.error(new McpError("Tool not found: " + callToolRequest.name())));
 		};
 	}

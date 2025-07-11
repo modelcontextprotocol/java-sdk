@@ -207,7 +207,7 @@ public class McpServerFeatures {
 	 * represents a specific capability.
 	 *
 	 * @param tool The tool definition including name, description, and parameter schema
-	 * @param call Deprecated. Uset he {@link AsyncToolSpecification#callTool} instead.
+	 * @param call Deprecated. Uset he {@link AsyncToolSpecification#callHandler} instead.
 	 * @param callHandler The function that implements the tool's logic, receiving a
 	 * {@link McpAsyncServerExchange} and a
 	 * {@link io.modelcontextprotocol.spec.McpSchema.CallToolRequest} and returning
@@ -217,7 +217,7 @@ public class McpServerFeatures {
 	 */
 	public record AsyncToolSpecification(McpSchema.Tool tool,
 			@Deprecated BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> call,
-			BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> callTool) {
+			BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler) {
 
 		/**
 		 * @deprecated Use {@link AsyncToolSpecification(McpSchema.Tool, null,
@@ -251,7 +251,7 @@ public class McpServerFeatures {
 
 			private McpSchema.Tool tool;
 
-			private BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> callTool;
+			private BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler;
 
 			/**
 			 * Sets the tool definition.
@@ -266,12 +266,12 @@ public class McpServerFeatures {
 
 			/**
 			 * Sets the call tool handler function.
-			 * @param callTool The function that implements the tool's logic
+			 * @param callHandler The function that implements the tool's logic
 			 * @return this builder instance
 			 */
-			public Builder callTool(
-					BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> callTool) {
-				this.callTool = callTool;
+			public Builder callHandler(
+					BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler) {
+				this.callHandler = callHandler;
 				return this;
 			}
 
@@ -282,9 +282,9 @@ public class McpServerFeatures {
 			 */
 			public AsyncToolSpecification build() {
 				Assert.notNull(tool, "Tool must not be null");
-				Assert.notNull(callTool, "CallTool function must not be null");
+				Assert.notNull(callHandler, "Call handler function must not be null");
 
-				return new AsyncToolSpecification(tool, null, callTool);
+				return new AsyncToolSpecification(tool, null, callHandler);
 			}
 
 		}

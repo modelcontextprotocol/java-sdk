@@ -346,21 +346,22 @@ public interface McpServer {
 		 * {@link McpServerFeatures.AsyncToolSpecification} explicitly.
 		 * @param tool The tool definition including name, description, and schema. Must
 		 * not be null.
-		 * @param handler The function that implements the tool's logic. Must not be null.
-		 * The function's first argument is an {@link McpAsyncServerExchange} upon which
-		 * the server can interact with the connected client. The second argument is the
-		 * {@link McpSchema.CallToolRequest} object containing the tool call
+		 * @param callHandler The function that implements the tool's logic. Must not be
+		 * null. The function's first argument is an {@link McpAsyncServerExchange} upon
+		 * which the server can interact with the connected client. The second argument is
+		 * the {@link McpSchema.CallToolRequest} object containing the tool call
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
 		public AsyncSpecification toolCall(McpSchema.Tool tool,
-				BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<CallToolResult>> handler) {
+				BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<CallToolResult>> callHandler) {
 
 			Assert.notNull(tool, "Tool must not be null");
-			Assert.notNull(handler, "Handler must not be null");
+			Assert.notNull(callHandler, "Handler must not be null");
 			assertNoDuplicateTool(tool.name());
 
-			this.tools.add(McpServerFeatures.AsyncToolSpecification.builder().tool(tool).callTool(handler).build());
+			this.tools
+				.add(McpServerFeatures.AsyncToolSpecification.builder().tool(tool).callHandler(callHandler).build());
 
 			return this;
 		}

@@ -122,7 +122,7 @@ class WebFluxSseIntegrationTests {
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> exchange.createMessage(mock(CreateMessageRequest.class))
+			.callHandler((exchange, request) -> exchange.createMessage(mock(CreateMessageRequest.class))
 				.thenReturn(mock(CallToolResult.class)))
 			.build();
 
@@ -165,7 +165,7 @@ class WebFluxSseIntegrationTests {
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 
 				var createMessageRequest = McpSchema.CreateMessageRequest.builder()
 					.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -243,7 +243,7 @@ class WebFluxSseIntegrationTests {
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 
 				var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
 					.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -321,7 +321,7 @@ class WebFluxSseIntegrationTests {
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 
 				var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
 					.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -366,7 +366,7 @@ class WebFluxSseIntegrationTests {
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 
 				exchange.createElicitation(mock(ElicitRequest.class)).block();
 
@@ -411,7 +411,7 @@ class WebFluxSseIntegrationTests {
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 
 				var elicitationRequest = ElicitRequest.builder()
 					.message("Test message")
@@ -475,7 +475,7 @@ class WebFluxSseIntegrationTests {
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 
 				var elicitationRequest = ElicitRequest.builder()
 					.message("Test message")
@@ -546,7 +546,7 @@ class WebFluxSseIntegrationTests {
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 
 				var elicitationRequest = ElicitRequest.builder()
 					.message("Test message")
@@ -921,7 +921,7 @@ class WebFluxSseIntegrationTests {
 		// Create server with a tool that sends logging notifications
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("logging-test", "Test logging notifications", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 
 				// Create and send notifications with different levels
 
@@ -1076,7 +1076,7 @@ class WebFluxSseIntegrationTests {
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("ping-async-test", "Test ping async behavior", emptyJsonSchema))
-			.callTool((exchange, request) -> {
+			.callHandler((exchange, request) -> {
 
 				executionOrder.set(executionOrder.get() + "1");
 
