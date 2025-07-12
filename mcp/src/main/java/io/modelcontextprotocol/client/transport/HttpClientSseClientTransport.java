@@ -423,16 +423,18 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			}
 
 			return this.serializeMessage(message)
-				.flatMap(body -> sendHttpPost(messageEndpointUri, body))
-				.doOnNext(response -> {
+				.flatMap(body -> sendHttpPost(messageEndpointUri, body).handle((response, sink) -> {
 					if (response.statusCode() != 200 && response.statusCode() != 201 && response.statusCode() != 202
 							&& response.statusCode() != 206) {
-						logger.error("Error sending message: {}", response.statusCode());
-						throw new McpError(new JSONRPCError(ErrorCodes.INVALID_REQUEST,
-								String.format("The server returned a %s status code", response.statusCode()),
-								response.statusCode()));
+						sink.error(new McpError(new JSONRPCError(ErrorCodes.INVALID_REQUEST,
+								"Sending message failed with a non-OK HTTP code: " + response.statusCode(),
+								response.statusCode())));
 					}
-				})
+					else {
+						sink.next(response);
+						sink.complete();
+					}
+				}))
 				.doOnError(error -> {
 					if (!isClosing) {
 						logger.error("Error sending message: {}", error.getMessage());

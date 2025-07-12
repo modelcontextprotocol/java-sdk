@@ -583,6 +583,16 @@ public final class McpSchema {
 		 * {@link Resource#builder()} instead.
 		 */
 		@Deprecated
+		public Resource(String uri, String name, String description, String mimeType, Long size,
+				Annotations annotations) {
+			this(uri, name, null, description, mimeType, null, annotations);
+		}
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link Resource#builder()} instead.
+		 */
+		@Deprecated
 		public Resource(String uri, String name, String description, String mimeType, Annotations annotations) {
 			this(uri, name, null, description, mimeType, null, annotations);
 		}
@@ -677,8 +687,13 @@ public final class McpSchema {
 				@JsonProperty("title") String title,
 				@JsonProperty("description") String description,
 				@JsonProperty("mimeType") String mimeType,
-				@JsonProperty("annotations") Annotations annotations) implements Annotated, BaseMetadata {
-		} // @formatter:on
+				@JsonProperty("annotations") Annotations annotations) implements Annotated, BaseMetadata {// @formatter:on
+
+		public ResourceTemplate(String uriTemplate, String name, String description, String mimeType,
+				Annotations annotations) {
+			this(uriTemplate, name, null, description, mimeType, annotations);
+		}
+	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -802,8 +817,12 @@ public final class McpSchema {
 				@JsonProperty("name") String name,
 				@JsonProperty("title") String title,
 				@JsonProperty("description") String description,
-				@JsonProperty("arguments") List<PromptArgument> arguments) implements BaseMetadata {
-		} // @formatter:on
+				@JsonProperty("arguments") List<PromptArgument> arguments) implements BaseMetadata { // @formatter:on
+
+		public Prompt(String name, String description, List<PromptArgument> arguments) {
+			this(name, null, description, arguments != null ? arguments : new ArrayList<>());
+		}
+	}
 
 	/**
 	 * Describes an argument that a prompt can accept.
@@ -819,8 +838,12 @@ public final class McpSchema {
 				@JsonProperty("name") String name,
 				@JsonProperty("title") String title,
 				@JsonProperty("description") String description,
-				@JsonProperty("required") Boolean required) implements BaseMetadata {
-		}// @formatter:on
+				@JsonProperty("required") Boolean required) implements BaseMetadata {// @formatter:on
+
+		public PromptArgument(String name, String description, Boolean required) {
+			this(name, null, description, required);
+		}
+	}
 
 	/**
 	 * Describes a message returned as part of a prompt.
@@ -945,6 +968,15 @@ public final class McpSchema {
 				@JsonProperty("description") String description,
 				@JsonProperty("inputSchema") JsonSchema inputSchema,
 				@JsonProperty("annotations") ToolAnnotations annotations) implements BaseMetadata { // @formatter:on
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link Tool#builder()} instead.
+		 */
+		@Deprecated
+		public Tool(String name, String description, JsonSchema inputSchema, ToolAnnotations annotations) {
+			this(name, null, description, inputSchema, annotations);
+		}
 
 		public Tool(String name, String description, String schema) {
 			this(name, null, description, parseSchema(schema), null);
@@ -1688,17 +1720,21 @@ public final class McpSchema {
 	public record PromptReference(// @formatter:off
 				@JsonProperty("type") String type,
 				@JsonProperty("name") String name,
-				@JsonProperty("title") String title ) implements McpSchema.CompleteReference, BaseMetadata {
+				@JsonProperty("title") String title ) implements McpSchema.CompleteReference, BaseMetadata { // @formatter:on
 
-				public PromptReference(String name) {
-						this("ref/prompt", name, null);
-				}
+		public PromptReference(String type, String name) {
+			this(type, name, null);
+		}
 
-				@Override
-				public String identifier() {
-						return name();
-				}
-		}// @formatter:on
+		public PromptReference(String name) {
+			this("ref/prompt", name, null);
+		}
+
+		@Override
+		public String identifier() {
+			return name();
+		}
+	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1719,18 +1755,31 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record CompleteRequest(// @formatter:off
-				@JsonProperty("ref") McpSchema.CompleteReference ref,
-				@JsonProperty("argument") CompleteArgument argument,
-				@JsonProperty("_meta") Map<String, Object> meta) implements Request {
+		@JsonProperty("ref") McpSchema.CompleteReference ref,
+		@JsonProperty("argument") CompleteArgument argument,
+		@JsonProperty("_meta") Map<String, Object> meta,
+		@JsonProperty("context") CompleteContext context) implements Request {
 
-				public CompleteRequest(McpSchema.CompleteReference ref, CompleteArgument argument) {
-						this(ref, argument, null);
-				}
+		public CompleteRequest(McpSchema.CompleteReference ref, CompleteArgument argument, Map<String, Object> meta) {
+			this(ref, argument, meta, null);
+		}
 
-				public record CompleteArgument(
-						@JsonProperty("name") String name,
-						@JsonProperty("value") String value) {
-				}// @formatter:on
+		public CompleteRequest(McpSchema.CompleteReference ref, CompleteArgument argument, CompleteContext context) {
+			this(ref, argument, null, context);
+		}
+
+		public CompleteRequest(McpSchema.CompleteReference ref, CompleteArgument argument) {
+			this(ref, argument, null, null);
+		}
+		
+		public record CompleteArgument(
+			@JsonProperty("name") String name,
+			@JsonProperty("value") String value) {
+		}
+
+		public record CompleteContext(
+			@JsonProperty("arguments") Map<String, String> arguments) {
+		}// @formatter:on
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -1910,6 +1959,17 @@ public final class McpSchema {
 				@JsonProperty("mimeType") String mimeType,
 				@JsonProperty("size") Long size,
 				@JsonProperty("annotations") Annotations annotations) implements Annotated, Content, ResourceContent { // @formatter:on
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link ResourceLink#ResourceLink(String, String, String, String, String, Long, Annotations)}
+		 * instead.
+		 */
+		@Deprecated
+		public ResourceLink(String name, String uri, String description, String mimeType, Long size,
+				Annotations annotations) {
+			this(name, null, uri, description, mimeType, size, annotations);
+		}
 
 		public static Builder builder() {
 			return new Builder();

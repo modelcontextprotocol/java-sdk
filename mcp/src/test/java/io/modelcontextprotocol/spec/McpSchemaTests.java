@@ -1266,7 +1266,7 @@ public class McpSchemaTests {
 		Map<String, Object> meta = new HashMap<>();
 		meta.put("progressToken", "complete-progress-789");
 
-		McpSchema.CompleteRequest request = new McpSchema.CompleteRequest(resourceRef, argument, meta);
+		McpSchema.CompleteRequest request = new McpSchema.CompleteRequest(resourceRef, argument, meta, null);
 
 		String value = mapper.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)

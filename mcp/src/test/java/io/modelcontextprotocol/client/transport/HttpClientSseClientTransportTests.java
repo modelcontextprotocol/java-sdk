@@ -59,7 +59,9 @@ class HttpClientSseClientTransportTests {
 		private Sinks.Many<ServerSentEvent<String>> events = Sinks.many().unicast().onBackpressureBuffer();
 
 		public TestHttpClientSseClientTransport(final String baseUri) {
-			super(HttpClient.newHttpClient(), HttpRequest.newBuilder(), baseUri, "/sse", new ObjectMapper());
+			super(HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(),
+					HttpRequest.newBuilder().header("Content-Type", "application/json"), baseUri, "/sse",
+					new ObjectMapper());
 		}
 
 		public int getInboundMessageCount() {
@@ -120,8 +122,7 @@ class HttpClientSseClientTransportTests {
 				""");
 
 		// Subscribe to messages and verify
-		StepVerifier.create(transport.sendMessage(testMessage).onErrorResume(throwable -> Mono.empty()))
-			.verifyComplete();
+		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 
 		assertThat(transport.getInboundMessageCount()).isEqualTo(1);
 	}
@@ -142,8 +143,7 @@ class HttpClientSseClientTransportTests {
 				Map.of("key", "value"));
 
 		// Verify message handling
-		StepVerifier.create(transport.sendMessage(testMessage).onErrorResume(throwable -> Mono.empty()))
-			.verifyComplete();
+		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 
 		assertThat(transport.getInboundMessageCount()).isEqualTo(1);
 	}
@@ -167,8 +167,7 @@ class HttpClientSseClientTransportTests {
 				Map.of("key", "value"));
 
 		// Verify message handling
-		StepVerifier.create(transport.sendMessage(testMessage).onErrorResume(throwable -> Mono.empty()))
-			.verifyComplete();
+		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 
 		assertThat(transport.getInboundMessageCount()).isEqualTo(1);
 	}
@@ -246,11 +245,7 @@ class HttpClientSseClientTransportTests {
 				Map.of("key", "value2"));
 
 		// Verify both messages are processed
-		StepVerifier
-			.create(transport.sendMessage(message1)
-				.then(transport.sendMessage(message2))
-				.onErrorResume(throwable -> Mono.empty()))
-			.verifyComplete();
+		StepVerifier.create(transport.sendMessage(message1).then(transport.sendMessage(message2))).verifyComplete();
 
 		// Verify message count
 		assertThat(transport.getInboundMessageCount()).isEqualTo(2);

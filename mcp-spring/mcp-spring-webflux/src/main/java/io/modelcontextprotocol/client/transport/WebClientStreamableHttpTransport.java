@@ -354,7 +354,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			if (responseException.getStatusCode().isSameCodeAs(HttpStatus.BAD_REQUEST)) {
 				return Mono.error(new McpTransportSessionNotFoundException(sessionRepresentation, toPropagate));
 			}
-			return Mono.empty();
+			return Mono.error(toPropagate);
 		}).flux();
 	}
 
