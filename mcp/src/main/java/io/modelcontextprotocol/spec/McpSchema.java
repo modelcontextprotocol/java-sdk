@@ -1056,7 +1056,7 @@ public final class McpSchema {
 	 * tools/list.
 	 * @param arguments Arguments to pass to the tool. These must conform to the tool's
 	 * input schema.
-	 * @param _meta Optional metadata about the request. This can include additional
+	 * @param meta Optional metadata about the request. This can include additional
 	 * information like `progressToken`
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -1623,7 +1623,7 @@ public final class McpSchema {
 				@JsonProperty("progressToken") String progressToken,
 				@JsonProperty("progress") Double progress,
 				@JsonProperty("total") Double total,
-	    @JsonProperty("message") String message) {
+				@JsonProperty("message") String message) {
 		}// @formatter:on
 
 	/**
