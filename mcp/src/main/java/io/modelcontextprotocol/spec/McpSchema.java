@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.util.annotation.Nullable;
 
 /**
  * Based on the <a href="http://www.jsonrpc.org/specification">JSON-RPC 2.0
@@ -57,6 +58,8 @@ public final class McpSchema {
 	public static final String METHOD_NOTIFICATION_INITIALIZED = "notifications/initialized";
 
 	public static final String METHOD_PING = "ping";
+
+	public static final String METHOD_NOTIFICATION_PROGRESS = "notifications/progress";
 
 	// Tool Methods
 	public static final String METHOD_TOOLS_LIST = "tools/list";
@@ -249,7 +252,7 @@ public final class McpSchema {
 				@JsonProperty("capabilities") ClientCapabilities capabilities,
 				@JsonProperty("clientInfo") Implementation clientInfo,
 				@JsonProperty("_meta") Map<String, Object> meta) implements Request {
-			
+
 			public InitializeRequest(String protocolVersion, ClientCapabilities capabilities, Implementation clientInfo) {
 				this(protocolVersion, capabilities, clientInfo, null);
 			}
@@ -462,7 +465,7 @@ public final class McpSchema {
 	public record Implementation(// @formatter:off
 				@JsonProperty("name") String name,
 				@JsonProperty("title") String title,
-				@JsonProperty("version") String version) implements BaseMetadata {// @formatter:on			
+				@JsonProperty("version") String version) implements BaseMetadata {// @formatter:on
 
 		public Implementation(String name, String version) {
 			this(name, null, version);
@@ -1053,6 +1056,8 @@ public final class McpSchema {
 	 * tools/list.
 	 * @param arguments Arguments to pass to the tool. These must conform to the tool's
 	 * input schema.
+	 * @param meta Optional metadata about the request. This can include additional
+	 * information like `progressToken`
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1063,9 +1068,10 @@ public final class McpSchema {
 
 				public CallToolRequest(String name, String jsonArguments) {
 						this(name, parseJsonArguments(jsonArguments), null);
-				}
-				public CallToolRequest(String name, Map<String, Object> arguments) {
-						this(name, arguments, null);
+		}
+
+		public CallToolRequest(String name, Map<String, Object> arguments) {
+			this(name, arguments, null);
 				}
 
 				private static Map<String, Object> parseJsonArguments(String jsonArguments) {
@@ -1317,7 +1323,7 @@ public final class McpSchema {
 				@JsonProperty("metadata") Map<String, Object> metadata,
 				@JsonProperty("_meta") Map<String, Object> meta) implements Request {
 
-				
+
 				// backwards compatibility constructor
 				public CreateMessageRequest(List<SamplingMessage> messages, ModelPreferences modelPreferences,
 											String systemPrompt, ContextInclusionStrategy includeContext,
@@ -1771,7 +1777,7 @@ public final class McpSchema {
 		public CompleteRequest(McpSchema.CompleteReference ref, CompleteArgument argument) {
 			this(ref, argument, null, null);
 		}
-		
+
 		public record CompleteArgument(
 			@JsonProperty("name") String name,
 			@JsonProperty("value") String value) {
