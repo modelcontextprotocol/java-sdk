@@ -227,7 +227,7 @@ public class McpServerFeatures {
 		 **/
 		@Deprecated
 		public AsyncToolSpecification(McpSchema.Tool tool,
-				BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> call) {
+				BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> call) {
 			this(tool, call, (exchange, toolReq) -> call.apply(exchange, toolReq.arguments()));
 		}
 
@@ -483,7 +483,7 @@ public class McpServerFeatures {
 
 		@Deprecated
 		public SyncToolSpecification(McpSchema.Tool tool,
-				BiFunction<McpSyncServerExchange, McpSchema.CallToolRequest, McpSchema.CallToolResult> call) {
+				BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> call) {
 			this(tool, call, (exchange, toolReq) -> call.apply(exchange, toolReq.arguments()));
 		}
 
