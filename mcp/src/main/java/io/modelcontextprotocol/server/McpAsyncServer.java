@@ -268,7 +268,7 @@ public class McpAsyncServer {
 	// ---------------------------------------
 
 	/**
-	 * Add a new tool specification at runtime.
+	 * Add a new tool call specification at runtime.
 	 * @param toolSpecification The tool specification to add
 	 * @return Mono that completes when clients have been notified of the change
 	 */
@@ -279,7 +279,7 @@ public class McpAsyncServer {
 		if (toolSpecification.tool() == null) {
 			return Mono.error(new McpError("Tool must not be null"));
 		}
-		if (toolSpecification.call() == null) {
+		if (toolSpecification.call() == null && toolSpecification.callHandler() == null) {
 			return Mono.error(new McpError("Tool call handler must not be null"));
 		}
 		if (this.serverCapabilities.tools() == null) {
@@ -360,7 +360,7 @@ public class McpAsyncServer {
 				return Mono.error(new McpError("Tool not found: " + callToolRequest.name()));
 			}
 
-			return toolSpecification.map(tool -> tool.call().apply(exchange, callToolRequest))
+			return toolSpecification.map(tool -> tool.callHandler().apply(exchange, callToolRequest))
 				.orElse(Mono.error(new McpError("Tool not found: " + callToolRequest.name())));
 		};
 	}
@@ -462,8 +462,8 @@ public class McpAsyncServer {
 			.filter(uri -> uri.contains("{"))
 			.map(uri -> {
 				var resource = this.resources.get(uri).resource();
-				var template = new McpSchema.ResourceTemplate(resource.uri(), resource.name(), resource.description(),
-						resource.mimeType(), resource.annotations());
+				var template = new McpSchema.ResourceTemplate(resource.uri(), resource.name(), resource.title(),
+						resource.description(), resource.mimeType(), resource.annotations());
 				return template;
 			})
 			.toList();
@@ -721,11 +721,14 @@ public class McpAsyncServer {
 		Map<String, Object> params = (Map<String, Object>) object;
 		Map<String, Object> refMap = (Map<String, Object>) params.get("ref");
 		Map<String, Object> argMap = (Map<String, Object>) params.get("argument");
+		Map<String, Object> contextMap = (Map<String, Object>) params.get("context");
+		Map<String, Object> meta = (Map<String, Object>) params.get("_meta");
 
 		String refType = (String) refMap.get("type");
 
 		McpSchema.CompleteReference ref = switch (refType) {
-			case "ref/prompt" -> new McpSchema.PromptReference(refType, (String) refMap.get("name"));
+			case "ref/prompt" -> new McpSchema.PromptReference(refType, (String) refMap.get("name"),
+					refMap.get("title") != null ? (String) refMap.get("title") : null);
 			case "ref/resource" -> new McpSchema.ResourceReference(refType, (String) refMap.get("uri"));
 			default -> throw new IllegalArgumentException("Invalid ref type: " + refType);
 		};
@@ -735,7 +738,13 @@ public class McpAsyncServer {
 		McpSchema.CompleteRequest.CompleteArgument argument = new McpSchema.CompleteRequest.CompleteArgument(argName,
 				argValue);
 
-		return new McpSchema.CompleteRequest(ref, argument);
+		McpSchema.CompleteRequest.CompleteContext context = null;
+		if (contextMap != null) {
+			Map<String, String> arguments = (Map<String, String>) contextMap.get("arguments");
+			context = new McpSchema.CompleteRequest.CompleteContext(arguments);
+		}
+
+		return new McpSchema.CompleteRequest(ref, argument, meta, context);
 	}
 
 	/**

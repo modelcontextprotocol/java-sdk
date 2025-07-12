@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 - 2024 the original author or authors.
+ * Copyright 2024 - 2025 the original author or authors.
  */
 package io.modelcontextprotocol.server.transport;
 
@@ -37,7 +37,6 @@ import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -46,6 +45,7 @@ import org.springframework.web.client.RestClient;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 
@@ -106,16 +106,18 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 	// Sampling Tests
 	// ---------------------------------------
 	@Test
-	@Disabled
+	// @Disabled
 	void testCreateMessageWithoutSamplingCapabilities() {
 
-		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
+			.callHandler((exchange, request) -> {
 
-					exchange.createMessage(mock(McpSchema.CreateMessageRequest.class)).block();
+				exchange.createMessage(mock(McpSchema.CreateMessageRequest.class)).block();
 
-					return Mono.just(mock(CallToolResult.class));
-				});
+				return Mono.just(mock(CallToolResult.class));
+			})
+			.build();
 
 		var server = McpServer.async(mcpServerTransportProvider).serverInfo("test-server", "1.0.0").tools(tool).build();
 
@@ -151,31 +153,33 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
 
-		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
+			.callHandler((exchange, request) -> {
 
-					var createMessageRequest = McpSchema.CreateMessageRequest.builder()
-						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
-								new McpSchema.TextContent("Test message"))))
-						.modelPreferences(ModelPreferences.builder()
-							.hints(List.of())
-							.costPriority(1.0)
-							.speedPriority(1.0)
-							.intelligencePriority(1.0)
-							.build())
-						.build();
+				var createMessageRequest = McpSchema.CreateMessageRequest.builder()
+					.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
+							new McpSchema.TextContent("Test message"))))
+					.modelPreferences(ModelPreferences.builder()
+						.hints(List.of())
+						.costPriority(1.0)
+						.speedPriority(1.0)
+						.intelligencePriority(1.0)
+						.build())
+					.build();
 
-					StepVerifier.create(exchange.createMessage(createMessageRequest)).consumeNextWith(result -> {
-						assertThat(result).isNotNull();
-						assertThat(result.role()).isEqualTo(Role.USER);
-						assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
-						assertThat(((McpSchema.TextContent) result.content()).text()).isEqualTo("Test message");
-						assertThat(result.model()).isEqualTo("MockModelName");
-						assertThat(result.stopReason()).isEqualTo(CreateMessageResult.StopReason.STOP_SEQUENCE);
-					}).verifyComplete();
+				StepVerifier.create(exchange.createMessage(createMessageRequest)).consumeNextWith(result -> {
+					assertThat(result).isNotNull();
+					assertThat(result.role()).isEqualTo(Role.USER);
+					assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
+					assertThat(((McpSchema.TextContent) result.content()).text()).isEqualTo("Test message");
+					assertThat(result.model()).isEqualTo("MockModelName");
+					assertThat(result.stopReason()).isEqualTo(CreateMessageResult.StopReason.STOP_SEQUENCE);
+				}).verifyComplete();
 
-					return Mono.just(callResponse);
-				});
+				return Mono.just(callResponse);
+			})
+			.build();
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
@@ -226,31 +230,33 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
 
-		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
+			.callHandler((exchange, request) -> {
 
-					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
-						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
-								new McpSchema.TextContent("Test message"))))
-						.modelPreferences(ModelPreferences.builder()
-							.hints(List.of())
-							.costPriority(1.0)
-							.speedPriority(1.0)
-							.intelligencePriority(1.0)
-							.build())
-						.build();
+				var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
+					.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
+							new McpSchema.TextContent("Test message"))))
+					.modelPreferences(ModelPreferences.builder()
+						.hints(List.of())
+						.costPriority(1.0)
+						.speedPriority(1.0)
+						.intelligencePriority(1.0)
+						.build())
+					.build();
 
-					StepVerifier.create(exchange.createMessage(craeteMessageRequest)).consumeNextWith(result -> {
-						assertThat(result).isNotNull();
-						assertThat(result.role()).isEqualTo(Role.USER);
-						assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
-						assertThat(((McpSchema.TextContent) result.content()).text()).isEqualTo("Test message");
-						assertThat(result.model()).isEqualTo("MockModelName");
-						assertThat(result.stopReason()).isEqualTo(CreateMessageResult.StopReason.STOP_SEQUENCE);
-					}).verifyComplete();
+				StepVerifier.create(exchange.createMessage(craeteMessageRequest)).consumeNextWith(result -> {
+					assertThat(result).isNotNull();
+					assertThat(result.role()).isEqualTo(Role.USER);
+					assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
+					assertThat(((McpSchema.TextContent) result.content()).text()).isEqualTo("Test message");
+					assertThat(result.model()).isEqualTo("MockModelName");
+					assertThat(result.stopReason()).isEqualTo(CreateMessageResult.StopReason.STOP_SEQUENCE);
+				}).verifyComplete();
 
-					return Mono.just(callResponse);
-				});
+				return Mono.just(callResponse);
+			})
+			.build();
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
@@ -298,31 +304,33 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
 
-		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
+			.callHandler((exchange, request) -> {
 
-					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
-						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
-								new McpSchema.TextContent("Test message"))))
-						.modelPreferences(ModelPreferences.builder()
-							.hints(List.of())
-							.costPriority(1.0)
-							.speedPriority(1.0)
-							.intelligencePriority(1.0)
-							.build())
-						.build();
+				var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
+					.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
+							new McpSchema.TextContent("Test message"))))
+					.modelPreferences(ModelPreferences.builder()
+						.hints(List.of())
+						.costPriority(1.0)
+						.speedPriority(1.0)
+						.intelligencePriority(1.0)
+						.build())
+					.build();
 
-					StepVerifier.create(exchange.createMessage(craeteMessageRequest)).consumeNextWith(result -> {
-						assertThat(result).isNotNull();
-						assertThat(result.role()).isEqualTo(Role.USER);
-						assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
-						assertThat(((McpSchema.TextContent) result.content()).text()).isEqualTo("Test message");
-						assertThat(result.model()).isEqualTo("MockModelName");
-						assertThat(result.stopReason()).isEqualTo(CreateMessageResult.StopReason.STOP_SEQUENCE);
-					}).verifyComplete();
+				StepVerifier.create(exchange.createMessage(craeteMessageRequest)).consumeNextWith(result -> {
+					assertThat(result).isNotNull();
+					assertThat(result.role()).isEqualTo(Role.USER);
+					assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
+					assertThat(((McpSchema.TextContent) result.content()).text()).isEqualTo("Test message");
+					assertThat(result.model()).isEqualTo("MockModelName");
+					assertThat(result.stopReason()).isEqualTo(CreateMessageResult.StopReason.STOP_SEQUENCE);
+				}).verifyComplete();
 
-					return Mono.just(callResponse);
-				});
+				return Mono.just(callResponse);
+			})
+			.build();
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
@@ -345,16 +353,18 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 	// Elicitation Tests
 	// ---------------------------------------
 	@Test
-	@Disabled
+	// @Disabled
 	void testCreateElicitationWithoutElicitationCapabilities() {
 
-		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
+			.callHandler((exchange, request) -> {
 
-					exchange.createElicitation(mock(ElicitRequest.class)).block();
+				exchange.createElicitation(mock(ElicitRequest.class)).block();
 
-					return Mono.just(mock(CallToolResult.class));
-				});
+				return Mono.just(mock(CallToolResult.class));
+			})
+			.build();
 
 		var server = McpServer.async(mcpServerTransportProvider).serverInfo("test-server", "1.0.0").tools(tool).build();
 
@@ -388,23 +398,25 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
 
-		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
+			.callHandler((exchange, request) -> {
 
-					var elicitationRequest = ElicitRequest.builder()
-						.message("Test message")
-						.requestedSchema(
-								Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
-						.build();
+				var elicitationRequest = ElicitRequest.builder()
+					.message("Test message")
+					.requestedSchema(
+							Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
+					.build();
 
-					StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
-						assertThat(result).isNotNull();
-						assertThat(result.action()).isEqualTo(ElicitResult.Action.ACCEPT);
-						assertThat(result.content().get("message")).isEqualTo("Test message");
-					}).verifyComplete();
+				StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
+					assertThat(result).isNotNull();
+					assertThat(result.action()).isEqualTo(ElicitResult.Action.ACCEPT);
+					assertThat(result.content().get("message")).isEqualTo("Test message");
+				}).verifyComplete();
 
-					return Mono.just(callResponse);
-				});
+				return Mono.just(callResponse);
+			})
+			.build();
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
@@ -454,23 +466,25 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
 
-		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
+			.callHandler((exchange, request) -> {
 
-					var elicitationRequest = ElicitRequest.builder()
-						.message("Test message")
-						.requestedSchema(
-								Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
-						.build();
+				var elicitationRequest = ElicitRequest.builder()
+					.message("Test message")
+					.requestedSchema(
+							Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
+					.build();
 
-					StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
-						assertThat(result).isNotNull();
-						assertThat(result.action()).isEqualTo(ElicitResult.Action.ACCEPT);
-						assertThat(result.content().get("message")).isEqualTo("Test message");
-					}).verifyComplete();
+				StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
+					assertThat(result).isNotNull();
+					assertThat(result.action()).isEqualTo(ElicitResult.Action.ACCEPT);
+					assertThat(result.content().get("message")).isEqualTo("Test message");
+				}).verifyComplete();
 
-					return Mono.just(callResponse);
-				});
+				return Mono.just(callResponse);
+			})
+			.build();
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
@@ -517,23 +531,25 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
 
-		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
+			.callHandler((exchange, request) -> {
 
-					var elicitationRequest = ElicitRequest.builder()
-						.message("Test message")
-						.requestedSchema(
-								Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
-						.build();
+				var elicitationRequest = ElicitRequest.builder()
+					.message("Test message")
+					.requestedSchema(
+							Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
+					.build();
 
-					StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
-						assertThat(result).isNotNull();
-						assertThat(result.action()).isEqualTo(ElicitResult.Action.ACCEPT);
-						assertThat(result.content().get("message")).isEqualTo("Test message");
-					}).verifyComplete();
+				StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
+					assertThat(result).isNotNull();
+					assertThat(result.action()).isEqualTo(ElicitResult.Action.ACCEPT);
+					assertThat(result.content().get("message")).isEqualTo("Test message");
+				}).verifyComplete();
 
-					return Mono.just(callResponse);
-				});
+				return Mono.just(callResponse);
+			})
+			.build();
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
@@ -602,13 +618,15 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 	@Test
 	void testRootsWithoutCapability() {
 
-		McpServerFeatures.SyncToolSpecification tool = new McpServerFeatures.SyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+		McpServerFeatures.SyncToolSpecification tool = McpServerFeatures.SyncToolSpecification.builder()
+			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
+			.callHandler((exchange, request) -> {
 
-					exchange.listRoots(); // try to list roots
+				exchange.listRoots(); // try to list roots
 
-					return mock(CallToolResult.class);
-				});
+				return mock(CallToolResult.class);
+			})
+			.build();
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider).rootsChangeHandler((exchange, rootsUpdate) -> {
 		}).tools(tool).build();
@@ -726,17 +744,22 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 	void testToolCallSuccess() {
 
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
-		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
-					// perform a blocking call to a remote service
-					String response = RestClient.create()
-						.get()
-						.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
-						.retrieve()
-						.body(String.class);
-					assertThat(response).isNotBlank();
-					return callResponse;
-				});
+
+		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
+			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
+			.callHandler((exchange, request) -> {
+				assertThat(McpTestServletFilter.getThreadLocalValue()).as("blocking code exectuion should be offloaded")
+					.isNull();
+				// perform a blocking call to a remote service
+				String response = RestClient.create()
+					.get()
+					.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
+					.retrieve()
+					.body(String.class);
+				assertThat(response).isNotBlank();
+				return callResponse;
+			})
+			.build();
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().tools(true).build())
@@ -759,20 +782,53 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 	}
 
 	@Test
+	void testToolCallImmediateExecution() {
+		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
+					var threadLocalValue = McpTestServletFilter.getThreadLocalValue();
+					return CallToolResult.builder()
+						.addTextContent(threadLocalValue != null ? threadLocalValue : "<unset>")
+						.build();
+				});
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool1)
+			.immediateExecution(true)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			mcpClient.initialize();
+
+			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+
+			assertThat(response).isNotNull();
+			assertThat(response.content()).first()
+				.asInstanceOf(type(McpSchema.TextContent.class))
+				.extracting(McpSchema.TextContent::text)
+				.isEqualTo(McpTestServletFilter.THREAD_LOCAL_VALUE);
+		}
+
+		mcpServer.close();
+	}
+
+	@Test
 	void testToolListChangeHandlingSuccess() {
 
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
-		McpServerFeatures.SyncToolSpecification tool1 = new McpServerFeatures.SyncToolSpecification(
-				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
-					// perform a blocking call to a remote service
-					String response = RestClient.create()
-						.get()
-						.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
-						.retrieve()
-						.body(String.class);
-					assertThat(response).isNotBlank();
-					return callResponse;
-				});
+		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
+			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
+			.callHandler((exchange, request) -> {
+				// perform a blocking call to a remote service
+				String response = RestClient.create()
+					.get()
+					.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
+					.retrieve()
+					.body(String.class);
+				assertThat(response).isNotBlank();
+				return callResponse;
+			})
+			.build();
 
 		AtomicReference<List<Tool>> rootsRef = new AtomicReference<>();
 
@@ -813,9 +869,10 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 			});
 
 			// Add a new tool
-			McpServerFeatures.SyncToolSpecification tool2 = new McpServerFeatures.SyncToolSpecification(
-					new McpSchema.Tool("tool2", "tool2 description", emptyJsonSchema),
-					(exchange, request) -> callResponse);
+			McpServerFeatures.SyncToolSpecification tool2 = McpServerFeatures.SyncToolSpecification.builder()
+				.tool(new McpSchema.Tool("tool2", "tool2 description", emptyJsonSchema))
+				.callHandler((exchange, request) -> callResponse)
+				.build();
 
 			mcpServer.addTool(tool2);
 
@@ -849,59 +906,60 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 		List<McpSchema.LoggingMessageNotification> receivedNotifications = new ArrayList<>();
 
 		// Create server with a tool that sends logging notifications
-		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
-				new McpSchema.Tool("logging-test", "Test logging notifications", emptyJsonSchema),
-				(exchange, request) -> {
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(new McpSchema.Tool("logging-test", "Test logging notifications", emptyJsonSchema))
+			.callHandler((exchange, request) -> {
 
-					// Create and send notifications with different levels
+				// Create and send notifications with different levels
 
-					// This should be filtered out (DEBUG < NOTICE)
-					exchange
-						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
-							.level(McpSchema.LoggingLevel.DEBUG)
-							.logger("test-logger")
-							.data("Debug message")
-							.build())
-						.block();
+				// This should be filtered out (DEBUG < NOTICE)
+				exchange
+					.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+						.level(McpSchema.LoggingLevel.DEBUG)
+						.logger("test-logger")
+						.data("Debug message")
+						.build())
+					.block();
 
-					// This should be sent (NOTICE >= NOTICE)
-					exchange
-						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
-							.level(McpSchema.LoggingLevel.NOTICE)
-							.logger("test-logger")
-							.data("Notice message")
-							.build())
-						.block();
+				// This should be sent (NOTICE >= NOTICE)
+				exchange
+					.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+						.level(McpSchema.LoggingLevel.NOTICE)
+						.logger("test-logger")
+						.data("Notice message")
+						.build())
+					.block();
 
-					// This should be sent (ERROR > NOTICE)
-					exchange
-						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
-							.level(McpSchema.LoggingLevel.ERROR)
-							.logger("test-logger")
-							.data("Error message")
-							.build())
-						.block();
+				// This should be sent (ERROR > NOTICE)
+				exchange
+					.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+						.level(McpSchema.LoggingLevel.ERROR)
+						.logger("test-logger")
+						.data("Error message")
+						.build())
+					.block();
 
-					// This should be filtered out (INFO < NOTICE)
-					exchange
-						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
-							.level(McpSchema.LoggingLevel.INFO)
-							.logger("test-logger")
-							.data("Another info message")
-							.build())
-						.block();
+				// This should be filtered out (INFO < NOTICE)
+				exchange
+					.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+						.level(McpSchema.LoggingLevel.INFO)
+						.logger("test-logger")
+						.data("Another info message")
+						.build())
+					.block();
 
-					// This should be sent (ERROR >= NOTICE)
-					exchange
-						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
-							.level(McpSchema.LoggingLevel.ERROR)
-							.logger("test-logger")
-							.data("Another error message")
-							.build())
-						.block();
+				// This should be sent (ERROR >= NOTICE)
+				exchange
+					.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+						.level(McpSchema.LoggingLevel.ERROR)
+						.logger("test-logger")
+						.data("Another error message")
+						.build())
+					.block();
 
-					return Mono.just(new CallToolResult("Logging test completed", false));
-				});
+				return Mono.just(new CallToolResult("Logging test completed", false));
+			})
+			.build();
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
@@ -955,6 +1013,60 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 				assertThat(notificationMap.get("Another error message").data()).isEqualTo("Another error message");
 			});
 		}
+		mcpServer.close();
+	}
+
+	// ---------------------------------------
+	// Ping Tests
+	// ---------------------------------------
+	@Test
+	void testPingSuccess() {
+		// Create server with a tool that uses ping functionality
+		AtomicReference<String> executionOrder = new AtomicReference<>("");
+
+		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("ping-async-test", "Test ping async behavior", emptyJsonSchema),
+				(exchange, request) -> {
+
+					executionOrder.set(executionOrder.get() + "1");
+
+					// Test async ping behavior
+					return exchange.ping().doOnNext(result -> {
+
+						assertThat(result).isNotNull();
+						// Ping should return an empty object or map
+						assertThat(result).isInstanceOf(Map.class);
+
+						executionOrder.set(executionOrder.get() + "2");
+						assertThat(result).isNotNull();
+					}).then(Mono.fromCallable(() -> {
+						executionOrder.set(executionOrder.get() + "3");
+						return new CallToolResult("Async ping test completed", false);
+					}));
+				});
+
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			// Initialize client
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Call the tool that tests ping async behavior
+			CallToolResult result = mcpClient.callTool(new McpSchema.CallToolRequest("ping-async-test", Map.of()));
+			assertThat(result).isNotNull();
+			assertThat(result.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
+			assertThat(((McpSchema.TextContent) result.content().get(0)).text()).isEqualTo("Async ping test completed");
+
+			// Verify execution order
+			assertThat(executionOrder.get()).isEqualTo("123");
+		}
+
 		mcpServer.close();
 	}
 

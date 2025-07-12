@@ -183,6 +183,20 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	@Test
+	void testListAllToolsReturnsImmutableList() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listTools()))
+				.consumeNextWith(result -> {
+					assertThat(result.tools()).isNotNull();
+					// Verify that the returned list is immutable
+					assertThatThrownBy(() -> result.tools().add(new Tool("test", "test", "{\"type\":\"object\"}")))
+						.isInstanceOf(UnsupportedOperationException.class);
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
 	void testPingWithoutInitialization() {
 		verifyCallSucceedsWithImplicitInitialization(client -> client.ping(), "pinging the server");
 	}
@@ -334,6 +348,21 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	@Test
+	void testListAllResourcesReturnsImmutableList() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResources()))
+				.consumeNextWith(result -> {
+					assertThat(result.resources()).isNotNull();
+					// Verify that the returned list is immutable
+					assertThatThrownBy(
+							() -> result.resources().add(Resource.builder().uri("test://uri").name("test").build()))
+						.isInstanceOf(UnsupportedOperationException.class);
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
 	void testMcpAsyncClientState() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			assertThat(mcpAsyncClient).isNotNull();
@@ -379,6 +408,20 @@ public abstract class AbstractMcpAsyncClientTests {
 							assertThat(firstPrompt.description()).isNotNull();
 						}
 					});
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllPromptsReturnsImmutableList() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listPrompts()))
+				.consumeNextWith(result -> {
+					assertThat(result.prompts()).isNotNull();
+					// Verify that the returned list is immutable
+					assertThatThrownBy(() -> result.prompts().add(new Prompt("test", "Test", "test", null)))
+						.isInstanceOf(UnsupportedOperationException.class);
 				})
 				.verifyComplete();
 		});
@@ -548,6 +591,21 @@ public abstract class AbstractMcpAsyncClientTests {
 				.consumeNextWith(result -> {
 					assertThat(result).isNotNull();
 					assertThat(result.resourceTemplates()).isNotNull();
+				})
+				.verifyComplete();
+		});
+	}
+
+	@Test
+	void testListAllResourceTemplatesReturnsImmutableList() {
+		withClient(createMcpTransport(), mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.listResourceTemplates()))
+				.consumeNextWith(result -> {
+					assertThat(result.resourceTemplates()).isNotNull();
+					// Verify that the returned list is immutable
+					assertThatThrownBy(() -> result.resourceTemplates()
+						.add(new McpSchema.ResourceTemplate("test://template", "test", "test", null, null, null)))
+						.isInstanceOf(UnsupportedOperationException.class);
 				})
 				.verifyComplete();
 		});
