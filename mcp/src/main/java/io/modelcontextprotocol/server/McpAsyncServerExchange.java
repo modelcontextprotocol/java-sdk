@@ -157,16 +157,6 @@ public class McpAsyncServerExchange {
 				LIST_ROOTS_RESULT_TYPE_REF);
 	}
 
-	public Mono<Void> notification(String method, Object params) {
-		if (method == null || method.isEmpty()) {
-			return Mono.error(new McpError("Method must not be null or empty"));
-		}
-		if (params == null) {
-			return Mono.error(new McpError("Params must not be null"));
-		}
-		return this.session.sendNotification(method, params);
-	}
-
 	/**
 	 * Send a logging message notification to the client. Messages below the current
 	 * minimum logging level will be filtered out.
@@ -185,6 +175,20 @@ public class McpAsyncServerExchange {
 			}
 			return Mono.empty();
 		});
+	}
+
+	/**
+	 * Sends a notification to the client that the current progress status has changed for
+	 * long-running operations.
+	 * @param progressNotification The progress notification to send
+	 * @return A Mono that completes when the notification has been sent
+	 */
+	public Mono<Void> progressNotification(McpSchema.ProgressNotification progressNotification) {
+		if (progressNotification == null) {
+			return Mono.error(new McpError("Progress notification must not be null"));
+		}
+
+		return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_PROGRESS, progressNotification);
 	}
 
 	/**
