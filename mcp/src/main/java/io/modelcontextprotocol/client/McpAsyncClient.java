@@ -100,6 +100,9 @@ public class McpAsyncClient {
 	public static final TypeReference<LoggingMessageNotification> LOGGING_MESSAGE_NOTIFICATION_TYPE_REF = new TypeReference<>() {
 	};
 
+	public static final TypeReference<McpSchema.ProgressNotification> PROGRESS_NOTIFICATION_TYPE_REF = new TypeReference<>() {
+	};
+
 	/**
 	 * Client capabilities.
 	 */
@@ -843,8 +846,7 @@ public class McpAsyncClient {
 
 		return params -> {
 			McpSchema.ProgressNotification progressNotification = transport.unmarshalFrom(params,
-					new TypeReference<McpSchema.ProgressNotification>() {
-					});
+					PROGRESS_NOTIFICATION_TYPE_REF);
 
 			return Flux.fromIterable(progressConsumers)
 				.flatMap(consumer -> consumer.apply(progressNotification))
