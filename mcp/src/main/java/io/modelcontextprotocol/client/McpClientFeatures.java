@@ -59,6 +59,7 @@ class McpClientFeatures {
 	 * @param resourcesChangeConsumers the resources change consumers.
 	 * @param promptsChangeConsumers the prompts change consumers.
 	 * @param loggingConsumers the logging consumers.
+	 * @param progressConsumers the progress consumers.
 	 * @param samplingHandler the sampling handler.
 	 * @param elicitationHandler the elicitation handler.
 	 */
@@ -68,6 +69,7 @@ class McpClientFeatures {
 			List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers,
 			List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers,
 			List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers,
+			List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers,
 			Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler,
 			Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler) {
 
@@ -79,6 +81,7 @@ class McpClientFeatures {
 		 * @param resourcesChangeConsumers the resources change consumers.
 		 * @param promptsChangeConsumers the prompts change consumers.
 		 * @param loggingConsumers the logging consumers.
+		 * @param progressConsumers the progressconsumers.
 		 * @param samplingHandler the sampling handler.
 		 * @param elicitationHandler the elicitation handler.
 		 */
@@ -89,6 +92,7 @@ class McpClientFeatures {
 				List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers,
 				List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers,
 				List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers,
+				List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers,
 				Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler,
 				Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler) {
 
@@ -106,6 +110,7 @@ class McpClientFeatures {
 			this.resourcesUpdateConsumers = resourcesUpdateConsumers != null ? resourcesUpdateConsumers : List.of();
 			this.promptsChangeConsumers = promptsChangeConsumers != null ? promptsChangeConsumers : List.of();
 			this.loggingConsumers = loggingConsumers != null ? loggingConsumers : List.of();
+			this.progressConsumers = progressConsumers != null ? progressConsumers : List.of();
 			this.samplingHandler = samplingHandler;
 			this.elicitationHandler = elicitationHandler;
 		}
@@ -149,6 +154,12 @@ class McpClientFeatures {
 					.subscribeOn(Schedulers.boundedElastic()));
 			}
 
+			List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers = new ArrayList<>();
+			for (Consumer<McpSchema.ProgressNotification> consumer : syncSpec.progressConsumers()) {
+				progressConsumers.add(p -> Mono.<Void>fromRunnable(() -> consumer.accept(p))
+					.subscribeOn(Schedulers.boundedElastic()));
+			}
+
 			Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler = r -> Mono
 				.fromCallable(() -> syncSpec.samplingHandler().apply(r))
 				.subscribeOn(Schedulers.boundedElastic());
@@ -159,7 +170,7 @@ class McpClientFeatures {
 
 			return new Async(syncSpec.clientInfo(), syncSpec.clientCapabilities(), syncSpec.roots(),
 					toolsChangeConsumers, resourcesChangeConsumers, resourcesUpdateConsumers, promptsChangeConsumers,
-					loggingConsumers, samplingHandler, elicitationHandler);
+					loggingConsumers, progressConsumers, samplingHandler, elicitationHandler);
 		}
 	}
 
@@ -174,6 +185,7 @@ class McpClientFeatures {
 	 * @param resourcesChangeConsumers the resources change consumers.
 	 * @param promptsChangeConsumers the prompts change consumers.
 	 * @param loggingConsumers the logging consumers.
+	 * @param progressConsumers the progress consumers.
 	 * @param samplingHandler the sampling handler.
 	 * @param elicitationHandler the elicitation handler.
 	 */
@@ -183,6 +195,7 @@ class McpClientFeatures {
 			List<Consumer<List<McpSchema.ResourceContents>>> resourcesUpdateConsumers,
 			List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers,
 			List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers,
+			List<Consumer<McpSchema.ProgressNotification>> progressConsumers,
 			Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler,
 			Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler) {
 
@@ -196,6 +209,7 @@ class McpClientFeatures {
 		 * @param resourcesUpdateConsumers the resource update consumers.
 		 * @param promptsChangeConsumers the prompts change consumers.
 		 * @param loggingConsumers the logging consumers.
+		 * @param progressConsumers the progress consumers.
 		 * @param samplingHandler the sampling handler.
 		 * @param elicitationHandler the elicitation handler.
 		 */
@@ -205,6 +219,7 @@ class McpClientFeatures {
 				List<Consumer<List<McpSchema.ResourceContents>>> resourcesUpdateConsumers,
 				List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers,
 				List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers,
+				List<Consumer<McpSchema.ProgressNotification>> progressConsumers,
 				Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler,
 				Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler) {
 
@@ -222,6 +237,7 @@ class McpClientFeatures {
 			this.resourcesUpdateConsumers = resourcesUpdateConsumers != null ? resourcesUpdateConsumers : List.of();
 			this.promptsChangeConsumers = promptsChangeConsumers != null ? promptsChangeConsumers : List.of();
 			this.loggingConsumers = loggingConsumers != null ? loggingConsumers : List.of();
+			this.progressConsumers = progressConsumers != null ? progressConsumers : List.of();
 			this.samplingHandler = samplingHandler;
 			this.elicitationHandler = elicitationHandler;
 		}

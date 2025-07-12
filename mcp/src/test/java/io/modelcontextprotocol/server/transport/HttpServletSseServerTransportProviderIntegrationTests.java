@@ -1070,4 +1070,75 @@ class HttpServletSseServerTransportProviderIntegrationTests {
 		mcpServer.close();
 	}
 
+	// ---------------------------------------
+	// Progress Tests
+	// ---------------------------------------
+	@Test
+	void testProgressNotification() {
+		// Create a list to store received logging notifications
+		List<McpSchema.ProgressNotification> receivedNotifications = new ArrayList<>();
+
+		// Create server with a tool that sends logging notifications
+
+		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("progress-test", "Test progress notifications", emptyJsonSchema), null,
+				(exchange, request) -> {
+					var progressToken = (String) request.meta().get("progressToken");
+
+					exchange
+						.progressNotification(
+								new McpSchema.ProgressNotification(progressToken, 0.1, 1.0, "Test progress 1/10"))
+						.block();
+
+					exchange
+						.progressNotification(
+								new McpSchema.ProgressNotification(progressToken, 0.5, 1.0, "Test progress 5/10"))
+						.block();
+
+					exchange
+						.progressNotification(
+								new McpSchema.ProgressNotification(progressToken, 1.0, 1.0, "Test progress 10/10"))
+						.block();
+
+					return Mono.just(new CallToolResult("Progress test completed", false));
+				});
+
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().logging().tools(true).build())
+			.tools(tool)
+			.build();
+		try (
+				// Create client with progress notification handler
+				var mcpClient = clientBuilder.progressConsumer(receivedNotifications::add).build()) {
+
+			// Initialize client
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Call the tool that sends progress notifications
+			CallToolResult result = mcpClient.callTool(
+					new McpSchema.CallToolRequest("progress-test", Map.of(), Map.of("progressToken", "test-token")));
+			assertThat(result).isNotNull();
+			assertThat(result.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
+			assertThat(((McpSchema.TextContent) result.content().get(0)).text()).isEqualTo("Progress test completed");
+
+			// Wait for notifications to be processed
+			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+
+				System.out.println("Received notifications: " + receivedNotifications);
+
+				// Should have received 3 notifications
+				assertThat(receivedNotifications).hasSize(3);
+
+				// Check the progress notifications
+				assertThat(receivedNotifications.stream().map(McpSchema.ProgressNotification::progressToken))
+					.containsExactlyInAnyOrder("test-token", "test-token", "test-token");
+				assertThat(receivedNotifications.stream().map(McpSchema.ProgressNotification::progress))
+					.containsExactlyInAnyOrder(0.1, 0.5, 1.0);
+			});
+		}
+		mcpServer.close();
+	}
+
 }
