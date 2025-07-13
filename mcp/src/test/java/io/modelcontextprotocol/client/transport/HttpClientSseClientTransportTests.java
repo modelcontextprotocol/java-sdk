@@ -106,6 +106,16 @@ class HttpClientSseClientTransportTests {
 	}
 
 	@Test
+	void testErrorOnBogusMessage() {
+		// bogus message
+		JSONRPCRequest bogusMessage = new JSONRPCRequest(null, null, "test-id", Map.of("key", "value"));
+
+		StepVerifier.create(transport.sendMessage(bogusMessage))
+			.verifyErrorMessage(
+					"Sending message failed with a non-OK HTTP code: 400 - Invalid message: {\"id\":\"test-id\",\"params\":{\"key\":\"value\"}}");
+	}
+
+	@Test
 	void testMessageProcessing() {
 		// Create a test message
 		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",

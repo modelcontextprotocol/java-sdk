@@ -424,8 +424,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 				.flatMap(body -> sendHttpPost(messageEndpointUri, body).handle((response, sink) -> {
 					if (response.statusCode() != 200 && response.statusCode() != 201 && response.statusCode() != 202
 							&& response.statusCode() != 206) {
-						sink.error(new RuntimeException(
-								"Sending message failed with a non-OK HTTP code: " + response.statusCode()));
+						sink.error(new RuntimeException("Sending message failed with a non-OK HTTP code: "
+								+ response.statusCode() + " - " + response.body()));
 					}
 					else {
 						sink.next(response);
@@ -453,7 +453,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		});
 	}
 
-	private Mono<HttpResponse<Void>> sendHttpPost(final String endpoint, final String body) {
+	private Mono<HttpResponse<String>> sendHttpPost(final String endpoint, final String body) {
 		final URI requestUri = Utils.resolveUri(baseUri, endpoint);
 		final HttpRequest request = this.requestBuilder.copy()
 			.uri(requestUri)
@@ -461,7 +461,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			.build();
 
 		// TODO: why discard the body?
-		return Mono.fromFuture(httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding()));
+		return Mono.fromFuture(httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()));
 	}
 
 	/**
