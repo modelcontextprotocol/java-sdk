@@ -33,11 +33,27 @@ public class McpServerSession implements McpSession {
 
 	private final ConcurrentHashMap<McpId, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
 
+	/**
+	 * Map of all registered session transport instances, keyed by the ID of the request
+	 * which invoked their instantiation
+	 */
 	private final ConcurrentHashMap<String, McpServerTransport> transports = new ConcurrentHashMap<>();
 
+	/** Generic SSE transport established by GET calls for listening to the server */
 	private McpServerTransport listeningTransport;
 
 	public static final String LISTENING_TRANSPORT = "listeningTransport";
+
+	private final AtomicLong eventCounter = new AtomicLong(0);
+
+	/** Maps a given event ID to the transport ID that it was sent over */
+	private final Map<String, String> eventTransports = new ConcurrentHashMap<>();
+
+	/**
+	 * Maps SSE transport IDs to a Map containing all events sent over them keyed by event
+	 * ID, added upon the transport's termination
+	 */
+	private final Map<String, Map<String, SseEvent>> transportEventHistories = new ConcurrentHashMap<>();
 
 	private final String id;
 
@@ -66,13 +82,18 @@ public class McpServerSession implements McpSession {
 
 	private final AtomicInteger state = new AtomicInteger(STATE_UNINITIALIZED);
 
-	private final AtomicLong eventCounter = new AtomicLong(0);
-
-	private final Map<String, String> eventTransports = new ConcurrentHashMap<>();
-
-	private final Map<String, Map<String, SseEvent>> transportEventHistories = new ConcurrentHashMap<>();
-
 	private volatile McpSchema.LoggingLevel minLoggingLevel = McpSchema.LoggingLevel.INFO;
+
+	// TODO: Remove this if we split SHTTP Server Session into its own class.
+	private AtomicBoolean isStreamableHttp = new AtomicBoolean(false);
+
+	public void setIsStreamableHttp(boolean b) {
+		isStreamableHttp.set(b);
+	}
+
+	public boolean isStreamableHttp() {
+		return isStreamableHttp.get();
+	}
 
 	/**
 	 * Creates a new server session with the given parameters and the transport to use.

@@ -29,6 +29,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportSession;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.spec.McpTransportStream;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCNotification;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
@@ -117,10 +118,6 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	public Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
 		return Mono.deferContextual(ctx -> {
 			this.handler.set(handler);
-			if (openConnectionOnStartup) {
-				logger.debug("Eagerly opening connection on startup");
-				return this.reconnect(null).then();
-			}
 			return Mono.empty();
 		});
 	}
@@ -250,11 +247,13 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 				})
 				.bodyValue(message)
 				.exchangeToFlux(response -> {
-					if (transportSession
-						.markInitialized(response.headers().asHttpHeaders().getFirst("mcp-session-id"))) {
-						// Once we have a session, we try to open an async stream for
-						// the server to send notifications and requests out-of-band.
-						reconnect(null).contextWrite(sink.contextView()).subscribe();
+					transportSession.markInitialized(response.headers().asHttpHeaders().getFirst("mcp-session-id"));
+					if (response.statusCode().is2xxSuccessful()
+							&& message instanceof JSONRPCNotification notification) {
+						if (notification.method().equals("notifications/initialized")) {
+							// Establish SSE stream after session is initialized
+							reconnect(null).contextWrite(sink.contextView()).subscribe();
+						}
 					}
 
 					String sessionRepresentation = sessionIdOrPlaceholder(transportSession);

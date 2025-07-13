@@ -8,11 +8,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+
+import io.modelcontextprotocol.server.transport.StreamableHttpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpServerSession;
+import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
 
@@ -80,6 +83,28 @@ public class McpAsyncServerExchange {
 	}
 
 	/**
+	 * If the exchange's session is using StreamableHttp: Upgrades the transport
+	 * referenced by this exchange's transportId to an SSE stream if it isn't already one.
+	 */
+	private void establishSseStream() {
+		final McpServerTransport currentTransport = session.getTransport(transportId);
+		if (session.isStreamableHttp()
+				&& currentTransport instanceof StreamableHttpServerTransportProvider.HttpTransport transport) {
+			session.registerTransport(transportId,
+					new StreamableHttpServerTransportProvider.SseTransport(transport.getObjectMapper(),
+							transport.getResponse(), transport.getAsyncContext(), null, transportId, session.getId()));
+		}
+	}
+
+	/**
+	 * This is for tool writers to use if they want to send their tool response over an
+	 * SSE stream without using any other McpAsyncServerExchange methods
+	 */
+	public void upgradeTransport() {
+		establishSseStream();
+	}
+
+	/**
 	 * Create a new message using the sampling capabilities of the client. The Model
 	 * Context Protocol (MCP) provides a standardized way for servers to request LLM
 	 * sampling (“completions” or “generations”) from language models via clients. This
@@ -96,6 +121,9 @@ public class McpAsyncServerExchange {
 	 * Specification</a>
 	 */
 	public Mono<McpSchema.CreateMessageResult> createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
+
+		establishSseStream();
+
 		if (this.clientCapabilities == null) {
 			return Mono.error(new McpError("Client must be initialized. Call the initialize method first!"));
 		}
@@ -121,6 +149,9 @@ public class McpAsyncServerExchange {
 	 * Specification</a>
 	 */
 	public Mono<McpSchema.ElicitResult> createElicitation(McpSchema.ElicitRequest elicitRequest) {
+
+		establishSseStream();
+
 		if (this.clientCapabilities == null) {
 			return Mono.error(new McpError("Client must be initialized. Call the initialize method first!"));
 		}
@@ -157,6 +188,9 @@ public class McpAsyncServerExchange {
 	 * @return A Mono that emits the list of roots result containing
 	 */
 	public Mono<McpSchema.ListRootsResult> listRoots(String cursor) {
+
+		establishSseStream();
+
 		return this.session.sendRequest(McpSchema.METHOD_ROOTS_LIST, new McpSchema.PaginatedRequest(cursor),
 				LIST_ROOTS_RESULT_TYPE_REF, transportId);
 	}
@@ -168,6 +202,8 @@ public class McpAsyncServerExchange {
 	 * @return A Mono that completes when the notification has been sent
 	 */
 	public Mono<Void> loggingNotification(LoggingMessageNotification loggingMessageNotification) {
+
+		establishSseStream();
 
 		if (loggingMessageNotification == null) {
 			return Mono.error(new McpError("Logging message must not be null"));
@@ -187,6 +223,9 @@ public class McpAsyncServerExchange {
 	 * @return A Mono that completes with clients's ping response
 	 */
 	public Mono<Object> ping() {
+
+		establishSseStream();
+
 		return this.session.sendRequest(McpSchema.METHOD_PING, null, OBJECT_TYPE_REF, transportId);
 	}
 

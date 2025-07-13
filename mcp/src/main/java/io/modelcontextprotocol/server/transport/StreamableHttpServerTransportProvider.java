@@ -58,11 +58,10 @@ import static java.util.Objects.requireNonNullElse;
  * Key improvements over the original implementation:
  * <ul>
  * <li>Manages server-client sessions, including transport registration.
- * <li>Handles HTTP requests and HTTP/SSE responses and streams.
+ * <li>Handles HTTP requests, providing direct-HTTP or SSE-streamed responses.
  * <li>Provides callbacks for session lifecycle and errors.
- * <li>Supports graceful shutdown.
  * <li>Enforces allowed 'Origin' header values if configured.
- * <li>Provides a default session ID provider if none is configured.
+ * <li>Provides a default constructor and default values for all constructor parameters.
  * </ul>
  *
  * @author Zachary German
@@ -195,6 +194,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 		logger.debug("Attempting to broadcast message to {} active sessions", sessions.size());
 
 		return Flux.fromIterable(sessions.values())
+			.filter(session -> session.getState() == session.STATE_INITIALIZED)
 			.flatMap(session -> session.sendNotification(method, params).doOnError(e -> {
 				logger.error("Failed to send message to session {}: {}", session.getId(), e.getMessage());
 				if (sessionHandler != null) {
@@ -241,6 +241,9 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 			sendErrorResponse(response, "Session ID missing in request header");
 			return;
 		}
+		else {
+			response.setHeader(SESSION_ID_HEADER, sessionId);
+		}
 
 		McpServerSession session = sessions.get(sessionId);
 		if (session == null) {
@@ -255,13 +258,6 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 		 * sendErrorResponse(response, "Protocol version missing in request header"); }
 		 */
 
-		// Set up SSE connection
-		response.setContentType(TEXT_EVENT_STREAM);
-		response.setCharacterEncoding(UTF_8);
-		response.setHeader(CACHE_CONTROL_HEADER, CACHE_CONTROL_NO_CACHE);
-		response.setHeader(CONNECTION_HEADER, CONNECTION_KEEP_ALIVE);
-		response.setHeader(SESSION_ID_HEADER, sessionId);
-
 		AsyncContext asyncContext = request.startAsync();
 		asyncContext.setTimeout(0);
 
@@ -270,13 +266,11 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 		if (lastEventId == null) { // Just opening a listening stream
 			SseTransport sseTransport = new SseTransport(objectMapper, response, asyncContext, lastEventId,
 					session.LISTENING_TRANSPORT, sessionId);
-			session.registerTransport(session.LISTENING_TRANSPORT, sseTransport);
 			logger.debug("Registered SSE transport {} for session {}", session.LISTENING_TRANSPORT, sessionId);
 		}
 		else { // Asking for a stream to replay events from a previous request
 			SseTransport sseTransport = new SseTransport(objectMapper, response, asyncContext, lastEventId,
 					request.getRequestId(), sessionId);
-			session.registerTransport(request.getRequestId(), sseTransport);
 			logger.debug("Registered SSE transport {} for session {}", request.getRequestId(), sessionId);
 		}
 	}
@@ -362,8 +356,6 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 
 					response.setHeader(SESSION_ID_HEADER, sessionId);
 
-					// Determine response type and create appropriate transport if needed
-					ResponseType responseType = detectResponseType(message, session);
 					final String transportId;
 					if (message instanceof JSONRPCRequest req) {
 						transportId = req.id().toString();
@@ -375,44 +367,21 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 						transportId = null;
 					}
 
-					if (responseType == ResponseType.STREAM) {
-						logger.debug("Handling STREAM response type");
-						response.setContentType(TEXT_EVENT_STREAM);
-						response.setCharacterEncoding(UTF_8);
-						response.setHeader(CACHE_CONTROL_HEADER, CACHE_CONTROL_NO_CACHE);
-						response.setHeader(CONNECTION_HEADER, CONNECTION_KEEP_ALIVE);
-
-						SseTransport sseTransport = new SseTransport(objectMapper, response, asyncContext, null,
-								transportId, sessionId);
-						session.registerTransport(transportId, sseTransport);
-					}
-					else {
-						logger.debug("Handling IMMEDIATE response type");
-						// Only set content type for requests, not notifications
-						if (message instanceof McpSchema.JSONRPCRequest) {
-							logger.debug("Setting content type to APPLICATION_JSON for request response");
-							response.setContentType(APPLICATION_JSON);
-						}
-						else {
-							logger.debug("Not setting content type for notification (empty response expected)");
-						}
-
-						if (transportId != null) { // Not needed for notifications (null
-													// transportId)
-							HttpTransport httpTransport = new HttpTransport(objectMapper, response, asyncContext);
-							session.registerTransport(transportId, httpTransport);
-						}
+					// Only set content type for requests
+					if (message instanceof McpSchema.JSONRPCRequest) {
+						response.setContentType(APPLICATION_JSON);
 					}
 
-					// Handle the message
-					logger.debug("About to handle message: {} with transport: {}", message.getClass().getSimpleName(),
-							transportId);
+					if (transportId != null) { // Not needed for notifications (null
+												// transportId)
+						HttpTransport httpTransport = new HttpTransport(objectMapper, response, asyncContext);
+						session.registerTransport(transportId, httpTransport);
+					}
 
 					// For notifications, we need to handle the HTTP response manually
 					// since no JSON response is sent
 					if (message instanceof McpSchema.JSONRPCNotification) {
 						session.handle(message).doOnSuccess(v -> {
-							logger.debug("Message handling completed successfully for transport: {}", transportId);
 							logger.debug("[NOTIFICATION] Sending empty HTTP response for notification");
 							try {
 								if (!response.isCommitted()) {
@@ -428,9 +397,6 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 						}).doOnError(e -> {
 							logger.error("Error in message handling: {}", e.getMessage(), e);
 							asyncContext.complete();
-						}).doFinally(signalType -> {
-							logger.debug("Unregistering transport: {} with signal: {}", transportId, signalType);
-							session.unregisterTransport(transportId);
 						}).contextWrite(Context.of(MCP_SESSION_ID, sessionId)).subscribe();
 					}
 					else {
@@ -487,6 +453,9 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 			sendErrorResponse(response, "Session ID missing in request header");
 			return;
 		}
+		else {
+			response.setHeader(SESSION_ID_HEADER, sessionId);
+		}
 
 		McpServerSession session = sessions.remove(sessionId);
 		if (session == null) {
@@ -495,7 +464,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 		}
 
 		session.closeGracefully().contextWrite(Context.of(MCP_SESSION_ID, sessionId)).subscribe();
-		logger.debug("Session closed: {}", sessionId);
+		logger.debug("Session closed via DELETE request: {}", sessionId);
 		if (sessionHandler != null) {
 			sessionHandler.onSessionClose(sessionId);
 		}
@@ -545,6 +514,8 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 		if (session == null && createIfMissing) {
 			logger.debug("Creating new session: {}", sessionId);
 			session = streamableHttpSessionFactory.create(sessionId);
+			session.setIsStreamableHttp(true); // TODO: Remove this if we split SHTTP server
+										// session to its own class.
 			sessions.put(sessionId, session);
 			logger.debug("Created new session: {}", sessionId);
 			if (sessionHandler != null) {
@@ -552,24 +523,6 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 			}
 		}
 		return session;
-	}
-
-	private ResponseType detectResponseType(McpSchema.JSONRPCMessage message, McpServerSession session) {
-		if (message instanceof McpSchema.JSONRPCRequest request) {
-			if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
-				return ResponseType.IMMEDIATE;
-			}
-
-			// Check if handler returns Flux (streaming) or Mono (immediate)
-			var handler = session.getRequestHandler(request.method());
-			if (handler != null && handler instanceof McpServerSession.StreamingRequestHandler) {
-				return ResponseType.STREAM;
-			}
-			return ResponseType.IMMEDIATE;
-		}
-		else {
-			return ResponseType.IMMEDIATE;
-		}
 	}
 
 	private void handleSessionNotFound(String sessionId, HttpServletRequest request, HttpServletResponse response)
@@ -657,7 +610,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 	/**
 	 * SSE transport implementation.
 	 */
-	private static class SseTransport implements McpServerTransport {
+	public static class SseTransport implements McpServerTransport {
 
 		private static final Logger logger = LoggerFactory.getLogger(SseTransport.class);
 
@@ -683,7 +636,16 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 			this.id = transportId;
 			this.sessionId = sessionId;
 
+			response.setContentType(TEXT_EVENT_STREAM);
+			response.setCharacterEncoding(UTF_8);
+			response.setHeader(CACHE_CONTROL_HEADER, CACHE_CONTROL_NO_CACHE);
+			response.setHeader(CONNECTION_HEADER, CONNECTION_KEEP_ALIVE);
+
+			logger.debug("Establishing SSE stream with ID: {} for session: {}", transportId, sessionId);
 			setupSseStream(lastEventId);
+
+			logger.debug("Registering SSE transport with ID: {} for session: {}", transportId, sessionId);
+			sessions.get(sessionId).registerTransport(transportId, this);
 		}
 
 		private void setupSseStream(String lastEventId) {
@@ -774,7 +736,10 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 				if (message instanceof McpSchema.JSONRPCResponse) {
 					logger.debug("Completing SSE stream after sending response");
 					eventSink.tryEmitComplete();
-					sessions.get(sessionId).setTransportEventHistory(id, eventHistory);
+					McpServerSession session = sessions.get(sessionId);
+					if (session != null) {
+						session.setTransportEventHistory(id, eventHistory);
+					}
 				}
 
 				return Mono.empty();
@@ -806,7 +771,10 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 			}).doOnComplete(() -> {
 				logger.debug("Completing SSE stream after sending all stream messages");
 				eventSink.tryEmitComplete();
-				sessions.get(sessionId).setTransportEventHistory(id, eventHistory);
+				McpServerSession session = sessions.get(sessionId);
+				if (session != null) {
+					session.setTransportEventHistory(id, eventHistory);
+				}
 			}).then();
 		}
 
@@ -819,7 +787,10 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 		public Mono<Void> closeGracefully() {
 			return Mono.fromRunnable(() -> {
 				eventSink.tryEmitComplete();
-				sessions.get(sessionId).setTransportEventHistory(id, eventHistory);
+				McpServerSession session = sessions.get(sessionId);
+				if (session != null) {
+					session.setTransportEventHistory(id, eventHistory);
+				}
 				logger.debug("SSE transport closed gracefully");
 			});
 		}
@@ -829,7 +800,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 	/**
 	 * HTTP transport implementation for immediate responses.
 	 */
-	private static class HttpTransport implements McpServerTransport {
+	public static class HttpTransport implements McpServerTransport {
 
 		private static final Logger logger = LoggerFactory.getLogger(HttpTransport.class);
 
@@ -843,6 +814,18 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 			this.objectMapper = objectMapper;
 			this.response = response;
 			this.asyncContext = asyncContext;
+		}
+
+		public ObjectMapper getObjectMapper() {
+			return this.objectMapper;
+		}
+
+		public HttpServletResponse getResponse() {
+			return this.response;
+		}
+
+		public AsyncContext getAsyncContext() {
+			return this.asyncContext;
 		}
 
 		@Override
