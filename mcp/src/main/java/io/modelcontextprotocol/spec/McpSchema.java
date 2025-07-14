@@ -219,7 +219,7 @@ public final class McpSchema {
 	public record JSONRPCNotification( // @formatter:off
 		@JsonProperty("jsonrpc") String jsonrpc,
 		@JsonProperty("method") String method,
-		@JsonProperty("params") Object params) implements JSONRPCMessage {// @formatter:on
+		@JsonProperty("params") Object params) implements JSONRPCMessage { // @formatter:on
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -230,14 +230,14 @@ public final class McpSchema {
 		@JsonProperty("jsonrpc") String jsonrpc,
 		@JsonProperty("id") Object id,
 		@JsonProperty("result") Object result,
-		@JsonProperty("error") JSONRPCError error) implements JSONRPCMessage {// @formatter:on
+		@JsonProperty("error") JSONRPCError error) implements JSONRPCMessage { // @formatter:on
 
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
-		public record JSONRPCError(// @formatter:off
+		public record JSONRPCError( // @formatter:off
 			@JsonProperty("code") int code,
 			@JsonProperty("message") String message,
-			@JsonProperty("data") Object data) {// @formatter:on
+			@JsonProperty("data") Object data) { // @formatter:on
 		}
 	}
 
@@ -250,7 +250,7 @@ public final class McpSchema {
 		@JsonProperty("protocolVersion") String protocolVersion,
 		@JsonProperty("capabilities") ClientCapabilities capabilities,
 		@JsonProperty("clientInfo") Implementation clientInfo,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Request {// @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
 		public InitializeRequest(String protocolVersion, ClientCapabilities capabilities, Implementation clientInfo) {
 			this(protocolVersion, capabilities, clientInfo, null);
@@ -263,7 +263,7 @@ public final class McpSchema {
 		@JsonProperty("protocolVersion") String protocolVersion,
 		@JsonProperty("capabilities") ServerCapabilities capabilities,
 		@JsonProperty("serverInfo") Implementation serverInfo,
-		@JsonProperty("instructions") String instructions) {// @formatter:on
+		@JsonProperty("instructions") String instructions) { // @formatter:on
 	}
 
 	/**
@@ -288,7 +288,7 @@ public final class McpSchema {
 		@JsonProperty("experimental") Map<String, Object> experimental,
 		@JsonProperty("roots") RootCapabilities roots,
 		@JsonProperty("sampling") Sampling sampling,
-		@JsonProperty("elicitation") Elicitation elicitation) {// @formatter:on
+		@JsonProperty("elicitation") Elicitation elicitation) { // @formatter:on
 
 		/**
 		 * Roots define the boundaries of where servers can operate within the filesystem,
@@ -376,7 +376,7 @@ public final class McpSchema {
 		@JsonProperty("logging") LoggingCapabilities logging,
 		@JsonProperty("prompts") PromptCapabilities prompts,
 		@JsonProperty("resources") ResourceCapabilities resources,
-		@JsonProperty("tools") ToolCapabilities tools) {// @formatter:on
+		@JsonProperty("tools") ToolCapabilities tools) { // @formatter:on
 
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record CompletionCapabilities() {
@@ -465,10 +465,10 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record Implementation(// @formatter:off
+	public record Implementation( // @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("title") String title,
-		@JsonProperty("version") String version) implements BaseMetadata {// @formatter:on			
+		@JsonProperty("version") String version) implements BaseMetadata { // @formatter:on			
 
 		public Implementation(String name, String version) {
 			this(name, null, version);
@@ -476,10 +476,12 @@ public final class McpSchema {
 	}
 
 	// Existing Enums and Base Types (from previous implementation)
-	public enum Role {// @formatter:off
+	public enum Role {
+
+	// @formatter:off
 		@JsonProperty("user") USER,
 		@JsonProperty("assistant") ASSISTANT
-	}// @formatter:on
+	} // @formatter:on
 
 	// ---------------------------
 	// Resource Interfaces
@@ -581,7 +583,7 @@ public final class McpSchema {
 		@JsonProperty("description") String description,
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("size") Long size,
-		@JsonProperty("annotations") Annotations annotations) implements Annotated, ResourceContent {// @formatter:on
+		@JsonProperty("annotations") Annotations annotations) implements Annotated, ResourceContent { // @formatter:on
 
 		/**
 		 * @deprecated Only exists for backwards-compatibility purposes. Use
@@ -692,7 +694,7 @@ public final class McpSchema {
 		@JsonProperty("title") String title,
 		@JsonProperty("description") String description,
 		@JsonProperty("mimeType") String mimeType,
-		@JsonProperty("annotations") Annotations annotations) implements Annotated, BaseMetadata {// @formatter:on
+		@JsonProperty("annotations") Annotations annotations) implements Annotated, BaseMetadata { // @formatter:on
 
 		public ResourceTemplate(String uriTemplate, String name, String description, String mimeType,
 				Annotations annotations) {
@@ -704,7 +706,7 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ListResourcesResult( // @formatter:off
 		@JsonProperty("resources") List<Resource> resources,
-		@JsonProperty("nextCursor") String nextCursor) {// @formatter:on
+		@JsonProperty("nextCursor") String nextCursor) { // @formatter:on
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -718,7 +720,7 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ReadResourceRequest( // @formatter:off
 		@JsonProperty("uri") String uri,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Request {// @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
 		public ReadResourceRequest(String uri) {
 			this(uri, null);
@@ -840,7 +842,7 @@ public final class McpSchema {
 		@JsonProperty("name") String name,
 		@JsonProperty("title") String title,
 		@JsonProperty("description") String description,
-		@JsonProperty("required") Boolean required) implements BaseMetadata {// @formatter:on
+		@JsonProperty("required") Boolean required) implements BaseMetadata { // @formatter:on
 
 		public PromptArgument(String name, String description, Boolean required) {
 			this(name, null, description, required);
@@ -874,7 +876,7 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ListPromptsResult( // @formatter:off
 		@JsonProperty("prompts") List<Prompt> prompts,
-		@JsonProperty("nextCursor") String nextCursor) {// @formatter:on
+		@JsonProperty("nextCursor") String nextCursor) { // @formatter:on
 	}
 
 	/**
@@ -885,7 +887,7 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record GetPromptRequest(// @formatter:off
+	public record GetPromptRequest( // @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("arguments") Map<String, Object> arguments,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
@@ -922,7 +924,7 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ListToolsResult( // @formatter:off
 		@JsonProperty("tools") List<Tool> tools,
-		@JsonProperty("nextCursor") String nextCursor) {// @formatter:on
+		@JsonProperty("nextCursor") String nextCursor) { // @formatter:on
 	}
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -981,7 +983,7 @@ public final class McpSchema {
 		@JsonProperty("description") String description,
 		@JsonProperty("inputSchema") JsonSchema inputSchema,
 		@JsonProperty("outputSchema") Map<String, Object> outputSchema,
-		@JsonProperty("annotations") ToolAnnotations annotations) {// @formatter:on
+		@JsonProperty("annotations") ToolAnnotations annotations) { // @formatter:on
 
 		/**
 		 * @deprecated Only exists for backwards-compatibility purposes. Use
@@ -1114,10 +1116,10 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record CallToolRequest(// @formatter:off
+	public record CallToolRequest( // @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("arguments") Map<String, Object> arguments,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Request {// @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
 		public CallToolRequest(String name, String jsonArguments) {
 			this(name, parseJsonArguments(jsonArguments), null);
@@ -1199,7 +1201,7 @@ public final class McpSchema {
 	public record CallToolResult( // @formatter:off
 		@JsonProperty("content") List<Content> content,
 		@JsonProperty("isError") Boolean isError,
-		@JsonProperty("structuredContent") Map<String, Object> structuredContent) {// @formatter:on
+		@JsonProperty("structuredContent") Map<String, Object> structuredContent) { // @formatter:on
 
 		// backwards compatibility constructor
 		public CallToolResult(List<Content> content, Boolean isError) {
@@ -1329,7 +1331,7 @@ public final class McpSchema {
 	// ---------------------------
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record ModelPreferences(// @formatter:off
+	public record ModelPreferences( // @formatter:off
 		@JsonProperty("hints") List<ModelHint> hints,
 		@JsonProperty("costPriority") Double costPriority,
 		@JsonProperty("speedPriority") Double speedPriority,
@@ -1394,7 +1396,7 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record SamplingMessage(// @formatter:off
+	public record SamplingMessage( // @formatter:off
 		@JsonProperty("role") Role role,
 		@JsonProperty("content") Content content) { // @formatter:on
 	}
@@ -1402,7 +1404,7 @@ public final class McpSchema {
 	// Sampling and Message Creation
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record CreateMessageRequest(// @formatter:off
+	public record CreateMessageRequest( // @formatter:off
 		@JsonProperty("messages") List<SamplingMessage> messages,
 		@JsonProperty("modelPreferences") ModelPreferences modelPreferences,
 		@JsonProperty("systemPrompt") String systemPrompt,
@@ -1411,7 +1413,7 @@ public final class McpSchema {
 		@JsonProperty("maxTokens") int maxTokens,
 		@JsonProperty("stopSequences") List<String> stopSequences,
 		@JsonProperty("metadata") Map<String, Object> metadata,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Request {// @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
 		// backwards compatibility constructor
 		public CreateMessageRequest(List<SamplingMessage> messages, ModelPreferences modelPreferences,
@@ -1517,7 +1519,7 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record CreateMessageResult(// @formatter:off
+	public record CreateMessageResult( // @formatter:off
 		@JsonProperty("role") Role role,
 		@JsonProperty("content") Content content,
 		@JsonProperty("model") String model,
@@ -1525,12 +1527,12 @@ public final class McpSchema {
 
 		public enum StopReason {
 
-		// @formatter:off
-						@JsonProperty("endTurn") END_TURN("endTurn"),
-						@JsonProperty("stopSequence") STOP_SEQUENCE("stopSequence"),
-						@JsonProperty("maxTokens") MAX_TOKENS("maxTokens"),
-						@JsonProperty("unknown") UNKNOWN("unknown");
-						// @formatter:on
+			// @formatter:off
+			@JsonProperty("endTurn") END_TURN("endTurn"),
+			@JsonProperty("stopSequence") STOP_SEQUENCE("stopSequence"),
+			@JsonProperty("maxTokens") MAX_TOKENS("maxTokens"),
+			@JsonProperty("unknown") UNKNOWN("unknown");
+			// @formatter:on
 
 			private final String value;
 
@@ -1603,10 +1605,10 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record ElicitRequest(// @formatter:off
+	public record ElicitRequest( // @formatter:off
 		@JsonProperty("message") String message,
 		@JsonProperty("requestedSchema") Map<String, Object> requestedSchema,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Request {// @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
 		// backwards compatibility constructor
 		public ElicitRequest(String message, Map<String, Object> requestedSchema) {
@@ -1657,11 +1659,13 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record ElicitResult(// @formatter:off
+	public record ElicitResult( // @formatter:off
 		@JsonProperty("action") Action action,
-		@JsonProperty("content") Map<String, Object> content) {// @formatter:on
+		@JsonProperty("content") Map<String, Object> content) { // @formatter:on
 
-		public enum Action {// @formatter:off
+		public enum Action {
+
+		// @formatter:off
 			@JsonProperty("accept") ACCEPT,
 			@JsonProperty("decline") DECLINE,
 			@JsonProperty("cancel") CANCEL
@@ -1699,7 +1703,7 @@ public final class McpSchema {
 	// ---------------------------
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record PaginatedRequest(// @formatter:off
+	public record PaginatedRequest( // @formatter:off
 		@JsonProperty("cursor") String cursor,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
@@ -1736,11 +1740,11 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record ProgressNotification(// @formatter:off
+	public record ProgressNotification( // @formatter:off
 		@JsonProperty("progressToken") String progressToken,
 		@JsonProperty("progress") Double progress,
 		@JsonProperty("total") Double total,
-		@JsonProperty("message") String message) {// @formatter:on
+		@JsonProperty("message") String message) { // @formatter:on
 	}
 
 	/**
@@ -1764,10 +1768,10 @@ public final class McpSchema {
 	 * @param data JSON-serializable logging data.
 	 */
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record LoggingMessageNotification(// @formatter:off
+	public record LoggingMessageNotification( // @formatter:off
 		@JsonProperty("level") LoggingLevel level,
 		@JsonProperty("logger") String logger,
-		@JsonProperty("data") String data) {// @formatter:on
+		@JsonProperty("data") String data) { // @formatter:on
 
 		public static Builder builder() {
 			return new Builder();
@@ -1803,7 +1807,9 @@ public final class McpSchema {
 		}
 	}
 
-	public enum LoggingLevel {// @formatter:off
+	public enum LoggingLevel {
+
+	// @formatter:off
 		@JsonProperty("debug") DEBUG(0),
 		@JsonProperty("info") INFO(1),
 		@JsonProperty("notice") NOTICE(2),
@@ -1844,7 +1850,7 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record PromptReference(// @formatter:off
+	public record PromptReference( // @formatter:off
 		@JsonProperty("type") String type,
 		@JsonProperty("name") String name,
 		@JsonProperty("title") String title ) implements McpSchema.CompleteReference, BaseMetadata { // @formatter:on
@@ -1865,9 +1871,9 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record ResourceReference(// @formatter:off
+	public record ResourceReference( // @formatter:off
 		@JsonProperty("type") String type,
-		@JsonProperty("uri") String uri) implements McpSchema.CompleteReference {// @formatter:on
+		@JsonProperty("uri") String uri) implements McpSchema.CompleteReference { // @formatter:on
 
 		public ResourceReference(String uri) {
 			this("ref/resource", uri);
@@ -1881,11 +1887,11 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record CompleteRequest(// @formatter:off
+	public record CompleteRequest( // @formatter:off
 		@JsonProperty("ref") McpSchema.CompleteReference ref,
 		@JsonProperty("argument") CompleteArgument argument,
 		@JsonProperty("_meta") Map<String, Object> meta,
-		@JsonProperty("context") CompleteContext context) implements Request {// @formatter:on
+		@JsonProperty("context") CompleteContext context) implements Request { // @formatter:on
 
 		public CompleteRequest(McpSchema.CompleteReference ref, CompleteArgument argument, Map<String, Object> meta) {
 			this(ref, argument, meta, null);
@@ -1913,7 +1919,7 @@ public final class McpSchema {
 		public record CompleteCompletion( // @formatter:off
 				@JsonProperty("values") List<String> values,
 				@JsonProperty("total") Integer total,
-				@JsonProperty("hasMore") Boolean hasMore) {// @formatter:on
+				@JsonProperty("hasMore") Boolean hasMore) { // @formatter:on
 		}
 	}
 
