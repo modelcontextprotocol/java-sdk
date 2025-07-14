@@ -799,10 +799,10 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record BlobResourceContents( // @formatter:off
-				@JsonProperty("uri") String uri,
-				@JsonProperty("mimeType") String mimeType,
-				@JsonProperty("blob") String blob) implements ResourceContents {
-		} // @formatter:on
+		@JsonProperty("uri") String uri,
+		@JsonProperty("mimeType") String mimeType,
+		@JsonProperty("blob") String blob) implements ResourceContents { // @formatter:on
+	}
 
 	// ---------------------------
 	// Prompt Interfaces
@@ -1425,12 +1425,11 @@ public final class McpSchema {
 
 		public enum ContextInclusionStrategy {
 
-			@JsonProperty("none")
-			NONE, @JsonProperty("thisServer")
-			THIS_SERVER, @JsonProperty("allServers")
-			ALL_SERVERS
-
-		}
+		// @formatter:off
+			@JsonProperty("none") NONE,
+			@JsonProperty("thisServer") THIS_SERVER,
+			@JsonProperty("allServers")ALL_SERVERS
+		} // @formatter:on
 
 		public static Builder builder() {
 			return new Builder();
@@ -1527,7 +1526,7 @@ public final class McpSchema {
 
 		public enum StopReason {
 
-			// @formatter:off
+		// @formatter:off
 			@JsonProperty("endTurn") END_TURN("endTurn"),
 			@JsonProperty("stopSequence") STOP_SEQUENCE("stopSequence"),
 			@JsonProperty("maxTokens") MAX_TOKENS("maxTokens"),
