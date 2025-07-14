@@ -29,7 +29,7 @@ import reactor.core.publisher.Mono;
  *
  * @author Dariusz Jędrzejczyk
  */
-public interface McpServerTransportProvider {
+public interface McpServerTransportProvider extends AutoCloseable {
 
 	/**
 	 * Sets the session factory that will be used to create sessions for new clients. An
@@ -52,6 +52,7 @@ public interface McpServerTransportProvider {
 	 * Immediately closes all the transports with connected clients and releases any
 	 * associated resources.
 	 */
+	@Override
 	default void close() {
 		this.closeGracefully().subscribe();
 	}

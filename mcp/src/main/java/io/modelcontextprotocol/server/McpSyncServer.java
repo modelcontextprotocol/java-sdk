@@ -48,7 +48,7 @@ import io.modelcontextprotocol.util.Assert;
  * @see McpAsyncServer
  * @see McpSchema
  */
-public class McpSyncServer {
+public class McpSyncServer implements AutoCloseable {
 
 	/**
 	 * The async server to wrap.
@@ -203,6 +203,7 @@ public class McpSyncServer {
 	/**
 	 * Close the server immediately.
 	 */
+	@Override
 	public void close() {
 		this.asyncServer.close();
 	}

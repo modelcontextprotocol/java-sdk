@@ -14,7 +14,7 @@ import java.util.Optional;
  * manages.
  * @author Dariusz Jędrzejczyk
  */
-public interface McpTransportSession<CONNECTION> {
+public interface McpTransportSession<CONNECTION> extends AutoCloseable {
 
 	/**
 	 * In case of stateful MCP servers, the value is present and contains the String
@@ -49,6 +49,7 @@ public interface McpTransportSession<CONNECTION> {
 	/**
 	 * Close and clear the monitored resources. Potentially asynchronous.
 	 */
+	@Override
 	void close();
 
 	/**

@@ -21,7 +21,7 @@ import reactor.core.publisher.Mono;
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
  */
-public interface McpSession {
+public interface McpSession extends AutoCloseable {
 
 	/**
 	 * Sends a request to the model counterparty and expects a response of type T.
@@ -75,6 +75,7 @@ public interface McpSession {
 	/**
 	 * Closes the session and releases any associated resources.
 	 */
+	@Override
 	void close();
 
 }

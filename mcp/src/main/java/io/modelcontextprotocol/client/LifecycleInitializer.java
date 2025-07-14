@@ -72,7 +72,7 @@ import reactor.util.context.ContextView;
  * the initialized notification</li>
  * </ul>
  */
-class LifecycleInitializer {
+class LifecycleInitializer implements AutoCloseable {
 
 	private static final Logger logger = LoggerFactory.getLogger(LifecycleInitializer.class);
 
@@ -326,6 +326,7 @@ class LifecycleInitializer {
 	/**
 	 * Closes the current initialization if it exists.
 	 */
+	@Override
 	public void close() {
 		DefaultInitialization current = this.initializationRef.getAndSet(null);
 		if (current != null) {

@@ -35,7 +35,7 @@ import reactor.core.publisher.Mono;
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
  */
-public interface McpTransport {
+public interface McpTransport extends AutoCloseable {
 
 	/**
 	 * Closes the transport connection and releases any associated resources.
@@ -45,6 +45,7 @@ public interface McpTransport {
 	 * needed. It should handle the graceful shutdown of any active connections.
 	 * </p>
 	 */
+	@Override
 	default void close() {
 		this.closeGracefully().subscribe();
 	}
