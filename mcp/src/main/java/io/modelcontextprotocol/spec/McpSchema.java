@@ -20,6 +20,9 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -934,16 +937,26 @@ public final class McpSchema {
 				@JsonProperty("definitions") Map<String, Object> definitions) {
 		} // @formatter:on
 
+	/**
+	 * Additional properties describing a Tool to clients.
+	 *
+	 * NOTE: all properties in ToolAnnotations are **hints**. They are not guaranteed to
+	 * provide a faithful description of tool behavior (including descriptive properties
+	 * like `title`).
+	 *
+	 * Clients should never make tool use decisions based on ToolAnnotations received from
+	 * untrusted servers.
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ToolAnnotations( // @formatter:off
-				@JsonProperty("title")  String title,
-				@JsonProperty("readOnlyHint")   Boolean readOnlyHint,
-				@JsonProperty("destructiveHint") Boolean destructiveHint,
-				@JsonProperty("idempotentHint") Boolean idempotentHint,
-				@JsonProperty("openWorldHint") Boolean openWorldHint,
-				@JsonProperty("returnDirect") Boolean returnDirect) {
-		} // @formatter:on
+		@JsonProperty("title")  String title,
+		@JsonProperty("readOnlyHint")   Boolean readOnlyHint,
+		@JsonProperty("destructiveHint") Boolean destructiveHint,
+		@JsonProperty("idempotentHint") Boolean idempotentHint,
+		@JsonProperty("openWorldHint") Boolean openWorldHint,
+		@JsonProperty("returnDirect") Boolean returnDirect) {
+	} // @formatter:on
 
 	/**
 	 * Represents a tool that the server provides. Tools enable servers to expose
@@ -957,17 +970,19 @@ public final class McpSchema {
 	 * used by clients to improve the LLM's understanding of available tools.
 	 * @param inputSchema A JSON Schema object that describes the expected structure of
 	 * the arguments when calling this tool. This allows clients to validate tool
-	 * @param annotations Additional properties describing a Tool to clients. arguments
-	 * before sending them to the server.
+	 * @param outputSchema An optional JSON Schema object defining the structure of the
+	 * tool's output returned in the structuredContent field of a CallToolResult.
+	 * @param annotations Optional additional tool information.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Tool( // @formatter:off
-				@JsonProperty("name") String name,
-				@JsonProperty("title") String title,
-				@JsonProperty("description") String description,
-				@JsonProperty("inputSchema") JsonSchema inputSchema,
-				@JsonProperty("annotations") ToolAnnotations annotations) implements BaseMetadata { // @formatter:on
+		@JsonProperty("name") String name,
+		@JsonProperty("title") String title,
+		@JsonProperty("description") String description,
+		@JsonProperty("inputSchema") JsonSchema inputSchema,
+		@JsonProperty("outputSchema") Map<String, Object> outputSchema,
+		@JsonProperty("annotations") ToolAnnotations annotations) {// @formatter:on
 
 		/**
 		 * @deprecated Only exists for backwards-compatibility purposes. Use
@@ -975,15 +990,35 @@ public final class McpSchema {
 		 */
 		@Deprecated
 		public Tool(String name, String description, JsonSchema inputSchema, ToolAnnotations annotations) {
-			this(name, null, description, inputSchema, annotations);
+			this(name, null, description, inputSchema, null, annotations);
 		}
 
-		public Tool(String name, String description, String schema) {
-			this(name, null, description, parseSchema(schema), null);
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link Tool#builder()} instead.
+		 */
+		@Deprecated
+		public Tool(String name, String description, String inputSchema) {
+			this(name, null, description, parseSchema(inputSchema), null, null);
 		}
 
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link Tool#builder()} instead.
+		 */
+		@Deprecated
 		public Tool(String name, String description, String schema, ToolAnnotations annotations) {
-			this(name, null, description, parseSchema(schema), annotations);
+			this(name, null, description, parseSchema(schema), null, annotations);
+		}
+
+		/**
+		 * @deprecated Only exists for backwards-compatibility purposes. Use
+		 * {@link Tool#builder()} instead.
+		 */
+		@Deprecated
+		public Tool(String name, String description, String inputSchema, String outputSchema,
+				ToolAnnotations annotations) {
+			this(name, null, description, parseSchema(inputSchema), schemaToMap(outputSchema), annotations);
 		}
 
 		public static Builder builder() {
@@ -999,6 +1034,8 @@ public final class McpSchema {
 			private String description;
 
 			private JsonSchema inputSchema;
+
+			private Map<String, Object> outputSchema;
 
 			private ToolAnnotations annotations;
 
@@ -1022,6 +1059,21 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder inputSchema(String inputSchema) {
+				this.inputSchema = parseSchema(inputSchema);
+				return this;
+			}
+
+			public Builder outputSchema(Map<String, Object> outputSchema) {
+				this.outputSchema = outputSchema;
+				return this;
+			}
+
+			public Builder outputSchema(String outputSchema) {
+				this.outputSchema = schemaToMap(outputSchema);
+				return this;
+			}
+
 			public Builder annotations(ToolAnnotations annotations) {
 				this.annotations = annotations;
 				return this;
@@ -1029,12 +1081,19 @@ public final class McpSchema {
 
 			public Tool build() {
 				Assert.hasText(name, "name must not be empty");
-
-				return new Tool(name, title, description, inputSchema, annotations);
+				return new Tool(name, title, description, inputSchema, outputSchema, annotations);
 			}
 
 		}
+	}
 
+	private static Map<String, Object> schemaToMap(String schema) {
+		try {
+			return OBJECT_MAPPER.readValue(schema, MAP_TYPE_REF);
+		}
+		catch (IOException e) {
+			throw new IllegalArgumentException("Invalid schema: " + schema, e);
+		}
 	}
 
 	private static JsonSchema parseSchema(String schema) {
@@ -1059,7 +1118,7 @@ public final class McpSchema {
 	public record CallToolRequest(// @formatter:off
 				@JsonProperty("name") String name,
 				@JsonProperty("arguments") Map<String, Object> arguments,
-				@JsonProperty("_meta") Map<String, Object> meta) implements Request {
+				@JsonProperty("_meta") Map<String, Object> meta) implements Request {// @formatter:off
 
 				public CallToolRequest(String name, String jsonArguments) {
 						this(name, parseJsonArguments(jsonArguments), null);
@@ -1119,7 +1178,7 @@ public final class McpSchema {
 								return new CallToolRequest(name, arguments, meta);
 						}
 				}
-		}// @formatter:off
+		}
 
 		/**
 		 * The server's response to a tools/call request from the client.
@@ -1128,110 +1187,137 @@ public final class McpSchema {
 		 *                or an embedded resource.
 		 * @param isError If true, indicates that the tool execution failed and the content contains error information.
 		 *                If false or absent, indicates successful execution.
+		 * @param structuredContent An optional JSON object that represents the structured result of the tool call.
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record CallToolResult( // @formatter:off
 				@JsonProperty("content") List<Content> content,
-				@JsonProperty("isError") Boolean isError) {
+				@JsonProperty("isError") Boolean isError,
+				@JsonProperty("structuredContent") Map<String, Object> structuredContent) {// @formatter:on
 
-				/**
-				 * Creates a new instance of {@link CallToolResult} with a string containing the
-				 * tool result.
-				 *
-				 * @param content The content of the tool result. This will be mapped to a one-sized list
-				 * 				  with a {@link TextContent} element.
-				 * @param isError If true, indicates that the tool execution failed and the content contains error information.
-				 *                If false or absent, indicates successful execution.
-				 */
-				public CallToolResult(String content, Boolean isError) {
-						this(List.of(new TextContent(content)), isError);
+		// backwards compatibility constructor
+		public CallToolResult(List<Content> content, Boolean isError) {
+			this(content, isError, null);
+		}
+
+		/**
+		 * Creates a new instance of {@link CallToolResult} with a string containing the
+		 * tool result.
+		 * @param content The content of the tool result. This will be mapped to a
+		 * one-sized list with a {@link TextContent} element.
+		 * @param isError If true, indicates that the tool execution failed and the
+		 * content contains error information. If false or absent, indicates successful
+		 * execution.
+		 */
+		public CallToolResult(String content, Boolean isError) {
+			this(List.of(new TextContent(content)), isError);
+		}
+
+		/**
+		 * Creates a builder for {@link CallToolResult}.
+		 * @return a new builder instance
+		 */
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		/**
+		 * Builder for {@link CallToolResult}.
+		 */
+		public static class Builder {
+
+			private List<Content> content = new ArrayList<>();
+
+			private Boolean isError = false;
+
+			private Map<String, Object> structuredContent;
+
+			/**
+			 * Sets the content list for the tool result.
+			 * @param content the content list
+			 * @return this builder
+			 */
+			public Builder content(List<Content> content) {
+				Assert.notNull(content, "content must not be null");
+				this.content = content;
+				return this;
+			}
+
+			public Builder structuredContent(Map<String, Object> structuredContent) {
+				Assert.notNull(structuredContent, "structuredContent must not be null");
+				this.structuredContent = structuredContent;
+				return this;
+			}
+
+			public Builder structuredContent(String structuredContent) {
+				Assert.hasText(structuredContent, "structuredContent must not be empty");
+				try {
+					this.structuredContent = OBJECT_MAPPER.readValue(structuredContent, MAP_TYPE_REF);
 				}
-
-				/**
-				 * Creates a builder for {@link CallToolResult}.
-				 * @return a new builder instance
-				 */
-				public static Builder builder() {
-						return new Builder();
+				catch (IOException e) {
+					throw new IllegalArgumentException("Invalid structured content: " + structuredContent, e);
 				}
+				return this;
+			}
 
-				/**
-				 * Builder for {@link CallToolResult}.
-				 */
-				public static class Builder {
-						private List<Content> content = new ArrayList<>();
-						private Boolean isError;
+			/**
+			 * Sets the text content for the tool result.
+			 * @param textContent the text content
+			 * @return this builder
+			 */
+			public Builder textContent(List<String> textContent) {
+				Assert.notNull(textContent, "textContent must not be null");
+				textContent.stream().map(TextContent::new).forEach(this.content::add);
+				return this;
+			}
 
-						/**
-						 * Sets the content list for the tool result.
-						 * @param content the content list
-						 * @return this builder
-						 */
-						public Builder content(List<Content> content) {
-								Assert.notNull(content, "content must not be null");
-								this.content = content;
-								return this;
-						}
-
-						/**
-						 * Sets the text content for the tool result.
-						 * @param textContent the text content
-						 * @return this builder
-						 */
-						public Builder textContent(List<String> textContent) {
-								Assert.notNull(textContent, "textContent must not be null");
-								textContent.stream()
-										.map(TextContent::new)
-										.forEach(this.content::add);
-								return this;
-						}
-
-						/**
-						 * Adds a content item to the tool result.
-						 * @param contentItem the content item to add
-						 * @return this builder
-						 */
-						public Builder addContent(Content contentItem) {
-								Assert.notNull(contentItem, "contentItem must not be null");
-								if (this.content == null) {
-										this.content = new ArrayList<>();
-								}
-								this.content.add(contentItem);
-								return this;
-						}
-
-						/**
-						 * Adds a text content item to the tool result.
-						 * @param text the text content
-						 * @return this builder
-						 */
-						public Builder addTextContent(String text) {
-								Assert.notNull(text, "text must not be null");
-								return addContent(new TextContent(text));
-						}
-
-						/**
-						 * Sets whether the tool execution resulted in an error.
-						 * @param isError true if the tool execution failed, false otherwise
-						 * @return this builder
-						 */
-						public Builder isError(Boolean isError) {
-								Assert.notNull(isError, "isError must not be null");
-								this.isError = isError;
-								return this;
-						}
-
-						/**
-						 * Builds a new {@link CallToolResult} instance.
-						 * @return a new CallToolResult instance
-						 */
-						public CallToolResult build() {
-								return new CallToolResult(content, isError);
-						}
+			/**
+			 * Adds a content item to the tool result.
+			 * @param contentItem the content item to add
+			 * @return this builder
+			 */
+			public Builder addContent(Content contentItem) {
+				Assert.notNull(contentItem, "contentItem must not be null");
+				if (this.content == null) {
+					this.content = new ArrayList<>();
 				}
+				this.content.add(contentItem);
+				return this;
+			}
 
-		} // @formatter:on
+			/**
+			 * Adds a text content item to the tool result.
+			 * @param text the text content
+			 * @return this builder
+			 */
+			public Builder addTextContent(String text) {
+				Assert.notNull(text, "text must not be null");
+				return addContent(new TextContent(text));
+			}
+
+			/**
+			 * Sets whether the tool execution resulted in an error.
+			 * @param isError true if the tool execution failed, false otherwise
+			 * @return this builder
+			 */
+			public Builder isError(Boolean isError) {
+				Assert.notNull(isError, "isError must not be null");
+				this.isError = isError;
+				return this;
+			}
+
+			/**
+			 * Builds a new {@link CallToolResult} instance.
+			 * @return a new CallToolResult instance
+			 */
+			public CallToolResult build() {
+				return new CallToolResult(content, isError, structuredContent);
+			}
+
+		}
+
+	}
 
 	// ---------------------------
 	// Sampling Interfaces
@@ -1286,7 +1372,7 @@ public final class McpSchema {
 						return new ModelPreferences(hints, costPriority, speedPriority, intelligencePriority);
 				}
 		}
-} // @formatter:on
+	} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1482,7 +1568,7 @@ public final class McpSchema {
 	/**
 	 * Used by the server to send an elicitation to the client.
 	 *
-	 * @param message The body of the elicitation message.
+	 * @param errorMessage The body of the elicitation message.
 	 * @param requestedSchema The elicitation response schema that must be satisfied.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)

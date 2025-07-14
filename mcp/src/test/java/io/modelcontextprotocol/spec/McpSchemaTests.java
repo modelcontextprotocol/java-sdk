@@ -830,9 +830,234 @@ public class McpSchemaTests {
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
-			.isEqualTo(
-					json("""
-							{"name":"test-tool","description":"A test tool","inputSchema":{"type":"object","properties":{"name":{"type":"string"},"value":{"type":"number"}},"required":["name"]},"annotations":{"title":"A test tool","readOnlyHint":false,"destructiveHint":false,"idempotentHint":false,"openWorldHint":false,"returnDirect":false}}"""));
+			.isEqualTo(json("""
+					{
+						"name":"test-tool",
+						"description":"A test tool",
+						"inputSchema":{
+							"type":"object",
+							"properties":{
+								"name":{"type":"string"},
+								"value":{"type":"number"}
+							},
+							"required":["name"]
+						},
+						"annotations":{
+							"title":"A test tool",
+							"readOnlyHint":false,
+							"destructiveHint":false,
+							"idempotentHint":false,
+							"openWorldHint":false,
+							"returnDirect":false
+						}
+					}
+					"""));
+	}
+
+	@Test
+	void testToolWithOutputSchema() throws Exception {
+		String inputSchemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"name": {
+							"type": "string"
+						},
+						"value": {
+							"type": "number"
+						}
+					},
+					"required": ["name"]
+				}
+				""";
+
+		String outputSchemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"result": {
+							"type": "string"
+						},
+						"status": {
+							"type": "string",
+							"enum": ["success", "error"]
+						}
+					},
+					"required": ["result", "status"]
+				}
+				""";
+
+		McpSchema.Tool tool = new McpSchema.Tool("test-tool", "A test tool", inputSchemaJson, outputSchemaJson, null);
+
+		String value = mapper.writeValueAsString(tool);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{
+						"name":"test-tool",
+						"description":"A test tool",
+						"inputSchema":{
+							"type":"object",
+							"properties":{
+								"name":{"type":"string"},
+								"value":{"type":"number"}
+							},
+							"required":["name"]
+						},
+						"outputSchema":{
+							"type":"object",
+							"properties":{
+								"result":{"type":"string"},
+								"status":{
+									"type":"string",
+									"enum":["success","error"]
+								}
+							},
+							"required":["result","status"]
+						}
+					}
+					"""));
+	}
+
+	@Test
+	void testToolWithOutputSchemaAndAnnotations() throws Exception {
+		String inputSchemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"name": {
+							"type": "string"
+						}
+					},
+					"required": ["name"]
+				}
+				""";
+
+		String outputSchemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"result": {
+							"type": "string"
+						}
+					},
+					"required": ["result"]
+				}
+				""";
+
+		McpSchema.ToolAnnotations annotations = new McpSchema.ToolAnnotations("A test tool with output", true, false,
+				true, false, true);
+
+		McpSchema.Tool tool = new McpSchema.Tool("test-tool", "A test tool", inputSchemaJson, outputSchemaJson,
+				annotations);
+
+		String value = mapper.writeValueAsString(tool);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{
+						"name":"test-tool",
+						"description":"A test tool",
+						"inputSchema":{
+							"type":"object",
+							"properties":{
+								"name":{"type":"string"}
+							},
+							"required":["name"]
+						},
+						"outputSchema":{
+							"type":"object",
+							"properties":{
+								"result":{"type":"string"}
+							},
+							"required":["result"]
+						},
+						"annotations":{
+							"title":"A test tool with output",
+							"readOnlyHint":true,
+							"destructiveHint":false,
+							"idempotentHint":true,
+							"openWorldHint":false,
+							"returnDirect":true
+						}
+					}"""));
+	}
+
+	@Test
+	void testToolDeserialization() throws Exception {
+		String toolJson = """
+				{
+					"name": "test-tool",
+					"description": "A test tool",
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"name": {"type": "string"}
+						},
+						"required": ["name"]
+					},
+					"outputSchema": {
+						"type": "object",
+						"properties": {
+							"result": {"type": "string"}
+						},
+						"required": ["result"]
+					},
+					"annotations": {
+						"title": "Test Tool",
+						"readOnlyHint": true,
+						"destructiveHint": false,
+						"idempotentHint": true,
+						"openWorldHint": false,
+						"returnDirect": false
+					}
+				}
+				""";
+
+		McpSchema.Tool tool = mapper.readValue(toolJson, McpSchema.Tool.class);
+
+		assertThat(tool).isNotNull();
+		assertThat(tool.name()).isEqualTo("test-tool");
+		assertThat(tool.description()).isEqualTo("A test tool");
+		assertThat(tool.inputSchema()).isNotNull();
+		assertThat(tool.inputSchema().type()).isEqualTo("object");
+		assertThat(tool.outputSchema()).isNotNull();
+		assertThat(tool.outputSchema()).containsKey("type");
+		assertThat(tool.outputSchema().get("type")).isEqualTo("object");
+		assertThat(tool.annotations()).isNotNull();
+		assertThat(tool.annotations().title()).isEqualTo("Test Tool");
+		assertThat(tool.annotations().readOnlyHint()).isTrue();
+		assertThat(tool.annotations().idempotentHint()).isTrue();
+		assertThat(tool.annotations().destructiveHint()).isFalse();
+		assertThat(tool.annotations().returnDirect()).isFalse();
+	}
+
+	@Test
+	void testToolDeserializationWithoutOutputSchema() throws Exception {
+		String toolJson = """
+				{
+					"name": "test-tool",
+					"description": "A test tool",
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"name": {"type": "string"}
+						},
+						"required": ["name"]
+					}
+				}
+				""";
+
+		McpSchema.Tool tool = mapper.readValue(toolJson, McpSchema.Tool.class);
+
+		assertThat(tool).isNotNull();
+		assertThat(tool.name()).isEqualTo("test-tool");
+		assertThat(tool.description()).isEqualTo("A test tool");
+		assertThat(tool.inputSchema()).isNotNull();
+		assertThat(tool.outputSchema()).isNull();
+		assertThat(tool.annotations()).isNull();
 	}
 
 	@Test
