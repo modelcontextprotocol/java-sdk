@@ -261,8 +261,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			.body(Flux.<ServerSentEvent<?>>create(sink -> {
 				WebFluxMcpSessionTransport sessionTransport = new WebFluxMcpSessionTransport(sink);
 
-				McpServerSession session = sessionFactory.create(sessionTransport);
-				String sessionId = session.getId();
+				String sessionId = sessionFactory.generateId();
+				McpServerSession session = sessionFactory.create(sessionId, sessionTransport);
 
 				logger.debug("Created new SSE connection for session: {}", sessionId);
 				sessions.put(sessionId, session);
