@@ -201,6 +201,14 @@ public final class McpSchema {
 
 	}
 
+	/**
+	 * A request that expects a response.
+	 *
+	 * @param jsonrpc The JSON-RPC version (must be "2.0")
+	 * @param method The name of the method to be invoked
+	 * @param id A unique identifier for the request
+	 * @param params Parameters for the method call
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	// TODO: batching support
@@ -212,6 +220,13 @@ public final class McpSchema {
 		@JsonProperty("params") Object params) implements JSONRPCMessage { // @formatter:on
 	}
 
+	/**
+	 * A notification which does not expect a response.
+	 *
+	 * @param jsonrpc The JSON-RPC version (must be "2.0")
+	 * @param method The name of the method being notified
+	 * @param params Parameters for the notification
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	// TODO: batching support
@@ -222,6 +237,14 @@ public final class McpSchema {
 		@JsonProperty("params") Object params) implements JSONRPCMessage { // @formatter:on
 	}
 
+	/**
+	 * A successful (non-error) response to a request.
+	 *
+	 * @param jsonrpc The JSON-RPC version (must be "2.0")
+	 * @param id The request identifier that this response corresponds to
+	 * @param result The result of the successful request
+	 * @param error Error information if the request failed
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	// TODO: batching support
@@ -232,6 +255,15 @@ public final class McpSchema {
 		@JsonProperty("result") Object result,
 		@JsonProperty("error") JSONRPCError error) implements JSONRPCMessage { // @formatter:on
 
+		/**
+		 * A response to a request that indicates an error occurred.
+		 *
+		 * @param code The error type that occurred
+		 * @param message A short description of the error. The message SHOULD be limited
+		 * to a concise single sentence
+		 * @param data Additional information about the error. The value of this member is
+		 * defined by the sender (e.g. detailed error information, nested errors etc.)
+		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record JSONRPCError( // @formatter:off
@@ -244,6 +276,16 @@ public final class McpSchema {
 	// ---------------------------
 	// Initialization
 	// ---------------------------
+	/**
+	 * This request is sent from the client to the server when it first connects, asking
+	 * it to begin initialization.
+	 *
+	 * @param protocolVersion The latest version of the Model Context Protocol that the
+	 * client supports. The client MAY decide to support older versions as well
+	 * @param capabilities The capabilities that the client supports
+	 * @param clientInfo Information about the client implementation
+	 * @param meta See specification for notes on _meta usage
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record InitializeRequest( // @formatter:off
@@ -257,6 +299,20 @@ public final class McpSchema {
 		}
 	}
 
+	/**
+	 * After receiving an initialize request from the client, the server sends this
+	 * response.
+	 *
+	 * @param protocolVersion The version of the Model Context Protocol that the server
+	 * wants to use. This may not match the version that the client requested. If the
+	 * client cannot support this version, it MUST disconnect
+	 * @param capabilities The capabilities that the server supports
+	 * @param serverInfo Information about the server implementation
+	 * @param instructions Instructions describing how to use the server and its features.
+	 * This can be used by clients to improve the LLM's understanding of available tools,
+	 * resources, etc. It can be thought of like a "hint" to the model. For example, this
+	 * information MAY be added to the system prompt
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record InitializeResult( // @formatter:off
@@ -267,20 +323,15 @@ public final class McpSchema {
 	}
 
 	/**
-	 * Clients can implement additional features to enrich connected MCP servers with
-	 * additional capabilities. These capabilities can be used to extend the functionality
-	 * of the server, or to provide additional information to the server about the
-	 * client's capabilities.
+	 * Capabilities a client may support. Known capabilities are defined here, in this
+	 * schema, but this is not a closed set: any client can define its own, additional
+	 * capabilities.
 	 *
-	 * @param experimental WIP
-	 * @param roots define the boundaries of where servers can operate within the
-	 * filesystem, allowing them to understand which directories and files they have
-	 * access to.
-	 * @param sampling Provides a standardized way for servers to request LLM sampling
-	 * (“completions” or “generations”) from language models via clients.
-	 * @param elicitation Provides a standardized way for servers to request additional
-	 * information from users through the client during interactions.
-	 *
+	 * @param experimental Experimental, non-standard capabilities that the client
+	 * supports
+	 * @param roots Present if the client supports listing roots
+	 * @param sampling Present if the client supports sampling from an LLM
+	 * @param elicitation Present if the client supports elicitation from the server
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -291,13 +342,10 @@ public final class McpSchema {
 		@JsonProperty("elicitation") Elicitation elicitation) { // @formatter:on
 
 		/**
-		 * Roots define the boundaries of where servers can operate within the filesystem,
-		 * allowing them to understand which directories and files they have access to.
-		 * Servers can request the list of roots from supporting clients and receive
-		 * notifications when that list changes.
+		 * Present if the client supports listing roots.
 		 *
-		 * @param listChanged Whether the client would send notification about roots has
-		 * changed since the last time the server checked.
+		 * @param listChanged Whether the client supports notifications for changes to the
+		 * roots list
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
@@ -368,6 +416,20 @@ public final class McpSchema {
 		}
 	}
 
+	/**
+	 * Capabilities that a server may support. Known capabilities are defined here, in
+	 * this schema, but this is not a closed set: any server can define its own,
+	 * additional capabilities.
+	 *
+	 * @param completions Present if the server supports argument autocompletion
+	 * suggestions
+	 * @param experimental Experimental, non-standard capabilities that the server
+	 * supports
+	 * @param logging Present if the server supports sending log messages to the client
+	 * @param prompts Present if the server offers any prompt templates
+	 * @param resources Present if the server offers any resources to read
+	 * @param tools Present if the server offers any tools to call
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ServerCapabilities( // @formatter:off
@@ -378,23 +440,48 @@ public final class McpSchema {
 		@JsonProperty("resources") ResourceCapabilities resources,
 		@JsonProperty("tools") ToolCapabilities tools) { // @formatter:on
 
+		/**
+		 * Present if the server supports argument autocompletion suggestions.
+		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record CompletionCapabilities() {
 		}
 
+		/**
+		 * Present if the server supports sending log messages to the client.
+		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record LoggingCapabilities() {
 		}
 
+		/**
+		 * Present if the server offers any prompt templates.
+		 *
+		 * @param listChanged Whether this server supports notifications for changes to
+		 * the prompt list
+		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record PromptCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
 		}
 
+		/**
+		 * Present if the server offers any resources to read.
+		 *
+		 * @param subscribe Whether this server supports subscribing to resource updates
+		 * @param listChanged Whether this server supports notifications for changes to
+		 * the resource list
+		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record ResourceCapabilities(@JsonProperty("subscribe") Boolean subscribe,
 				@JsonProperty("listChanged") Boolean listChanged) {
 		}
 
+		/**
+		 * Present if the server offers any tools to call.
+		 *
+		 * @param listChanged Whether this server supports notifications for changes to
+		 * the tool list
+		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		public record ToolCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
 		}
@@ -702,6 +789,13 @@ public final class McpSchema {
 		}
 	}
 
+	/**
+	 * The server's response to a resources/list request from the client.
+	 *
+	 * @param resources A list of resources that the server provides
+	 * @param nextCursor An opaque token representing the pagination position after the
+	 * last returned result. If present, there may be more results available
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ListResourcesResult( // @formatter:off
@@ -709,6 +803,13 @@ public final class McpSchema {
 		@JsonProperty("nextCursor") String nextCursor) { // @formatter:on
 	}
 
+	/**
+	 * The server's response to a resources/templates/list request from the client.
+	 *
+	 * @param resourceTemplates A list of resource templates that the server provides
+	 * @param nextCursor An opaque token representing the pagination position after the
+	 * last returned result. If present, there may be more results available
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ListResourceTemplatesResult( // @formatter:off
@@ -716,6 +817,13 @@ public final class McpSchema {
 		@JsonProperty("nextCursor") String nextCursor) { // @formatter:on
 	}
 
+	/**
+	 * Sent from the client to the server, to read a specific resource URI.
+	 *
+	 * @param uri The URI of the resource to read. The URI can use any protocol; it is up
+	 * to the server how to interpret it
+	 * @param meta See specification for notes on _meta usage
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ReadResourceRequest( // @formatter:off
@@ -727,6 +835,11 @@ public final class McpSchema {
 		}
 	}
 
+	/**
+	 * The server's response to a resources/read request from the client.
+	 *
+	 * @param contents The contents of the resource
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ReadResourceResult(@JsonProperty("contents") List<ResourceContents> contents) {
@@ -744,6 +857,12 @@ public final class McpSchema {
 	public record SubscribeRequest(@JsonProperty("uri") String uri) {
 	}
 
+	/**
+	 * Sent from the client to request cancellation of resources/updated notifications
+	 * from the server. This should follow a previous resources/subscribe request.
+	 *
+	 * @param uri The URI of the resource to unsubscribe from
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record UnsubscribeRequest(@JsonProperty("uri") String uri) {
@@ -927,6 +1046,16 @@ public final class McpSchema {
 		@JsonProperty("nextCursor") String nextCursor) { // @formatter:on
 	}
 
+	/**
+	 * A JSON Schema object that describes the expected structure of arguments or output.
+	 *
+	 * @param type The type of the schema (e.g., "object")
+	 * @param properties The properties of the schema object
+	 * @param required List of required property names
+	 * @param additionalProperties Whether additional properties are allowed
+	 * @param defs Schema definitions using the newer $defs keyword
+	 * @param definitions Schema definitions using the legacy definitions keyword
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record JsonSchema( // @formatter:off
@@ -1329,6 +1458,24 @@ public final class McpSchema {
 	// ---------------------------
 	// Sampling Interfaces
 	// ---------------------------
+	/**
+	 * The server's preferences for model selection, requested of the client during
+	 * sampling.
+	 *
+	 * @param hints Optional hints to use for model selection. If multiple hints are
+	 * specified, the client MUST evaluate them in order (such that the first match is
+	 * taken). The client SHOULD prioritize these hints over the numeric priorities, but
+	 * MAY still use the priorities to select from ambiguous matches
+	 * @param costPriority How much to prioritize cost when selecting a model. A value of
+	 * 0 means cost is not important, while a value of 1 means cost is the most important
+	 * factor
+	 * @param speedPriority How much to prioritize sampling speed (latency) when selecting
+	 * a model. A value of 0 means speed is not important, while a value of 1 means speed
+	 * is the most important factor
+	 * @param intelligencePriority How much to prioritize intelligence and capabilities
+	 * when selecting a model. A value of 0 means intelligence is not important, while a
+	 * value of 1 means intelligence is the most important factor
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ModelPreferences( // @formatter:off
@@ -1386,6 +1533,16 @@ public final class McpSchema {
 		}
 	}
 
+	/**
+	 * Hints to use for model selection.
+	 *
+	 * @param name A hint for a model name. The client SHOULD treat this as a substring of
+	 * a model name; for example: `claude-3-5-sonnet` should match
+	 * `claude-3-5-sonnet-20241022`, `sonnet` should match `claude-3-5-sonnet-20241022`,
+	 * `claude-3-sonnet-20240229`, etc., `claude` should match any Claude model. The
+	 * client MAY also map the string to a different provider's model name or a different
+	 * model family, as long as it fills a similar niche
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ModelHint(@JsonProperty("name") String name) {
@@ -1394,6 +1551,12 @@ public final class McpSchema {
 		}
 	}
 
+	/**
+	 * Describes a message issued to or received from an LLM API.
+	 *
+	 * @param role The sender or recipient of messages and data in a conversation
+	 * @param content The content of the message
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record SamplingMessage( // @formatter:off
@@ -1401,7 +1564,28 @@ public final class McpSchema {
 		@JsonProperty("content") Content content) { // @formatter:on
 	}
 
-	// Sampling and Message Creation
+	/**
+	 * A request from the server to sample an LLM via the client. The client has full
+	 * discretion over which model to select. The client should also inform the user
+	 * before beginning sampling, to allow them to inspect the request (human in the loop)
+	 * and decide whether to approve it.
+	 *
+	 * @param messages The conversation messages to send to the LLM
+	 * @param modelPreferences The server's preferences for which model to select. The
+	 * client MAY ignore these preferences
+	 * @param systemPrompt An optional system prompt the server wants to use for sampling.
+	 * The client MAY modify or omit this prompt
+	 * @param includeContext A request to include context from one or more MCP servers
+	 * (including the caller), to be attached to the prompt. The client MAY ignore this
+	 * request
+	 * @param temperature Optional temperature parameter for sampling
+	 * @param maxTokens The maximum number of tokens to sample, as requested by the
+	 * server. The client MAY choose to sample fewer tokens than requested
+	 * @param stopSequences Optional stop sequences for sampling
+	 * @param metadata Optional metadata to pass through to the LLM provider. The format
+	 * of this metadata is provider-specific
+	 * @param meta See specification for notes on _meta usage
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record CreateMessageRequest( // @formatter:off
@@ -1516,6 +1700,17 @@ public final class McpSchema {
 		}
 	}
 
+	/**
+	 * The client's response to a sampling/create_message request from the server. The
+	 * client should inform the user before returning the sampled message, to allow them
+	 * to inspect the response (human in the loop) and decide whether to allow the server
+	 * to see it.
+	 *
+	 * @param role The role of the message sender (typically assistant)
+	 * @param content The content of the sampled message
+	 * @param model The name of the model that generated the message
+	 * @param stopReason The reason why sampling stopped, if known
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record CreateMessageResult( // @formatter:off
@@ -1597,10 +1792,13 @@ public final class McpSchema {
 
 	// Elicitation
 	/**
-	 * Used by the server to send an elicitation to the client.
+	 * A request from the server to elicit additional information from the user via the
+	 * client.
 	 *
-	 * @param errorMessage The body of the elicitation message.
-	 * @param requestedSchema The elicitation response schema that must be satisfied.
+	 * @param message The message to present to the user
+	 * @param requestedSchema A restricted subset of JSON Schema. Only top-level
+	 * properties are allowed, without nesting
+	 * @param meta See specification for notes on _meta usage
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1656,6 +1854,15 @@ public final class McpSchema {
 		}
 	}
 
+	/**
+	 * The client's response to an elicitation request.
+	 *
+	 * @param action The user action in response to the elicitation. "accept": User
+	 * submitted the form/confirmed the action, "decline": User explicitly declined the
+	 * action, "cancel": User dismissed without making an explicit choice
+	 * @param content The submitted form data, only present when action is "accept".
+	 * Contains values matching the requested schema
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ElicitResult( // @formatter:off
@@ -1700,6 +1907,13 @@ public final class McpSchema {
 	// ---------------------------
 	// Pagination Interfaces
 	// ---------------------------
+	/**
+	 * A request that supports pagination using cursors.
+	 *
+	 * @param cursor An opaque token representing the current pagination position. If
+	 * provided, the server should return results starting after this cursor
+	 * @param meta See specification for notes on _meta usage
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record PaginatedRequest( // @formatter:off
@@ -1718,6 +1932,13 @@ public final class McpSchema {
 		}
 	}
 
+	/**
+	 * An opaque token representing the pagination position after the last returned
+	 * result. If present, there may be more results available.
+	 *
+	 * @param nextCursor An opaque token representing the pagination position after the
+	 * last returned result. If present, there may be more results available
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record PaginatedResult(@JsonProperty("nextCursor") String nextCursor) {
@@ -1831,6 +2052,13 @@ public final class McpSchema {
 
 	}
 
+	/**
+	 * A request from the client to the server, to enable or adjust logging.
+	 *
+	 * @param level The level of logging that the client wants to receive from the server.
+	 * The server should send all logs at this level and higher (i.e., more severe) to the
+	 * client as notifications/message
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record SetLevelRequest(@JsonProperty("level") LoggingLevel level) {
@@ -1847,6 +2075,13 @@ public final class McpSchema {
 
 	}
 
+	/**
+	 * Identifies a prompt for completion requests.
+	 *
+	 * @param type The reference type identifier (typically "ref/prompt")
+	 * @param name The name of the prompt
+	 * @param title An optional title for the prompt
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record PromptReference( // @formatter:off
@@ -1868,6 +2103,12 @@ public final class McpSchema {
 		}
 	}
 
+	/**
+	 * A reference to a resource or resource template definition for completion requests.
+	 *
+	 * @param type The reference type identifier (typically "ref/resource")
+	 * @param uri The URI or URI template of the resource
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ResourceReference( // @formatter:off
@@ -1884,6 +2125,14 @@ public final class McpSchema {
 		}
 	}
 
+	/**
+	 * A request from the client to the server, to ask for completion options.
+	 *
+	 * @param ref A reference to a prompt or resource template definition
+	 * @param argument The argument's information for completion requests
+	 * @param meta See specification for notes on _meta usage
+	 * @param context Additional, optional context for completions
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record CompleteRequest( // @formatter:off
@@ -1904,17 +2153,42 @@ public final class McpSchema {
 			this(ref, argument, null, null);
 		}
 
+		/**
+		 * The argument's information for completion requests.
+		 *
+		 * @param name The name of the argument
+		 * @param value The value of the argument to use for completion matching
+		 */
 		public record CompleteArgument(@JsonProperty("name") String name, @JsonProperty("value") String value) {
 		}
 
+		/**
+		 * Additional, optional context for completions.
+		 *
+		 * @param arguments Previously-resolved variables in a URI template or prompt
+		 */
 		public record CompleteContext(@JsonProperty("arguments") Map<String, String> arguments) {
 		}
 	}
 
+	/**
+	 * The server's response to a completion/complete request.
+	 *
+	 * @param completion The completion information containing values and metadata
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record CompleteResult(@JsonProperty("completion") CompleteCompletion completion) {
 
+		/**
+		 * The server's response to a completion/complete request
+		 *
+		 * @param values An array of completion values. Must not exceed 100 items
+		 * @param total The total number of completion options available. This can exceed
+		 * the number of values actually sent in the response
+		 * @param hasMore Indicates whether there are additional completion options beyond
+		 * those provided in the current response, even if the exact total is unknown
+		 */
 		public record CompleteCompletion( // @formatter:off
 				@JsonProperty("values") List<String> values,
 				@JsonProperty("total") Integer total,
@@ -1954,6 +2228,12 @@ public final class McpSchema {
 
 	}
 
+	/**
+	 * Text provided to or from an LLM.
+	 *
+	 * @param annotations Optional annotations for the client
+	 * @param text The text content of the message
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record TextContent( // @formatter:off
@@ -1989,6 +2269,14 @@ public final class McpSchema {
 		}
 	}
 
+	/**
+	 * An image provided to or from an LLM.
+	 *
+	 * @param annotations Optional annotations for the client
+	 * @param data The base64-encoded image data
+	 * @param mimeType The MIME type of the image. Different providers may support
+	 * different image types
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ImageContent( // @formatter:off
@@ -2021,6 +2309,14 @@ public final class McpSchema {
 		}
 	}
 
+	/**
+	 * Audio provided to or from an LLM.
+	 *
+	 * @param annotations Optional annotations for the client
+	 * @param data The base64-encoded audio data
+	 * @param mimeType The MIME type of the audio. Different providers may support
+	 * different audio types
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record AudioContent( // @formatter:off
@@ -2029,6 +2325,15 @@ public final class McpSchema {
 		@JsonProperty("mimeType") String mimeType) implements Annotated, Content { // @formatter:on
 	}
 
+	/**
+	 * The contents of a resource, embedded into a prompt or tool call result.
+	 *
+	 * It is up to the client how best to render embedded resources for the benefit of the
+	 * LLM and/or the user.
+	 *
+	 * @param annotations Optional annotations for the client
+	 * @param resource The resource contents that are embedded
+	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record EmbeddedResource( // @formatter:off
