@@ -4,7 +4,15 @@
 
 package io.modelcontextprotocol.server;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import java.util.List;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -17,21 +25,13 @@ import io.modelcontextprotocol.spec.McpSchema.Resource;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Test suite for the {@link McpSyncServer} that can be used with different
- * {@link io.modelcontextprotocol.spec.McpServerTransportProvider} implementations.
+ * {@link McpTransportProvider} implementations.
  *
  * @author Christian Tzolov
  */
-// KEEP IN SYNC with the class in mcp-test module
 public abstract class AbstractMcpSyncServerTests {
 
 	private static final String TEST_TOOL_NAME = "test-tool";
@@ -109,6 +109,7 @@ public abstract class AbstractMcpSyncServerTests {
 			""";
 
 	@Test
+	@Deprecated
 	void testAddTool() {
 		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
@@ -124,6 +125,23 @@ public abstract class AbstractMcpSyncServerTests {
 	}
 
 	@Test
+	void testAddToolCall() {
+		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.build();
+
+		Tool newTool = new McpSchema.Tool("new-tool", "New test tool", emptyJsonSchema);
+		assertThatCode(() -> mcpSyncServer.addTool(McpServerFeatures.SyncToolSpecification.builder()
+			.tool(newTool)
+			.callHandler((exchange, request) -> new CallToolResult(List.of(), false))
+			.build())).doesNotThrowAnyException();
+
+		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+	}
+
+	@Test
+	@Deprecated
 	void testAddDuplicateTool() {
 		Tool duplicateTool = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
 
@@ -142,13 +160,88 @@ public abstract class AbstractMcpSyncServerTests {
 	}
 
 	@Test
+	void testAddDuplicateToolCall() {
+		Tool duplicateTool = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
+
+		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.toolCall(duplicateTool, (exchange, request) -> new CallToolResult(List.of(), false))
+			.build();
+
+		assertThatThrownBy(() -> mcpSyncServer.addTool(McpServerFeatures.SyncToolSpecification.builder()
+			.tool(duplicateTool)
+			.callHandler((exchange, request) -> new CallToolResult(List.of(), false))
+			.build())).isInstanceOf(McpError.class)
+			.hasMessage("Tool with name '" + TEST_TOOL_NAME + "' already exists");
+
+		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testDuplicateToolCallDuringBuilding() {
+		Tool duplicateTool = new Tool("duplicate-build-toolcall", "Duplicate toolcall during building",
+				emptyJsonSchema);
+
+		assertThatThrownBy(() -> McpServer.sync(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.toolCall(duplicateTool, (exchange, request) -> new CallToolResult(List.of(), false))
+			.toolCall(duplicateTool, (exchange, request) -> new CallToolResult(List.of(), false)) // Duplicate!
+			.build()).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Tool with name 'duplicate-build-toolcall' is already registered.");
+	}
+
+	@Test
+	void testDuplicateToolsInBatchListRegistration() {
+		Tool duplicateTool = new Tool("batch-list-tool", "Duplicate tool in batch list", emptyJsonSchema);
+		List<McpServerFeatures.SyncToolSpecification> specs = List.of(
+				McpServerFeatures.SyncToolSpecification.builder()
+					.tool(duplicateTool)
+					.callHandler((exchange, request) -> new CallToolResult(List.of(), false))
+					.build(),
+				McpServerFeatures.SyncToolSpecification.builder()
+					.tool(duplicateTool)
+					.callHandler((exchange, request) -> new CallToolResult(List.of(), false))
+					.build() // Duplicate!
+		);
+
+		assertThatThrownBy(() -> McpServer.sync(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(specs)
+			.build()).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Tool with name 'batch-list-tool' is already registered.");
+	}
+
+	@Test
+	void testDuplicateToolsInBatchVarargsRegistration() {
+		Tool duplicateTool = new Tool("batch-varargs-tool", "Duplicate tool in batch varargs", emptyJsonSchema);
+
+		assertThatThrownBy(() -> McpServer.sync(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(McpServerFeatures.SyncToolSpecification.builder()
+				.tool(duplicateTool)
+				.callHandler((exchange, request) -> new CallToolResult(List.of(), false))
+				.build(),
+					McpServerFeatures.SyncToolSpecification.builder()
+						.tool(duplicateTool)
+						.callHandler((exchange, request) -> new CallToolResult(List.of(), false))
+						.build() // Duplicate!
+			)
+			.build()).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Tool with name 'batch-varargs-tool' is already registered.");
+	}
+
+	@Test
 	void testRemoveTool() {
 		Tool tool = new McpSchema.Tool(TEST_TOOL_NAME, "Test tool", emptyJsonSchema);
 
 		var mcpSyncServer = McpServer.sync(createMcpTransportProvider())
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
-			.tool(tool, (exchange, args) -> new CallToolResult(List.of(), false))
+			.toolCall(tool, (exchange, args) -> new CallToolResult(List.of(), false))
 			.build();
 
 		assertThatCode(() -> mcpSyncServer.removeTool(TEST_TOOL_NAME)).doesNotThrowAnyException();
@@ -187,6 +280,17 @@ public abstract class AbstractMcpSyncServerTests {
 		var mcpSyncServer = McpServer.sync(createMcpTransportProvider()).serverInfo("test-server", "1.0.0").build();
 
 		assertThatCode(() -> mcpSyncServer.notifyResourcesListChanged()).doesNotThrowAnyException();
+
+		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testNotifyResourcesUpdated() {
+		var mcpSyncServer = McpServer.sync(createMcpTransportProvider()).serverInfo("test-server", "1.0.0").build();
+
+		assertThatCode(() -> mcpSyncServer
+			.notifyResourcesUpdated(new McpSchema.ResourcesUpdatedNotification(TEST_RESOURCE_URI)))
+			.doesNotThrowAnyException();
 
 		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
 	}
@@ -278,7 +382,7 @@ public abstract class AbstractMcpSyncServerTests {
 			.serverInfo("test-server", "1.0.0")
 			.build();
 
-		Prompt prompt = new Prompt(TEST_PROMPT_NAME, "Test Prompt", List.of());
+		Prompt prompt = new Prompt(TEST_PROMPT_NAME, "Test Prompt", "Test Prompt", List.of());
 		McpServerFeatures.SyncPromptSpecification specification = new McpServerFeatures.SyncPromptSpecification(prompt,
 				(exchange, req) -> new GetPromptResult("Test prompt description", List
 					.of(new PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent("Test content")))));
@@ -299,7 +403,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testRemovePrompt() {
-		Prompt prompt = new Prompt(TEST_PROMPT_NAME, "Test Prompt", List.of());
+		Prompt prompt = new Prompt(TEST_PROMPT_NAME, "Test Prompt", "Test Prompt", List.of());
 		McpServerFeatures.SyncPromptSpecification specification = new McpServerFeatures.SyncPromptSpecification(prompt,
 				(exchange, req) -> new GetPromptResult("Test prompt description", List
 					.of(new PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent("Test content")))));
