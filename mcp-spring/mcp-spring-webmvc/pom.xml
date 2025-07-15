@@ -134,7 +134,14 @@
 			<scope>test</scope>
 		</dependency>
 
-    </dependencies>
+		<dependency>
+			<groupId>net.javacrumbs.json-unit</groupId>
+			<artifactId>json-unit-assertj</artifactId>
+			<version>${json-unit-assertj.version}</version>
+			<scope>test</scope>
+		</dependency>
+
+	</dependencies>
 
 
 </project>

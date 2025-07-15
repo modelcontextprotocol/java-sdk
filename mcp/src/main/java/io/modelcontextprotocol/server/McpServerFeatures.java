@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2025 the original author or authors.
  */
 
 package io.modelcontextprotocol.server;
@@ -12,6 +12,7 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
 import reactor.core.publisher.Mono;
@@ -95,28 +96,30 @@ public class McpServerFeatures {
 		 * blocking code offloading to prevent accidental blocking of the non-blocking
 		 * transport.
 		 * @param syncSpec a potentially blocking, synchronous specification.
+		 * @param immediateExecution when true, do not offload. Do NOT set to true when
+		 * using a non-blocking transport.
 		 * @return a specification which is protected from blocking calls specified by the
 		 * user.
 		 */
-		static Async fromSync(Sync syncSpec) {
+		static Async fromSync(Sync syncSpec, boolean immediateExecution) {
 			List<McpServerFeatures.AsyncToolSpecification> tools = new ArrayList<>();
 			for (var tool : syncSpec.tools()) {
-				tools.add(AsyncToolSpecification.fromSync(tool));
+				tools.add(AsyncToolSpecification.fromSync(tool, immediateExecution));
 			}
 
 			Map<String, AsyncResourceSpecification> resources = new HashMap<>();
 			syncSpec.resources().forEach((key, resource) -> {
-				resources.put(key, AsyncResourceSpecification.fromSync(resource));
+				resources.put(key, AsyncResourceSpecification.fromSync(resource, immediateExecution));
 			});
 
 			Map<String, AsyncPromptSpecification> prompts = new HashMap<>();
 			syncSpec.prompts().forEach((key, prompt) -> {
-				prompts.put(key, AsyncPromptSpecification.fromSync(prompt));
+				prompts.put(key, AsyncPromptSpecification.fromSync(prompt, immediateExecution));
 			});
 
 			Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions = new HashMap<>();
 			syncSpec.completions().forEach((key, completion) -> {
-				completions.put(key, AsyncCompletionSpecification.fromSync(completion));
+				completions.put(key, AsyncCompletionSpecification.fromSync(completion, immediateExecution));
 			});
 
 			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootChangeConsumers = new ArrayList<>();
@@ -203,51 +206,110 @@ public class McpServerFeatures {
 	/**
 	 * Specification of a tool with its asynchronous handler function. Tools are the
 	 * primary way for MCP servers to expose functionality to AI models. Each tool
-	 * represents a specific capability, such as:
-	 * <ul>
-	 * <li>Performing calculations
-	 * <li>Accessing external APIs
-	 * <li>Querying databases
-	 * <li>Manipulating files
-	 * <li>Executing system commands
-	 * </ul>
-	 *
-	 * <p>
-	 * Example tool specification: <pre>{@code
-	 * new McpServerFeatures.AsyncToolSpecification(
-	 *     new Tool(
-	 *         "calculator",
-	 *         "Performs mathematical calculations",
-	 *         new JsonSchemaObject()
-	 *             .required("expression")
-	 *             .property("expression", JsonSchemaType.STRING)
-	 *     ),
-	 *     (exchange, args) -> {
-	 *         String expr = (String) args.get("expression");
-	 *         return Mono.fromSupplier(() -> evaluate(expr))
-	 *             .map(result -> new CallToolResult("Result: " + result));
-	 *     }
-	 * )
-	 * }</pre>
+	 * represents a specific capability.
 	 *
 	 * @param tool The tool definition including name, description, and parameter schema
-	 * @param call The function that implements the tool's logic, receiving arguments and
-	 * returning results. The function's first argument is an
-	 * {@link McpAsyncServerExchange} upon which the server can interact with the
-	 * connected client. The second arguments is a map of tool arguments.
+	 * @param call Deprecated. Uset he {@link AsyncToolSpecification#callHandler} instead.
+	 * @param callHandler The function that implements the tool's logic, receiving a
+	 * {@link McpAsyncServerExchange} and a
+	 * {@link io.modelcontextprotocol.spec.McpSchema.CallToolRequest} and returning
+	 * results. The function's first argument is an {@link McpAsyncServerExchange} upon
+	 * which the server can interact with the connected client. The second arguments is a
+	 * map of tool arguments.
 	 */
 	public record AsyncToolSpecification(McpSchema.Tool tool,
-			BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> call) {
+			@Deprecated BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> call,
+			BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler) {
 
-		static AsyncToolSpecification fromSync(SyncToolSpecification tool) {
+		/**
+		 * @deprecated Use {@link AsyncToolSpecification(McpSchema.Tool, null,
+		 * BiFunction)} instead.
+		 **/
+		@Deprecated
+		public AsyncToolSpecification(McpSchema.Tool tool,
+				BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> call) {
+			this(tool, call, (exchange, toolReq) -> call.apply(exchange, toolReq.arguments()));
+		}
+
+		static AsyncToolSpecification fromSync(SyncToolSpecification syncToolSpec) {
+			return fromSync(syncToolSpec, false);
+		}
+
+		static AsyncToolSpecification fromSync(SyncToolSpecification syncToolSpec, boolean immediate) {
+
 			// FIXME: This is temporary, proper validation should be implemented
-			if (tool == null) {
+			if (syncToolSpec == null) {
 				return null;
 			}
-			return new AsyncToolSpecification(tool.tool(),
-					(exchange, map) -> Mono
-						.fromCallable(() -> tool.call().apply(new McpSyncServerExchange(exchange), map))
-						.subscribeOn(Schedulers.boundedElastic()));
+
+			BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> deprecatedCall = (syncToolSpec
+				.call() != null) ? (exchange, map) -> {
+					var toolResult = Mono
+						.fromCallable(() -> syncToolSpec.call().apply(new McpSyncServerExchange(exchange), map));
+					return immediate ? toolResult : toolResult.subscribeOn(Schedulers.boundedElastic());
+				} : null;
+
+			BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler = (
+					exchange, req) -> {
+				var toolResult = Mono
+					.fromCallable(() -> syncToolSpec.callHandler().apply(new McpSyncServerExchange(exchange), req));
+				return immediate ? toolResult : toolResult.subscribeOn(Schedulers.boundedElastic());
+			};
+
+			return new AsyncToolSpecification(syncToolSpec.tool(), deprecatedCall, callHandler);
+		}
+
+		/**
+		 * Builder for creating AsyncToolSpecification instances.
+		 */
+		public static class Builder {
+
+			private McpSchema.Tool tool;
+
+			private BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler;
+
+			/**
+			 * Sets the tool definition.
+			 * @param tool The tool definition including name, description, and parameter
+			 * schema
+			 * @return this builder instance
+			 */
+			public Builder tool(McpSchema.Tool tool) {
+				this.tool = tool;
+				return this;
+			}
+
+			/**
+			 * Sets the call tool handler function.
+			 * @param callHandler The function that implements the tool's logic
+			 * @return this builder instance
+			 */
+			public Builder callHandler(
+					BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler) {
+				this.callHandler = callHandler;
+				return this;
+			}
+
+			/**
+			 * Builds the AsyncToolSpecification instance.
+			 * @return a new AsyncToolSpecification instance
+			 * @throws IllegalArgumentException if required fields are not set
+			 */
+			public AsyncToolSpecification build() {
+				Assert.notNull(tool, "Tool must not be null");
+				Assert.notNull(callHandler, "Call handler function must not be null");
+
+				return new AsyncToolSpecification(tool, null, callHandler);
+			}
+
+		}
+
+		/**
+		 * Creates a new builder instance.
+		 * @return a new Builder instance
+		 */
+		public static Builder builder() {
+			return new Builder();
 		}
 	}
 
@@ -263,13 +325,13 @@ public class McpServerFeatures {
 	 * </ul>
 	 *
 	 * <p>
-	 * Example resource specification: <pre>{@code
+	 * Example resource specification:
+	 *
+	 * <pre>{@code
 	 * new McpServerFeatures.AsyncResourceSpecification(
-	 *     new Resource("docs", "Documentation files", "text/markdown"),
-	 *     (exchange, request) ->
-	 *         Mono.fromSupplier(() -> readFile(request.getPath()))
-	 *             .map(ReadResourceResult::new)
-	 * )
+	 * 		new Resource("docs", "Documentation files", "text/markdown"),
+	 * 		(exchange, request) -> Mono.fromSupplier(() -> readFile(request.getPath()))
+	 * 				.map(ReadResourceResult::new))
 	 * }</pre>
 	 *
 	 * @param resource The resource definition including name, description, and MIME type
@@ -281,15 +343,16 @@ public class McpServerFeatures {
 	public record AsyncResourceSpecification(McpSchema.Resource resource,
 			BiFunction<McpAsyncServerExchange, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
 
-		static AsyncResourceSpecification fromSync(SyncResourceSpecification resource) {
+		static AsyncResourceSpecification fromSync(SyncResourceSpecification resource, boolean immediateExecution) {
 			// FIXME: This is temporary, proper validation should be implemented
 			if (resource == null) {
 				return null;
 			}
-			return new AsyncResourceSpecification(resource.resource(),
-					(exchange, req) -> Mono
-						.fromCallable(() -> resource.readHandler().apply(new McpSyncServerExchange(exchange), req))
-						.subscribeOn(Schedulers.boundedElastic()));
+			return new AsyncResourceSpecification(resource.resource(), (exchange, req) -> {
+				var resourceResult = Mono
+					.fromCallable(() -> resource.readHandler().apply(new McpSyncServerExchange(exchange), req));
+				return immediateExecution ? resourceResult : resourceResult.subscribeOn(Schedulers.boundedElastic());
+			});
 		}
 	}
 
@@ -305,16 +368,16 @@ public class McpServerFeatures {
 	 * </ul>
 	 *
 	 * <p>
-	 * Example prompt specification: <pre>{@code
+	 * Example prompt specification:
+	 *
+	 * <pre>{@code
 	 * new McpServerFeatures.AsyncPromptSpecification(
-	 *     new Prompt("analyze", "Code analysis template"),
-	 *     (exchange, request) -> {
-	 *         String code = request.getArguments().get("code");
-	 *         return Mono.just(new GetPromptResult(
-	 *             "Analyze this code:\n\n" + code + "\n\nProvide feedback on:"
-	 *         ));
-	 *     }
-	 * )
+	 * 		new Prompt("analyze", "Code analysis template"),
+	 * 		(exchange, request) -> {
+	 * 			String code = request.getArguments().get("code");
+	 * 			return Mono.just(new GetPromptResult(
+	 * 					"Analyze this code:\n\n" + code + "\n\nProvide feedback on:"));
+	 * 		})
 	 * }</pre>
 	 *
 	 * @param prompt The prompt definition including name and description
@@ -327,15 +390,16 @@ public class McpServerFeatures {
 	public record AsyncPromptSpecification(McpSchema.Prompt prompt,
 			BiFunction<McpAsyncServerExchange, McpSchema.GetPromptRequest, Mono<McpSchema.GetPromptResult>> promptHandler) {
 
-		static AsyncPromptSpecification fromSync(SyncPromptSpecification prompt) {
+		static AsyncPromptSpecification fromSync(SyncPromptSpecification prompt, boolean immediateExecution) {
 			// FIXME: This is temporary, proper validation should be implemented
 			if (prompt == null) {
 				return null;
 			}
-			return new AsyncPromptSpecification(prompt.prompt(),
-					(exchange, req) -> Mono
-						.fromCallable(() -> prompt.promptHandler().apply(new McpSyncServerExchange(exchange), req))
-						.subscribeOn(Schedulers.boundedElastic()));
+			return new AsyncPromptSpecification(prompt.prompt(), (exchange, req) -> {
+				var promptResult = Mono
+					.fromCallable(() -> prompt.promptHandler().apply(new McpSyncServerExchange(exchange), req));
+				return immediateExecution ? promptResult : promptResult.subscribeOn(Schedulers.boundedElastic());
+			});
 		}
 	}
 
@@ -366,54 +430,115 @@ public class McpServerFeatures {
 		 * @return an asynchronous wrapper of the provided sync specification, or
 		 * {@code null} if input is null
 		 */
-		static AsyncCompletionSpecification fromSync(SyncCompletionSpecification completion) {
+		static AsyncCompletionSpecification fromSync(SyncCompletionSpecification completion,
+				boolean immediateExecution) {
 			if (completion == null) {
 				return null;
 			}
-			return new AsyncCompletionSpecification(completion.referenceKey(),
-					(exchange, request) -> Mono.fromCallable(
-							() -> completion.completionHandler().apply(new McpSyncServerExchange(exchange), request))
-						.subscribeOn(Schedulers.boundedElastic()));
+			return new AsyncCompletionSpecification(completion.referenceKey(), (exchange, request) -> {
+				var completionResult = Mono.fromCallable(
+						() -> completion.completionHandler().apply(new McpSyncServerExchange(exchange), request));
+				return immediateExecution ? completionResult
+						: completionResult.subscribeOn(Schedulers.boundedElastic());
+			});
 		}
 	}
 
 	/**
 	 * Specification of a tool with its synchronous handler function. Tools are the
-	 * primary way for MCP servers to expose functionality to AI models. Each tool
-	 * represents a specific capability, such as:
-	 * <ul>
-	 * <li>Performing calculations
-	 * <li>Accessing external APIs
-	 * <li>Querying databases
-	 * <li>Manipulating files
-	 * <li>Executing system commands
-	 * </ul>
+	 * primary way for MCP servers to expose functionality to AI models.
 	 *
 	 * <p>
-	 * Example tool specification: <pre>{@code
-	 * new McpServerFeatures.SyncToolSpecification(
-	 *     new Tool(
-	 *         "calculator",
-	 *         "Performs mathematical calculations",
-	 *         new JsonSchemaObject()
-	 *             .required("expression")
-	 *             .property("expression", JsonSchemaType.STRING)
-	 *     ),
-	 *     (exchange, args) -> {
-	 *         String expr = (String) args.get("expression");
-	 *         return new CallToolResult("Result: " + evaluate(expr));
-	 *     }
-	 * )
+	 * Example tool specification:
+	 *
+	 * <pre>{@code
+	 * McpServerFeatures.SyncToolSpecification.builder()
+	 * 		.tool(new Tool(
+	 * 				"calculator",
+	 * 				"Performs mathematical calculations",
+	 * 				new JsonSchemaObject()
+	 * 						.required("expression")
+	 * 						.property("expression", JsonSchemaType.STRING)))
+	 * 		.toolHandler((exchange, req) -> {
+	 * 			String expr = (String) req.arguments().get("expression");
+	 * 			return new CallToolResult("Result: " + evaluate(expr));
+	 * 		}))
+	 *      .build();
 	 * }</pre>
 	 *
 	 * @param tool The tool definition including name, description, and parameter schema
-	 * @param call The function that implements the tool's logic, receiving arguments and
-	 * returning results. The function's first argument is an
+	 * @param call (Deprected) The function that implements the tool's logic, receiving
+	 * arguments and returning results. The function's first argument is an
 	 * {@link McpSyncServerExchange} upon which the server can interact with the connected
-	 * client. The second arguments is a map of arguments passed to the tool.
+	 * @param callHandler The function that implements the tool's logic, receiving a
+	 * {@link McpSyncServerExchange} and a
+	 * {@link io.modelcontextprotocol.spec.McpSchema.CallToolRequest} and returning
+	 * results. The function's first argument is an {@link McpSyncServerExchange} upon
+	 * which the server can interact with the client. The second arguments is a map of
+	 * arguments passed to the tool.
 	 */
 	public record SyncToolSpecification(McpSchema.Tool tool,
-			BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> call) {
+			@Deprecated BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> call,
+			BiFunction<McpSyncServerExchange, CallToolRequest, McpSchema.CallToolResult> callHandler) {
+
+		@Deprecated
+		public SyncToolSpecification(McpSchema.Tool tool,
+				BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> call) {
+			this(tool, call, (exchange, toolReq) -> call.apply(exchange, toolReq.arguments()));
+		}
+
+		/**
+		 * Builder for creating SyncToolSpecification instances.
+		 */
+		public static class Builder {
+
+			private McpSchema.Tool tool;
+
+			private BiFunction<McpSyncServerExchange, CallToolRequest, McpSchema.CallToolResult> callHandler;
+
+			/**
+			 * Sets the tool definition.
+			 * @param tool The tool definition including name, description, and parameter
+			 * schema
+			 * @return this builder instance
+			 */
+			public Builder tool(McpSchema.Tool tool) {
+				this.tool = tool;
+				return this;
+			}
+
+			/**
+			 * Sets the call tool handler function.
+			 * @param callHandler The function that implements the tool's logic
+			 * @return this builder instance
+			 */
+			public Builder callHandler(
+					BiFunction<McpSyncServerExchange, CallToolRequest, McpSchema.CallToolResult> callHandler) {
+				this.callHandler = callHandler;
+				return this;
+			}
+
+			/**
+			 * Builds the SyncToolSpecification instance.
+			 * @return a new SyncToolSpecification instance
+			 * @throws IllegalArgumentException if required fields are not set
+			 */
+			public SyncToolSpecification build() {
+				Assert.notNull(tool, "Tool must not be null");
+				Assert.notNull(callHandler, "CallTool function must not be null");
+
+				return new SyncToolSpecification(tool, null, callHandler);
+			}
+
+		}
+
+		/**
+		 * Creates a new builder instance.
+		 * @return a new Builder instance
+		 */
+		public static Builder builder() {
+			return new Builder();
+		}
 	}
 
 	/**
@@ -428,14 +553,15 @@ public class McpServerFeatures {
 	 * </ul>
 	 *
 	 * <p>
-	 * Example resource specification: <pre>{@code
+	 * Example resource specification:
+	 *
+	 * <pre>{@code
 	 * new McpServerFeatures.SyncResourceSpecification(
-	 *     new Resource("docs", "Documentation files", "text/markdown"),
-	 *     (exchange, request) -> {
-	 *         String content = readFile(request.getPath());
-	 *         return new ReadResourceResult(content);
-	 *     }
-	 * )
+	 * 		new Resource("docs", "Documentation files", "text/markdown"),
+	 * 		(exchange, request) -> {
+	 * 			String content = readFile(request.getPath());
+	 * 			return new ReadResourceResult(content);
+	 * 		})
 	 * }</pre>
 	 *
 	 * @param resource The resource definition including name, description, and MIME type
@@ -460,16 +586,16 @@ public class McpServerFeatures {
 	 * </ul>
 	 *
 	 * <p>
-	 * Example prompt specification: <pre>{@code
+	 * Example prompt specification:
+	 *
+	 * <pre>{@code
 	 * new McpServerFeatures.SyncPromptSpecification(
-	 *     new Prompt("analyze", "Code analysis template"),
-	 *     (exchange, request) -> {
-	 *         String code = request.getArguments().get("code");
-	 *         return new GetPromptResult(
-	 *             "Analyze this code:\n\n" + code + "\n\nProvide feedback on:"
-	 *         );
-	 *     }
-	 * )
+	 * 		new Prompt("analyze", "Code analysis template"),
+	 * 		(exchange, request) -> {
+	 * 			String code = request.getArguments().get("code");
+	 * 			return new GetPromptResult(
+	 * 					"Analyze this code:\n\n" + code + "\n\nProvide feedback on:");
+	 * 		})
 	 * }</pre>
 	 *
 	 * @param prompt The prompt definition including name and description

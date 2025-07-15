@@ -95,8 +95,6 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 
 	private final String baseUrl;
 
-	private final String contextPath;
-
 	private final RouterFunction<ServerResponse> routerFunction;
 
 	private McpServerSession.Factory sessionFactory;
@@ -136,7 +134,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
 	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
-		this(objectMapper, "", "", messageEndpoint, sseEndpoint);
+		this(objectMapper, "", messageEndpoint, sseEndpoint);
 	}
 
 	/**
