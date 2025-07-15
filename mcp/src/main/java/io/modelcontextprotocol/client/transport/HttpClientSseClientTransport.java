@@ -325,10 +325,10 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
 
 		return Mono.create(sink -> {
-            URI clientUri = Utils.resolveUri(this.baseUri, this.sseEndpoint);
-            logger.debug("Subscribing to {}", clientUri);
+			URI clientUri = Utils.resolveUri(this.baseUri, this.sseEndpoint);
+			logger.debug("Subscribing to {}", clientUri);
 
-            HttpRequest request = requestBuilder.copy()
+			HttpRequest request = requestBuilder.copy()
 				.uri(clientUri)
 				.header("Accept", "text/event-stream")
 				.header("Cache-Control", "no-cache")
