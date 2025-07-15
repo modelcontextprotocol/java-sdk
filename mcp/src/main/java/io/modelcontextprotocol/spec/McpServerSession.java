@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
+import io.modelcontextprotocol.spec.McpSchema.MessageId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -23,7 +24,7 @@ public class McpServerSession implements McpSession {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpServerSession.class);
 
-	private final ConcurrentHashMap<Object, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<MessageId, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
 
 	private final String id;
 
@@ -104,13 +105,13 @@ public class McpServerSession implements McpSession {
 		this.clientInfo.lazySet(clientInfo);
 	}
 
-	private String generateRequestId() {
-		return this.id + "-" + this.requestCounter.getAndIncrement();
+	private MessageId generateRequestId() {
+		return MessageId.of(this.id + "-" + this.requestCounter.getAndIncrement());
 	}
 
 	@Override
 	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {
-		String requestId = this.generateRequestId();
+		MessageId requestId = this.generateRequestId();
 
 		return Mono.<McpSchema.JSONRPCResponse>create(sink -> {
 			this.pendingResponses.put(requestId, sink);

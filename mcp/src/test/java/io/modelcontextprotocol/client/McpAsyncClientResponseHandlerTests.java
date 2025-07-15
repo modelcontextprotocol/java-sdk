@@ -17,6 +17,7 @@ import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
+import io.modelcontextprotocol.spec.McpSchema.MessageId;
 import io.modelcontextprotocol.spec.McpSchema.PaginatedRequest;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import org.junit.jupiter.api.Test;
@@ -172,7 +173,7 @@ class McpAsyncClientResponseHandlerTests {
 
 		// Simulate incoming request
 		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_ROOTS_LIST, "test-id", null);
+				McpSchema.METHOD_ROOTS_LIST, MessageId.of("test-id"), null);
 		transport.simulateIncomingMessage(request);
 
 		// Verify response
@@ -180,7 +181,7 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
 
 		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
-		assertThat(response.id()).isEqualTo("test-id");
+		assertThat(response.id()).isEqualTo(MessageId.of("test-id"));
 		assertThat(response.result())
 			.isEqualTo(new McpSchema.ListRootsResult(List.of(new Root("file:///test/path", "test-root"))));
 		assertThat(response.error()).isNull();
@@ -309,7 +310,7 @@ class McpAsyncClientResponseHandlerTests {
 
 		// Simulate incoming request
 		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, "test-id", messageRequest);
+				McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, MessageId.of("test-id"), messageRequest);
 		transport.simulateIncomingMessage(request);
 
 		// Verify response
@@ -317,7 +318,7 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
 
 		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
-		assertThat(response.id()).isEqualTo("test-id");
+		assertThat(response.id()).isEqualTo(MessageId.of("test-id"));
 		assertThat(response.error()).isNull();
 
 		McpSchema.CreateMessageResult result = transport.unmarshalFrom(response.result(),
@@ -350,7 +351,7 @@ class McpAsyncClientResponseHandlerTests {
 
 		// Simulate incoming request
 		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, "test-id", messageRequest);
+				McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, MessageId.of("test-id"), messageRequest);
 		transport.simulateIncomingMessage(request);
 
 		// Verify error response
@@ -358,7 +359,7 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
 
 		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
-		assertThat(response.id()).isEqualTo("test-id");
+		assertThat(response.id()).isEqualTo(MessageId.of("test-id"));
 		assertThat(response.result()).isNull();
 		assertThat(response.error()).isNotNull();
 		assertThat(response.error().message()).contains("Method not found: sampling/createMessage");
@@ -414,7 +415,7 @@ class McpAsyncClientResponseHandlerTests {
 
 		// Simulate incoming request
 		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_ELICITATION_CREATE, "test-id", elicitRequest);
+				McpSchema.METHOD_ELICITATION_CREATE, MessageId.of("test-id"), elicitRequest);
 		transport.simulateIncomingMessage(request);
 
 		// Verify response
@@ -422,7 +423,7 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
 
 		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
-		assertThat(response.id()).isEqualTo("test-id");
+		assertThat(response.id()).isEqualTo(MessageId.of("test-id"));
 		assertThat(response.error()).isNull();
 
 		McpSchema.ElicitResult result = transport.unmarshalFrom(response.result(), new TypeReference<>() {
@@ -459,7 +460,7 @@ class McpAsyncClientResponseHandlerTests {
 
 		// Simulate incoming request
 		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_ELICITATION_CREATE, "test-id", elicitRequest);
+				McpSchema.METHOD_ELICITATION_CREATE, MessageId.of("test-id"), elicitRequest);
 		transport.simulateIncomingMessage(request);
 
 		// Verify response
@@ -467,7 +468,7 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
 
 		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
-		assertThat(response.id()).isEqualTo("test-id");
+		assertThat(response.id()).isEqualTo(MessageId.of("test-id"));
 		assertThat(response.error()).isNull();
 
 		McpSchema.ElicitResult result = transport.unmarshalFrom(response.result(), new TypeReference<>() {
@@ -498,7 +499,7 @@ class McpAsyncClientResponseHandlerTests {
 
 		// Simulate incoming request
 		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_ELICITATION_CREATE, "test-id", elicitRequest);
+				McpSchema.METHOD_ELICITATION_CREATE, MessageId.of("test-id"), elicitRequest);
 		transport.simulateIncomingMessage(request);
 
 		// Verify error response
@@ -506,7 +507,7 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
 
 		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
-		assertThat(response.id()).isEqualTo("test-id");
+		assertThat(response.id()).isEqualTo(MessageId.of("test-id"));
 		assertThat(response.result()).isNull();
 		assertThat(response.error()).isNotNull();
 		assertThat(response.error().message()).contains("Method not found: elicitation/create");
@@ -535,7 +536,7 @@ class McpAsyncClientResponseHandlerTests {
 
 		// Simulate incoming ping request from server
 		McpSchema.JSONRPCRequest pingRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_PING, "ping-id", null);
+				McpSchema.METHOD_PING, MessageId.of("ping-id"), null);
 		transport.simulateIncomingMessage(pingRequest);
 
 		// Verify response
@@ -543,7 +544,7 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
 
 		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
-		assertThat(response.id()).isEqualTo("ping-id");
+		assertThat(response.id()).isEqualTo(MessageId.of("ping-id"));
 		assertThat(response.error()).isNull();
 		assertThat(response.result()).isInstanceOf(Map.class);
 		assertThat(((Map<?, ?>) response.result())).isEmpty();

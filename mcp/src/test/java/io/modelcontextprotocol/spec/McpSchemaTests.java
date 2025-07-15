@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
 
+import io.modelcontextprotocol.spec.McpSchema.MessageId;
 import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
 import net.javacrumbs.jsonunit.core.Option;
 
@@ -240,8 +241,8 @@ public class McpSchemaTests {
 		Map<String, Object> params = new HashMap<>();
 		params.put("key", "value");
 
-		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, "method_name", 1,
-				params);
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, "method_name",
+				MessageId.of(1), params);
 
 		String value = mapper.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -272,7 +273,8 @@ public class McpSchemaTests {
 		Map<String, Object> result = new HashMap<>();
 		result.put("result_key", "result_value");
 
-		McpSchema.JSONRPCResponse response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, 1, result, null);
+		McpSchema.JSONRPCResponse response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, MessageId.of(1),
+				result, null);
 
 		String value = mapper.writeValueAsString(response);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -287,7 +289,8 @@ public class McpSchemaTests {
 		McpSchema.JSONRPCResponse.JSONRPCError error = new McpSchema.JSONRPCResponse.JSONRPCError(
 				McpSchema.ErrorCodes.INVALID_REQUEST, "Invalid request", null);
 
-		McpSchema.JSONRPCResponse response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, 1, null, error);
+		McpSchema.JSONRPCResponse response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, MessageId.of(1),
+				null, error);
 
 		String value = mapper.writeValueAsString(response);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)

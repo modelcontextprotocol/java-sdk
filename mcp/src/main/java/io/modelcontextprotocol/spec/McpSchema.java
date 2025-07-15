@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -18,8 +19,18 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
@@ -36,6 +47,7 @@ import org.slf4j.LoggerFactory;
  * @author Christian Tzolov
  * @author Luca Chang
  * @author Surbhi Bansal
+ * @author Zachary German
  */
 public final class McpSchema {
 
@@ -145,6 +157,107 @@ public final class McpSchema {
 
 	}
 
+	/**
+	 * MCP JSON-RPC Message ID wrapper: MUST be non-null String or Int.
+	 * <p>
+	 * <b>Note</b>: This does <b>not</b> follow the JSON-RPC 'id' specification, which is
+	 * nullable and could be a floating-point.
+	 * </p>
+	 */
+	@JsonSerialize(using = MessageId.Serializer.class)
+	@JsonDeserialize(using = MessageId.Deserializer.class)
+	public static final class MessageId {
+
+		private final Object value;
+
+		public MessageId(String value) {
+			this.value = Objects.requireNonNull(value, "'id' must not be null");
+		}
+
+		public MessageId(Integer value) {
+			this.value = Objects.requireNonNull(value, "'id' must not be null");
+		}
+
+		public static MessageId of(Object raw) {
+			if (raw instanceof String s)
+				return new MessageId(s);
+			if (raw instanceof Integer i)
+				return new MessageId(i);
+			throw new IllegalArgumentException("MCP 'id' must be String or Integer");
+		}
+
+		public boolean isString() {
+			return value instanceof String;
+		}
+
+		public boolean isInteger() {
+			return value instanceof Integer;
+		}
+
+		public String asString() {
+			return (String) value;
+		}
+
+		public Integer asInteger() {
+			return (Integer) value;
+		}
+
+		public Object raw() {
+			return value;
+		}
+
+		@Override
+		public String toString() {
+			return String.valueOf(value);
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o)
+				return true;
+			if (o == null || getClass() != o.getClass())
+				return false;
+			MessageId messageId = (MessageId) o;
+			return value.equals(messageId.value);
+		}
+
+		@Override
+		public int hashCode() {
+			return value.hashCode();
+		}
+
+		public static class Deserializer extends JsonDeserializer<MessageId> {
+
+			@Override
+			public MessageId deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+				JsonToken t = p.getCurrentToken();
+				if (t == JsonToken.VALUE_STRING) {
+					return new MessageId(p.getText());
+				}
+				else if (t == JsonToken.VALUE_NUMBER_INT) {
+					return new MessageId(p.getIntValue());
+				}
+				throw JsonMappingException.from(p, "MCP 'id' must be a non-null String or Integer");
+			}
+
+		}
+
+		public static class Serializer extends JsonSerializer<MessageId> {
+
+			@Override
+			public void serialize(MessageId id, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+				if (id.isString()) {
+					gen.writeString(id.asString());
+				}
+				else {
+					gen.writeNumber(id.asInteger());
+				}
+			}
+
+		}
+
+	}
+
 	public sealed interface Request permits InitializeRequest, CallToolRequest, CreateMessageRequest, ElicitRequest,
 			CompleteRequest, GetPromptRequest, PaginatedRequest, ReadResourceRequest {
 
@@ -209,7 +322,7 @@ public final class McpSchema {
 	public record JSONRPCRequest( // @formatter:off
 						@JsonProperty("jsonrpc") String jsonrpc,
 						@JsonProperty("method") String method,
-						@JsonProperty("id") Object id,
+						@JsonProperty("id") MessageId id,
 						@JsonProperty("params") Object params) implements JSONRPCMessage {
 		} // @formatter:on
 
@@ -229,7 +342,7 @@ public final class McpSchema {
 	// @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
 	public record JSONRPCResponse( // @formatter:off
 						@JsonProperty("jsonrpc") String jsonrpc,
-						@JsonProperty("id") Object id,
+						@JsonProperty("id") MessageId id,
 						@JsonProperty("result") Object result,
 						@JsonProperty("error") JSONRPCError error) implements JSONRPCMessage {
 
