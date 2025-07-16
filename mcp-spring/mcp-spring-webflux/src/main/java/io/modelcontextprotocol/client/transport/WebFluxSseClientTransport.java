@@ -62,6 +62,10 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebFluxSseClientTransport.class);
 
+	private static final String MCP_PROTOCOL_VERSION = "2024-11-05";
+
+	private static final String MCP_PROTOCOL_VERSION_HEADER_NAME = "MCP-Protocol-Version";
+
 	/**
 	 * Event type for JSON-RPC messages received through the SSE connection. The server
 	 * sends messages with this event type to transmit JSON-RPC protocol data.
@@ -250,6 +254,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 				return webClient.post()
 					.uri(messageEndpointUri)
 					.contentType(MediaType.APPLICATION_JSON)
+					.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
 					.bodyValue(jsonText)
 					.retrieve()
 					.toBodilessEntity()
@@ -282,6 +287,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 			.get()
 			.uri(this.sseEndpoint)
 			.accept(MediaType.TEXT_EVENT_STREAM)
+			.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
 			.retrieve()
 			.bodyToFlux(SSE_TYPE)
 			.retryWhen(Retry.from(retrySignal -> retrySignal.handle(inboundRetryHandler)));

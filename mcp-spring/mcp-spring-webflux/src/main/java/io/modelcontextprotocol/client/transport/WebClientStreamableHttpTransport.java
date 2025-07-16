@@ -66,6 +66,10 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebClientStreamableHttpTransport.class);
 
+	private static final String MCP_PROTOCOL_VERSION = "2025-06-18";
+
+	private static final String MCP_PROTOCOL_VERSION_HEADER_NAME = "MCP-Protocol-Version";
+
 	private static final String DEFAULT_ENDPOINT = "/mcp";
 
 	/**
@@ -128,12 +132,20 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	private DefaultMcpTransportSession createTransportSession() {
 		Function<String, Publisher<Void>> onClose = sessionId -> sessionId == null ? Mono.empty()
-				: webClient.delete().uri(this.endpoint).headers(httpHeaders -> {
-					httpHeaders.add("mcp-session-id", sessionId);
-				}).retrieve().toBodilessEntity().onErrorComplete(e -> {
-					logger.warn("Got error when closing transport", e);
-					return true;
-				}).then();
+				: webClient.delete()
+					.uri(this.endpoint)
+					.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
+					.headers(httpHeaders -> {
+						httpHeaders.add("mcp-session-id", sessionId);
+						httpHeaders.add(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION);
+					})
+					.retrieve()
+					.toBodilessEntity()
+					.onErrorComplete(e -> {
+						logger.warn("Got error when closing transport", e);
+						return true;
+					})
+					.then();
 		return new DefaultMcpTransportSession(onClose);
 	}
 
@@ -186,6 +198,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			Disposable connection = webClient.get()
 				.uri(this.endpoint)
 				.accept(MediaType.TEXT_EVENT_STREAM)
+				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
 				.headers(httpHeaders -> {
 					transportSession.sessionId().ifPresent(id -> httpHeaders.add("mcp-session-id", id));
 					if (stream != null) {
@@ -246,6 +259,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			Disposable connection = webClient.post()
 				.uri(this.endpoint)
 				.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_EVENT_STREAM)
+				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
 				.headers(httpHeaders -> {
 					transportSession.sessionId().ifPresent(id -> httpHeaders.add("mcp-session-id", id));
 				})

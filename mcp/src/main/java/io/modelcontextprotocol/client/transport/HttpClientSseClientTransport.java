@@ -61,6 +61,10 @@ import reactor.core.publisher.Sinks;
  */
 public class HttpClientSseClientTransport implements McpClientTransport {
 
+	private static final String MCP_PROTOCOL_VERSION = "2024-11-05";
+
+	private static final String MCP_PROTOCOL_VERSION_HEADER_NAME = "MCP-Protocol-Version";
+
 	private static final Logger logger = LoggerFactory.getLogger(HttpClientSseClientTransport.class);
 
 	/** SSE event type for JSON-RPC messages */
@@ -391,6 +395,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 				.uri(uri)
 				.header("Accept", "text/event-stream")
 				.header("Cache-Control", "no-cache")
+				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
 				.GET();
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null));
 		}).flatMap(requestBuilder -> Mono.create(sink -> {
@@ -516,7 +521,10 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	private Mono<HttpResponse<String>> sendHttpPost(final String endpoint, final String body) {
 		final URI requestUri = Utils.resolveUri(baseUri, endpoint);
 		return Mono.defer(() -> {
-			var builder = this.requestBuilder.copy().uri(requestUri).POST(HttpRequest.BodyPublishers.ofString(body));
+			var builder = this.requestBuilder.copy()
+				.uri(requestUri)
+				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
+				.POST(HttpRequest.BodyPublishers.ofString(body));
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", requestUri, body));
 		}).flatMap(customizedBuilder -> {
 			var request = customizedBuilder.build();
