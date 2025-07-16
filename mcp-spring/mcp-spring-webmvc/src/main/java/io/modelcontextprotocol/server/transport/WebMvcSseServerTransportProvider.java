@@ -13,8 +13,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse.JSONRPCError;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
@@ -300,14 +303,19 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		}
 
 		if (request.param("sessionId").isEmpty()) {
-			return ServerResponse.badRequest().body(new McpError("Session ID missing in message endpoint"));
+			return ServerResponse.badRequest()
+				.body(McpError.builder(ErrorCodes.INVALID_REQUEST).message("Missing session ID param").build());
 		}
 
 		String sessionId = request.param("sessionId").get();
 		McpServerSession session = sessions.get(sessionId);
 
 		if (session == null) {
-			return ServerResponse.status(HttpStatus.NOT_FOUND).body(new McpError("Session not found: " + sessionId));
+			return ServerResponse.status(HttpStatus.NOT_FOUND)
+				.body(McpError.builder(ErrorCodes.INVALID_REQUEST)
+					.message("SessionId not found")
+					.data("Empty sessionId: " + sessionId)
+					.build());
 		}
 
 		try {
@@ -321,11 +329,11 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		}
 		catch (IllegalArgumentException | IOException e) {
 			logger.error("Failed to deserialize message: {}", e.getMessage());
-			return ServerResponse.badRequest().body(new McpError("Invalid message format"));
+			return ServerResponse.badRequest().body(new McpTransportException("Invalid message format", e));
 		}
 		catch (Exception e) {
 			logger.error("Error handling message: {}", e.getMessage());
-			return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new McpError(e.getMessage()));
+			return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new McpTransportException(e));
 		}
 	}
 

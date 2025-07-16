@@ -9,9 +9,12 @@ import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.modelcontextprotocol.spec.McpClientInternalException;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
@@ -197,13 +200,14 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 		this.inboundSubscription = events.concatMap(event -> Mono.just(event).<JSONRPCMessage>handle((e, s) -> {
 			if (ENDPOINT_EVENT_TYPE.equals(event.event())) {
 				String messageEndpointUri = event.data();
-				if (messageEndpointSink.tryEmitValue(messageEndpointUri).isSuccess()) {
+				var emitResult = messageEndpointSink.tryEmitValue(messageEndpointUri);
+				if (emitResult.isSuccess()) {
 					s.complete();
 				}
 				else {
 					// TODO: clarify with the spec if multiple events can be
 					// received
-					s.error(new McpError("Failed to handle SSE endpoint event"));
+					s.error(new McpClientInternalException("Failed to handle SSE endpoint event"));
 				}
 			}
 			else if (MESSAGE_EVENT_TYPE.equals(event.event())) {
@@ -216,7 +220,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 				}
 			}
 			else {
-				s.error(new McpError("Received unrecognized SSE event type: " + event.event()));
+				s.error(new McpTransportException("Received unrecognized SSE event type: " + event.event()));
 			}
 		}).transform(handler)).subscribe();
 

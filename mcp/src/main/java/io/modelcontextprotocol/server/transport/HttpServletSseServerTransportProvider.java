@@ -11,9 +11,12 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.McpError;
+
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
@@ -25,8 +28,6 @@ import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -255,12 +256,11 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		// Get the session ID from the request parameter
 		String sessionId = request.getParameter("sessionId");
 		if (sessionId == null) {
-			response.setContentType(APPLICATION_JSON);
+			// response.setContentType(APPLICATION_JSON);
 			response.setCharacterEncoding(UTF_8);
 			response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-			String jsonError = objectMapper.writeValueAsString(new McpError("Session ID missing in message endpoint"));
 			PrintWriter writer = response.getWriter();
-			writer.write(jsonError);
+			writer.write("Session ID missing in message endpoint");
 			writer.flush();
 			return;
 		}
@@ -268,12 +268,11 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		// Get the session from the sessions map
 		McpServerSession session = sessions.get(sessionId);
 		if (session == null) {
-			response.setContentType(APPLICATION_JSON);
+			// response.setContentType(APPLICATION_JSON);
 			response.setCharacterEncoding(UTF_8);
 			response.setStatus(HttpServletResponse.SC_NOT_FOUND);
-			String jsonError = objectMapper.writeValueAsString(new McpError("Session not found: " + sessionId));
 			PrintWriter writer = response.getWriter();
-			writer.write(jsonError);
+			writer.write("Session not found: " + sessionId);
 			writer.flush();
 			return;
 		}
@@ -296,13 +295,13 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		catch (Exception e) {
 			logger.error("Error processing message: {}", e.getMessage());
 			try {
-				McpError mcpError = new McpError(e.getMessage());
-				response.setContentType(APPLICATION_JSON);
+				// McpError mcpError = new McpError(e.getMessage());
+				// response.setContentType(APPLICATION_JSON);
 				response.setCharacterEncoding(UTF_8);
 				response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-				String jsonError = objectMapper.writeValueAsString(mcpError);
+				// String jsonError = objectMapper.writeValueAsString(mcpError);
 				PrintWriter writer = response.getWriter();
-				writer.write(jsonError);
+				writer.write(e.getMessage());
 				writer.flush();
 			}
 			catch (IOException ex) {

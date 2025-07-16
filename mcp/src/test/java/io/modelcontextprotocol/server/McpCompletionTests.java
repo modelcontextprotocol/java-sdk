@@ -248,7 +248,8 @@ class McpCompletionTests {
 						// Check if database context is provided
 						if (request.context() == null || request.context().arguments() == null
 								|| !request.context().arguments().containsKey("database")) {
-							throw new McpError("Please select a database first to see available tables");
+							throw new IllegalArgumentException(
+									"Please select a database first to see available tables");
 						}
 						// Normal completion if context is provided
 						String db = request.context().arguments().get("database");

@@ -7,9 +7,12 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse.JSONRPCError;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -300,31 +303,29 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		}
 
 		if (request.queryParam("sessionId").isEmpty()) {
-			return ServerResponse.badRequest().bodyValue(new McpError("Session ID missing in message endpoint"));
+			return ServerResponse.badRequest()
+				.bodyValue(McpError.builder(ErrorCodes.INVALID_REQUEST).message("Missing session ID param").build());
 		}
 
-		McpServerSession session = sessions.get(request.queryParam("sessionId").get());
+		String sessionId = request.queryParam("sessionId").get();
+		McpServerSession session = sessions.get(sessionId);
 
 		if (session == null) {
 			return ServerResponse.status(HttpStatus.NOT_FOUND)
-				.bodyValue(new McpError("Session not found: " + request.queryParam("sessionId").get()));
+				.bodyValue(McpError.builder(ErrorCodes.INVALID_REQUEST)
+					.message("SessionId not found")
+					.data("Empty sessionId: " + sessionId)
+					.build());
 		}
 
 		return request.bodyToMono(String.class).flatMap(body -> {
 			try {
 				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
-				return session.handle(message).flatMap(response -> ServerResponse.ok().build()).onErrorResume(error -> {
-					logger.error("Error processing  message: {}", error.getMessage());
-					// TODO: instead of signalling the error, just respond with 200 OK
-					// - the error is signalled on the SSE connection
-					// return ServerResponse.ok().build();
-					return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
-						.bodyValue(new McpError(error.getMessage()));
-				});
+				return session.handle(message).flatMap(response -> ServerResponse.ok().build());
 			}
 			catch (IllegalArgumentException | IOException e) {
 				logger.error("Failed to deserialize message: {}", e.getMessage());
-				return ServerResponse.badRequest().bodyValue(new McpError("Invalid message format"));
+				return ServerResponse.badRequest().bodyValue(new McpTransportException("Invalid message format", e));
 			}
 		});
 	}

@@ -26,6 +26,7 @@ import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.McpTransportSession;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.spec.McpTransportStream;
@@ -428,11 +429,11 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 				return Tuples.of(Optional.ofNullable(event.id()), List.of(message));
 			}
 			catch (IOException ioException) {
-				throw new McpError("Error parsing JSON-RPC message: " + event.data());
+				throw new McpTransportException("Error parsing JSON-RPC message: " + event.data(), ioException);
 			}
 		}
 		else {
-			throw new McpError("Received unrecognized SSE event type: " + event.event());
+			throw new McpTransportException("Received unrecognized SSE event type: " + event.event());
 		}
 	}
 

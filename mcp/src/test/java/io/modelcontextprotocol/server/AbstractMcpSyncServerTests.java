@@ -154,7 +154,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 		assertThatThrownBy(() -> mcpSyncServer.addTool(new McpServerFeatures.SyncToolSpecification(duplicateTool,
 				(exchange, args) -> new CallToolResult(List.of(), false))))
-			.isInstanceOf(McpError.class)
+			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Tool with name '" + TEST_TOOL_NAME + "' already exists");
 
 		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
@@ -173,7 +173,7 @@ public abstract class AbstractMcpSyncServerTests {
 		assertThatThrownBy(() -> mcpSyncServer.addTool(McpServerFeatures.SyncToolSpecification.builder()
 			.tool(duplicateTool)
 			.callHandler((exchange, request) -> new CallToolResult(List.of(), false))
-			.build())).isInstanceOf(McpError.class)
+			.build())).isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Tool with name '" + TEST_TOOL_NAME + "' already exists");
 
 		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
@@ -257,7 +257,8 @@ public abstract class AbstractMcpSyncServerTests {
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.build();
 
-		assertThatThrownBy(() -> mcpSyncServer.removeTool("nonexistent-tool")).isInstanceOf(McpError.class)
+		assertThatThrownBy(() -> mcpSyncServer.removeTool("nonexistent-tool"))
+			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Tool with name 'nonexistent-tool' not found");
 
 		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
@@ -321,7 +322,7 @@ public abstract class AbstractMcpSyncServerTests {
 			.build();
 
 		assertThatThrownBy(() -> mcpSyncServer.addResource((McpServerFeatures.SyncResourceSpecification) null))
-			.isInstanceOf(McpError.class)
+			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Resource must not be null");
 
 		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
@@ -338,7 +339,8 @@ public abstract class AbstractMcpSyncServerTests {
 		McpServerFeatures.SyncResourceSpecification specification = new McpServerFeatures.SyncResourceSpecification(
 				resource, (exchange, req) -> new ReadResourceResult(List.of()));
 
-		assertThatThrownBy(() -> serverWithoutResources.addResource(specification)).isInstanceOf(McpError.class)
+		assertThatThrownBy(() -> serverWithoutResources.addResource(specification))
+			.isInstanceOf(IllegalStateException.class)
 			.hasMessage("Server must be configured with resource capabilities");
 	}
 
@@ -348,7 +350,8 @@ public abstract class AbstractMcpSyncServerTests {
 			.serverInfo("test-server", "1.0.0")
 			.build();
 
-		assertThatThrownBy(() -> serverWithoutResources.removeResource(TEST_RESOURCE_URI)).isInstanceOf(McpError.class)
+		assertThatThrownBy(() -> serverWithoutResources.removeResource(TEST_RESOURCE_URI))
+			.isInstanceOf(IllegalStateException.class)
 			.hasMessage("Server must be configured with resource capabilities");
 	}
 
@@ -373,7 +376,7 @@ public abstract class AbstractMcpSyncServerTests {
 			.build();
 
 		assertThatThrownBy(() -> mcpSyncServer.addPrompt((McpServerFeatures.SyncPromptSpecification) null))
-			.isInstanceOf(McpError.class)
+			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Prompt specification must not be null");
 	}
 
@@ -388,7 +391,8 @@ public abstract class AbstractMcpSyncServerTests {
 				(exchange, req) -> new GetPromptResult("Test prompt description", List
 					.of(new PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent("Test content")))));
 
-		assertThatThrownBy(() -> serverWithoutPrompts.addPrompt(specification)).isInstanceOf(McpError.class)
+		assertThatThrownBy(() -> serverWithoutPrompts.addPrompt(specification))
+			.isInstanceOf(IllegalStateException.class)
 			.hasMessage("Server must be configured with prompt capabilities");
 	}
 
@@ -398,7 +402,8 @@ public abstract class AbstractMcpSyncServerTests {
 			.serverInfo("test-server", "1.0.0")
 			.build();
 
-		assertThatThrownBy(() -> serverWithoutPrompts.removePrompt(TEST_PROMPT_NAME)).isInstanceOf(McpError.class)
+		assertThatThrownBy(() -> serverWithoutPrompts.removePrompt(TEST_PROMPT_NAME))
+			.isInstanceOf(IllegalStateException.class)
 			.hasMessage("Server must be configured with prompt capabilities");
 	}
 
@@ -427,7 +432,8 @@ public abstract class AbstractMcpSyncServerTests {
 			.capabilities(ServerCapabilities.builder().prompts(true).build())
 			.build();
 
-		assertThatThrownBy(() -> mcpSyncServer.removePrompt("nonexistent-prompt")).isInstanceOf(McpError.class)
+		assertThatThrownBy(() -> mcpSyncServer.removePrompt("nonexistent-prompt"))
+			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Prompt with name 'nonexistent-prompt' not found");
 
 		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();

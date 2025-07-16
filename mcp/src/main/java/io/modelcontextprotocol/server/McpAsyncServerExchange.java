@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import io.modelcontextprotocol.spec.McpError;
+
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
@@ -93,10 +93,11 @@ public class McpAsyncServerExchange {
 	 */
 	public Mono<McpSchema.CreateMessageResult> createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
 		if (this.clientCapabilities == null) {
-			return Mono.error(new McpError("Client must be initialized. Call the initialize method first!"));
+			return Mono
+				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
 		}
 		if (this.clientCapabilities.sampling() == null) {
-			return Mono.error(new McpError("Client must be configured with sampling capabilities"));
+			return Mono.error(new IllegalArgumentException("Client must be configured with sampling capabilities"));
 		}
 		return this.session.sendRequest(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, createMessageRequest,
 				CREATE_MESSAGE_RESULT_TYPE_REF);
@@ -118,10 +119,11 @@ public class McpAsyncServerExchange {
 	 */
 	public Mono<McpSchema.ElicitResult> createElicitation(McpSchema.ElicitRequest elicitRequest) {
 		if (this.clientCapabilities == null) {
-			return Mono.error(new McpError("Client must be initialized. Call the initialize method first!"));
+			return Mono
+				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
 		}
 		if (this.clientCapabilities.elicitation() == null) {
-			return Mono.error(new McpError("Client must be configured with elicitation capabilities"));
+			return Mono.error(new IllegalArgumentException("Client must be configured with elicitation capabilities"));
 		}
 		return this.session.sendRequest(McpSchema.METHOD_ELICITATION_CREATE, elicitRequest,
 				ELICITATION_RESULT_TYPE_REF);
@@ -166,7 +168,7 @@ public class McpAsyncServerExchange {
 	public Mono<Void> loggingNotification(LoggingMessageNotification loggingMessageNotification) {
 
 		if (loggingMessageNotification == null) {
-			return Mono.error(new McpError("Logging message must not be null"));
+			return Mono.error(new IllegalArgumentException("Logging message must not be null"));
 		}
 
 		return Mono.defer(() -> {
@@ -185,7 +187,7 @@ public class McpAsyncServerExchange {
 	 */
 	public Mono<Void> progressNotification(McpSchema.ProgressNotification progressNotification) {
 		if (progressNotification == null) {
-			return Mono.error(new McpError("Progress notification must not be null"));
+			return Mono.error(new IllegalArgumentException("Progress notification must not be null"));
 		}
 		return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_PROGRESS, progressNotification);
 	}

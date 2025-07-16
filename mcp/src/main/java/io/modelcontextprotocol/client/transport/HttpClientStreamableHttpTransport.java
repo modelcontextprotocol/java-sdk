@@ -29,8 +29,8 @@ import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEven
 import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
 import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.McpTransportSession;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.spec.McpTransportStream;
@@ -260,8 +260,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 							}
 							catch (IOException ioException) {
-								return Flux.<McpSchema.JSONRPCMessage>error(new McpError(
-										"Error parsing JSON-RPC message: " + responseEvent.sseEvent().data()));
+								return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
+										"Error parsing JSON-RPC message: " + responseEvent, ioException));
 							}
 						}
 					}
@@ -282,8 +282,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						return Flux.<McpSchema.JSONRPCMessage>error(exception);
 					}
 
-					return Flux.<McpSchema.JSONRPCMessage>error(
-							new McpError("Received unrecognized SSE event type: " + responseEvent.sseEvent().event()));
+					return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
+							"Received unrecognized SSE event type: " + responseEvent.sseEvent().event()));
 
 				}).<McpSchema
 						.JSONRPCMessage>flatMap(jsonrpcMessage -> this.handler.get().apply(Mono.just(jsonrpcMessage)))
@@ -428,8 +428,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 									return Flux.from(sessionStream.consumeSseStream(Flux.just(idWithMessages)));
 								}
 								catch (IOException ioException) {
-									return Flux.<McpSchema.JSONRPCMessage>error(
-											new McpError("Error parsing JSON-RPC message: " + sseEvent.data()));
+									return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
+											"Error parsing JSON-RPC message: " + sseEvent, ioException));
 								}
 							});
 					}
@@ -445,8 +445,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 							return Mono.just(McpSchema.deserializeJsonRpcMessage(objectMapper, data));
 						}
 						catch (IOException e) {
-							// TODO: this should be a McpTransportError
-							return Mono.error(e);
+							return Mono.error(new McpTransportException(
+									"Error deserializing JSON-RPC message: " + responseEvent, e));
 						}
 					}
 					logger.warn("Unknown media type {} returned for POST in session {}", contentType,

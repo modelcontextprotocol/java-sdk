@@ -4,22 +4,6 @@
 
 package io.modelcontextprotocol.server;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-
-import com.fasterxml.jackson.core.type.TypeReference;
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpServerSession;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -29,6 +13,23 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+
+import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpServerSession;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 /**
  * Tests for {@link McpAsyncServerExchange}.
@@ -214,7 +215,8 @@ class McpAsyncServerExchangeTests {
 	@Test
 	void testLoggingNotificationWithNullMessage() {
 		StepVerifier.create(exchange.loggingNotification(null)).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(McpError.class).hasMessage("Logging message must not be null");
+			assertThat(error).isInstanceOf(IllegalArgumentException.class)
+				.hasMessage("Logging message must not be null");
 		});
 	}
 
@@ -406,7 +408,7 @@ class McpAsyncServerExchangeTests {
 
 		StepVerifier.create(exchangeWithNullCapabilities.createElicitation(elicitRequest))
 			.verifyErrorSatisfies(error -> {
-				assertThat(error).isInstanceOf(McpError.class)
+				assertThat(error).isInstanceOf(IllegalStateException.class)
 					.hasMessage("Client must be initialized. Call the initialize method first!");
 			});
 
@@ -430,7 +432,7 @@ class McpAsyncServerExchangeTests {
 			.build();
 
 		StepVerifier.create(exchangeWithoutElicitation.createElicitation(elicitRequest)).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(McpError.class)
+			assertThat(error).isInstanceOf(IllegalArgumentException.class)
 				.hasMessage("Client must be configured with elicitation capabilities");
 		});
 
@@ -579,7 +581,7 @@ class McpAsyncServerExchangeTests {
 
 		StepVerifier.create(exchangeWithNullCapabilities.createMessage(createMessageRequest))
 			.verifyErrorSatisfies(error -> {
-				assertThat(error).isInstanceOf(McpError.class)
+				assertThat(error).isInstanceOf(IllegalStateException.class)
 					.hasMessage("Client must be initialized. Call the initialize method first!");
 			});
 
@@ -604,7 +606,7 @@ class McpAsyncServerExchangeTests {
 			.build();
 
 		StepVerifier.create(exchangeWithoutSampling.createMessage(createMessageRequest)).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(McpError.class)
+			assertThat(error).isInstanceOf(IllegalArgumentException.class)
 				.hasMessage("Client must be configured with sampling capabilities");
 		});
 
@@ -765,13 +767,13 @@ class McpAsyncServerExchangeTests {
 	@Test
 	void testPingWithMcpError() {
 		// Given - Mock an MCP-specific error during ping
-		McpError mcpError = new McpError("Server unavailable");
+		var mcpError = new IllegalStateException("Server unavailable");
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class)))
 			.thenReturn(Mono.error(mcpError));
 
 		// When & Then
 		StepVerifier.create(exchange.ping()).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(McpError.class).hasMessage("Server unavailable");
+			assertThat(error).isInstanceOf(IllegalStateException.class).hasMessage("Server unavailable");
 		});
 
 		verify(mockSession, times(1)).sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class));

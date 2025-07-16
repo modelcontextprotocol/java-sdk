@@ -30,7 +30,9 @@ import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
+import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse.JSONRPCError;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
@@ -281,16 +283,16 @@ public class McpAsyncServer {
 	 */
 	public Mono<Void> addTool(McpServerFeatures.AsyncToolSpecification toolSpecification) {
 		if (toolSpecification == null) {
-			return Mono.error(new McpError("Tool specification must not be null"));
+			return Mono.error(new IllegalArgumentException("Tool specification must not be null"));
 		}
 		if (toolSpecification.tool() == null) {
-			return Mono.error(new McpError("Tool must not be null"));
+			return Mono.error(new IllegalArgumentException("Tool must not be null"));
 		}
 		if (toolSpecification.call() == null && toolSpecification.callHandler() == null) {
-			return Mono.error(new McpError("Tool call handler must not be null"));
+			return Mono.error(new IllegalArgumentException("Tool call handler must not be null"));
 		}
 		if (this.serverCapabilities.tools() == null) {
-			return Mono.error(new McpError("Server must be configured with tool capabilities"));
+			return Mono.error(new IllegalStateException("Server must be configured with tool capabilities"));
 		}
 
 		var wrappedToolSpecification = withStructuredOutputHandling(this.jsonSchemaValidator, toolSpecification);
@@ -298,8 +300,8 @@ public class McpAsyncServer {
 		return Mono.defer(() -> {
 			// Check for duplicate tool names
 			if (this.tools.stream().anyMatch(th -> th.tool().name().equals(wrappedToolSpecification.tool().name()))) {
-				return Mono.error(
-						new McpError("Tool with name '" + wrappedToolSpecification.tool().name() + "' already exists"));
+				return Mono.error(new IllegalArgumentException(
+						"Tool with name '" + wrappedToolSpecification.tool().name() + "' already exists"));
 			}
 
 			this.tools.add(wrappedToolSpecification);
@@ -422,10 +424,10 @@ public class McpAsyncServer {
 	 */
 	public Mono<Void> removeTool(String toolName) {
 		if (toolName == null) {
-			return Mono.error(new McpError("Tool name must not be null"));
+			return Mono.error(new IllegalArgumentException("Tool name must not be null"));
 		}
 		if (this.serverCapabilities.tools() == null) {
-			return Mono.error(new McpError("Server must be configured with tool capabilities"));
+			return Mono.error(new IllegalStateException("Server must be configured with tool capabilities"));
 		}
 
 		return Mono.defer(() -> {
@@ -438,7 +440,7 @@ public class McpAsyncServer {
 				}
 				return Mono.empty();
 			}
-			return Mono.error(new McpError("Tool with name '" + toolName + "' not found"));
+			return Mono.error(new IllegalArgumentException("Tool with name '" + toolName + "' not found"));
 		});
 	}
 
@@ -469,11 +471,17 @@ public class McpAsyncServer {
 				.findAny();
 
 			if (toolSpecification.isEmpty()) {
-				return Mono.error(new McpError("Tool not found: " + callToolRequest.name()));
+				// Tool errors should be reported within the result object, not as MCP
+				// protocol-level errors. This allows the LLM to see and potentially
+				// handle the error.
+				return Mono.just(CallToolResult.builder()
+					.isError(true)
+					.content(List.of(new TextContent("Tool not found: " + callToolRequest.name())))
+					.build());
 			}
-
-			return toolSpecification.map(tool -> tool.callHandler().apply(exchange, callToolRequest))
-				.orElse(Mono.error(new McpError("Tool not found: " + callToolRequest.name())));
+			else {
+				return toolSpecification.get().callHandler().apply(exchange, callToolRequest);
+			}
 		};
 	}
 
@@ -488,16 +496,16 @@ public class McpAsyncServer {
 	 */
 	public Mono<Void> addResource(McpServerFeatures.AsyncResourceSpecification resourceSpecification) {
 		if (resourceSpecification == null || resourceSpecification.resource() == null) {
-			return Mono.error(new McpError("Resource must not be null"));
+			return Mono.error(new IllegalArgumentException("Resource must not be null"));
 		}
 
 		if (this.serverCapabilities.resources() == null) {
-			return Mono.error(new McpError("Server must be configured with resource capabilities"));
+			return Mono.error(new IllegalStateException("Server must be configured with resource capabilities"));
 		}
 
 		return Mono.defer(() -> {
 			if (this.resources.putIfAbsent(resourceSpecification.resource().uri(), resourceSpecification) != null) {
-				return Mono.error(new McpError(
+				return Mono.error(new IllegalArgumentException(
 						"Resource with URI '" + resourceSpecification.resource().uri() + "' already exists"));
 			}
 			logger.debug("Added resource handler: {}", resourceSpecification.resource().uri());
@@ -515,10 +523,10 @@ public class McpAsyncServer {
 	 */
 	public Mono<Void> removeResource(String resourceUri) {
 		if (resourceUri == null) {
-			return Mono.error(new McpError("Resource URI must not be null"));
+			return Mono.error(new IllegalArgumentException("Resource URI must not be null"));
 		}
 		if (this.serverCapabilities.resources() == null) {
-			return Mono.error(new McpError("Server must be configured with resource capabilities"));
+			return Mono.error(new IllegalStateException("Server must be configured with resource capabilities"));
 		}
 
 		return Mono.defer(() -> {
@@ -530,7 +538,7 @@ public class McpAsyncServer {
 				}
 				return Mono.empty();
 			}
-			return Mono.error(new McpError("Resource with URI '" + resourceUri + "' not found"));
+			return Mono.error(new IllegalArgumentException("Resource with URI '" + resourceUri + "' not found"));
 		});
 	}
 
@@ -598,7 +606,7 @@ public class McpAsyncServer {
 					.create(resourceSpecification.resource().uri())
 					.matches(resourceUri))
 				.findFirst()
-				.orElseThrow(() -> new McpError("Resource not found: " + resourceUri));
+				.orElseThrow(() -> new IllegalArgumentException("Resource not found: " + resourceUri));
 
 			return specification.readHandler().apply(exchange, resourceRequest);
 		};
@@ -615,18 +623,18 @@ public class McpAsyncServer {
 	 */
 	public Mono<Void> addPrompt(McpServerFeatures.AsyncPromptSpecification promptSpecification) {
 		if (promptSpecification == null) {
-			return Mono.error(new McpError("Prompt specification must not be null"));
+			return Mono.error(new IllegalArgumentException("Prompt specification must not be null"));
 		}
 		if (this.serverCapabilities.prompts() == null) {
-			return Mono.error(new McpError("Server must be configured with prompt capabilities"));
+			return Mono.error(new IllegalStateException("Server must be configured with prompt capabilities"));
 		}
 
 		return Mono.defer(() -> {
 			McpServerFeatures.AsyncPromptSpecification specification = this.prompts
 				.putIfAbsent(promptSpecification.prompt().name(), promptSpecification);
 			if (specification != null) {
-				return Mono.error(
-						new McpError("Prompt with name '" + promptSpecification.prompt().name() + "' already exists"));
+				return Mono.error(new IllegalArgumentException(
+						"Prompt with name '" + promptSpecification.prompt().name() + "' already exists"));
 			}
 
 			logger.debug("Added prompt handler: {}", promptSpecification.prompt().name());
@@ -648,10 +656,10 @@ public class McpAsyncServer {
 	 */
 	public Mono<Void> removePrompt(String promptName) {
 		if (promptName == null) {
-			return Mono.error(new McpError("Prompt name must not be null"));
+			return Mono.error(new IllegalArgumentException("Prompt name must not be null"));
 		}
 		if (this.serverCapabilities.prompts() == null) {
-			return Mono.error(new McpError("Server must be configured with prompt capabilities"));
+			return Mono.error(new IllegalStateException("Server must be configured with prompt capabilities"));
 		}
 
 		return Mono.defer(() -> {
@@ -666,7 +674,7 @@ public class McpAsyncServer {
 				}
 				return Mono.empty();
 			}
-			return Mono.error(new McpError("Prompt with name '" + promptName + "' not found"));
+			return Mono.error(new IllegalArgumentException("Prompt with name '" + promptName + "' not found"));
 		});
 	}
 
@@ -703,7 +711,7 @@ public class McpAsyncServer {
 			// Implement prompt retrieval logic here
 			McpServerFeatures.AsyncPromptSpecification specification = this.prompts.get(promptRequest.name());
 			if (specification == null) {
-				return Mono.error(new McpError("Prompt not found: " + promptRequest.name()));
+				return Mono.error(new IllegalArgumentException("Prompt not found: " + promptRequest.name()));
 			}
 
 			return specification.promptHandler().apply(exchange, promptRequest);
@@ -729,7 +737,7 @@ public class McpAsyncServer {
 	public Mono<Void> loggingNotification(LoggingMessageNotification loggingMessageNotification) {
 
 		if (loggingMessageNotification == null) {
-			return Mono.error(new McpError("Logging message must not be null"));
+			return Mono.error(new IllegalArgumentException("Logging message must not be null"));
 		}
 
 		if (loggingMessageNotification.level().level() < minLoggingLevel.level()) {
@@ -764,11 +772,11 @@ public class McpAsyncServer {
 			McpSchema.CompleteRequest request = parseCompletionParams(params);
 
 			if (request.ref() == null) {
-				return Mono.error(new McpError("ref must not be null"));
+				return Mono.error(new IllegalArgumentException("ref must not be null"));
 			}
 
 			if (request.ref().type() == null) {
-				return Mono.error(new McpError("type must not be null"));
+				return Mono.error(new IllegalArgumentException("type must not be null"));
 			}
 
 			String type = request.ref().type();
@@ -779,7 +787,7 @@ public class McpAsyncServer {
 			if (type.equals("ref/prompt") && request.ref() instanceof McpSchema.PromptReference promptReference) {
 				McpServerFeatures.AsyncPromptSpecification promptSpec = this.prompts.get(promptReference.name());
 				if (promptSpec == null) {
-					return Mono.error(new McpError("Prompt not found: " + promptReference.name()));
+					return Mono.error(new IllegalArgumentException("Prompt not found: " + promptReference.name()));
 				}
 				if (!promptSpec.prompt()
 					.arguments()
@@ -788,19 +796,19 @@ public class McpAsyncServer {
 					.findFirst()
 					.isPresent()) {
 
-					return Mono.error(new McpError("Argument not found: " + argumentName));
+					return Mono.error(new IllegalArgumentException("Argument not found: " + argumentName));
 				}
 			}
 
 			if (type.equals("ref/resource") && request.ref() instanceof McpSchema.ResourceReference resourceReference) {
 				McpServerFeatures.AsyncResourceSpecification resourceSpec = this.resources.get(resourceReference.uri());
 				if (resourceSpec == null) {
-					return Mono.error(new McpError("Resource not found: " + resourceReference.uri()));
+					return Mono.error(new IllegalArgumentException("Resource not found: " + resourceReference.uri()));
 				}
 				if (!uriTemplateManagerFactory.create(resourceSpec.resource().uri())
 					.getVariableNames()
 					.contains(argumentName)) {
-					return Mono.error(new McpError("Argument not found: " + argumentName));
+					return Mono.error(new IllegalArgumentException("Argument not found: " + argumentName));
 				}
 
 			}
@@ -808,7 +816,8 @@ public class McpAsyncServer {
 			McpServerFeatures.AsyncCompletionSpecification specification = this.completions.get(request.ref());
 
 			if (specification == null) {
-				return Mono.error(new McpError("AsyncCompletionSpecification not found: " + request.ref()));
+				return Mono
+					.error(new IllegalStateException("AsyncCompletionSpecification not found: " + request.ref()));
 			}
 
 			return specification.completionHandler().apply(exchange, request);
