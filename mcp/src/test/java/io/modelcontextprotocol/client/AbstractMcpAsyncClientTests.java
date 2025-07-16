@@ -421,7 +421,7 @@ public abstract class AbstractMcpAsyncClientTests {
 				.consumeNextWith(result -> {
 					assertThat(result.prompts()).isNotNull();
 					// Verify that the returned list is immutable
-					assertThatThrownBy(() -> result.prompts().add(new Prompt("test", "test", null)))
+					assertThatThrownBy(() -> result.prompts().add(new Prompt("test", "test", "test", null)))
 						.isInstanceOf(UnsupportedOperationException.class);
 				})
 				.verifyComplete();
@@ -605,7 +605,7 @@ public abstract class AbstractMcpAsyncClientTests {
 					assertThat(result.resourceTemplates()).isNotNull();
 					// Verify that the returned list is immutable
 					assertThatThrownBy(() -> result.resourceTemplates()
-						.add(new McpSchema.ResourceTemplate("test://template", "test", null, null, null)))
+						.add(new McpSchema.ResourceTemplate("test://template", "test", "test", null, null, null)))
 						.isInstanceOf(UnsupportedOperationException.class);
 				})
 				.verifyComplete();

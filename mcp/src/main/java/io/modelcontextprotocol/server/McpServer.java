@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2025 the original author or authors.
  */
 
 package io.modelcontextprotocol.server;
@@ -14,6 +14,9 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.modelcontextprotocol.spec.DefaultJsonSchemaValidator;
+import io.modelcontextprotocol.spec.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
@@ -82,12 +85,16 @@ import reactor.core.publisher.Mono;
  *     .capabilities(new ServerCapabilities(...))
  *     // Register tools
  *     .tools(
- *         new McpServerFeatures.AsyncToolSpecification(calculatorTool,
- *             (exchange, args) -> Mono.fromSupplier(() -> calculate(args))
- *                 .map(result -> new CallToolResult("Result: " + result))),
- *         new McpServerFeatures.AsyncToolSpecification(weatherTool,
- *             (exchange, args) -> Mono.fromSupplier(() -> getWeather(args))
- *                 .map(result -> new CallToolResult("Weather: " + result)))
+ *         McpServerFeatures.AsyncToolSpecification.builder()
+ * 			.tool(calculatorTool)
+ *   	    .callTool((exchange, args) -> Mono.fromSupplier(() -> calculate(args.arguments()))
+ *                 .map(result -> new CallToolResult("Result: " + result))))
+ *.         .build(),
+ *         McpServerFeatures.AsyncToolSpecification.builder()
+ * 	        .tool((weatherTool)
+ *          .callTool((exchange, args) -> Mono.fromSupplier(() -> getWeather(args.arguments()))
+ *                 .map(result -> new CallToolResult("Weather: " + result))))
+ *          .build()
  *     )
  *     // Register resources
  *     .resources(
@@ -165,6 +172,8 @@ public interface McpServer {
 		private McpSchema.Implementation serverInfo = DEFAULT_SERVER_INFO;
 
 		private McpSchema.ServerCapabilities serverCapabilities;
+
+		private JsonSchemaValidator jsonSchemaValidator;
 
 		private String instructions;
 
@@ -321,13 +330,43 @@ public interface McpServer {
 		 * map of arguments passed to the tool.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if tool or handler is null
+		 * @deprecated Use {@link #toolCall(McpSchema.Tool, BiFunction)} instead for tool
+		 * calls that require a request object.
 		 */
+		@Deprecated
 		public AsyncSpecification tool(McpSchema.Tool tool,
 				BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<CallToolResult>> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
+			assertNoDuplicateTool(tool.name());
 
 			this.tools.add(new McpServerFeatures.AsyncToolSpecification(tool, handler));
+
+			return this;
+		}
+
+		/**
+		 * Adds a single tool with its implementation handler to the server. This is a
+		 * convenience method for registering individual tools without creating a
+		 * {@link McpServerFeatures.AsyncToolSpecification} explicitly.
+		 * @param tool The tool definition including name, description, and schema. Must
+		 * not be null.
+		 * @param callHandler The function that implements the tool's logic. Must not be
+		 * null. The function's first argument is an {@link McpAsyncServerExchange} upon
+		 * which the server can interact with the connected client. The second argument is
+		 * the {@link McpSchema.CallToolRequest} object containing the tool call
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if tool or handler is null
+		 */
+		public AsyncSpecification toolCall(McpSchema.Tool tool,
+				BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<CallToolResult>> callHandler) {
+
+			Assert.notNull(tool, "Tool must not be null");
+			Assert.notNull(callHandler, "Handler must not be null");
+			assertNoDuplicateTool(tool.name());
+
+			this.tools
+				.add(McpServerFeatures.AsyncToolSpecification.builder().tool(tool).callHandler(callHandler).build());
 
 			return this;
 		}
@@ -344,7 +383,12 @@ public interface McpServer {
 		 */
 		public AsyncSpecification tools(List<McpServerFeatures.AsyncToolSpecification> toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
-			this.tools.addAll(toolSpecifications);
+
+			for (var tool : toolSpecifications) {
+				assertNoDuplicateTool(tool.tool().name());
+				this.tools.add(tool);
+			}
+
 			return this;
 		}
 
@@ -355,22 +399,29 @@ public interface McpServer {
 		 * <p>
 		 * Example usage: <pre>{@code
 		 * .tools(
-		 *     new McpServerFeatures.AsyncToolSpecification(calculatorTool, calculatorHandler),
-		 *     new McpServerFeatures.AsyncToolSpecification(weatherTool, weatherHandler),
-		 *     new McpServerFeatures.AsyncToolSpecification(fileManagerTool, fileManagerHandler)
+		 *     McpServerFeatures.AsyncToolSpecification.builder().tool(calculatorTool).callTool(calculatorHandler).build(),
+		 *     McpServerFeatures.AsyncToolSpecification.builder().tool(weatherTool).callTool(weatherHandler).build(),
+		 *     McpServerFeatures.AsyncToolSpecification.builder().tool(fileManagerTool).callTool(fileManagerHandler).build()
 		 * )
 		 * }</pre>
 		 * @param toolSpecifications The tool specifications to add. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if toolSpecifications is null
-		 * @see #tools(List)
 		 */
 		public AsyncSpecification tools(McpServerFeatures.AsyncToolSpecification... toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
+
 			for (McpServerFeatures.AsyncToolSpecification tool : toolSpecifications) {
+				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
 			return this;
+		}
+
+		private void assertNoDuplicateTool(String toolName) {
+			if (this.tools.stream().anyMatch(toolSpec -> toolSpec.tool().name().equals(toolName))) {
+				throw new IllegalArgumentException("Tool with name '" + toolName + "' is already registered.");
+			}
 		}
 
 		/**
@@ -625,6 +676,20 @@ public interface McpServer {
 		}
 
 		/**
+		 * Sets the JSON schema validator to use for validating tool and resource schemas.
+		 * This ensures that the server's tools and resources conform to the expected
+		 * schema definitions.
+		 * @param jsonSchemaValidator The validator to use. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if jsonSchemaValidator is null
+		 */
+		public AsyncSpecification jsonSchemaValidator(JsonSchemaValidator jsonSchemaValidator) {
+			Assert.notNull(jsonSchemaValidator, "JsonSchemaValidator must not be null");
+			this.jsonSchemaValidator = jsonSchemaValidator;
+			return this;
+		}
+
+		/**
 		 * Builds an asynchronous MCP server that provides non-blocking operations.
 		 * @return A new instance of {@link McpAsyncServer} configured with this builder's
 		 * settings.
@@ -634,8 +699,10 @@ public interface McpServer {
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
 					this.instructions);
 			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
+			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
+					: new DefaultJsonSchemaValidator(mapper);
 			return new McpAsyncServer(this.transportProvider, mapper, features, this.requestTimeout,
-					this.uriTemplateManagerFactory);
+					this.uriTemplateManagerFactory, jsonSchemaValidator);
 		}
 
 	}
@@ -680,6 +747,8 @@ public interface McpServer {
 
 		private final List<ResourceTemplate> resourceTemplates = new ArrayList<>();
 
+		private JsonSchemaValidator jsonSchemaValidator;
+
 		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
 		 * expose prompt templates to clients. Prompts allow servers to provide structured
@@ -694,6 +763,8 @@ public interface McpServer {
 		private final List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeHandlers = new ArrayList<>();
 
 		private Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
+
+		private boolean immediateExecution = false;
 
 		private SyncSpecification(McpServerTransportProvider transportProvider) {
 			Assert.notNull(transportProvider, "Transport provider must not be null");
@@ -812,13 +883,41 @@ public interface McpServer {
 		 * list of arguments passed to the tool.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if tool or handler is null
+		 * @deprecated Use {@link #toolCall(McpSchema.Tool, BiFunction)} instead for tool
+		 * calls that require a request object.
 		 */
+		@Deprecated
 		public SyncSpecification tool(McpSchema.Tool tool,
 				BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
+			assertNoDuplicateTool(tool.name());
 
 			this.tools.add(new McpServerFeatures.SyncToolSpecification(tool, handler));
+
+			return this;
+		}
+
+		/**
+		 * Adds a single tool with its implementation handler to the server. This is a
+		 * convenience method for registering individual tools without creating a
+		 * {@link McpServerFeatures.SyncToolSpecification} explicitly.
+		 * @param tool The tool definition including name, description, and schema. Must
+		 * not be null.
+		 * @param handler The function that implements the tool's logic. Must not be null.
+		 * The function's first argument is an {@link McpSyncServerExchange} upon which
+		 * the server can interact with the connected client. The second argument is the
+		 * list of arguments passed to the tool.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if tool or handler is null
+		 */
+		public SyncSpecification toolCall(McpSchema.Tool tool,
+				BiFunction<McpSyncServerExchange, McpSchema.CallToolRequest, McpSchema.CallToolResult> handler) {
+			Assert.notNull(tool, "Tool must not be null");
+			Assert.notNull(handler, "Handler must not be null");
+			assertNoDuplicateTool(tool.name());
+
+			this.tools.add(new McpServerFeatures.SyncToolSpecification(tool, null, handler));
 
 			return this;
 		}
@@ -835,7 +934,13 @@ public interface McpServer {
 		 */
 		public SyncSpecification tools(List<McpServerFeatures.SyncToolSpecification> toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
-			this.tools.addAll(toolSpecifications);
+
+			for (var tool : toolSpecifications) {
+				String toolName = tool.tool().name();
+				assertNoDuplicateTool(toolName); // Check against existing tools
+				this.tools.add(tool);
+			}
+
 			return this;
 		}
 
@@ -858,10 +963,18 @@ public interface McpServer {
 		 */
 		public SyncSpecification tools(McpServerFeatures.SyncToolSpecification... toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
+
 			for (McpServerFeatures.SyncToolSpecification tool : toolSpecifications) {
+				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
 			return this;
+		}
+
+		private void assertNoDuplicateTool(String toolName) {
+			if (this.tools.stream().anyMatch(toolSpec -> toolSpec.tool().name().equals(toolName))) {
+				throw new IllegalArgumentException("Tool with name '" + toolName + "' is already registered.");
+			}
 		}
 
 		/**
@@ -1116,6 +1229,28 @@ public interface McpServer {
 			return this;
 		}
 
+		public SyncSpecification jsonSchemaValidator(JsonSchemaValidator jsonSchemaValidator) {
+			Assert.notNull(jsonSchemaValidator, "JsonSchemaValidator must not be null");
+			this.jsonSchemaValidator = jsonSchemaValidator;
+			return this;
+		}
+
+		/**
+		 * Enable on "immediate execution" of the operations on the underlying
+		 * {@link McpAsyncServer}. Defaults to false, which does blocking code offloading
+		 * to prevent accidental blocking of the non-blocking transport.
+		 * <p>
+		 * Do NOT set to true if the underlying transport is a non-blocking
+		 * implementation.
+		 * @param immediateExecution When true, do not offload work asynchronously.
+		 * @return This builder instance for method chaining.
+		 *
+		 */
+		public SyncSpecification immediateExecution(boolean immediateExecution) {
+			this.immediateExecution = immediateExecution;
+			return this;
+		}
+
 		/**
 		 * Builds a synchronous MCP server that provides blocking operations.
 		 * @return A new instance of {@link McpSyncServer} configured with this builder's
@@ -1125,12 +1260,16 @@ public interface McpServer {
 			McpServerFeatures.Sync syncFeatures = new McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,
 					this.tools, this.resources, this.resourceTemplates, this.prompts, this.completions,
 					this.rootsChangeHandlers, this.instructions);
-			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures);
+			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures,
+					this.immediateExecution);
 			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
-			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures, this.requestTimeout,
-					this.uriTemplateManagerFactory);
+			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
+					: new DefaultJsonSchemaValidator(mapper);
 
-			return new McpSyncServer(asyncServer);
+			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures, this.requestTimeout,
+					this.uriTemplateManagerFactory, jsonSchemaValidator);
+
+			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
 	}

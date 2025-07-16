@@ -108,11 +108,11 @@ public class McpSyncServerExchange {
 	}
 
 	/**
-	 * Sends a ping request to the client.
-	 * @return A Mono that completes with clients's ping response
+	 * Sends a synchronous ping request to the client.
+	 * @return
 	 */
-	public void ping() {
-		this.exchange.ping().block();
+	public Object ping() {
+		return this.exchange.ping().block();
 	}
 
 }

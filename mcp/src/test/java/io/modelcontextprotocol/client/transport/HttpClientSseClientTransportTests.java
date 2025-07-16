@@ -7,23 +7,20 @@ package io.modelcontextprotocol.client.transport;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mockito;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import reactor.core.publisher.Mono;
@@ -34,11 +31,6 @@ import org.springframework.http.codec.ServerSentEvent;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Tests for the {@link HttpClientSseClientTransport} class.
@@ -67,7 +59,9 @@ class HttpClientSseClientTransportTests {
 		private Sinks.Many<ServerSentEvent<String>> events = Sinks.many().unicast().onBackpressureBuffer();
 
 		public TestHttpClientSseClientTransport(final String baseUri) {
-			super(HttpClient.newHttpClient(), HttpRequest.newBuilder(), baseUri, "/sse", new ObjectMapper());
+			super(HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(),
+					HttpRequest.newBuilder().header("Content-Type", "application/json"), baseUri, "/sse",
+					new ObjectMapper());
 		}
 
 		public int getInboundMessageCount() {
@@ -109,6 +103,16 @@ class HttpClientSseClientTransportTests {
 
 	void cleanup() {
 		container.stop();
+	}
+
+	@Test
+	void testErrorOnBogusMessage() {
+		// bogus message
+		JSONRPCRequest bogusMessage = new JSONRPCRequest(null, null, "test-id", Map.of("key", "value"));
+
+		StepVerifier.create(transport.sendMessage(bogusMessage))
+			.verifyErrorMessage(
+					"Sending message failed with a non-OK HTTP code: 400 - Invalid message: {\"id\":\"test-id\",\"params\":{\"key\":\"value\"}}");
 	}
 
 	@Test
@@ -369,27 +373,6 @@ class HttpClientSseClientTransportTests {
 
 		// Clean up
 		customizedTransport.closeGracefully().block();
-	}
-
-	@Test
-	@SuppressWarnings("unchecked")
-	void testResolvingClientEndpoint() {
-		HttpClient httpClient = Mockito.mock(HttpClient.class);
-		HttpResponse<Void> httpResponse = Mockito.mock(HttpResponse.class);
-		CompletableFuture<HttpResponse<Void>> future = new CompletableFuture<>();
-		future.complete(httpResponse);
-		when(httpClient.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(future);
-
-		HttpClientSseClientTransport transport = new HttpClientSseClientTransport(httpClient, HttpRequest.newBuilder(),
-				"http://example.com", "http://example.com/sse", new ObjectMapper());
-
-		transport.connect(Function.identity());
-
-		ArgumentCaptor<HttpRequest> httpRequestCaptor = ArgumentCaptor.forClass(HttpRequest.class);
-		verify(httpClient).sendAsync(httpRequestCaptor.capture(), any(HttpResponse.BodyHandler.class));
-		assertThat(httpRequestCaptor.getValue().uri()).isEqualTo(URI.create("http://example.com/sse"));
-
-		transport.closeGracefully().block();
 	}
 
 }

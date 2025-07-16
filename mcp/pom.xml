@@ -84,6 +84,22 @@
 		</dependency>
 
 		<dependency>
+			<groupId>com.networknt</groupId>
+			<artifactId>json-schema-validator</artifactId>
+			<version>${json-schema-validator.version}</version>
+		</dependency>
+
+		<!-- Used by the HttpServletSseServerTransport -->
+		<dependency>
+			<groupId>jakarta.servlet</groupId>
+			<artifactId>jakarta.servlet-api</artifactId>
+			<version>${jakarta.servlet.version}</version>
+			<scope>provided</scope>
+		</dependency>
+
+		<!-- Test dependencies -->
+
+		<dependency>
 			<groupId>org.springframework</groupId>
 			<artifactId>spring-webmvc</artifactId>
 			<version>${springframework.version}</version>
@@ -141,11 +157,11 @@
 
 		<!-- Mockito cannot mock this class: class java.net.http.HttpClient. the bytebuddy helps. -->
 		<dependency>
-            <groupId>net.bytebuddy</groupId>
-            <artifactId>byte-buddy</artifactId>
-            <version>${byte-buddy.version}</version>
-            <scope>test</scope>
-        </dependency>
+			<groupId>net.bytebuddy</groupId>
+			<artifactId>byte-buddy</artifactId>
+			<version>${byte-buddy.version}</version>
+			<scope>test</scope>
+		</dependency>
 		<dependency>
 			<groupId>io.projectreactor</groupId>
 			<artifactId>reactor-test</artifactId>
@@ -179,15 +195,6 @@
 			<scope>test</scope>
 		</dependency>
 
-
-		<!-- Used by the HttpServletSseServerTransport -->
-		<dependency>
-			<groupId>jakarta.servlet</groupId>
-			<artifactId>jakarta.servlet-api</artifactId>
-			<version>${jakarta.servlet.version}</version>
-			<scope>provided</scope>
-		</dependency>
-
 		<!-- Tomcat dependencies for testing -->
 		<dependency>
 			<groupId>org.apache.tomcat.embed</groupId>
@@ -201,6 +208,14 @@
 			<version>${tomcat.version}</version>
 			<scope>test</scope>
 		</dependency>
+
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>toxiproxy</artifactId>
+			<version>${toxiproxy.version}</version>
+			<scope>test</scope>
+		</dependency>
+
 
 	</dependencies>
 
