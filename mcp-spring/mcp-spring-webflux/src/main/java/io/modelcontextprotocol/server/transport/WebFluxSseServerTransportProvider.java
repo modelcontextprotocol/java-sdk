@@ -206,6 +206,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	// FIXME: This javadoc makes claims about using isClosing flag but it's not
 	// actually
 	// doing that.
+
 	/**
 	 * Initiates a graceful shutdown of all the sessions. This method ensures all active
 	 * sessions are properly closed and cleaned up.
@@ -258,7 +259,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		return ServerResponse.ok()
 			.contentType(MediaType.TEXT_EVENT_STREAM)
 			.body(Flux.<ServerSentEvent<?>>create(sink -> {
-				WebFluxMcpSessionTransport sessionTransport = new WebFluxMcpSessionTransport(sink);
+				WebFluxMcpSessionTransport sessionTransport = new WebFluxMcpSessionTransport(request, sink);
 
 				McpServerSession session = sessionFactory.create(sessionTransport);
 				String sessionId = session.getId();
@@ -331,10 +332,17 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 	private class WebFluxMcpSessionTransport implements McpServerTransport {
 
+		private final ServerRequest request;
+
 		private final FluxSink<ServerSentEvent<?>> sink;
 
-		public WebFluxMcpSessionTransport(FluxSink<ServerSentEvent<?>> sink) {
+		public WebFluxMcpSessionTransport(ServerRequest request, FluxSink<ServerSentEvent<?>> sink) {
+			this.request = request;
 			this.sink = sink;
+		}
+
+		public ServerRequest getRequest() {
+			return request;
 		}
 
 		@Override
