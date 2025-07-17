@@ -1017,6 +1017,111 @@ class WebFluxSseIntegrationTests {
 	}
 
 	// ---------------------------------------
+	// Progress Tests
+	// ---------------------------------------
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testProgressNotification(String clientType) throws InterruptedException {
+		int expectedNotificationsCount = 4; // 3 notifications + 1 for another progress
+											// token
+		CountDownLatch latch = new CountDownLatch(expectedNotificationsCount);
+		// Create a list to store received logging notifications
+		List<McpSchema.ProgressNotification> receivedNotifications = new CopyOnWriteArrayList<>();
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Create server with a tool that sends logging notifications
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(McpSchema.Tool.builder()
+				.name("progress-test")
+				.description("Test progress notifications")
+				.inputSchema(emptyJsonSchema)
+				.build())
+			.callHandler((exchange, request) -> {
+
+				// Create and send notifications
+				var progressToken = (String) request.meta().get("progressToken");
+
+				return exchange
+					.progressNotification(
+							new McpSchema.ProgressNotification(progressToken, 0.0, 1.0, "Processing started"))
+					.then(exchange.progressNotification(
+							new McpSchema.ProgressNotification(progressToken, 0.5, 1.0, "Processing data")))
+					.then(// Send a progress notification with another progress value
+							// should
+							exchange.progressNotification(new McpSchema.ProgressNotification("another-progress-token",
+									0.0, 1.0, "Another processing started")))
+					.then(exchange.progressNotification(
+							new McpSchema.ProgressNotification(progressToken, 1.0, 1.0, "Processing completed")))
+					.thenReturn(new CallToolResult(("Progress test completed"), false));
+			})
+			.build();
+
+		var mcpServer = McpServer.async(mcpServerTransportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool)
+			.build();
+
+		try (
+				// Create client with progress notification handler
+				var mcpClient = clientBuilder.progressConsumer(notification -> {
+					receivedNotifications.add(notification);
+					latch.countDown();
+				}).build()) {
+
+			// Initialize client
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Call the tool that sends progress notifications
+			McpSchema.CallToolRequest callToolRequest = McpSchema.CallToolRequest.builder()
+				.name("progress-test")
+				.meta(Map.of("progressToken", "test-progress-token"))
+				.build();
+			CallToolResult result = mcpClient.callTool(callToolRequest);
+			assertThat(result).isNotNull();
+			assertThat(result.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
+			assertThat(((McpSchema.TextContent) result.content().get(0)).text()).isEqualTo("Progress test completed");
+
+			assertThat(latch.await(5, TimeUnit.SECONDS)).as("Should receive notifications in reasonable time").isTrue();
+
+			// Should have received 3 notifications
+			assertThat(receivedNotifications).hasSize(expectedNotificationsCount);
+
+			Map<String, McpSchema.ProgressNotification> notificationMap = receivedNotifications.stream()
+				.collect(Collectors.toMap(n -> n.message(), n -> n));
+
+			// First notification should be 0.0/1.0 progress
+			assertThat(notificationMap.get("Processing started").progressToken()).isEqualTo("test-progress-token");
+			assertThat(notificationMap.get("Processing started").progress()).isEqualTo(0.0);
+			assertThat(notificationMap.get("Processing started").total()).isEqualTo(1.0);
+			assertThat(notificationMap.get("Processing started").message()).isEqualTo("Processing started");
+
+			// Second notification should be 0.5/1.0 progress
+			assertThat(notificationMap.get("Processing data").progressToken()).isEqualTo("test-progress-token");
+			assertThat(notificationMap.get("Processing data").progress()).isEqualTo(0.5);
+			assertThat(notificationMap.get("Processing data").total()).isEqualTo(1.0);
+			assertThat(notificationMap.get("Processing data").message()).isEqualTo("Processing data");
+
+			// Third notification should be another progress token with 0.0/1.0 progress
+			assertThat(notificationMap.get("Another processing started").progressToken())
+				.isEqualTo("another-progress-token");
+			assertThat(notificationMap.get("Another processing started").progress()).isEqualTo(0.0);
+			assertThat(notificationMap.get("Another processing started").total()).isEqualTo(1.0);
+			assertThat(notificationMap.get("Another processing started").message())
+				.isEqualTo("Another processing started");
+
+			// Fourth notification should be 1.0/1.0 progress
+			assertThat(notificationMap.get("Processing completed").progressToken()).isEqualTo("test-progress-token");
+			assertThat(notificationMap.get("Processing completed").progress()).isEqualTo(1.0);
+			assertThat(notificationMap.get("Processing completed").total()).isEqualTo(1.0);
+			assertThat(notificationMap.get("Processing completed").message()).isEqualTo("Processing completed");
+		}
+		mcpServer.close();
+	}
+
+	// ---------------------------------------
 	// Completion Tests
 	// ---------------------------------------
 	@ParameterizedTest(name = "{0} : Completion call")
