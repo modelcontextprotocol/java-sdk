@@ -1,0 +1,64 @@
+### Maven/Gradle Builds ###
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+.gradle
+out
+/.gradletasknamecache
+**/*.flattened-pom.xml
+
+### IDE - Eclipse/STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings/
+.springBeans
+.sts4-cache
+bin/
+com.springsource.sts.config.flow.prefs
+
+### IDE - IntelliJ IDEA ###
+.idea/
+*.iml
+*.ipr
+*.iws
+
+### IDE - NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### IDE - VS Code ###
+.vscode/
+vscode/
+settings.json
+
+### Logs and Databases ###
+build.log
+shell.log
+integration-repo
+ivy-cache
+spring-build
+derby-home
+derbydb
+derby.log
+
+### Node.js ###
+node/
+node_modules/
+package-lock.json
+package.json
+
+### Other ###
+.antlr/
+.profiler/
+s3.properties
+.*.swp
+.DS_Store
