@@ -135,35 +135,45 @@ class ResponseSubscribers {
 
 		@Override
 		protected void hookOnNext(String line) {
-			if (line.isEmpty()) {
-				// Empty line means end of event
-				if (this.eventBuilder.length() > 0) {
-					String eventData = this.eventBuilder.toString();
-					SseEvent sseEvent = new SseEvent(currentEventId.get(), currentEventType.get(), eventData.trim());
+			if (this.responseInfo.statusCode() >= 200 && this.responseInfo.statusCode() < 300) {
 
-					this.sink.next(new SseResponseEvent(responseInfo, sseEvent));
-					this.eventBuilder.setLength(0);
+				if (line.isEmpty()) {
+					// Empty line means end of event
+					if (this.eventBuilder.length() > 0) {
+						String eventData = this.eventBuilder.toString();
+						SseEvent sseEvent = new SseEvent(currentEventId.get(), currentEventType.get(),
+								eventData.trim());
+
+						this.sink.next(new SseResponseEvent(responseInfo, sseEvent));
+						this.eventBuilder.setLength(0);
+					}
+				}
+				else {
+					if (line.startsWith("data:")) {
+						var matcher = EVENT_DATA_PATTERN.matcher(line);
+						if (matcher.find()) {
+							this.eventBuilder.append(matcher.group(1).trim()).append("\n");
+						}
+					}
+					else if (line.startsWith("id:")) {
+						var matcher = EVENT_ID_PATTERN.matcher(line);
+						if (matcher.find()) {
+							this.currentEventId.set(matcher.group(1).trim());
+						}
+					}
+					else if (line.startsWith("event:")) {
+						var matcher = EVENT_TYPE_PATTERN.matcher(line);
+						if (matcher.find()) {
+							this.currentEventType.set(matcher.group(1).trim());
+						}
+					}
 				}
 			}
 			else {
-				if (line.startsWith("data:")) {
-					var matcher = EVENT_DATA_PATTERN.matcher(line);
-					if (matcher.find()) {
-						this.eventBuilder.append(matcher.group(1).trim()).append("\n");
-					}
-				}
-				else if (line.startsWith("id:")) {
-					var matcher = EVENT_ID_PATTERN.matcher(line);
-					if (matcher.find()) {
-						this.currentEventId.set(matcher.group(1).trim());
-					}
-				}
-				else if (line.startsWith("event:")) {
-					var matcher = EVENT_TYPE_PATTERN.matcher(line);
-					if (matcher.find()) {
-						this.currentEventType.set(matcher.group(1).trim());
-					}
-				}
+				// If the response is not successful, emit an error
+				System.out.println("Received non-successful response: " + this.responseInfo.statusCode());
+				SseEvent sseEvent = new SseEvent(null, null, null);
+				this.sink.next(new SseResponseEvent(responseInfo, sseEvent));
 			}
 		}
 
