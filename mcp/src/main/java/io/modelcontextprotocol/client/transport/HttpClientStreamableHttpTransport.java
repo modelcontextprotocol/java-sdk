@@ -358,7 +358,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			String jsonBody = this.toString(sendMessage);
 
 			HttpRequest request = requestBuilder.uri(Utils.resolveUri(this.baseUri, this.endpoint))
-				.header("Accept", TEXT_EVENT_STREAM + ", " + APPLICATION_JSON)
+				.header("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
 				.header("Content-Type", APPLICATION_JSON)
 				.header("Cache-Control", "no-cache")
 				.POST(HttpRequest.BodyPublishers.ofString(jsonBody))
@@ -436,11 +436,19 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					else if (contentType.contains(APPLICATION_JSON)) {
 						messageSink.success();
 						String data = ((ResponseSubscribers.AggregateResponseEvent) responseEvent).data();
-						try {
-							return Mono.just(McpSchema.deserializeJsonRpcMessage(objectMapper, data));
+						if (Utils.hasText(data) && !data.trim().equals("{}")) {
+
+							try {
+								return Mono.just(McpSchema.deserializeJsonRpcMessage(objectMapper, data));
+							}
+							catch (IOException e) {
+								return Mono.error(e);
+							}
 						}
-						catch (IOException e) {
-							return Mono.error(e);
+						else {
+							// No content type means no response body
+							logger.debug("No content type returned for POST in session {}", sessionRepresentation);
+							return Mono.empty();
 						}
 					}
 					logger.warn("Unknown media type {} returned for POST in session {}", contentType,

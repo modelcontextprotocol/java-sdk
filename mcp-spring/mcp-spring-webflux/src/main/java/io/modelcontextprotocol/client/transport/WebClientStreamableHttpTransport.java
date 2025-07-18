@@ -30,6 +30,7 @@ import io.modelcontextprotocol.spec.McpTransportSession;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.spec.McpTransportStream;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.Utils;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -244,7 +245,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 			Disposable connection = webClient.post()
 				.uri(this.endpoint)
-				.accept(MediaType.TEXT_EVENT_STREAM, MediaType.APPLICATION_JSON)
+				.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_EVENT_STREAM)
 				.headers(httpHeaders -> {
 					transportSession.sessionId().ifPresent(id -> httpHeaders.add("mcp-session-id", id));
 				})
@@ -387,9 +388,14 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	private Flux<McpSchema.JSONRPCMessage> responseFlux(ClientResponse response) {
 		return response.bodyToMono(String.class).<Iterable<McpSchema.JSONRPCMessage>>handle((responseMessage, s) -> {
 			try {
-				McpSchema.JSONRPCMessage jsonRpcResponse = McpSchema.deserializeJsonRpcMessage(objectMapper,
-						responseMessage);
-				s.next(List.of(jsonRpcResponse));
+				if (Utils.hasText(responseMessage) && !responseMessage.trim().equals("{}")) {
+					McpSchema.JSONRPCMessage jsonRpcResponse = McpSchema.deserializeJsonRpcMessage(objectMapper,
+							responseMessage);
+					s.next(List.of(jsonRpcResponse));
+				}
+				else {
+					logger.warn("Received empty response message: {}", responseMessage);
+				}
 			}
 			catch (IOException e) {
 				s.error(e);

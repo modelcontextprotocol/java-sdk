@@ -69,6 +69,9 @@ public final class Utils {
 	 * base URL or URI is malformed
 	 */
 	public static URI resolveUri(URI baseUrl, String endpointUrl) {
+		if (!Utils.hasText(endpointUrl)) {
+			return baseUrl;
+		}
 		URI endpointUri = URI.create(endpointUrl);
 		if (endpointUri.isAbsolute() && !isUnderBaseUri(baseUrl, endpointUri)) {
 			throw new IllegalArgumentException("Absolute endpoint URL does not match the base URL.");
