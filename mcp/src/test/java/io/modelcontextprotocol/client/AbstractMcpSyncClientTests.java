@@ -13,6 +13,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -647,6 +650,50 @@ public abstract class AbstractMcpSyncClientTests {
 				assertThat(receivedMessage.get()).endsWith(message); // Prefixed
 				assertThat(receivedMaxTokens.get()).isEqualTo(maxTokens);
 			});
+	}
+
+	// ---------------------------------------
+	// Progress Notification Tests
+	// ---------------------------------------
+
+	@Test
+	void testProgressConsumer() {
+		AtomicInteger progressNotificationCount = new AtomicInteger(0);
+		List<McpSchema.ProgressNotification> receivedNotifications = new CopyOnWriteArrayList<>();
+		CountDownLatch latch = new CountDownLatch(2);
+
+		withClient(createMcpTransport(), builder -> builder.progressConsumer(notification -> {
+			System.out.println("Received progress notification: " + notification);
+			receivedNotifications.add(notification);
+			progressNotificationCount.incrementAndGet();
+			latch.countDown();
+		}), client -> {
+			client.initialize();
+
+			// Call a tool that sends progress notifications
+			CallToolRequest request = CallToolRequest.builder()
+				.name("longRunningOperation")
+				.arguments(Map.of("duration", 1, "steps", 2))
+				.progressToken("test-token")
+				.build();
+
+			CallToolResult result = client.callTool(request);
+
+			assertThat(result).isNotNull();
+
+			try {
+				// Wait for progress notifications to be processed
+				latch.await(3, TimeUnit.SECONDS);
+			}
+			catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+
+			assertThat(progressNotificationCount.get()).isEqualTo(2);
+
+			assertThat(receivedNotifications).isNotEmpty();
+			assertThat(receivedNotifications.get(0).progressToken()).isEqualTo("test-token");
+		});
 	}
 
 }

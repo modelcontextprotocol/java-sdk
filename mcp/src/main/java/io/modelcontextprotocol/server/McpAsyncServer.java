@@ -313,9 +313,9 @@ public class McpAsyncServer {
 	}
 
 	private static class StructuredOutputCallToolHandler
-			implements BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> {
+			implements BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> {
 
-		private final BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> delegateCallToolResult;
+		private final BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> delegateCallToolResult;
 
 		private final JsonSchemaValidator jsonSchemaValidator;
 
@@ -323,7 +323,7 @@ public class McpAsyncServer {
 
 		public StructuredOutputCallToolHandler(JsonSchemaValidator jsonSchemaValidator,
 				Map<String, Object> outputSchema,
-				BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> delegateHandler) {
+				BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> delegateHandler) {
 
 			Assert.notNull(jsonSchemaValidator, "JsonSchemaValidator must not be null");
 			Assert.notNull(delegateHandler, "Delegate call tool result handler must not be null");
@@ -334,9 +334,9 @@ public class McpAsyncServer {
 		}
 
 		@Override
-		public Mono<CallToolResult> apply(McpAsyncServerExchange exchange, Map<String, Object> arguments) {
+		public Mono<CallToolResult> apply(McpAsyncServerExchange exchange, McpSchema.CallToolRequest request) {
 
-			return this.delegateCallToolResult.apply(exchange, arguments).map(result -> {
+			return this.delegateCallToolResult.apply(exchange, request).map(result -> {
 
 				if (outputSchema == null) {
 					if (result.structuredContent() != null) {
@@ -398,7 +398,7 @@ public class McpAsyncServer {
 	private static McpServerFeatures.AsyncToolSpecification withStructuredOutputHandling(
 			JsonSchemaValidator jsonSchemaValidator, McpServerFeatures.AsyncToolSpecification toolSpecification) {
 
-		if (toolSpecification.call() instanceof StructuredOutputCallToolHandler) {
+		if (toolSpecification.callHandler() instanceof StructuredOutputCallToolHandler) {
 			// If the tool is already wrapped, return it as is
 			return toolSpecification;
 		}
@@ -408,9 +408,11 @@ public class McpAsyncServer {
 			return toolSpecification;
 		}
 
-		return new McpServerFeatures.AsyncToolSpecification(toolSpecification.tool(),
-				new StructuredOutputCallToolHandler(jsonSchemaValidator, toolSpecification.tool().outputSchema(),
-						toolSpecification.call()));
+		return McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(toolSpecification.tool())
+			.callHandler(new StructuredOutputCallToolHandler(jsonSchemaValidator,
+					toolSpecification.tool().outputSchema(), toolSpecification.callHandler()))
+			.build();
 	}
 
 	/**

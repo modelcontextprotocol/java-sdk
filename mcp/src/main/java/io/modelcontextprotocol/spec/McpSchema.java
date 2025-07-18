@@ -61,6 +61,8 @@ public final class McpSchema {
 
 	public static final String METHOD_PING = "ping";
 
+	public static final String METHOD_NOTIFICATION_PROGRESS = "notifications/progress";
+
 	// Tool Methods
 	public static final String METHOD_TOOLS_LIST = "tools/list";
 
@@ -1388,7 +1390,8 @@ public final class McpSchema {
 	 * tools/list.
 	 * @param arguments Arguments to pass to the tool. These must conform to the tool's
 	 * input schema.
-	 * @param meta See specification for notes on _meta usage
+	 * @param meta Optional metadata about the request. This can include additional
+	 * information like `progressToken`
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
