@@ -61,6 +61,10 @@ import reactor.core.publisher.Sinks;
  */
 public class HttpClientSseClientTransport implements McpClientTransport {
 
+	private static final String MCP_PROTOCOL_VERSION = "2024-11-05";
+
+	private static final String MCP_PROTOCOL_VERSION_HEADER_NAME = "MCP-Protocol-Version";
+
 	private static final Logger logger = LoggerFactory.getLogger(HttpClientSseClientTransport.class);
 
 	/** SSE event type for JSON-RPC messages */
@@ -330,6 +334,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 				.uri(Utils.resolveUri(this.baseUri, this.sseEndpoint))
 				.header("Accept", "text/event-stream")
 				.header("Cache-Control", "no-cache")
+				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
 				.GET()
 				.build();
 
@@ -457,6 +462,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		final URI requestUri = Utils.resolveUri(baseUri, endpoint);
 		final HttpRequest request = this.requestBuilder.copy()
 			.uri(requestUri)
+			.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
 			.POST(HttpRequest.BodyPublishers.ofString(body))
 			.build();
 

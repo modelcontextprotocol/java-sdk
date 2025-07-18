@@ -72,6 +72,10 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(HttpClientStreamableHttpTransport.class);
 
+	private static final String MCP_PROTOCOL_VERSION = "2025-06-18";
+
+	private static final String MCP_PROTOCOL_VERSION_HEADER_NAME = "MCP-Protocol-Version";
+
 	private static final String DEFAULT_ENDPOINT = "/mcp";
 
 	/**
@@ -158,6 +162,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			.uri(Utils.resolveUri(this.baseUri, this.endpoint))
 			.header("Cache-Control", "no-cache")
 			.header("mcp-session-id", sessionId)
+			.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
 			.DELETE()
 			.build();
 
@@ -222,6 +227,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			HttpRequest request = requestBuilder.uri(Utils.resolveUri(this.baseUri, this.endpoint))
 				.header("Accept", TEXT_EVENT_STREAM)
 				.header("Cache-Control", "no-cache")
+				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
 				.GET()
 				.build();
 
@@ -361,6 +367,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				.header("Accept", TEXT_EVENT_STREAM + ", " + APPLICATION_JSON)
 				.header("Content-Type", APPLICATION_JSON)
 				.header("Cache-Control", "no-cache")
+				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
 				.POST(HttpRequest.BodyPublishers.ofString(jsonBody))
 				.build();
 
