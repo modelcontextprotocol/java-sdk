@@ -8,4 +8,12 @@ package io.modelcontextprotocol.spec;
  */
 public interface McpServerTransport extends McpTransport {
 
+	/**
+	 * Returns the session id.
+	 * @return the session id. default is null.
+	 */
+	default String getSessionId() {
+		return null;
+	}
+
 }
