@@ -17,6 +17,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpServerSession;
+import io.modelcontextprotocol.spec.McpSingleSessionServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,7 +67,7 @@ import org.springframework.web.servlet.function.ServerResponse.SseBuilder;
  * @see McpServerTransportProvider
  * @see RouterFunction
  */
-public class WebMvcSseServerTransportProvider implements McpServerTransportProvider {
+public class WebMvcSseServerTransportProvider implements McpSingleSessionServerTransportProvider {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebMvcSseServerTransportProvider.class);
 

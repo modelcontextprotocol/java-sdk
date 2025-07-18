@@ -24,6 +24,7 @@ import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.McpSingleSessionServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,7 +41,7 @@ import reactor.core.scheduler.Schedulers;
  *
  * @author Christian Tzolov
  */
-public class StdioServerTransportProvider implements McpServerTransportProvider {
+public class StdioServerTransportProvider implements McpSingleSessionServerTransportProvider {
 
 	private static final Logger logger = LoggerFactory.getLogger(StdioServerTransportProvider.class);
 

@@ -1,25 +1,15 @@
 package io.modelcontextprotocol.server.transport;
 
-import java.io.IOException;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
-import io.modelcontextprotocol.spec.McpServerTransportProvider;
-import io.modelcontextprotocol.spec.McpSingleSessionServerTransportProvider;
+import io.modelcontextprotocol.spec.McpStreamableServerSession;
+import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.Exceptions;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.FluxSink;
-import reactor.core.publisher.Mono;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
@@ -27,84 +17,36 @@ import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
+import reactor.core.Disposable;
+import reactor.core.Exceptions;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
+import reactor.core.publisher.Mono;
 
-/**
- * Server-side implementation of the MCP (Model Context Protocol) HTTP transport using
- * Server-Sent Events (SSE). This implementation provides a bidirectional communication
- * channel between MCP clients and servers using HTTP POST for client-to-server messages
- * and SSE for server-to-client messages.
- *
- * <p>
- * Key features:
- * <ul>
- * <li>Implements the {@link McpServerTransportProvider} interface that allows managing
- * {@link McpServerSession} instances and enabling their communication with the
- * {@link McpServerTransport} abstraction.</li>
- * <li>Uses WebFlux for non-blocking request handling and SSE support</li>
- * <li>Maintains client sessions for reliable message delivery</li>
- * <li>Supports graceful shutdown with session cleanup</li>
- * <li>Thread-safe message broadcasting to multiple clients</li>
- * </ul>
- *
- * <p>
- * The transport sets up two main endpoints:
- * <ul>
- * <li>SSE endpoint (/sse) - For establishing SSE connections with clients</li>
- * <li>Message endpoint (configurable) - For receiving JSON-RPC messages from clients</li>
- * </ul>
- *
- * <p>
- * This implementation is thread-safe and can handle multiple concurrent client
- * connections. It uses {@link ConcurrentHashMap} for session management and Project
- * Reactor's non-blocking APIs for message processing and delivery.
- *
- * @author Christian Tzolov
- * @author Alexandros Pappas
- * @author Dariusz Jędrzejczyk
- * @see McpServerTransport
- * @see ServerSentEvent
- */
-public class WebFluxSseServerTransportProvider implements McpSingleSessionServerTransportProvider {
+import java.io.IOException;
+import java.util.concurrent.ConcurrentHashMap;
 
-	private static final Logger logger = LoggerFactory.getLogger(WebFluxSseServerTransportProvider.class);
+public class WebFluxStreamableServerTransportProvider implements McpStreamableServerTransportProvider {
 
-	/**
-	 * Event type for JSON-RPC messages sent through the SSE connection.
-	 */
+	private static final Logger logger = LoggerFactory.getLogger(WebFluxStreamableServerTransportProvider.class);
+
 	public static final String MESSAGE_EVENT_TYPE = "message";
 
-	/**
-	 * Event type for sending the message endpoint URI to clients.
-	 */
 	public static final String ENDPOINT_EVENT_TYPE = "endpoint";
-
-	/**
-	 * Default SSE endpoint path as specified by the MCP transport specification.
-	 */
-	public static final String DEFAULT_SSE_ENDPOINT = "/sse";
 
 	public static final String DEFAULT_BASE_URL = "";
 
 	private final ObjectMapper objectMapper;
 
-	/**
-	 * Base URL for the message endpoint. This is used to construct the full URL for
-	 * clients to send their JSON-RPC messages.
-	 */
 	private final String baseUrl;
 
-	private final String messageEndpoint;
-
-	private final String sseEndpoint;
+	private final String mcpEndpoint;
 
 	private final RouterFunction<?> routerFunction;
 
-	private McpServerSession.Factory sessionFactory;
+	private McpStreamableServerSession.Factory sessionFactory;
 
-	/**
-	 * Map of active client sessions, keyed by session ID.
-	 */
-	private final ConcurrentHashMap<String, McpServerSession> sessions = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<String, McpStreamableServerSession> sessions = new ConcurrentHashMap<>();
 
 	/**
 	 * Flag indicating if the transport is shutting down.
@@ -116,26 +58,13 @@ public class WebFluxSseServerTransportProvider implements McpSingleSessionServer
 	 * SSE endpoint.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 * of MCP messages. Must not be null.
-	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
+	 * @param mcpEndpoint The endpoint URI where clients should send their JSON-RPC
 	 * messages. This endpoint will be communicated to clients during SSE connection
 	 * setup. Must not be null.
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
-	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint) {
-		this(objectMapper, messageEndpoint, DEFAULT_SSE_ENDPOINT);
-	}
-
-	/**
-	 * Constructs a new WebFlux SSE server transport provider instance.
-	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
-	 * of MCP messages. Must not be null.
-	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
-	 * messages. This endpoint will be communicated to clients during SSE connection
-	 * setup. Must not be null.
-	 * @throws IllegalArgumentException if either parameter is null
-	 */
-	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
-		this(objectMapper, DEFAULT_BASE_URL, messageEndpoint, sseEndpoint);
+	public WebFluxStreamableServerTransportProvider(ObjectMapper objectMapper, String mcpEndpoint) {
+		this(objectMapper, DEFAULT_BASE_URL, mcpEndpoint);
 	}
 
 	/**
@@ -143,30 +72,27 @@ public class WebFluxSseServerTransportProvider implements McpSingleSessionServer
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 * of MCP messages. Must not be null.
 	 * @param baseUrl webflux message base path
-	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
+	 * @param mcpEndpoint The endpoint URI where clients should send their JSON-RPC
 	 * messages. This endpoint will be communicated to clients during SSE connection
 	 * setup. Must not be null.
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
-	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
-			String sseEndpoint) {
+	public WebFluxStreamableServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String mcpEndpoint) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(baseUrl, "Message base path must not be null");
-		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
-		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
+		Assert.notNull(mcpEndpoint, "Message endpoint must not be null");
 
 		this.objectMapper = objectMapper;
 		this.baseUrl = baseUrl;
-		this.messageEndpoint = messageEndpoint;
-		this.sseEndpoint = sseEndpoint;
+		this.mcpEndpoint = mcpEndpoint;
 		this.routerFunction = RouterFunctions.route()
-			.GET(this.sseEndpoint, this::handleSseConnection)
-			.POST(this.messageEndpoint, this::handleMessage)
+			.GET(this.mcpEndpoint, this::handleGet)
+			.POST(this.mcpEndpoint, this::handlePost)
 			.build();
 	}
 
 	@Override
-	public void setSessionFactory(McpServerSession.Factory sessionFactory) {
+	public void setSessionFactory(McpStreamableServerSession.Factory sessionFactory) {
 		this.sessionFactory = sessionFactory;
 	}
 
@@ -226,7 +152,7 @@ public class WebFluxSseServerTransportProvider implements McpSingleSessionServer
 	public Mono<Void> closeGracefully() {
 		return Flux.fromIterable(sessions.values())
 			.doFirst(() -> logger.debug("Initiating graceful shutdown with {} active sessions", sessions.size()))
-			.flatMap(McpServerSession::closeGracefully)
+			.flatMap(McpStreamableServerSession::closeGracefully)
 			.then();
 	}
 
@@ -252,33 +178,37 @@ public class WebFluxSseServerTransportProvider implements McpSingleSessionServer
 	 * @param request The incoming server request
 	 * @return A Mono which emits a response with the SSE event stream
 	 */
-	private Mono<ServerResponse> handleSseConnection(ServerRequest request) {
+	private Mono<ServerResponse> handleGet(ServerRequest request) {
 		if (isClosing) {
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
 		}
 
-		return ServerResponse.ok()
-			.contentType(MediaType.TEXT_EVENT_STREAM)
-			.body(Flux.<ServerSentEvent<?>>create(sink -> {
-				WebFluxMcpSessionTransport sessionTransport = new WebFluxMcpSessionTransport(sink);
+		return Mono.defer(() -> {
+			if (!request.headers().asHttpHeaders().containsKey("mcp-session-id")) {
+				return ServerResponse.badRequest().build(); // TODO: say we need a session id
+			}
 
-				McpServerSession session = sessionFactory.create(sessionTransport);
-				String sessionId = session.getId();
+			String sessionId = request.headers().asHttpHeaders().getFirst("mcp-session-id");
 
-				logger.debug("Created new SSE connection for session: {}", sessionId);
-				sessions.put(sessionId, session);
+			McpStreamableServerSession session = this.sessions.get(sessionId);
 
-				// Send initial endpoint event
-				logger.debug("Sending initial endpoint event to session: {}", sessionId);
-				sink.next(ServerSentEvent.builder()
-					.event(ENDPOINT_EVENT_TYPE)
-					.data(this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId)
-					.build());
-				sink.onCancel(() -> {
-					logger.debug("Session {} cancelled", sessionId);
-					sessions.remove(sessionId);
-				});
-			}), ServerSentEvent.class);
+			if (session == null) {
+				return ServerResponse.notFound().build();
+			}
+
+			if (request.headers().asHttpHeaders().containsKey("mcp-last-id")) {
+				String lastId = request.headers().asHttpHeaders().getFirst("mcp-last-id");
+				return ServerResponse.ok().contentType(MediaType.TEXT_EVENT_STREAM).body(session.replay(lastId), ServerSentEvent.class);
+			}
+
+			return ServerResponse.ok().contentType(MediaType.TEXT_EVENT_STREAM)
+					.body(Flux.<ServerSentEvent<?>>create(sink -> {
+						WebFluxStreamableMcpSessionTransport sessionTransport = new WebFluxStreamableMcpSessionTransport(sink);
+						McpStreamableServerSession.McpStreamableServerSessionStream genericStream = session.newStream(sessionTransport);
+						sink.onDispose(genericStream::close);
+					}), ServerSentEvent.class);
+
+		});
 	}
 
 	/**
@@ -296,33 +226,51 @@ public class WebFluxSseServerTransportProvider implements McpSingleSessionServer
 	 * @param request The incoming server request containing the JSON-RPC message
 	 * @return A Mono emitting the response indicating the message processing result
 	 */
-	private Mono<ServerResponse> handleMessage(ServerRequest request) {
+	private Mono<ServerResponse> handlePost(ServerRequest request) {
 		if (isClosing) {
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
 		}
 
-		if (request.queryParam("sessionId").isEmpty()) {
-			return ServerResponse.badRequest().bodyValue(new McpError("Session ID missing in message endpoint"));
-		}
-
-		McpServerSession session = sessions.get(request.queryParam("sessionId").get());
-
-		if (session == null) {
-			return ServerResponse.status(HttpStatus.NOT_FOUND)
-				.bodyValue(new McpError("Session not found: " + request.queryParam("sessionId").get()));
-		}
-
-		return request.bodyToMono(String.class).flatMap(body -> {
+		return request.bodyToMono(String.class).<ServerResponse>flatMap(body -> {
 			try {
 				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
-				return session.handle(message).flatMap(response -> ServerResponse.ok().build()).onErrorResume(error -> {
-					logger.error("Error processing  message: {}", error.getMessage());
-					// TODO: instead of signalling the error, just respond with 200 OK
-					// - the error is signalled on the SSE connection
-					// return ServerResponse.ok().build();
-					return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
-						.bodyValue(new McpError(error.getMessage()));
-				});
+				if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest && jsonrpcRequest.method().equals(McpSchema.METHOD_INITIALIZE)) {
+					McpSchema.InitializeRequest initializeRequest = objectMapper.convertValue(jsonrpcRequest.params(), new TypeReference<McpSchema.InitializeRequest>() {});
+					McpStreamableServerSession.McpStreamableServerSessionInit init = this.sessionFactory.startSession(initializeRequest);
+					sessions.put(init.session().getId(), init.session());
+					return init.initResult().flatMap(initResult -> ServerResponse.ok().header("mcp-session-id", init.session().getId()).bodyValue(initResult));
+				}
+
+				if (!request.headers().asHttpHeaders().containsKey("sessionId")) {
+					return ServerResponse.badRequest().bodyValue(new McpError("Session ID missing"));
+				}
+
+				String sessionId = request.headers().asHttpHeaders().getFirst("sessionId");
+				McpStreamableServerSession session = sessions.get(sessionId);
+
+				if (session == null) {
+					return ServerResponse.status(HttpStatus.NOT_FOUND)
+							.bodyValue(new McpError("Session not found: " + sessionId));
+				}
+
+				if (message instanceof McpSchema.JSONRPCResponse jsonrpcResponse) {
+					return session.accept(jsonrpcResponse).then(ServerResponse.accepted().build());
+				} else if (message instanceof McpSchema.JSONRPCNotification jsonrpcNotification) {
+					return session.accept(jsonrpcNotification).then(ServerResponse.accepted().build());
+				} else if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
+					return ServerResponse.ok().contentType(MediaType.TEXT_EVENT_STREAM)
+							.body(Flux.<ServerSentEvent<?>>create(sink -> {
+								WebFluxStreamableMcpSessionTransport st = new WebFluxStreamableMcpSessionTransport(sink);
+								Mono<Void> stream = session.handleStream(jsonrpcRequest, st);
+								Disposable streamSubscription = stream
+										.doOnError(err -> sink.error(err))
+										.contextWrite(sink.contextView())
+										.subscribe();
+								sink.onCancel(streamSubscription);
+							}), ServerSentEvent.class);
+				} else {
+					return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).bodyValue(new McpError("Unknown message type"));
+				}
 			}
 			catch (IllegalArgumentException | IOException e) {
 				logger.error("Failed to deserialize message: {}", e.getMessage());
@@ -331,11 +279,11 @@ public class WebFluxSseServerTransportProvider implements McpSingleSessionServer
 		});
 	}
 
-	private class WebFluxMcpSessionTransport implements McpServerTransport {
+	private class WebFluxStreamableMcpSessionTransport implements McpServerTransport {
 
 		private final FluxSink<ServerSentEvent<?>> sink;
 
-		public WebFluxMcpSessionTransport(FluxSink<ServerSentEvent<?>> sink) {
+		public WebFluxStreamableMcpSessionTransport(FluxSink<ServerSentEvent<?>> sink) {
 			this.sink = sink;
 		}
 
@@ -383,7 +331,7 @@ public class WebFluxSseServerTransportProvider implements McpSingleSessionServer
 	}
 
 	/**
-	 * Builder for creating instances of {@link WebFluxSseServerTransportProvider}.
+	 * Builder for creating instances of {@link WebFluxStreamableServerTransportProvider}.
 	 * <p>
 	 * This builder provides a fluent API for configuring and creating instances of
 	 * WebFluxSseServerTransportProvider with custom settings.
@@ -394,9 +342,7 @@ public class WebFluxSseServerTransportProvider implements McpSingleSessionServer
 
 		private String baseUrl = DEFAULT_BASE_URL;
 
-		private String messageEndpoint;
-
-		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
+		private String mcpEndpoint = "/mcp";
 
 		/**
 		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
@@ -432,33 +378,21 @@ public class WebFluxSseServerTransportProvider implements McpSingleSessionServer
 		 */
 		public Builder messageEndpoint(String messageEndpoint) {
 			Assert.notNull(messageEndpoint, "Message endpoint must not be null");
-			this.messageEndpoint = messageEndpoint;
+			this.mcpEndpoint = messageEndpoint;
 			return this;
 		}
 
 		/**
-		 * Sets the SSE endpoint path.
-		 * @param sseEndpoint The SSE endpoint path. Must not be null.
-		 * @return this builder instance
-		 * @throws IllegalArgumentException if sseEndpoint is null
-		 */
-		public Builder sseEndpoint(String sseEndpoint) {
-			Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
-			this.sseEndpoint = sseEndpoint;
-			return this;
-		}
-
-		/**
-		 * Builds a new instance of {@link WebFluxSseServerTransportProvider} with the
+		 * Builds a new instance of {@link WebFluxStreamableServerTransportProvider} with the
 		 * configured settings.
 		 * @return A new WebFluxSseServerTransportProvider instance
 		 * @throws IllegalStateException if required parameters are not set
 		 */
-		public WebFluxSseServerTransportProvider build() {
+		public WebFluxStreamableServerTransportProvider build() {
 			Assert.notNull(objectMapper, "ObjectMapper must be set");
-			Assert.notNull(messageEndpoint, "Message endpoint must be set");
+			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 
-			return new WebFluxSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint);
+			return new WebFluxStreamableServerTransportProvider(objectMapper, baseUrl, mcpEndpoint);
 		}
 
 	}

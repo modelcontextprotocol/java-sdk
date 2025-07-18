@@ -21,6 +21,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.McpStatelessServerTransport;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
@@ -153,6 +154,22 @@ public interface McpServer {
 	 */
 	static AsyncSpecification async(McpServerTransportProvider transportProvider) {
 		return new AsyncSpecification(transportProvider);
+	}
+
+	static StatelessAsyncSpecification async(McpStatelessServerTransport transportProvider) {
+		// TODO
+	}
+
+	static StatelessSyncSpecification sync(McpStatelessServerTransport transportProvider) {
+		// TODO
+	}
+
+	class StatelessAsyncSpecification {
+		// TODO
+	}
+
+	class StatelessSyncSpecification {
+		// TODO
 	}
 
 	/**
