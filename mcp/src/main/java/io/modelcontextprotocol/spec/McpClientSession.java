@@ -4,20 +4,23 @@
 
 package io.modelcontextprotocol.spec;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import io.modelcontextprotocol.util.Assert;
-import org.reactivestreams.Publisher;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import reactor.core.publisher.Mono;
-import reactor.core.publisher.MonoSink;
-
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
+
+import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+
+import io.modelcontextprotocol.util.Assert;
+import reactor.core.publisher.Mono;
+import reactor.core.publisher.MonoSink;
 
 /**
  * Default implementation of the MCP (Model Context Protocol) session that manages
@@ -62,6 +65,12 @@ public class McpClientSession implements McpSession {
 	private final AtomicLong requestCounter = new AtomicLong(0);
 
 	/**
+	 * List of JSON-RPC methods that can be ignored. These methods will not be processed
+	 * and will not generate errors if received
+	 */
+	private final List<String> ignorableJsonRpcMethods;
+
+	/**
 	 * Functional interface for handling incoming JSON-RPC requests. Implementations
 	 * should process the request parameters and return a response.
 	 *
@@ -101,10 +110,7 @@ public class McpClientSession implements McpSession {
 	 * @param transport Transport implementation for message exchange
 	 * @param requestHandlers Map of method names to request handlers
 	 * @param notificationHandlers Map of method names to notification handlers
-	 * @deprecated Use
-	 * {@link #McpClientSession(Duration, McpClientTransport, Map, Map, Function)}
 	 */
-	@Deprecated
 	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
 			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
 		this(requestTimeout, transport, requestHandlers, notificationHandlers, Function.identity());
@@ -118,20 +124,41 @@ public class McpClientSession implements McpSession {
 	 * @param notificationHandlers Map of method names to notification handlers
 	 * @param connectHook Hook that allows transforming the connection Publisher prior to
 	 * subscribing
+	 * @deprecated Use
+	 * {@link #McpClientSession(Duration, McpClientTransport, Map, Map, Function, List)}
+	 * instead.
 	 */
 	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
 			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers,
 			Function<? super Mono<Void>, ? extends Publisher<Void>> connectHook) {
+		this(requestTimeout, transport, requestHandlers, notificationHandlers, connectHook, List.of());
+	}
+
+	/**
+	 * Creates a new McpClientSession with the specified configuration and handlers.
+	 * @param requestTimeout Duration to wait for responses
+	 * @param transport Transport implementation for message exchange
+	 * @param requestHandlers Map of method names to request handlers
+	 * @param notificationHandlers Map of method names to notification handlers
+	 * @param connectHook Hook that allows transforming the connection Publisher prior to
+	 * subscribing
+	 * @param ignorableJsonRpcMethods List of JSON-RPC methods that can be ignored
+	 */
+	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
+			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers,
+			Function<? super Mono<Void>, ? extends Publisher<Void>> connectHook, List<String> ignorableJsonRpcMethods) {
 
 		Assert.notNull(requestTimeout, "The requestTimeout can not be null");
 		Assert.notNull(transport, "The transport can not be null");
 		Assert.notNull(requestHandlers, "The requestHandlers can not be null");
 		Assert.notNull(notificationHandlers, "The notificationHandlers can not be null");
+		Assert.notNull(ignorableJsonRpcMethods, "The ignorableJsonRpcMethods can not be null");
 
 		this.requestTimeout = requestTimeout;
 		this.transport = transport;
 		this.requestHandlers.putAll(requestHandlers);
 		this.notificationHandlers.putAll(notificationHandlers);
+		this.ignorableJsonRpcMethods = ignorableJsonRpcMethods;
 
 		this.transport.connect(mono -> mono.doOnNext(this::handle)).transform(connectHook).subscribe();
 	}
@@ -186,6 +213,12 @@ public class McpClientSession implements McpSession {
 	 */
 	private Mono<McpSchema.JSONRPCResponse> handleIncomingRequest(McpSchema.JSONRPCRequest request) {
 		return Mono.defer(() -> {
+
+			if (this.ignorableJsonRpcMethods.contains(request.method())) {
+				logger.debug("Ignoring JSON-RPC request: {}", request);
+				return Mono.empty();
+			}
+
 			var handler = this.requestHandlers.get(request.method());
 			if (handler == null) {
 				MethodNotFoundError error = getMethodNotFoundError(request.method());
@@ -221,7 +254,12 @@ public class McpClientSession implements McpSession {
 		return Mono.defer(() -> {
 			var handler = notificationHandlers.get(notification.method());
 			if (handler == null) {
-				logger.error("No handler registered for notification method: {}", notification.method());
+				if (this.ignorableJsonRpcMethods.contains(notification.method())) {
+					logger.debug("Ignoring JSON-RPC notification: {}", notification);
+				}
+				else {
+					logger.error("No handler registered for notification: {}", notification);
+				}
 				return Mono.empty();
 			}
 			return handler.handle(notification.params());

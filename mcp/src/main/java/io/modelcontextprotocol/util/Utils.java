@@ -8,6 +8,7 @@ import reactor.util.annotation.Nullable;
 
 import java.net.URI;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -17,6 +18,14 @@ import java.util.Map;
  */
 
 public final class Utils {
+
+	/**
+	 * Default list of JSON-RPC methods that can be ignored by the client. These methods
+	 * will not be processed and will not generate errors if received. This includes
+	 * notifications like "notifications/cancelled" and "notifications/stderr".
+	 */
+	public static List<String> DEFAULT_IGNORABLE_JSON_RPC_METHODS = List.of("notifications/cancelled",
+			"notifications/stderr");
 
 	/**
 	 * Check whether the given {@code String} contains actual <em>text</em>.

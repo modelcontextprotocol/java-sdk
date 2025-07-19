@@ -116,6 +116,8 @@ public class McpAsyncServer {
 
 	private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
 
+	private final List<String> ignorableJsonRpcMethods;
+
 	/**
 	 * Create a new McpAsyncServer with the given transport provider and capabilities.
 	 * @param mcpTransportProvider The transport layer implementation for MCP
@@ -126,6 +128,22 @@ public class McpAsyncServer {
 	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
+		this(mcpTransportProvider, objectMapper, features, requestTimeout, uriTemplateManagerFactory,
+				jsonSchemaValidator, Utils.DEFAULT_IGNORABLE_JSON_RPC_METHODS);
+	}
+
+	/**
+	 * Create a new McpAsyncServer with the given transport provider and capabilities.
+	 * @param mcpTransportProvider The transport layer implementation for MCP
+	 * communication.
+	 * @param features The MCP server supported features.
+	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
+	 * @param ignorableJsonRpcMethods List of JSON-RPC method names that should be ignored
+	 */
+	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
+			McpServerFeatures.Async features, Duration requestTimeout,
+			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
+			List<String> ignorableJsonRpcMethods) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.objectMapper = objectMapper;
 		this.serverInfo = features.serverInfo();
@@ -138,6 +156,8 @@ public class McpAsyncServer {
 		this.completions.putAll(features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
+		this.ignorableJsonRpcMethods = ignorableJsonRpcMethods != null ? List.copyOf(ignorableJsonRpcMethods)
+				: List.of();
 
 		Map<String, McpServerSession.RequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -190,9 +210,9 @@ public class McpAsyncServer {
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED,
 				asyncRootsListChangedNotificationHandler(rootsChangeConsumers));
 
-		mcpTransportProvider.setSessionFactory(
-				transport -> new McpServerSession(UUID.randomUUID().toString(), requestTimeout, transport,
-						this::asyncInitializeRequestHandler, Mono::empty, requestHandlers, notificationHandlers));
+		mcpTransportProvider.setSessionFactory(transport -> new McpServerSession(UUID.randomUUID().toString(),
+				requestTimeout, transport, this::asyncInitializeRequestHandler, Mono::empty, requestHandlers,
+				notificationHandlers, this.ignorableJsonRpcMethods));
 	}
 
 	// ---------------------------------------

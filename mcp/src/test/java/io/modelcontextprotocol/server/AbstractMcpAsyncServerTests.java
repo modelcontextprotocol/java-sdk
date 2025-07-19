@@ -523,4 +523,44 @@ public abstract class AbstractMcpAsyncServerTests {
 			.doesNotThrowAnyException();
 	}
 
+	// ---------------------------------------
+	// Ignorable JSON-RPC Methods Tests
+	// ---------------------------------------
+
+	@Test
+	void testIgnorableJsonRpcMethodsBuilderList() {
+		List<String> customIgnorables = List.of("custom/method1", "custom/method2");
+
+		var server = McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.ignorableJsonRpcMethods(customIgnorables)
+			.build();
+
+		assertThat(server).isNotNull();
+		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testIgnorableJsonRpcMethodsBuilderVarargs() {
+		var server = McpServer.async(createMcpTransportProvider())
+			.serverInfo("test-server", "1.0.0")
+			.ignorableJsonRpcMethods("custom/method1", "custom/method2", "custom/method3")
+			.build();
+
+		assertThat(server).isNotNull();
+		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testIgnorableMethodsBuilderNullValidation() {
+		assertThatThrownBy(
+				() -> McpServer.async(createMcpTransportProvider()).ignorableJsonRpcMethods((List<String>) null))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Ignorable JSON-RPC methods must not be null");
+
+		assertThatThrownBy(() -> McpServer.async(createMcpTransportProvider()).ignorableJsonRpcMethods((String[]) null))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Ignorable JSON-RPC methods must not be null");
+	}
+
 }
