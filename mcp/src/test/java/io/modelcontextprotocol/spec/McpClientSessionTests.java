@@ -5,10 +5,13 @@
 package io.modelcontextprotocol.spec;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.MockMcpClientTransport;
+import io.modelcontextprotocol.client.McpClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -193,6 +196,45 @@ class McpClientSessionTests {
 	@Test
 	void testGracefulShutdown() {
 		StepVerifier.create(session.closeGracefully()).verifyComplete();
+	}
+
+	// Tests for ignorable JSON-RPC methods feature
+
+	@Test
+	void testIgnorableRequestsAreIgnored() {
+		List<String> ignorableMethods = List.of("ignorable/request");
+		transport = new MockMcpClientTransport();
+		session = new McpClientSession(TIMEOUT, transport, Map.of(), Map.of(), Function.identity(), ignorableMethods);
+
+		// Simulate incoming ignorable request
+		McpSchema.JSONRPCRequest ignorableRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
+				"ignorable/request", "test-id", null);
+		transport.simulateIncomingMessage(ignorableRequest);
+
+		// Verify no response was sent (ignored)
+		assertThat(transport.getLastSentMessage()).isNull();
+	}
+
+	@Test
+	void testIgnorableNotificationsAreIgnored() {
+		List<String> ignorableMethods = List.of("ignorable/notification");
+		transport = new MockMcpClientTransport();
+		session = new McpClientSession(TIMEOUT, transport, Map.of(), Map.of(), Function.identity(), ignorableMethods);
+
+		// Simulate incoming ignorable notification
+		McpSchema.JSONRPCNotification ignorableNotification = new McpSchema.JSONRPCNotification(
+				McpSchema.JSONRPC_VERSION, "ignorable/notification", Map.of("data", "test"));
+		transport.simulateIncomingMessage(ignorableNotification);
+
+		assertThat(transport.getLastSentMessage()).isNull();
+	}
+
+	@Test
+	void testIgnorableMethodsConstructorNullValidation() {
+		assertThatThrownBy(
+				() -> new McpClientSession(TIMEOUT, transport, Map.of(), Map.of(), Function.identity(), null))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("ignorableJsonRpcMethods can not be null");
 	}
 
 }

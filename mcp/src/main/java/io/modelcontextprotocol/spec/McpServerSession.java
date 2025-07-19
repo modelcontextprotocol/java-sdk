@@ -1,6 +1,7 @@
 package io.modelcontextprotocol.spec;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -56,6 +57,8 @@ public class McpServerSession implements McpSession {
 
 	private final AtomicInteger state = new AtomicInteger(STATE_UNINITIALIZED);
 
+	private final List<String> ignorableJsonRpcMethods;
+
 	/**
 	 * Creates a new server session with the given parameters and the transport to use.
 	 * @param id session id
@@ -72,6 +75,28 @@ public class McpServerSession implements McpSession {
 	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
 			InitRequestHandler initHandler, InitNotificationHandler initNotificationHandler,
 			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
+		this(id, requestTimeout, transport, initHandler, initNotificationHandler, requestHandlers, notificationHandlers,
+				List.of());
+	}
+
+	/**
+	 * Creates a new server session with the given parameters and the transport to use.
+	 * @param id session id
+	 * @param transport the transport to use
+	 * @param initHandler called when a
+	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
+	 * server
+	 * @param initNotificationHandler called when a
+	 * {@link io.modelcontextprotocol.spec.McpSchema#METHOD_NOTIFICATION_INITIALIZED} is
+	 * received.
+	 * @param requestHandlers map of request handlers to use
+	 * @param notificationHandlers map of notification handlers to use
+	 * @param ignorableJsonRpcMethods list of JSON-RPC method names that should be ignored
+	 */
+	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
+			InitRequestHandler initHandler, InitNotificationHandler initNotificationHandler,
+			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers,
+			List<String> ignorableJsonRpcMethods) {
 		this.id = id;
 		this.requestTimeout = requestTimeout;
 		this.transport = transport;
@@ -79,6 +104,8 @@ public class McpServerSession implements McpSession {
 		this.initNotificationHandler = initNotificationHandler;
 		this.requestHandlers = requestHandlers;
 		this.notificationHandlers = notificationHandlers;
+		this.ignorableJsonRpcMethods = ignorableJsonRpcMethods != null ? List.copyOf(ignorableJsonRpcMethods)
+				: List.of();
 	}
 
 	/**
@@ -200,6 +227,12 @@ public class McpServerSession implements McpSession {
 	 */
 	private Mono<McpSchema.JSONRPCResponse> handleIncomingRequest(McpSchema.JSONRPCRequest request) {
 		return Mono.defer(() -> {
+
+			if (ignorableJsonRpcMethods.contains(request.method())) {
+				logger.debug("Ignoring JSON-RPC request: {}", request);
+				return Mono.empty();
+			}
+
 			Mono<?> resultMono;
 			if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
 				// TODO handle situation where already initialized!
@@ -248,7 +281,13 @@ public class McpServerSession implements McpSession {
 
 			var handler = notificationHandlers.get(notification.method());
 			if (handler == null) {
-				logger.error("No handler registered for notification method: {}", notification.method());
+				if (ignorableJsonRpcMethods.contains(notification.method())) {
+					logger.debug("Ignoring JSON-RPC notification: {}", notification);
+				}
+				else {
+					logger.error("No handler registered for notification: {}", notification);
+				}
+
 				return Mono.empty();
 			}
 			return this.exchangeSink.asMono().flatMap(exchange -> handler.handle(exchange, notification.params()));

@@ -159,7 +159,7 @@ public class McpAsyncClient {
 	 * @param features the MCP Client supported features.
 	 */
 	McpAsyncClient(McpClientTransport transport, Duration requestTimeout, Duration initializationTimeout,
-			McpClientFeatures.Async features) {
+			McpClientFeatures.Async features, List<String> ignorableJsonRpcMethods) {
 
 		Assert.notNull(transport, "Transport must not be null");
 		Assert.notNull(requestTimeout, "Request timeout must not be null");
@@ -269,7 +269,7 @@ public class McpAsyncClient {
 		this.initializer = new LifecycleInitializer(clientCapabilities, clientInfo,
 				List.of(McpSchema.LATEST_PROTOCOL_VERSION), initializationTimeout,
 				ctx -> new McpClientSession(requestTimeout, transport, requestHandlers, notificationHandlers,
-						con -> con.contextWrite(ctx)));
+						con -> con.contextWrite(ctx), ignorableJsonRpcMethods));
 		this.transport.setExceptionHandler(this.initializer::handleException);
 	}
 

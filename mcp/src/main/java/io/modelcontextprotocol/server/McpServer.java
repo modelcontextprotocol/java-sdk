@@ -24,6 +24,7 @@ import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
+import io.modelcontextprotocol.util.Utils;
 import reactor.core.publisher.Mono;
 
 /**
@@ -211,6 +212,8 @@ public interface McpServer {
 		private final List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeHandlers = new ArrayList<>();
 
 		private Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
+
+		private final List<String> ignorableJsonRpcMethods = new ArrayList<>(Utils.DEFAULT_IGNORABLE_JSON_RPC_METHODS);
 
 		private AsyncSpecification(McpServerTransportProvider transportProvider) {
 			Assert.notNull(transportProvider, "Transport provider must not be null");
@@ -690,6 +693,34 @@ public interface McpServer {
 		}
 
 		/**
+		 * Adds JSON-RPC method names that should be ignored by the server. Ignored
+		 * methods will not generate error responses when received from clients, allowing
+		 * for graceful handling of unknown or unwanted methods.
+		 * @param ignorableJsonRpcMethods List of method names to ignore. Must not be
+		 * null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if ignorableJsonRpcMethods is null
+		 */
+		public AsyncSpecification ignorableJsonRpcMethods(List<String> ignorableJsonRpcMethods) {
+			Assert.notNull(ignorableJsonRpcMethods, "Ignorable JSON-RPC methods must not be null");
+			this.ignorableJsonRpcMethods.addAll(ignorableJsonRpcMethods);
+			return this;
+		}
+
+		/**
+		 * Adds JSON-RPC method names that should be ignored by the server using varargs.
+		 * This is a convenience method for {@link #ignorableJsonRpcMethods(List)}.
+		 * @param ignorableJsonRpcMethods Method names to ignore. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if ignorableJsonRpcMethods is null
+		 */
+		public AsyncSpecification ignorableJsonRpcMethods(String... ignorableJsonRpcMethods) {
+			Assert.notNull(ignorableJsonRpcMethods, "Ignorable JSON-RPC methods must not be null");
+			this.ignorableJsonRpcMethods.addAll(List.of(ignorableJsonRpcMethods));
+			return this;
+		}
+
+		/**
 		 * Builds an asynchronous MCP server that provides non-blocking operations.
 		 * @return A new instance of {@link McpAsyncServer} configured with this builder's
 		 * settings.
@@ -701,8 +732,9 @@ public interface McpServer {
 			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
 					: new DefaultJsonSchemaValidator(mapper);
+
 			return new McpAsyncServer(this.transportProvider, mapper, features, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator);
+					this.uriTemplateManagerFactory, jsonSchemaValidator, this.ignorableJsonRpcMethods);
 		}
 
 	}
@@ -765,6 +797,8 @@ public interface McpServer {
 		private Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
 
 		private boolean immediateExecution = false;
+
+		private final List<String> ignorableJsonRpcMethods = new ArrayList<>(Utils.DEFAULT_IGNORABLE_JSON_RPC_METHODS);
 
 		private SyncSpecification(McpServerTransportProvider transportProvider) {
 			Assert.notNull(transportProvider, "Transport provider must not be null");
@@ -1252,6 +1286,34 @@ public interface McpServer {
 		}
 
 		/**
+		 * Adds JSON-RPC method names that should be ignored by the server. Ignored
+		 * methods will not generate error responses when received from clients, allowing
+		 * for graceful handling of unknown or unwanted methods.
+		 * @param ignorableJsonRpcMethods List of method names to ignore. Must not be
+		 * null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if ignorableJsonRpcMethods is null
+		 */
+		public SyncSpecification ignorableJsonRpcMethods(List<String> ignorableJsonRpcMethods) {
+			Assert.notNull(ignorableJsonRpcMethods, "Ignorable JSON-RPC methods must not be null");
+			this.ignorableJsonRpcMethods.addAll(ignorableJsonRpcMethods);
+			return this;
+		}
+
+		/**
+		 * Adds JSON-RPC method names that should be ignored by the server using varargs.
+		 * This is a convenience method for {@link #ignorableJsonRpcMethods(List)}.
+		 * @param ignorableJsonRpcMethods Method names to ignore. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if ignorableJsonRpcMethods is null
+		 */
+		public SyncSpecification ignorableJsonRpcMethods(String... ignorableJsonRpcMethods) {
+			Assert.notNull(ignorableJsonRpcMethods, "Ignorable JSON-RPC methods must not be null");
+			this.ignorableJsonRpcMethods.addAll(List.of(ignorableJsonRpcMethods));
+			return this;
+		}
+
+		/**
 		 * Builds a synchronous MCP server that provides blocking operations.
 		 * @return A new instance of {@link McpSyncServer} configured with this builder's
 		 * settings.
@@ -1267,7 +1329,7 @@ public interface McpServer {
 					: new DefaultJsonSchemaValidator(mapper);
 
 			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator);
+					this.uriTemplateManagerFactory, jsonSchemaValidator, this.ignorableJsonRpcMethods);
 
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}

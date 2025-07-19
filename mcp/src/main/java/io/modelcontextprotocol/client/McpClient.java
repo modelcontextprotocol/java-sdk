@@ -23,6 +23,7 @@ import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.Implementation;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.Utils;
 import reactor.core.publisher.Mono;
 
 /**
@@ -161,6 +162,12 @@ public interface McpClient {
 
 		private Duration initializationTimeout = Duration.ofSeconds(20);
 
+		/**
+		 * List of JSON-RPC methods that can be ignored. These methods will not be
+		 * processed and will not generate errors if received
+		 */
+		private final List<String> ignorableJsonRpcMethods = new ArrayList<>(Utils.DEFAULT_IGNORABLE_JSON_RPC_METHODS);
+
 		private ClientCapabilities capabilities;
 
 		private Implementation clientInfo = new Implementation("Java SDK MCP Client", "1.0.0");
@@ -212,6 +219,36 @@ public interface McpClient {
 		public SyncSpec initializationTimeout(Duration initializationTimeout) {
 			Assert.notNull(initializationTimeout, "Initialization timeout must not be null");
 			this.initializationTimeout = initializationTimeout;
+			return this;
+		}
+
+		/**
+		 * Sets the list of JSON-RPC methods that can be ignored by the client. These
+		 * methods will not be processed and will not generate errors if received.
+		 * @param ignorableJsonRpcMethods A list of JSON-RPC method names to ignore. Must
+		 * not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if ignorableJsonRpcMethods is null
+		 */
+		public SyncSpec ignorableJsonRpcMethods(List<String> ignorableJsonRpcMethods) {
+			Assert.notNull(ignorableJsonRpcMethods, "Ignorable JSON-RPC methods must not be null");
+			this.ignorableJsonRpcMethods.addAll(ignorableJsonRpcMethods);
+			return this;
+		}
+
+		/**
+		 * Sets the list of JSON-RPC methods that can be ignored by the client. These
+		 * methods will not be processed and will not generate errors if received.
+		 * @param ignorableJsonRpcMethods An array of JSON-RPC method names to ignore.
+		 * Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if ignorableJsonRpcMethods is null
+		 */
+		public SyncSpec ignorableJsonRpcMethods(String... ignorableJsonRpcMethods) {
+			Assert.notNull(ignorableJsonRpcMethods, "Ignorable JSON-RPC methods must not be null");
+			for (String method : ignorableJsonRpcMethods) {
+				this.ignorableJsonRpcMethods.add(method);
+			}
 			return this;
 		}
 
@@ -422,8 +459,8 @@ public interface McpClient {
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
-			return new McpSyncClient(
-					new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout, asyncFeatures));
+			return new McpSyncClient(new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout,
+					asyncFeatures, this.ignorableJsonRpcMethods));
 		}
 
 	}
@@ -451,6 +488,12 @@ public interface McpClient {
 		private Duration requestTimeout = Duration.ofSeconds(20); // Default timeout
 
 		private Duration initializationTimeout = Duration.ofSeconds(20);
+
+		/**
+		 * List of JSON-RPC methods that can be ignored. These methods will not be
+		 * processed and will not generate errors if received
+		 */
+		private final List<String> ignorableJsonRpcMethods = new ArrayList<>(Utils.DEFAULT_IGNORABLE_JSON_RPC_METHODS);
 
 		private ClientCapabilities capabilities;
 
@@ -503,6 +546,36 @@ public interface McpClient {
 		public AsyncSpec initializationTimeout(Duration initializationTimeout) {
 			Assert.notNull(initializationTimeout, "Initialization timeout must not be null");
 			this.initializationTimeout = initializationTimeout;
+			return this;
+		}
+
+		/**
+		 * Sets the list of JSON-RPC methods that can be ignored by the client. These
+		 * methods will not be processed and will not generate errors if received.
+		 * @param ignorableJsonRpcMethods A list of JSON-RPC method names to ignore. Must
+		 * not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if ignorableJsonRpcMethods is null
+		 */
+		public AsyncSpec ignorableJsonRpcMethods(List<String> ignorableJsonRpcMethods) {
+			Assert.notNull(ignorableJsonRpcMethods, "Ignorable JSON-RPC methods must not be null");
+			this.ignorableJsonRpcMethods.addAll(ignorableJsonRpcMethods);
+			return this;
+		}
+
+		/**
+		 * Sets the list of JSON-RPC methods that can be ignored by the client. These
+		 * methods will not be processed and will not generate errors if received.
+		 * @param ignorableJsonRpcMethods An array of JSON-RPC method names to ignore.
+		 * Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if ignorableJsonRpcMethods is null
+		 */
+		public AsyncSpec ignorableJsonRpcMethods(String... ignorableJsonRpcMethods) {
+			Assert.notNull(ignorableJsonRpcMethods, "Ignorable JSON-RPC methods must not be null");
+			for (String method : ignorableJsonRpcMethods) {
+				this.ignorableJsonRpcMethods.add(method);
+			}
 			return this;
 		}
 
@@ -730,7 +803,8 @@ public interface McpClient {
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
 							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 							this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
-							this.samplingHandler, this.elicitationHandler));
+							this.samplingHandler, this.elicitationHandler),
+					this.ignorableJsonRpcMethods);
 		}
 
 	}
