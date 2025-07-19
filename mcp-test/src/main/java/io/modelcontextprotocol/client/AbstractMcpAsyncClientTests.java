@@ -830,4 +830,35 @@ public abstract class AbstractMcpAsyncClientTests {
 		});
 	}
 
+	// Tests for ignorable JSON-RPC methods feature
+
+	@Test
+	void testIgnorableJsonRpcMethodsBuilderList() {
+		List<String> customIgnorables = List.of("custom/method1", "custom/method2");
+
+		withClient(createMcpTransport(), builder -> builder.ignorableJsonRpcMethods(customIgnorables), client -> {
+			StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
+		});
+	}
+
+	@Test
+	void testIgnorableJsonRpcMethodsBuilderVarargs() {
+		withClient(createMcpTransport(),
+				builder -> builder.ignorableJsonRpcMethods("custom/method1", "custom/method2", "custom/method3"),
+				client -> {
+					StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
+				});
+	}
+
+	@Test
+	void testIgnorableMethodsBuilderNullValidation() {
+		assertThatThrownBy(() -> McpClient.async(createMcpTransport()).ignorableJsonRpcMethods((List<String>) null))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Ignorable JSON-RPC methods must not be null");
+
+		assertThatThrownBy(() -> McpClient.async(createMcpTransport()).ignorableJsonRpcMethods((String[]) null))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Ignorable JSON-RPC methods must not be null");
+	}
+
 }
