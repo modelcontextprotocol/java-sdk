@@ -116,10 +116,11 @@
 				<version>${spring-javaformat-maven-plugin.version}</version>
 				<executions>
 					<execution>
+						<id>checkstyle-validation</id>
 						<phase>validate</phase>
 						<inherited>true</inherited>
 						<goals>
-							<goal>validate</goal>
+							<goal>apply</goal>
 						</goals>
 					</execution>
 				</executions>
