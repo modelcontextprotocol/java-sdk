@@ -118,6 +118,7 @@ class McpClientFeatures {
 		/**
 		 * @deprecated Only exists for backwards-compatibility purposes.
 		 */
+		@Deprecated
 		public Async(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 				Map<String, McpSchema.Root> roots,
 				List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers,
@@ -262,6 +263,7 @@ class McpClientFeatures {
 		/**
 		 * @deprecated Only exists for backwards-compatibility purposes.
 		 */
+		@Deprecated
 		public Sync(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 				Map<String, McpSchema.Root> roots, List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers,
 				List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers,
