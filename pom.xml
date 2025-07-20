@@ -35,9 +35,11 @@
 
 	<developers>
 		<developer>
+			<id>tzolov</id>
 			<name>Christian Tzolov</name>
 		</developer>
 		<developer>
+			<id>chemicL</id>
 			<name>Dariusz Jędrzejczyk</name>
 		</developer>
 	</developers>
