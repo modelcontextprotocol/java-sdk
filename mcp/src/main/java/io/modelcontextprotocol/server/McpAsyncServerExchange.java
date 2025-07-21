@@ -178,6 +178,19 @@ public class McpAsyncServerExchange {
 	}
 
 	/**
+	 * Sends a notification to the client that the current progress status has changed for
+	 * long-running operations.
+	 * @param progressNotification The progress notification to send
+	 * @return A Mono that completes when the notification has been sent
+	 */
+	public Mono<Void> progressNotification(McpSchema.ProgressNotification progressNotification) {
+		if (progressNotification == null) {
+			return Mono.error(new McpError("Progress notification must not be null"));
+		}
+		return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_PROGRESS, progressNotification);
+	}
+
+	/**
 	 * Sends a ping request to the client.
 	 * @return A Mono that completes with clients's ping response
 	 */

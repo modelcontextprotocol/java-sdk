@@ -108,6 +108,15 @@ public class McpSyncServerExchange {
 	}
 
 	/**
+	 * Sends a notification to the client that the current progress status has changed for
+	 * long-running operations.
+	 * @param progressNotification The progress notification to send
+	 */
+	public void progressNotification(McpSchema.ProgressNotification progressNotification) {
+		this.exchange.progressNotification(progressNotification).block();
+	}
+
+	/**
 	 * Sends a synchronous ping request to the client.
 	 * @return
 	 */
