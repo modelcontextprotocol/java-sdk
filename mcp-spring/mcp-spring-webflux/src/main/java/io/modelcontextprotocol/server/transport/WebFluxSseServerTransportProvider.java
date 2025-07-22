@@ -10,7 +10,6 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
-import io.modelcontextprotocol.spec.McpSingleSessionServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,7 +62,7 @@ import org.springframework.web.reactive.function.server.ServerResponse;
  * @see McpServerTransport
  * @see ServerSentEvent
  */
-public class WebFluxSseServerTransportProvider implements McpSingleSessionServerTransportProvider {
+public class WebFluxSseServerTransportProvider implements McpServerTransportProvider {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebFluxSseServerTransportProvider.class);
 

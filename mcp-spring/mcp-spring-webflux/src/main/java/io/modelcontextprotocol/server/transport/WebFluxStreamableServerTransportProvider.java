@@ -193,7 +193,8 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 		return Mono.defer(() -> {
 			if (!request.headers().asHttpHeaders().containsKey("mcp-session-id")) {
-				return ServerResponse.badRequest().build(); // TODO: say we need a session id
+				return ServerResponse.badRequest().build(); // TODO: say we need a session
+															// id
 			}
 
 			String sessionId = request.headers().asHttpHeaders().getFirst("mcp-session-id");
@@ -206,15 +207,20 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 			if (request.headers().asHttpHeaders().containsKey("mcp-last-id")) {
 				String lastId = request.headers().asHttpHeaders().getFirst("mcp-last-id");
-				return ServerResponse.ok().contentType(MediaType.TEXT_EVENT_STREAM).body(session.replay(lastId), ServerSentEvent.class);
+				return ServerResponse.ok()
+					.contentType(MediaType.TEXT_EVENT_STREAM)
+					.body(session.replay(lastId), ServerSentEvent.class);
 			}
 
-			return ServerResponse.ok().contentType(MediaType.TEXT_EVENT_STREAM)
-					.body(Flux.<ServerSentEvent<?>>create(sink -> {
-						WebFluxStreamableMcpSessionTransport sessionTransport = new WebFluxStreamableMcpSessionTransport(sink);
-						McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session.listeningStream(sessionTransport);
-						sink.onDispose(listeningStream::close);
-					}), ServerSentEvent.class);
+			return ServerResponse.ok()
+				.contentType(MediaType.TEXT_EVENT_STREAM)
+				.body(Flux.<ServerSentEvent<?>>create(sink -> {
+					WebFluxStreamableMcpSessionTransport sessionTransport = new WebFluxStreamableMcpSessionTransport(
+							sink);
+					McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
+						.listeningStream(sessionTransport);
+					sink.onDispose(listeningStream::close);
+				}), ServerSentEvent.class);
 
 		}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext));
 	}
@@ -244,11 +250,18 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		return request.bodyToMono(String.class).<ServerResponse>flatMap(body -> {
 			try {
 				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
-				if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest && jsonrpcRequest.method().equals(McpSchema.METHOD_INITIALIZE)) {
-					McpSchema.InitializeRequest initializeRequest = objectMapper.convertValue(jsonrpcRequest.params(), new TypeReference<McpSchema.InitializeRequest>() {});
-					McpStreamableServerSession.McpStreamableServerSessionInit init = this.sessionFactory.startSession(initializeRequest);
+				if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest
+						&& jsonrpcRequest.method().equals(McpSchema.METHOD_INITIALIZE)) {
+					McpSchema.InitializeRequest initializeRequest = objectMapper.convertValue(jsonrpcRequest.params(),
+							new TypeReference<McpSchema.InitializeRequest>() {
+							});
+					McpStreamableServerSession.McpStreamableServerSessionInit init = this.sessionFactory
+						.startSession(initializeRequest);
 					sessions.put(init.session().getId(), init.session());
-					return init.initResult().flatMap(initResult -> ServerResponse.ok().header("mcp-session-id", init.session().getId()).bodyValue(initResult));
+					return init.initResult()
+						.flatMap(initResult -> ServerResponse.ok()
+							.header("mcp-session-id", init.session().getId())
+							.bodyValue(initResult));
 				}
 
 				if (!request.headers().asHttpHeaders().containsKey("sessionId")) {
@@ -260,26 +273,30 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 				if (session == null) {
 					return ServerResponse.status(HttpStatus.NOT_FOUND)
-							.bodyValue(new McpError("Session not found: " + sessionId));
+						.bodyValue(new McpError("Session not found: " + sessionId));
 				}
 
 				if (message instanceof McpSchema.JSONRPCResponse jsonrpcResponse) {
 					return session.accept(jsonrpcResponse).then(ServerResponse.accepted().build());
-				} else if (message instanceof McpSchema.JSONRPCNotification jsonrpcNotification) {
+				}
+				else if (message instanceof McpSchema.JSONRPCNotification jsonrpcNotification) {
 					return session.accept(jsonrpcNotification).then(ServerResponse.accepted().build());
-				} else if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
-					return ServerResponse.ok().contentType(MediaType.TEXT_EVENT_STREAM)
-							.body(Flux.<ServerSentEvent<?>>create(sink -> {
-								WebFluxStreamableMcpSessionTransport st = new WebFluxStreamableMcpSessionTransport(sink);
-								Mono<Void> stream = session.responseStream(jsonrpcRequest, st);
-								Disposable streamSubscription = stream
-										.doOnError(err -> sink.error(err))
-										.contextWrite(sink.contextView())
-										.subscribe();
-								sink.onCancel(streamSubscription);
-							}), ServerSentEvent.class);
-				} else {
-					return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).bodyValue(new McpError("Unknown message type"));
+				}
+				else if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
+					return ServerResponse.ok()
+						.contentType(MediaType.TEXT_EVENT_STREAM)
+						.body(Flux.<ServerSentEvent<?>>create(sink -> {
+							WebFluxStreamableMcpSessionTransport st = new WebFluxStreamableMcpSessionTransport(sink);
+							Mono<Void> stream = session.responseStream(jsonrpcRequest, st);
+							Disposable streamSubscription = stream.doOnError(err -> sink.error(err))
+								.contextWrite(sink.contextView())
+								.subscribe();
+							sink.onCancel(streamSubscription);
+						}), ServerSentEvent.class);
+				}
+				else {
+					return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+						.bodyValue(new McpError("Unknown message type"));
 				}
 			}
 			catch (IllegalArgumentException | IOException e) {
@@ -393,8 +410,8 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		}
 
 		/**
-		 * Builds a new instance of {@link WebFluxStreamableServerTransportProvider} with the
-		 * configured settings.
+		 * Builds a new instance of {@link WebFluxStreamableServerTransportProvider} with
+		 * the configured settings.
 		 * @return A new WebFluxSseServerTransportProvider instance
 		 * @throws IllegalStateException if required parameters are not set
 		 */

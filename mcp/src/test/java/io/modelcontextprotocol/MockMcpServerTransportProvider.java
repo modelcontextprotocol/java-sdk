@@ -19,13 +19,12 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerSession.Factory;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
-import io.modelcontextprotocol.spec.McpSingleSessionServerTransportProvider;
 import reactor.core.publisher.Mono;
 
 /**
  * @author Christian Tzolov
  */
-public class MockMcpServerTransportProvider implements McpSingleSessionServerTransportProvider {
+public class MockMcpServerTransportProvider implements McpServerTransportProvider {
 
 	private McpServerSession session;
 
