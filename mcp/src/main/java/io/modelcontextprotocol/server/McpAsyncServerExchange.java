@@ -13,6 +13,7 @@ import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
+import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpSession;
 import io.modelcontextprotocol.spec.McpTransportContext;
 import io.modelcontextprotocol.util.Assert;
@@ -63,6 +64,7 @@ public class McpAsyncServerExchange {
 	@Deprecated
 	public McpAsyncServerExchange(McpSession session, McpSchema.ClientCapabilities clientCapabilities,
 			McpSchema.Implementation clientInfo) {
+		this.sessionId = null;
 		this.session = session;
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
