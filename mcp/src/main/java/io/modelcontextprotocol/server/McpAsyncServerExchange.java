@@ -60,6 +60,14 @@ public class McpAsyncServerExchange {
 	}
 
 	/**
+	 * Get the session id.
+	 * @return The session id
+	 */
+	public String getSessionId() {
+		return this.session.getId();
+	}
+
+	/**
 	 * Get the client capabilities that define the supported features and functionality.
 	 * @return The client capabilities
 	 */
