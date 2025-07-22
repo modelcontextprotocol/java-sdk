@@ -65,9 +65,8 @@ public class McpStatelessAsyncServer {
 	private final JsonSchemaValidator jsonSchemaValidator;
 
 	McpStatelessAsyncServer(McpStatelessServerTransport mcpTransport, ObjectMapper objectMapper,
-							McpStatelessServerFeatures.Async features, Duration requestTimeout,
-							McpUriTemplateManagerFactory uriTemplateManagerFactory,
-							JsonSchemaValidator jsonSchemaValidator) {
+			McpStatelessServerFeatures.Async features, Duration requestTimeout,
+			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
 		this.mcpTransportProvider = mcpTransport;
 		this.objectMapper = objectMapper;
 		this.serverInfo = features.serverInfo();
@@ -114,12 +113,12 @@ public class McpStatelessAsyncServer {
 			requestHandlers.put(McpSchema.METHOD_COMPLETION_COMPLETE, completionCompleteRequestHandler());
 		}
 
-		mcpTransport.setRequestHandler((context, request) ->
-			requestHandlers.get(request.method()).apply(context, request.params())
-					.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
-					.onErrorResume(t ->
-							Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null, new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR, t.getMessage(), null)))
-					));
+		mcpTransport.setRequestHandler((context, request) -> requestHandlers.get(request.method())
+			.apply(context, request.params())
+			.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
+			.onErrorResume(t -> Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
+					new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR, t.getMessage(),
+							null)))));
 	}
 
 	// ---------------------------------------
@@ -127,7 +126,8 @@ public class McpStatelessAsyncServer {
 	// ---------------------------------------
 	private RequestHandler<McpSchema.InitializeResult> asyncInitializeRequestHandler() {
 		return (ctx, req) -> Mono.defer(() -> {
-			McpSchema.InitializeRequest initializeRequest = this.objectMapper.convertValue(req, McpSchema.InitializeRequest.class);
+			McpSchema.InitializeRequest initializeRequest = this.objectMapper.convertValue(req,
+					McpSchema.InitializeRequest.class);
 
 			logger.info("Client initialize request - Protocol: {}, Capabilities: {}, Info: {}",
 					initializeRequest.protocolVersion(), initializeRequest.capabilities(),
@@ -249,7 +249,9 @@ public class McpStatelessAsyncServer {
 
 	private RequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
 		return (ctx, params) -> {
-			List<Tool> tools = this.tools.stream().map(McpStatelessServerFeatures.AsyncToolSpecification::tool).toList();
+			List<Tool> tools = this.tools.stream()
+				.map(McpStatelessServerFeatures.AsyncToolSpecification::tool)
+				.toList();
 			return Mono.just(new McpSchema.ListToolsResult(tools, null));
 		};
 	}
@@ -335,8 +337,7 @@ public class McpStatelessAsyncServer {
 	}
 
 	private RequestHandler<McpSchema.ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
-		return (ctx, params) -> Mono
-			.just(new McpSchema.ListResourceTemplatesResult(this.getResourceTemplates(), null));
+		return (ctx, params) -> Mono.just(new McpSchema.ListResourceTemplatesResult(this.getResourceTemplates(), null));
 
 	}
 
@@ -482,21 +483,20 @@ public class McpStatelessAsyncServer {
 
 			// check if the referenced resource exists
 			if (type.equals("ref/prompt") && request.ref() instanceof McpSchema.PromptReference promptReference) {
-				McpStatelessServerFeatures.AsyncPromptSpecification promptSpec = this.prompts.get(promptReference.name());
+				McpStatelessServerFeatures.AsyncPromptSpecification promptSpec = this.prompts
+					.get(promptReference.name());
 				if (promptSpec == null) {
 					return Mono.error(new McpError("Prompt not found: " + promptReference.name()));
 				}
-				if (promptSpec.prompt()
-					.arguments()
-					.stream()
-					.noneMatch(arg -> arg.name().equals(argumentName))) {
+				if (promptSpec.prompt().arguments().stream().noneMatch(arg -> arg.name().equals(argumentName))) {
 
 					return Mono.error(new McpError("Argument not found: " + argumentName));
 				}
 			}
 
 			if (type.equals("ref/resource") && request.ref() instanceof McpSchema.ResourceReference resourceReference) {
-				McpStatelessServerFeatures.AsyncResourceSpecification resourceSpec = this.resources.get(resourceReference.uri());
+				McpStatelessServerFeatures.AsyncResourceSpecification resourceSpec = this.resources
+					.get(resourceReference.uri());
 				if (resourceSpec == null) {
 					return Mono.error(new McpError("Resource not found: " + resourceReference.uri()));
 				}
@@ -567,4 +567,5 @@ public class McpStatelessAsyncServer {
 	interface RequestHandler<T> extends BiFunction<McpTransportContext, Object, Mono<T>> {
 
 	}
+
 }

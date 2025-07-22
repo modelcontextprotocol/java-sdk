@@ -2,11 +2,14 @@ package io.modelcontextprotocol.spec;
 
 public interface McpTransportContext {
 
-    String KEY = "MCP_TRANSPORT_CONTEXT";
+	String KEY = "MCP_TRANSPORT_CONTEXT";
 
-    McpTransportContext EMPTY = new DefaultMcpTransportContext();
+	McpTransportContext EMPTY = new DefaultMcpTransportContext();
 
-    Object get(String key);
-    void put(String key, Object value);
-    McpTransportContext copy();
+	Object get(String key);
+
+	void put(String key, Object value);
+
+	McpTransportContext copy();
+
 }

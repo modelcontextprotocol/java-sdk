@@ -19,7 +19,8 @@ import java.util.Map;
 import java.util.function.BiFunction;
 
 /**
- * MCP stateless server features specification that a particular server can choose to support.
+ * MCP stateless server features specification that a particular server can choose to
+ * support.
  *
  * @author Dariusz Jędrzejczyk
  */
@@ -37,11 +38,11 @@ public class McpStatelessServerFeatures {
 	 * @param instructions The server instructions text
 	 */
 	record Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-                 List<McpStatelessServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
-                 List<McpSchema.ResourceTemplate> resourceTemplates,
-                 Map<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts,
-                 Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions,
-                 String instructions) {
+			List<McpStatelessServerFeatures.AsyncToolSpecification> tools,
+			Map<String, AsyncResourceSpecification> resources, List<McpSchema.ResourceTemplate> resourceTemplates,
+			Map<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts,
+			Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions,
+			String instructions) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -54,11 +55,11 @@ public class McpStatelessServerFeatures {
 		 * @param instructions The server instructions text
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-              List<McpStatelessServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
-              List<McpSchema.ResourceTemplate> resourceTemplates,
-              Map<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts,
-              Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions,
-              String instructions) {
+				List<McpStatelessServerFeatures.AsyncToolSpecification> tools,
+				Map<String, AsyncResourceSpecification> resources, List<McpSchema.ResourceTemplate> resourceTemplates,
+				Map<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts,
+				Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions,
+				String instructions) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -204,9 +205,9 @@ public class McpStatelessServerFeatures {
 				return null;
 			}
 
-			BiFunction<McpTransportContext, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler = (ctx, req) -> {
-				var toolResult = Mono
-					.fromCallable(() -> syncToolSpec.callHandler().apply(ctx, req));
+			BiFunction<McpTransportContext, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler = (ctx,
+					req) -> {
+				var toolResult = Mono.fromCallable(() -> syncToolSpec.callHandler().apply(ctx, req));
 				return immediate ? toolResult : toolResult.subscribeOn(Schedulers.boundedElastic());
 			};
 
@@ -257,7 +258,8 @@ public class McpStatelessServerFeatures {
 	 *
 	 * @param prompt The prompt definition including name and description
 	 * @param promptHandler The function that processes prompt requests and returns
-	 * formatted templates. The function's argument is a {@link McpSchema.GetPromptRequest}.
+	 * formatted templates. The function's argument is a
+	 * {@link McpSchema.GetPromptRequest}.
 	 */
 	public record AsyncPromptSpecification(McpSchema.Prompt prompt,
 			BiFunction<McpTransportContext, McpSchema.GetPromptRequest, Mono<McpSchema.GetPromptResult>> promptHandler) {
@@ -286,7 +288,8 @@ public class McpStatelessServerFeatures {
 	 *
 	 * @param referenceKey The unique key representing the completion reference.
 	 * @param completionHandler The asynchronous function that processes completion
-	 * requests and returns results. The function's argument is a {@link McpSchema.CompleteRequest}.
+	 * requests and returns results. The function's argument is a
+	 * {@link McpSchema.CompleteRequest}.
 	 */
 	public record AsyncCompletionSpecification(McpSchema.CompleteReference referenceKey,
 			BiFunction<McpTransportContext, McpSchema.CompleteRequest, Mono<McpSchema.CompleteResult>> completionHandler) {
@@ -305,8 +308,7 @@ public class McpStatelessServerFeatures {
 				return null;
 			}
 			return new AsyncCompletionSpecification(completion.referenceKey(), (ctx, req) -> {
-				var completionResult = Mono.fromCallable(
-						() -> completion.completionHandler().apply(ctx, req));
+				var completionResult = Mono.fromCallable(() -> completion.completionHandler().apply(ctx, req));
 				return immediateExecution ? completionResult
 						: completionResult.subscribeOn(Schedulers.boundedElastic());
 			});
@@ -357,7 +359,8 @@ public class McpStatelessServerFeatures {
 	 *
 	 * @param prompt The prompt definition including name and description
 	 * @param promptHandler The function that processes prompt requests and returns
-	 * formatted templates. The function's argument is a {@link McpSchema.GetPromptRequest}.
+	 * formatted templates. The function's argument is a
+	 * {@link McpSchema.GetPromptRequest}.
 	 */
 	public record SyncPromptSpecification(McpSchema.Prompt prompt,
 			BiFunction<McpTransportContext, McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler) {

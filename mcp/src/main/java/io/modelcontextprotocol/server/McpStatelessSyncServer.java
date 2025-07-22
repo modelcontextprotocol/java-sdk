@@ -88,8 +88,9 @@ public class McpStatelessSyncServer {
 	 */
 	public void addTool(McpStatelessServerFeatures.SyncToolSpecification toolSpecification) {
 		this.asyncServer
-				.addTool(McpStatelessServerFeatures.AsyncToolSpecification.fromSync(toolSpecification, this.immediateExecution))
-				.block();
+			.addTool(McpStatelessServerFeatures.AsyncToolSpecification.fromSync(toolSpecification,
+					this.immediateExecution))
+			.block();
 	}
 
 	/**
@@ -108,8 +109,9 @@ public class McpStatelessSyncServer {
 	 */
 	public void addResource(McpStatelessServerFeatures.SyncResourceSpecification resourceSpecification) {
 		this.asyncServer
-				.addResource(McpStatelessServerFeatures.AsyncResourceSpecification.fromSync(resourceSpecification, this.immediateExecution))
-				.block();
+			.addResource(McpStatelessServerFeatures.AsyncResourceSpecification.fromSync(resourceSpecification,
+					this.immediateExecution))
+			.block();
 	}
 
 	/**
@@ -128,8 +130,9 @@ public class McpStatelessSyncServer {
 	 */
 	public void addPrompt(McpStatelessServerFeatures.SyncPromptSpecification promptSpecification) {
 		this.asyncServer
-				.addPrompt(McpStatelessServerFeatures.AsyncPromptSpecification.fromSync(promptSpecification, this.immediateExecution))
-				.block();
+			.addPrompt(McpStatelessServerFeatures.AsyncPromptSpecification.fromSync(promptSpecification,
+					this.immediateExecution))
+			.block();
 	}
 
 	/**
@@ -149,4 +152,5 @@ public class McpStatelessSyncServer {
 	void setProtocolVersions(List<String> protocolVersions) {
 		this.asyncServer.setProtocolVersions(protocolVersions);
 	}
+
 }

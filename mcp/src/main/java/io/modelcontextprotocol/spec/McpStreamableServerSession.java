@@ -49,10 +49,10 @@ public class McpStreamableServerSession implements McpSession {
 
 	private final AtomicReference<McpStreamableServerSessionStream> listeningStreamRef = new AtomicReference<>();
 
-	public McpStreamableServerSession(String id, McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
-									  Duration requestTimeout,
-									  InitNotificationHandler initNotificationHandler,
-									  Map<String, McpRequestHandler<?>> requestHandlers, Map<String, McpNotificationHandler> notificationHandlers) {
+	public McpStreamableServerSession(String id, McpSchema.ClientCapabilities clientCapabilities,
+			McpSchema.Implementation clientInfo, Duration requestTimeout,
+			InitNotificationHandler initNotificationHandler, Map<String, McpRequestHandler<?>> requestHandlers,
+			Map<String, McpNotificationHandler> notificationHandlers) {
 		this.id = id;
 		this.clientCapabilities.lazySet(clientCapabilities);
 		this.clientInfo.lazySet(clientInfo);
@@ -74,7 +74,8 @@ public class McpStreamableServerSession implements McpSession {
 	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {
 		return Mono.defer(() -> {
 			McpStreamableServerSessionStream listeningStream = this.listeningStreamRef.get();
-			return listeningStream != null ? listeningStream.sendRequest(method, requestParams, typeRef) : Mono.error(new RuntimeException("Generic stream is unavailable for session " + this.id));
+			return listeningStream != null ? listeningStream.sendRequest(method, requestParams, typeRef)
+					: Mono.error(new RuntimeException("Generic stream is unavailable for session " + this.id));
 		});
 	}
 
@@ -82,7 +83,8 @@ public class McpStreamableServerSession implements McpSession {
 	public Mono<Void> sendNotification(String method, Object params) {
 		return Mono.defer(() -> {
 			McpStreamableServerSessionStream listeningStream = this.listeningStreamRef.get();
-			return listeningStream != null ? listeningStream.sendNotification(method, params) : Mono.error(new RuntimeException("Generic stream is unavailable for session " + this.id));
+			return listeningStream != null ? listeningStream.sendNotification(method, params)
+					: Mono.error(new RuntimeException("Generic stream is unavailable for session " + this.id));
 		});
 	}
 
@@ -92,7 +94,8 @@ public class McpStreamableServerSession implements McpSession {
 		return listeningStream;
 	}
 
-	// TODO: keep track of history by keeping a map from eventId to stream and then iterate over the events using the lastEventId
+	// TODO: keep track of history by keeping a map from eventId to stream and then
+	// iterate over the events using the lastEventId
 	public Flux<McpSchema.JSONRPCMessage> replay(Object lastEventId) {
 		return Flux.empty();
 	}
@@ -102,19 +105,28 @@ public class McpStreamableServerSession implements McpSession {
 			McpTransportContext transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 
 			McpStreamableServerSessionStream stream = new McpStreamableServerSessionStream(transport);
-			McpRequestHandler<?> requestHandler = McpStreamableServerSession.this.requestHandlers.get(jsonrpcRequest.method());
-			// TODO: delegate to stream, which upon successful response should close remove itself from the registry and also close the underlying transport (sink)
+			McpRequestHandler<?> requestHandler = McpStreamableServerSession.this.requestHandlers
+				.get(jsonrpcRequest.method());
+			// TODO: delegate to stream, which upon successful response should close
+			// remove itself from the registry and also close the underlying transport
+			// (sink)
 			if (requestHandler == null) {
 				MethodNotFoundError error = getMethodNotFoundError(jsonrpcRequest.method());
-				return transport.sendMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), null,
-						new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
-								error.message(), error.data())));
+				return transport
+					.sendMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), null,
+							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
+									error.message(), error.data())));
 			}
-			return requestHandler.handle(new McpAsyncServerExchange(stream, clientCapabilities.get(), clientInfo.get(), transportContext), jsonrpcRequest.params())
-					.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), result, null))
-					.flatMap(transport::sendMessage).then(transport.closeGracefully());
+			return requestHandler
+				.handle(new McpAsyncServerExchange(stream, clientCapabilities.get(), clientInfo.get(),
+						transportContext), jsonrpcRequest.params())
+				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), result,
+						null))
+				.flatMap(transport::sendMessage)
+				.then(transport.closeGracefully());
 		});
 	}
+
 	public Mono<Void> accept(McpSchema.JSONRPCNotification notification) {
 		return Mono.deferContextual(ctx -> {
 			McpTransportContext transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
@@ -124,24 +136,32 @@ public class McpStreamableServerSession implements McpSession {
 				return Mono.empty();
 			}
 			McpStreamableServerSessionStream listeningStream = this.listeningStreamRef.get();
-			return notificationHandler.handle(new McpAsyncServerExchange(listeningStream != null ? listeningStream : MissingMcpTransportSession.INSTANCE, this.clientCapabilities.get(), this.clientInfo.get(), transportContext), notification.params());
+			return notificationHandler.handle(
+					new McpAsyncServerExchange(
+							listeningStream != null ? listeningStream : MissingMcpTransportSession.INSTANCE,
+							this.clientCapabilities.get(), this.clientInfo.get(), transportContext),
+					notification.params());
 		});
 
 	}
+
 	public Mono<Void> accept(McpSchema.JSONRPCResponse response) {
 		return Mono.defer(() -> {
-					var stream = this.requestIdToStream.get(response.id());
-					if (stream == null) {
-						return Mono.error(new McpError("Unexpected response for unknown id " + response.id())); // TODO JSONize
-					}
-					var sink = stream.pendingResponses.remove(response.id());
-					if (sink == null) {
-						return Mono.error(new McpError("Unexpected response for unknown id " + response.id())); // TODO JSONize
-					} else {
-						sink.success(response);
-					}
-					return Mono.empty();
-				});
+			var stream = this.requestIdToStream.get(response.id());
+			if (stream == null) {
+				return Mono.error(new McpError("Unexpected response for unknown id " + response.id())); // TODO
+																										// JSONize
+			}
+			var sink = stream.pendingResponses.remove(response.id());
+			if (sink == null) {
+				return Mono.error(new McpError("Unexpected response for unknown id " + response.id())); // TODO
+																										// JSONize
+			}
+			else {
+				sink.success(response);
+			}
+			return Mono.empty();
+		});
 	}
 
 	record MethodNotFoundError(String method, String message, Object data) {
@@ -155,7 +175,13 @@ public class McpStreamableServerSession implements McpSession {
 	public Mono<Void> closeGracefully() {
 		return Mono.defer(() -> {
 			McpStreamableServerSessionStream listeningStream = this.listeningStreamRef.get();
-			return listeningStream != null ? listeningStream.closeGracefully() : Mono.empty(); // TODO: Also close all the open streams
+			return listeningStream != null ? listeningStream.closeGracefully() : Mono.empty(); // TODO:
+																								// Also
+																								// close
+																								// all
+																								// the
+																								// open
+																								// streams
 		});
 	}
 
@@ -196,10 +222,14 @@ public class McpStreamableServerSession implements McpSession {
 	}
 
 	public interface Factory {
+
 		McpStreamableServerSessionInit startSession(McpSchema.InitializeRequest initializeRequest);
+
 	}
 
-	public record McpStreamableServerSessionInit(McpStreamableServerSession session, Mono<McpSchema.InitializeResult> initResult) {}
+	public record McpStreamableServerSessionInit(McpStreamableServerSession session,
+			Mono<McpSchema.InitializeResult> initResult) {
+	}
 
 	public final class McpStreamableServerSessionStream implements McpSession {
 
@@ -219,34 +249,32 @@ public class McpStreamableServerSession implements McpSession {
 
 			return Mono.<McpSchema.JSONRPCResponse>create(sink -> {
 				this.pendingResponses.put(requestId, sink);
-				McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, method,
-						requestId, requestParams);
-				this.transport.sendMessage(jsonrpcRequest).subscribe(v -> {}, sink::error);
-			})
-					.timeout(requestTimeout)
-					.doOnError(e -> {
-						this.pendingResponses.remove(requestId);
-						McpStreamableServerSession.this.requestIdToStream.remove(requestId);
-					})
-					.handle((jsonRpcResponse, sink) -> {
-						if (jsonRpcResponse.error() != null) {
-							sink.error(new McpError(jsonRpcResponse.error()));
-						}
-						else {
-							if (typeRef.getType().equals(Void.class)) {
-								sink.complete();
-							}
-							else {
-								sink.next(this.transport.unmarshalFrom(jsonRpcResponse.result(), typeRef));
-							}
-						}
-					});
+				McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
+						method, requestId, requestParams);
+				this.transport.sendMessage(jsonrpcRequest).subscribe(v -> {
+				}, sink::error);
+			}).timeout(requestTimeout).doOnError(e -> {
+				this.pendingResponses.remove(requestId);
+				McpStreamableServerSession.this.requestIdToStream.remove(requestId);
+			}).handle((jsonRpcResponse, sink) -> {
+				if (jsonRpcResponse.error() != null) {
+					sink.error(new McpError(jsonRpcResponse.error()));
+				}
+				else {
+					if (typeRef.getType().equals(Void.class)) {
+						sink.complete();
+					}
+					else {
+						sink.next(this.transport.unmarshalFrom(jsonRpcResponse.result(), typeRef));
+					}
+				}
+			});
 		}
 
 		@Override
 		public Mono<Void> sendNotification(String method, Object params) {
-			McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
-					method, params);
+			McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(
+					McpSchema.JSONRPC_VERSION, method, params);
 			return this.transport.sendMessage(jsonrpcNotification);
 		}
 
@@ -271,6 +299,7 @@ public class McpStreamableServerSession implements McpSession {
 			McpStreamableServerSession.this.requestIdToStream.values().removeIf(this::equals);
 			this.transport.close();
 		}
+
 	}
 
 }

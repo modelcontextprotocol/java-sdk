@@ -73,8 +73,9 @@ public class McpServerSession implements McpSession {
 	 * @param notificationHandlers map of notification handlers to use
 	 */
 	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
-							McpInitRequestHandler initHandler, InitNotificationHandler initNotificationHandler,
-							Map<String, McpRequestHandler<?>> requestHandlers, Map<String, McpNotificationHandler> notificationHandlers) {
+			McpInitRequestHandler initHandler, InitNotificationHandler initNotificationHandler,
+			Map<String, McpRequestHandler<?>> requestHandlers,
+			Map<String, McpNotificationHandler> notificationHandlers) {
 		this.id = id;
 		this.requestTimeout = requestTimeout;
 		this.transport = transport;
@@ -279,6 +280,7 @@ public class McpServerSession implements McpSession {
 
 	/**
 	 * Request handler for the initialization request.
+	 *
 	 * @deprecated Use {@link McpInitRequestHandler}
 	 */
 	@Deprecated
@@ -308,6 +310,7 @@ public class McpServerSession implements McpSession {
 
 	/**
 	 * A handler for client-initiated notifications.
+	 *
 	 * @deprecated Use {@link McpNotificationHandler}
 	 */
 	@Deprecated

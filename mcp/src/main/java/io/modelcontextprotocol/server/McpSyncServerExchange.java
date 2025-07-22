@@ -47,6 +47,7 @@ public class McpSyncServerExchange {
 	public McpTransportContext transportContext() {
 		return this.exchange.transportContext();
 	}
+
 	/**
 	 * Create a new message using the sampling capabilities of the client. The Model
 	 * Context Protocol (MCP) provides a standardized way for servers to request LLM

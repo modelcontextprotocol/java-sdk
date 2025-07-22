@@ -57,7 +57,7 @@ public class McpAsyncServerExchange {
 	 * @param clientInfo The client implementation information.
 	 */
 	public McpAsyncServerExchange(McpSession session, McpSchema.ClientCapabilities clientCapabilities,
-								  McpSchema.Implementation clientInfo) {
+			McpSchema.Implementation clientInfo) {
 		this.session = session;
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
@@ -69,11 +69,12 @@ public class McpAsyncServerExchange {
 	 * @param session The server session representing a 1-1 interaction.
 	 * @param clientCapabilities The client capabilities that define the supported
 	 * features and functionality.
-	 * @param transportContext context associated with the client as extracted from the transport
+	 * @param transportContext context associated with the client as extracted from the
+	 * transport
 	 * @param clientInfo The client implementation information.
 	 */
 	public McpAsyncServerExchange(McpSession session, McpSchema.ClientCapabilities clientCapabilities,
-								  McpSchema.Implementation clientInfo, McpTransportContext transportContext) {
+			McpSchema.Implementation clientInfo, McpTransportContext transportContext) {
 		this.session = session;
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
