@@ -3,9 +3,9 @@ package io.modelcontextprotocol.spec;
 import com.fasterxml.jackson.core.type.TypeReference;
 import reactor.core.publisher.Mono;
 
-public class DisconnectedMcpSession implements McpSession {
+public class MissingMcpTransportSession implements McpSession {
 
-    public static final DisconnectedMcpSession INSTANCE = new DisconnectedMcpSession();
+    public static final MissingMcpTransportSession INSTANCE = new MissingMcpTransportSession();
 
     @Override
     public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {

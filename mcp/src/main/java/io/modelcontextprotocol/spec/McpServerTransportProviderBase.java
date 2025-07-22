@@ -1,8 +1,8 @@
 package io.modelcontextprotocol.spec;
 
-import reactor.core.publisher.Mono;
-
 import java.util.Map;
+
+import reactor.core.publisher.Mono;
 
 /**
  * The core building block providing the server-side MCP transport. Implement this
@@ -12,8 +12,8 @@ import java.util.Map;
  * <p>
  * The lifecycle of the provider dictates that it be created first, upon application
  * startup, and then passed into either
- * {@link io.modelcontextprotocol.server.McpServer#sync(McpStreamableServerTransportProvider)} or
- * {@link io.modelcontextprotocol.server.McpServer#async(McpStreamableServerTransportProvider)}. As
+ * {@link io.modelcontextprotocol.server.McpServer#sync(McpServerTransportProvider)} or
+ * {@link io.modelcontextprotocol.server.McpServer#async(McpServerTransportProvider)}. As
  * a result of the MCP server creation, the provider will be notified of a
  * {@link McpServerSession.Factory} which will be used to handle a 1:1 communication
  * between a newly connected client and the server. The provider's responsibility is to
@@ -29,15 +29,7 @@ import java.util.Map;
  *
  * @author Dariusz Jędrzejczyk
  */
-public interface McpStreamableServerTransportProvider extends McpServerTransportProviderBase {
-
-	/**
-	 * Sets the session factory that will be used to create sessions for new clients. An
-	 * implementation of the MCP server MUST call this method before any MCP interactions
-	 * take place.
-	 * @param sessionFactory the session factory to be used for initiating client sessions
-	 */
-	void setSessionFactory(McpStreamableServerSession.Factory sessionFactory);
+public interface McpServerTransportProviderBase {
 
 	/**
 	 * Sends a notification to all connected clients.

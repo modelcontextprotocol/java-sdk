@@ -6,6 +6,7 @@ package io.modelcontextprotocol.server;
 
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
+import io.modelcontextprotocol.spec.McpTransportContext;
 
 /**
  * Represents a synchronous exchange with a Model Context Protocol (MCP) client. The
@@ -43,6 +44,9 @@ public class McpSyncServerExchange {
 		return this.exchange.getClientInfo();
 	}
 
+	public McpTransportContext transportContext() {
+		return this.exchange.transportContext();
+	}
 	/**
 	 * Create a new message using the sampling capabilities of the client. The Model
 	 * Context Protocol (MCP) provides a standardized way for servers to request LLM

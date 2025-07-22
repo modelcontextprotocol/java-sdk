@@ -18,7 +18,6 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
-import io.modelcontextprotocol.spec.McpSingleSessionServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
 import jakarta.servlet.AsyncContext;
 import jakarta.servlet.ServletException;
@@ -61,7 +60,7 @@ import reactor.core.publisher.Mono;
  */
 
 @WebServlet(asyncSupported = true)
-public class HttpServletSseServerTransportProvider extends HttpServlet implements McpSingleSessionServerTransportProvider {
+public class HttpServletSseServerTransportProvider extends HttpServlet implements McpServerTransportProvider {
 
 	/** Logger for this class */
 	private static final Logger logger = LoggerFactory.getLogger(HttpServletSseServerTransportProvider.class);

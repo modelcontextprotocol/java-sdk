@@ -16,7 +16,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
 
 import io.modelcontextprotocol.spec.DefaultMcpStreamableServerSessionFactory;
-import io.modelcontextprotocol.spec.McpSingleSessionServerTransportProvider;
+import io.modelcontextprotocol.spec.McpServerTransportProviderBase;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,7 +89,7 @@ public class McpAsyncServer {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpAsyncServer.class);
 
-	private final McpServerTransportProvider mcpTransportProvider;
+	private final McpServerTransportProviderBase mcpTransportProvider;
 
 	private final ObjectMapper objectMapper;
 
@@ -126,7 +126,7 @@ public class McpAsyncServer {
 	 * @param features The MCP server supported features.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 */
-	McpAsyncServer(McpSingleSessionServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
+	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
 				   McpServerFeatures.Async features, Duration requestTimeout,
 				   McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
 		this.mcpTransportProvider = mcpTransportProvider;

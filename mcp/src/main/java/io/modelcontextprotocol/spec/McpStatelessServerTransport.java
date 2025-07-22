@@ -2,11 +2,11 @@ package io.modelcontextprotocol.spec;
 
 import reactor.core.publisher.Mono;
 
-import java.util.function.Function;
+import java.util.function.BiFunction;
 
 public interface McpStatelessServerTransport {
 
-	void setHandler(Function<McpSchema.JSONRPCRequest, Mono<McpSchema.JSONRPCResponse>> message);
+	void setRequestHandler(BiFunction<McpTransportContext, McpSchema.JSONRPCRequest, Mono<McpSchema.JSONRPCResponse>> message);
 
 	/**
 	 * Immediately closes all the transports with connected clients and releases any

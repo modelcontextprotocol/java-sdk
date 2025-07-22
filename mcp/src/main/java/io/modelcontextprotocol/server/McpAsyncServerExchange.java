@@ -8,11 +8,13 @@ import java.util.ArrayList;
 import java.util.Collections;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.spec.DefaultMcpTransportContext;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSession;
+import io.modelcontextprotocol.spec.McpTransportContext;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
 
@@ -30,6 +32,8 @@ public class McpAsyncServerExchange {
 	private final McpSchema.ClientCapabilities clientCapabilities;
 
 	private final McpSchema.Implementation clientInfo;
+
+	private final McpTransportContext transportContext;
 
 	private volatile LoggingLevel minLoggingLevel = LoggingLevel.INFO;
 
@@ -57,6 +61,23 @@ public class McpAsyncServerExchange {
 		this.session = session;
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
+		this.transportContext = new DefaultMcpTransportContext();
+	}
+
+	/**
+	 * Create a new asynchronous exchange with the client.
+	 * @param session The server session representing a 1-1 interaction.
+	 * @param clientCapabilities The client capabilities that define the supported
+	 * features and functionality.
+	 * @param transportContext context associated with the client as extracted from the transport
+	 * @param clientInfo The client implementation information.
+	 */
+	public McpAsyncServerExchange(McpSession session, McpSchema.ClientCapabilities clientCapabilities,
+								  McpSchema.Implementation clientInfo, McpTransportContext transportContext) {
+		this.session = session;
+		this.clientCapabilities = clientCapabilities;
+		this.clientInfo = clientInfo;
+		this.transportContext = transportContext;
 	}
 
 	/**
@@ -73,6 +94,10 @@ public class McpAsyncServerExchange {
 	 */
 	public McpSchema.Implementation getClientInfo() {
 		return this.clientInfo;
+	}
+
+	public McpTransportContext transportContext() {
+		return this.transportContext;
 	}
 
 	/**

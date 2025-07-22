@@ -47,7 +47,7 @@ public class McpStreamableServerSession implements McpSession {
 
 	private final AtomicInteger state = new AtomicInteger(STATE_UNINITIALIZED);
 
-	private final AtomicReference<McpStreamableServerSessionStream> genericStreamRef = new AtomicReference<>();
+	private final AtomicReference<McpStreamableServerSessionStream> listeningStreamRef = new AtomicReference<>();
 
 	public McpStreamableServerSession(String id, McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
 									  Duration requestTimeout,
@@ -73,23 +73,23 @@ public class McpStreamableServerSession implements McpSession {
 	@Override
 	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {
 		return Mono.defer(() -> {
-			McpStreamableServerSessionStream genericStream = this.genericStreamRef.get();
-			return genericStream != null ? genericStream.sendRequest(method, requestParams, typeRef) : Mono.error(new RuntimeException("Generic stream is unavailable for session " + this.id));
+			McpStreamableServerSessionStream listeningStream = this.listeningStreamRef.get();
+			return listeningStream != null ? listeningStream.sendRequest(method, requestParams, typeRef) : Mono.error(new RuntimeException("Generic stream is unavailable for session " + this.id));
 		});
 	}
 
 	@Override
 	public Mono<Void> sendNotification(String method, Object params) {
 		return Mono.defer(() -> {
-			McpStreamableServerSessionStream genericStream = this.genericStreamRef.get();
-			return genericStream != null ? genericStream.sendNotification(method, params) : Mono.error(new RuntimeException("Generic stream is unavailable for session " + this.id));
+			McpStreamableServerSessionStream listeningStream = this.listeningStreamRef.get();
+			return listeningStream != null ? listeningStream.sendNotification(method, params) : Mono.error(new RuntimeException("Generic stream is unavailable for session " + this.id));
 		});
 	}
 
-	public McpStreamableServerSessionStream newStream(McpServerTransport transport) {
-		McpStreamableServerSessionStream genericStream = new McpStreamableServerSessionStream(transport);
-		this.genericStreamRef.set(genericStream);
-		return genericStream;
+	public McpStreamableServerSessionStream listeningStream(McpServerTransport transport) {
+		McpStreamableServerSessionStream listeningStream = new McpStreamableServerSessionStream(transport);
+		this.listeningStreamRef.set(listeningStream);
+		return listeningStream;
 	}
 
 	// TODO: keep track of history by keeping a map from eventId to stream and then iterate over the events using the lastEventId
@@ -97,29 +97,34 @@ public class McpStreamableServerSession implements McpSession {
 		return Flux.empty();
 	}
 
-	public Mono<Void> handleStream(McpSchema.JSONRPCRequest jsonrpcRequest, McpServerTransport transport) {
-		McpStreamableServerSessionStream stream = new McpStreamableServerSessionStream(transport);
-		McpRequestHandler<?> requestHandler = McpStreamableServerSession.this.requestHandlers.get(jsonrpcRequest.method());
-		// TODO: delegate to stream, which upon successful response should close remove itself from the registry and also close the underlying transport (sink)
-		if (requestHandler == null) {
-			MethodNotFoundError error = getMethodNotFoundError(jsonrpcRequest.method());
-			return transport.sendMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), null,
-					new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
-							error.message(), error.data())));
-		}
-		return requestHandler.handle(new McpAsyncServerExchange(stream, clientCapabilities.get(), clientInfo.get()), jsonrpcRequest.params())
-				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), result, null))
-				.flatMap(transport::sendMessage).then(transport.closeGracefully());
+	public Mono<Void> responseStream(McpSchema.JSONRPCRequest jsonrpcRequest, McpServerTransport transport) {
+		return Mono.deferContextual(ctx -> {
+			McpTransportContext transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
+
+			McpStreamableServerSessionStream stream = new McpStreamableServerSessionStream(transport);
+			McpRequestHandler<?> requestHandler = McpStreamableServerSession.this.requestHandlers.get(jsonrpcRequest.method());
+			// TODO: delegate to stream, which upon successful response should close remove itself from the registry and also close the underlying transport (sink)
+			if (requestHandler == null) {
+				MethodNotFoundError error = getMethodNotFoundError(jsonrpcRequest.method());
+				return transport.sendMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), null,
+						new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
+								error.message(), error.data())));
+			}
+			return requestHandler.handle(new McpAsyncServerExchange(stream, clientCapabilities.get(), clientInfo.get(), transportContext), jsonrpcRequest.params())
+					.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), result, null))
+					.flatMap(transport::sendMessage).then(transport.closeGracefully());
+		});
 	}
 	public Mono<Void> accept(McpSchema.JSONRPCNotification notification) {
-		return Mono.defer(() -> {
+		return Mono.deferContextual(ctx -> {
+			McpTransportContext transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 			McpNotificationHandler notificationHandler = this.notificationHandlers.get(notification.method());
 			if (notificationHandler == null) {
 				logger.error("No handler registered for notification method: {}", notification.method());
 				return Mono.empty();
 			}
-			McpStreamableServerSessionStream genericStream = this.genericStreamRef.get();
-			return notificationHandler.handle(new McpAsyncServerExchange(genericStream != null ? genericStream : DisconnectedMcpSession.INSTANCE, this.clientCapabilities.get(), this.clientInfo.get()), notification.params());
+			McpStreamableServerSessionStream listeningStream = this.listeningStreamRef.get();
+			return notificationHandler.handle(new McpAsyncServerExchange(listeningStream != null ? listeningStream : MissingMcpTransportSession.INSTANCE, this.clientCapabilities.get(), this.clientInfo.get(), transportContext), notification.params());
 		});
 
 	}
@@ -149,16 +154,16 @@ public class McpStreamableServerSession implements McpSession {
 	@Override
 	public Mono<Void> closeGracefully() {
 		return Mono.defer(() -> {
-			McpStreamableServerSessionStream genericStream = this.genericStreamRef.get();
-			return genericStream != null ? genericStream.closeGracefully() : Mono.empty(); // TODO: Also close all the open streams
+			McpStreamableServerSessionStream listeningStream = this.listeningStreamRef.get();
+			return listeningStream != null ? listeningStream.closeGracefully() : Mono.empty(); // TODO: Also close all the open streams
 		});
 	}
 
 	@Override
 	public void close() {
-		McpStreamableServerSessionStream genericStream = this.genericStreamRef.get();
-		if (genericStream != null) {
-			genericStream.close();
+		McpStreamableServerSessionStream listeningStream = this.listeningStreamRef.get();
+		if (listeningStream != null) {
+			listeningStream.close();
 		}
 		// TODO: Also close all open streams
 	}
@@ -251,7 +256,7 @@ public class McpStreamableServerSession implements McpSession {
 				this.pendingResponses.values().forEach(s -> s.error(new RuntimeException("Stream closed")));
 				this.pendingResponses.clear();
 				// If this was the generic stream, reset it
-				McpStreamableServerSession.this.genericStreamRef.compareAndExchange(this, null);
+				McpStreamableServerSession.this.listeningStreamRef.compareAndExchange(this, null);
 				McpStreamableServerSession.this.requestIdToStream.values().removeIf(this::equals);
 				return this.transport.closeGracefully();
 			});
@@ -262,7 +267,7 @@ public class McpStreamableServerSession implements McpSession {
 			this.pendingResponses.values().forEach(s -> s.error(new RuntimeException("Stream closed")));
 			this.pendingResponses.clear();
 			// If this was the generic stream, reset it
-			McpStreamableServerSession.this.genericStreamRef.compareAndExchange(this, null);
+			McpStreamableServerSession.this.listeningStreamRef.compareAndExchange(this, null);
 			McpStreamableServerSession.this.requestIdToStream.values().removeIf(this::equals);
 			this.transport.close();
 		}
