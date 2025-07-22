@@ -390,7 +390,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		return response.bodyToMono(String.class).<Iterable<McpSchema.JSONRPCMessage>>handle((responseMessage, s) -> {
 			try {
 				if (sentMessage instanceof McpSchema.JSONRPCNotification && Utils.hasText(responseMessage)) {
-					logger.warn("Notificaiton: {} received non-compliant response: {}", sentMessage, responseMessage);
+					logger.warn("Notification: {} received non-compliant response: {}", sentMessage, responseMessage);
+					s.complete();
 				}
 				else {
 					McpSchema.JSONRPCMessage jsonRpcResponse = McpSchema.deserializeJsonRpcMessage(objectMapper,
@@ -399,6 +400,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 				}
 			}
 			catch (IOException e) {
+				// TODO: this should be a McpTransportError
 				s.error(e);
 			}
 		}).flatMapIterable(Function.identity());

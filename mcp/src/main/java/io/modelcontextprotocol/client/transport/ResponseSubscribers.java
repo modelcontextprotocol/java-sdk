@@ -168,6 +168,7 @@ class ResponseSubscribers {
 				}
 				else {
 					// If the response is not successful, emit an error
+					// TODO: This should be a McpTransportError
 					this.sink.error(new McpError(
 							"Invalid SSE response. Status code: " + this.responseInfo.statusCode() + " Line: " + line));
 
