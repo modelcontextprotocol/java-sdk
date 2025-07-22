@@ -436,19 +436,16 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					else if (contentType.contains(APPLICATION_JSON)) {
 						messageSink.success();
 						String data = ((ResponseSubscribers.AggregateResponseEvent) responseEvent).data();
-						if (Utils.hasText(data) && !data.trim().equals("{}")) {
-
-							try {
-								return Mono.just(McpSchema.deserializeJsonRpcMessage(objectMapper, data));
-							}
-							catch (IOException e) {
-								return Mono.error(e);
-							}
-						}
-						else {
-							// No content type means no response body
-							logger.debug("No content type returned for POST in session {}", sessionRepresentation);
+						if (sendMessage instanceof McpSchema.JSONRPCNotification && Utils.hasText(data)) {
+							logger.warn("Notificaiton: {} received non-compliant response: {}", sendMessage, data);
 							return Mono.empty();
+						}
+
+						try {
+							return Mono.just(McpSchema.deserializeJsonRpcMessage(objectMapper, data));
+						}
+						catch (IOException e) {
+							return Mono.error(e);
 						}
 					}
 					logger.warn("Unknown media type {} returned for POST in session {}", contentType,
