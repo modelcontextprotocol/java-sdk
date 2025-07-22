@@ -27,6 +27,8 @@ import reactor.core.publisher.Mono;
  */
 public class McpAsyncServerExchange {
 
+	private final String sessionId;
+
 	private final McpSession session;
 
 	private final McpSchema.ClientCapabilities clientCapabilities;
@@ -55,13 +57,16 @@ public class McpAsyncServerExchange {
 	 * @param clientCapabilities The client capabilities that define the supported
 	 * features and functionality.
 	 * @param clientInfo The client implementation information.
+	 * @deprecated Use
+	 * {@link #McpAsyncServerExchange(String, McpSession, McpSchema.ClientCapabilities, McpSchema.Implementation, McpTransportContext)}
 	 */
+	@Deprecated
 	public McpAsyncServerExchange(McpSession session, McpSchema.ClientCapabilities clientCapabilities,
 			McpSchema.Implementation clientInfo) {
 		this.session = session;
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
-		this.transportContext = new DefaultMcpTransportContext();
+		this.transportContext = McpTransportContext.EMPTY;
 	}
 
 	/**
@@ -73,8 +78,9 @@ public class McpAsyncServerExchange {
 	 * transport
 	 * @param clientInfo The client implementation information.
 	 */
-	public McpAsyncServerExchange(McpSession session, McpSchema.ClientCapabilities clientCapabilities,
+	public McpAsyncServerExchange(String sessionId, McpSession session, McpSchema.ClientCapabilities clientCapabilities,
 			McpSchema.Implementation clientInfo, McpTransportContext transportContext) {
+		this.sessionId = sessionId;
 		this.session = session;
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
@@ -99,6 +105,10 @@ public class McpAsyncServerExchange {
 
 	public McpTransportContext transportContext() {
 		return this.transportContext;
+	}
+
+	public String sessionId() {
+		return this.sessionId;
 	}
 
 	/**

@@ -28,6 +28,10 @@ public class McpSyncServerExchange {
 		this.exchange = exchange;
 	}
 
+	public String sessionId() {
+		return this.exchange.sessionId();
+	}
+
 	/**
 	 * Get the client capabilities that define the supported features and functionality.
 	 * @return The client capabilities

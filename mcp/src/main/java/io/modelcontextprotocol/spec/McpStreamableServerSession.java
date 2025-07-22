@@ -118,7 +118,7 @@ public class McpStreamableServerSession implements McpSession {
 									error.message(), error.data())));
 			}
 			return requestHandler
-				.handle(new McpAsyncServerExchange(stream, clientCapabilities.get(), clientInfo.get(),
+				.handle(new McpAsyncServerExchange(this.id, stream, clientCapabilities.get(), clientInfo.get(),
 						transportContext), jsonrpcRequest.params())
 				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), result,
 						null))
@@ -137,7 +137,7 @@ public class McpStreamableServerSession implements McpSession {
 			}
 			McpStreamableServerSessionStream listeningStream = this.listeningStreamRef.get();
 			return notificationHandler.handle(
-					new McpAsyncServerExchange(
+					new McpAsyncServerExchange(this.id,
 							listeningStream != null ? listeningStream : MissingMcpTransportSession.INSTANCE,
 							this.clientCapabilities.get(), this.clientInfo.get(), transportContext),
 					notification.params());

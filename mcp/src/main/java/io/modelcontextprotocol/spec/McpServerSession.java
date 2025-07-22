@@ -246,7 +246,8 @@ public class McpServerSession implements McpSession {
 		return Mono.defer(() -> {
 			if (McpSchema.METHOD_NOTIFICATION_INITIALIZED.equals(notification.method())) {
 				this.state.lazySet(STATE_INITIALIZED);
-				exchangeSink.tryEmitValue(new McpAsyncServerExchange(this, clientCapabilities.get(), clientInfo.get()));
+				exchangeSink.tryEmitValue(new McpAsyncServerExchange(this.id, this, clientCapabilities.get(),
+						clientInfo.get(), McpTransportContext.EMPTY));
 				return this.initNotificationHandler.handle();
 			}
 
