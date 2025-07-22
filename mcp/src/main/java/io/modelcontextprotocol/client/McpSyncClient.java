@@ -5,10 +5,15 @@
 package io.modelcontextprotocol.client;
 
 import java.time.Duration;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.modelcontextprotocol.spec.JsonSchemaValidator;
+import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
@@ -48,6 +53,7 @@ import io.modelcontextprotocol.util.Assert;
  * @author Dariusz Jędrzejczyk
  * @author Christian Tzolov
  * @author Jihoon Kim
+ * @author Anurag Pant
  * @see McpClient
  * @see McpAsyncClient
  * @see McpSchema
@@ -63,14 +69,23 @@ public class McpSyncClient implements AutoCloseable {
 
 	private final McpAsyncClient delegate;
 
+	private final JsonSchemaValidator jsonSchemaValidator;
+
+	/**
+	 * Cached tool output schemas.
+	 */
+	private final ConcurrentHashMap<String, Optional<Map<String, Object>>> toolsOutputSchemaCache;
+
 	/**
 	 * Create a new McpSyncClient with the given delegate.
 	 * @param delegate the asynchronous kernel on top of which this synchronous client
 	 * provides a blocking API.
 	 */
-	McpSyncClient(McpAsyncClient delegate) {
+	McpSyncClient(McpAsyncClient delegate, JsonSchemaValidator jsonSchemaValidator) {
 		Assert.notNull(delegate, "The delegate can not be null");
 		this.delegate = delegate;
+		this.jsonSchemaValidator = jsonSchemaValidator;
+		this.toolsOutputSchemaCache = new ConcurrentHashMap<>();
 	}
 
 	/**
@@ -216,7 +231,37 @@ public class McpSyncClient implements AutoCloseable {
 	 * Boolean indicating if the execution failed (true) or succeeded (false/absent)
 	 */
 	public McpSchema.CallToolResult callTool(McpSchema.CallToolRequest callToolRequest) {
-		return this.delegate.callTool(callToolRequest).block();
+		if (!this.toolsOutputSchemaCache.containsKey(callToolRequest.name())) {
+			listTools(); // Ensure tools are cached before calling
+		}
+
+		McpSchema.CallToolResult result = this.delegate.callTool(callToolRequest).block();
+		Optional<Map<String, Object>> optOutputSchema = toolsOutputSchemaCache.get(callToolRequest.name());
+
+		if (result != null && result.isError() != null && !result.isError()) {
+			if (optOutputSchema == null) {
+				// Should not be triggered but added for completeness
+				throw new McpError("Tool with name '" + callToolRequest.name() + "' not found");
+			}
+			else {
+				if (optOutputSchema.isPresent()) {
+					// Validate the tool output against the cached output schema
+					var validation = this.jsonSchemaValidator.validate(optOutputSchema.get(),
+							result.structuredContent());
+					if (!validation.valid()) {
+						throw new McpError("Tool call result validation failed: " + validation.errorMessage());
+					}
+				}
+				else if (result.structuredContent() != null) {
+					logger.warn(
+							"Calling a tool with no outputSchema is not expected to return result with structured content, but got: {}",
+							result.structuredContent());
+				}
+
+			}
+		}
+
+		return result;
 	}
 
 	/**
@@ -226,7 +271,14 @@ public class McpSyncClient implements AutoCloseable {
 	 * pagination if more tools are available
 	 */
 	public McpSchema.ListToolsResult listTools() {
-		return this.delegate.listTools().block();
+		return this.delegate.listTools().doOnNext(result -> {
+			if (result.tools() != null) {
+				// Cache tools output schema
+				result.tools()
+					.forEach(tool -> this.toolsOutputSchemaCache.put(tool.name(),
+							Optional.ofNullable(tool.outputSchema())));
+			}
+		}).block();
 	}
 
 	/**
@@ -237,7 +289,14 @@ public class McpSyncClient implements AutoCloseable {
 	 * pagination if more tools are available
 	 */
 	public McpSchema.ListToolsResult listTools(String cursor) {
-		return this.delegate.listTools(cursor).block();
+		return this.delegate.listTools(cursor).doOnNext(result -> {
+			if (result.tools() != null) {
+				// Cache tools output schema
+				result.tools()
+					.forEach(tool -> this.toolsOutputSchemaCache.put(tool.name(),
+							Optional.ofNullable(tool.outputSchema())));
+			}
+		}).block();
 	}
 
 	// --------------------------
