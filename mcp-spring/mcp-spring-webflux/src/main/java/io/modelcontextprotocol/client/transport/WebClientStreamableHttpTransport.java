@@ -288,7 +288,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 								logger.trace("Received response to POST for session {}", sessionRepresentation);
 								// communicate to caller the message was delivered
 								sink.success();
-								return statelessResponseFlux(message, response);
+								return directResponseFlux(message, response);
 							}
 							else {
 								logger.warn("Unknown media type {} returned for POST in session {}", contentType,
@@ -385,12 +385,12 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		return transportSession.sessionId().orElse("[missing_session_id]");
 	}
 
-	private Flux<McpSchema.JSONRPCMessage> statelessResponseFlux(McpSchema.JSONRPCMessage sendMessage,
+	private Flux<McpSchema.JSONRPCMessage> directResponseFlux(McpSchema.JSONRPCMessage sentMessage,
 			ClientResponse response) {
 		return response.bodyToMono(String.class).<Iterable<McpSchema.JSONRPCMessage>>handle((responseMessage, s) -> {
 			try {
-				if (sendMessage instanceof McpSchema.JSONRPCNotification && Utils.hasText(responseMessage)) {
-					logger.warn("Notificaiton: {} received non-compliant response: {}", sendMessage, responseMessage);
+				if (sentMessage instanceof McpSchema.JSONRPCNotification && Utils.hasText(responseMessage)) {
+					logger.warn("Notificaiton: {} received non-compliant response: {}", sentMessage, responseMessage);
 				}
 				else {
 					McpSchema.JSONRPCMessage jsonRpcResponse = McpSchema.deserializeJsonRpcMessage(objectMapper,

@@ -342,9 +342,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		}
 	}
 
-	public Mono<Void> sendMessage(McpSchema.JSONRPCMessage sendMessage) {
+	public Mono<Void> sendMessage(McpSchema.JSONRPCMessage sentMessage) {
 		return Mono.create(messageSink -> {
-			logger.debug("Sending message {}", sendMessage);
+			logger.debug("Sending message {}", sentMessage);
 
 			final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
 			final McpTransportSession<Disposable> transportSession = this.activeSession.get();
@@ -355,7 +355,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				requestBuilder = requestBuilder.header("mcp-session-id", transportSession.sessionId().get());
 			}
 
-			String jsonBody = this.toString(sendMessage);
+			String jsonBody = this.toString(sentMessage);
 
 			HttpRequest request = requestBuilder.uri(Utils.resolveUri(this.baseUri, this.endpoint))
 				.header("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
@@ -436,8 +436,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					else if (contentType.contains(APPLICATION_JSON)) {
 						messageSink.success();
 						String data = ((ResponseSubscribers.AggregateResponseEvent) responseEvent).data();
-						if (sendMessage instanceof McpSchema.JSONRPCNotification && Utils.hasText(data)) {
-							logger.warn("Notificaiton: {} received non-compliant response: {}", sendMessage, data);
+						if (sentMessage instanceof McpSchema.JSONRPCNotification && Utils.hasText(data)) {
+							logger.warn("Notificaiton: {} received non-compliant response: {}", sentMessage, data);
 							return Mono.empty();
 						}
 
