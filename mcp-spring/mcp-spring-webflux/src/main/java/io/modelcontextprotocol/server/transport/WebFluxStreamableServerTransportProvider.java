@@ -5,8 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.DefaultMcpTransportContext;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerSession;
+import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.McpTransportContext;
 import io.modelcontextprotocol.util.Assert;
@@ -45,6 +45,8 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 	private final String mcpEndpoint;
 
+	private final boolean disallowDelete;
+
 	private final RouterFunction<?> routerFunction;
 
 	private McpStreamableServerSession.Factory sessionFactory;
@@ -70,7 +72,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
 	public WebFluxStreamableServerTransportProvider(ObjectMapper objectMapper, String mcpEndpoint) {
-		this(objectMapper, DEFAULT_BASE_URL, mcpEndpoint);
+		this(objectMapper, DEFAULT_BASE_URL, mcpEndpoint, false);
 	}
 
 	/**
@@ -83,7 +85,8 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 	 * setup. Must not be null.
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
-	public WebFluxStreamableServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String mcpEndpoint) {
+	public WebFluxStreamableServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String mcpEndpoint,
+			boolean disallowDelete) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(baseUrl, "Message base path must not be null");
 		Assert.notNull(mcpEndpoint, "Message endpoint must not be null");
@@ -91,9 +94,11 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		this.objectMapper = objectMapper;
 		this.baseUrl = baseUrl;
 		this.mcpEndpoint = mcpEndpoint;
+		this.disallowDelete = disallowDelete;
 		this.routerFunction = RouterFunctions.route()
 			.GET(this.mcpEndpoint, this::handleGet)
 			.POST(this.mcpEndpoint, this::handlePost)
+			.DELETE(this.mcpEndpoint, this::handleDelete)
 			.build();
 	}
 
@@ -306,7 +311,37 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext));
 	}
 
-	private class WebFluxStreamableMcpSessionTransport implements McpServerTransport {
+	private Mono<ServerResponse> handleDelete(ServerRequest request) {
+		if (isClosing) {
+			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
+		}
+
+		McpTransportContext transportContext = this.contextExtractor.apply(request);
+
+		return Mono.defer(() -> {
+			if (!request.headers().asHttpHeaders().containsKey("mcp-session-id")) {
+				return ServerResponse.badRequest().build(); // TODO: say we need a session
+				// id
+			}
+
+			// TODO: The user can configure whether deletions are permitted
+			if (this.disallowDelete) {
+				return ServerResponse.status(HttpStatus.METHOD_NOT_ALLOWED).build();
+			}
+
+			String sessionId = request.headers().asHttpHeaders().getFirst("mcp-session-id");
+
+			McpStreamableServerSession session = this.sessions.get(sessionId);
+
+			if (session == null) {
+				return ServerResponse.notFound().build();
+			}
+
+			return session.delete().then(ServerResponse.ok().build());
+		}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext));
+	}
+
+	private class WebFluxStreamableMcpSessionTransport implements McpStreamableServerTransport {
 
 		private final FluxSink<ServerSentEvent<?>> sink;
 
@@ -316,6 +351,11 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 		@Override
 		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+			return this.sendMessage(message, null);
+		}
+
+		@Override
+		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message, String messageId) {
 			return Mono.fromSupplier(() -> {
 				try {
 					return objectMapper.writeValueAsString(message);
@@ -325,6 +365,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 				}
 			}).doOnNext(jsonText -> {
 				ServerSentEvent<Object> event = ServerSentEvent.builder()
+					.id(messageId)
 					.event(MESSAGE_EVENT_TYPE)
 					.data(jsonText)
 					.build();
@@ -419,7 +460,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 			Assert.notNull(objectMapper, "ObjectMapper must be set");
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 
-			return new WebFluxStreamableServerTransportProvider(objectMapper, baseUrl, mcpEndpoint);
+			return new WebFluxStreamableServerTransportProvider(objectMapper, baseUrl, mcpEndpoint, false);
 		}
 
 	}

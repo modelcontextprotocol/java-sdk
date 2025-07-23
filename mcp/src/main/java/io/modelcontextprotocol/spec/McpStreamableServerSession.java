@@ -12,10 +12,12 @@ import reactor.core.publisher.MonoSink;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 public class McpStreamableServerSession implements McpSession {
 
@@ -88,7 +90,13 @@ public class McpStreamableServerSession implements McpSession {
 		});
 	}
 
-	public McpStreamableServerSessionStream listeningStream(McpServerTransport transport) {
+	public Mono<Void> delete() {
+		return this.closeGracefully().then(Mono.fromRunnable(() -> {
+			// delete history, etc.
+		}));
+	}
+
+	public McpStreamableServerSessionStream listeningStream(McpStreamableServerTransport transport) {
 		McpStreamableServerSessionStream listeningStream = new McpStreamableServerSessionStream(transport);
 		this.listeningStreamRef.set(listeningStream);
 		return listeningStream;
@@ -100,7 +108,7 @@ public class McpStreamableServerSession implements McpSession {
 		return Flux.empty();
 	}
 
-	public Mono<Void> responseStream(McpSchema.JSONRPCRequest jsonrpcRequest, McpServerTransport transport) {
+	public Mono<Void> responseStream(McpSchema.JSONRPCRequest jsonrpcRequest, McpStreamableServerTransport transport) {
 		return Mono.deferContextual(ctx -> {
 			McpTransportContext transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 
@@ -235,10 +243,18 @@ public class McpStreamableServerSession implements McpSession {
 
 		private final ConcurrentHashMap<Object, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
 
-		private final McpServerTransport transport;
+		private final McpStreamableServerTransport transport;
 
-		public McpStreamableServerSessionStream(McpServerTransport transport) {
+		private final String transportId;
+
+		private final Supplier<String> uuidGenerator;
+
+		public McpStreamableServerSessionStream(McpStreamableServerTransport transport) {
 			this.transport = transport;
+			this.transportId = UUID.randomUUID().toString();
+			// This ID design allows for a constant-time extraction of the history by
+			// precisely identifying the SSE stream using the first component
+			this.uuidGenerator = () -> this.transportId + "_" + UUID.randomUUID();
 		}
 
 		@Override
@@ -251,7 +267,9 @@ public class McpStreamableServerSession implements McpSession {
 				this.pendingResponses.put(requestId, sink);
 				McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
 						method, requestId, requestParams);
-				this.transport.sendMessage(jsonrpcRequest).subscribe(v -> {
+				String messageId = this.uuidGenerator.get();
+				// TODO: store message in history
+				this.transport.sendMessage(jsonrpcRequest, messageId).subscribe(v -> {
 				}, sink::error);
 			}).timeout(requestTimeout).doOnError(e -> {
 				this.pendingResponses.remove(requestId);
@@ -275,7 +293,9 @@ public class McpStreamableServerSession implements McpSession {
 		public Mono<Void> sendNotification(String method, Object params) {
 			McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(
 					McpSchema.JSONRPC_VERSION, method, params);
-			return this.transport.sendMessage(jsonrpcNotification);
+			String messageId = this.uuidGenerator.get();
+			// TODO: store message in history
+			return this.transport.sendMessage(jsonrpcNotification, messageId);
 		}
 
 		@Override
