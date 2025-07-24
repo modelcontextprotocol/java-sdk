@@ -197,7 +197,7 @@ class WebFluxSseClientTransportTests {
 				    "jsonrpc": "2.0",
 				    "method": "test-method",
 				    "id": "test-id",
-				    "params": {"key": "value"}				
+				    "params": {"key": "value"}
 				}
 				""");
 
