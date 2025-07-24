@@ -8,7 +8,7 @@ import java.time.Duration;
 import java.util.List;
 
 import io.modelcontextprotocol.MockMcpClientTransport;
-import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.spec.McpClientInternalException;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import org.junit.jupiter.api.Test;
@@ -111,7 +111,7 @@ class McpClientProtocolVersionTests {
 						new McpSchema.InitializeResult(unsupportedVersion, null,
 								new McpSchema.Implementation("test-server", "1.0.0"), null),
 						null));
-			}).expectError(McpError.class).verify();
+			}).expectError(McpClientInternalException.class).verify();
 		}
 		finally {
 			StepVerifier.create(client.closeGracefully()).verifyComplete();

@@ -10,10 +10,12 @@ import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.modelcontextprotocol.spec.McpClientInternalException;
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse.JSONRPCError;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
@@ -285,8 +287,7 @@ class LifecycleInitializer {
 			return initializationJob.map(initializeResult -> this.initializationRef.get())
 				.timeout(this.initializationTimeout)
 				.onErrorResume(ex -> {
-					logger.warn("Failed to initialize", ex);
-					return Mono.error(new McpError("Client failed to initialize " + actionName));
+					return Mono.error(new McpClientInternalException("Client failed to initialize " + actionName, ex));
 				})
 				.flatMap(operation);
 		});
@@ -311,8 +312,10 @@ class LifecycleInitializer {
 					initializeResult.instructions());
 
 			if (!this.protocolVersions.contains(initializeResult.protocolVersion())) {
-				return Mono.error(new McpError(
-						"Unsupported protocol version from the server: " + initializeResult.protocolVersion()));
+				return Mono.error(McpError.builder(-32602)
+					.message("Unsupported protocol version")
+					.data("Unsupported protocol version from the server: " + initializeResult.protocolVersion())
+					.build());
 			}
 
 			return mcpClientSession.sendNotification(McpSchema.METHOD_NOTIFICATION_INITIALIZED, null)

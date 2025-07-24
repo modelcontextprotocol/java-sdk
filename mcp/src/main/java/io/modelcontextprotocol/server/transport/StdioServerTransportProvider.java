@@ -14,17 +14,18 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.McpError;
+
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
@@ -99,7 +100,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	@Override
 	public Mono<Void> notifyClients(String method, Object params) {
 		if (this.session == null) {
-			return Mono.error(new McpError("No session to close"));
+			return Mono.error(new IllegalStateException("Session not initialized"));
 		}
 		return this.session.sendNotification(method, params)
 			.doOnError(e -> logger.error("Failed to send notification: {}", e.getMessage()));

@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import org.junit.jupiter.api.BeforeEach;
@@ -213,7 +212,7 @@ class McpSyncServerExchangeTests {
 
 	@Test
 	void testLoggingNotificationWithNullMessage() {
-		assertThatThrownBy(() -> exchange.loggingNotification(null)).isInstanceOf(McpError.class)
+		assertThatThrownBy(() -> exchange.loggingNotification(null)).isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Logging message must not be null");
 	}
 
@@ -399,7 +398,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		assertThatThrownBy(() -> exchangeWithNullCapabilities.createElicitation(elicitRequest))
-			.isInstanceOf(McpError.class)
+			.isInstanceOf(IllegalStateException.class)
 			.hasMessage("Client must be initialized. Call the initialize method first!");
 
 		// Verify that sendRequest was never called due to null capabilities
@@ -423,7 +422,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		assertThatThrownBy(() -> exchangeWithoutElicitation.createElicitation(elicitRequest))
-			.isInstanceOf(McpError.class)
+			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Client must be configured with elicitation capabilities");
 
 		// Verify that sendRequest was never called due to missing elicitation
@@ -577,7 +576,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		assertThatThrownBy(() -> exchangeWithNullCapabilities.createMessage(createMessageRequest))
-			.isInstanceOf(McpError.class)
+			.isInstanceOf(IllegalStateException.class)
 			.hasMessage("Client must be initialized. Call the initialize method first!");
 
 		// Verify that sendRequest was never called due to null capabilities
@@ -602,7 +601,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		assertThatThrownBy(() -> exchangeWithoutSampling.createMessage(createMessageRequest))
-			.isInstanceOf(McpError.class)
+			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Client must be configured with sampling capabilities");
 
 		// Verify that sendRequest was never called due to missing sampling capabilities
@@ -763,12 +762,13 @@ class McpSyncServerExchangeTests {
 	@Test
 	void testPingWithMcpError() {
 		// Given - Mock an MCP-specific error during ping
-		McpError mcpError = new McpError("Server unavailable");
+		var mcpError = new IllegalStateException("Server unavailable");
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class)))
 			.thenReturn(Mono.error(mcpError));
 
 		// When & Then
-		assertThatThrownBy(() -> exchange.ping()).isInstanceOf(McpError.class).hasMessage("Server unavailable");
+		assertThatThrownBy(() -> exchange.ping()).isInstanceOf(IllegalStateException.class)
+			.hasMessage("Server unavailable");
 
 		verify(mockSession, times(1)).sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeReference.class));
 	}
