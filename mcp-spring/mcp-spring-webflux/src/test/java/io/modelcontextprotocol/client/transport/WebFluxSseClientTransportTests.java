@@ -6,6 +6,7 @@ package io.modelcontextprotocol.client.transport;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
@@ -75,6 +76,11 @@ class WebFluxSseClientTransportTests {
 
 		public int getInboundMessageCount() {
 			return inboundMessageCount.get();
+		}
+
+		public void simulateSseComment(String comment) {
+			events.tryEmitNext(ServerSentEvent.<String>builder().comment(comment).build());
+			inboundMessageCount.incrementAndGet();
 		}
 
 		public void simulateEndpointEvent(String jsonMessage) {
@@ -159,6 +165,27 @@ class WebFluxSseClientTransportTests {
 	}
 
 	@Test
+	void testCommentSseMessage() {
+		// If the line starts with a character (:) are comment lins and should be ingored
+		// https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation
+
+		CopyOnWriteArrayList<Throwable> droppedErrors = new CopyOnWriteArrayList<>();
+		reactor.core.publisher.Hooks.onErrorDropped(droppedErrors::add);
+
+		try {
+			// Simulate receiving the SSE comment line
+			transport.simulateSseComment("sse comment");
+
+			StepVerifier.create(transport.closeGracefully()).verifyComplete();
+
+			assertThat(droppedErrors).hasSize(0);
+		}
+		finally {
+			reactor.core.publisher.Hooks.resetOnErrorDropped();
+		}
+	}
+
+	@Test
 	void testMessageProcessing() {
 		// Create a test message
 		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
@@ -167,10 +194,10 @@ class WebFluxSseClientTransportTests {
 		// Simulate receiving the message
 		transport.simulateMessageEvent("""
 				{
-				    "jsonrpc": "2.0",
-				    "method": "test-method",
-				    "id": "test-id",
-				    "params": {"key": "value"}
+				"jsonrpc": "2.0",
+				"method": "test-method",
+				"id": "test-id",
+				"params": {"key": "value"}
 				}
 				""");
 

@@ -432,7 +432,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			}
 		}
 		else {
-			throw new McpError("Received unrecognized SSE event type: " + event.event());
+			logger.debug("Received SSE event with type: {}", event);
+			return Tuples.of(Optional.empty(), List.of());
 		}
 	}
 

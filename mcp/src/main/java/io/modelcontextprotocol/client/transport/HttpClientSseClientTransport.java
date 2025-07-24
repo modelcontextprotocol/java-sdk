@@ -366,10 +366,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 								return Flux.just(message);
 							}
 							else {
-								logger.error("Received unrecognized SSE event type: {}",
-										responseEvent.sseEvent().event());
-								sink.error(new McpError(
-										"Received unrecognized SSE event type: " + responseEvent.sseEvent().event()));
+								logger.debug("Received unrecognized SSE event type: {}", responseEvent.sseEvent());
+								sink.success();
 							}
 						}
 						catch (IOException e) {

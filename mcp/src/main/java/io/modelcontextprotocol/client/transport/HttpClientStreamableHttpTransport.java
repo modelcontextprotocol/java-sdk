@@ -264,6 +264,10 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 										"Error parsing JSON-RPC message: " + responseEvent.sseEvent().data()));
 							}
 						}
+						else {
+							logger.debug("Received SSE event with type: {}", responseEvent.sseEvent());
+							return Flux.empty();
+						}
 					}
 					else if (statusCode == METHOD_NOT_ALLOWED) { // NotAllowed
 						logger.debug("The server does not support SSE streams, using request-response mode.");
