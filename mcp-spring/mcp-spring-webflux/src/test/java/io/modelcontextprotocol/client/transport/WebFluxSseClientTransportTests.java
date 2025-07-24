@@ -194,11 +194,10 @@ class WebFluxSseClientTransportTests {
 		// Simulate receiving the message
 		transport.simulateMessageEvent("""
 				{
-				"jsonrpc": "2.0",
-				"method": "test-method",
-				"id": "test-id",
-				"params": {"key": "value"}
-				}
+				    "jsonrpc": "2.0",
+				    "method": "test-method",
+				    "id": "test-id",
+				    "params": {"key": "value"}				}
 				""");
 
 		// Subscribe to messages and verify
