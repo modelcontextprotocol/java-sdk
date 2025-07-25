@@ -274,6 +274,14 @@ public class McpAsyncClient {
 	}
 
 	/**
+	 * Get the current initialization result.
+	 * @return the initialization result.
+	 */
+	public McpSchema.InitializeResult getCurrentInitializationResult() {
+		return this.initializer.currentInitializationResult();
+	}
+
+	/**
 	 * Get the server capabilities that define the supported features and functionality.
 	 * @return The server capabilities
 	 */
