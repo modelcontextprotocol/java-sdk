@@ -156,7 +156,7 @@ public interface McpServer {
 	 * @param transportProvider The transport layer implementation for MCP communication.
 	 * @return A new instance of {@link AsyncSpecification} for configuring the server.
 	 */
-	static SingleSessionAsyncSpecification async(McpServerTransportProvider transportProvider) {
+	static AsyncSpecification<?> async(McpServerTransportProvider transportProvider) {
 		return new SingleSessionAsyncSpecification(transportProvider);
 	}
 
@@ -180,7 +180,7 @@ public interface McpServer {
 	 * @param transportProvider The transport layer implementation for MCP communication.
 	 * @return A new instance of {@link AsyncSpecification} for configuring the server.
 	 */
-	static StreamableServerAsyncSpecification async(McpStreamableServerTransportProvider transportProvider) {
+	static AsyncSpecification<?> async(McpStreamableServerTransportProvider transportProvider) {
 		return new StreamableServerAsyncSpecification(transportProvider);
 	}
 
@@ -206,6 +206,7 @@ public interface McpServer {
 		 * @return A new instance of {@link McpAsyncServer} configured with this builder's
 		 * settings.
 		 */
+		@Override
 		public McpAsyncServer build() {
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
@@ -232,6 +233,7 @@ public interface McpServer {
 		 * @return A new instance of {@link McpAsyncServer} configured with this builder's
 		 * settings.
 		 */
+		@Override
 		public McpAsyncServer build() {
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
@@ -248,7 +250,7 @@ public interface McpServer {
 	/**
 	 * Asynchronous server specification.
 	 */
-	class AsyncSpecification<S extends AsyncSpecification<S>> {
+	abstract class AsyncSpecification<S extends AsyncSpecification<S>> {
 
 		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
 
@@ -295,12 +297,14 @@ public interface McpServer {
 
 		final List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeHandlers = new ArrayList<>();
 
-		Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
+		Duration requestTimeout = Duration.ofHours(10); // Default timeout
 
-		@SuppressWarnings("unchecked")
-		S self() {
-			return (S) this;
-		}
+		public abstract McpAsyncServer build();
+
+		// @SuppressWarnings("unchecked")
+		// S self() {
+		// return (S) this;
+		// }
 
 		/**
 		 * Sets the URI template manager factory to use for creating URI templates. This
@@ -309,10 +313,10 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if uriTemplateManagerFactory is null
 		 */
-		public S uriTemplateManagerFactory(McpUriTemplateManagerFactory uriTemplateManagerFactory) {
+		public AsyncSpecification<S> uriTemplateManagerFactory(McpUriTemplateManagerFactory uriTemplateManagerFactory) {
 			Assert.notNull(uriTemplateManagerFactory, "URI template manager factory must not be null");
 			this.uriTemplateManagerFactory = uriTemplateManagerFactory;
-			return self();
+			return this;
 		}
 
 		/**
@@ -324,10 +328,10 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if requestTimeout is null
 		 */
-		public S requestTimeout(Duration requestTimeout) {
+		public AsyncSpecification<S> requestTimeout(Duration requestTimeout) {
 			Assert.notNull(requestTimeout, "Request timeout must not be null");
 			this.requestTimeout = requestTimeout;
-			return self();
+			return this;
 		}
 
 		/**
@@ -339,10 +343,10 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if serverInfo is null
 		 */
-		public S serverInfo(McpSchema.Implementation serverInfo) {
+		public AsyncSpecification<S> serverInfo(McpSchema.Implementation serverInfo) {
 			Assert.notNull(serverInfo, "Server info must not be null");
 			this.serverInfo = serverInfo;
-			return self();
+			return this;
 		}
 
 		/**
@@ -355,11 +359,11 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if name or version is null or empty
 		 * @see #serverInfo(McpSchema.Implementation)
 		 */
-		public S serverInfo(String name, String version) {
+		public AsyncSpecification<S> serverInfo(String name, String version) {
 			Assert.hasText(name, "Name must not be null or empty");
 			Assert.hasText(version, "Version must not be null or empty");
 			this.serverInfo = new McpSchema.Implementation(name, version);
-			return self();
+			return this;
 		}
 
 		/**
@@ -369,9 +373,9 @@ public interface McpServer {
 		 * @param instructions The instructions text. Can be null or empty.
 		 * @return This builder instance for method chaining
 		 */
-		public S instructions(String instructions) {
+		public AsyncSpecification<S> instructions(String instructions) {
 			this.instructions = instructions;
-			return self();
+			return this;
 		}
 
 		/**
@@ -388,10 +392,10 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if serverCapabilities is null
 		 */
-		public S capabilities(McpSchema.ServerCapabilities serverCapabilities) {
+		public AsyncSpecification<S> capabilities(McpSchema.ServerCapabilities serverCapabilities) {
 			Assert.notNull(serverCapabilities, "Server capabilities must not be null");
 			this.serverCapabilities = serverCapabilities;
-			return self();
+			return this;
 		}
 
 		/**
@@ -419,7 +423,7 @@ public interface McpServer {
 		 * calls that require a request object.
 		 */
 		@Deprecated
-		public S tool(McpSchema.Tool tool,
+		public AsyncSpecification<S> tool(McpSchema.Tool tool,
 				BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<CallToolResult>> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
@@ -427,7 +431,7 @@ public interface McpServer {
 
 			this.tools.add(new McpServerFeatures.AsyncToolSpecification(tool, handler));
 
-			return self();
+			return this;
 		}
 
 		/**
@@ -443,7 +447,7 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
-		public S toolCall(McpSchema.Tool tool,
+		public AsyncSpecification<S> toolCall(McpSchema.Tool tool,
 				BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<CallToolResult>> callHandler) {
 
 			Assert.notNull(tool, "Tool must not be null");
@@ -453,7 +457,7 @@ public interface McpServer {
 			this.tools
 				.add(McpServerFeatures.AsyncToolSpecification.builder().tool(tool).callHandler(callHandler).build());
 
-			return self();
+			return this;
 		}
 
 		/**
@@ -466,7 +470,7 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if toolSpecifications is null
 		 * @see #tools(McpServerFeatures.AsyncToolSpecification...)
 		 */
-		public S tools(List<McpServerFeatures.AsyncToolSpecification> toolSpecifications) {
+		public AsyncSpecification<S> tools(List<McpServerFeatures.AsyncToolSpecification> toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 
 			for (var tool : toolSpecifications) {
@@ -474,7 +478,7 @@ public interface McpServer {
 				this.tools.add(tool);
 			}
 
-			return self();
+			return this;
 		}
 
 		/**
@@ -493,14 +497,14 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if toolSpecifications is null
 		 */
-		public S tools(McpServerFeatures.AsyncToolSpecification... toolSpecifications) {
+		public AsyncSpecification<S> tools(McpServerFeatures.AsyncToolSpecification... toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 
 			for (McpServerFeatures.AsyncToolSpecification tool : toolSpecifications) {
 				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
-			return self();
+			return this;
 		}
 
 		private void assertNoDuplicateTool(String toolName) {
@@ -519,10 +523,11 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if resourceSpecifications is null
 		 * @see #resources(McpServerFeatures.AsyncResourceSpecification...)
 		 */
-		public S resources(Map<String, McpServerFeatures.AsyncResourceSpecification> resourceSpecifications) {
+		public AsyncSpecification<S> resources(
+				Map<String, McpServerFeatures.AsyncResourceSpecification> resourceSpecifications) {
 			Assert.notNull(resourceSpecifications, "Resource handlers map must not be null");
 			this.resources.putAll(resourceSpecifications);
-			return self();
+			return this;
 		}
 
 		/**
@@ -534,12 +539,13 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if resourceSpecifications is null
 		 * @see #resources(McpServerFeatures.AsyncResourceSpecification...)
 		 */
-		public S resources(List<McpServerFeatures.AsyncResourceSpecification> resourceSpecifications) {
+		public AsyncSpecification<S> resources(
+				List<McpServerFeatures.AsyncResourceSpecification> resourceSpecifications) {
 			Assert.notNull(resourceSpecifications, "Resource handlers list must not be null");
 			for (McpServerFeatures.AsyncResourceSpecification resource : resourceSpecifications) {
 				this.resources.put(resource.resource().uri(), resource);
 			}
-			return self();
+			return this;
 		}
 
 		/**
@@ -559,12 +565,12 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceSpecifications is null
 		 */
-		public S resources(McpServerFeatures.AsyncResourceSpecification... resourceSpecifications) {
+		public AsyncSpecification<S> resources(McpServerFeatures.AsyncResourceSpecification... resourceSpecifications) {
 			Assert.notNull(resourceSpecifications, "Resource handlers list must not be null");
 			for (McpServerFeatures.AsyncResourceSpecification resource : resourceSpecifications) {
 				this.resources.put(resource.resource().uri(), resource);
 			}
-			return self();
+			return this;
 		}
 
 		/**
@@ -584,10 +590,10 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
-		public S resourceTemplates(List<ResourceTemplate> resourceTemplates) {
+		public AsyncSpecification<S> resourceTemplates(List<ResourceTemplate> resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
 			this.resourceTemplates.addAll(resourceTemplates);
-			return self();
+			return this;
 		}
 
 		/**
@@ -598,12 +604,12 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(List)
 		 */
-		public S resourceTemplates(ResourceTemplate... resourceTemplates) {
+		public AsyncSpecification<S> resourceTemplates(ResourceTemplate... resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
 			for (ResourceTemplate resourceTemplate : resourceTemplates) {
 				this.resourceTemplates.add(resourceTemplate);
 			}
-			return self();
+			return this;
 		}
 
 		/**
@@ -623,10 +629,10 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if prompts is null
 		 */
-		public S prompts(Map<String, McpServerFeatures.AsyncPromptSpecification> prompts) {
+		public AsyncSpecification<S> prompts(Map<String, McpServerFeatures.AsyncPromptSpecification> prompts) {
 			Assert.notNull(prompts, "Prompts map must not be null");
 			this.prompts.putAll(prompts);
-			return self();
+			return this;
 		}
 
 		/**
@@ -637,12 +643,12 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if prompts is null
 		 * @see #prompts(McpServerFeatures.AsyncPromptSpecification...)
 		 */
-		public S prompts(List<McpServerFeatures.AsyncPromptSpecification> prompts) {
+		public AsyncSpecification<S> prompts(List<McpServerFeatures.AsyncPromptSpecification> prompts) {
 			Assert.notNull(prompts, "Prompts list must not be null");
 			for (McpServerFeatures.AsyncPromptSpecification prompt : prompts) {
 				this.prompts.put(prompt.prompt().name(), prompt);
 			}
-			return self();
+			return this;
 		}
 
 		/**
@@ -661,12 +667,12 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if prompts is null
 		 */
-		public S prompts(McpServerFeatures.AsyncPromptSpecification... prompts) {
+		public AsyncSpecification<S> prompts(McpServerFeatures.AsyncPromptSpecification... prompts) {
 			Assert.notNull(prompts, "Prompts list must not be null");
 			for (McpServerFeatures.AsyncPromptSpecification prompt : prompts) {
 				this.prompts.put(prompt.prompt().name(), prompt);
 			}
-			return self();
+			return this;
 		}
 
 		/**
@@ -676,12 +682,12 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if completions is null
 		 */
-		public S completions(List<McpServerFeatures.AsyncCompletionSpecification> completions) {
+		public AsyncSpecification<S> completions(List<McpServerFeatures.AsyncCompletionSpecification> completions) {
 			Assert.notNull(completions, "Completions list must not be null");
 			for (McpServerFeatures.AsyncCompletionSpecification completion : completions) {
 				this.completions.put(completion.referenceKey(), completion);
 			}
-			return self();
+			return this;
 		}
 
 		/**
@@ -691,12 +697,12 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if completions is null
 		 */
-		public S completions(McpServerFeatures.AsyncCompletionSpecification... completions) {
+		public AsyncSpecification<S> completions(McpServerFeatures.AsyncCompletionSpecification... completions) {
 			Assert.notNull(completions, "Completions list must not be null");
 			for (McpServerFeatures.AsyncCompletionSpecification completion : completions) {
 				this.completions.put(completion.referenceKey(), completion);
 			}
-			return self();
+			return this;
 		}
 
 		/**
@@ -709,10 +715,11 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumer is null
 		 */
-		public S rootsChangeHandler(BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>> handler) {
+		public AsyncSpecification<S> rootsChangeHandler(
+				BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>> handler) {
 			Assert.notNull(handler, "Consumer must not be null");
 			this.rootsChangeHandlers.add(handler);
-			return self();
+			return this;
 		}
 
 		/**
@@ -724,11 +731,11 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if consumers is null
 		 * @see #rootsChangeHandler(BiFunction)
 		 */
-		public S rootsChangeHandlers(
+		public AsyncSpecification<S> rootsChangeHandlers(
 				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> handlers) {
 			Assert.notNull(handlers, "Handlers list must not be null");
 			this.rootsChangeHandlers.addAll(handlers);
-			return self();
+			return this;
 		}
 
 		/**
@@ -740,7 +747,7 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if consumers is null
 		 * @see #rootsChangeHandlers(List)
 		 */
-		public S rootsChangeHandlers(
+		public AsyncSpecification<S> rootsChangeHandlers(
 				@SuppressWarnings("unchecked") BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>... handlers) {
 			Assert.notNull(handlers, "Handlers list must not be null");
 			return this.rootsChangeHandlers(Arrays.asList(handlers));
@@ -752,10 +759,10 @@ public interface McpServer {
 		 * @return This builder instance for method chaining.
 		 * @throws IllegalArgumentException if objectMapper is null
 		 */
-		public S objectMapper(ObjectMapper objectMapper) {
+		public AsyncSpecification<S> objectMapper(ObjectMapper objectMapper) {
 			Assert.notNull(objectMapper, "ObjectMapper must not be null");
 			this.objectMapper = objectMapper;
-			return self();
+			return this;
 		}
 
 		/**
@@ -766,10 +773,10 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if jsonSchemaValidator is null
 		 */
-		public S jsonSchemaValidator(JsonSchemaValidator jsonSchemaValidator) {
+		public AsyncSpecification<S> jsonSchemaValidator(JsonSchemaValidator jsonSchemaValidator) {
 			Assert.notNull(jsonSchemaValidator, "JsonSchemaValidator must not be null");
 			this.jsonSchemaValidator = jsonSchemaValidator;
-			return self();
+			return this;
 		}
 
 	}

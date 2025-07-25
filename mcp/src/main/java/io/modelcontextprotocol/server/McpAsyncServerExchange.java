@@ -10,6 +10,7 @@ import java.util.Collections;
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.spec.DefaultMcpTransportContext;
 import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.spec.McpLoggableSession;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
@@ -30,15 +31,13 @@ public class McpAsyncServerExchange {
 
 	private final String sessionId;
 
-	private final McpSession session;
+	private final McpLoggableSession session;
 
 	private final McpSchema.ClientCapabilities clientCapabilities;
 
 	private final McpSchema.Implementation clientInfo;
 
 	private final McpTransportContext transportContext;
-
-	private volatile LoggingLevel minLoggingLevel = LoggingLevel.INFO;
 
 	private static final TypeReference<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeReference<>() {
 	};
@@ -59,13 +58,16 @@ public class McpAsyncServerExchange {
 	 * features and functionality.
 	 * @param clientInfo The client implementation information.
 	 * @deprecated Use
-	 * {@link #McpAsyncServerExchange(String, McpSession, McpSchema.ClientCapabilities, McpSchema.Implementation, McpTransportContext)}
+	 * {@link #McpAsyncServerExchange(String, McpLoggableSession, McpSchema.ClientCapabilities, McpSchema.Implementation, McpTransportContext)}
 	 */
 	@Deprecated
 	public McpAsyncServerExchange(McpSession session, McpSchema.ClientCapabilities clientCapabilities,
 			McpSchema.Implementation clientInfo) {
 		this.sessionId = null;
-		this.session = session;
+		if (!(session instanceof McpLoggableSession)) {
+			throw new IllegalArgumentException("Expecting session to be a McpLoggableSession instance");
+		}
+		this.session = (McpLoggableSession) session;
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
 		this.transportContext = McpTransportContext.EMPTY;
@@ -80,8 +82,9 @@ public class McpAsyncServerExchange {
 	 * transport
 	 * @param clientInfo The client implementation information.
 	 */
-	public McpAsyncServerExchange(String sessionId, McpSession session, McpSchema.ClientCapabilities clientCapabilities,
-			McpSchema.Implementation clientInfo, McpTransportContext transportContext) {
+	public McpAsyncServerExchange(String sessionId, McpLoggableSession session,
+			McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
+			McpTransportContext transportContext) {
 		this.sessionId = sessionId;
 		this.session = session;
 		this.clientCapabilities = clientCapabilities;
@@ -208,7 +211,7 @@ public class McpAsyncServerExchange {
 		}
 
 		return Mono.defer(() -> {
-			if (this.isNotificationForLevelAllowed(loggingMessageNotification.level())) {
+			if (this.session.isNotificationForLevelAllowed(loggingMessageNotification.level())) {
 				return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_MESSAGE, loggingMessageNotification);
 			}
 			return Mono.empty();
@@ -243,11 +246,7 @@ public class McpAsyncServerExchange {
 	 */
 	void setMinLoggingLevel(LoggingLevel minLoggingLevel) {
 		Assert.notNull(minLoggingLevel, "minLoggingLevel must not be null");
-		this.minLoggingLevel = minLoggingLevel;
-	}
-
-	private boolean isNotificationForLevelAllowed(LoggingLevel loggingLevel) {
-		return loggingLevel.level() >= this.minLoggingLevel.level();
+		this.session.setMinLoggingLevel(minLoggingLevel);
 	}
 
 }

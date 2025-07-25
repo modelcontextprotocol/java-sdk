@@ -35,8 +35,6 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 	public static final String MESSAGE_EVENT_TYPE = "message";
 
-	public static final String ENDPOINT_EVENT_TYPE = "endpoint";
-
 	public static final String DEFAULT_BASE_URL = "";
 
 	private final ObjectMapper objectMapper;
@@ -263,17 +261,28 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 					McpStreamableServerSession.McpStreamableServerSessionInit init = this.sessionFactory
 						.startSession(initializeRequest);
 					sessions.put(init.session().getId(), init.session());
-					return init.initResult()
+					return init.initResult().map(initializeResult -> {
+						McpSchema.JSONRPCResponse jsonrpcResponse = new McpSchema.JSONRPCResponse(
+								McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), initializeResult, null);
+						try {
+							return this.objectMapper.writeValueAsString(jsonrpcResponse);
+						}
+						catch (IOException e) {
+							logger.warn("Failed to serialize initResponse", e);
+							throw Exceptions.propagate(e);
+						}
+					})
 						.flatMap(initResult -> ServerResponse.ok()
+							.contentType(MediaType.APPLICATION_JSON)
 							.header("mcp-session-id", init.session().getId())
 							.bodyValue(initResult));
 				}
 
-				if (!request.headers().asHttpHeaders().containsKey("sessionId")) {
+				if (!request.headers().asHttpHeaders().containsKey("mcp-session-id")) {
 					return ServerResponse.badRequest().bodyValue(new McpError("Session ID missing"));
 				}
 
-				String sessionId = request.headers().asHttpHeaders().getFirst("sessionId");
+				String sessionId = request.headers().asHttpHeaders().getFirst("mcp-session-id");
 				McpStreamableServerSession session = sessions.get(sessionId);
 
 				if (session == null) {
@@ -308,7 +317,9 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 				logger.error("Failed to deserialize message: {}", e.getMessage());
 				return ServerResponse.badRequest().bodyValue(new McpError("Invalid message format"));
 			}
-		}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext));
+		})
+			.switchIfEmpty(ServerResponse.badRequest().build())
+			.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext));
 	}
 
 	private Mono<ServerResponse> handleDelete(ServerRequest request) {

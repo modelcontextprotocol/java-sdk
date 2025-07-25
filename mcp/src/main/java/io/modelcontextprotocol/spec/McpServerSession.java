@@ -12,6 +12,7 @@ import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpInitRequestHandler;
 import io.modelcontextprotocol.server.McpNotificationHandler;
 import io.modelcontextprotocol.server.McpRequestHandler;
+import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -22,7 +23,7 @@ import reactor.core.publisher.Sinks;
  * Represents a Model Control Protocol (MCP) session on the server side. It manages
  * bidirectional JSON-RPC communication with the client.
  */
-public class McpServerSession implements McpSession {
+public class McpServerSession implements McpLoggableSession {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpServerSession.class);
 
@@ -58,6 +59,8 @@ public class McpServerSession implements McpSession {
 	private static final int STATE_INITIALIZED = 2;
 
 	private final AtomicInteger state = new AtomicInteger(STATE_UNINITIALIZED);
+
+	private volatile McpSchema.LoggingLevel minLoggingLevel = McpSchema.LoggingLevel.INFO;
 
 	/**
 	 * Creates a new server session with the given parameters and the transport to use.
@@ -110,6 +113,17 @@ public class McpServerSession implements McpSession {
 
 	private String generateRequestId() {
 		return this.id + "-" + this.requestCounter.getAndIncrement();
+	}
+
+	@Override
+	public void setMinLoggingLevel(McpSchema.LoggingLevel minLoggingLevel) {
+		Assert.notNull(minLoggingLevel, "minLoggingLevel must not be null");
+		this.minLoggingLevel = minLoggingLevel;
+	}
+
+	@Override
+	public boolean isNotificationForLevelAllowed(McpSchema.LoggingLevel loggingLevel) {
+		return loggingLevel.level() >= this.minLoggingLevel.level();
 	}
 
 	@Override

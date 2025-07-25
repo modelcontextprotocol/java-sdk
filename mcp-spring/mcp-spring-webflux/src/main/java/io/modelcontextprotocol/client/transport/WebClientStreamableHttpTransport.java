@@ -340,7 +340,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 				McpSchema.JSONRPCResponse jsonRpcResponse = objectMapper.readValue(body,
 						McpSchema.JSONRPCResponse.class);
 				jsonRpcError = jsonRpcResponse.error();
-				toPropagate = new McpError(jsonRpcError);
+				toPropagate = jsonRpcError != null ? new McpError(jsonRpcError)
+						: new McpError("Can't parse the jsonResponse " + jsonRpcResponse);
 			}
 			catch (IOException ex) {
 				toPropagate = new RuntimeException("Sending request failed", e);

@@ -6,14 +6,15 @@ package io.modelcontextprotocol.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvider;
+import io.modelcontextprotocol.server.transport.WebFluxStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import org.junit.jupiter.api.Timeout;
-import reactor.netty.DisposableServer;
-import reactor.netty.http.server.HttpServer;
-
 import org.springframework.http.server.reactive.HttpHandler;
 import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
 import org.springframework.web.reactive.function.server.RouterFunctions;
+import reactor.netty.DisposableServer;
+import reactor.netty.http.server.HttpServer;
 
 /**
  * Tests for {@link McpAsyncServer} using {@link WebFluxSseServerTransportProvider}.
@@ -21,7 +22,7 @@ import org.springframework.web.reactive.function.server.RouterFunctions;
  * @author Christian Tzolov
  */
 @Timeout(15) // Giving extra time beyond the client timeout
-class WebFluxSseMcpAsyncServerTests extends AbstractMcpAsyncServerTests {
+class WebFluxStreamableMcpAsyncServerTests extends AbstractMcpAsyncServerTests {
 
 	private static final int PORT = TestUtil.findAvailablePort();
 
@@ -29,10 +30,8 @@ class WebFluxSseMcpAsyncServerTests extends AbstractMcpAsyncServerTests {
 
 	private DisposableServer httpServer;
 
-	private McpServerTransportProvider createMcpTransportProvider() {
-		var transportProvider = new WebFluxSseServerTransportProvider.Builder().objectMapper(new ObjectMapper())
-			.messageEndpoint(MESSAGE_ENDPOINT)
-			.build();
+	private McpStreamableServerTransportProvider createMcpTransportProvider() {
+		var transportProvider = new WebFluxStreamableServerTransportProvider(new ObjectMapper(), MESSAGE_ENDPOINT);
 
 		HttpHandler httpHandler = RouterFunctions.toHttpHandler(transportProvider.getRouterFunction());
 		ReactorHttpHandlerAdapter adapter = new ReactorHttpHandlerAdapter(httpHandler);
