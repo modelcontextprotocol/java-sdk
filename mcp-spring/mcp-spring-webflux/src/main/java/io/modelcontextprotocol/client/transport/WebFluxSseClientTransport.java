@@ -5,6 +5,7 @@ package io.modelcontextprotocol.client.transport;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.common.util.StringUtils;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -165,8 +166,16 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 		this.sseEndpoint = sseEndpoint;
 	}
 
-	private boolean isPingEvent(ServerSentEvent<String> event) {
-		return event.comment() != null && event.comment().startsWith("ping");
+	private boolean isCommentLine(ServerSentEvent<String> event) {
+		String id = event.id();
+		String type = event.event();
+		String data = event.data();
+		String comment = event.comment();
+
+		return StringUtils.isEmpty(id) &&
+				StringUtils.isEmpty(type) &&
+				StringUtils.isEmpty(data) &&
+				comment != null;
 	}
 
 	/**
@@ -215,8 +224,8 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 					s.error(ioException);
 				}
 			}
-			else if (isPingEvent(event)) {
-				logger.debug("Received SSE ping message");
+			else if (isCommentLine(event)) {
+				logger.debug("Received SSE comment: {}", event.comment());
 				s.complete();
 			}
 			else {
