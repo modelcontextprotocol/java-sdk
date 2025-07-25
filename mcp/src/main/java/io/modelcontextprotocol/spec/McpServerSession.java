@@ -9,6 +9,10 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
+import io.modelcontextprotocol.server.McpInitRequestHandler;
+import io.modelcontextprotocol.server.McpNotificationHandler;
+import io.modelcontextprotocol.server.McpRequestHandler;
+import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -19,7 +23,7 @@ import reactor.core.publisher.Sinks;
  * Represents a Model Control Protocol (MCP) session on the server side. It manages
  * bidirectional JSON-RPC communication with the client.
  */
-public class McpServerSession implements McpSession {
+public class McpServerSession implements McpLoggableSession {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpServerSession.class);
 
@@ -32,13 +36,13 @@ public class McpServerSession implements McpSession {
 
 	private final AtomicLong requestCounter = new AtomicLong(0);
 
-	private final InitRequestHandler initRequestHandler;
+	private final McpInitRequestHandler initRequestHandler;
 
 	private final InitNotificationHandler initNotificationHandler;
 
-	private final Map<String, RequestHandler<?>> requestHandlers;
+	private final Map<String, McpRequestHandler<?>> requestHandlers;
 
-	private final Map<String, NotificationHandler> notificationHandlers;
+	private final Map<String, McpNotificationHandler> notificationHandlers;
 
 	private final McpServerTransport transport;
 
@@ -56,6 +60,8 @@ public class McpServerSession implements McpSession {
 
 	private final AtomicInteger state = new AtomicInteger(STATE_UNINITIALIZED);
 
+	private volatile McpSchema.LoggingLevel minLoggingLevel = McpSchema.LoggingLevel.INFO;
+
 	/**
 	 * Creates a new server session with the given parameters and the transport to use.
 	 * @param id session id
@@ -70,8 +76,9 @@ public class McpServerSession implements McpSession {
 	 * @param notificationHandlers map of notification handlers to use
 	 */
 	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
-			InitRequestHandler initHandler, InitNotificationHandler initNotificationHandler,
-			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
+			McpInitRequestHandler initHandler, InitNotificationHandler initNotificationHandler,
+			Map<String, McpRequestHandler<?>> requestHandlers,
+			Map<String, McpNotificationHandler> notificationHandlers) {
 		this.id = id;
 		this.requestTimeout = requestTimeout;
 		this.transport = transport;
@@ -106,6 +113,17 @@ public class McpServerSession implements McpSession {
 
 	private String generateRequestId() {
 		return this.id + "-" + this.requestCounter.getAndIncrement();
+	}
+
+	@Override
+	public void setMinLoggingLevel(McpSchema.LoggingLevel minLoggingLevel) {
+		Assert.notNull(minLoggingLevel, "minLoggingLevel must not be null");
+		this.minLoggingLevel = minLoggingLevel;
+	}
+
+	@Override
+	public boolean isNotificationForLevelAllowed(McpSchema.LoggingLevel loggingLevel) {
+		return loggingLevel.level() >= this.minLoggingLevel.level();
 	}
 
 	@Override
@@ -242,7 +260,10 @@ public class McpServerSession implements McpSession {
 		return Mono.defer(() -> {
 			if (McpSchema.METHOD_NOTIFICATION_INITIALIZED.equals(notification.method())) {
 				this.state.lazySet(STATE_INITIALIZED);
-				exchangeSink.tryEmitValue(new McpAsyncServerExchange(this, clientCapabilities.get(), clientInfo.get()));
+				// FIXME: The session ID passed here is not the same as the one in the
+				// legacy SSE transport.
+				exchangeSink.tryEmitValue(new McpAsyncServerExchange(this.id, this, clientCapabilities.get(),
+						clientInfo.get(), McpTransportContext.EMPTY));
 				return this.initNotificationHandler.handle();
 			}
 
@@ -264,17 +285,22 @@ public class McpServerSession implements McpSession {
 
 	@Override
 	public Mono<Void> closeGracefully() {
+		// TODO: clear pendingResponses and emit errors?
 		return this.transport.closeGracefully();
 	}
 
 	@Override
 	public void close() {
+		// TODO: clear pendingResponses and emit errors?
 		this.transport.close();
 	}
 
 	/**
 	 * Request handler for the initialization request.
+	 *
+	 * @deprecated Use {@link McpInitRequestHandler}
 	 */
+	@Deprecated
 	public interface InitRequestHandler {
 
 		/**
@@ -301,7 +327,10 @@ public class McpServerSession implements McpSession {
 
 	/**
 	 * A handler for client-initiated notifications.
+	 *
+	 * @deprecated Use {@link McpNotificationHandler}
 	 */
+	@Deprecated
 	public interface NotificationHandler {
 
 		/**
@@ -320,7 +349,9 @@ public class McpServerSession implements McpSession {
 	 *
 	 * @param <T> the type of the response that is expected as a result of handling the
 	 * request.
+	 * @deprecated Use {@link McpRequestHandler}
 	 */
+	@Deprecated
 	public interface RequestHandler<T> {
 
 		/**

@@ -49,8 +49,7 @@ class WebMvcSseAsyncServerTransportTests extends AbstractMcpAsyncServerTests {
 
 	private AnnotationConfigWebApplicationContext appContext;
 
-	@Override
-	protected McpServerTransportProvider createMcpTransportProvider() {
+	private McpServerTransportProvider createMcpTransportProvider() {
 		// Set up Tomcat first
 		tomcat = new Tomcat();
 		tomcat.setPort(PORT);
@@ -88,6 +87,11 @@ class WebMvcSseAsyncServerTransportTests extends AbstractMcpAsyncServerTests {
 		}
 
 		return transportProvider;
+	}
+
+	@Override
+	protected McpServer.AsyncSpecification<?> prepareAsyncServerBuilder() {
+		return McpServer.async(createMcpTransportProvider());
 	}
 
 	@Override
