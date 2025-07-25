@@ -35,9 +35,11 @@
 
 	<developers>
 		<developer>
+			<id>tzolov</id>
 			<name>Christian Tzolov</name>
 		</developer>
 		<developer>
+			<id>chemicL</id>
 			<name>Dariusz Jędrzejczyk</name>
 		</developer>
 	</developers>
@@ -116,10 +118,11 @@
 				<version>${spring-javaformat-maven-plugin.version}</version>
 				<executions>
 					<execution>
+						<id>checkstyle-validation</id>
 						<phase>validate</phase>
 						<inherited>true</inherited>
 						<goals>
-							<goal>validate</goal>
+							<goal>apply</goal>
 						</goals>
 					</execution>
 				</executions>
