@@ -179,6 +179,10 @@ public class McpStreamableServerSession implements McpLoggableSession {
 				})
 				.flatMap(transport::sendMessage)
 				.then(transport.closeGracefully());
+		}).onErrorResume(error -> {
+			return transport.sendMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(),
+					null, new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+							error.getMessage(), null)));
 		});
 	}
 
