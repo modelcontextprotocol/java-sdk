@@ -4,14 +4,10 @@
 
 package io.modelcontextprotocol.server;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.server.transport.WebMvcSseServerTransportProvider;
-import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.apache.catalina.Context;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.startup.Tomcat;
 import org.junit.jupiter.api.Timeout;
-
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.context.support.AnnotationConfigWebApplicationContext;
@@ -20,36 +16,53 @@ import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
 
-@Timeout(15)
-class WebMvcSseAsyncServerTransportTests extends AbstractMcpAsyncServerTests {
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-	private static final String MESSAGE_ENDPOINT = "/mcp/message";
+import io.modelcontextprotocol.server.transport.WebMvcStreamableServerTransportProvider;
+import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
+import reactor.netty.DisposableServer;
+
+/**
+ * Tests for {@link McpAsyncServer} using {@link WebFluxSseServerTransportProvider}.
+ *
+ * @author Christian Tzolov
+ */
+@Timeout(15) // Giving extra time beyond the client timeout
+class WebMcpStreamableMcpAsyncServerTests extends AbstractMcpAsyncServerTests {
 
 	private static final int PORT = TestUtil.findAvailablePort();
 
+	private static final String MCP_ENDPOINT = "/mcp";
+
+	private DisposableServer httpServer;
+
+	private AnnotationConfigWebApplicationContext appContext;
+
 	private Tomcat tomcat;
 
-	private McpServerTransportProvider transportProvider;
+	private McpStreamableServerTransportProvider transportProvider;
 
 	@Configuration
 	@EnableWebMvc
 	static class TestConfig {
 
 		@Bean
-		public WebMvcSseServerTransportProvider webMvcSseServerTransportProvider() {
-			return new WebMvcSseServerTransportProvider(new ObjectMapper(), MESSAGE_ENDPOINT);
+		public WebMvcStreamableServerTransportProvider webMvcSseServerTransportProvider() {
+			return WebMvcStreamableServerTransportProvider.builder()
+				.objectMapper(new ObjectMapper())
+				.mcpEndpoint(MCP_ENDPOINT)
+				.build();
 		}
 
 		@Bean
-		public RouterFunction<ServerResponse> routerFunction(WebMvcSseServerTransportProvider transportProvider) {
+		public RouterFunction<ServerResponse> routerFunction(
+				WebMvcStreamableServerTransportProvider transportProvider) {
 			return transportProvider.getRouterFunction();
 		}
 
 	}
 
-	private AnnotationConfigWebApplicationContext appContext;
-
-	private McpServerTransportProvider createMcpTransportProvider() {
+	private McpStreamableServerTransportProvider createMcpTransportProvider() {
 		// Set up Tomcat first
 		tomcat = new Tomcat();
 		tomcat.setPort(PORT);
@@ -68,7 +81,7 @@ class WebMvcSseAsyncServerTransportTests extends AbstractMcpAsyncServerTests {
 		appContext.refresh();
 
 		// Get the transport from Spring context
-		transportProvider = appContext.getBean(WebMvcSseServerTransportProvider.class);
+		transportProvider = appContext.getBean(McpStreamableServerTransportProvider.class);
 
 		// Create DispatcherServlet with our Spring context
 		DispatcherServlet dispatcherServlet = new DispatcherServlet(appContext);
@@ -100,20 +113,8 @@ class WebMvcSseAsyncServerTransportTests extends AbstractMcpAsyncServerTests {
 
 	@Override
 	protected void onClose() {
-		if (transportProvider != null) {
-			transportProvider.closeGracefully().block();
-		}
-		if (appContext != null) {
-			appContext.close();
-		}
-		if (tomcat != null) {
-			try {
-				tomcat.stop();
-				tomcat.destroy();
-			}
-			catch (LifecycleException e) {
-				throw new RuntimeException("Failed to stop Tomcat", e);
-			}
+		if (httpServer != null) {
+			httpServer.disposeNow();
 		}
 	}
 

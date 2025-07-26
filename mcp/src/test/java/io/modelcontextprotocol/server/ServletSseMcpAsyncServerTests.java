@@ -16,9 +16,13 @@ import org.junit.jupiter.api.Timeout;
 @Timeout(15) // Giving extra time beyond the client timeout
 class ServletSseMcpAsyncServerTests extends AbstractMcpAsyncServerTests {
 
-	@Override
 	protected McpServerTransportProvider createMcpTransportProvider() {
 		return HttpServletSseServerTransportProvider.builder().messageEndpoint("/mcp/message").build();
+	}
+
+	@Override
+	protected McpServer.AsyncSpecification<?> prepareAsyncServerBuilder() {
+		return McpServer.async(createMcpTransportProvider());
 	}
 
 }

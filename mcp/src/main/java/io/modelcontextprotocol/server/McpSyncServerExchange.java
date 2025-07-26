@@ -6,6 +6,7 @@ package io.modelcontextprotocol.server;
 
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
+import io.modelcontextprotocol.spec.McpTransportContext;
 
 /**
  * Represents a synchronous exchange with a Model Context Protocol (MCP) client. The
@@ -27,6 +28,10 @@ public class McpSyncServerExchange {
 		this.exchange = exchange;
 	}
 
+	public String sessionId() {
+		return this.exchange.sessionId();
+	}
+
 	/**
 	 * Get the client capabilities that define the supported features and functionality.
 	 * @return The client capabilities
@@ -41,6 +46,10 @@ public class McpSyncServerExchange {
 	 */
 	public McpSchema.Implementation getClientInfo() {
 		return this.exchange.getClientInfo();
+	}
+
+	public McpTransportContext transportContext() {
+		return this.exchange.transportContext();
 	}
 
 	/**

@@ -8,11 +8,15 @@ import java.util.ArrayList;
 import java.util.Collections;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.spec.DefaultMcpTransportContext;
 import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.spec.McpLoggableSession;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpServerSession;
+import io.modelcontextprotocol.spec.McpSession;
+import io.modelcontextprotocol.spec.McpTransportContext;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
 
@@ -25,13 +29,15 @@ import reactor.core.publisher.Mono;
  */
 public class McpAsyncServerExchange {
 
-	private final McpServerSession session;
+	private final String sessionId;
+
+	private final McpLoggableSession session;
 
 	private final McpSchema.ClientCapabilities clientCapabilities;
 
 	private final McpSchema.Implementation clientInfo;
 
-	private volatile LoggingLevel minLoggingLevel = LoggingLevel.INFO;
+	private final McpTransportContext transportContext;
 
 	private static final TypeReference<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeReference<>() {
 	};
@@ -51,12 +57,39 @@ public class McpAsyncServerExchange {
 	 * @param clientCapabilities The client capabilities that define the supported
 	 * features and functionality.
 	 * @param clientInfo The client implementation information.
+	 * @deprecated Use
+	 * {@link #McpAsyncServerExchange(String, McpLoggableSession, McpSchema.ClientCapabilities, McpSchema.Implementation, McpTransportContext)}
 	 */
-	public McpAsyncServerExchange(McpServerSession session, McpSchema.ClientCapabilities clientCapabilities,
+	@Deprecated
+	public McpAsyncServerExchange(McpSession session, McpSchema.ClientCapabilities clientCapabilities,
 			McpSchema.Implementation clientInfo) {
+		this.sessionId = null;
+		if (!(session instanceof McpLoggableSession)) {
+			throw new IllegalArgumentException("Expecting session to be a McpLoggableSession instance");
+		}
+		this.session = (McpLoggableSession) session;
+		this.clientCapabilities = clientCapabilities;
+		this.clientInfo = clientInfo;
+		this.transportContext = McpTransportContext.EMPTY;
+	}
+
+	/**
+	 * Create a new asynchronous exchange with the client.
+	 * @param session The server session representing a 1-1 interaction.
+	 * @param clientCapabilities The client capabilities that define the supported
+	 * features and functionality.
+	 * @param transportContext context associated with the client as extracted from the
+	 * transport
+	 * @param clientInfo The client implementation information.
+	 */
+	public McpAsyncServerExchange(String sessionId, McpLoggableSession session,
+			McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
+			McpTransportContext transportContext) {
+		this.sessionId = sessionId;
 		this.session = session;
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
+		this.transportContext = transportContext;
 	}
 
 	/**
@@ -73,6 +106,14 @@ public class McpAsyncServerExchange {
 	 */
 	public McpSchema.Implementation getClientInfo() {
 		return this.clientInfo;
+	}
+
+	public McpTransportContext transportContext() {
+		return this.transportContext;
+	}
+
+	public String sessionId() {
+		return this.sessionId;
 	}
 
 	/**
@@ -170,7 +211,7 @@ public class McpAsyncServerExchange {
 		}
 
 		return Mono.defer(() -> {
-			if (this.isNotificationForLevelAllowed(loggingMessageNotification.level())) {
+			if (this.session.isNotificationForLevelAllowed(loggingMessageNotification.level())) {
 				return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_MESSAGE, loggingMessageNotification);
 			}
 			return Mono.empty();
@@ -205,11 +246,7 @@ public class McpAsyncServerExchange {
 	 */
 	void setMinLoggingLevel(LoggingLevel minLoggingLevel) {
 		Assert.notNull(minLoggingLevel, "minLoggingLevel must not be null");
-		this.minLoggingLevel = minLoggingLevel;
-	}
-
-	private boolean isNotificationForLevelAllowed(LoggingLevel loggingLevel) {
-		return loggingLevel.level() >= this.minLoggingLevel.level();
+		this.session.setMinLoggingLevel(minLoggingLevel);
 	}
 
 }

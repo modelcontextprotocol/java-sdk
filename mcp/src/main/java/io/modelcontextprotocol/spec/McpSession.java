@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.spec;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
 
 /**
