@@ -3,16 +3,17 @@
  */
 package io.modelcontextprotocol.server;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -21,10 +22,12 @@ import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
@@ -33,6 +36,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
+import io.modelcontextprotocol.client.transport.WebClientStreamableHttpTransport;
 import io.modelcontextprotocol.server.transport.WebMvcStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -46,11 +50,10 @@ import io.modelcontextprotocol.spec.McpSchema.Role;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
+import net.javacrumbs.jsonunit.core.Option;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
-
-import net.javacrumbs.jsonunit.core.Option;
 
 class WebMvcStreamableIntegrationTests {
 
@@ -60,7 +63,7 @@ class WebMvcStreamableIntegrationTests {
 
 	private WebMvcStreamableServerTransportProvider mcpServerTransportProvider;
 
-	McpClient.SyncSpec clientBuilder;
+	ConcurrentHashMap<String, McpClient.SyncSpec> clientBuilders = new ConcurrentHashMap<>();
 
 	@Configuration
 	@EnableWebMvc
@@ -97,9 +100,17 @@ class WebMvcStreamableIntegrationTests {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		clientBuilder = McpClient.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
-			.endpoint(MESSAGE_ENDPOINT)
-			.build());
+		clientBuilders
+			.put("httpclient",
+					McpClient.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
+						.endpoint(MESSAGE_ENDPOINT)
+						.build()).initializationTimeout(Duration.ofHours(10)).requestTimeout(Duration.ofHours(10)));
+
+		clientBuilders.put("webflux",
+				McpClient.sync(WebClientStreamableHttpTransport
+					.builder(WebClient.builder().baseUrl("http://localhost:" + PORT))
+					.endpoint(MESSAGE_ENDPOINT)
+					.build()));
 
 		// Get the transport from Spring context
 		mcpServerTransportProvider = tomcatServer.appContext().getBean(WebMvcStreamableServerTransportProvider.class);
@@ -127,8 +138,11 @@ class WebMvcStreamableIntegrationTests {
 		}
 	}
 
-	@Test
-	void simple() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void simple(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
 
 		var server = McpServer.async(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
@@ -144,14 +158,17 @@ class WebMvcStreamableIntegrationTests {
 			assertThat(client.initialize()).isNotNull();
 
 		}
-		server.close();
+		server.closeGracefully();
 	}
 
 	// ---------------------------------------
 	// Sampling Tests
 	// ---------------------------------------
-	@Test
-	void testCreateMessageWithoutSamplingCapabilities() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testCreateMessageWithoutSamplingCapabilities(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(emptyJsonSchema).build())
@@ -173,20 +190,19 @@ class WebMvcStreamableIntegrationTests {
 			try {
 				client.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
 			}
-			catch (Exception e) {
+			catch (McpError e) {
 				assertThat(e).isInstanceOf(McpError.class)
 					.hasMessage("Client must be configured with sampling capabilities");
 			}
-			// catch (McpError e) {
-			// assertThat(e).isInstanceOf(McpError.class)
-			// .hasMessage("Client must be configured with sampling capabilities");
-			// }
 		}
-		server.close();
+		server.closeGracefully();
 	}
 
-	@Test
-	void testCreateMessageSuccess() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testCreateMessageSuccess(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
 
 		Function<CreateMessageRequest, CreateMessageResult> samplingHandler = request -> {
 			assertThat(request.messages()).hasSize(1);
@@ -249,10 +265,13 @@ class WebMvcStreamableIntegrationTests {
 		mcpServer.close();
 	}
 
-	@Test
-	void testCreateMessageWithRequestTimeoutSuccess() throws InterruptedException {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testCreateMessageWithRequestTimeoutSuccess(String clientType) throws InterruptedException {
 
 		// Client
+
+		var clientBuilder = clientBuilders.get(clientType);
 
 		Function<CreateMessageRequest, CreateMessageResult> samplingHandler = request -> {
 			assertThat(request.messages()).hasSize(1);
@@ -323,10 +342,11 @@ class WebMvcStreamableIntegrationTests {
 		mcpServer.close();
 	}
 
-	@Test
-	void testCreateMessageWithRequestTimeoutFail() throws InterruptedException {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testCreateMessageWithRequestTimeoutFail(String clientType) throws InterruptedException {
 
-		// Client
+		var clientBuilder = clientBuilders.get(clientType);
 
 		Function<CreateMessageRequest, CreateMessageResult> samplingHandler = request -> {
 			assertThat(request.messages()).hasSize(1);
@@ -345,8 +365,6 @@ class WebMvcStreamableIntegrationTests {
 			.capabilities(ClientCapabilities.builder().sampling().build())
 			.sampling(samplingHandler)
 			.build();
-
-		// Server
 
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
@@ -399,8 +417,11 @@ class WebMvcStreamableIntegrationTests {
 	// ---------------------------------------
 	// Elicitation Tests
 	// ---------------------------------------
-	@Test
-	void testCreateElicitationWithoutElicitationCapabilities() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testCreateElicitationWithoutElicitationCapabilities(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
@@ -431,8 +452,11 @@ class WebMvcStreamableIntegrationTests {
 		server.closeGracefully().block();
 	}
 
-	@Test
-	void testCreateElicitationSuccess() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testCreateElicitationSuccess(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
 
 		Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler = request -> {
 			assertThat(request.message()).isNotEmpty();
@@ -486,10 +510,11 @@ class WebMvcStreamableIntegrationTests {
 		mcpServer.closeGracefully().block();
 	}
 
-	@Test
-	void testCreateElicitationWithRequestTimeoutSuccess() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testCreateElicitationWithRequestTimeoutSuccess(String clientType) {
 
-		// Client
+		var clientBuilder = clientBuilders.get(clientType);
 
 		Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler = request -> {
 			assertThat(request.message()).isNotEmpty();
@@ -508,8 +533,6 @@ class WebMvcStreamableIntegrationTests {
 			.capabilities(ClientCapabilities.builder().elicitation().build())
 			.elicitation(elicitationHandler)
 			.build();
-
-		// Server
 
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
@@ -552,10 +575,11 @@ class WebMvcStreamableIntegrationTests {
 		mcpServer.closeGracefully().block();
 	}
 
-	@Test
-	void testCreateElicitationWithRequestTimeoutFail() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testCreateElicitationWithRequestTimeoutFail(String clientType) {
 
-		// Client
+		var clientBuilder = clientBuilders.get(clientType);
 
 		Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler = request -> {
 			assertThat(request.message()).isNotEmpty();
@@ -574,8 +598,6 @@ class WebMvcStreamableIntegrationTests {
 			.capabilities(ClientCapabilities.builder().elicitation().build())
 			.elicitation(elicitationHandler)
 			.build();
-
-		// Server
 
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
@@ -620,8 +642,11 @@ class WebMvcStreamableIntegrationTests {
 	// ---------------------------------------
 	// Roots Tests
 	// ---------------------------------------
-	@Test
-	void testRootsSuccess() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testRootsSuccess(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
 		List<Root> roots = List.of(new Root("uri1://", "root1"), new Root("uri2://", "root2"));
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
@@ -664,8 +689,11 @@ class WebMvcStreamableIntegrationTests {
 		mcpServer.close();
 	}
 
-	@Test
-	void testRootsWithoutCapability() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testRootsWithoutCapability(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
 
 		McpServerFeatures.SyncToolSpecification tool = McpServerFeatures.SyncToolSpecification.builder()
 			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
@@ -699,8 +727,12 @@ class WebMvcStreamableIntegrationTests {
 		mcpServer.close();
 	}
 
-	@Test
-	void testRootsNotificationWithEmptyRootsList() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testRootsNotificationWithEmptyRootsList(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
@@ -724,8 +756,12 @@ class WebMvcStreamableIntegrationTests {
 		mcpServer.close();
 	}
 
-	@Test
-	void testRootsWithMultipleHandlers() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testRootsWithMultipleHandlers(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
 		List<Root> roots = List.of(new Root("uri1://", "root1"));
 
 		AtomicReference<List<Root>> rootsRef1 = new AtomicReference<>();
@@ -753,8 +789,12 @@ class WebMvcStreamableIntegrationTests {
 		mcpServer.close();
 	}
 
-	@Test
-	void testRootsServerCloseWithActiveSubscription() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testRootsServerCloseWithActiveSubscription(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
 		List<Root> roots = List.of(new Root("uri1://", "root1"));
 
 		AtomicReference<List<Root>> rootsRef = new AtomicReference<>();
@@ -792,8 +832,11 @@ class WebMvcStreamableIntegrationTests {
 			}
 			""";
 
-	@Test
-	void testToolCallSuccess() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testToolCallSuccess(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
 
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
@@ -830,8 +873,12 @@ class WebMvcStreamableIntegrationTests {
 		mcpServer.close();
 	}
 
-	@Test
-	void testThrowingToolCallIsCaughtBeforeTimeout() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testThrowingToolCallIsCaughtBeforeTimeout(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
 		McpSyncServer mcpServer = McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(new McpServerFeatures.SyncToolSpecification(
@@ -857,8 +904,11 @@ class WebMvcStreamableIntegrationTests {
 		mcpServer.close();
 	}
 
-	@Test
-	void testToolListChangeHandlingSuccess() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testToolListChangeHandlingSuccess(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
 
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
@@ -929,8 +979,11 @@ class WebMvcStreamableIntegrationTests {
 		mcpServer.close();
 	}
 
-	@Test
-	void testInitialize() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testInitialize(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider).build();
 
@@ -943,8 +996,12 @@ class WebMvcStreamableIntegrationTests {
 		mcpServer.close();
 	}
 
-	@Test
-	void testPingSuccess() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testPingSuccess(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
 		// Create server with a tool that uses ping functionality
 		AtomicReference<String> executionOrder = new AtomicReference<>("");
 
@@ -998,8 +1055,11 @@ class WebMvcStreamableIntegrationTests {
 	// Tool Structured Output Schema Tests
 	// ---------------------------------------
 
-	@Test
-	void testStructuredOutputValidationSuccess() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testStructuredOutputValidationSuccess(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
 		// Create a tool with output schema
 		Map<String, Object> outputSchema = Map.of(
 				"type", "object", "properties", Map.of("result", Map.of("type", "number"), "operation",
@@ -1067,8 +1127,12 @@ class WebMvcStreamableIntegrationTests {
 		mcpServer.close();
 	}
 
-	@Test
-	void testStructuredOutputValidationFailure() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testStructuredOutputValidationFailure(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
 		// Create a tool with output schema
 		Map<String, Object> outputSchema = Map.of("type", "object", "properties",
 				Map.of("result", Map.of("type", "number"), "operation", Map.of("type", "string")), "required",
@@ -1116,8 +1180,12 @@ class WebMvcStreamableIntegrationTests {
 		mcpServer.close();
 	}
 
-	@Test
-	void testStructuredOutputMissingStructuredContent() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testStructuredOutputMissingStructuredContent(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
 		// Create a tool with output schema
 		Map<String, Object> outputSchema = Map.of("type", "object", "properties",
 				Map.of("result", Map.of("type", "number")), "required", List.of("result"));
@@ -1161,8 +1229,12 @@ class WebMvcStreamableIntegrationTests {
 		mcpServer.close();
 	}
 
-	@Test
-	void testStructuredOutputRuntimeToolAddition() {
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testStructuredOutputRuntimeToolAddition(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
 		// Start server without tools
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
 			.serverInfo("test-server", "1.0.0")
