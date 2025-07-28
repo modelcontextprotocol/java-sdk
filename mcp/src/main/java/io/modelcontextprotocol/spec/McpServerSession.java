@@ -38,8 +38,6 @@ public class McpServerSession implements McpLoggableSession {
 
 	private final McpInitRequestHandler initRequestHandler;
 
-	private final InitNotificationHandler initNotificationHandler;
-
 	private final Map<String, McpRequestHandler<?>> requestHandlers;
 
 	private final Map<String, McpNotificationHandler> notificationHandlers;
@@ -69,12 +67,36 @@ public class McpServerSession implements McpLoggableSession {
 	 * @param initHandler called when a
 	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
 	 * server
+	 * @param requestHandlers map of request handlers to use
+	 * @param notificationHandlers map of notification handlers to use
+	 */
+	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
+			McpInitRequestHandler initHandler, Map<String, McpRequestHandler<?>> requestHandlers,
+			Map<String, McpNotificationHandler> notificationHandlers) {
+		this.id = id;
+		this.requestTimeout = requestTimeout;
+		this.transport = transport;
+		this.initRequestHandler = initHandler;
+		this.requestHandlers = requestHandlers;
+		this.notificationHandlers = notificationHandlers;
+	}
+
+	/**
+	 * Creates a new server session with the given parameters and the transport to use.
+	 * @param id session id
+	 * @param transport the transport to use
+	 * @param initHandler called when a
+	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
+	 * server
 	 * @param initNotificationHandler called when a
 	 * {@link io.modelcontextprotocol.spec.McpSchema#METHOD_NOTIFICATION_INITIALIZED} is
 	 * received.
 	 * @param requestHandlers map of request handlers to use
 	 * @param notificationHandlers map of notification handlers to use
+	 * @deprecated Use
+	 * {@link #McpServerSession(String, Duration, McpServerTransport, McpInitRequestHandler, Map, Map)}
 	 */
+	@Deprecated
 	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
 			McpInitRequestHandler initHandler, InitNotificationHandler initNotificationHandler,
 			Map<String, McpRequestHandler<?>> requestHandlers,
@@ -83,7 +105,6 @@ public class McpServerSession implements McpLoggableSession {
 		this.requestTimeout = requestTimeout;
 		this.transport = transport;
 		this.initRequestHandler = initHandler;
-		this.initNotificationHandler = initNotificationHandler;
 		this.requestHandlers = requestHandlers;
 		this.notificationHandlers = notificationHandlers;
 	}
@@ -264,7 +285,6 @@ public class McpServerSession implements McpLoggableSession {
 				// legacy SSE transport.
 				exchangeSink.tryEmitValue(new McpAsyncServerExchange(this.id, this, clientCapabilities.get(),
 						clientInfo.get(), McpTransportContext.EMPTY));
-				return this.initNotificationHandler.handle();
 			}
 
 			var handler = notificationHandlers.get(notification.method());

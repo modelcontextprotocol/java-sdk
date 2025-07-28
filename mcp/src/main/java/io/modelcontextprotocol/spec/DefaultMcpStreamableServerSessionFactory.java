@@ -33,8 +33,7 @@ public class DefaultMcpStreamableServerSessionFactory implements McpStreamableSe
 			McpSchema.InitializeRequest initializeRequest) {
 		return new McpStreamableServerSession.McpStreamableServerSessionInit(
 				new McpStreamableServerSession(UUID.randomUUID().toString(), initializeRequest.capabilities(),
-						initializeRequest.clientInfo(), requestTimeout, Mono::empty, requestHandlers,
-						notificationHandlers),
+						initializeRequest.clientInfo(), requestTimeout, requestHandlers, notificationHandlers),
 				this.initRequestHandler.handle(initializeRequest));
 	}
 

@@ -32,8 +32,6 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	private final AtomicLong requestCounter = new AtomicLong(0);
 
-	private final InitNotificationHandler initNotificationHandler;
-
 	private final Map<String, McpRequestHandler<?>> requestHandlers;
 
 	private final Map<String, McpNotificationHandler> notificationHandlers;
@@ -58,7 +56,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	public McpStreamableServerSession(String id, McpSchema.ClientCapabilities clientCapabilities,
 			McpSchema.Implementation clientInfo, Duration requestTimeout,
-			InitNotificationHandler initNotificationHandler, Map<String, McpRequestHandler<?>> requestHandlers,
+			Map<String, McpRequestHandler<?>> requestHandlers,
 			Map<String, McpNotificationHandler> notificationHandlers) {
 		this.id = id;
 		this.missingMcpTransportSession = new MissingMcpTransportSession(id);
@@ -66,7 +64,6 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		this.clientCapabilities.lazySet(clientCapabilities);
 		this.clientInfo.lazySet(clientInfo);
 		this.requestTimeout = requestTimeout;
-		this.initNotificationHandler = initNotificationHandler;
 		this.requestHandlers = requestHandlers;
 		this.notificationHandlers = notificationHandlers;
 	}
@@ -228,19 +225,6 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		 * @return a Mono that will emit the result of the initialization
 		 */
 		Mono<McpSchema.InitializeResult> handle(McpSchema.InitializeRequest initializeRequest);
-
-	}
-
-	/**
-	 * Notification handler for the initialization notification from the client.
-	 */
-	public interface InitNotificationHandler {
-
-		/**
-		 * Specifies an action to take upon successful initialization.
-		 * @return a Mono that will complete when the initialization is acted upon.
-		 */
-		Mono<Void> handle();
 
 	}
 
