@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.spec.DefaultMcpTransportContext;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
@@ -54,7 +55,8 @@ class McpAsyncServerExchangeTests {
 
 		clientInfo = new McpSchema.Implementation("test-client", "1.0.0");
 
-		exchange = new McpAsyncServerExchange(mockSession, clientCapabilities, clientInfo);
+		exchange = new McpAsyncServerExchange("testSessionId", mockSession, clientCapabilities, clientInfo,
+				new DefaultMcpTransportContext());
 	}
 
 	@Test
@@ -219,27 +221,33 @@ class McpAsyncServerExchangeTests {
 	}
 
 	@Test
-	void testLoggingNotificationWithAllowedLevel() {
+	void testSetMinLoggingLevelWithNullValue() {
+		assertThatThrownBy(() -> exchange.setMinLoggingLevel(null)).isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("minLoggingLevel must not be null");
+	}
 
+	@Test
+	void testLoggingNotificationWithAllowedLevel() {
 		McpSchema.LoggingMessageNotification notification = McpSchema.LoggingMessageNotification.builder()
 			.level(McpSchema.LoggingLevel.ERROR)
 			.logger("test-logger")
 			.data("Test error message")
 			.build();
 
+		when(mockSession.isNotificationForLevelAllowed(any())).thenReturn(Boolean.TRUE);
 		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(notification)))
 			.thenReturn(Mono.empty());
 
 		StepVerifier.create(exchange.loggingNotification(notification)).verifyComplete();
 
-		// Verify that sendNotification was called exactly once
+		verify(mockSession, times(1)).isNotificationForLevelAllowed(eq(McpSchema.LoggingLevel.ERROR));
 		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(notification));
 	}
 
 	@Test
 	void testLoggingNotificationWithFilteredLevel() {
-		// Given - Set minimum level to WARNING, send DEBUG message
-		exchange.setMinLoggingLevel(McpSchema.LoggingLevel.WARNING);
+		exchange.setMinLoggingLevel(McpSchema.LoggingLevel.DEBUG);
+		verify(mockSession, times(1)).setMinLoggingLevel(eq(McpSchema.LoggingLevel.DEBUG));
 
 		McpSchema.LoggingMessageNotification debugNotification = McpSchema.LoggingMessageNotification.builder()
 			.level(McpSchema.LoggingLevel.DEBUG)
@@ -247,148 +255,44 @@ class McpAsyncServerExchangeTests {
 			.data("Debug message that should be filtered")
 			.build();
 
-		// When & Then - Should complete without sending notification
-		StepVerifier.create(exchange.loggingNotification(debugNotification)).verifyComplete();
-
-		// Verify that sendNotification was never called for filtered DEBUG level
-		verify(mockSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(debugNotification));
-	}
-
-	@Test
-	void testLoggingNotificationLevelFiltering() {
-		// Given - Set minimum level to WARNING
-		exchange.setMinLoggingLevel(McpSchema.LoggingLevel.WARNING);
-
-		// Test DEBUG (should be filtered)
-		McpSchema.LoggingMessageNotification debugNotification = McpSchema.LoggingMessageNotification.builder()
-			.level(McpSchema.LoggingLevel.DEBUG)
-			.logger("test-logger")
-			.data("Debug message")
-			.build();
+		when(mockSession.isNotificationForLevelAllowed(eq(McpSchema.LoggingLevel.DEBUG))).thenReturn(Boolean.TRUE);
+		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(debugNotification)))
+			.thenReturn(Mono.empty());
 
 		StepVerifier.create(exchange.loggingNotification(debugNotification)).verifyComplete();
 
-		// Verify that sendNotification was never called for DEBUG level
-		verify(mockSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(debugNotification));
+		verify(mockSession, times(1)).isNotificationForLevelAllowed(eq(McpSchema.LoggingLevel.DEBUG));
+		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE),
+				eq(debugNotification));
 
-		// Test INFO (should be filtered)
-		McpSchema.LoggingMessageNotification infoNotification = McpSchema.LoggingMessageNotification.builder()
-			.level(McpSchema.LoggingLevel.INFO)
-			.logger("test-logger")
-			.data("Info message")
-			.build();
-
-		StepVerifier.create(exchange.loggingNotification(infoNotification)).verifyComplete();
-
-		// Verify that sendNotification was never called for INFO level
-		verify(mockSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(infoNotification));
-
-		reset(mockSession);
-
-		// Test WARNING (should be sent)
 		McpSchema.LoggingMessageNotification warningNotification = McpSchema.LoggingMessageNotification.builder()
 			.level(McpSchema.LoggingLevel.WARNING)
 			.logger("test-logger")
-			.data("Warning message")
+			.data("Debug message that should be filtered")
 			.build();
-
-		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(warningNotification)))
-			.thenReturn(Mono.empty());
 
 		StepVerifier.create(exchange.loggingNotification(warningNotification)).verifyComplete();
 
-		// Verify that sendNotification was called exactly once for WARNING level
-		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE),
+		verify(mockSession, times(1)).isNotificationForLevelAllowed(eq(McpSchema.LoggingLevel.WARNING));
+		verify(mockSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE),
 				eq(warningNotification));
-
-		// Test ERROR (should be sent)
-		McpSchema.LoggingMessageNotification errorNotification = McpSchema.LoggingMessageNotification.builder()
-			.level(McpSchema.LoggingLevel.ERROR)
-			.logger("test-logger")
-			.data("Error message")
-			.build();
-
-		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(errorNotification)))
-			.thenReturn(Mono.empty());
-
-		StepVerifier.create(exchange.loggingNotification(errorNotification)).verifyComplete();
-
-		// Verify that sendNotification was called exactly once for ERROR level
-		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE),
-				eq(errorNotification));
-	}
-
-	@Test
-	void testLoggingNotificationWithDefaultLevel() {
-
-		McpSchema.LoggingMessageNotification infoNotification = McpSchema.LoggingMessageNotification.builder()
-			.level(McpSchema.LoggingLevel.INFO)
-			.logger("test-logger")
-			.data("Info message")
-			.build();
-
-		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(infoNotification)))
-			.thenReturn(Mono.empty());
-
-		StepVerifier.create(exchange.loggingNotification(infoNotification)).verifyComplete();
-
-		// Verify that sendNotification was called exactly once for default level
-		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(infoNotification));
 	}
 
 	@Test
 	void testLoggingNotificationWithSessionError() {
-
 		McpSchema.LoggingMessageNotification notification = McpSchema.LoggingMessageNotification.builder()
 			.level(McpSchema.LoggingLevel.ERROR)
 			.logger("test-logger")
 			.data("Test error message")
 			.build();
 
+		when(mockSession.isNotificationForLevelAllowed(any())).thenReturn(Boolean.TRUE);
 		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(notification)))
 			.thenReturn(Mono.error(new RuntimeException("Session error")));
 
 		StepVerifier.create(exchange.loggingNotification(notification)).verifyErrorSatisfies(error -> {
 			assertThat(error).isInstanceOf(RuntimeException.class).hasMessage("Session error");
 		});
-	}
-
-	@Test
-	void testSetMinLoggingLevelWithNullValue() {
-		// When & Then
-		assertThatThrownBy(() -> exchange.setMinLoggingLevel(null)).isInstanceOf(IllegalArgumentException.class)
-			.hasMessage("minLoggingLevel must not be null");
-	}
-
-	@Test
-	void testLoggingLevelHierarchy() {
-		// Test all logging levels to ensure proper hierarchy
-		McpSchema.LoggingLevel[] levels = { McpSchema.LoggingLevel.DEBUG, McpSchema.LoggingLevel.INFO,
-				McpSchema.LoggingLevel.NOTICE, McpSchema.LoggingLevel.WARNING, McpSchema.LoggingLevel.ERROR,
-				McpSchema.LoggingLevel.CRITICAL, McpSchema.LoggingLevel.ALERT, McpSchema.LoggingLevel.EMERGENCY };
-
-		// Set minimum level to WARNING
-		exchange.setMinLoggingLevel(McpSchema.LoggingLevel.WARNING);
-
-		for (McpSchema.LoggingLevel level : levels) {
-			McpSchema.LoggingMessageNotification notification = McpSchema.LoggingMessageNotification.builder()
-				.level(level)
-				.logger("test-logger")
-				.data("Test message for " + level)
-				.build();
-
-			if (level.level() >= McpSchema.LoggingLevel.WARNING.level()) {
-				// Should be sent
-				when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE), eq(notification)))
-					.thenReturn(Mono.empty());
-
-				StepVerifier.create(exchange.loggingNotification(notification)).verifyComplete();
-			}
-			else {
-				// Should be filtered (completes without sending)
-				StepVerifier.create(exchange.loggingNotification(notification)).verifyComplete();
-			}
-		}
 	}
 
 	// ---------------------------------------
