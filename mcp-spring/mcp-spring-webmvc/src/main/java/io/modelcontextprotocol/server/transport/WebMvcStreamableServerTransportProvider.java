@@ -7,6 +7,7 @@ package io.modelcontextprotocol.server.transport;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -230,9 +231,6 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 
 		try {
 			return ServerResponse.sse(sseBuilder -> {
-				sseBuilder.onComplete(() -> {
-					logger.debug("SSE connection completed for session: {}", sessionId);
-				});
 				sseBuilder.onTimeout(() -> {
 					logger.debug("SSE connection timed out for session: {}", sessionId);
 				});
@@ -264,8 +262,11 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 					// Establish new listening stream
 					McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
 						.listeningStream(sessionTransport);
-					// Note: WebMVC SSE doesn't have onCancel, cleanup will happen in
-					// onComplete/onTimeout
+
+					sseBuilder.onComplete(() -> {
+						logger.debug("SSE connection completed for session: {}", sessionId);
+						listeningStream.close();
+					});
 				}
 			}, Duration.ZERO);
 		}
@@ -415,12 +416,21 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 	/**
 	 * Implementation of McpStreamableServerTransport for WebMVC SSE sessions. This class
 	 * handles the transport-level communication for a specific client session.
+	 *
+	 * <p>
+	 * This class is thread-safe and uses a ReentrantLock to synchronize access to the
+	 * underlying SSE builder to prevent race conditions when multiple threads attempt to
+	 * send messages concurrently.
 	 */
 	private class WebMvcStreamableMcpSessionTransport implements McpStreamableServerTransport {
 
 		private final String sessionId;
 
 		private final SseBuilder sseBuilder;
+
+		private final ReentrantLock lock = new ReentrantLock();
+
+		private volatile boolean closed = false;
 
 		/**
 		 * Creates a new session transport with the specified ID and SSE builder.
@@ -453,7 +463,18 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		@Override
 		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message, String messageId) {
 			return Mono.fromRunnable(() -> {
+				if (this.closed) {
+					logger.debug("Attempted to send message to closed session: {}", this.sessionId);
+					return;
+				}
+
+				this.lock.lock();
 				try {
+					if (this.closed) {
+						logger.debug("Session {} was closed during message send attempt", this.sessionId);
+						return;
+					}
+
 					String jsonText = objectMapper.writeValueAsString(message);
 					this.sseBuilder.id(messageId != null ? messageId : this.sessionId)
 						.event(MESSAGE_EVENT_TYPE)
@@ -462,7 +483,16 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 				}
 				catch (Exception e) {
 					logger.error("Failed to send message to session {}: {}", this.sessionId, e.getMessage());
-					this.sseBuilder.error(e);
+					try {
+						this.sseBuilder.error(e);
+					}
+					catch (Exception errorException) {
+						logger.error("Failed to send error to SSE builder for session {}: {}", this.sessionId,
+								errorException.getMessage());
+					}
+				}
+				finally {
+					this.lock.unlock();
 				}
 			});
 		}
@@ -486,14 +516,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		@Override
 		public Mono<Void> closeGracefully() {
 			return Mono.fromRunnable(() -> {
-				logger.debug("Closing streamable session transport: {}", this.sessionId);
-				try {
-					this.sseBuilder.complete();
-					logger.debug("Successfully completed SSE builder for session {}", this.sessionId);
-				}
-				catch (Exception e) {
-					logger.warn("Failed to complete SSE builder for session {}: {}", this.sessionId, e.getMessage());
-				}
+				WebMvcStreamableMcpSessionTransport.this.close();
 			});
 		}
 
@@ -502,12 +525,23 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		 */
 		@Override
 		public void close() {
+			this.lock.lock();
 			try {
+				if (this.closed) {
+					logger.debug("Session transport {} already closed", this.sessionId);
+					return;
+				}
+
+				this.closed = true;
+
 				this.sseBuilder.complete();
 				logger.debug("Successfully completed SSE builder for session {}", sessionId);
 			}
 			catch (Exception e) {
 				logger.warn("Failed to complete SSE builder for session {}: {}", sessionId, e.getMessage());
+			}
+			finally {
+				this.lock.unlock();
 			}
 		}
 
