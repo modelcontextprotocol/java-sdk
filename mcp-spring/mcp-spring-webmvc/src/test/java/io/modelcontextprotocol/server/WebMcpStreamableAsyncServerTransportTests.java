@@ -28,7 +28,7 @@ import reactor.netty.DisposableServer;
  * @author Christian Tzolov
  */
 @Timeout(15) // Giving extra time beyond the client timeout
-class WebMcpStreamableMcpAsyncServerTests extends AbstractMcpAsyncServerTests {
+class WebMcpStreamableAsyncServerTransportTests extends AbstractMcpAsyncServerTests {
 
 	private static final int PORT = TestUtil.findAvailablePort();
 

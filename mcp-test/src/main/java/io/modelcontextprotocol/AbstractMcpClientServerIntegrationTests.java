@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -35,6 +36,8 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
+import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
+import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.ModelPreferences;
 import io.modelcontextprotocol.spec.McpSchema.Role;
@@ -489,19 +492,23 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	@ValueSource(strings = { "httpclient", "webflux" })
 	void testCreateElicitationWithRequestTimeoutFail(String clientType) {
 
+		var latch = new CountDownLatch(1);
+
 		var clientBuilder = clientBuilders.get(clientType);
 
-		Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler = request -> {
+		Function<ElicitRequest, ElicitResult> elicitationHandler = request -> {
 			assertThat(request.message()).isNotEmpty();
 			assertThat(request.requestedSchema()).isNotNull();
+
 			try {
-				TimeUnit.SECONDS.sleep(2);
+				if (!latch.await(2, TimeUnit.SECONDS)) {
+					throw new RuntimeException("Timeout waiting for elicitation processing");
+				}
 			}
 			catch (InterruptedException e) {
 				throw new RuntimeException(e);
 			}
-			return new McpSchema.ElicitResult(McpSchema.ElicitResult.Action.ACCEPT,
-					Map.of("message", request.message()));
+			return new ElicitResult(ElicitResult.Action.ACCEPT, Map.of("message", request.message()));
 		};
 
 		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
@@ -509,31 +516,28 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.elicitation(elicitationHandler)
 			.build();
 
-		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
-				null);
+		CallToolResult callResponse = new CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
+
+		AtomicReference<ElicitResult> resultRef = new AtomicReference<>();
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(emptyJsonSchema).build())
 			.callHandler((exchange, request) -> {
 
-				var elicitationRequest = McpSchema.ElicitRequest.builder()
+				var elicitationRequest = ElicitRequest.builder()
 					.message("Test message")
 					.requestedSchema(
 							Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
 					.build();
 
-				StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
-					assertThat(result).isNotNull();
-					assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
-					assertThat(result.content().get("message")).isEqualTo("Test message");
-				}).verifyComplete();
-
-				return Mono.just(callResponse);
+				return exchange.createElicitation(elicitationRequest)
+					.doOnNext(resultRef::set)
+					.then(Mono.just(callResponse));
 			})
 			.build();
 
 		var mcpServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
-			.requestTimeout(Duration.ofSeconds(1))
+			.requestTimeout(Duration.ofSeconds(1)) // 1 second.
 			.tools(tool)
 			.build();
 
@@ -542,7 +546,10 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 		assertThatExceptionOfType(McpError.class).isThrownBy(() -> {
 			mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
-		}).withMessageContaining("Timeout");
+		}).withMessageContaining("within 1000ms");
+
+		ElicitResult elicitResult = resultRef.get();
+		assertThat(elicitResult).isNull();
 
 		mcpClient.closeGracefully();
 		mcpServer.closeGracefully().block();

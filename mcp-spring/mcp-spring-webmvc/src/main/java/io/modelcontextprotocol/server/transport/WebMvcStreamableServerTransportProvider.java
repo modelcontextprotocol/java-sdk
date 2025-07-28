@@ -205,7 +205,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 	}
 
 	/**
-	 * Handles GET requests for SSE connections and message replay.
+	 * Setup the listening SSE connections and message replay.
 	 * @param request The incoming server request
 	 * @return A ServerResponse configured for SSE communication, or an error response
 	 */
