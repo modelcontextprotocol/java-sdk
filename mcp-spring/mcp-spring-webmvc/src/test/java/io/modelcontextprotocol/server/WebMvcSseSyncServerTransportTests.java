@@ -49,7 +49,11 @@ class WebMvcSseSyncServerTransportTests extends AbstractMcpSyncServerTests {
 	private AnnotationConfigWebApplicationContext appContext;
 
 	@Override
-	protected WebMvcSseServerTransportProvider createMcpTransportProvider() {
+	protected McpServer.SyncSpecification<?> prepareSyncServerBuilder() {
+		return McpServer.sync(createMcpTransportProvider());
+	}
+
+	private WebMvcSseServerTransportProvider createMcpTransportProvider() {
 		// Set up Tomcat first
 		tomcat = new Tomcat();
 		tomcat.setPort(PORT);
