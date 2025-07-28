@@ -146,6 +146,12 @@ public class McpStreamableServerSession implements McpLoggableSession {
 						transportContext), jsonrpcRequest.params())
 				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), result,
 						null))
+				.onErrorResume(e -> {
+					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(),
+							null, new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+									e.getMessage(), null));
+					return Mono.just(errorResponse);
+				})
 				.flatMap(transport::sendMessage)
 				.then(transport.closeGracefully());
 		});

@@ -117,8 +117,8 @@ class WebFluxStreamableIntegrationTests {
 	// ---------------------------------------
 	// Sampling Tests
 	// ---------------------------------------
-	// @ParameterizedTest(name = "{0} : {displayName} ")
-	// @ValueSource(strings = { "httpclient", "webflux" })
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
 	void testCreateMessageWithoutSamplingCapabilities(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -298,8 +298,8 @@ class WebFluxStreamableIntegrationTests {
 		mcpServer.closeGracefully().block();
 	}
 
-	// @ParameterizedTest(name = "{0} : {displayName} ")
-	// @ValueSource(strings = { "httpclient", "webflux" })
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
 	void testCreateMessageWithRequestTimeoutFail(String clientType) throws InterruptedException {
 
 		// Client
@@ -361,20 +361,16 @@ class WebFluxStreamableIntegrationTests {
 	// ---------------------------------------
 	// Elicitation Tests
 	// ---------------------------------------
-	// @ParameterizedTest(name = "{0} : {displayName} ")
-	// @ValueSource(strings = { "httpclient", "webflux" })
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
 	void testCreateElicitationWithoutElicitationCapabilities(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callHandler((exchange, request) -> {
-
-				exchange.createElicitation(mock(ElicitRequest.class)).block();
-
-				return Mono.just(mock(CallToolResult.class));
-			})
+			.callHandler((exchange, request) -> exchange.createElicitation(mock(ElicitRequest.class))
+				.then(Mono.just(mock(CallToolResult.class))))
 			.build();
 
 		var server = McpServer.async(mcpStreamableServerTransportProvider)
@@ -515,8 +511,8 @@ class WebFluxStreamableIntegrationTests {
 		mcpServer.closeGracefully().block();
 	}
 
-	// @ParameterizedTest(name = "{0} : {displayName} ")
-	// @ValueSource(strings = { "httpclient", "webflux" })
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
 	void testCreateElicitationWithRequestTimeoutFail(String clientType) {
 
 		var latch = new CountDownLatch(1);
@@ -547,6 +543,8 @@ class WebFluxStreamableIntegrationTests {
 
 		CallToolResult callResponse = new CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 
+		AtomicReference<ElicitResult> resultRef = new AtomicReference<>();
+
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(new Tool("tool1", "tool1 description", emptyJsonSchema))
 			.callHandler((exchange, request) -> {
@@ -557,13 +555,9 @@ class WebFluxStreamableIntegrationTests {
 							Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
 					.build();
 
-				StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
-					assertThat(result).isNotNull();
-					assertThat(result.action()).isEqualTo(ElicitResult.Action.ACCEPT);
-					assertThat(result.content().get("message")).isEqualTo("Test message");
-				}).verifyComplete();
-
-				return Mono.just(callResponse);
+				return exchange.createElicitation(elicitationRequest)
+					.doOnNext(resultRef::set)
+					.then(Mono.just(callResponse));
 			})
 			.build();
 
@@ -579,6 +573,9 @@ class WebFluxStreamableIntegrationTests {
 		assertThatExceptionOfType(McpError.class).isThrownBy(() -> {
 			mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
 		}).withMessageContaining("within 1000ms");
+
+		ElicitResult elicitResult = resultRef.get();
+		assertThat(elicitResult).isNull();
 
 		mcpClient.closeGracefully();
 		mcpServer.closeGracefully().block();
@@ -634,8 +631,8 @@ class WebFluxStreamableIntegrationTests {
 		mcpServer.close();
 	}
 
-	// @ParameterizedTest(name = "{0} : {displayName} ")
-	// @ValueSource(strings = { "httpclient", "webflux" })
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
 	void testRootsWithoutCapability(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
