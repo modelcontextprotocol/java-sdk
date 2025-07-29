@@ -414,7 +414,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		}
 
 		try {
-			session.delete().block();
+			session.delete().contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext)).block();
 			this.sessions.remove(sessionId);
 			return ServerResponse.ok().build();
 		}
