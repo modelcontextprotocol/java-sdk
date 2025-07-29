@@ -216,7 +216,8 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 				}
 			}
 			else {
-				s.error(new McpError("Received unrecognized SSE event type: " + event.event()));
+				logger.debug("Received unrecognized SSE event type: {}", event);
+				s.complete();
 			}
 		}).transform(handler)).subscribe();
 

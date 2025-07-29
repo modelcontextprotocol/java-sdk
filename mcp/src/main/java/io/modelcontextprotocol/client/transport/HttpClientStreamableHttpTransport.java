@@ -264,6 +264,10 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 										"Error parsing JSON-RPC message: " + responseEvent.sseEvent().data()));
 							}
 						}
+						else {
+							logger.debug("Received SSE event with type: {}", responseEvent.sseEvent());
+							return Flux.empty();
+						}
 					}
 					else if (statusCode == METHOD_NOT_ALLOWED) { // NotAllowed
 						logger.debug("The server does not support SSE streams, using request-response mode.");
@@ -342,9 +346,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		}
 	}
 
-	public Mono<Void> sendMessage(McpSchema.JSONRPCMessage sendMessage) {
+	public Mono<Void> sendMessage(McpSchema.JSONRPCMessage sentMessage) {
 		return Mono.create(messageSink -> {
-			logger.debug("Sending message {}", sendMessage);
+			logger.debug("Sending message {}", sentMessage);
 
 			final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
 			final McpTransportSession<Disposable> transportSession = this.activeSession.get();
@@ -355,10 +359,10 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				requestBuilder = requestBuilder.header("mcp-session-id", transportSession.sessionId().get());
 			}
 
-			String jsonBody = this.toString(sendMessage);
+			String jsonBody = this.toString(sentMessage);
 
 			HttpRequest request = requestBuilder.uri(Utils.resolveUri(this.baseUri, this.endpoint))
-				.header("Accept", TEXT_EVENT_STREAM + ", " + APPLICATION_JSON)
+				.header("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
 				.header("Content-Type", APPLICATION_JSON)
 				.header("Cache-Control", "no-cache")
 				.POST(HttpRequest.BodyPublishers.ofString(jsonBody))
@@ -436,10 +440,16 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					else if (contentType.contains(APPLICATION_JSON)) {
 						messageSink.success();
 						String data = ((ResponseSubscribers.AggregateResponseEvent) responseEvent).data();
+						if (sentMessage instanceof McpSchema.JSONRPCNotification && Utils.hasText(data)) {
+							logger.warn("Notification: {} received non-compliant response: {}", sentMessage, data);
+							return Mono.empty();
+						}
+
 						try {
 							return Mono.just(McpSchema.deserializeJsonRpcMessage(objectMapper, data));
 						}
 						catch (IOException e) {
+							// TODO: this should be a McpTransportError
 							return Mono.error(e);
 						}
 					}
