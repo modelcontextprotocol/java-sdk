@@ -12,6 +12,8 @@ import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -22,7 +24,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import net.javacrumbs.jsonunit.core.Option;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -62,11 +66,18 @@ import io.modelcontextprotocol.spec.McpSchema.Role;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
-import net.javacrumbs.jsonunit.core.Option;
+
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
 import reactor.core.publisher.Mono;
 import reactor.netty.DisposableServer;
 import reactor.netty.http.server.HttpServer;
 import reactor.test.StepVerifier;
+
+import static io.modelcontextprotocol.spec.McpSchema.ErrorCodes.INVALID_PARAMS;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class WebFluxSseIntegrationTests {
 
@@ -322,18 +333,16 @@ class WebFluxSseIntegrationTests {
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
 
-		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
-			.tool(new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema))
-			.callHandler((exchange, request) -> {
+		McpServerFeatures.AsyncToolSpecification tool = new McpServerFeatures.AsyncToolSpecification(
+				new McpSchema.Tool("tool1", "tool1 description", emptyJsonSchema), (exchange, request) -> {
 
-				var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
-					.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
-							new McpSchema.TextContent("Test message"))))
-					.build();
+					var craeteMessageRequest = McpSchema.CreateMessageRequest.builder()
+						.messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
+								new McpSchema.TextContent("Test message"))))
+						.build();
 
-				return exchange.createMessage(craeteMessageRequest).thenReturn(callResponse);
-			})
-			.build();
+					return exchange.createMessage(craeteMessageRequest).thenReturn(callResponse);
+				});
 
 		var mcpServer = McpServer.async(mcpServerTransportProvider)
 			.requestTimeout(Duration.ofSeconds(1))
@@ -886,6 +895,138 @@ class WebFluxSseIntegrationTests {
 			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
 				assertThat(rootsRef.get()).containsAll(List.of(tool2.tool()));
 			});
+		}
+
+		mcpServer.close();
+	}
+
+	// ---------------------------------------
+	// Tests for Paginated Tool List Results
+	// ---------------------------------------
+
+	@ParameterizedTest(name = "{0} ({1}) : {displayName} ")
+	@MethodSource("providePaginationTestParams")
+	void testListToolsSuccess(String clientType, int availableElements) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Setup list of prompts
+		List<McpServerFeatures.SyncToolSpecification> tools = new ArrayList<>();
+
+		for (int i = 0; i < availableElements; i++) {
+			var mock = new McpSchema.Tool("test-tool-" + i, "Test Tool Description", emptyJsonSchema);
+			var spec = new McpServerFeatures.SyncToolSpecification(mock, null);
+
+			tools.add(spec);
+		}
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tools)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var returnedElements = new HashSet<String>();
+
+			var hasEntries = true;
+			String nextCursor = null;
+
+			while (hasEntries) {
+				var res = mcpClient.listTools(nextCursor);
+
+				res.tools().forEach(e -> returnedElements.add(e.name())); // store unique
+																			// attribute
+
+				nextCursor = res.nextCursor();
+
+				if (nextCursor == null) {
+					hasEntries = false;
+				}
+			}
+
+			assertThat(returnedElements.size()).isEqualTo(availableElements);
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testListToolsCursorInvalidListChanged(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Setup list of prompts
+		var pageSize = 10;
+		List<McpServerFeatures.SyncToolSpecification> tools = new ArrayList<>();
+
+		for (int i = 0; i <= pageSize; i++) {
+			var mock = new McpSchema.Tool("test-tool-" + i, "Test Tool Description", emptyJsonSchema);
+			var spec = new McpServerFeatures.SyncToolSpecification(mock, null);
+
+			tools.add(spec);
+		}
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tools)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var res = mcpClient.listTools(null);
+
+			// Change list
+			var mock = new McpSchema.Tool("test-tool-xyz", "Test Tool Description", emptyJsonSchema);
+			mcpServer.addTool(new McpServerFeatures.SyncToolSpecification(mock, null));
+
+			assertThatThrownBy(() -> mcpClient.listTools(res.nextCursor())).isInstanceOf(McpError.class)
+				.hasMessage("Invalid cursor")
+				.satisfies(exception -> {
+					var error = (McpError) exception;
+					assertThat(error.getJsonRpcError().code()).isEqualTo(INVALID_PARAMS);
+					assertThat(error.getJsonRpcError().message()).isEqualTo("Invalid cursor");
+				});
+
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testListToolsInvalidCursor(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		var mock = new McpSchema.Tool("test-tool", "Test Tool Description", emptyJsonSchema);
+		var spec = new McpServerFeatures.SyncToolSpecification(mock, null);
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(spec)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThatThrownBy(() -> mcpClient.listTools("INVALID")).isInstanceOf(McpError.class)
+				.hasMessage("Invalid cursor")
+				.satisfies(exception -> {
+					var error = (McpError) exception;
+					assertThat(error.getJsonRpcError().code()).isEqualTo(INVALID_PARAMS);
+					assertThat(error.getJsonRpcError().message()).isEqualTo("Invalid cursor");
+				});
+
 		}
 
 		mcpServer.close();
@@ -1487,6 +1628,383 @@ class WebFluxSseIntegrationTests {
 			case "5 + 3" -> 8.0;
 			default -> 0.0;
 		};
+	}
+
+	// ---------------------------------------
+	// Tests for Paginated Prompt List Results
+	// ---------------------------------------
+
+	@ParameterizedTest(name = "{0} ({1}) : {displayName} ")
+	@MethodSource("providePaginationTestParams")
+	void testListPromptsSuccess(String clientType, int availableElements) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Setup list of prompts
+		List<McpServerFeatures.SyncPromptSpecification> prompts = new ArrayList<>();
+
+		for (int i = 0; i < availableElements; i++) {
+			var mock = new McpSchema.Prompt("test-prompt-" + i, "Test Prompt Description",
+					List.of(new McpSchema.PromptArgument("arg1", "Test argument", true)));
+			var spec = new McpServerFeatures.SyncPromptSpecification(mock, null);
+
+			prompts.add(spec);
+		}
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().prompts(true).build())
+			.prompts(prompts)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var returnedElements = new HashSet<String>();
+
+			var hasEntries = true;
+			String nextCursor = null;
+
+			while (hasEntries) {
+				var res = mcpClient.listPrompts(nextCursor);
+
+				res.prompts().forEach(e -> returnedElements.add(e.name())); // store
+				// unique
+				// attribute
+
+				nextCursor = res.nextCursor();
+
+				if (nextCursor == null) {
+					hasEntries = false;
+				}
+			}
+
+			assertThat(returnedElements.size()).isEqualTo(availableElements);
+
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testListPromptsCursorInvalidListChanged(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Setup list of prompts
+		var pageSize = 10;
+		List<McpServerFeatures.SyncPromptSpecification> prompts = new ArrayList<>();
+
+		for (int i = 0; i <= pageSize; i++) {
+			var mock = new McpSchema.Prompt("test-prompt-" + i, "Test Prompt Description",
+					List.of(new McpSchema.PromptArgument("arg1", "Test argument", true)));
+			var spec = new McpServerFeatures.SyncPromptSpecification(mock, null);
+
+			prompts.add(spec);
+		}
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().prompts(true).build())
+			.prompts(prompts)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var res = mcpClient.listPrompts(null);
+
+			// Change list
+			var mock = new McpSchema.Prompt("test-prompt-xyz", "Test Prompt Description",
+					List.of(new McpSchema.PromptArgument("arg1", "Test argument", true)));
+
+			mcpServer.addPrompt(new McpServerFeatures.SyncPromptSpecification(mock, null));
+
+			assertThatThrownBy(() -> mcpClient.listPrompts(res.nextCursor())).isInstanceOf(McpError.class)
+				.hasMessage("Invalid cursor")
+				.satisfies(exception -> {
+					var error = (McpError) exception;
+					assertThat(error.getJsonRpcError().code()).isEqualTo(INVALID_PARAMS);
+					assertThat(error.getJsonRpcError().message()).isEqualTo("Invalid cursor");
+				});
+
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testListPromptsInvalidCursor(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		var mock = new McpSchema.Prompt("test-prompt", "Test Prompt Description",
+				List.of(new McpSchema.PromptArgument("arg1", "Test argument", true)));
+
+		var spec = new McpServerFeatures.SyncPromptSpecification(mock, null);
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().prompts(true).build())
+			.prompts(spec)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThatThrownBy(() -> mcpClient.listPrompts("INVALID")).isInstanceOf(McpError.class)
+				.hasMessage("Invalid cursor")
+				.satisfies(exception -> {
+					var error = (McpError) exception;
+					assertThat(error.getJsonRpcError().code()).isEqualTo(INVALID_PARAMS);
+					assertThat(error.getJsonRpcError().message()).isEqualTo("Invalid cursor");
+				});
+
+		}
+
+		mcpServer.close();
+	}
+
+	// ---------------------------------------
+	// Tests for Paginated Resources List Results
+	// ---------------------------------------
+
+	@ParameterizedTest(name = "{0} ({1}) : {displayName} ")
+	@MethodSource("providePaginationTestParams")
+	void testListResourcesSuccess(String clientType, int availableElements) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Setup list of prompts
+		List<McpServerFeatures.SyncResourceSpecification> resources = new ArrayList<>();
+
+		for (int i = 0; i < availableElements; i++) {
+			var mock = new McpSchema.Resource("file://example-" + i + ".txt", "test-resource",
+					"Test Resource Description", "application/octet-stream", null);
+			var spec = new McpServerFeatures.SyncResourceSpecification(mock, null);
+
+			resources.add(spec);
+		}
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().resources(true, true).build())
+			.resources(resources)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var returnedElements = new HashSet<String>();
+
+			var hasEntries = true;
+			String nextCursor = null;
+
+			while (hasEntries) {
+				var res = mcpClient.listResources(nextCursor);
+
+				res.resources().forEach(e -> returnedElements.add(e.uri())); // store
+				// unique
+				// attribute
+
+				nextCursor = res.nextCursor();
+
+				if (nextCursor == null) {
+					hasEntries = false;
+				}
+			}
+
+			assertThat(returnedElements.size()).isEqualTo(availableElements);
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testListResourcesCursorInvalidListChanged(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Setup list of prompts
+		var pageSize = 10;
+		List<McpServerFeatures.SyncResourceSpecification> resources = new ArrayList<>();
+
+		for (int i = 0; i <= pageSize; i++) {
+			var mock = new McpSchema.Resource("file://example-" + i + ".txt", "test-resource",
+					"Test Resource Description", "application/octet-stream", null);
+			var spec = new McpServerFeatures.SyncResourceSpecification(mock, null);
+
+			resources.add(spec);
+		}
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().resources(true, true).build())
+			.resources(resources)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var res = mcpClient.listResources(null);
+
+			// Change list
+			var mock = new McpSchema.Resource("file://example-xyz.txt", "test-resource", "Test Resource Description",
+					"application/octet-stream", null);
+			mcpServer.addResource(new McpServerFeatures.SyncResourceSpecification(mock, null));
+
+			assertThatThrownBy(() -> mcpClient.listResources(res.nextCursor())).isInstanceOf(McpError.class)
+				.hasMessage("Invalid cursor")
+				.satisfies(exception -> {
+					var error = (McpError) exception;
+					assertThat(error.getJsonRpcError().code()).isEqualTo(INVALID_PARAMS);
+					assertThat(error.getJsonRpcError().message()).isEqualTo("Invalid cursor");
+				});
+
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testListResourcesInvalidCursor(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		var mock = new McpSchema.Resource("file://example.txt", "test-resource", "Test Resource Description",
+				"application/octet-stream", null);
+		var spec = new McpServerFeatures.SyncResourceSpecification(mock, null);
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().resources(true, true).build())
+			.resources(spec)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThatThrownBy(() -> mcpClient.listResources("INVALID")).isInstanceOf(McpError.class)
+				.hasMessage("Invalid cursor")
+				.satisfies(exception -> {
+					var error = (McpError) exception;
+					assertThat(error.getJsonRpcError().code()).isEqualTo(INVALID_PARAMS);
+					assertThat(error.getJsonRpcError().message()).isEqualTo("Invalid cursor");
+				});
+
+		}
+
+		mcpServer.close();
+	}
+
+	// ---------------------------------------
+	// Tests for Paginated Resource Templates Results
+	// ---------------------------------------
+
+	@ParameterizedTest(name = "{0} ({1}) : {displayName} ")
+	@MethodSource("providePaginationTestParams")
+	void testListResourceTemplatesSuccess(String clientType, int availableElements) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Setup list of prompts
+		List<McpSchema.ResourceTemplate> resourceTemplates = new ArrayList<>();
+
+		for (int i = 0; i < availableElements; i++) {
+			resourceTemplates.add(new McpSchema.ResourceTemplate("file://{path}-" + i + ".txt", "test-resource",
+					"Test Resource Description", "application/octet-stream", null));
+		}
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().resources(true, true).build())
+			.resourceTemplates(resourceTemplates)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var returnedElements = new HashSet<String>();
+
+			var hasEntries = true;
+			String nextCursor = null;
+
+			while (hasEntries) {
+				var res = mcpClient.listResourceTemplates(nextCursor);
+
+				res.resourceTemplates().forEach(e -> returnedElements.add(e.uriTemplate())); // store
+				// unique
+				// attribute
+
+				nextCursor = res.nextCursor();
+
+				if (nextCursor == null) {
+					hasEntries = false;
+				}
+			}
+
+			assertThat(returnedElements.size()).isEqualTo(availableElements);
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testListResourceTemplatesInvalidCursor(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		var mock = new McpSchema.ResourceTemplate("file://{path}.txt", "test-resource", "Test Resource Description",
+				"application/octet-stream", null);
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().resources(true, true).build())
+			.resourceTemplates(mock)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThatThrownBy(() -> mcpClient.listResourceTemplates("INVALID")).isInstanceOf(McpError.class)
+				.hasMessage("Invalid cursor")
+				.satisfies(exception -> {
+					var error = (McpError) exception;
+					assertThat(error.getJsonRpcError().code()).isEqualTo(INVALID_PARAMS);
+					assertThat(error.getJsonRpcError().message()).isEqualTo("Invalid cursor");
+				});
+
+		}
+
+		mcpServer.close();
+	}
+
+	// ---------------------------------------
+	// Helpers for Tests of Paginated Lists
+	// ---------------------------------------
+
+	/**
+	 * Helper function for pagination tests. This provides a stream of the following
+	 * parameters: 1. Client type (e.g. httpclient, webflux) 2. Number of available
+	 * elements in the list
+	 * @return a stream of arguments with test parameters
+	 */
+	static Stream<Arguments> providePaginationTestParams() {
+		return Stream.of(Arguments.of("httpclient", 0), Arguments.of("httpclient", 1), Arguments.of("httpclient", 21),
+				Arguments.of("webflux", 0), Arguments.of("webflux", 1), Arguments.of("webflux", 21));
 	}
 
 }
