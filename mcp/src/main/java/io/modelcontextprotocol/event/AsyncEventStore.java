@@ -5,7 +5,6 @@ package io.modelcontextprotocol.event;
 
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 /**
  * Interface for an event store that supports resumability. It allows storing events and
@@ -39,26 +38,6 @@ public interface AsyncEventStore {
 
 		Mono<Void> accept(EventMessage message);
 
-	}
-
-	public static AsyncEventStore from(SyncEventStore syncEventStore) {
-		if (syncEventStore == null) {
-			return null;
-		}
-		return new AsyncEventStore() {
-			@Override
-			public Mono<String> storeEvent(String streamId, JSONRPCMessage message) {
-				return Mono.fromCallable(() -> syncEventStore.storeEvent(streamId, message))
-					.subscribeOn(Schedulers.boundedElastic());
-			}
-
-			@Override
-			public Mono<String> replayEventsAfter(String lastEventId, EventCallback sendCallback) {
-				return Mono.fromCallable(() -> syncEventStore.replayEventsAfter(lastEventId, eventMessage -> {
-					sendCallback.accept(eventMessage).block();
-				})).subscribeOn(Schedulers.boundedElastic());
-			}
-		};
 	}
 
 }
