@@ -243,15 +243,20 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 					String lastId = request.headers().asHttpHeaders().getFirst(MCP_LAST_ID);
 
 					try {
-						session.replay(lastId).toIterable().forEach(message -> {
-							try {
-								sessionTransport.sendMessage(message).block();
-							}
-							catch (Exception e) {
-								logger.error("Failed to replay message: {}", e.getMessage());
-								sseBuilder.error(e);
-							}
-						});
+						session.replay(lastId)
+							.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
+							.toIterable()
+							.forEach(message -> {
+								try {
+									sessionTransport.sendMessage(message)
+										.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
+										.block();
+								}
+								catch (Exception e) {
+									logger.error("Failed to replay message: {}", e.getMessage());
+									sseBuilder.error(e);
+								}
+							});
 					}
 					catch (Exception e) {
 						logger.error("Failed to replay messages: {}", e.getMessage());
@@ -331,11 +336,15 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 			}
 
 			if (message instanceof McpSchema.JSONRPCResponse jsonrpcResponse) {
-				session.accept(jsonrpcResponse).block();
+				session.accept(jsonrpcResponse)
+					.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
+					.block();
 				return ServerResponse.accepted().build();
 			}
 			else if (message instanceof McpSchema.JSONRPCNotification jsonrpcNotification) {
-				session.accept(jsonrpcNotification).block();
+				session.accept(jsonrpcNotification)
+					.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
+					.block();
 				return ServerResponse.accepted().build();
 			}
 			else if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
@@ -352,7 +361,9 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 							sessionId, sseBuilder);
 
 					try {
-						session.responseStream(jsonrpcRequest, sessionTransport).block();
+						session.responseStream(jsonrpcRequest, sessionTransport)
+							.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
+							.block();
 					}
 					catch (Exception e) {
 						logger.error("Failed to handle request stream: {}", e.getMessage());
