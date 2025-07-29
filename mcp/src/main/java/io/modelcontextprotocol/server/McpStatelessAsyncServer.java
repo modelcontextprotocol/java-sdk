@@ -14,11 +14,12 @@ import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
 import io.modelcontextprotocol.spec.McpTransportContext;
+import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
+import io.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
@@ -72,7 +73,7 @@ public class McpStatelessAsyncServer {
 		this.serverInfo = features.serverInfo();
 		this.serverCapabilities = features.serverCapabilities();
 		this.instructions = features.instructions();
-		this.tools.addAll(features.tools());
+		this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, features.tools()));
 		this.resources.putAll(features.resources());
 		this.resourceTemplates.addAll(features.resourceTemplates());
 		this.prompts.putAll(features.prompts());
@@ -80,7 +81,7 @@ public class McpStatelessAsyncServer {
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
 
-		Map<String, RequestHandler<?>> requestHandlers = new HashMap<>();
+		Map<String, McpStatelessRequestHandler<?>> requestHandlers = new HashMap<>();
 
 		// Initialize request handlers for standard MCP methods
 
@@ -113,18 +114,14 @@ public class McpStatelessAsyncServer {
 			requestHandlers.put(McpSchema.METHOD_COMPLETION_COMPLETE, completionCompleteRequestHandler());
 		}
 
-		mcpTransport.setRequestHandler((context, request) -> requestHandlers.get(request.method())
-			.apply(context, request.params())
-			.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
-			.onErrorResume(t -> Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
-					new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR, t.getMessage(),
-							null)))));
+		McpStatelessServerHandler handler = new DefaultMcpStatelessServerHandler(requestHandlers, Map.of());
+		mcpTransport.setMcpHandler(handler);
 	}
 
 	// ---------------------------------------
 	// Lifecycle Management
 	// ---------------------------------------
-	private RequestHandler<McpSchema.InitializeResult> asyncInitializeRequestHandler() {
+	private McpStatelessRequestHandler<McpSchema.InitializeResult> asyncInitializeRequestHandler() {
 		return (ctx, req) -> Mono.defer(() -> {
 			McpSchema.InitializeRequest initializeRequest = this.objectMapper.convertValue(req,
 					McpSchema.InitializeRequest.class);
@@ -190,6 +187,108 @@ public class McpStatelessAsyncServer {
 	// Tool Management
 	// ---------------------------------------
 
+	private static List<McpStatelessServerFeatures.AsyncToolSpecification> withStructuredOutputHandling(
+			JsonSchemaValidator jsonSchemaValidator, List<McpStatelessServerFeatures.AsyncToolSpecification> tools) {
+
+		if (Utils.isEmpty(tools)) {
+			return tools;
+		}
+
+		return tools.stream().map(tool -> withStructuredOutputHandling(jsonSchemaValidator, tool)).toList();
+	}
+
+	private static McpStatelessServerFeatures.AsyncToolSpecification withStructuredOutputHandling(
+			JsonSchemaValidator jsonSchemaValidator,
+			McpStatelessServerFeatures.AsyncToolSpecification toolSpecification) {
+
+		if (toolSpecification.callHandler() instanceof StructuredOutputCallToolHandler) {
+			// If the tool is already wrapped, return it as is
+			return toolSpecification;
+		}
+
+		if (toolSpecification.tool().outputSchema() == null) {
+			// If the tool does not have an output schema, return it as is
+			return toolSpecification;
+		}
+
+		return new McpStatelessServerFeatures.AsyncToolSpecification(toolSpecification.tool(),
+				new StructuredOutputCallToolHandler(jsonSchemaValidator, toolSpecification.tool().outputSchema(),
+						toolSpecification.callHandler()));
+	}
+
+	private static class StructuredOutputCallToolHandler
+			implements BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> {
+
+		private final BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> delegateHandler;
+
+		private final JsonSchemaValidator jsonSchemaValidator;
+
+		private final Map<String, Object> outputSchema;
+
+		public StructuredOutputCallToolHandler(JsonSchemaValidator jsonSchemaValidator,
+				Map<String, Object> outputSchema,
+				BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> delegateHandler) {
+
+			Assert.notNull(jsonSchemaValidator, "JsonSchemaValidator must not be null");
+			Assert.notNull(delegateHandler, "Delegate call tool result handler must not be null");
+
+			this.delegateHandler = delegateHandler;
+			this.outputSchema = outputSchema;
+			this.jsonSchemaValidator = jsonSchemaValidator;
+		}
+
+		@Override
+		public Mono<CallToolResult> apply(McpTransportContext transportContext, McpSchema.CallToolRequest request) {
+
+			return this.delegateHandler.apply(transportContext, request).map(result -> {
+
+				if (outputSchema == null) {
+					if (result.structuredContent() != null) {
+						logger.warn(
+								"Tool call with no outputSchema is not expected to have a result with structured content, but got: {}",
+								result.structuredContent());
+					}
+					// Pass through. No validation is required if no output schema is
+					// provided.
+					return result;
+				}
+
+				// If an output schema is provided, servers MUST provide structured
+				// results that conform to this schema.
+				// https://modelcontextprotocol.io/specification/2025-06-18/server/tools#output-schema
+				if (result.structuredContent() == null) {
+					logger.warn(
+							"Response missing structured content which is expected when calling tool with non-empty outputSchema");
+					return new CallToolResult(
+							"Response missing structured content which is expected when calling tool with non-empty outputSchema",
+							true);
+				}
+
+				// Validate the result against the output schema
+				var validation = this.jsonSchemaValidator.validate(outputSchema, result.structuredContent());
+
+				if (!validation.valid()) {
+					logger.warn("Tool call result validation failed: {}", validation.errorMessage());
+					return new CallToolResult(validation.errorMessage(), true);
+				}
+
+				if (Utils.isEmpty(result.content())) {
+					// For backwards compatibility, a tool that returns structured
+					// content SHOULD also return functionally equivalent unstructured
+					// content. (For example, serialized JSON can be returned in a
+					// TextContent block.)
+					// https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content
+
+					return new CallToolResult(List.of(new McpSchema.TextContent(validation.jsonStructuredOutput())),
+							result.isError(), result.structuredContent());
+				}
+
+				return result;
+			});
+		}
+
+	}
+
 	/**
 	 * Add a new tool specification at runtime.
 	 * @param toolSpecification The tool specification to add
@@ -209,15 +308,17 @@ public class McpStatelessAsyncServer {
 			return Mono.error(new McpError("Server must be configured with tool capabilities"));
 		}
 
+		var wrappedToolSpecification = withStructuredOutputHandling(this.jsonSchemaValidator, toolSpecification);
+
 		return Mono.defer(() -> {
 			// Check for duplicate tool names
-			if (this.tools.stream().anyMatch(th -> th.tool().name().equals(toolSpecification.tool().name()))) {
-				return Mono
-					.error(new McpError("Tool with name '" + toolSpecification.tool().name() + "' already exists"));
+			if (this.tools.stream().anyMatch(th -> th.tool().name().equals(wrappedToolSpecification.tool().name()))) {
+				return Mono.error(
+						new McpError("Tool with name '" + wrappedToolSpecification.tool().name() + "' already exists"));
 			}
 
-			this.tools.add(toolSpecification);
-			logger.debug("Added tool handler: {}", toolSpecification.tool().name());
+			this.tools.add(wrappedToolSpecification);
+			logger.debug("Added tool handler: {}", wrappedToolSpecification.tool().name());
 
 			return Mono.empty();
 		});
@@ -247,7 +348,7 @@ public class McpStatelessAsyncServer {
 		});
 	}
 
-	private RequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
+	private McpStatelessRequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
 		return (ctx, params) -> {
 			List<Tool> tools = this.tools.stream()
 				.map(McpStatelessServerFeatures.AsyncToolSpecification::tool)
@@ -256,7 +357,7 @@ public class McpStatelessAsyncServer {
 		};
 	}
 
-	private RequestHandler<CallToolResult> toolsCallRequestHandler() {
+	private McpStatelessRequestHandler<CallToolResult> toolsCallRequestHandler() {
 		return (ctx, params) -> {
 			McpSchema.CallToolRequest callToolRequest = objectMapper.convertValue(params,
 					new TypeReference<McpSchema.CallToolRequest>() {
@@ -326,7 +427,7 @@ public class McpStatelessAsyncServer {
 		});
 	}
 
-	private RequestHandler<McpSchema.ListResourcesResult> resourcesListRequestHandler() {
+	private McpStatelessRequestHandler<McpSchema.ListResourcesResult> resourcesListRequestHandler() {
 		return (ctx, params) -> {
 			var resourceList = this.resources.values()
 				.stream()
@@ -336,7 +437,7 @@ public class McpStatelessAsyncServer {
 		};
 	}
 
-	private RequestHandler<McpSchema.ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
+	private McpStatelessRequestHandler<McpSchema.ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
 		return (ctx, params) -> Mono.just(new McpSchema.ListResourceTemplatesResult(this.getResourceTemplates(), null));
 
 	}
@@ -359,7 +460,7 @@ public class McpStatelessAsyncServer {
 		return list;
 	}
 
-	private RequestHandler<McpSchema.ReadResourceResult> resourcesReadRequestHandler() {
+	private McpStatelessRequestHandler<McpSchema.ReadResourceResult> resourcesReadRequestHandler() {
 		return (ctx, params) -> {
 			McpSchema.ReadResourceRequest resourceRequest = objectMapper.convertValue(params,
 					new TypeReference<McpSchema.ReadResourceRequest>() {
@@ -433,7 +534,7 @@ public class McpStatelessAsyncServer {
 		});
 	}
 
-	private RequestHandler<McpSchema.ListPromptsResult> promptsListRequestHandler() {
+	private McpStatelessRequestHandler<McpSchema.ListPromptsResult> promptsListRequestHandler() {
 		return (ctx, params) -> {
 			// TODO: Implement pagination
 			// McpSchema.PaginatedRequest request = objectMapper.convertValue(params,
@@ -449,7 +550,7 @@ public class McpStatelessAsyncServer {
 		};
 	}
 
-	private RequestHandler<McpSchema.GetPromptResult> promptsGetRequestHandler() {
+	private McpStatelessRequestHandler<McpSchema.GetPromptResult> promptsGetRequestHandler() {
 		return (ctx, params) -> {
 			McpSchema.GetPromptRequest promptRequest = objectMapper.convertValue(params,
 					new TypeReference<McpSchema.GetPromptRequest>() {
@@ -465,7 +566,7 @@ public class McpStatelessAsyncServer {
 		};
 	}
 
-	private RequestHandler<McpSchema.CompleteResult> completionCompleteRequestHandler() {
+	private McpStatelessRequestHandler<McpSchema.CompleteResult> completionCompleteRequestHandler() {
 		return (ctx, params) -> {
 			McpSchema.CompleteRequest request = parseCompletionParams(params);
 
@@ -561,11 +662,6 @@ public class McpStatelessAsyncServer {
 	 */
 	void setProtocolVersions(List<String> protocolVersions) {
 		this.protocolVersions = protocolVersions;
-	}
-
-	@FunctionalInterface
-	interface RequestHandler<T> extends BiFunction<McpTransportContext, Object, Mono<T>> {
-
 	}
 
 }
