@@ -11,11 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpServerTransport;
-import io.modelcontextprotocol.spec.McpServerTransportProvider;
-import io.modelcontextprotocol.spec.McpServerSession;
+import io.modelcontextprotocol.spec.*;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -96,6 +92,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 
 	private McpServerSession.Factory sessionFactory;
 
+	private McpServerSessionListener<ServerRequest> mcpServerSessionListener;
+
 	/**
 	 * Map of active client sessions, keyed by session ID.
 	 */
@@ -148,6 +146,24 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 */
 	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint) {
+		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, null);
+	}
+
+	/**
+	 * Constructs a new WebMvcSseServerTransportProvider instance.
+	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
+	 * of messages.
+	 * @param baseUrl The base URL for the message endpoint, used to construct the full
+	 * endpoint URL for clients.
+	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
+	 * messages via HTTP POST. This endpoint will be communicated to clients through the
+	 * SSE connection's initial endpoint event.
+	 * @param mcpServerSessionListener The listener for handling server session events.
+	 * @param sseEndpoint The endpoint URI where clients establish their SSE connections.
+	 * @throws IllegalArgumentException if any parameter is null
+	 */
+	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+			String sseEndpoint, McpServerSessionListener<ServerRequest> mcpServerSessionListener) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(baseUrl, "Message base URL must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
@@ -161,6 +177,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			.GET(this.sseEndpoint, this::handleSseConnection)
 			.POST(this.messageEndpoint, this::handleMessage)
 			.build();
+		this.mcpServerSessionListener = mcpServerSessionListener;
 	}
 
 	@Override
@@ -212,6 +229,10 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			.flatMap(McpServerSession::closeGracefully)
 			.then()
 			.doOnSuccess(v -> logger.debug("Graceful shutdown completed"));
+	}
+
+	public void setMcpServerSessionListener(McpServerSessionListener<ServerRequest> mcpServerSessionListener) {
+		this.mcpServerSessionListener = mcpServerSessionListener;
 	}
 
 	/**
@@ -274,6 +295,10 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 					logger.error("Failed to send initial endpoint event: {}", e.getMessage());
 					sseBuilder.error(e);
 				}
+
+				if (null != mcpServerSessionListener) {
+					mcpServerSessionListener.onConnection(session, request);
+				}
 			}, Duration.ZERO);
 		}
 		catch (Exception e) {
@@ -308,6 +333,10 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 
 		if (session == null) {
 			return ServerResponse.status(HttpStatus.NOT_FOUND).body(new McpError("Session not found: " + sessionId));
+		}
+
+		if (null != mcpServerSessionListener) {
+			mcpServerSessionListener.onConnection(session, request);
 		}
 
 		try {
@@ -412,6 +441,11 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			catch (Exception e) {
 				logger.warn("Failed to complete SSE builder for session {}: {}", sessionId, e.getMessage());
 			}
+		}
+
+		@Override
+		public String getSessionId() {
+			return sessionId;
 		}
 
 	}

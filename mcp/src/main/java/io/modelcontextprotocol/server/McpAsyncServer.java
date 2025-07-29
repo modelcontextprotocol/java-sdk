@@ -190,9 +190,12 @@ public class McpAsyncServer {
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED,
 				asyncRootsListChangedNotificationHandler(rootsChangeConsumers));
 
-		mcpTransportProvider.setSessionFactory(
-				transport -> new McpServerSession(UUID.randomUUID().toString(), requestTimeout, transport,
-						this::asyncInitializeRequestHandler, Mono::empty, requestHandlers, notificationHandlers));
+		mcpTransportProvider.setSessionFactory(transport -> {
+			// If the sessionId is not provided, generate a random one.
+			String sessionId = Optional.ofNullable(transport.getSessionId()).orElse(UUID.randomUUID().toString());
+			return new McpServerSession(sessionId, requestTimeout, transport, this::asyncInitializeRequestHandler,
+					Mono::empty, requestHandlers, notificationHandlers);
+		});
 	}
 
 	// ---------------------------------------
