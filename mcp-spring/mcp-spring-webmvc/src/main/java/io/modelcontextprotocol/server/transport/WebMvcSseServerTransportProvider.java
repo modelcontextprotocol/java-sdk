@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -340,6 +341,12 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		private final SseBuilder sseBuilder;
 
 		/**
+		 * Lock to ensure thread-safe access to the SSE builder when sending messages.
+		 * This prevents concurrent modifications that could lead to corrupted SSE events.
+		 */
+		private final ReentrantLock sseBuilderLock = new ReentrantLock();
+
+		/**
 		 * Creates a new session transport with the specified ID and SSE builder.
 		 * @param sessionId The unique identifier for this session
 		 * @param sseBuilder The SSE builder for sending server events to the client
@@ -358,6 +365,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		@Override
 		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
 			return Mono.fromRunnable(() -> {
+				sseBuilderLock.lock();
 				try {
 					String jsonText = objectMapper.writeValueAsString(message);
 					sseBuilder.id(sessionId).event(MESSAGE_EVENT_TYPE).data(jsonText);
@@ -366,6 +374,9 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				catch (Exception e) {
 					logger.error("Failed to send message to session {}: {}", sessionId, e.getMessage());
 					sseBuilder.error(e);
+				}
+				finally {
+					sseBuilderLock.unlock();
 				}
 			});
 		}
@@ -390,12 +401,16 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		public Mono<Void> closeGracefully() {
 			return Mono.fromRunnable(() -> {
 				logger.debug("Closing session transport: {}", sessionId);
+				sseBuilderLock.lock();
 				try {
 					sseBuilder.complete();
 					logger.debug("Successfully completed SSE builder for session {}", sessionId);
 				}
 				catch (Exception e) {
 					logger.warn("Failed to complete SSE builder for session {}: {}", sessionId, e.getMessage());
+				}
+				finally {
+					sseBuilderLock.unlock();
 				}
 			});
 		}
@@ -405,12 +420,16 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		 */
 		@Override
 		public void close() {
+			sseBuilderLock.lock();
 			try {
 				sseBuilder.complete();
 				logger.debug("Successfully completed SSE builder for session {}", sessionId);
 			}
 			catch (Exception e) {
 				logger.warn("Failed to complete SSE builder for session {}: {}", sessionId, e.getMessage());
+			}
+			finally {
+				sseBuilderLock.unlock();
 			}
 		}
 
