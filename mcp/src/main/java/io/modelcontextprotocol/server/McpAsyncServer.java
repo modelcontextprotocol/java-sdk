@@ -16,8 +16,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.modelcontextprotocol.spec.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpParamsValidationError;
@@ -29,11 +34,10 @@ import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -87,6 +91,8 @@ public class McpAsyncServer {
 
 	private final ObjectMapper objectMapper;
 
+	private final JsonSchemaValidator jsonSchemaValidator;
+
 	private final McpSchema.ServerCapabilities serverCapabilities;
 
 	private final McpSchema.Implementation serverInfo;
@@ -122,18 +128,19 @@ public class McpAsyncServer {
 	 */
 	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
-			McpUriTemplateManagerFactory uriTemplateManagerFactory) {
+			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.objectMapper = objectMapper;
 		this.serverInfo = features.serverInfo();
 		this.serverCapabilities = features.serverCapabilities();
 		this.instructions = features.instructions();
-		this.tools.addAll(features.tools());
+		this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, features.tools()));
 		this.resources.putAll(features.resources());
 		this.resourceTemplates.addAll(features.resourceTemplates());
 		this.prompts.putAll(features.prompts());
 		this.completions.putAll(features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
+		this.jsonSchemaValidator = jsonSchemaValidator;
 
 		Map<String, McpServerSession.RequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -271,7 +278,7 @@ public class McpAsyncServer {
 	// ---------------------------------------
 
 	/**
-	 * Add a new tool specification at runtime.
+	 * Add a new tool call specification at runtime.
 	 * @param toolSpecification The tool specification to add
 	 * @return Mono that completes when clients have been notified of the change
 	 */
@@ -282,28 +289,131 @@ public class McpAsyncServer {
 		if (toolSpecification.tool() == null) {
 			return Mono.error(new McpError("Tool must not be null"));
 		}
-		if (toolSpecification.call() == null) {
+		if (toolSpecification.call() == null && toolSpecification.callHandler() == null) {
 			return Mono.error(new McpError("Tool call handler must not be null"));
 		}
 		if (this.serverCapabilities.tools() == null) {
 			return Mono.error(new McpError("Server must be configured with tool capabilities"));
 		}
 
+		var wrappedToolSpecification = withStructuredOutputHandling(this.jsonSchemaValidator, toolSpecification);
+
 		return Mono.defer(() -> {
 			// Check for duplicate tool names
-			if (this.tools.stream().anyMatch(th -> th.tool().name().equals(toolSpecification.tool().name()))) {
-				return Mono
-					.error(new McpError("Tool with name '" + toolSpecification.tool().name() + "' already exists"));
+			if (this.tools.stream().anyMatch(th -> th.tool().name().equals(wrappedToolSpecification.tool().name()))) {
+				return Mono.error(
+						new McpError("Tool with name '" + wrappedToolSpecification.tool().name() + "' already exists"));
 			}
 
-			this.tools.add(toolSpecification);
-			logger.debug("Added tool handler: {}", toolSpecification.tool().name());
+			this.tools.add(wrappedToolSpecification);
+			logger.debug("Added tool handler: {}", wrappedToolSpecification.tool().name());
 
 			if (this.serverCapabilities.tools().listChanged()) {
 				return notifyToolsListChanged();
 			}
 			return Mono.empty();
 		});
+	}
+
+	private static class StructuredOutputCallToolHandler
+			implements BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> {
+
+		private final BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> delegateCallToolResult;
+
+		private final JsonSchemaValidator jsonSchemaValidator;
+
+		private final Map<String, Object> outputSchema;
+
+		public StructuredOutputCallToolHandler(JsonSchemaValidator jsonSchemaValidator,
+				Map<String, Object> outputSchema,
+				BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> delegateHandler) {
+
+			Assert.notNull(jsonSchemaValidator, "JsonSchemaValidator must not be null");
+			Assert.notNull(delegateHandler, "Delegate call tool result handler must not be null");
+
+			this.delegateCallToolResult = delegateHandler;
+			this.outputSchema = outputSchema;
+			this.jsonSchemaValidator = jsonSchemaValidator;
+		}
+
+		@Override
+		public Mono<CallToolResult> apply(McpAsyncServerExchange exchange, Map<String, Object> arguments) {
+
+			return this.delegateCallToolResult.apply(exchange, arguments).map(result -> {
+
+				if (outputSchema == null) {
+					if (result.structuredContent() != null) {
+						logger.warn(
+								"Tool call with no outputSchema is not expected to have a result with structured content, but got: {}",
+								result.structuredContent());
+					}
+					// Pass through. No validation is required if no output schema is
+					// provided.
+					return result;
+				}
+
+				// If an output schema is provided, servers MUST provide structured
+				// results that conform to this schema.
+				// https://modelcontextprotocol.io/specification/2025-06-18/server/tools#output-schema
+				if (result.structuredContent() == null) {
+					logger.warn(
+							"Response missing structured content which is expected when calling tool with non-empty outputSchema");
+					return new CallToolResult(
+							"Response missing structured content which is expected when calling tool with non-empty outputSchema",
+							true);
+				}
+
+				// Validate the result against the output schema
+				var validation = this.jsonSchemaValidator.validate(outputSchema, result.structuredContent());
+
+				if (!validation.valid()) {
+					logger.warn("Tool call result validation failed: {}", validation.errorMessage());
+					return new CallToolResult(validation.errorMessage(), true);
+				}
+
+				if (Utils.isEmpty(result.content())) {
+					// For backwards compatibility, a tool that returns structured
+					// content SHOULD also return functionally equivalent unstructured
+					// content. (For example, serialized JSON can be returned in a
+					// TextContent block.)
+					// https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content
+
+					return new CallToolResult(List.of(new McpSchema.TextContent(validation.jsonStructuredOutput())),
+							result.isError(), result.structuredContent());
+				}
+
+				return result;
+			});
+		}
+
+	}
+
+	private static List<McpServerFeatures.AsyncToolSpecification> withStructuredOutputHandling(
+			JsonSchemaValidator jsonSchemaValidator, List<McpServerFeatures.AsyncToolSpecification> tools) {
+
+		if (Utils.isEmpty(tools)) {
+			return tools;
+		}
+
+		return tools.stream().map(tool -> withStructuredOutputHandling(jsonSchemaValidator, tool)).toList();
+	}
+
+	private static McpServerFeatures.AsyncToolSpecification withStructuredOutputHandling(
+			JsonSchemaValidator jsonSchemaValidator, McpServerFeatures.AsyncToolSpecification toolSpecification) {
+
+		if (toolSpecification.call() instanceof StructuredOutputCallToolHandler) {
+			// If the tool is already wrapped, return it as is
+			return toolSpecification;
+		}
+
+		if (toolSpecification.tool().outputSchema() == null) {
+			// If the tool does not have an output schema, return it as is
+			return toolSpecification;
+		}
+
+		return new McpServerFeatures.AsyncToolSpecification(toolSpecification.tool(),
+				new StructuredOutputCallToolHandler(jsonSchemaValidator, toolSpecification.tool().outputSchema(),
+						toolSpecification.call()));
 	}
 
 	/**
@@ -379,7 +489,7 @@ public class McpAsyncServer {
 				return Mono.error(new McpError("Tool not found: " + callToolRequest.name()));
 			}
 
-			return toolSpecification.map(tool -> tool.call().apply(exchange, callToolRequest.arguments()))
+			return toolSpecification.map(tool -> tool.callHandler().apply(exchange, callToolRequest))
 				.orElse(Mono.error(new McpError("Tool not found: " + callToolRequest.name())));
 		};
 	}
@@ -512,8 +622,8 @@ public class McpAsyncServer {
 			.filter(uri -> uri.contains("{"))
 			.map(uri -> {
 				var resource = this.resources.get(uri).resource();
-				var template = new McpSchema.ResourceTemplate(resource.uri(), resource.name(), resource.description(),
-						resource.mimeType(), resource.annotations());
+				var template = new McpSchema.ResourceTemplate(resource.uri(), resource.name(), resource.title(),
+						resource.description(), resource.mimeType(), resource.annotations());
 				return template;
 			})
 			.toList();
@@ -781,11 +891,14 @@ public class McpAsyncServer {
 		Map<String, Object> params = (Map<String, Object>) object;
 		Map<String, Object> refMap = (Map<String, Object>) params.get("ref");
 		Map<String, Object> argMap = (Map<String, Object>) params.get("argument");
+		Map<String, Object> contextMap = (Map<String, Object>) params.get("context");
+		Map<String, Object> meta = (Map<String, Object>) params.get("_meta");
 
 		String refType = (String) refMap.get("type");
 
 		McpSchema.CompleteReference ref = switch (refType) {
-			case "ref/prompt" -> new McpSchema.PromptReference(refType, (String) refMap.get("name"));
+			case "ref/prompt" -> new McpSchema.PromptReference(refType, (String) refMap.get("name"),
+					refMap.get("title") != null ? (String) refMap.get("title") : null);
 			case "ref/resource" -> new McpSchema.ResourceReference(refType, (String) refMap.get("uri"));
 			default -> throw new IllegalArgumentException("Invalid ref type: " + refType);
 		};
@@ -795,7 +908,13 @@ public class McpAsyncServer {
 		McpSchema.CompleteRequest.CompleteArgument argument = new McpSchema.CompleteRequest.CompleteArgument(argName,
 				argValue);
 
-		return new McpSchema.CompleteRequest(ref, argument);
+		McpSchema.CompleteRequest.CompleteContext context = null;
+		if (contextMap != null) {
+			Map<String, String> arguments = (Map<String, String>) contextMap.get("arguments");
+			context = new McpSchema.CompleteRequest.CompleteContext(arguments);
+		}
+
+		return new McpSchema.CompleteRequest(ref, argument, meta, context);
 	}
 
 	/**

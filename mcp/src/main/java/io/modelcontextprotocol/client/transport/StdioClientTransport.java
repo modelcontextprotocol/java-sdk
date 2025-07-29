@@ -269,7 +269,7 @@ public class StdioClientTransport implements McpClientTransport {
 					}
 					catch (Exception e) {
 						if (!isClosing) {
-							logger.error("Error processing inbound message for line: " + line, e);
+							logger.error("Error processing inbound message for line: {}", line, e);
 						}
 						break;
 					}
@@ -362,11 +362,11 @@ public class StdioClientTransport implements McpClientTransport {
 			}
 			else {
 				logger.warn("Process not started");
-				return Mono.empty();
+				return Mono.<Process>empty();
 			}
 		})).doOnNext(process -> {
 			if (process.exitValue() != 0) {
-				logger.warn("Process terminated with code " + process.exitValue());
+				logger.warn("Process terminated with code {}", process.exitValue());
 			}
 			else {
 				logger.info("MCP server process stopped");

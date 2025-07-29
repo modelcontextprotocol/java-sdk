@@ -60,7 +60,7 @@ public class McpSchemaTests {
 				{"type":"WRONG","text":"XXX"}""", McpSchema.TextContent.class))
 			.isInstanceOf(InvalidTypeIdException.class)
 			.hasMessageContaining(
-					"Could not resolve type id 'WRONG' as a subtype of `io.modelcontextprotocol.spec.McpSchema$TextContent`: known type ids = [audio, image, resource, text]");
+					"Could not resolve type id 'WRONG' as a subtype of `io.modelcontextprotocol.spec.McpSchema$TextContent`: known type ids = [audio, image, resource, resource_link, text]");
 	}
 
 	@Test
@@ -105,6 +105,43 @@ public class McpSchemaTests {
 		assertThat(audioContent.type()).isEqualTo("audio");
 		assertThat(audioContent.data()).isEqualTo("base64encodeddata");
 		assertThat(audioContent.mimeType()).isEqualTo("audio/wav");
+	}
+
+	@Test
+	void testCreateMessageRequestWithMeta() throws Exception {
+		McpSchema.TextContent content = new McpSchema.TextContent("User message");
+		McpSchema.SamplingMessage message = new McpSchema.SamplingMessage(McpSchema.Role.USER, content);
+		McpSchema.ModelHint hint = new McpSchema.ModelHint("gpt-4");
+		McpSchema.ModelPreferences preferences = new McpSchema.ModelPreferences(Collections.singletonList(hint), 0.3,
+				0.7, 0.9);
+
+		Map<String, Object> metadata = new HashMap<>();
+		metadata.put("session", "test-session");
+
+		Map<String, Object> meta = new HashMap<>();
+		meta.put("progressToken", "create-message-token-456");
+
+		McpSchema.CreateMessageRequest request = McpSchema.CreateMessageRequest.builder()
+			.messages(Collections.singletonList(message))
+			.modelPreferences(preferences)
+			.systemPrompt("You are a helpful assistant")
+			.includeContext(McpSchema.CreateMessageRequest.ContextInclusionStrategy.THIS_SERVER)
+			.temperature(0.7)
+			.maxTokens(1000)
+			.stopSequences(Arrays.asList("STOP", "END"))
+			.metadata(metadata)
+			.meta(meta)
+			.build();
+
+		String value = mapper.writeValueAsString(request);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.containsEntry("_meta", Map.of("progressToken", "create-message-token-456"));
+
+		// Test Request interface methods
+		assertThat(request.meta()).isEqualTo(meta);
+		assertThat(request.progressToken()).isEqualTo("create-message-token-456");
 	}
 
 	@Test
@@ -166,6 +203,34 @@ public class McpSchemaTests {
 		assertThat(embeddedResource.resource().mimeType()).isEqualTo("application/octet-stream");
 		assertThat(((McpSchema.BlobResourceContents) embeddedResource.resource()).blob())
 			.isEqualTo("base64encodedblob");
+	}
+
+	@Test
+	void testResourceLink() throws Exception {
+		McpSchema.ResourceLink resourceLink = new McpSchema.ResourceLink("main.rs", "Main file",
+				"file:///project/src/main.rs", "Primary application entry point", "text/x-rust", null, null);
+		String value = mapper.writeValueAsString(resourceLink);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"type":"resource_link","name":"main.rs","title":"Main file","uri":"file:///project/src/main.rs","description":"Primary application entry point","mimeType":"text/x-rust"}"""));
+	}
+
+	@Test
+	void testResourceLinkDeserialization() throws Exception {
+		McpSchema.ResourceLink resourceLink = mapper.readValue(
+				"""
+						{"type":"resource_link","name":"main.rs","uri":"file:///project/src/main.rs","description":"Primary application entry point","mimeType":"text/x-rust"}""",
+				McpSchema.ResourceLink.class);
+		assertThat(resourceLink).isNotNull();
+		assertThat(resourceLink.type()).isEqualTo("resource_link");
+		assertThat(resourceLink.name()).isEqualTo("main.rs");
+		assertThat(resourceLink.uri()).isEqualTo("file:///project/src/main.rs");
+		assertThat(resourceLink.description()).isEqualTo("Primary application entry point");
+		assertThat(resourceLink.mimeType()).isEqualTo("text/x-rust");
 	}
 
 	// JSON-RPC Message Types Tests
@@ -354,7 +419,7 @@ public class McpSchemaTests {
 		McpSchema.Annotations annotations = new McpSchema.Annotations(Arrays.asList(McpSchema.Role.USER), 0.5);
 
 		McpSchema.ResourceTemplate template = new McpSchema.ResourceTemplate("resource://{param}/test", "Test Template",
-				"A test resource template", "text/plain", annotations);
+				"Test Template", "A test resource template", "text/plain", annotations);
 
 		String value = mapper.writeValueAsString(template);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -362,7 +427,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"uriTemplate":"resource://{param}/test","name":"Test Template","description":"A test resource template","mimeType":"text/plain","annotations":{"audience":["user"],"priority":0.5}}"""));
+							{"uriTemplate":"resource://{param}/test","name":"Test Template","title":"Test Template","description":"A test resource template","mimeType":"text/plain","annotations":{"audience":["user"],"priority":0.5}}"""));
 	}
 
 	@Test
@@ -388,10 +453,10 @@ public class McpSchemaTests {
 	@Test
 	void testListResourceTemplatesResult() throws Exception {
 		McpSchema.ResourceTemplate template1 = new McpSchema.ResourceTemplate("resource://{param}/test1",
-				"Test Template 1", "First test template", "text/plain", null);
+				"Test Template 1", "Test Template 1", "First test template", "text/plain", null);
 
 		McpSchema.ResourceTemplate template2 = new McpSchema.ResourceTemplate("resource://{param}/test2",
-				"Test Template 2", "Second test template", "application/json", null);
+				"Test Template 2", "Test Template 2", "Second test template", "application/json", null);
 
 		McpSchema.ListResourceTemplatesResult result = new McpSchema.ListResourceTemplatesResult(
 				Arrays.asList(template1, template2), "next-cursor");
@@ -402,7 +467,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"resourceTemplates":[{"uriTemplate":"resource://{param}/test1","name":"Test Template 1","description":"First test template","mimeType":"text/plain"},{"uriTemplate":"resource://{param}/test2","name":"Test Template 2","description":"Second test template","mimeType":"application/json"}],"nextCursor":"next-cursor"}"""));
+							{"resourceTemplates":[{"uriTemplate":"resource://{param}/test1","name":"Test Template 1","title":"Test Template 1","description":"First test template","mimeType":"text/plain"},{"uriTemplate":"resource://{param}/test2","name":"Test Template 2","title":"Test Template 2","description":"Second test template","mimeType":"application/json"}],"nextCursor":"next-cursor"}"""));
 	}
 
 	@Test
@@ -415,6 +480,36 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(json("""
 					{"uri":"resource://test"}"""));
+	}
+
+	@Test
+	void testReadResourceRequestWithMeta() throws Exception {
+		Map<String, Object> meta = new HashMap<>();
+		meta.put("progressToken", "read-resource-token-123");
+
+		McpSchema.ReadResourceRequest request = new McpSchema.ReadResourceRequest("resource://test", meta);
+
+		String value = mapper.writeValueAsString(request);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"uri":"resource://test","_meta":{"progressToken":"read-resource-token-123"}}"""));
+
+		// Test Request interface methods
+		assertThat(request.meta()).isEqualTo(meta);
+		assertThat(request.progressToken()).isEqualTo("read-resource-token-123");
+	}
+
+	@Test
+	void testReadResourceRequestDeserialization() throws Exception {
+		McpSchema.ReadResourceRequest request = mapper.readValue("""
+				{"uri":"resource://test","_meta":{"progressToken":"test-token"}}""",
+				McpSchema.ReadResourceRequest.class);
+
+		assertThat(request.uri()).isEqualTo("resource://test");
+		assertThat(request.meta()).containsEntry("progressToken", "test-token");
+		assertThat(request.progressToken()).isEqualTo("test-token");
 	}
 
 	@Test
@@ -440,11 +535,13 @@ public class McpSchemaTests {
 
 	@Test
 	void testPrompt() throws Exception {
-		McpSchema.PromptArgument arg1 = new McpSchema.PromptArgument("arg1", "First argument", true);
+		McpSchema.PromptArgument arg1 = new McpSchema.PromptArgument("arg1", "First argument", "First argument", true);
 
-		McpSchema.PromptArgument arg2 = new McpSchema.PromptArgument("arg2", "Second argument", false);
+		McpSchema.PromptArgument arg2 = new McpSchema.PromptArgument("arg2", "Second argument", "Second argument",
+				false);
 
-		McpSchema.Prompt prompt = new McpSchema.Prompt("test-prompt", "A test prompt", Arrays.asList(arg1, arg2));
+		McpSchema.Prompt prompt = new McpSchema.Prompt("test-prompt", "Test Prompt", "A test prompt",
+				Arrays.asList(arg1, arg2));
 
 		String value = mapper.writeValueAsString(prompt);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -452,7 +549,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"name":"test-prompt","description":"A test prompt","arguments":[{"name":"arg1","description":"First argument","required":true},{"name":"arg2","description":"Second argument","required":false}]}"""));
+							{"name":"test-prompt","title":"Test Prompt","description":"A test prompt","arguments":[{"name":"arg1","title":"First argument","description":"First argument","required":true},{"name":"arg2","title":"Second argument","description":"Second argument","required":false}]}"""));
 	}
 
 	@Test
@@ -471,11 +568,13 @@ public class McpSchemaTests {
 
 	@Test
 	void testListPromptsResult() throws Exception {
-		McpSchema.PromptArgument arg = new McpSchema.PromptArgument("arg", "An argument", true);
+		McpSchema.PromptArgument arg = new McpSchema.PromptArgument("arg", "Argument", "An argument", true);
 
-		McpSchema.Prompt prompt1 = new McpSchema.Prompt("prompt1", "First prompt", Collections.singletonList(arg));
+		McpSchema.Prompt prompt1 = new McpSchema.Prompt("prompt1", "First prompt", "First prompt",
+				Collections.singletonList(arg));
 
-		McpSchema.Prompt prompt2 = new McpSchema.Prompt("prompt2", "Second prompt", Collections.emptyList());
+		McpSchema.Prompt prompt2 = new McpSchema.Prompt("prompt2", "Second prompt", "Second prompt",
+				Collections.emptyList());
 
 		McpSchema.ListPromptsResult result = new McpSchema.ListPromptsResult(Arrays.asList(prompt1, prompt2),
 				"next-cursor");
@@ -486,7 +585,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"prompts":[{"name":"prompt1","description":"First prompt","arguments":[{"name":"arg","description":"An argument","required":true}]},{"name":"prompt2","description":"Second prompt","arguments":[]}],"nextCursor":"next-cursor"}"""));
+							{"prompts":[{"name":"prompt1","title":"First prompt","description":"First prompt","arguments":[{"name":"arg","title":"Argument","description":"An argument","required":true}]},{"name":"prompt2","title":"Second prompt","description":"Second prompt","arguments":[]}],"nextCursor":"next-cursor"}"""));
 	}
 
 	@Test
@@ -500,6 +599,30 @@ public class McpSchemaTests {
 		assertThat(mapper.readValue("""
 				{"name":"test-prompt","arguments":{"arg1":"value1","arg2":42}}""", McpSchema.GetPromptRequest.class))
 			.isEqualTo(request);
+	}
+
+	@Test
+	void testGetPromptRequestWithMeta() throws Exception {
+		Map<String, Object> arguments = new HashMap<>();
+		arguments.put("arg1", "value1");
+		arguments.put("arg2", 42);
+
+		Map<String, Object> meta = new HashMap<>();
+		meta.put("progressToken", "token123");
+
+		McpSchema.GetPromptRequest request = new McpSchema.GetPromptRequest("test-prompt", arguments, meta);
+
+		String value = mapper.writeValueAsString(request);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"name":"test-prompt","arguments":{"arg1":"value1","arg2":42},"_meta":{"progressToken":"token123"}}"""));
+
+		// Test that it implements Request interface methods
+		assertThat(request.meta()).isEqualTo(meta);
+		assertThat(request.progressToken()).isEqualTo("token123");
 	}
 
 	@Test
@@ -707,9 +830,234 @@ public class McpSchemaTests {
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
-			.isEqualTo(
-					json("""
-							{"name":"test-tool","description":"A test tool","inputSchema":{"type":"object","properties":{"name":{"type":"string"},"value":{"type":"number"}},"required":["name"]},"annotations":{"title":"A test tool","readOnlyHint":false,"destructiveHint":false,"idempotentHint":false,"openWorldHint":false,"returnDirect":false}}"""));
+			.isEqualTo(json("""
+					{
+						"name":"test-tool",
+						"description":"A test tool",
+						"inputSchema":{
+							"type":"object",
+							"properties":{
+								"name":{"type":"string"},
+								"value":{"type":"number"}
+							},
+							"required":["name"]
+						},
+						"annotations":{
+							"title":"A test tool",
+							"readOnlyHint":false,
+							"destructiveHint":false,
+							"idempotentHint":false,
+							"openWorldHint":false,
+							"returnDirect":false
+						}
+					}
+					"""));
+	}
+
+	@Test
+	void testToolWithOutputSchema() throws Exception {
+		String inputSchemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"name": {
+							"type": "string"
+						},
+						"value": {
+							"type": "number"
+						}
+					},
+					"required": ["name"]
+				}
+				""";
+
+		String outputSchemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"result": {
+							"type": "string"
+						},
+						"status": {
+							"type": "string",
+							"enum": ["success", "error"]
+						}
+					},
+					"required": ["result", "status"]
+				}
+				""";
+
+		McpSchema.Tool tool = new McpSchema.Tool("test-tool", "A test tool", inputSchemaJson, outputSchemaJson, null);
+
+		String value = mapper.writeValueAsString(tool);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{
+						"name":"test-tool",
+						"description":"A test tool",
+						"inputSchema":{
+							"type":"object",
+							"properties":{
+								"name":{"type":"string"},
+								"value":{"type":"number"}
+							},
+							"required":["name"]
+						},
+						"outputSchema":{
+							"type":"object",
+							"properties":{
+								"result":{"type":"string"},
+								"status":{
+									"type":"string",
+									"enum":["success","error"]
+								}
+							},
+							"required":["result","status"]
+						}
+					}
+					"""));
+	}
+
+	@Test
+	void testToolWithOutputSchemaAndAnnotations() throws Exception {
+		String inputSchemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"name": {
+							"type": "string"
+						}
+					},
+					"required": ["name"]
+				}
+				""";
+
+		String outputSchemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"result": {
+							"type": "string"
+						}
+					},
+					"required": ["result"]
+				}
+				""";
+
+		McpSchema.ToolAnnotations annotations = new McpSchema.ToolAnnotations("A test tool with output", true, false,
+				true, false, true);
+
+		McpSchema.Tool tool = new McpSchema.Tool("test-tool", "A test tool", inputSchemaJson, outputSchemaJson,
+				annotations);
+
+		String value = mapper.writeValueAsString(tool);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{
+						"name":"test-tool",
+						"description":"A test tool",
+						"inputSchema":{
+							"type":"object",
+							"properties":{
+								"name":{"type":"string"}
+							},
+							"required":["name"]
+						},
+						"outputSchema":{
+							"type":"object",
+							"properties":{
+								"result":{"type":"string"}
+							},
+							"required":["result"]
+						},
+						"annotations":{
+							"title":"A test tool with output",
+							"readOnlyHint":true,
+							"destructiveHint":false,
+							"idempotentHint":true,
+							"openWorldHint":false,
+							"returnDirect":true
+						}
+					}"""));
+	}
+
+	@Test
+	void testToolDeserialization() throws Exception {
+		String toolJson = """
+				{
+					"name": "test-tool",
+					"description": "A test tool",
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"name": {"type": "string"}
+						},
+						"required": ["name"]
+					},
+					"outputSchema": {
+						"type": "object",
+						"properties": {
+							"result": {"type": "string"}
+						},
+						"required": ["result"]
+					},
+					"annotations": {
+						"title": "Test Tool",
+						"readOnlyHint": true,
+						"destructiveHint": false,
+						"idempotentHint": true,
+						"openWorldHint": false,
+						"returnDirect": false
+					}
+				}
+				""";
+
+		McpSchema.Tool tool = mapper.readValue(toolJson, McpSchema.Tool.class);
+
+		assertThat(tool).isNotNull();
+		assertThat(tool.name()).isEqualTo("test-tool");
+		assertThat(tool.description()).isEqualTo("A test tool");
+		assertThat(tool.inputSchema()).isNotNull();
+		assertThat(tool.inputSchema().type()).isEqualTo("object");
+		assertThat(tool.outputSchema()).isNotNull();
+		assertThat(tool.outputSchema()).containsKey("type");
+		assertThat(tool.outputSchema().get("type")).isEqualTo("object");
+		assertThat(tool.annotations()).isNotNull();
+		assertThat(tool.annotations().title()).isEqualTo("Test Tool");
+		assertThat(tool.annotations().readOnlyHint()).isTrue();
+		assertThat(tool.annotations().idempotentHint()).isTrue();
+		assertThat(tool.annotations().destructiveHint()).isFalse();
+		assertThat(tool.annotations().returnDirect()).isFalse();
+	}
+
+	@Test
+	void testToolDeserializationWithoutOutputSchema() throws Exception {
+		String toolJson = """
+				{
+					"name": "test-tool",
+					"description": "A test tool",
+					"inputSchema": {
+						"type": "object",
+						"properties": {
+							"name": {"type": "string"}
+						},
+						"required": ["name"]
+					}
+				}
+				""";
+
+		McpSchema.Tool tool = mapper.readValue(toolJson, McpSchema.Tool.class);
+
+		assertThat(tool).isNotNull();
+		assertThat(tool.name()).isEqualTo("test-tool");
+		assertThat(tool.description()).isEqualTo("A test tool");
+		assertThat(tool.inputSchema()).isNotNull();
+		assertThat(tool.outputSchema()).isNull();
+		assertThat(tool.annotations()).isNull();
 	}
 
 	@Test
@@ -746,6 +1094,65 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(json("""
 					{"name":"test-tool","arguments":{"name":"test","value":42}}"""));
+	}
+
+	@Test
+	void testCallToolRequestWithMeta() throws Exception {
+
+		McpSchema.CallToolRequest request = McpSchema.CallToolRequest.builder()
+			.name("test-tool")
+			.arguments(Map.of("name", "test", "value", 42))
+			.progressToken("tool-progress-123")
+			.build();
+		String value = mapper.writeValueAsString(request);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"name":"test-tool","arguments":{"name":"test","value":42},"_meta":{"progressToken":"tool-progress-123"}}"""));
+
+		// Test that it implements Request interface methods
+		assertThat(request.meta()).isEqualTo(Map.of("progressToken", "tool-progress-123"));
+		assertThat(request.progressToken()).isEqualTo("tool-progress-123");
+	}
+
+	@Test
+	void testCallToolRequestBuilderWithJsonArguments() throws Exception {
+		Map<String, Object> meta = new HashMap<>();
+		meta.put("progressToken", "json-builder-789");
+
+		McpSchema.CallToolRequest request = McpSchema.CallToolRequest.builder().name("test-tool").arguments("""
+				{
+					"name": "test",
+					"value": 42
+				}
+				""").meta(meta).build();
+
+		String value = mapper.writeValueAsString(request);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"name":"test-tool","arguments":{"name":"test","value":42},"_meta":{"progressToken":"json-builder-789"}}"""));
+
+		// Test that it implements Request interface methods
+		assertThat(request.meta()).isEqualTo(meta);
+		assertThat(request.progressToken()).isEqualTo("json-builder-789");
+	}
+
+	@Test
+	void testCallToolRequestBuilderNameRequired() {
+		Map<String, Object> arguments = new HashMap<>();
+		arguments.put("name", "test");
+
+		McpSchema.CallToolRequest.Builder builder = McpSchema.CallToolRequest.builder().arguments(arguments);
+
+		assertThatThrownBy(builder::build).isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("name must not be empty");
 	}
 
 	@Test
@@ -964,6 +1371,141 @@ public class McpSchemaTests {
 					{"action":"accept","content":{"foo":"bar"}}"""));
 	}
 
+	@Test
+	void testElicitRequestWithMeta() throws Exception {
+		Map<String, Object> requestedSchema = Map.of("type", "object", "required", List.of("name"), "properties",
+				Map.of("name", Map.of("type", "string")));
+
+		Map<String, Object> meta = new HashMap<>();
+		meta.put("progressToken", "elicit-token-789");
+
+		McpSchema.ElicitRequest request = McpSchema.ElicitRequest.builder()
+			.message("Please provide your name")
+			.requestedSchema(requestedSchema)
+			.meta(meta)
+			.build();
+
+		String value = mapper.writeValueAsString(request);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.containsEntry("_meta", Map.of("progressToken", "elicit-token-789"));
+
+		// Test Request interface methods
+		assertThat(request.meta()).isEqualTo(meta);
+		assertThat(request.progressToken()).isEqualTo("elicit-token-789");
+	}
+
+	// Pagination Tests
+
+	@Test
+	void testPaginatedRequestNoArgs() throws Exception {
+		McpSchema.PaginatedRequest request = new McpSchema.PaginatedRequest();
+
+		String value = mapper.writeValueAsString(request);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{}"""));
+
+		// Test that it implements Request interface methods
+		assertThat(request.meta()).isNull();
+		assertThat(request.progressToken()).isNull();
+	}
+
+	@Test
+	void testPaginatedRequestWithCursor() throws Exception {
+		McpSchema.PaginatedRequest request = new McpSchema.PaginatedRequest("cursor123");
+
+		String value = mapper.writeValueAsString(request);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"cursor":"cursor123"}"""));
+
+		// Test that it implements Request interface methods
+		assertThat(request.meta()).isNull();
+		assertThat(request.progressToken()).isNull();
+	}
+
+	@Test
+	void testPaginatedRequestWithMeta() throws Exception {
+		Map<String, Object> meta = new HashMap<>();
+		meta.put("progressToken", "pagination-progress-456");
+
+		McpSchema.PaginatedRequest request = new McpSchema.PaginatedRequest("cursor123", meta);
+
+		String value = mapper.writeValueAsString(request);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"cursor":"cursor123","_meta":{"progressToken":"pagination-progress-456"}}"""));
+
+		// Test that it implements Request interface methods
+		assertThat(request.meta()).isEqualTo(meta);
+		assertThat(request.progressToken()).isEqualTo("pagination-progress-456");
+	}
+
+	@Test
+	void testPaginatedRequestDeserialization() throws Exception {
+		McpSchema.PaginatedRequest request = mapper.readValue("""
+				{"cursor":"test-cursor","_meta":{"progressToken":"test-token"}}""", McpSchema.PaginatedRequest.class);
+
+		assertThat(request.cursor()).isEqualTo("test-cursor");
+		assertThat(request.meta()).containsEntry("progressToken", "test-token");
+		assertThat(request.progressToken()).isEqualTo("test-token");
+	}
+
+	// Complete Request Tests
+
+	@Test
+	void testCompleteRequest() throws Exception {
+		McpSchema.PromptReference promptRef = new McpSchema.PromptReference("test-prompt");
+		McpSchema.CompleteRequest.CompleteArgument argument = new McpSchema.CompleteRequest.CompleteArgument("arg1",
+				"partial-value");
+
+		McpSchema.CompleteRequest request = new McpSchema.CompleteRequest(promptRef, argument);
+
+		String value = mapper.writeValueAsString(request);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"ref":{"type":"ref/prompt","name":"test-prompt"},"argument":{"name":"arg1","value":"partial-value"}}"""));
+
+		// Test that it implements Request interface methods
+		assertThat(request.meta()).isNull();
+		assertThat(request.progressToken()).isNull();
+	}
+
+	@Test
+	void testCompleteRequestWithMeta() throws Exception {
+		McpSchema.ResourceReference resourceRef = new McpSchema.ResourceReference("file:///test.txt");
+		McpSchema.CompleteRequest.CompleteArgument argument = new McpSchema.CompleteRequest.CompleteArgument("path",
+				"/partial/path");
+
+		Map<String, Object> meta = new HashMap<>();
+		meta.put("progressToken", "complete-progress-789");
+
+		McpSchema.CompleteRequest request = new McpSchema.CompleteRequest(resourceRef, argument, meta, null);
+
+		String value = mapper.writeValueAsString(request);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"ref":{"type":"ref/resource","uri":"file:///test.txt"},"argument":{"name":"path","value":"/partial/path"},"_meta":{"progressToken":"complete-progress-789"}}"""));
+
+		// Test that it implements Request interface methods
+		assertThat(request.meta()).isEqualTo(meta);
+		assertThat(request.progressToken()).isEqualTo("complete-progress-789");
+	}
+
 	// Roots Tests
 
 	@Test
@@ -984,7 +1526,7 @@ public class McpSchemaTests {
 
 		McpSchema.Root root2 = new McpSchema.Root("file:///path/to/root2", "Second Root");
 
-		McpSchema.ListRootsResult result = new McpSchema.ListRootsResult(Arrays.asList(root1, root2));
+		McpSchema.ListRootsResult result = new McpSchema.ListRootsResult(Arrays.asList(root1, root2), "next-cursor");
 
 		String value = mapper.writeValueAsString(result);
 
@@ -993,8 +1535,49 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"roots":[{"uri":"file:///path/to/root1","name":"First Root"},{"uri":"file:///path/to/root2","name":"Second Root"}]}"""));
+							{"roots":[{"uri":"file:///path/to/root1","name":"First Root"},{"uri":"file:///path/to/root2","name":"Second Root"}],"nextCursor":"next-cursor"}"""));
 
+	}
+
+	// Progress Notification Tests
+
+	@Test
+	void testProgressNotificationWithMessage() throws Exception {
+		McpSchema.ProgressNotification notification = new McpSchema.ProgressNotification("progress-token-123", 0.5, 1.0,
+				"Processing file 1 of 2");
+
+		String value = mapper.writeValueAsString(notification);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(
+					json("""
+							{"progressToken":"progress-token-123","progress":0.5,"total":1.0,"message":"Processing file 1 of 2"}"""));
+	}
+
+	@Test
+	void testProgressNotificationDeserialization() throws Exception {
+		McpSchema.ProgressNotification notification = mapper.readValue("""
+				{"progressToken":"token-456","progress":0.75,"total":1.0,"message":"Almost done"}""",
+				McpSchema.ProgressNotification.class);
+
+		assertThat(notification.progressToken()).isEqualTo("token-456");
+		assertThat(notification.progress()).isEqualTo(0.75);
+		assertThat(notification.total()).isEqualTo(1.0);
+		assertThat(notification.message()).isEqualTo("Almost done");
+	}
+
+	@Test
+	void testProgressNotificationWithoutMessage() throws Exception {
+		McpSchema.ProgressNotification notification = new McpSchema.ProgressNotification("progress-token-789", 0.25,
+				null, null);
+
+		String value = mapper.writeValueAsString(notification);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{"progressToken":"progress-token-789","progress":0.25}"""));
 	}
 
 }

@@ -251,8 +251,8 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Create a mock prompts list that the server will return
-		McpSchema.Prompt mockPrompt = new McpSchema.Prompt("test-prompt", "Test Prompt Description",
-				List.of(new McpSchema.PromptArgument("arg1", "Test argument", true)));
+		McpSchema.Prompt mockPrompt = new McpSchema.Prompt("test-prompt", "Test Prompt", "Test Prompt Description",
+				List.of(new McpSchema.PromptArgument("arg1", "Test argument", "Test argument", true)));
 		McpSchema.ListPromptsResult mockPromptsResult = new McpSchema.ListPromptsResult(List.of(mockPrompt), null);
 
 		// Simulate server sending prompts/list_changed notification
@@ -523,6 +523,32 @@ class McpAsyncClientResponseHandlerTests {
 			.capabilities(ClientCapabilities.builder().elicitation().build())
 			.build()).isInstanceOf(McpError.class)
 			.hasMessage("Elicitation handler must not be null when client capabilities include elicitation");
+	}
+
+	@Test
+	void testPingMessageRequestHandling() {
+		MockMcpClientTransport transport = initializationEnabledTransport();
+
+		McpAsyncClient asyncMcpClient = McpClient.async(transport).build();
+
+		assertThat(asyncMcpClient.initialize().block()).isNotNull();
+
+		// Simulate incoming ping request from server
+		McpSchema.JSONRPCRequest pingRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
+				McpSchema.METHOD_PING, "ping-id", null);
+		transport.simulateIncomingMessage(pingRequest);
+
+		// Verify response
+		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
+		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
+
+		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
+		assertThat(response.id()).isEqualTo("ping-id");
+		assertThat(response.error()).isNull();
+		assertThat(response.result()).isInstanceOf(Map.class);
+		assertThat(((Map<?, ?>) response.result())).isEmpty();
+
+		asyncMcpClient.closeGracefully();
 	}
 
 }
