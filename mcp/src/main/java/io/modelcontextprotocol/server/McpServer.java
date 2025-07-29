@@ -15,6 +15,8 @@ import java.util.function.BiFunction;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.modelcontextprotocol.event.AsyncEventStore;
+import io.modelcontextprotocol.event.SyncEventStore;
 import io.modelcontextprotocol.spec.DefaultJsonSchemaValidator;
 import io.modelcontextprotocol.spec.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -224,8 +226,15 @@ public interface McpServer {
 
 		private final McpStreamableServerTransportProvider transportProvider;
 
+		private AsyncEventStore eventStore;
+
 		public StreamableServerAsyncSpecification(McpStreamableServerTransportProvider transportProvider) {
 			this.transportProvider = transportProvider;
+		}
+
+		public AsyncSpecification<StreamableServerAsyncSpecification> eventStore(AsyncEventStore eventStore) {
+			this.eventStore = eventStore;
+			return this;
 		}
 
 		/**
@@ -242,7 +251,7 @@ public interface McpServer {
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
 					: new DefaultJsonSchemaValidator(mapper);
 			return new McpAsyncServer(this.transportProvider, mapper, features, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator);
+					this.uriTemplateManagerFactory, jsonSchemaValidator, this.eventStore);
 		}
 
 	}
@@ -813,9 +822,16 @@ public interface McpServer {
 
 		private final McpStreamableServerTransportProvider transportProvider;
 
+		private SyncEventStore eventStore;
+
 		private StreamableSyncSpecification(McpStreamableServerTransportProvider transportProvider) {
 			Assert.notNull(transportProvider, "Transport provider must not be null");
 			this.transportProvider = transportProvider;
+		}
+
+		public StreamableSyncSpecification eventStore(SyncEventStore eventStore) {
+			this.eventStore = eventStore;
+			return this;
 		}
 
 		/**
@@ -835,7 +851,7 @@ public interface McpServer {
 					: new DefaultJsonSchemaValidator(mapper);
 
 			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator);
+					this.uriTemplateManagerFactory, jsonSchemaValidator, AsyncEventStore.from(eventStore));
 
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}

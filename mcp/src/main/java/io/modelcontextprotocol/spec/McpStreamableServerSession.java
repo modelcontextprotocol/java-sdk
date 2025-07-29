@@ -1,6 +1,9 @@
 package io.modelcontextprotocol.spec;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+
+import io.modelcontextprotocol.event.AsyncEventStore;
+import io.modelcontextprotocol.event.EventMessage;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpNotificationHandler;
 import io.modelcontextprotocol.server.McpRequestHandler;
@@ -54,10 +57,19 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	private volatile McpSchema.LoggingLevel minLoggingLevel = McpSchema.LoggingLevel.INFO;
 
+	private final AsyncEventStore eventStore;
+
 	public McpStreamableServerSession(String id, McpSchema.ClientCapabilities clientCapabilities,
 			McpSchema.Implementation clientInfo, Duration requestTimeout,
 			Map<String, McpRequestHandler<?>> requestHandlers,
 			Map<String, McpNotificationHandler> notificationHandlers) {
+		this(id, clientCapabilities, clientInfo, requestTimeout, requestHandlers, notificationHandlers, null);
+	}
+
+	public McpStreamableServerSession(String id, McpSchema.ClientCapabilities clientCapabilities,
+			McpSchema.Implementation clientInfo, Duration requestTimeout,
+			Map<String, McpRequestHandler<?>> requestHandlers, Map<String, McpNotificationHandler> notificationHandlers,
+			AsyncEventStore eventStore) {
 		this.id = id;
 		this.missingMcpTransportSession = new MissingMcpTransportSession(id);
 		this.listeningStreamRef = new AtomicReference<>(this.missingMcpTransportSession);
@@ -66,6 +78,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		this.requestTimeout = requestTimeout;
 		this.requestHandlers = requestHandlers;
 		this.notificationHandlers = notificationHandlers;
+		this.eventStore = eventStore;
 	}
 
 	@Override
@@ -117,8 +130,27 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	// TODO: keep track of history by keeping a map from eventId to stream and then
 	// iterate over the events using the lastEventId
+	/**
+	 * Replays events that occurred after the specified event ID.
+	 * @param lastEventId the ID of the last event the client received
+	 * @return a Flux of JSON-RPC messages to replay to the client
+	 */
 	public Flux<McpSchema.JSONRPCMessage> replay(Object lastEventId) {
-		return Flux.empty();
+		if (this.eventStore == null || lastEventId == null) {
+			return Flux.empty();
+		}
+
+		return Flux.create(sink -> {
+			this.eventStore.replayEventsAfter((String) lastEventId, message -> {
+				sink.next(message.message());
+				return Mono.empty();
+			}).subscribe(streamId -> {
+				sink.complete();
+			}, error -> {
+				logger.error("Error during event replay", error);
+				sink.error(error);
+			});
+		});
 	}
 
 	public Mono<Void> responseStream(McpSchema.JSONRPCRequest jsonrpcRequest, McpStreamableServerTransport transport) {
@@ -143,13 +175,23 @@ public class McpStreamableServerSession implements McpLoggableSession {
 						transportContext), jsonrpcRequest.params())
 				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), result,
 						null))
+				.flatMap(response -> {
+					// Store the event in the event store reactively
+					return (this.eventStore != null)
+							? this.eventStore.storeEvent(this.id, response)
+								.map(eventId -> new EventMessage(response, eventId))
+							: Mono.just(new EventMessage(response, null));
+				})
 				.onErrorResume(e -> {
 					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(),
 							null, new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 									e.getMessage(), null));
-					return Mono.just(errorResponse);
+					return Mono.just(new EventMessage(errorResponse, null));
 				})
-				.flatMap(transport::sendMessage)
+				.flatMap(eventMessage -> {
+					return transport.sendMessage(eventMessage.message(), eventMessage.eventId())
+						.doOnError(error -> logger.error("Failed to send response message", error));
+				})
 				.then(transport.closeGracefully());
 		});
 	}

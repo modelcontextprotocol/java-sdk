@@ -5,15 +5,14 @@ package io.modelcontextprotocol;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpClient;
-import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.client.transport.WebClientStreamableHttpTransport;
-import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
+import io.modelcontextprotocol.event.InMemoryAsyncEventStore;
 import io.modelcontextprotocol.server.McpServer;
+import io.modelcontextprotocol.server.McpServer.StreamableServerAsyncSpecification;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.server.TestUtil;
-import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvider;
 import io.modelcontextprotocol.server.transport.WebFluxStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -1488,6 +1487,66 @@ class WebFluxStreamableIntegrationTests {
 			case "5 + 3" -> 8.0;
 			default -> 0.0;
 		};
+	}
+
+	// ---------------------------------------
+	// AsyncEventStore Integration Tests
+	// ---------------------------------------
+
+	// TODO: Add tests for AsyncEventStore integration with tools and event storage
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	// @ValueSource(strings = { "httpclient", "webflux" })
+	@ValueSource(strings = { "httpclient" })
+	void testAsyncEventStoreBasicEventStorage(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Create a simple tool that generates responses
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(Tool.builder()
+				.name("event-test")
+				.description("Test event storage")
+				.inputSchema(emptyJsonSchema)
+				.build())
+			.callHandler((exchange, request) -> {
+				String message = request.arguments() != null
+						? (String) request.arguments().getOrDefault("message", "default message") : "default message";
+				return Mono.just(new CallToolResult(List.of(new McpSchema.TextContent("Response: " + message)), null));
+			})
+			.build();
+
+		// Create server - event store integration would be configured here
+		StreamableServerAsyncSpecification serverBuilder = (StreamableServerAsyncSpecification) McpServer
+			.async(mcpStreamableServerTransportProvider);
+		var mcpServer = serverBuilder.eventStore(new InMemoryAsyncEventStore())
+			.serverInfo("test-server", "1.0.0")
+			.tools(tool)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Call tool multiple times to generate events that would be stored
+			CallToolResult response1 = mcpClient
+				.callTool(new McpSchema.CallToolRequest("event-test", Map.of("message", "first")));
+			assertThat(response1).isNotNull();
+			assertThat(response1.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
+			assertThat(((McpSchema.TextContent) response1.content().get(0)).text()).isEqualTo("Response: first");
+
+			CallToolResult response2 = mcpClient
+				.callTool(new McpSchema.CallToolRequest("event-test", Map.of("message", "second")));
+			assertThat(response2).isNotNull();
+			assertThat(response2.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
+			assertThat(((McpSchema.TextContent) response2.content().get(0)).text()).isEqualTo("Response: second");
+
+			CallToolResult response3 = mcpClient
+				.callTool(new McpSchema.CallToolRequest("event-test", Map.of("message", "third")));
+			assertThat(response3).isNotNull();
+			assertThat(response3.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
+			assertThat(((McpSchema.TextContent) response3.content().get(0)).text()).isEqualTo("Response: third");
+		}
+
+		mcpServer.close();
 	}
 
 }
