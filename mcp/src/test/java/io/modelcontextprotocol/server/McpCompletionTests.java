@@ -41,6 +41,8 @@ class McpCompletionTests {
 
 	private HttpServletSseServerTransportProvider mcpServerTransportProvider;
 
+	private static final int PORT = TomcatTestUtil.findAvailablePort();
+
 	private static final String CUSTOM_MESSAGE_ENDPOINT = "/otherPath/mcp/message";
 
 	McpClient.SyncSpec clientBuilder;
@@ -55,7 +57,7 @@ class McpCompletionTests {
 			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
 			.build();
 
-		tomcat = TomcatTestUtil.createTomcatServer("", 3400, mcpServerTransportProvider);
+		tomcat = TomcatTestUtil.createTomcatServer("", PORT, mcpServerTransportProvider);
 		try {
 			tomcat.start();
 			assertThat(tomcat.getServer().getState()).isEqualTo(LifecycleState.STARTED);
@@ -64,7 +66,7 @@ class McpCompletionTests {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		this.clientBuilder = McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + 3400).build());
+		this.clientBuilder = McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT).build());
 	}
 
 	@AfterEach
