@@ -188,6 +188,12 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
 
+		List<MediaType> acceptHeaders = request.headers().asHttpHeaders().getAccept();
+		if (!(acceptHeaders.contains(MediaType.APPLICATION_JSON)
+				&& acceptHeaders.contains(MediaType.TEXT_EVENT_STREAM))) {
+			return ServerResponse.badRequest().build();
+		}
+
 		return request.bodyToMono(String.class).<ServerResponse>flatMap(body -> {
 			try {
 				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
