@@ -108,6 +108,11 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	private volatile boolean isClosing = false;
 
 	/**
+	 * DNS rebinding protection configuration.
+	 */
+	private final DnsRebindingProtection dnsRebindingProtection;
+
+	/**
 	 * Constructs a new WebMvcSseServerTransportProvider instance with the default SSE
 	 * endpoint.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
@@ -115,8 +120,10 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
 	 * messages via HTTP POST. This endpoint will be communicated to clients through the
 	 * SSE connection's initial endpoint event.
+	 * @deprecated Use {@link #builder()} instead.
 	 * @throws IllegalArgumentException if either objectMapper or messageEndpoint is null
 	 */
+	@Deprecated
 	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint) {
 		this(objectMapper, messageEndpoint, DEFAULT_SSE_ENDPOINT);
 	}
@@ -129,10 +136,12 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * messages via HTTP POST. This endpoint will be communicated to clients through the
 	 * SSE connection's initial endpoint event.
 	 * @param sseEndpoint The endpoint URI where clients establish their SSE connections.
+	 * @deprecated Use {@link #builder()} instead.
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
+	@Deprecated
 	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
-		this(objectMapper, "", messageEndpoint, sseEndpoint);
+		this(objectMapper, "", messageEndpoint, sseEndpoint, null);
 	}
 
 	/**
@@ -145,10 +154,32 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * messages via HTTP POST. This endpoint will be communicated to clients through the
 	 * SSE connection's initial endpoint event.
 	 * @param sseEndpoint The endpoint URI where clients establish their SSE connections.
+	 * @deprecated Use {@link #builder()} instead.
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
+	@Deprecated
 	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint) {
+		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, null);
+	}
+
+	/**
+	 * Constructs a new WebMvcSseServerTransportProvider instance with DNS rebinding
+	 * protection.
+	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
+	 * of messages.
+	 * @param baseUrl The base URL for the message endpoint, used to construct the full
+	 * endpoint URL for clients.
+	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
+	 * messages via HTTP POST. This endpoint will be communicated to clients through the
+	 * SSE connection's initial endpoint event.
+	 * @param sseEndpoint The endpoint URI where clients establish their SSE connections.
+	 * @param dnsRebindingProtection The DNS rebinding protection configuration (may be
+	 * null).
+	 * @throws IllegalArgumentException if any required parameter is null
+	 */
+	private WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+			String sseEndpoint, DnsRebindingProtection dnsRebindingProtection) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(baseUrl, "Message base URL must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
@@ -158,6 +189,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
+		this.dnsRebindingProtection = dnsRebindingProtection;
 		this.routerFunction = RouterFunctions.route()
 			.GET(this.sseEndpoint, this::handleSseConnection)
 			.POST(this.messageEndpoint, this::handleMessage)
@@ -247,6 +279,12 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
+		// Validate headers
+		ServerResponse validationError = validateDnsRebindingProtection(request);
+		if (validationError != null) {
+			return validationError;
+		}
+
 		String sessionId = UUID.randomUUID().toString();
 		logger.debug("Creating new SSE connection for session: {}", sessionId);
 
@@ -298,6 +336,19 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	private ServerResponse handleMessage(ServerRequest request) {
 		if (this.isClosing) {
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
+		}
+
+		// Always validate Content-Type for POST requests
+		String contentType = request.headers().asHttpHeaders().getFirst("Content-Type");
+		if (contentType == null || !contentType.toLowerCase().startsWith("application/json")) {
+			logger.warn("Invalid Content-Type header: '{}'", contentType);
+			return ServerResponse.badRequest().body(new McpError("Content-Type must be application/json"));
+		}
+
+		// Validate headers for POST requests if DNS rebinding protection is configured
+		ServerResponse validationError = validateDnsRebindingProtection(request);
+		if (validationError != null) {
+			return validationError;
 		}
 
 		if (request.param("sessionId").isEmpty()) {
@@ -433,6 +484,25 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			}
 		}
 
+	}
+
+	/**
+	 * Validates DNS rebinding protection for the given request.
+	 * @param request The incoming server request
+	 * @return A ServerResponse with forbidden status if validation fails, or null if
+	 * validation passes
+	 */
+	private ServerResponse validateDnsRebindingProtection(ServerRequest request) {
+		if (dnsRebindingProtection != null) {
+			String hostHeader = request.headers().asHttpHeaders().getFirst("Host");
+			String originHeader = request.headers().asHttpHeaders().getFirst("Origin");
+			if (!dnsRebindingProtection.isValid(hostHeader, originHeader)) {
+				logger.warn("DNS rebinding protection validation failed - Host: '{}', Origin: '{}'", hostHeader,
+						originHeader);
+				return ServerResponse.status(HttpStatus.FORBIDDEN).body("DNS rebinding protection validation failed");
+			}
+		}
+		return null;
 	}
 
 }
