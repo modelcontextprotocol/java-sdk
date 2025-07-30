@@ -30,7 +30,10 @@ class WebFluxStreamableMcpSyncServerTests extends AbstractMcpSyncServerTests {
 	private DisposableServer httpServer;
 
 	private McpStreamableServerTransportProvider createMcpTransportProvider() {
-		var transportProvider = new WebFluxStreamableServerTransportProvider(new ObjectMapper(), MESSAGE_ENDPOINT);
+		var transportProvider = WebFluxStreamableServerTransportProvider.builder()
+			.objectMapper(new ObjectMapper())
+			.messageEndpoint(MESSAGE_ENDPOINT)
+			.build();
 
 		HttpHandler httpHandler = RouterFunctions.toHttpHandler(transportProvider.getRouterFunction());
 		ReactorHttpHandlerAdapter adapter = new ReactorHttpHandlerAdapter(httpHandler);

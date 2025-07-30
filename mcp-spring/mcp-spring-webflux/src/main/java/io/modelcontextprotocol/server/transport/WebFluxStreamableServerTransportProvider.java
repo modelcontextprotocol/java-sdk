@@ -2,13 +2,15 @@ package io.modelcontextprotocol.server.transport;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.DefaultMcpTransportContext;
+import io.modelcontextprotocol.server.DefaultMcpTransportContext;
+import io.modelcontextprotocol.server.McpTransportContextExtractor;
+import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpStreamableServerSession;
 import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
-import io.modelcontextprotocol.spec.McpTransportContext;
+import io.modelcontextprotocol.server.McpTransportContext;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,20 +28,21 @@ import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
 
+/**
+ * Implementation of a WebFlux based {@link McpStreamableServerTransportProvider}.
+ *
+ * @author Dariusz Jędrzejczyk
+ */
 public class WebFluxStreamableServerTransportProvider implements McpStreamableServerTransportProvider {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebFluxStreamableServerTransportProvider.class);
 
 	public static final String MESSAGE_EVENT_TYPE = "message";
 
-	public static final String DEFAULT_BASE_URL = "";
-
 	private final ObjectMapper objectMapper;
-
-	private final String baseUrl;
 
 	private final String mcpEndpoint;
 
@@ -51,47 +54,19 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 	private final ConcurrentHashMap<String, McpStreamableServerSession> sessions = new ConcurrentHashMap<>();
 
-	// TODO: add means to specify this
-	private Function<ServerRequest, McpTransportContext> contextExtractor = req -> new DefaultMcpTransportContext();
+	private McpTransportContextExtractor<ServerRequest> contextExtractor;
 
-	/**
-	 * Flag indicating if the transport is shutting down.
-	 */
 	private volatile boolean isClosing = false;
 
-	/**
-	 * Constructs a new WebFlux SSE server transport provider instance with the default
-	 * SSE endpoint.
-	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
-	 * of MCP messages. Must not be null.
-	 * @param mcpEndpoint The endpoint URI where clients should send their JSON-RPC
-	 * messages. This endpoint will be communicated to clients during SSE connection
-	 * setup. Must not be null.
-	 * @throws IllegalArgumentException if either parameter is null
-	 */
-	public WebFluxStreamableServerTransportProvider(ObjectMapper objectMapper, String mcpEndpoint) {
-		this(objectMapper, DEFAULT_BASE_URL, mcpEndpoint, false);
-	}
-
-	/**
-	 * Constructs a new WebFlux SSE server transport provider instance.
-	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
-	 * of MCP messages. Must not be null.
-	 * @param baseUrl webflux message base path
-	 * @param mcpEndpoint The endpoint URI where clients should send their JSON-RPC
-	 * messages. This endpoint will be communicated to clients during SSE connection
-	 * setup. Must not be null.
-	 * @throws IllegalArgumentException if either parameter is null
-	 */
-	public WebFluxStreamableServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String mcpEndpoint,
-			boolean disallowDelete) {
+	private WebFluxStreamableServerTransportProvider(ObjectMapper objectMapper, String mcpEndpoint,
+			McpTransportContextExtractor<ServerRequest> contextExtractor, boolean disallowDelete) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
-		Assert.notNull(baseUrl, "Message base path must not be null");
 		Assert.notNull(mcpEndpoint, "Message endpoint must not be null");
+		Assert.notNull(contextExtractor, "Context extractor must not be null");
 
 		this.objectMapper = objectMapper;
-		this.baseUrl = baseUrl;
 		this.mcpEndpoint = mcpEndpoint;
+		this.contextExtractor = contextExtractor;
 		this.disallowDelete = disallowDelete;
 		this.routerFunction = RouterFunctions.route()
 			.GET(this.mcpEndpoint, this::handleGet)
@@ -105,24 +80,6 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		this.sessionFactory = sessionFactory;
 	}
 
-	/**
-	 * Broadcasts a JSON-RPC message to all connected clients through their SSE
-	 * connections. The message is serialized to JSON and sent as a server-sent event to
-	 * each active session.
-	 *
-	 * <p>
-	 * The method:
-	 * <ul>
-	 * <li>Serializes the message to JSON</li>
-	 * <li>Creates a server-sent event with the message data</li>
-	 * <li>Attempts to send the event to all active sessions</li>
-	 * <li>Tracks and reports any delivery failures</li>
-	 * </ul>
-	 * @param method The JSON-RPC method to send to clients
-	 * @param params The method parameters to send to clients
-	 * @return A Mono that completes when the message has been sent to all sessions, or
-	 * errors if any session fails to receive the message
-	 */
 	@Override
 	public Mono<Void> notifyClients(String method, Object params) {
 		if (sessions.isEmpty()) {
@@ -140,29 +97,15 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 			.then();
 	}
 
-	// FIXME: This javadoc makes claims about using isClosing flag but it's not
-	// actually
-	// doing that.
-	/**
-	 * Initiates a graceful shutdown of all the sessions. This method ensures all active
-	 * sessions are properly closed and cleaned up.
-	 *
-	 * <p>
-	 * The shutdown process:
-	 * <ul>
-	 * <li>Marks the transport as closing to prevent new connections</li>
-	 * <li>Closes each active session</li>
-	 * <li>Removes closed sessions from the sessions map</li>
-	 * <li>Times out after 5 seconds if shutdown takes too long</li>
-	 * </ul>
-	 * @return A Mono that completes when all sessions have been closed
-	 */
 	@Override
 	public Mono<Void> closeGracefully() {
-		return Flux.fromIterable(sessions.values())
-			.doFirst(() -> logger.debug("Initiating graceful shutdown with {} active sessions", sessions.size()))
-			.flatMap(McpStreamableServerSession::closeGracefully)
-			.then();
+		return Mono.defer(() -> {
+			this.isClosing = true;
+			return Flux.fromIterable(sessions.values())
+				.doFirst(() -> logger.debug("Initiating graceful shutdown with {} active sessions", sessions.size()))
+				.flatMap(McpStreamableServerSession::closeGracefully)
+				.then();
+		});
 	}
 
 	/**
@@ -170,10 +113,11 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 	 * This router function should be integrated into the application's web configuration.
 	 *
 	 * <p>
-	 * The router function defines two endpoints:
+	 * The router function defines one endpoint with three methods:
 	 * <ul>
-	 * <li>GET {sseEndpoint} - For establishing SSE connections</li>
+	 * <li>GET {messageEndpoint} - For the client listening SSE stream</li>
 	 * <li>POST {messageEndpoint} - For receiving client messages</li>
+	 * <li>DELETE {messageEndpoint} - For removing sessions</li>
 	 * </ul>
 	 * @return The configured {@link RouterFunction} for handling HTTP requests
 	 */
@@ -182,8 +126,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 	}
 
 	/**
-	 * Handles new SSE connection requests from clients. Creates a new session for each
-	 * connection and sets up the SSE event stream.
+	 * Opens the listening SSE streams for clients.
 	 * @param request The incoming server request
 	 * @return A Mono which emits a response with the SSE event stream
 	 */
@@ -192,15 +135,20 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.apply(request);
+		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
 
 		return Mono.defer(() -> {
-			if (!request.headers().asHttpHeaders().containsKey("mcp-session-id")) {
+			List<MediaType> acceptHeaders = request.headers().asHttpHeaders().getAccept();
+			if (!acceptHeaders.contains(MediaType.TEXT_EVENT_STREAM)) {
+				return ServerResponse.badRequest().build();
+			}
+
+			if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
 				return ServerResponse.badRequest().build(); // TODO: say we need a session
 															// id
 			}
 
-			String sessionId = request.headers().asHttpHeaders().getFirst("mcp-session-id");
+			String sessionId = request.headers().asHttpHeaders().getFirst(HttpHeaders.MCP_SESSION_ID);
 
 			McpStreamableServerSession session = this.sessions.get(sessionId);
 
@@ -208,8 +156,8 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 				return ServerResponse.notFound().build();
 			}
 
-			if (request.headers().asHttpHeaders().containsKey("mcp-last-id")) {
-				String lastId = request.headers().asHttpHeaders().getFirst("mcp-last-id");
+			if (request.headers().asHttpHeaders().containsKey(HttpHeaders.LAST_EVENT_ID)) {
+				String lastId = request.headers().asHttpHeaders().getFirst(HttpHeaders.LAST_EVENT_ID);
 				return ServerResponse.ok()
 					.contentType(MediaType.TEXT_EVENT_STREAM)
 					.body(session.replay(lastId), ServerSentEvent.class);
@@ -229,26 +177,16 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 	}
 
 	/**
-	 * Handles incoming JSON-RPC messages from clients. Deserializes the message and
-	 * processes it through the configured message handler.
-	 *
-	 * <p>
-	 * The handler:
-	 * <ul>
-	 * <li>Deserializes the incoming JSON-RPC message</li>
-	 * <li>Passes it through the message handler chain</li>
-	 * <li>Returns appropriate HTTP responses based on processing results</li>
-	 * <li>Handles various error conditions with appropriate error responses</li>
-	 * </ul>
+	 * Handles incoming JSON-RPC messages from clients.
 	 * @param request The incoming server request containing the JSON-RPC message
-	 * @return A Mono emitting the response indicating the message processing result
+	 * @return A Mono with the response appropriate to a particular Streamable HTTP flow.
 	 */
 	private Mono<ServerResponse> handlePost(ServerRequest request) {
 		if (isClosing) {
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.apply(request);
+		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
 
 		return request.bodyToMono(String.class).<ServerResponse>flatMap(body -> {
 			try {
@@ -274,15 +212,15 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 					})
 						.flatMap(initResult -> ServerResponse.ok()
 							.contentType(MediaType.APPLICATION_JSON)
-							.header("mcp-session-id", init.session().getId())
+							.header(HttpHeaders.MCP_SESSION_ID, init.session().getId())
 							.bodyValue(initResult));
 				}
 
-				if (!request.headers().asHttpHeaders().containsKey("mcp-session-id")) {
+				if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
 					return ServerResponse.badRequest().bodyValue(new McpError("Session ID missing"));
 				}
 
-				String sessionId = request.headers().asHttpHeaders().getFirst("mcp-session-id");
+				String sessionId = request.headers().asHttpHeaders().getFirst(HttpHeaders.MCP_SESSION_ID);
 				McpStreamableServerSession session = sessions.get(sessionId);
 
 				if (session == null) {
@@ -302,15 +240,15 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 						.body(Flux.<ServerSentEvent<?>>create(sink -> {
 							WebFluxStreamableMcpSessionTransport st = new WebFluxStreamableMcpSessionTransport(sink);
 							Mono<Void> stream = session.responseStream(jsonrpcRequest, st);
-							Disposable streamSubscription = stream.doOnError(err -> sink.error(err))
-								.contextWrite(sink.contextView())
-								.subscribe();
+							Disposable streamSubscription = stream.onErrorComplete(err -> {
+								sink.error(err);
+								return true;
+							}).contextWrite(sink.contextView()).subscribe();
 							sink.onCancel(streamSubscription);
 						}), ServerSentEvent.class);
 				}
 				else {
-					return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
-						.bodyValue(new McpError("Unknown message type"));
+					return ServerResponse.badRequest().bodyValue(new McpError("Unknown message type"));
 				}
 			}
 			catch (IllegalArgumentException | IOException e) {
@@ -327,20 +265,19 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.apply(request);
+		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
 
 		return Mono.defer(() -> {
-			if (!request.headers().asHttpHeaders().containsKey("mcp-session-id")) {
+			if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
 				return ServerResponse.badRequest().build(); // TODO: say we need a session
-				// id
+															// id
 			}
 
-			// TODO: The user can configure whether deletions are permitted
 			if (this.disallowDelete) {
 				return ServerResponse.status(HttpStatus.METHOD_NOT_ALLOWED).build();
 			}
 
-			String sessionId = request.headers().asHttpHeaders().getFirst("mcp-session-id");
+			String sessionId = request.headers().asHttpHeaders().getFirst(HttpHeaders.MCP_SESSION_ID);
 
 			McpStreamableServerSession session = this.sessions.get(sessionId);
 
@@ -413,15 +350,21 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 	 * Builder for creating instances of {@link WebFluxStreamableServerTransportProvider}.
 	 * <p>
 	 * This builder provides a fluent API for configuring and creating instances of
-	 * WebFluxSseServerTransportProvider with custom settings.
+	 * WebFluxStreamableServerTransportProvider with custom settings.
 	 */
 	public static class Builder {
 
 		private ObjectMapper objectMapper;
 
-		private String baseUrl = DEFAULT_BASE_URL;
-
 		private String mcpEndpoint = "/mcp";
+
+		private McpTransportContextExtractor<ServerRequest> contextExtractor = (serverRequest, context) -> context;
+
+		private boolean disallowDelete;
+
+		private Builder() {
+			// used by a static method
+		}
 
 		/**
 		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
@@ -433,19 +376,6 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		public Builder objectMapper(ObjectMapper objectMapper) {
 			Assert.notNull(objectMapper, "ObjectMapper must not be null");
 			this.objectMapper = objectMapper;
-			return this;
-		}
-
-		/**
-		 * Sets the project basePath as endpoint prefix where clients should send their
-		 * JSON-RPC messages
-		 * @param baseUrl the message basePath . Must not be null.
-		 * @return this builder instance
-		 * @throws IllegalArgumentException if basePath is null
-		 */
-		public Builder basePath(String baseUrl) {
-			Assert.notNull(baseUrl, "basePath must not be null");
-			this.baseUrl = baseUrl;
 			return this;
 		}
 
@@ -462,16 +392,44 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		}
 
 		/**
+		 * Sets the context extractor that allows providing the MCP feature
+		 * implementations to inspect HTTP transport level metadata that was present at
+		 * HTTP request processing time. This allows to extract custom headers and other
+		 * useful data for use during execution later on in the process.
+		 * @param contextExtractor The contextExtractor to fill in a
+		 * {@link McpTransportContext}.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if contextExtractor is null
+		 */
+		public Builder contextExtractor(McpTransportContextExtractor<ServerRequest> contextExtractor) {
+			Assert.notNull(contextExtractor, "contextExtractor must not be null");
+			this.contextExtractor = contextExtractor;
+			return this;
+		}
+
+		/**
+		 * Sets whether the session removal capability is disabled.
+		 * @param disallowDelete if {@code true}, the DELETE endpoint will not be
+		 * supported and sessions won't be deleted.
+		 * @return this builder instance
+		 */
+		public Builder disallowDelete(boolean disallowDelete) {
+			this.disallowDelete = disallowDelete;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link WebFluxStreamableServerTransportProvider} with
 		 * the configured settings.
-		 * @return A new WebFluxSseServerTransportProvider instance
+		 * @return A new WebFluxStreamableServerTransportProvider instance
 		 * @throws IllegalStateException if required parameters are not set
 		 */
 		public WebFluxStreamableServerTransportProvider build() {
 			Assert.notNull(objectMapper, "ObjectMapper must be set");
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 
-			return new WebFluxStreamableServerTransportProvider(objectMapper, baseUrl, mcpEndpoint, false);
+			return new WebFluxStreamableServerTransportProvider(objectMapper, mcpEndpoint, contextExtractor,
+					disallowDelete);
 		}
 
 	}

@@ -5,15 +5,12 @@ package io.modelcontextprotocol;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpClient;
-import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.client.transport.WebClientStreamableHttpTransport;
-import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.server.TestUtil;
-import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvider;
 import io.modelcontextprotocol.server.transport.WebFluxStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -84,8 +81,10 @@ class WebFluxStreamableIntegrationTests {
 	@BeforeEach
 	public void before() {
 
-		this.mcpStreamableServerTransportProvider = new WebFluxStreamableServerTransportProvider(new ObjectMapper(),
-				CUSTOM_MESSAGE_ENDPOINT);
+		this.mcpStreamableServerTransportProvider = WebFluxStreamableServerTransportProvider.builder()
+			.objectMapper(new ObjectMapper())
+			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
+			.build();
 
 		HttpHandler httpHandler = RouterFunctions
 			.toHttpHandler(mcpStreamableServerTransportProvider.getRouterFunction());

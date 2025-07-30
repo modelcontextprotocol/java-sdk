@@ -1,4 +1,4 @@
-package io.modelcontextprotocol.spec;
+package io.modelcontextprotocol.server;
 
 public interface McpTransportContext {
 

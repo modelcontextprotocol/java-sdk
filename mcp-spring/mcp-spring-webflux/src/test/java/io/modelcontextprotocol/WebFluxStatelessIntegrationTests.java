@@ -21,7 +21,7 @@ import io.modelcontextprotocol.spec.McpSchema.PromptArgument;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
-import io.modelcontextprotocol.spec.McpTransportContext;
+import io.modelcontextprotocol.server.McpTransportContext;
 import net.javacrumbs.jsonunit.core.Option;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,8 +61,10 @@ class WebFluxStatelessIntegrationTests {
 
 	@BeforeEach
 	public void before() {
-		this.mcpStreamableServerTransport = new WebFluxStatelessServerTransport(new ObjectMapper(), "",
-				CUSTOM_MESSAGE_ENDPOINT);
+		this.mcpStreamableServerTransport = WebFluxStatelessServerTransport.builder()
+			.objectMapper(new ObjectMapper())
+			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
+			.build();
 
 		HttpHandler httpHandler = RouterFunctions.toHttpHandler(mcpStreamableServerTransport.getRouterFunction());
 		ReactorHttpHandlerAdapter adapter = new ReactorHttpHandlerAdapter(httpHandler);

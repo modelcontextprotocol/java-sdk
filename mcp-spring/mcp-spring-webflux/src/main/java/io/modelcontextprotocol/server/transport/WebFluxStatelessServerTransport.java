@@ -2,11 +2,12 @@ package io.modelcontextprotocol.server.transport;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
-import io.modelcontextprotocol.spec.DefaultMcpTransportContext;
+import io.modelcontextprotocol.server.DefaultMcpTransportContext;
+import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
-import io.modelcontextprotocol.spec.McpTransportContext;
+import io.modelcontextprotocol.server.McpTransportContext;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,17 +20,19 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.function.Function;
 
+/**
+ * Implementation of a WebFlux based {@link McpStatelessServerTransport}.
+ *
+ * @author Dariusz Jędrzejczyk
+ */
 public class WebFluxStatelessServerTransport implements McpStatelessServerTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebFluxStatelessServerTransport.class);
 
-	public static final String DEFAULT_BASE_URL = "";
-
 	private final ObjectMapper objectMapper;
-
-	private final String baseUrl;
 
 	private final String mcpEndpoint;
 
@@ -37,32 +40,19 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 
 	private McpStatelessServerHandler mcpHandler;
 
-	// TODO: add means to specify this
-	private Function<ServerRequest, McpTransportContext> contextExtractor = req -> new DefaultMcpTransportContext();
+	private McpTransportContextExtractor<ServerRequest> contextExtractor;
 
-	/**
-	 * Flag indicating if the transport is shutting down.
-	 */
 	private volatile boolean isClosing = false;
 
-	/**
-	 * Constructs a new WebFlux SSE server transport provider instance.
-	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
-	 * of MCP messages. Must not be null.
-	 * @param baseUrl webflux message base path
-	 * @param mcpEndpoint The endpoint URI where clients should send their JSON-RPC
-	 * messages. This endpoint will be communicated to clients during SSE connection
-	 * setup. Must not be null.
-	 * @throws IllegalArgumentException if either parameter is null
-	 */
-	public WebFluxStatelessServerTransport(ObjectMapper objectMapper, String baseUrl, String mcpEndpoint) {
-		Assert.notNull(objectMapper, "ObjectMapper must not be null");
-		Assert.notNull(baseUrl, "Message base path must not be null");
-		Assert.notNull(mcpEndpoint, "Message endpoint must not be null");
+	private WebFluxStatelessServerTransport(ObjectMapper objectMapper, String mcpEndpoint,
+			McpTransportContextExtractor<ServerRequest> contextExtractor) {
+		Assert.notNull(objectMapper, "objectMapper must not be null");
+		Assert.notNull(mcpEndpoint, "mcpEndpoint must not be null");
+		Assert.notNull(contextExtractor, "contextExtractor must not be null");
 
 		this.objectMapper = objectMapper;
-		this.baseUrl = baseUrl;
 		this.mcpEndpoint = mcpEndpoint;
+		this.contextExtractor = contextExtractor;
 		this.routerFunction = RouterFunctions.route()
 			.GET(this.mcpEndpoint, this::handleGet)
 			.POST(this.mcpEndpoint, this::handlePost)
@@ -74,26 +64,9 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 		this.mcpHandler = mcpHandler;
 	}
 
-	// FIXME: This javadoc makes claims about using isClosing flag but it's not
-	// actually
-	// doing that.
-	/**
-	 * Initiates a graceful shutdown of all the sessions. This method ensures all active
-	 * sessions are properly closed and cleaned up.
-	 *
-	 * <p>
-	 * The shutdown process:
-	 * <ul>
-	 * <li>Marks the transport as closing to prevent new connections</li>
-	 * <li>Closes each active session</li>
-	 * <li>Removes closed sessions from the sessions map</li>
-	 * <li>Times out after 5 seconds if shutdown takes too long</li>
-	 * </ul>
-	 * @return A Mono that completes when all sessions have been closed
-	 */
 	@Override
 	public Mono<Void> closeGracefully() {
-		return Mono.empty();
+		return Mono.fromRunnable(() -> this.isClosing = true);
 	}
 
 	/**
@@ -101,10 +74,10 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 	 * This router function should be integrated into the application's web configuration.
 	 *
 	 * <p>
-	 * The router function defines two endpoints:
+	 * The router function defines one endpoint handling two HTTP methods:
 	 * <ul>
-	 * <li>GET {sseEndpoint} - For establishing SSE connections</li>
-	 * <li>POST {messageEndpoint} - For receiving client messages</li>
+	 * <li>GET {messageEndpoint} - Unsupported, returns 405 METHOD NOT ALLOWED</li>
+	 * <li>POST {messageEndpoint} - For handling client requests and notifications</li>
 	 * </ul>
 	 * @return The configured {@link RouterFunction} for handling HTTP requests
 	 */
@@ -112,37 +85,22 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 		return this.routerFunction;
 	}
 
-	/**
-	 * Handles GET requests from clients.
-	 * @param request The incoming server request
-	 * @return A Mono which emits a response informing the client that listening stream is
-	 * unavailable
-	 */
 	private Mono<ServerResponse> handleGet(ServerRequest request) {
 		return ServerResponse.status(HttpStatus.METHOD_NOT_ALLOWED).build();
 	}
 
-	/**
-	 * Handles incoming JSON-RPC messages from clients. Deserializes the message and
-	 * processes it through the configured message handler.
-	 *
-	 * <p>
-	 * The handler:
-	 * <ul>
-	 * <li>Deserializes the incoming JSON-RPC message</li>
-	 * <li>Passes it through the message handler chain</li>
-	 * <li>Returns appropriate HTTP responses based on processing results</li>
-	 * <li>Handles various error conditions with appropriate error responses</li>
-	 * </ul>
-	 * @param request The incoming server request containing the JSON-RPC message
-	 * @return A Mono emitting the response indicating the message processing result
-	 */
 	private Mono<ServerResponse> handlePost(ServerRequest request) {
 		if (isClosing) {
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.apply(request);
+		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
+
+		List<MediaType> acceptHeaders = request.headers().asHttpHeaders().getAccept();
+		if (!(acceptHeaders.contains(MediaType.APPLICATION_JSON)
+				&& acceptHeaders.contains(MediaType.TEXT_EVENT_STREAM))) {
+			return ServerResponse.badRequest().build();
+		}
 
 		return request.bodyToMono(String.class).<ServerResponse>flatMap(body -> {
 			try {
@@ -170,6 +128,10 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 		}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext));
 	}
 
+	/**
+	 * Create a builder for the server.
+	 * @return a fresh {@link Builder} instance.
+	 */
 	public static Builder builder() {
 		return new Builder();
 	}
@@ -184,9 +146,13 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 
 		private ObjectMapper objectMapper;
 
-		private String baseUrl = DEFAULT_BASE_URL;
-
 		private String mcpEndpoint = "/mcp";
+
+		private McpTransportContextExtractor<ServerRequest> contextExtractor = (serverRequest, context) -> context;
+
+		private Builder() {
+			// used by a static method
+		}
 
 		/**
 		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
@@ -198,19 +164,6 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 		public Builder objectMapper(ObjectMapper objectMapper) {
 			Assert.notNull(objectMapper, "ObjectMapper must not be null");
 			this.objectMapper = objectMapper;
-			return this;
-		}
-
-		/**
-		 * Sets the project basePath as endpoint prefix where clients should send their
-		 * JSON-RPC messages
-		 * @param baseUrl the message basePath . Must not be null.
-		 * @return this builder instance
-		 * @throws IllegalArgumentException if basePath is null
-		 */
-		public Builder basePath(String baseUrl) {
-			Assert.notNull(baseUrl, "basePath must not be null");
-			this.baseUrl = baseUrl;
 			return this;
 		}
 
@@ -227,6 +180,22 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 		}
 
 		/**
+		 * Sets the context extractor that allows providing the MCP feature
+		 * implementations to inspect HTTP transport level metadata that was present at
+		 * HTTP request processing time. This allows to extract custom headers and other
+		 * useful data for use during execution later on in the process.
+		 * @param contextExtractor The contextExtractor to fill in a
+		 * {@link McpTransportContext}.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if contextExtractor is null
+		 */
+		public Builder contextExtractor(McpTransportContextExtractor<ServerRequest> contextExtractor) {
+			Assert.notNull(contextExtractor, "Context extractor must not be null");
+			this.contextExtractor = contextExtractor;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link WebFluxStatelessServerTransport} with the
 		 * configured settings.
 		 * @return A new WebFluxSseServerTransportProvider instance
@@ -236,7 +205,7 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 			Assert.notNull(objectMapper, "ObjectMapper must be set");
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 
-			return new WebFluxStatelessServerTransport(objectMapper, baseUrl, mcpEndpoint);
+			return new WebFluxStatelessServerTransport(objectMapper, mcpEndpoint, contextExtractor);
 		}
 
 	}

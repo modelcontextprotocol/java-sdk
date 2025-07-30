@@ -1,4 +1,4 @@
-package io.modelcontextprotocol.spec;
+package io.modelcontextprotocol.server;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
