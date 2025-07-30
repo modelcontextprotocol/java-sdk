@@ -64,7 +64,6 @@ public abstract class AbstractMcpAsyncServerTests {
 	// ---------------------------------------
 	// Server Lifecycle Tests
 	// ---------------------------------------
-
 	void testConstructorWithInvalidArguments() {
 		assertThatThrownBy(() -> McpServer.async((McpServerTransportProvider) null))
 			.isInstanceOf(IllegalArgumentException.class)

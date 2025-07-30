@@ -30,6 +30,7 @@ import io.modelcontextprotocol.spec.McpTransportSession;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.spec.McpTransportStream;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.Utils;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -244,7 +245,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 			Disposable connection = webClient.post()
 				.uri(this.endpoint)
-				.accept(MediaType.TEXT_EVENT_STREAM, MediaType.APPLICATION_JSON)
+				.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_EVENT_STREAM)
 				.headers(httpHeaders -> {
 					transportSession.sessionId().ifPresent(id -> httpHeaders.add("mcp-session-id", id));
 				})
@@ -287,7 +288,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 								logger.trace("Received response to POST for session {}", sessionRepresentation);
 								// communicate to caller the message was delivered
 								sink.success();
-								return responseFlux(response);
+								return directResponseFlux(message, response);
 							}
 							else {
 								logger.warn("Unknown media type {} returned for POST in session {}", contentType,
@@ -385,14 +386,22 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		return transportSession.sessionId().orElse("[missing_session_id]");
 	}
 
-	private Flux<McpSchema.JSONRPCMessage> responseFlux(ClientResponse response) {
+	private Flux<McpSchema.JSONRPCMessage> directResponseFlux(McpSchema.JSONRPCMessage sentMessage,
+			ClientResponse response) {
 		return response.bodyToMono(String.class).<Iterable<McpSchema.JSONRPCMessage>>handle((responseMessage, s) -> {
 			try {
-				McpSchema.JSONRPCMessage jsonRpcResponse = McpSchema.deserializeJsonRpcMessage(objectMapper,
-						responseMessage);
-				s.next(List.of(jsonRpcResponse));
+				if (sentMessage instanceof McpSchema.JSONRPCNotification && Utils.hasText(responseMessage)) {
+					logger.warn("Notification: {} received non-compliant response: {}", sentMessage, responseMessage);
+					s.complete();
+				}
+				else {
+					McpSchema.JSONRPCMessage jsonRpcResponse = McpSchema.deserializeJsonRpcMessage(objectMapper,
+							responseMessage);
+					s.next(List.of(jsonRpcResponse));
+				}
 			}
 			catch (IOException e) {
+				// TODO: this should be a McpTransportError
 				s.error(e);
 			}
 		}).flatMapIterable(Function.identity());
@@ -424,7 +433,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			}
 		}
 		else {
-			throw new McpError("Received unrecognized SSE event type: " + event.event());
+			logger.debug("Received SSE event with type: {}", event);
+			return Tuples.of(Optional.empty(), List.of());
 		}
 	}
 
