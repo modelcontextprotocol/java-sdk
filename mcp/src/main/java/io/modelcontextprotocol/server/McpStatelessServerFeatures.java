@@ -22,6 +22,7 @@ import java.util.function.BiFunction;
  * support.
  *
  * @author Dariusz Jędrzejczyk
+ * @author Christian Tzolov
  */
 public class McpStatelessServerFeatures {
 
@@ -212,6 +213,59 @@ public class McpStatelessServerFeatures {
 
 			return new AsyncToolSpecification(syncToolSpec.tool(), callHandler);
 		}
+
+		/**
+		 * Builder for creating AsyncToolSpecification instances.
+		 */
+		public static class Builder {
+
+			private McpSchema.Tool tool;
+
+			private BiFunction<McpTransportContext, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler;
+
+			/**
+			 * Sets the tool definition.
+			 * @param tool The tool definition including name, description, and parameter
+			 * schema
+			 * @return this builder instance
+			 */
+			public Builder tool(McpSchema.Tool tool) {
+				this.tool = tool;
+				return this;
+			}
+
+			/**
+			 * Sets the call tool handler function.
+			 * @param callHandler The function that implements the tool's logic
+			 * @return this builder instance
+			 */
+			public Builder callHandler(
+					BiFunction<McpTransportContext, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler) {
+				this.callHandler = callHandler;
+				return this;
+			}
+
+			/**
+			 * Builds the AsyncToolSpecification instance.
+			 * @return a new AsyncToolSpecification instance
+			 * @throws IllegalArgumentException if required fields are not set
+			 */
+			public AsyncToolSpecification build() {
+				Assert.notNull(tool, "Tool must not be null");
+				Assert.notNull(callHandler, "Call handler function must not be null");
+
+				return new AsyncToolSpecification(tool, callHandler);
+			}
+
+		}
+
+		/**
+		 * Creates a new builder instance.
+		 * @return a new Builder instance
+		 */
+		public static Builder builder() {
+			return new Builder();
+		}
 	}
 
 	/**
@@ -324,6 +378,55 @@ public class McpStatelessServerFeatures {
 	 */
 	public record SyncToolSpecification(McpSchema.Tool tool,
 			BiFunction<McpTransportContext, CallToolRequest, McpSchema.CallToolResult> callHandler) {
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		/**
+		 * Builder for creating SyncToolSpecification instances.
+		 */
+		public static class Builder {
+
+			private McpSchema.Tool tool;
+
+			private BiFunction<McpTransportContext, CallToolRequest, McpSchema.CallToolResult> callHandler;
+
+			/**
+			 * Sets the tool definition.
+			 * @param tool The tool definition including name, description, and parameter
+			 * schema
+			 * @return this builder instance
+			 */
+			public Builder tool(McpSchema.Tool tool) {
+				this.tool = tool;
+				return this;
+			}
+
+			/**
+			 * Sets the call tool handler function.
+			 * @param callHandler The function that implements the tool's logic
+			 * @return this builder instance
+			 */
+			public Builder callHandler(
+					BiFunction<McpTransportContext, CallToolRequest, McpSchema.CallToolResult> callHandler) {
+				this.callHandler = callHandler;
+				return this;
+			}
+
+			/**
+			 * Builds the SyncToolSpecification instance.
+			 * @return a new SyncToolSpecification instance
+			 * @throws IllegalArgumentException if required fields are not set
+			 */
+			public SyncToolSpecification build() {
+				Assert.notNull(tool, "Tool must not be null");
+				Assert.notNull(callHandler, "CallTool function must not be null");
+
+				return new SyncToolSpecification(tool, callHandler);
+			}
+
+		}
 	}
 
 	/**
