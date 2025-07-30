@@ -31,7 +31,7 @@ public class McpAsyncServerExchange {
 
 	private final McpSchema.Implementation clientInfo;
 
-	private volatile LoggingLevel minLoggingLevel = LoggingLevel.INFO;
+	private volatile LoggingLevel minLoggingLevel = LoggingLevel.DEBUG;
 
 	private static final TypeReference<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeReference<>() {
 	};
