@@ -75,9 +75,9 @@ public class McpAsyncServerExchange {
 	 * @param session The server session representing a 1-1 interaction.
 	 * @param clientCapabilities The client capabilities that define the supported
 	 * features and functionality.
+	 * @param clientInfo The client implementation information.
 	 * @param transportContext context associated with the client as extracted from the
 	 * transport
-	 * @param clientInfo The client implementation information.
 	 */
 	public McpAsyncServerExchange(String sessionId, McpLoggableSession session,
 			McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
@@ -105,10 +105,20 @@ public class McpAsyncServerExchange {
 		return this.clientInfo;
 	}
 
+	/**
+	 * Provides the {@link McpTransportContext} associated with the transport layer. For
+	 * HTTP transports it can contain the metadata associated with the HTTP request that
+	 * triggered the processing.
+	 * @return the transport context object
+	 */
 	public McpTransportContext transportContext() {
 		return this.transportContext;
 	}
 
+	/**
+	 * Provides the Session ID.
+	 * @return session ID string
+	 */
 	public String sessionId() {
 		return this.sessionId;
 	}

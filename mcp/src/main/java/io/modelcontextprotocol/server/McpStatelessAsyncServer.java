@@ -32,6 +32,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
 
 /**
+ * A stateless MCP server implementation for use with Streamable HTTP transport types. It
+ * allows simple horizontal scalability since it does not maintain a session and does not
+ * require initialization. Each instance of the server can be reached with no prior
+ * knowledge and can serve the clients with the capabilities it supports.
+ *
  * @author Dariusz Jędrzejczyk
  */
 public class McpStatelessAsyncServer {

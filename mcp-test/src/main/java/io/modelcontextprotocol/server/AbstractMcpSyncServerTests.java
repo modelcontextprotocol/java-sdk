@@ -28,7 +28,7 @@ import io.modelcontextprotocol.spec.McpServerTransportProvider;
 
 /**
  * Test suite for the {@link McpSyncServer} that can be used with different
- * {@link McpTransportProvider} implementations.
+ * {@link McpServerTransportProvider} implementations.
  *
  * @author Christian Tzolov
  */

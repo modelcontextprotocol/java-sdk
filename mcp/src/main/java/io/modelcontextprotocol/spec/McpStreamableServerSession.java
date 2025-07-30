@@ -21,6 +21,14 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
+/**
+ * Representation of a Streamable HTTP server session that keeps track of mapping
+ * server-initiated requests to the client and mapping arriving responses. It also allows
+ * handling incoming notifications. For requests, it provides the default SSE streaming
+ * capability without the insight into the transport-specific details of HTTP handling.
+ *
+ * @author Dariusz Jędrzejczyk
+ */
 public class McpStreamableServerSession implements McpLoggableSession {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpStreamableServerSession.class);
@@ -41,20 +49,22 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	private final AtomicReference<McpSchema.Implementation> clientInfo = new AtomicReference<>();
 
-	private static final int STATE_UNINITIALIZED = 0;
-
-	private static final int STATE_INITIALIZING = 1;
-
-	private static final int STATE_INITIALIZED = 2;
-
-	private final AtomicInteger state = new AtomicInteger(STATE_UNINITIALIZED);
-
 	private final AtomicReference<McpLoggableSession> listeningStreamRef;
 
 	private final MissingMcpTransportSession missingMcpTransportSession;
 
 	private volatile McpSchema.LoggingLevel minLoggingLevel = McpSchema.LoggingLevel.INFO;
 
+	/**
+	 * Create an instance of the streamable session.
+	 * @param id session ID
+	 * @param clientCapabilities client capabilities
+	 * @param clientInfo client info
+	 * @param requestTimeout timeout to use for requests
+	 * @param requestHandlers the map of MCP request handlers keyed by method name
+	 * @param notificationHandlers the map of MCP notification handlers keyed by method
+	 * name
+	 */
 	public McpStreamableServerSession(String id, McpSchema.ClientCapabilities clientCapabilities,
 			McpSchema.Implementation clientInfo, Duration requestTimeout,
 			Map<String, McpRequestHandler<?>> requestHandlers,
@@ -80,6 +90,10 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		return loggingLevel.level() >= this.minLoggingLevel.level();
 	}
 
+	/**
+	 * Return the Session ID.
+	 * @return session ID
+	 */
 	public String getId() {
 		return this.id;
 	}
@@ -106,10 +120,17 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	public Mono<Void> delete() {
 		return this.closeGracefully().then(Mono.fromRunnable(() -> {
+			// TODO: review in the context of history storage
 			// delete history, etc.
 		}));
 	}
 
+	/**
+	 * Create a listening stream (the generic HTTP GET request without Last-Event-ID
+	 * header).
+	 * @param transport The dedicated SSE transport stream
+	 * @return a stream representation
+	 */
 	public McpStreamableServerSessionStream listeningStream(McpStreamableServerTransport transport) {
 		McpStreamableServerSessionStream listeningStream = new McpStreamableServerSessionStream(transport);
 		this.listeningStreamRef.set(listeningStream);
@@ -122,6 +143,12 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		return Flux.empty();
 	}
 
+	/**
+	 * Provide the SSE stream of MCP messages finalized with a Response.
+	 * @param jsonrpcRequest the MCP request triggering the stream creation
+	 * @param transport the SSE transport stream to send messages to
+	 * @return Mono which completes once the processing is done
+	 */
 	public Mono<Void> responseStream(McpSchema.JSONRPCRequest jsonrpcRequest, McpStreamableServerTransport transport) {
 		return Mono.deferContextual(ctx -> {
 			McpTransportContext transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
@@ -155,6 +182,11 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		});
 	}
 
+	/**
+	 * Handle the MCP notification.
+	 * @param notification MCP notification
+	 * @return Mono which completes upon succesful handling
+	 */
 	public Mono<Void> accept(McpSchema.JSONRPCNotification notification) {
 		return Mono.deferContextual(ctx -> {
 			McpTransportContext transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
@@ -170,6 +202,11 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	}
 
+	/**
+	 * Handle the MCP response.
+	 * @param response MCP response to the server-initiated request
+	 * @return Mono which completes upon successful processing
+	 */
 	public Mono<Void> accept(McpSchema.JSONRPCResponse response) {
 		return Mono.defer(() -> {
 			var stream = this.requestIdToStream.get(response.id());
@@ -229,16 +266,35 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	}
 
+	/**
+	 * Factory for new Streamable HTTP MCP sessions.
+	 */
 	public interface Factory {
 
+		/**
+		 * Given an initialize request, create a composite for the session initialization
+		 * @param initializeRequest the initialization request from the client
+		 * @return a composite allowing the session to start
+		 */
 		McpStreamableServerSessionInit startSession(McpSchema.InitializeRequest initializeRequest);
 
 	}
 
+	/**
+	 * Composite holding the {@link McpStreamableServerSession} and the initialization
+	 * result
+	 *
+	 * @param session the session instance
+	 * @param initResult the result to use to respond to the client
+	 */
 	public record McpStreamableServerSessionInit(McpStreamableServerSession session,
 			Mono<McpSchema.InitializeResult> initResult) {
 	}
 
+	/**
+	 * An individual SSE stream within a Streamable HTTP context. Can be either the
+	 * listening GET SSE stream or a request-specific POST SSE stream.
+	 */
 	public final class McpStreamableServerSessionStream implements McpLoggableSession {
 
 		private final ConcurrentHashMap<Object, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
@@ -249,6 +305,10 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 		private final Supplier<String> uuidGenerator;
 
+		/**
+		 * Constructor accepting the dedicated transport representing the SSE stream.
+		 * @param transport request-specific SSE transport stream
+		 */
 		public McpStreamableServerSessionStream(McpStreamableServerTransport transport) {
 			this.transport = transport;
 			this.transportId = UUID.randomUUID().toString();

@@ -1,5 +1,11 @@
 package io.modelcontextprotocol.spec;
 
+/**
+ * Classic implementation of {@link McpServerTransportProviderBase} for a single outgoing
+ * stream in bidirectional communication (STDIO and the legacy HTTP SSE).
+ *
+ * @author Dariusz Jędrzejczyk
+ */
 public interface McpServerTransportProvider extends McpServerTransportProviderBase {
 
 	/**

@@ -183,10 +183,26 @@ public interface McpServer {
 		return new StreamableServerAsyncSpecification(transportProvider);
 	}
 
+	/**
+	 * Starts building an asynchronous MCP server that provides non-blocking operations.
+	 * Asynchronous servers can handle multiple requests concurrently on a single Thread
+	 * using a functional paradigm with non-blocking server transports, making them more
+	 * scalable for high-concurrency scenarios but more complex to implement.
+	 * @param transport The transport layer implementation for MCP communication.
+	 * @return A new instance of {@link AsyncSpecification} for configuring the server.
+	 */
 	static StatelessAsyncSpecification async(McpStatelessServerTransport transport) {
 		return new StatelessAsyncSpecification(transport);
 	}
 
+	/**
+	 * Starts building a synchronous MCP server that provides blocking operations.
+	 * Synchronous servers block the current Thread's execution upon each request before
+	 * giving the control back to the caller, making them simpler to implement but
+	 * potentially less scalable for concurrent operations.
+	 * @param transport The transport layer implementation for MCP communication.
+	 * @return A new instance of {@link SyncSpecification} for configuring the server.
+	 */
 	static StatelessSyncSpecification sync(McpStatelessServerTransport transport) {
 		return new StatelessSyncSpecification(transport);
 	}

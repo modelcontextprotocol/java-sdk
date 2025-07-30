@@ -12,6 +12,11 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 
 /**
+ * A stateless MCP server implementation for use with Streamable HTTP transport types. It
+ * allows simple horizontal scalability since it does not maintain a session and does not
+ * require initialization. Each instance of the server can be reached with no prior
+ * knowledge and can serve the clients with the capabilities it supports.
+ *
  * @author Dariusz Jędrzejczyk
  */
 public class McpStatelessSyncServer {
@@ -21,10 +26,6 @@ public class McpStatelessSyncServer {
 	private final McpStatelessAsyncServer asyncServer;
 
 	private final boolean immediateExecution;
-
-	McpStatelessSyncServer(McpStatelessAsyncServer asyncServer) {
-		this(asyncServer, false);
-	}
 
 	McpStatelessSyncServer(McpStatelessAsyncServer asyncServer, boolean immediateExecution) {
 		this.asyncServer = asyncServer;
@@ -65,7 +66,6 @@ public class McpStatelessSyncServer {
 	/**
 	 * Add a new tool specification at runtime.
 	 * @param toolSpecification The tool specification to add
-	 * @return Mono that completes when clients have been notified of the change
 	 */
 	public void addTool(McpStatelessServerFeatures.SyncToolSpecification toolSpecification) {
 		this.asyncServer
@@ -77,7 +77,6 @@ public class McpStatelessSyncServer {
 	/**
 	 * Remove a tool handler at runtime.
 	 * @param toolName The name of the tool handler to remove
-	 * @return Mono that completes when clients have been notified of the change
 	 */
 	public void removeTool(String toolName) {
 		this.asyncServer.removeTool(toolName).block();
@@ -86,7 +85,6 @@ public class McpStatelessSyncServer {
 	/**
 	 * Add a new resource handler at runtime.
 	 * @param resourceSpecification The resource handler to add
-	 * @return Mono that completes when clients have been notified of the change
 	 */
 	public void addResource(McpStatelessServerFeatures.SyncResourceSpecification resourceSpecification) {
 		this.asyncServer
@@ -98,7 +96,6 @@ public class McpStatelessSyncServer {
 	/**
 	 * Remove a resource handler at runtime.
 	 * @param resourceUri The URI of the resource handler to remove
-	 * @return Mono that completes when clients have been notified of the change
 	 */
 	public void removeResource(String resourceUri) {
 		this.asyncServer.removeResource(resourceUri).block();
@@ -107,7 +104,6 @@ public class McpStatelessSyncServer {
 	/**
 	 * Add a new prompt handler at runtime.
 	 * @param promptSpecification The prompt handler to add
-	 * @return Mono that completes when clients have been notified of the change
 	 */
 	public void addPrompt(McpStatelessServerFeatures.SyncPromptSpecification promptSpecification) {
 		this.asyncServer
@@ -119,7 +115,6 @@ public class McpStatelessSyncServer {
 	/**
 	 * Remove a prompt handler at runtime.
 	 * @param promptName The name of the prompt handler to remove
-	 * @return Mono that completes when clients have been notified of the change
 	 */
 	public void removePrompt(String promptName) {
 		this.asyncServer.removePrompt(promptName).block();

@@ -16,9 +16,11 @@ import reactor.netty.DisposableServer;
 import reactor.netty.http.server.HttpServer;
 
 /**
- * Tests for {@link McpAsyncServer} using {@link WebFluxSseServerTransportProvider}.
+ * Tests for {@link McpAsyncServer} using
+ * {@link WebFluxStreamableServerTransportProvider}.
  *
  * @author Christian Tzolov
+ * @author Dariusz Jędrzejczyk
  */
 @Timeout(15) // Giving extra time beyond the client timeout
 class WebFluxStreamableMcpSyncServerTests extends AbstractMcpSyncServerTests {

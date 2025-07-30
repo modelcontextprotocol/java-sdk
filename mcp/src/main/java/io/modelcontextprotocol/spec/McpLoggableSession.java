@@ -1,5 +1,11 @@
 package io.modelcontextprotocol.spec;
 
+/**
+ * An {@link McpSession} which is capable of processing logging notifications and keeping
+ * track of a min logging level.
+ *
+ * @author Dariusz Jędrzejczyk
+ */
 public interface McpLoggableSession extends McpSession {
 
 	/**
@@ -9,6 +15,11 @@ public interface McpLoggableSession extends McpSession {
 	 */
 	void setMinLoggingLevel(McpSchema.LoggingLevel minLoggingLevel);
 
+	/**
+	 * Allows checking whether a particular logging level is allowed.
+	 * @param loggingLevel the level to check
+	 * @return whether the logging at the specified level is permitted.
+	 */
 	boolean isNotificationForLevelAllowed(McpSchema.LoggingLevel loggingLevel);
 
 }

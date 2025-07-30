@@ -8,7 +8,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.Map;
 
-public class DefaultMcpStatelessServerHandler implements McpStatelessServerHandler {
+class DefaultMcpStatelessServerHandler implements McpStatelessServerHandler {
 
 	private static final Logger logger = LoggerFactory.getLogger(DefaultMcpStatelessServerHandler.class);
 
