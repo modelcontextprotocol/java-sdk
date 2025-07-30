@@ -7,12 +7,18 @@ package io.modelcontextprotocol.server.transport;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.modelcontextprotocol.spec.DefaultMcpTransportContext;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -27,8 +33,6 @@ import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 /**
@@ -43,6 +47,7 @@ import reactor.core.publisher.Mono;
  * for the core MCP module, providing streamable HTTP transport functionality without
  * Spring dependencies.
  *
+ * @author Zachary German
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
  * @see McpStreamableServerTransportProvider
@@ -72,7 +77,12 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	/**
 	 * Header name for the last message ID used in replay requests.
 	 */
-	private static final String MCP_LAST_ID = "Last-Event-ID";
+	private static final String LAST_EVENT_ID = "Last-Event-ID";
+
+	/**
+	 * Header name for the response media types accepted by the requester.
+	 */
+	private static final String ACCEPT = "Accept";
 
 	/**
 	 * Default base URL for the message endpoint.
@@ -216,13 +226,25 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		McpTransportContext transportContext = this.contextExtractor.apply(request);
 
-		if (request.getHeader(MCP_SESSION_ID) == null) {
-			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
-					new McpError("Session ID required in mcp-session-id header"));
-			return;
+		List<String> badRequestErrors = new ArrayList<>();
+
+		String accept = request.getHeader(ACCEPT);
+		if (accept == null || !accept.contains(TEXT_EVENT_STREAM)) {
+			badRequestErrors.add("text/event-stream required in Accept header");
 		}
 
 		String sessionId = request.getHeader(MCP_SESSION_ID);
+
+		if (sessionId == null || sessionId.isBlank()) {
+			badRequestErrors.add("Session ID required in mcp-session-id header");
+		}
+
+		if (!badRequestErrors.isEmpty()) {
+			String combinedMessage = String.join("; ", badRequestErrors);
+			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, new McpError(combinedMessage));
+			return;
+		}
+
 		McpStreamableServerSession session = this.sessions.get(sessionId);
 
 		if (session == null) {
@@ -246,8 +268,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 					sessionId, asyncContext, response.getWriter());
 
 			// Check if this is a replay request
-			if (request.getHeader(MCP_LAST_ID) != null) {
-				String lastId = request.getHeader(MCP_LAST_ID);
+			if (request.getHeader(LAST_EVENT_ID) != null) {
+				String lastId = request.getHeader(LAST_EVENT_ID);
 
 				try {
 					session.replay(lastId)
@@ -327,6 +349,16 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			return;
 		}
 
+		List<String> badRequestErrors = new ArrayList<>();
+
+		String accept = request.getHeader(ACCEPT);
+		if (accept == null || !accept.contains(TEXT_EVENT_STREAM)) {
+			badRequestErrors.add("text/event-stream required in Accept header");
+		}
+		if (accept == null || !accept.contains(APPLICATION_JSON)) {
+			badRequestErrors.add("application/json required in Accept header");
+		}
+
 		McpTransportContext transportContext = this.contextExtractor.apply(request);
 
 		try {
@@ -342,6 +374,12 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			// Handle initialization request
 			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest
 					&& jsonrpcRequest.method().equals(McpSchema.METHOD_INITIALIZE)) {
+				if (!badRequestErrors.isEmpty()) {
+					String combinedMessage = String.join("; ", badRequestErrors);
+					this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, new McpError(combinedMessage));
+					return;
+				}
+
 				McpSchema.InitializeRequest initializeRequest = objectMapper.convertValue(jsonrpcRequest.params(),
 						new TypeReference<McpSchema.InitializeRequest>() {
 						});
@@ -373,13 +411,18 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				}
 			}
 
-			// Handle other messages that require a session
-			if (request.getHeader(MCP_SESSION_ID) == null) {
-				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, new McpError("Session ID missing"));
+			String sessionId = request.getHeader(MCP_SESSION_ID);
+
+			if (sessionId == null || sessionId.isBlank()) {
+				badRequestErrors.add("Session ID required in mcp-session-id header");
+			}
+
+			if (!badRequestErrors.isEmpty()) {
+				String combinedMessage = String.join("; ", badRequestErrors);
+				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, new McpError(combinedMessage));
 				return;
 			}
 
-			String sessionId = request.getHeader(MCP_SESSION_ID);
 			McpStreamableServerSession session = this.sessions.get(sessionId);
 
 			if (session == null) {
