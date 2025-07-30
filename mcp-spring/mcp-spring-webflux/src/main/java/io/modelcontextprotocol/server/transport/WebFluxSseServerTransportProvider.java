@@ -79,6 +79,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 */
 	public static final String ENDPOINT_EVENT_TYPE = "endpoint";
 
+	private static final String MCP_PROTOCOL_VERSION = "2025-06-18";
+
 	/**
 	 * Default SSE endpoint path as specified by the MCP transport specification.
 	 */
@@ -210,6 +212,11 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 			this.keepAliveScheduler.start();
 		}
+	}
+
+	@Override
+	public String protocolVersion() {
+		return "2024-11-05";
 	}
 
 	@Override

@@ -77,4 +77,8 @@ public interface McpTransport {
 	 */
 	<T> T unmarshalFrom(Object data, TypeReference<T> typeRef);
 
+	default String protocolVersion() {
+		return "2024-11-05";
+	}
+
 }

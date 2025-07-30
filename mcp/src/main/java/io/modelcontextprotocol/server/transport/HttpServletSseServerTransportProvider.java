@@ -178,6 +178,11 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		}
 	}
 
+	@Override
+	public String protocolVersion() {
+		return "2024-11-05";
+	}
+
 	/**
 	 * Creates a new HttpServletSseServerTransportProvider instance with the default SSE
 	 * endpoint.

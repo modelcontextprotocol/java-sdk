@@ -115,7 +115,7 @@ public class McpAsyncServer {
 
 	private final ConcurrentHashMap<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions = new ConcurrentHashMap<>();
 
-	private List<String> protocolVersions = List.of(McpSchema.LATEST_PROTOCOL_VERSION);
+	private List<String> protocolVersions;
 
 	private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
 
@@ -145,6 +145,8 @@ public class McpAsyncServer {
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
 
+		this.protocolVersions = List.of(mcpTransportProvider.protocolVersion());
+
 		mcpTransportProvider.setSessionFactory(transport -> new McpServerSession(UUID.randomUUID().toString(),
 				requestTimeout, transport, this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers));
 	}
@@ -167,6 +169,8 @@ public class McpAsyncServer {
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
+
+		this.protocolVersions = List.of(mcpTransportProvider.protocolVersion());
 
 		mcpTransportProvider.setSessionFactory(new DefaultMcpStreamableServerSessionFactory(requestTimeout,
 				this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers));

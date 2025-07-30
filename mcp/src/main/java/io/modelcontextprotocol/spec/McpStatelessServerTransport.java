@@ -22,4 +22,8 @@ public interface McpStatelessServerTransport {
 	 */
 	Mono<Void> closeGracefully();
 
+	default String protocolVersion() {
+		return "2025-03-26";
+	}
+
 }

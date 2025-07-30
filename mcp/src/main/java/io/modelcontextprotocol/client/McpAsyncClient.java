@@ -272,9 +272,8 @@ public class McpAsyncClient {
 				asyncProgressNotificationHandler(progressConsumersFinal));
 
 		this.initializer = new LifecycleInitializer(clientCapabilities, clientInfo,
-				List.of(McpSchema.LATEST_PROTOCOL_VERSION), initializationTimeout,
-				ctx -> new McpClientSession(requestTimeout, transport, requestHandlers, notificationHandlers,
-						con -> con.contextWrite(ctx)));
+				List.of(transport.protocolVersion()), initializationTimeout, ctx -> new McpClientSession(requestTimeout,
+						transport, requestHandlers, notificationHandlers, con -> con.contextWrite(ctx)));
 		this.transport.setExceptionHandler(this.initializer::handleException);
 	}
 

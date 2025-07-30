@@ -21,7 +21,6 @@ import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.function.Function;
 
 /**
  * Implementation of a WebFlux based {@link McpStatelessServerTransport}.

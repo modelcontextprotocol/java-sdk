@@ -215,6 +215,11 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		this.httpRequestCustomizer = httpRequestCustomizer;
 	}
 
+	@Override
+	public String protocolVersion() {
+		return MCP_PROTOCOL_VERSION;
+	}
+
 	/**
 	 * Creates a new builder for {@link HttpClientSseClientTransport}.
 	 * @param baseUri the base URI of the MCP server

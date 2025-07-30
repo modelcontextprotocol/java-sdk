@@ -89,6 +89,11 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	}
 
 	@Override
+	public String protocolVersion() {
+		return "2024-11-05";
+	}
+
+	@Override
 	public void setSessionFactory(McpServerSession.Factory sessionFactory) {
 		// Create a single session for the stdio connection
 		var transport = new StdioMcpSessionTransport();

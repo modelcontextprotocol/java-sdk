@@ -63,7 +63,7 @@ public class McpStatelessAsyncServer {
 
 	private final ConcurrentHashMap<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions = new ConcurrentHashMap<>();
 
-	private List<String> protocolVersions = List.of(McpSchema.LATEST_PROTOCOL_VERSION);
+	private List<String> protocolVersions;
 
 	private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
 
@@ -117,6 +117,8 @@ public class McpStatelessAsyncServer {
 		if (this.serverCapabilities.completions() != null) {
 			requestHandlers.put(McpSchema.METHOD_COMPLETION_COMPLETE, completionCompleteRequestHandler());
 		}
+
+		this.protocolVersions = List.of(mcpTransport.protocolVersion());
 
 		McpStatelessServerHandler handler = new DefaultMcpStatelessServerHandler(requestHandlers, Map.of());
 		mcpTransport.setMcpHandler(handler);

@@ -55,4 +55,12 @@ public interface McpServerTransportProviderBase {
 	 */
 	Mono<Void> closeGracefully();
 
+	/**
+	 * Returns the protocol version supported by this transport provider.
+	 * @return the protocol version as a string
+	 */
+	default String protocolVersion() {
+		return "2024-11-05";
+	}
+
 }

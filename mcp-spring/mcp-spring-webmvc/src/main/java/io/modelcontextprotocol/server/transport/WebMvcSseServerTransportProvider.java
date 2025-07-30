@@ -210,6 +210,11 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	}
 
 	@Override
+	public String protocolVersion() {
+		return "2024-11-05";
+	}
+
+	@Override
 	public void setSessionFactory(McpServerSession.Factory sessionFactory) {
 		this.sessionFactory = sessionFactory;
 	}

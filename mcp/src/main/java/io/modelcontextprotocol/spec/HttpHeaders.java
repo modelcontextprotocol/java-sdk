@@ -17,4 +17,9 @@ public interface HttpHeaders {
 	 */
 	String LAST_EVENT_ID = "last-event-id";
 
+	/**
+	 * Identifies the MCP protocol version.
+	 */
+	String PROTOCOL_VERSION = "MCP-Protocol-Version";
+
 }

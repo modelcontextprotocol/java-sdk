@@ -148,6 +148,11 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 	}
 
 	@Override
+	public String protocolVersion() {
+		return "2025-03-26";
+	}
+
+	@Override
 	public void setSessionFactory(McpStreamableServerSession.Factory sessionFactory) {
 		this.sessionFactory = sessionFactory;
 	}

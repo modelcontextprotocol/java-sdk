@@ -29,6 +29,8 @@ public class MockMcpClientTransport implements McpClientTransport {
 
 	private final BiConsumer<MockMcpClientTransport, McpSchema.JSONRPCMessage> interceptor;
 
+	private String protocolVersion = McpSchema.LATEST_PROTOCOL_VERSION;
+
 	public MockMcpClientTransport() {
 		this((t, msg) -> {
 		});
@@ -36,6 +38,15 @@ public class MockMcpClientTransport implements McpClientTransport {
 
 	public MockMcpClientTransport(BiConsumer<MockMcpClientTransport, McpSchema.JSONRPCMessage> interceptor) {
 		this.interceptor = interceptor;
+	}
+
+	public MockMcpClientTransport withProtocolVersion(String protocolVersion) {
+		return this;
+	}
+
+	@Override
+	public String protocolVersion() {
+		return protocolVersion;
 	}
 
 	public void simulateIncomingMessage(McpSchema.JSONRPCMessage message) {

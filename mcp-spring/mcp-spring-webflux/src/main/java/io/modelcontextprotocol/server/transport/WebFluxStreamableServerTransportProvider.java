@@ -96,6 +96,11 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 	}
 
 	@Override
+	public String protocolVersion() {
+		return "2025-03-26";
+	}
+
+	@Override
 	public void setSessionFactory(McpStreamableServerSession.Factory sessionFactory) {
 		this.sessionFactory = sessionFactory;
 	}

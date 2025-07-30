@@ -20,8 +20,8 @@ class McpAsyncClientTests {
 	public static final McpSchema.ServerCapabilities MOCK_SERVER_CAPABILITIES = McpSchema.ServerCapabilities.builder()
 		.build();
 
-	public static final McpSchema.InitializeResult MOCK_INIT_RESULT = new McpSchema.InitializeResult(
-			McpSchema.LATEST_PROTOCOL_VERSION, MOCK_SERVER_CAPABILITIES, MOCK_SERVER_INFO, "Test instructions");
+	public static final McpSchema.InitializeResult MOCK_INIT_RESULT = new McpSchema.InitializeResult("2024-11-05",
+			MOCK_SERVER_CAPABILITIES, MOCK_SERVER_INFO, "Test instructions");
 
 	private static final String CONTEXT_KEY = "context.key";
 
