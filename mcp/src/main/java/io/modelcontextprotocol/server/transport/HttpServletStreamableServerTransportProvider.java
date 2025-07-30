@@ -19,13 +19,14 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.modelcontextprotocol.spec.DefaultMcpTransportContext;
+import io.modelcontextprotocol.server.DefaultMcpTransportContext;
+import io.modelcontextprotocol.server.McpTransportContext;
+import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpStreamableServerSession;
 import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
-import io.modelcontextprotocol.spec.McpTransportContext;
 import io.modelcontextprotocol.util.Assert;
 import jakarta.servlet.AsyncContext;
 import jakarta.servlet.ServletException;
@@ -117,8 +118,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 */
 	private final ConcurrentHashMap<String, McpStreamableServerSession> sessions = new ConcurrentHashMap<>();
 
-	// TODO: add means to specify this
-	private Function<HttpServletRequest, McpTransportContext> contextExtractor = req -> new DefaultMcpTransportContext();
+	private McpTransportContextExtractor<HttpServletRequest> contextExtractor;
 
 	/**
 	 * Flag indicating if the transport is shutting down.
@@ -132,16 +132,19 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * @param mcpEndpoint The endpoint URI where clients should send their JSON-RPC
 	 * messages via HTTP. This endpoint will handle GET, POST, and DELETE requests.
 	 * @param disallowDelete Whether to disallow DELETE requests on the endpoint.
+	 * @param contextExtractor The extractor for transport context from the request.
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
-	public HttpServletStreamableServerTransportProvider(ObjectMapper objectMapper, String mcpEndpoint,
-			boolean disallowDelete) {
+	private HttpServletStreamableServerTransportProvider(ObjectMapper objectMapper, String mcpEndpoint,
+			boolean disallowDelete, McpTransportContextExtractor<HttpServletRequest> contextExtractor) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(mcpEndpoint, "MCP endpoint must not be null");
+		Assert.notNull(contextExtractor, "Context extractor must not be null");
 
 		this.objectMapper = objectMapper;
 		this.mcpEndpoint = mcpEndpoint;
 		this.disallowDelete = disallowDelete;
+		this.contextExtractor = contextExtractor;
 	}
 
 	@Override
@@ -224,8 +227,6 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			return;
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.apply(request);
-
 		List<String> badRequestErrors = new ArrayList<>();
 
 		String accept = request.getHeader(ACCEPT);
@@ -254,6 +255,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		logger.debug("Handling GET request for session: {}", sessionId);
 
+		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
+
 		try {
 			response.setContentType(TEXT_EVENT_STREAM);
 			response.setCharacterEncoding(UTF_8);
@@ -277,7 +280,9 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 						.toIterable()
 						.forEach(message -> {
 							try {
-								sessionTransport.sendMessage(message).block();
+								sessionTransport.sendMessage(message)
+									.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
+									.block();
 							}
 							catch (Exception e) {
 								logger.error("Failed to replay message: {}", e.getMessage());
@@ -359,7 +364,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			badRequestErrors.add("application/json required in Accept header");
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.apply(request);
+		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
 
 		try {
 			BufferedReader reader = request.getReader();
@@ -517,7 +522,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			return;
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.apply(request);
+		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
 
 		if (request.getHeader(MCP_SESSION_ID) == null) {
 			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
@@ -745,6 +750,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		private boolean disallowDelete = false;
 
+		private McpTransportContextExtractor<HttpServletRequest> contextExtractor = (serverRequest, context) -> context;
+
 		/**
 		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
@@ -781,6 +788,18 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		/**
+		 * Sets the context extractor for extracting transport context from the request.
+		 * @param contextExtractor The context extractor to use. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if contextExtractor is null
+		 */
+		public Builder contextExtractor(McpTransportContextExtractor<HttpServletRequest> contextExtractor) {
+			Assert.notNull(contextExtractor, "Context extractor must not be null");
+			this.contextExtractor = contextExtractor;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link HttpServletStreamableServerTransportProvider}
 		 * with the configured settings.
 		 * @return A new HttpServletStreamableServerTransportProvider instance
@@ -791,7 +810,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 
 			return new HttpServletStreamableServerTransportProvider(this.objectMapper, this.mcpEndpoint,
-					this.disallowDelete);
+					this.disallowDelete, this.contextExtractor);
 		}
 
 	}
