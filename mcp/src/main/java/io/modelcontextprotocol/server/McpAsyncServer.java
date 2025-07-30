@@ -296,7 +296,7 @@ public class McpAsyncServer {
 			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
 		return (exchange, params) -> exchange.listRoots()
 			.flatMap(listRootsResult -> Flux.fromIterable(rootsChangeConsumers)
-				.flatMap(consumer -> consumer.apply(exchange, listRootsResult.roots()))
+				.flatMap(consumer -> Mono.defer(() -> consumer.apply(exchange, listRootsResult.roots())))
 				.onErrorResume(error -> {
 					logger.error("Error handling roots list change notification", error);
 					return Mono.empty();
@@ -506,7 +506,7 @@ public class McpAsyncServer {
 				return Mono.error(new McpError("Tool not found: " + callToolRequest.name()));
 			}
 
-			return toolSpecification.map(tool -> tool.callHandler().apply(exchange, callToolRequest))
+			return toolSpecification.map(tool -> Mono.defer(() -> tool.callHandler().apply(exchange, callToolRequest)))
 				.orElse(Mono.error(new McpError("Tool not found: " + callToolRequest.name())));
 		};
 	}
@@ -634,7 +634,7 @@ public class McpAsyncServer {
 				.findFirst()
 				.orElseThrow(() -> new McpError("Resource not found: " + resourceUri));
 
-			return specification.readHandler().apply(exchange, resourceRequest);
+			return Mono.defer(() -> specification.readHandler().apply(exchange, resourceRequest));
 		};
 	}
 
@@ -740,7 +740,7 @@ public class McpAsyncServer {
 				return Mono.error(new McpError("Prompt not found: " + promptRequest.name()));
 			}
 
-			return specification.promptHandler().apply(exchange, promptRequest);
+			return Mono.defer(() -> specification.promptHandler().apply(exchange, promptRequest));
 		};
 	}
 
@@ -845,7 +845,7 @@ public class McpAsyncServer {
 				return Mono.error(new McpError("AsyncCompletionSpecification not found: " + request.ref()));
 			}
 
-			return specification.completionHandler().apply(exchange, request);
+			return Mono.defer(() -> specification.completionHandler().apply(exchange, request));
 		};
 	}
 
