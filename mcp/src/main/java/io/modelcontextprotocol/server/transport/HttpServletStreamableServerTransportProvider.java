@@ -7,6 +7,7 @@ package io.modelcontextprotocol.server.transport;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,12 +29,14 @@ import io.modelcontextprotocol.spec.McpStreamableServerSession;
 import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.KeepAliveScheduler;
 import jakarta.servlet.AsyncContext;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
@@ -111,6 +114,12 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	private volatile boolean isClosing = false;
 
 	/**
+	 * Keep-alive scheduler for managing session pings. Activated if keepAliveInterval is
+	 * set. Disabled by default.
+	 */
+	private KeepAliveScheduler keepAliveScheduler;
+
+	/**
 	 * Constructs a new HttpServletStreamableServerTransportProvider instance.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 * of messages.
@@ -121,7 +130,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
 	private HttpServletStreamableServerTransportProvider(ObjectMapper objectMapper, String mcpEndpoint,
-			boolean disallowDelete, McpTransportContextExtractor<HttpServletRequest> contextExtractor) {
+			boolean disallowDelete, McpTransportContextExtractor<HttpServletRequest> contextExtractor,
+			Duration keepAliveInterval) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(mcpEndpoint, "MCP endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
@@ -130,6 +140,18 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		this.mcpEndpoint = mcpEndpoint;
 		this.disallowDelete = disallowDelete;
 		this.contextExtractor = contextExtractor;
+
+		if (keepAliveInterval != null) {
+
+			this.keepAliveScheduler = KeepAliveScheduler
+				.builder(() -> (isClosing) ? Flux.empty() : Flux.fromIterable(sessions.values()))
+				.initialDelay(keepAliveInterval)
+				.interval(keepAliveInterval)
+				.build();
+
+			this.keepAliveScheduler.start();
+		}
+
 	}
 
 	@Override
@@ -187,6 +209,12 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 			this.sessions.clear();
 			logger.debug("Graceful shutdown completed");
+		}).then().doOnSuccess(v -> {
+			sessions.clear();
+			logger.debug("Graceful shutdown completed");
+			if (this.keepAliveScheduler != null) {
+				this.keepAliveScheduler.shutdown();
+			}
 		});
 	}
 
@@ -737,6 +765,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		private McpTransportContextExtractor<HttpServletRequest> contextExtractor = (serverRequest, context) -> context;
 
+		private Duration keepAliveInterval;
+
 		/**
 		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
@@ -785,6 +815,18 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		/**
+		 * Sets the keep-alive interval for the transport. If set, a keep-alive scheduler
+		 * will be activated to periodically ping active sessions.
+		 * @param keepAliveInterval The interval for keep-alive pings. If null, no
+		 * keep-alive will be scheduled.
+		 * @return this builder instance
+		 */
+		public Builder keepAliveInterval(Duration keepAliveInterval) {
+			this.keepAliveInterval = keepAliveInterval;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link HttpServletStreamableServerTransportProvider}
 		 * with the configured settings.
 		 * @return A new HttpServletStreamableServerTransportProvider instance
@@ -795,7 +837,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 
 			return new HttpServletStreamableServerTransportProvider(this.objectMapper, this.mcpEndpoint,
-					this.disallowDelete, this.contextExtractor);
+					this.disallowDelete, this.contextExtractor, this.keepAliveInterval);
 		}
 
 	}

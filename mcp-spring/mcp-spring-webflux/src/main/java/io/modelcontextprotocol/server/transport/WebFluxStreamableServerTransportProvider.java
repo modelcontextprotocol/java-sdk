@@ -12,6 +12,8 @@ import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.server.McpTransportContext;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.KeepAliveScheduler;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -28,6 +30,7 @@ import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -58,8 +61,11 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 	private volatile boolean isClosing = false;
 
+	private KeepAliveScheduler keepAliveScheduler;
+
 	private WebFluxStreamableServerTransportProvider(ObjectMapper objectMapper, String mcpEndpoint,
-			McpTransportContextExtractor<ServerRequest> contextExtractor, boolean disallowDelete) {
+			McpTransportContextExtractor<ServerRequest> contextExtractor, boolean disallowDelete,
+			Duration keepAliveInterval) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(mcpEndpoint, "Message endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
@@ -73,6 +79,20 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 			.POST(this.mcpEndpoint, this::handlePost)
 			.DELETE(this.mcpEndpoint, this::handleDelete)
 			.build();
+
+		if (keepAliveInterval != null) {
+			this.keepAliveScheduler = KeepAliveScheduler
+				.builder(() -> (isClosing) ? Flux.empty() : Flux.fromIterable(this.sessions.values()))
+				.initialDelay(keepAliveInterval)
+				.interval(keepAliveInterval)
+				.build();
+
+			this.keepAliveScheduler.start();
+		}
+		else {
+			logger.warn("Keep-alive interval is not set or invalid. No keep-alive will be scheduled.");
+		}
+
 	}
 
 	@Override
@@ -105,6 +125,11 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 				.doFirst(() -> logger.debug("Initiating graceful shutdown with {} active sessions", sessions.size()))
 				.flatMap(McpStreamableServerSession::closeGracefully)
 				.then();
+		}).then().doOnSuccess(v -> {
+			sessions.clear();
+			if (this.keepAliveScheduler != null) {
+				this.keepAliveScheduler.shutdown();
+			}
 		});
 	}
 
@@ -368,6 +393,8 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 		private boolean disallowDelete;
 
+		private Duration keepAliveInterval;
+
 		private Builder() {
 			// used by a static method
 		}
@@ -425,6 +452,17 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		}
 
 		/**
+		 * Sets the keep-alive interval for the server transport.
+		 * @param keepAliveInterval The interval for sending keep-alive messages. If null,
+		 * no keep-alive will be scheduled.
+		 * @return this builder instance
+		 */
+		public Builder keepAliveInterval(Duration keepAliveInterval) {
+			this.keepAliveInterval = keepAliveInterval;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link WebFluxStreamableServerTransportProvider} with
 		 * the configured settings.
 		 * @return A new WebFluxStreamableServerTransportProvider instance
@@ -435,7 +473,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 
 			return new WebFluxStreamableServerTransportProvider(objectMapper, mcpEndpoint, contextExtractor,
-					disallowDelete);
+					disallowDelete, keepAliveInterval);
 		}
 
 	}

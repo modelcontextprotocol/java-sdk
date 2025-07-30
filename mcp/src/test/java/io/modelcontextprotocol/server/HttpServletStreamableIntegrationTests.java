@@ -38,6 +38,7 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 		mcpServerTransportProvider = HttpServletStreamableServerTransportProvider.builder()
 			.objectMapper(new ObjectMapper())
 			.mcpEndpoint(MESSAGE_ENDPOINT)
+			.keepAliveInterval(Duration.ofSeconds(1))
 			.build();
 
 		tomcat = TomcatTestUtil.createTomcatServer("", PORT, mcpServerTransportProvider);

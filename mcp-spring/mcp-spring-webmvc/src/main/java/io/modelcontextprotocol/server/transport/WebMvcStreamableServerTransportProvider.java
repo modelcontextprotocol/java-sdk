@@ -33,6 +33,8 @@ import io.modelcontextprotocol.spec.McpStreamableServerSession;
 import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.KeepAliveScheduler;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
@@ -101,6 +103,8 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 	 */
 	private volatile boolean isClosing = false;
 
+	private KeepAliveScheduler keepAliveScheduler;
+
 	/**
 	 * Constructs a new WebMvcStreamableServerTransportProvider instance.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
@@ -113,7 +117,8 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
 	private WebMvcStreamableServerTransportProvider(ObjectMapper objectMapper, String mcpEndpoint,
-			boolean disallowDelete, McpTransportContextExtractor<ServerRequest> contextExtractor) {
+			boolean disallowDelete, McpTransportContextExtractor<ServerRequest> contextExtractor,
+			Duration keepAliveInterval) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(mcpEndpoint, "MCP endpoint must not be null");
 		Assert.notNull(contextExtractor, "McpTransportContextExtractor must not be null");
@@ -127,6 +132,19 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 			.POST(this.mcpEndpoint, this::handlePost)
 			.DELETE(this.mcpEndpoint, this::handleDelete)
 			.build();
+
+		if (keepAliveInterval != null) {
+			this.keepAliveScheduler = KeepAliveScheduler
+				.builder(() -> (isClosing) ? Flux.empty() : Flux.fromIterable(this.sessions.values()))
+				.initialDelay(keepAliveInterval)
+				.interval(keepAliveInterval)
+				.build();
+
+			this.keepAliveScheduler.start();
+		}
+		else {
+			logger.warn("Keep-alive interval is not set or invalid. No keep-alive will be scheduled.");
+		}
 	}
 
 	@Override
@@ -184,6 +202,10 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 
 			this.sessions.clear();
 			logger.debug("Graceful shutdown completed");
+		}).then().doOnSuccess(v -> {
+			if (this.keepAliveScheduler != null) {
+				this.keepAliveScheduler.shutdown();
+			}
 		});
 	}
 
@@ -584,6 +606,8 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 
 		private McpTransportContextExtractor<ServerRequest> contextExtractor = (serverRequest, context) -> context;
 
+		private Duration keepAliveInterval;
+
 		/**
 		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
@@ -636,6 +660,18 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		}
 
 		/**
+		 * Sets the keep-alive interval for the transport. If set, a keep-alive scheduler
+		 * will be created to periodically check and send keep-alive messages to clients.
+		 * @param keepAliveInterval The interval duration for keep-alive messages, or null
+		 * to disable keep-alive
+		 * @return this builder instance
+		 */
+		public Builder keepAliveInterval(Duration keepAliveInterval) {
+			this.keepAliveInterval = keepAliveInterval;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link WebMvcStreamableServerTransportProvider} with
 		 * the configured settings.
 		 * @return A new WebMvcStreamableServerTransportProvider instance
@@ -646,7 +682,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 
 			return new WebMvcStreamableServerTransportProvider(this.objectMapper, this.mcpEndpoint, this.disallowDelete,
-					this.contextExtractor);
+					this.contextExtractor, this.keepAliveInterval);
 		}
 
 	}
