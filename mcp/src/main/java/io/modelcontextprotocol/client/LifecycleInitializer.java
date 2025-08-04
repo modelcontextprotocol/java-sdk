@@ -290,7 +290,8 @@ class LifecycleInitializer {
 				.timeout(this.initializationTimeout)
 				.onErrorResume(ex -> {
 					logger.warn("Failed to initialize", ex);
-					return Mono.error(new McpError("Client failed to initialize " + actionName));
+					return Mono.error(
+							new McpError("Client failed to initialize " + actionName + " due to: " + ex.getMessage()));
 				})
 				.flatMap(operation);
 		});

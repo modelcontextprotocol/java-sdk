@@ -45,8 +45,8 @@ public class MockMcpClientTransport implements McpClientTransport {
 	}
 
 	@Override
-	public String protocolVersion() {
-		return protocolVersion;
+	public List<String> protocolVersions() {
+		return List.of(protocolVersion);
 	}
 
 	public void simulateIncomingMessage(McpSchema.JSONRPCMessage message) {

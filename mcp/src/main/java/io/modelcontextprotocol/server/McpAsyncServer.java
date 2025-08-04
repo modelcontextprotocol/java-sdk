@@ -145,7 +145,7 @@ public class McpAsyncServer {
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
 
-		this.protocolVersions = List.of(mcpTransportProvider.protocolVersion());
+		this.protocolVersions = mcpTransportProvider.protocolVersions();
 
 		mcpTransportProvider.setSessionFactory(transport -> new McpServerSession(UUID.randomUUID().toString(),
 				requestTimeout, transport, this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers));
@@ -170,7 +170,7 @@ public class McpAsyncServer {
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
 
-		this.protocolVersions = List.of(mcpTransportProvider.protocolVersion());
+		this.protocolVersions = mcpTransportProvider.protocolVersions();
 
 		mcpTransportProvider.setSessionFactory(new DefaultMcpStreamableServerSessionFactory(requestTimeout,
 				this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers));

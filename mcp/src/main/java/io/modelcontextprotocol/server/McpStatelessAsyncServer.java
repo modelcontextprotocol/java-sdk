@@ -118,7 +118,7 @@ public class McpStatelessAsyncServer {
 			requestHandlers.put(McpSchema.METHOD_COMPLETION_COMPLETE, completionCompleteRequestHandler());
 		}
 
-		this.protocolVersions = List.of(mcpTransport.protocolVersion());
+		this.protocolVersions = new ArrayList<>(mcpTransport.protocolVersions());
 
 		McpStatelessServerHandler handler = new DefaultMcpStatelessServerHandler(requestHandlers, Map.of());
 		mcpTransport.setMcpHandler(handler);

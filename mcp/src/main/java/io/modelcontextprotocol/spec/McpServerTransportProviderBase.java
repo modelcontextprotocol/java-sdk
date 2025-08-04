@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.spec;
 
+import java.util.List;
 import java.util.Map;
 
 import reactor.core.publisher.Mono;
@@ -63,8 +64,8 @@ public interface McpServerTransportProviderBase {
 	 * Returns the protocol version supported by this transport provider.
 	 * @return the protocol version as a string
 	 */
-	default String protocolVersion() {
-		return "2024-11-05";
+	default List<String> protocolVersions() {
+		return List.of(ProtocolVersions.MCP_2024_11_05);
 	}
 
 }

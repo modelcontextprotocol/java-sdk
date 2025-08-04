@@ -45,7 +45,9 @@ class McpServerProtocolVersionTests {
 		assertThat(jsonResponse.id()).isEqualTo(requestId);
 		assertThat(jsonResponse.result()).isInstanceOf(McpSchema.InitializeResult.class);
 		McpSchema.InitializeResult result = (McpSchema.InitializeResult) jsonResponse.result();
-		assertThat(result.protocolVersion()).isEqualTo(transportProvider.protocolVersion());
+
+		var protocolVersion = transportProvider.protocolVersions().get(transportProvider.protocolVersions().size() - 1);
+		assertThat(result.protocolVersion()).isEqualTo(protocolVersion);
 
 		server.closeGracefully().subscribe();
 	}
@@ -93,7 +95,8 @@ class McpServerProtocolVersionTests {
 		assertThat(jsonResponse.id()).isEqualTo(requestId);
 		assertThat(jsonResponse.result()).isInstanceOf(McpSchema.InitializeResult.class);
 		McpSchema.InitializeResult result = (McpSchema.InitializeResult) jsonResponse.result();
-		assertThat(result.protocolVersion()).isEqualTo(transportProvider.protocolVersion());
+		var protocolVersion = transportProvider.protocolVersions().get(transportProvider.protocolVersions().size() - 1);
+		assertThat(result.protocolVersion()).isEqualTo(protocolVersion);
 
 		server.closeGracefully().subscribe();
 	}

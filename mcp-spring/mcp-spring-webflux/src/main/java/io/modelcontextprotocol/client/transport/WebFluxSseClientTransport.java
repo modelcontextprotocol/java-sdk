@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.client.transport;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
@@ -16,6 +17,7 @@ import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,7 +67,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebFluxSseClientTransport.class);
 
-	private static final String MCP_PROTOCOL_VERSION = "2024-11-05";
+	private static final String MCP_PROTOCOL_VERSION = ProtocolVersions.MCP_2024_11_05;
 
 	/**
 	 * Event type for JSON-RPC messages received through the SSE connection. The server
@@ -172,8 +174,8 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	}
 
 	@Override
-	public String protocolVersion() {
-		return MCP_PROTOCOL_VERSION;
+	public List<String> protocolVersions() {
+		return List.of(MCP_PROTOCOL_VERSION);
 	}
 
 	/**

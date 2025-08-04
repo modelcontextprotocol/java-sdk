@@ -32,6 +32,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpStreamableServerSession;
 import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.KeepAliveScheduler;
 import reactor.core.publisher.Flux;
@@ -142,8 +143,8 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 	}
 
 	@Override
-	public String protocolVersion() {
-		return "2025-03-26";
+	public List<String> protocolVersions() {
+		return List.of(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26);
 	}
 
 	@Override

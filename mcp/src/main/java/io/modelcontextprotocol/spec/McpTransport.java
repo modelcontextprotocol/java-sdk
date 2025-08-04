@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol.spec;
 
+import java.util.List;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import reactor.core.publisher.Mono;
@@ -77,8 +79,8 @@ public interface McpTransport {
 	 */
 	<T> T unmarshalFrom(Object data, TypeReference<T> typeRef);
 
-	default String protocolVersion() {
-		return "2024-11-05";
+	default List<String> protocolVersions() {
+		return List.of(ProtocolVersions.MCP_2024_11_05);
 	}
 
 }

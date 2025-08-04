@@ -8,6 +8,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.ProtocolVersions;
+
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
@@ -24,8 +26,8 @@ class McpAsyncClientTests {
 	public static final McpSchema.ServerCapabilities MOCK_SERVER_CAPABILITIES = McpSchema.ServerCapabilities.builder()
 		.build();
 
-	public static final McpSchema.InitializeResult MOCK_INIT_RESULT = new McpSchema.InitializeResult("2024-11-05",
-			MOCK_SERVER_CAPABILITIES, MOCK_SERVER_INFO, "Test instructions");
+	public static final McpSchema.InitializeResult MOCK_INIT_RESULT = new McpSchema.InitializeResult(
+			ProtocolVersions.MCP_2024_11_05, MOCK_SERVER_CAPABILITIES, MOCK_SERVER_INFO, "Test instructions");
 
 	private static final String CONTEXT_KEY = "context.key";
 

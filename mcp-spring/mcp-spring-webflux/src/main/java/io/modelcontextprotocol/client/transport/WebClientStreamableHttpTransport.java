@@ -34,6 +34,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportSession;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.spec.McpTransportStream;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
 import reactor.core.Disposable;
@@ -71,7 +72,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebClientStreamableHttpTransport.class);
 
-	private static final String MCP_PROTOCOL_VERSION = "2025-03-26";
+	private static final String MCP_PROTOCOL_VERSION = ProtocolVersions.MCP_2025_03_26;
 
 	private static final String DEFAULT_ENDPOINT = "/mcp";
 
@@ -111,8 +112,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	}
 
 	@Override
-	public String protocolVersion() {
-		return MCP_PROTOCOL_VERSION;
+	public List<String> protocolVersions() {
+		return List.of(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26);
 	}
 
 	/**
