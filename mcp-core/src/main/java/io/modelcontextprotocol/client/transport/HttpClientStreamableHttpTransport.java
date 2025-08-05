@@ -177,7 +177,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				.uri(uri)
 				.header("Cache-Control", "no-cache")
 				.header(HttpHeaders.MCP_SESSION_ID, sessionId)
-				.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+				.header(HttpHeaders.MCP_PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 				.DELETE();
 			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "DELETE", uri, null, transportContext));
@@ -248,7 +248,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				var builder = requestBuilder.uri(uri)
 					.header("Accept", TEXT_EVENT_STREAM)
 					.header("Cache-Control", "no-cache")
-					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+					.header(HttpHeaders.MCP_PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 					.GET();
 				var transportContext = connectionCtx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 				return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
@@ -423,7 +423,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					.header("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
 					.header("Content-Type", APPLICATION_JSON)
 					.header("Cache-Control", "no-cache")
-					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+					.header(HttpHeaders.MCP_PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 					.POST(HttpRequest.BodyPublishers.ofString(jsonBody));
 				var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 				return Mono
