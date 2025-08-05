@@ -2,7 +2,7 @@
  * Copyright 2024-2025 the original author or authors.
  */
 
-package io.modelcontextprotocol.client.transport;
+package io.modelcontextprotocol.client.transport.customizer;
 
 import java.net.URI;
 import java.net.http.HttpRequest;

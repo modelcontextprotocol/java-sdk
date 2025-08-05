@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol.client.transport;
 
+import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpRequestCustomizer;
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpRequestCustomizer;
 import io.modelcontextprotocol.spec.McpSchema;
 import java.net.URI;
 import java.net.URISyntaxException;
