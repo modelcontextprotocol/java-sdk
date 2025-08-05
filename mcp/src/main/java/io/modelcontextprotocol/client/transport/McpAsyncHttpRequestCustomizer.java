@@ -19,12 +19,12 @@ import reactor.util.annotation.Nullable;
  *
  * @author Daniel Garnier-Moiroux
  */
-public interface AsyncHttpRequestCustomizer {
+public interface McpAsyncHttpRequestCustomizer {
 
 	Publisher<HttpRequest.Builder> customize(HttpRequest.Builder builder, String method, URI endpoint,
 			@Nullable String body);
 
-	AsyncHttpRequestCustomizer NOOP = new Noop();
+	McpAsyncHttpRequestCustomizer NOOP = new Noop();
 
 	/**
 	 * Wrap a sync implementation in an async wrapper.
@@ -32,14 +32,14 @@ public interface AsyncHttpRequestCustomizer {
 	 * Do NOT wrap a blocking implementation for use in a non-blocking context. For a
 	 * blocking implementation, consider using {@link Schedulers#boundedElastic()}.
 	 */
-	static AsyncHttpRequestCustomizer fromSync(SyncHttpRequestCustomizer customizer) {
+	static McpAsyncHttpRequestCustomizer fromSync(McpSyncHttpRequestCustomizer customizer) {
 		return (builder, method, uri, body) -> Mono.fromSupplier(() -> {
 			customizer.customize(builder, method, uri, body);
 			return builder;
 		});
 	}
 
-	class Noop implements AsyncHttpRequestCustomizer {
+	class Noop implements McpAsyncHttpRequestCustomizer {
 
 		@Override
 		public Publisher<HttpRequest.Builder> customize(HttpRequest.Builder builder, String method, URI endpoint,

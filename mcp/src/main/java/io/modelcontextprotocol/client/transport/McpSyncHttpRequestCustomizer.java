@@ -14,7 +14,7 @@ import reactor.util.annotation.Nullable;
  *
  * @author Daniel Garnier-Moiroux
  */
-public interface SyncHttpRequestCustomizer {
+public interface McpSyncHttpRequestCustomizer {
 
 	void customize(HttpRequest.Builder builder, String method, URI endpoint, @Nullable String body);
 

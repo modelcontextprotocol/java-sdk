@@ -113,7 +113,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private final boolean resumableStreams;
 
-	private final AsyncHttpRequestCustomizer httpRequestCustomizer;
+	private final McpAsyncHttpRequestCustomizer httpRequestCustomizer;
 
 	private final AtomicReference<DefaultMcpTransportSession> activeSession = new AtomicReference<>();
 
@@ -123,7 +123,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private HttpClientStreamableHttpTransport(ObjectMapper objectMapper, HttpClient httpClient,
 			HttpRequest.Builder requestBuilder, String baseUri, String endpoint, boolean resumableStreams,
-			boolean openConnectionOnStartup, AsyncHttpRequestCustomizer httpRequestCustomizer) {
+			boolean openConnectionOnStartup, McpAsyncHttpRequestCustomizer httpRequestCustomizer) {
 		this.objectMapper = objectMapper;
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
@@ -567,7 +567,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 		private HttpRequest.Builder requestBuilder = HttpRequest.newBuilder();
 
-		private AsyncHttpRequestCustomizer httpRequestCustomizer = AsyncHttpRequestCustomizer.NOOP;
+		private McpAsyncHttpRequestCustomizer httpRequestCustomizer = McpAsyncHttpRequestCustomizer.NOOP;
 
 		/**
 		 * Creates a new builder with the specified base URI.
@@ -676,16 +676,16 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 * executing them.
 		 * <p>
 		 * This overrides the customizer from
-		 * {@link #asyncHttpRequestCustomizer(AsyncHttpRequestCustomizer)}.
+		 * {@link #asyncHttpRequestCustomizer(McpAsyncHttpRequestCustomizer)}.
 		 * <p>
-		 * Do NOT use a blocking {@link SyncHttpRequestCustomizer} in a non-blocking
-		 * context. Use {@link #asyncHttpRequestCustomizer(AsyncHttpRequestCustomizer)}
+		 * Do NOT use a blocking {@link McpSyncHttpRequestCustomizer} in a non-blocking
+		 * context. Use {@link #asyncHttpRequestCustomizer(McpAsyncHttpRequestCustomizer)}
 		 * instead.
 		 * @param syncHttpRequestCustomizer the request customizer
 		 * @return this builder
 		 */
-		public Builder httpRequestCustomizer(SyncHttpRequestCustomizer syncHttpRequestCustomizer) {
-			this.httpRequestCustomizer = AsyncHttpRequestCustomizer.fromSync(syncHttpRequestCustomizer);
+		public Builder httpRequestCustomizer(McpSyncHttpRequestCustomizer syncHttpRequestCustomizer) {
+			this.httpRequestCustomizer = McpAsyncHttpRequestCustomizer.fromSync(syncHttpRequestCustomizer);
 			return this;
 		}
 
@@ -694,13 +694,13 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 * executing them.
 		 * <p>
 		 * This overrides the customizer from
-		 * {@link #httpRequestCustomizer(SyncHttpRequestCustomizer)}.
+		 * {@link #httpRequestCustomizer(McpSyncHttpRequestCustomizer)}.
 		 * <p>
 		 * Do NOT use a blocking implementation in a non-blocking context.
 		 * @param asyncHttpRequestCustomizer the request customizer
 		 * @return this builder
 		 */
-		public Builder asyncHttpRequestCustomizer(AsyncHttpRequestCustomizer asyncHttpRequestCustomizer) {
+		public Builder asyncHttpRequestCustomizer(McpAsyncHttpRequestCustomizer asyncHttpRequestCustomizer) {
 			this.httpRequestCustomizer = asyncHttpRequestCustomizer;
 			return this;
 		}

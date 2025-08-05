@@ -112,7 +112,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	/**
 	 * Customizer to modify requests before they are executed.
 	 */
-	private final AsyncHttpRequestCustomizer httpRequestCustomizer;
+	private final McpAsyncHttpRequestCustomizer httpRequestCustomizer;
 
 	/**
 	 * Creates a new transport instance with default HTTP client and object mapper.
@@ -187,7 +187,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	@Deprecated(forRemoval = true)
 	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
 			String sseEndpoint, ObjectMapper objectMapper) {
-		this(httpClient, requestBuilder, baseUri, sseEndpoint, objectMapper, AsyncHttpRequestCustomizer.NOOP);
+		this(httpClient, requestBuilder, baseUri, sseEndpoint, objectMapper, McpAsyncHttpRequestCustomizer.NOOP);
 	}
 
 	/**
@@ -203,7 +203,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 * @throws IllegalArgumentException if objectMapper, clientBuilder, or headers is null
 	 */
 	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
-			String sseEndpoint, ObjectMapper objectMapper, AsyncHttpRequestCustomizer httpRequestCustomizer) {
+			String sseEndpoint, ObjectMapper objectMapper, McpAsyncHttpRequestCustomizer httpRequestCustomizer) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.hasText(baseUri, "baseUri must not be empty");
 		Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
@@ -250,7 +250,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		private HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
 			.header("Content-Type", "application/json");
 
-		private AsyncHttpRequestCustomizer httpRequestCustomizer = AsyncHttpRequestCustomizer.NOOP;
+		private McpAsyncHttpRequestCustomizer httpRequestCustomizer = McpAsyncHttpRequestCustomizer.NOOP;
 
 		/**
 		 * Creates a new builder instance.
@@ -354,16 +354,16 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		 * executing them.
 		 * <p>
 		 * This overrides the customizer from
-		 * {@link #asyncHttpRequestCustomizer(AsyncHttpRequestCustomizer)}.
+		 * {@link #asyncHttpRequestCustomizer(McpAsyncHttpRequestCustomizer)}.
 		 * <p>
-		 * Do NOT use a blocking {@link SyncHttpRequestCustomizer} in a non-blocking
-		 * context. Use {@link #asyncHttpRequestCustomizer(AsyncHttpRequestCustomizer)}
+		 * Do NOT use a blocking {@link McpSyncHttpRequestCustomizer} in a non-blocking
+		 * context. Use {@link #asyncHttpRequestCustomizer(McpAsyncHttpRequestCustomizer)}
 		 * instead.
 		 * @param syncHttpRequestCustomizer the request customizer
 		 * @return this builder
 		 */
-		public Builder httpRequestCustomizer(SyncHttpRequestCustomizer syncHttpRequestCustomizer) {
-			this.httpRequestCustomizer = AsyncHttpRequestCustomizer.fromSync(syncHttpRequestCustomizer);
+		public Builder httpRequestCustomizer(McpSyncHttpRequestCustomizer syncHttpRequestCustomizer) {
+			this.httpRequestCustomizer = McpAsyncHttpRequestCustomizer.fromSync(syncHttpRequestCustomizer);
 			return this;
 		}
 
@@ -372,13 +372,13 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		 * executing them.
 		 * <p>
 		 * This overrides the customizer from
-		 * {@link #httpRequestCustomizer(SyncHttpRequestCustomizer)}.
+		 * {@link #httpRequestCustomizer(McpSyncHttpRequestCustomizer)}.
 		 * <p>
 		 * Do NOT use a blocking implementation in a non-blocking context.
 		 * @param asyncHttpRequestCustomizer the request customizer
 		 * @return this builder
 		 */
-		public Builder asyncHttpRequestCustomizer(AsyncHttpRequestCustomizer asyncHttpRequestCustomizer) {
+		public Builder asyncHttpRequestCustomizer(McpAsyncHttpRequestCustomizer asyncHttpRequestCustomizer) {
 			this.httpRequestCustomizer = asyncHttpRequestCustomizer;
 			return this;
 		}

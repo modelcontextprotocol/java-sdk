@@ -72,7 +72,7 @@ class HttpClientSseClientTransportTests {
 		public TestHttpClientSseClientTransport(final String baseUri) {
 			super(HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(),
 					HttpRequest.newBuilder().header("Content-Type", "application/json"), baseUri, "/sse",
-					new ObjectMapper(), AsyncHttpRequestCustomizer.NOOP);
+					new ObjectMapper(), McpAsyncHttpRequestCustomizer.NOOP);
 		}
 
 		public int getInboundMessageCount() {
@@ -389,7 +389,7 @@ class HttpClientSseClientTransportTests {
 
 	@Test
 	void testRequestCustomizer() {
-		var mockCustomizer = mock(SyncHttpRequestCustomizer.class);
+		var mockCustomizer = mock(McpSyncHttpRequestCustomizer.class);
 
 		// Create a transport with the customizer
 		var customizedTransport = HttpClientSseClientTransport.builder(host)
@@ -423,7 +423,7 @@ class HttpClientSseClientTransportTests {
 
 	@Test
 	void testAsyncRequestCustomizer() {
-		var mockCustomizer = mock(AsyncHttpRequestCustomizer.class);
+		var mockCustomizer = mock(McpAsyncHttpRequestCustomizer.class);
 		when(mockCustomizer.customize(any(), any(), any(), any()))
 			.thenAnswer(invocation -> Mono.just(invocation.getArguments()[0]));
 
