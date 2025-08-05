@@ -143,11 +143,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		Function<String, Publisher<Void>> onClose = sessionId -> sessionId == null ? Mono.empty()
 				: webClient.delete()
 					.uri(this.endpoint)
+					.header(HttpHeaders.MCP_SESSION_ID, sessionId)
 					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
-					.headers(httpHeaders -> {
-						httpHeaders.add(HttpHeaders.MCP_SESSION_ID, sessionId);
-						httpHeaders.add(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION);
-					})
 					.retrieve()
 					.toBodilessEntity()
 					.onErrorComplete(e -> {
