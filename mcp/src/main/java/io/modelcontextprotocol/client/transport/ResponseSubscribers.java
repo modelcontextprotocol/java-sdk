@@ -237,10 +237,10 @@ class ResponseSubscribers {
 
 		@Override
 		protected void hookOnComplete() {
-			// sink.next() is must 
+			// sink.next() is must
 			String data = this.eventBuilder.toString();
 			this.sink.next(new AggregateResponseEvent(responseInfo, data));
-		
+
 			this.sink.complete();
 		}
 
