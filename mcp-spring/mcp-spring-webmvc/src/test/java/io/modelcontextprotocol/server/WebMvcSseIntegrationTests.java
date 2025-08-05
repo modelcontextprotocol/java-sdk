@@ -23,7 +23,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.AbstractMcpClientServerIntegrationTests;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
-import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
+import io.modelcontextprotocol.client.transport.WebClientSseClientTransport;
 import io.modelcontextprotocol.server.McpServer.AsyncSpecification;
 import io.modelcontextprotocol.server.McpServer.SingleSessionSyncSpecification;
 import io.modelcontextprotocol.server.transport.WebMvcSseServerTransportProvider;
@@ -45,8 +45,8 @@ class WebMvcSseIntegrationTests extends AbstractMcpClientServerIntegrationTests 
 					.initializationTimeout(Duration.ofHours(10))
 					.requestTimeout(Duration.ofHours(10)));
 
-		clientBuilders.put("webflux", McpClient
-			.sync(WebFluxSseClientTransport.builder(WebClient.builder().baseUrl("http://localhost:" + port)).build()));
+		clientBuilders.put("webflux", McpClient.sync(
+				WebClientSseClientTransport.builder(WebClient.builder().baseUrl("http://localhost:" + port)).build()));
 	}
 
 	@Configuration

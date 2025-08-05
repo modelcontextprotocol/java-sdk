@@ -4,12 +4,6 @@
 
 package io.modelcontextprotocol.client.transport;
 
-import java.time.Duration;
-import java.util.Map;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
@@ -17,6 +11,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.web.reactive.function.client.WebClient;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import reactor.core.publisher.Flux;
@@ -24,21 +20,21 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
 
-import org.springframework.http.codec.ServerSentEvent;
-import org.springframework.web.reactive.function.client.WebClient;
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.*;
 
 /**
- * Tests for the {@link WebFluxSseClientTransport} class.
+ * Tests for the {@link WebClientSseClientTransport} class.
  *
  * @author Christian Tzolov
  */
 @Timeout(15)
-@Deprecated(forRemoval = true)
-class WebFluxSseClientTransportTests {
+class WebClientSseClientTransportTests {
 
 	static String host = "http://localhost:3001";
 
@@ -56,7 +52,7 @@ class WebFluxSseClientTransportTests {
 	private ObjectMapper objectMapper;
 
 	// Test class to access protected methods
-	static class TestSseClientTransport extends WebFluxSseClientTransport {
+	static class TestSseClientTransport extends WebClientSseClientTransport {
 
 		private final AtomicInteger inboundMessageCount = new AtomicInteger(0);
 
@@ -130,10 +126,10 @@ class WebFluxSseClientTransportTests {
 
 	@Test
 	void constructorValidation() {
-		assertThatThrownBy(() -> new WebFluxSseClientTransport(null)).isInstanceOf(IllegalArgumentException.class)
+		assertThatThrownBy(() -> new WebClientSseClientTransport(null)).isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("WebClient.Builder must not be null");
 
-		assertThatThrownBy(() -> new WebFluxSseClientTransport(webClientBuilder, null))
+		assertThatThrownBy(() -> new WebClientSseClientTransport(webClientBuilder, null))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("ObjectMapper must not be null");
 	}
@@ -141,24 +137,24 @@ class WebFluxSseClientTransportTests {
 	@Test
 	void testBuilderPattern() {
 		// Test default builder
-		WebFluxSseClientTransport transport1 = WebFluxSseClientTransport.builder(webClientBuilder).build();
+		WebClientSseClientTransport transport1 = WebClientSseClientTransport.builder(webClientBuilder).build();
 		assertThatCode(() -> transport1.closeGracefully().block()).doesNotThrowAnyException();
 
 		// Test builder with custom ObjectMapper
 		ObjectMapper customMapper = new ObjectMapper();
-		WebFluxSseClientTransport transport2 = WebFluxSseClientTransport.builder(webClientBuilder)
+		WebClientSseClientTransport transport2 = WebClientSseClientTransport.builder(webClientBuilder)
 			.objectMapper(customMapper)
 			.build();
 		assertThatCode(() -> transport2.closeGracefully().block()).doesNotThrowAnyException();
 
 		// Test builder with custom SSE endpoint
-		WebFluxSseClientTransport transport3 = WebFluxSseClientTransport.builder(webClientBuilder)
+		WebClientSseClientTransport transport3 = WebClientSseClientTransport.builder(webClientBuilder)
 			.sseEndpoint("/custom-sse")
 			.build();
 		assertThatCode(() -> transport3.closeGracefully().block()).doesNotThrowAnyException();
 
 		// Test builder with all custom parameters
-		WebFluxSseClientTransport transport4 = WebFluxSseClientTransport.builder(webClientBuilder)
+		WebClientSseClientTransport transport4 = WebClientSseClientTransport.builder(webClientBuilder)
 			.objectMapper(customMapper)
 			.sseEndpoint("/custom-sse")
 			.build();
@@ -289,7 +285,8 @@ class WebFluxSseClientTransportTests {
 		// Create a WebClient that simulates connection failures
 		WebClient.Builder failingWebClientBuilder = WebClient.builder().baseUrl("http://non-existent-host");
 
-		WebFluxSseClientTransport failingTransport = WebFluxSseClientTransport.builder(failingWebClientBuilder).build();
+		WebClientSseClientTransport failingTransport = WebClientSseClientTransport.builder(failingWebClientBuilder)
+			.build();
 
 		// Verify that the transport attempts to reconnect
 		StepVerifier.create(Mono.delay(Duration.ofSeconds(2))).expectNextCount(1).verifyComplete();

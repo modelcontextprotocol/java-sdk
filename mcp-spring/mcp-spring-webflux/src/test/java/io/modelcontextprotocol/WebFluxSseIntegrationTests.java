@@ -38,7 +38,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
-import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
+import io.modelcontextprotocol.client.transport.WebClientSseClientTransport;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
@@ -102,7 +102,7 @@ class WebFluxSseIntegrationTests {
 					.build()));
 		clientBuilders.put("webflux",
 				McpClient
-					.sync(WebFluxSseClientTransport.builder(WebClient.builder().baseUrl("http://localhost:" + PORT))
+					.sync(WebClientSseClientTransport.builder(WebClient.builder().baseUrl("http://localhost:" + PORT))
 						.sseEndpoint(CUSTOM_SSE_ENDPOINT)
 						.build()));
 

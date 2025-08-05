@@ -5,7 +5,6 @@
 package io.modelcontextprotocol.client.transport;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.modelcontextprotocol.util.Assert;
 
 import org.springframework.web.reactive.function.client.WebClient;
@@ -35,13 +34,11 @@ import org.springframework.web.reactive.function.client.WebClient;
  *
  * @author Christian Tzolov
  * @author Yanming Zhou
- * @deprecated use {@link WebClientSseClientTransport} instead
  * @see <a href=
  * "https://spec.modelcontextprotocol.io/specification/basic/transports/#http-with-sse">MCP
  * HTTP with SSE Transport Specification</a>
  */
-@Deprecated(forRemoval = true)
-public class WebFluxSseClientTransport extends InternalWebClientSseClientTransport {
+public class WebClientSseClientTransport extends InternalWebClientSseClientTransport {
 
 	/**
 	 * Constructs a new SseClientTransport with the specified WebClient builder. Uses a
@@ -50,7 +47,7 @@ public class WebFluxSseClientTransport extends InternalWebClientSseClientTranspo
 	 * instance
 	 * @throws IllegalArgumentException if webClientBuilder is null
 	 */
-	public WebFluxSseClientTransport(WebClient.Builder webClientBuilder) {
+	public WebClientSseClientTransport(WebClient.Builder webClientBuilder) {
 		super(webClientBuilder);
 	}
 
@@ -62,7 +59,7 @@ public class WebFluxSseClientTransport extends InternalWebClientSseClientTranspo
 	 * @param objectMapper the ObjectMapper to use for JSON processing
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
-	public WebFluxSseClientTransport(WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
+	public WebClientSseClientTransport(WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
 		super(webClientBuilder, objectMapper);
 	}
 
@@ -75,13 +72,13 @@ public class WebFluxSseClientTransport extends InternalWebClientSseClientTranspo
 	 * @param sseEndpoint the SSE endpoint URI to use for establishing the connection
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
-	public WebFluxSseClientTransport(WebClient.Builder webClientBuilder, ObjectMapper objectMapper,
+	public WebClientSseClientTransport(WebClient.Builder webClientBuilder, ObjectMapper objectMapper,
 			String sseEndpoint) {
 		super(webClientBuilder, objectMapper, sseEndpoint);
 	}
 
 	/**
-	 * Creates a new builder for {@link WebFluxSseClientTransport}.
+	 * Creates a new builder for {@link WebClientSseClientTransport}.
 	 * @param webClientBuilder the WebClient.Builder to use for creating the WebClient
 	 * instance
 	 * @return a new builder instance
@@ -91,7 +88,7 @@ public class WebFluxSseClientTransport extends InternalWebClientSseClientTranspo
 	}
 
 	/**
-	 * Builder for {@link WebFluxSseClientTransport}.
+	 * Builder for {@link WebClientSseClientTransport}.
 	 */
 	public static class Builder {
 
@@ -133,11 +130,11 @@ public class WebFluxSseClientTransport extends InternalWebClientSseClientTranspo
 		}
 
 		/**
-		 * Builds a new {@link WebFluxSseClientTransport} instance.
+		 * Builds a new {@link WebClientSseClientTransport} instance.
 		 * @return a new transport instance
 		 */
-		public WebFluxSseClientTransport build() {
-			return new WebFluxSseClientTransport(webClientBuilder, objectMapper, sseEndpoint);
+		public WebClientSseClientTransport build() {
+			return new WebClientSseClientTransport(webClientBuilder, objectMapper, sseEndpoint);
 		}
 
 	}

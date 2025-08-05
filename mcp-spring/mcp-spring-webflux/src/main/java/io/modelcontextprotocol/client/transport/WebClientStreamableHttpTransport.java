@@ -60,7 +60,7 @@ import reactor.util.function.Tuples;
  * "https://modelcontextprotocol.io/specification/2024-11-05/basic/transports#http-with-sse">"HTTP
  * with SSE" transport</a>. In order to communicate over the phased-out
  * <code>2024-11-05</code> protocol, use {@link HttpClientSseClientTransport} or
- * {@link WebFluxSseClientTransport}.
+ * {@link WebClientSseClientTransport}.
  * </p>
  *
  * @author Dariusz Jędrzejczyk
