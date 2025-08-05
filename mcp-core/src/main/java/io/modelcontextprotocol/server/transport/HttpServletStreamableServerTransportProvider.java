@@ -102,7 +102,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	private McpStreamableServerSession.Factory sessionFactory;
 
 	/**
-	 * Map of active client sessions, keyed by mcp-session-id.
+	 * Map of active client sessions, keyed by Mcp-Session-Id.
 	 */
 	private final ConcurrentHashMap<String, McpStreamableServerSession> sessions = new ConcurrentHashMap<>();
 
@@ -256,7 +256,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		String sessionId = request.getHeader(HttpHeaders.MCP_SESSION_ID);
 
 		if (sessionId == null || sessionId.isBlank()) {
-			badRequestErrors.add("Session ID required in mcp-session-id header");
+			badRequestErrors.add("Session ID required in " + HttpHeaders.MCP_SESSION_ID + " header");
 		}
 
 		if (!badRequestErrors.isEmpty()) {
@@ -438,7 +438,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			String sessionId = request.getHeader(HttpHeaders.MCP_SESSION_ID);
 
 			if (sessionId == null || sessionId.isBlank()) {
-				badRequestErrors.add("Session ID required in mcp-session-id header");
+				badRequestErrors.add("Session ID required in " + HttpHeaders.MCP_SESSION_ID + " header");
 			}
 
 			if (!badRequestErrors.isEmpty()) {
@@ -545,7 +545,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		if (request.getHeader(HttpHeaders.MCP_SESSION_ID) == null) {
 			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
-					new McpError("Session ID required in mcp-session-id header"));
+					new McpError("Session ID required in " + HttpHeaders.MCP_SESSION_ID + " header"));
 			return;
 		}
 
