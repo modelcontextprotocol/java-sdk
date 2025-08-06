@@ -13,6 +13,8 @@ public interface McpStatelessServerTransport {
 
 	void setMcpHandler(McpStatelessServerHandler mcpHandler);
 
+	McpStatelessServerHandler getMcpHandler();
+
 	/**
 	 * Immediately closes all the transports with connected clients and releases any
 	 * associated resources.

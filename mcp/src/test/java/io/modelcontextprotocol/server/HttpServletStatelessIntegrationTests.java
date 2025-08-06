@@ -8,11 +8,13 @@ import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 
@@ -21,6 +23,7 @@ import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.web.client.RestClient;
@@ -42,7 +45,9 @@ import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import net.javacrumbs.jsonunit.core.Option;
+import reactor.core.publisher.Mono;
 
+@TestInstance(PER_CLASS)
 class HttpServletStatelessIntegrationTests {
 
 	private static final int PORT = TomcatTestUtil.findAvailablePort();
@@ -92,6 +97,43 @@ class HttpServletStatelessIntegrationTests {
 				throw new RuntimeException("Failed to stop Tomcat", e);
 			}
 		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient" })
+	void testWrappingMcpHandler(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport).build();
+
+		AtomicInteger counter = new AtomicInteger();
+
+		McpStatelessServerHandler actualMcpHandler = mcpStatelessServerTransport.getMcpHandler();
+		McpStatelessServerHandler wrappedMcpHandler = new McpStatelessServerHandler() {
+			@Override
+			public Mono<McpSchema.JSONRPCResponse> handleRequest(McpTransportContext transportContext,
+					McpSchema.JSONRPCRequest request) {
+				counter.incrementAndGet();
+				return actualMcpHandler.handleRequest(transportContext, request);
+			}
+
+			@Override
+			public Mono<Void> handleNotification(McpTransportContext transportContext,
+					McpSchema.JSONRPCNotification notification) {
+				return actualMcpHandler.handleNotification(transportContext, notification);
+			}
+		};
+		mcpStatelessServerTransport.setMcpHandler(wrappedMcpHandler);
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+			assertThat(counter.get()).isEqualTo(1);
+		}
+		finally {
+			mcpStatelessServerTransport.setMcpHandler(actualMcpHandler);
+		}
+
+		mcpServer.close();
 	}
 
 	// ---------------------------------------
