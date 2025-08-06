@@ -533,7 +533,7 @@ public final class McpSchema {
 
 			private Map<String, Object> experimental;
 
-			private LoggingCapabilities logging = new LoggingCapabilities();
+			private LoggingCapabilities logging;
 
 			private PromptCapabilities prompts;
 

@@ -81,6 +81,7 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(result).isNotNull();
 		assertThat(result.protocolVersion()).isEqualTo(transport.protocolVersions().get(0));
 		assertThat(result.capabilities()).isEqualTo(serverCapabilities);
+		assertThat(result.capabilities().logging()).isNull();
 		assertThat(result.serverInfo()).isEqualTo(serverInfo);
 		assertThat(result.instructions()).isEqualTo("Test instructions");
 
