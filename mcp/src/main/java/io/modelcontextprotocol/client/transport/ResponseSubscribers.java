@@ -1,6 +1,7 @@
 /*
 * Copyright 2024 - 2024 the original author or authors.
 */
+
 package io.modelcontextprotocol.client.transport;
 
 import java.net.http.HttpResponse;
@@ -12,6 +13,7 @@ import java.util.regex.Pattern;
 import org.reactivestreams.FlowAdapters;
 import org.reactivestreams.Subscription;
 
+import io.modelcontextprotocol.spec.McpError;
 import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.FluxSink;
 
@@ -135,6 +137,7 @@ class ResponseSubscribers {
 
 		@Override
 		protected void hookOnNext(String line) {
+
 			if (line.isEmpty()) {
 				// Empty line means end of event
 				if (this.eventBuilder.length() > 0) {
@@ -163,6 +166,13 @@ class ResponseSubscribers {
 					if (matcher.find()) {
 						this.currentEventType.set(matcher.group(1).trim());
 					}
+				}
+				else {
+					// If the response is not successful, emit an error
+					// TODO: This should be a McpTransportError
+					this.sink.error(new McpError(
+							"Invalid SSE response. Status code: " + this.responseInfo.statusCode() + " Line: " + line));
+
 				}
 			}
 		}

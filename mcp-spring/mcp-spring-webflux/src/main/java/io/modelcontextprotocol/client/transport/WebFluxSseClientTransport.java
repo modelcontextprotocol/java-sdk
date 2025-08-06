@@ -1,18 +1,23 @@
 /*
  * Copyright 2024 - 2024 the original author or authors.
  */
+
 package io.modelcontextprotocol.client.transport;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,6 +66,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 public class WebFluxSseClientTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebFluxSseClientTransport.class);
+
+	private static final String MCP_PROTOCOL_VERSION = ProtocolVersions.MCP_2024_11_05;
 
 	/**
 	 * Event type for JSON-RPC messages received through the SSE connection. The server
@@ -166,6 +173,11 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 		this.sseEndpoint = sseEndpoint;
 	}
 
+	@Override
+	public List<String> protocolVersions() {
+		return List.of(MCP_PROTOCOL_VERSION);
+	}
+
 	/**
 	 * Establishes a connection to the MCP server using Server-Sent Events (SSE). This
 	 * method initiates the SSE connection and sets up the message processing pipeline.
@@ -216,7 +228,8 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 				}
 			}
 			else {
-				s.error(new McpError("Received unrecognized SSE event type: " + event.event()));
+				logger.debug("Received unrecognized SSE event type: {}", event);
+				s.complete();
 			}
 		}).transform(handler)).subscribe();
 
@@ -249,6 +262,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 				return webClient.post()
 					.uri(messageEndpointUri)
 					.contentType(MediaType.APPLICATION_JSON)
+					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 					.bodyValue(jsonText)
 					.retrieve()
 					.toBodilessEntity()
@@ -281,6 +295,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 			.get()
 			.uri(this.sseEndpoint)
 			.accept(MediaType.TEXT_EVENT_STREAM)
+			.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 			.retrieve()
 			.bodyToFlux(SSE_TYPE)
 			.retryWhen(Retry.from(retrySignal -> retrySignal.handle(inboundRetryHandler)));

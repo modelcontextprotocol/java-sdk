@@ -1,6 +1,7 @@
 /*
 * Copyright 2025 - 2025 the original author or authors.
 */
+
 package io.modelcontextprotocol.spec;
 
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
@@ -319,8 +320,8 @@ public class McpSchemaTests {
 		McpSchema.Implementation clientInfo = new McpSchema.Implementation("test-client", "1.0.0");
 		Map<String, Object> meta = Map.of("metaKey", "metaValue");
 
-		McpSchema.InitializeRequest request = new McpSchema.InitializeRequest("2024-11-05", capabilities, clientInfo,
-				meta);
+		McpSchema.InitializeRequest request = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2024_11_05,
+				capabilities, clientInfo, meta);
 
 		String value = mapper.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -342,8 +343,8 @@ public class McpSchemaTests {
 
 		McpSchema.Implementation serverInfo = new McpSchema.Implementation("test-server", "1.0.0");
 
-		McpSchema.InitializeResult result = new McpSchema.InitializeResult("2024-11-05", capabilities, serverInfo,
-				"Server initialized successfully");
+		McpSchema.InitializeResult result = new McpSchema.InitializeResult(ProtocolVersions.MCP_2024_11_05,
+				capabilities, serverInfo, "Server initialized successfully");
 
 		String value = mapper.writeValueAsString(result);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)

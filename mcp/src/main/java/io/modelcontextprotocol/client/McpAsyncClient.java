@@ -1,9 +1,12 @@
 /*
  * Copyright 2024-2024 the original author or authors.
  */
+
 package io.modelcontextprotocol.client;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -174,7 +177,10 @@ public class McpAsyncClient {
 		Map<String, RequestHandler<?>> requestHandlers = new HashMap<>();
 
 		// Ping MUST respond with an empty data, but not NULL response.
-		requestHandlers.put(McpSchema.METHOD_PING, params -> Mono.just(Map.of()));
+		requestHandlers.put(McpSchema.METHOD_PING, params -> {
+			logger.debug("Received ping: {}", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+			return Mono.just(Map.of());
+		});
 
 		// Roots List Request Handler
 		if (this.clientCapabilities.roots() != null) {
@@ -266,11 +272,18 @@ public class McpAsyncClient {
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_PROGRESS,
 				asyncProgressNotificationHandler(progressConsumersFinal));
 
-		this.initializer = new LifecycleInitializer(clientCapabilities, clientInfo,
-				List.of(McpSchema.LATEST_PROTOCOL_VERSION), initializationTimeout,
-				ctx -> new McpClientSession(requestTimeout, transport, requestHandlers, notificationHandlers,
-						con -> con.contextWrite(ctx)));
+		this.initializer = new LifecycleInitializer(clientCapabilities, clientInfo, transport.protocolVersions(),
+				initializationTimeout, ctx -> new McpClientSession(requestTimeout, transport, requestHandlers,
+						notificationHandlers, con -> con.contextWrite(ctx)));
 		this.transport.setExceptionHandler(this.initializer::handleException);
+	}
+
+	/**
+	 * Get the current initialization result.
+	 * @return the initialization result.
+	 */
+	public McpSchema.InitializeResult getCurrentInitializationResult() {
+		return this.initializer.currentInitializationResult();
 	}
 
 	/**

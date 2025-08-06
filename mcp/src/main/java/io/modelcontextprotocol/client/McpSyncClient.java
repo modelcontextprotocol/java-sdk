@@ -74,6 +74,14 @@ public class McpSyncClient implements AutoCloseable {
 	}
 
 	/**
+	 * Get the current initialization result.
+	 * @return the initialization result.
+	 */
+	public McpSchema.InitializeResult getCurrentInitializationResult() {
+		return this.delegate.getCurrentInitializationResult();
+	}
+
+	/**
 	 * Get the server capabilities that define the supported features and functionality.
 	 * @return The server capabilities
 	 */
