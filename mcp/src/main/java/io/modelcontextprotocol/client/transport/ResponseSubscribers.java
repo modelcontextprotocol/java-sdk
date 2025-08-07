@@ -12,6 +12,8 @@ import java.util.regex.Pattern;
 
 import org.reactivestreams.FlowAdapters;
 import org.reactivestreams.Subscription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.modelcontextprotocol.spec.McpError;
 import reactor.core.publisher.BaseSubscriber;
@@ -30,6 +32,8 @@ import reactor.core.publisher.FluxSink;
  * @author Dariusz Jędrzejczyk
  */
 class ResponseSubscribers {
+
+	private static final Logger logger = LoggerFactory.getLogger(ResponseSubscribers.class);
 
 	record SseEvent(String id, String event, String data) {
 	}
@@ -166,6 +170,11 @@ class ResponseSubscribers {
 					if (matcher.find()) {
 						this.currentEventType.set(matcher.group(1).trim());
 					}
+				}
+				else if (line.startsWith(":")) {
+					// Ignore comment lines starting with ":"
+					// This is a no-op, just to skip comments
+					logger.debug("Ignoring comment line: {}", line);
 				}
 				else {
 					// If the response is not successful, emit an error
