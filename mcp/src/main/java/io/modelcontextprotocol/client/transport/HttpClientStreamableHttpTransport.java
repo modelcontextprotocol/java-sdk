@@ -400,7 +400,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					.header("Cache-Control", "no-cache")
 					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 					.POST(HttpRequest.BodyPublishers.ofString(jsonBody));
-				return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, jsonBody));
+				return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", uri, jsonBody));
 			}).flatMapMany(requestBuilder -> Flux.<ResponseEvent>create(responseEventSink -> {
 
 				// Create the async request with proper body subscriber selection

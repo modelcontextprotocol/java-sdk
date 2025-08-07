@@ -84,7 +84,7 @@ public class HttpClientStreamableHttpTransportEmptyJsonResponseTest {
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 
 		// Verify the customizer was called
-		verify(mockRequestCustomizer, atLeastOnce()).customize(any(), eq("GET"), eq(uri), eq(
+		verify(mockRequestCustomizer, atLeastOnce()).customize(any(), eq("POST"), eq(uri), eq(
 				"{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":\"test-id\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{\"roots\":{\"listChanged\":true}},\"clientInfo\":{\"name\":\"Spring AI MCP Client\",\"version\":\"0.3.1\"}}}"));
 
 	}
