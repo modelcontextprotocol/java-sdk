@@ -1201,6 +1201,7 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record JsonSchema( // @formatter:off
 		@JsonProperty("type") String type,
+		@JsonProperty("items") JsonSchema items,
 		@JsonProperty("properties") Map<String, Object> properties,
 		@JsonProperty("required") List<String> required,
 		@JsonProperty("additionalProperties") Boolean additionalProperties,
