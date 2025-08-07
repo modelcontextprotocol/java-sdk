@@ -31,6 +31,7 @@ import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.McpTransportSession;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.spec.McpTransportStream;
@@ -69,6 +70,8 @@ import reactor.util.function.Tuples;
  * HTTP transport specification</a>
  */
 public class WebClientStreamableHttpTransport implements McpClientTransport {
+
+	private static final String MISSING_SESSION_ID = "[missing_session_id]";
 
 	private static final Logger logger = LoggerFactory.getLogger(WebClientStreamableHttpTransport.class);
 
@@ -221,8 +224,13 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 						return Flux.empty();
 					}
 					else if (isNotFound(response)) {
-						String sessionIdRepresentation = sessionIdOrPlaceholder(transportSession);
-						return mcpSessionNotFoundError(sessionIdRepresentation);
+						if (transportSession.sessionId().isPresent()) {
+							String sessionIdRepresentation = sessionIdOrPlaceholder(transportSession);
+							return mcpSessionNotFoundError(sessionIdRepresentation);
+						}
+						else {
+							return this.extractError(response, MISSING_SESSION_ID);
+						}
 					}
 					else {
 						return response.<McpSchema.JSONRPCMessage>createError().doOnError(e -> {
@@ -318,10 +326,10 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 						}
 					}
 					else {
-						if (isNotFound(response)) {
+						if (isNotFound(response) && !sessionRepresentation.equals(MISSING_SESSION_ID)) {
 							return mcpSessionNotFoundError(sessionRepresentation);
 						}
-						return extractError(response, sessionRepresentation);
+						return this.extractError(response, sessionRepresentation);
 					}
 				})
 				.flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage)))
@@ -362,10 +370,10 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 						McpSchema.JSONRPCResponse.class);
 				jsonRpcError = jsonRpcResponse.error();
 				toPropagate = jsonRpcError != null ? new McpError(jsonRpcError)
-						: new McpError("Can't parse the jsonResponse " + jsonRpcResponse);
+						: new McpTransportException("Can't parse the jsonResponse " + jsonRpcResponse);
 			}
 			catch (IOException ex) {
-				toPropagate = new RuntimeException("Sending request failed", e);
+				toPropagate = new McpTransportException("Sending request failed, " + e.getMessage(), e);
 				logger.debug("Received content together with {} HTTP code response: {}", response.statusCode(), body);
 			}
 
@@ -374,7 +382,11 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			// invalidate the session
 			// https://github.com/modelcontextprotocol/typescript-sdk/issues/389
 			if (responseException.getStatusCode().isSameCodeAs(HttpStatus.BAD_REQUEST)) {
-				return Mono.error(new McpTransportSessionNotFoundException(sessionRepresentation, toPropagate));
+				if (!sessionRepresentation.equals(MISSING_SESSION_ID)) {
+					return Mono.error(new McpTransportSessionNotFoundException(sessionRepresentation, toPropagate));
+				}
+				return Mono.error(new McpTransportException("Received 400 BAD REQUEST for session "
+						+ sessionRepresentation + ". " + toPropagate.getMessage(), toPropagate));
 			}
 			return Mono.error(toPropagate);
 		}).flux();
@@ -403,7 +415,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	}
 
 	private static String sessionIdOrPlaceholder(McpTransportSession<?> transportSession) {
-		return transportSession.sessionId().orElse("[missing_session_id]");
+		return transportSession.sessionId().orElse(MISSING_SESSION_ID);
 	}
 
 	private Flux<McpSchema.JSONRPCMessage> directResponseFlux(McpSchema.JSONRPCMessage sentMessage,
@@ -421,8 +433,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 				}
 			}
 			catch (IOException e) {
-				// TODO: this should be a McpTransportError
-				s.error(e);
+				s.error(new McpTransportException(e));
 			}
 		}).flatMapIterable(Function.identity());
 	}
@@ -449,7 +460,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 				return Tuples.of(Optional.ofNullable(event.id()), List.of(message));
 			}
 			catch (IOException ioException) {
-				throw new McpError("Error parsing JSON-RPC message: " + event.data());
+				throw new McpTransportException("Error parsing JSON-RPC message: " + event.data(), ioException);
 			}
 		}
 		else {

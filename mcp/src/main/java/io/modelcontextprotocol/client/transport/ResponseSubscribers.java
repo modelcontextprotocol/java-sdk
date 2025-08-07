@@ -15,7 +15,7 @@ import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.spec.McpTransportException;
 import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.FluxSink;
 
@@ -178,8 +178,7 @@ class ResponseSubscribers {
 				}
 				else {
 					// If the response is not successful, emit an error
-					// TODO: This should be a McpTransportError
-					this.sink.error(new McpError(
+					this.sink.error(new McpTransportException(
 							"Invalid SSE response. Status code: " + this.responseInfo.statusCode() + " Line: " + line));
 
 				}
