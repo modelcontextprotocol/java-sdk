@@ -75,14 +75,15 @@ class WebMvcStatelessIntegrationTests extends AbstractStatelessIntegrationTests 
 
 		clientBuilders.put("httpclient", McpClient
 			.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + port).endpoint(mcpEndpoint).build())
-			.initializationTimeout(Duration.ofHours(10))
 			.requestTimeout(Duration.ofHours(10)));
 
 		clientBuilders.put("webflux",
-				McpClient.sync(WebClientStreamableHttpTransport
-					.builder(WebClient.builder().baseUrl("http://localhost:" + port))
-					.endpoint(mcpEndpoint)
-					.build()));
+				McpClient
+					.sync(WebClientStreamableHttpTransport
+						.builder(WebClient.builder().baseUrl("http://localhost:" + port))
+						.endpoint(mcpEndpoint)
+						.build())
+					.requestTimeout(Duration.ofHours(10)));
 	}
 
 	@BeforeEach
