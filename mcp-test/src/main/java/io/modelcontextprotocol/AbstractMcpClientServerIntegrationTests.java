@@ -19,10 +19,13 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -31,16 +34,22 @@ import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
+import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
+import io.modelcontextprotocol.spec.McpSchema.CompleteRequest;
+import io.modelcontextprotocol.spec.McpSchema.CompleteResult;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
 import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
 import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.ModelPreferences;
+import io.modelcontextprotocol.spec.McpSchema.Prompt;
+import io.modelcontextprotocol.spec.McpSchema.PromptArgument;
+import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.Role;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
@@ -740,7 +749,6 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	// ---------------------------------------
 	// Tools Tests
 	// ---------------------------------------
-
 	String emptyJsonSchema = """
 			{
 				"$schema": "http://json-schema.org/draft-07/schema#",
@@ -944,6 +952,276 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		mcpServer.close();
 	}
 
+	// ---------------------------------------
+	// Logging Tests
+	// ---------------------------------------
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testLoggingNotification(String clientType) throws InterruptedException {
+		int expectedNotificationsCount = 3;
+		CountDownLatch latch = new CountDownLatch(expectedNotificationsCount);
+		// Create a list to store received logging notifications
+		List<McpSchema.LoggingMessageNotification> receivedNotifications = new CopyOnWriteArrayList<>();
+
+		var clientBuilder = clientBuilders.get(clientType);
+		;
+		// Create server with a tool that sends logging notifications
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(Tool.builder()
+				.name("logging-test")
+				.description("Test logging notifications")
+				.inputSchema(emptyJsonSchema)
+				.build())
+			.callHandler((exchange, request) -> {
+
+				// Create and send notifications with different levels
+
+			//@formatter:off
+					return exchange // This should be filtered out (DEBUG < NOTICE)
+						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+								.level(McpSchema.LoggingLevel.DEBUG)
+								.logger("test-logger")
+								.data("Debug message")
+								.build())
+					.then(exchange // This should be sent (NOTICE >= NOTICE)
+						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+								.level(McpSchema.LoggingLevel.NOTICE)
+								.logger("test-logger")
+								.data("Notice message")
+								.build()))
+					.then(exchange // This should be sent (ERROR > NOTICE)
+						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+							.level(McpSchema.LoggingLevel.ERROR)
+							.logger("test-logger")
+							.data("Error message")
+							.build()))
+					.then(exchange // This should be filtered out (INFO < NOTICE)
+						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+								.level(McpSchema.LoggingLevel.INFO)
+								.logger("test-logger")
+								.data("Another info message")
+								.build()))
+					.then(exchange // This should be sent (ERROR >= NOTICE)
+						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+								.level(McpSchema.LoggingLevel.ERROR)
+								.logger("test-logger")
+								.data("Another error message")
+								.build()))
+					.thenReturn(new CallToolResult("Logging test completed", false));
+					//@formatter:on
+			})
+			.build();
+
+		var mcpServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().logging().tools(true).build())
+			.tools(tool)
+			.build();
+
+		try (
+				// Create client with logging notification handler
+				var mcpClient = clientBuilder.loggingConsumer(notification -> {
+					receivedNotifications.add(notification);
+					latch.countDown();
+				}).build()) {
+
+			// Initialize client
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Set minimum logging level to NOTICE
+			mcpClient.setLoggingLevel(McpSchema.LoggingLevel.NOTICE);
+
+			// Call the tool that sends logging notifications
+			CallToolResult result = mcpClient.callTool(new McpSchema.CallToolRequest("logging-test", Map.of()));
+			assertThat(result).isNotNull();
+			assertThat(result.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
+			assertThat(((McpSchema.TextContent) result.content().get(0)).text()).isEqualTo("Logging test completed");
+
+			assertThat(latch.await(5, TimeUnit.SECONDS)).as("Should receive notifications in reasonable time").isTrue();
+
+			// Should have received 3 notifications (1 NOTICE and 2 ERROR)
+			assertThat(receivedNotifications).hasSize(expectedNotificationsCount);
+
+			Map<String, McpSchema.LoggingMessageNotification> notificationMap = receivedNotifications.stream()
+				.collect(Collectors.toMap(n -> n.data(), n -> n));
+
+			// First notification should be NOTICE level
+			assertThat(notificationMap.get("Notice message").level()).isEqualTo(McpSchema.LoggingLevel.NOTICE);
+			assertThat(notificationMap.get("Notice message").logger()).isEqualTo("test-logger");
+			assertThat(notificationMap.get("Notice message").data()).isEqualTo("Notice message");
+
+			// Second notification should be ERROR level
+			assertThat(notificationMap.get("Error message").level()).isEqualTo(McpSchema.LoggingLevel.ERROR);
+			assertThat(notificationMap.get("Error message").logger()).isEqualTo("test-logger");
+			assertThat(notificationMap.get("Error message").data()).isEqualTo("Error message");
+
+			// Third notification should be ERROR level
+			assertThat(notificationMap.get("Another error message").level()).isEqualTo(McpSchema.LoggingLevel.ERROR);
+			assertThat(notificationMap.get("Another error message").logger()).isEqualTo("test-logger");
+			assertThat(notificationMap.get("Another error message").data()).isEqualTo("Another error message");
+		}
+		mcpServer.close();
+	}
+
+	// ---------------------------------------
+	// Progress Tests
+	// ---------------------------------------
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testProgressNotification(String clientType) throws InterruptedException {
+		int expectedNotificationsCount = 4; // 3 notifications + 1 for another progress
+											// token
+		CountDownLatch latch = new CountDownLatch(expectedNotificationsCount);
+		// Create a list to store received logging notifications
+		List<McpSchema.ProgressNotification> receivedNotifications = new CopyOnWriteArrayList<>();
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Create server with a tool that sends logging notifications
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(McpSchema.Tool.builder()
+				.name("progress-test")
+				.description("Test progress notifications")
+				.inputSchema(emptyJsonSchema)
+				.build())
+			.callHandler((exchange, request) -> {
+
+				// Create and send notifications
+				var progressToken = (String) request.meta().get("progressToken");
+
+				return exchange
+					.progressNotification(
+							new McpSchema.ProgressNotification(progressToken, 0.0, 1.0, "Processing started"))
+					.then(exchange.progressNotification(
+							new McpSchema.ProgressNotification(progressToken, 0.5, 1.0, "Processing data")))
+					.then(// Send a progress notification with another progress value
+							// should
+							exchange.progressNotification(new McpSchema.ProgressNotification("another-progress-token",
+									0.0, 1.0, "Another processing started")))
+					.then(exchange.progressNotification(
+							new McpSchema.ProgressNotification(progressToken, 1.0, 1.0, "Processing completed")))
+					.thenReturn(new CallToolResult(("Progress test completed"), false));
+			})
+			.build();
+
+		var mcpServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool)
+			.build();
+
+		try (
+				// Create client with progress notification handler
+				var mcpClient = clientBuilder.progressConsumer(notification -> {
+					receivedNotifications.add(notification);
+					latch.countDown();
+				}).build()) {
+
+			// Initialize client
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Call the tool that sends progress notifications
+			McpSchema.CallToolRequest callToolRequest = McpSchema.CallToolRequest.builder()
+				.name("progress-test")
+				.meta(Map.of("progressToken", "test-progress-token"))
+				.build();
+			CallToolResult result = mcpClient.callTool(callToolRequest);
+			assertThat(result).isNotNull();
+			assertThat(result.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
+			assertThat(((McpSchema.TextContent) result.content().get(0)).text()).isEqualTo("Progress test completed");
+
+			assertThat(latch.await(5, TimeUnit.SECONDS)).as("Should receive notifications in reasonable time").isTrue();
+
+			// Should have received 3 notifications
+			assertThat(receivedNotifications).hasSize(expectedNotificationsCount);
+
+			Map<String, McpSchema.ProgressNotification> notificationMap = receivedNotifications.stream()
+				.collect(Collectors.toMap(n -> n.message(), n -> n));
+
+			// First notification should be 0.0/1.0 progress
+			assertThat(notificationMap.get("Processing started").progressToken()).isEqualTo("test-progress-token");
+			assertThat(notificationMap.get("Processing started").progress()).isEqualTo(0.0);
+			assertThat(notificationMap.get("Processing started").total()).isEqualTo(1.0);
+			assertThat(notificationMap.get("Processing started").message()).isEqualTo("Processing started");
+
+			// Second notification should be 0.5/1.0 progress
+			assertThat(notificationMap.get("Processing data").progressToken()).isEqualTo("test-progress-token");
+			assertThat(notificationMap.get("Processing data").progress()).isEqualTo(0.5);
+			assertThat(notificationMap.get("Processing data").total()).isEqualTo(1.0);
+			assertThat(notificationMap.get("Processing data").message()).isEqualTo("Processing data");
+
+			// Third notification should be another progress token with 0.0/1.0 progress
+			assertThat(notificationMap.get("Another processing started").progressToken())
+				.isEqualTo("another-progress-token");
+			assertThat(notificationMap.get("Another processing started").progress()).isEqualTo(0.0);
+			assertThat(notificationMap.get("Another processing started").total()).isEqualTo(1.0);
+			assertThat(notificationMap.get("Another processing started").message())
+				.isEqualTo("Another processing started");
+
+			// Fourth notification should be 1.0/1.0 progress
+			assertThat(notificationMap.get("Processing completed").progressToken()).isEqualTo("test-progress-token");
+			assertThat(notificationMap.get("Processing completed").progress()).isEqualTo(1.0);
+			assertThat(notificationMap.get("Processing completed").total()).isEqualTo(1.0);
+			assertThat(notificationMap.get("Processing completed").message()).isEqualTo("Processing completed");
+		}
+		finally {
+			mcpServer.close();
+		}
+	}
+
+	// ---------------------------------------
+	// Completion Tests
+	// ---------------------------------------
+	@ParameterizedTest(name = "{0} : Completion call")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testCompletionShouldReturnExpectedSuggestions(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		var expectedValues = List.of("python", "pytorch", "pyside");
+		var completionResponse = new McpSchema.CompleteResult(new CompleteResult.CompleteCompletion(expectedValues, 10, // total
+				true // hasMore
+		));
+
+		AtomicReference<CompleteRequest> samplingRequest = new AtomicReference<>();
+		BiFunction<McpSyncServerExchange, CompleteRequest, CompleteResult> completionHandler = (mcpSyncServerExchange,
+				request) -> {
+			samplingRequest.set(request);
+			return completionResponse;
+		};
+
+		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().completions().build())
+			.prompts(new McpServerFeatures.SyncPromptSpecification(
+					new Prompt("code_review", "Code review", "this is code review prompt",
+							List.of(new PromptArgument("language", "Language", "string", false))),
+					(mcpSyncServerExchange, getPromptRequest) -> null))
+			.completions(new McpServerFeatures.SyncCompletionSpecification(
+					new McpSchema.PromptReference("ref/prompt", "code_review", "Code review"), completionHandler))
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = new CompleteRequest(
+					new PromptReference("ref/prompt", "code_review", "Code review"),
+					new CompleteRequest.CompleteArgument("language", "py"));
+
+			CompleteResult result = mcpClient.completeCompletion(request);
+
+			assertThat(result).isNotNull();
+
+			assertThat(samplingRequest.get().argument().name()).isEqualTo("language");
+			assertThat(samplingRequest.get().argument().value()).isEqualTo("py");
+			assertThat(samplingRequest.get().ref().type()).isEqualTo("ref/prompt");
+		}
+
+		mcpServer.close();
+	}
+
+	// ---------------------------------------
+	// Ping Tests
+	// ---------------------------------------
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
 	void testPingSuccess(String clientType) {
@@ -1006,7 +1284,6 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	// ---------------------------------------
 	// Tool Structured Output Schema Tests
 	// ---------------------------------------
-
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
 	void testStructuredOutputValidationSuccess(String clientType) {

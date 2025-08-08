@@ -11,8 +11,6 @@ import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -29,7 +27,6 @@ import io.modelcontextprotocol.client.transport.WebClientStreamableHttpTransport
 import io.modelcontextprotocol.server.McpServer.StatelessAsyncSpecification;
 import io.modelcontextprotocol.server.McpServer.StatelessSyncSpecification;
 import io.modelcontextprotocol.server.transport.WebMvcStatelessServerTransport;
-import io.modelcontextprotocol.spec.McpSchema;
 import reactor.core.scheduler.Schedulers;
 
 class WebMvcStatelessIntegrationTests extends AbstractStatelessIntegrationTests {
@@ -63,6 +60,31 @@ class WebMvcStatelessIntegrationTests extends AbstractStatelessIntegrationTests 
 
 	private TomcatTestUtil.TomcatServer tomcatServer;
 
+	@Override
+	protected StatelessAsyncSpecification prepareAsyncServerBuilder() {
+		return McpServer.async(this.mcpServerTransport);
+	}
+
+	@Override
+	protected StatelessSyncSpecification prepareSyncServerBuilder() {
+		return McpServer.sync(this.mcpServerTransport);
+	}
+
+	@Override
+	protected void prepareClients(int port, String mcpEndpoint) {
+
+		clientBuilders.put("httpclient", McpClient
+			.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + port).endpoint(mcpEndpoint).build())
+			.initializationTimeout(Duration.ofHours(10))
+			.requestTimeout(Duration.ofHours(10)));
+
+		clientBuilders.put("webflux",
+				McpClient.sync(WebClientStreamableHttpTransport
+					.builder(WebClient.builder().baseUrl("http://localhost:" + port))
+					.endpoint(mcpEndpoint)
+					.build()));
+	}
+
 	@BeforeEach
 	public void before() {
 
@@ -76,31 +98,11 @@ class WebMvcStatelessIntegrationTests extends AbstractStatelessIntegrationTests 
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		clientBuilders
-			.put("httpclient",
-					McpClient.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
-						.endpoint(MESSAGE_ENDPOINT)
-						.build()).initializationTimeout(Duration.ofHours(10)).requestTimeout(Duration.ofHours(10)));
-
-		clientBuilders.put("webflux",
-				McpClient.sync(WebClientStreamableHttpTransport
-					.builder(WebClient.builder().baseUrl("http://localhost:" + PORT))
-					.endpoint(MESSAGE_ENDPOINT)
-					.build()));
+		prepareClients(PORT, MESSAGE_ENDPOINT);
 
 		// Get the transport from Spring context
 		this.mcpServerTransport = tomcatServer.appContext().getBean(WebMvcStatelessServerTransport.class);
 
-	}
-
-	@Override
-	protected StatelessAsyncSpecification prepareAsyncServerBuilder() {
-		return McpServer.async(this.mcpServerTransport);
-	}
-
-	@Override
-	protected StatelessSyncSpecification prepareSyncServerBuilder() {
-		return McpServer.sync(this.mcpServerTransport);
 	}
 
 	@AfterEach
@@ -122,44 +124,6 @@ class WebMvcStatelessIntegrationTests extends AbstractStatelessIntegrationTests 
 				throw new RuntimeException("Failed to stop Tomcat", e);
 			}
 		}
-	}
-
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
-	void simple(String clientType) {
-
-		var clientBuilder = clientBuilders.get(clientType);
-
-		var server = McpServer.async(this.mcpServerTransport)
-			.serverInfo("test-server", "1.0.0")
-			.requestTimeout(Duration.ofSeconds(1000))
-			.build();
-
-		try (
-				// Create client without sampling capabilities
-				var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
-					.requestTimeout(Duration.ofSeconds(1000))
-					.build()) {
-
-			assertThat(client.initialize()).isNotNull();
-
-		}
-		server.closeGracefully();
-	}
-
-	@Override
-	protected void prepareClients(int port, String mcpEndpoint) {
-
-		clientBuilders.put("httpclient", McpClient
-			.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + port).endpoint(mcpEndpoint).build())
-			.initializationTimeout(Duration.ofHours(10))
-			.requestTimeout(Duration.ofHours(10)));
-
-		clientBuilders.put("webflux",
-				McpClient.sync(WebClientStreamableHttpTransport
-					.builder(WebClient.builder().baseUrl("http://localhost:" + port))
-					.endpoint(mcpEndpoint)
-					.build()));
 	}
 
 }
