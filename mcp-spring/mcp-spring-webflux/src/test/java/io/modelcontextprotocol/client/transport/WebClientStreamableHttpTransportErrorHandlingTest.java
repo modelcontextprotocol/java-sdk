@@ -37,8 +37,8 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 /**
- * Fixed version of tests for error handling in WebClientStreamableHttpTransport.
- * Addresses concurrency issues with proper Reactor patterns.
+ * Tests for error handling in WebClientStreamableHttpTransport. Addresses concurrency
+ * issues with proper Reactor patterns.
  *
  * @author Christian Tzolov
  */

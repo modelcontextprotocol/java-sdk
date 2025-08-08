@@ -11,6 +11,7 @@ import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Timeout;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -29,6 +30,7 @@ import io.modelcontextprotocol.server.McpServer.StatelessSyncSpecification;
 import io.modelcontextprotocol.server.transport.WebMvcStatelessServerTransport;
 import reactor.core.scheduler.Schedulers;
 
+@Timeout(15)
 class WebMvcStatelessIntegrationTests extends AbstractStatelessIntegrationTests {
 
 	private static final int PORT = TestUtil.findAvailablePort();

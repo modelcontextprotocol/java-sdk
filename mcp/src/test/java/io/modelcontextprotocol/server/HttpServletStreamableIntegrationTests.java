@@ -13,6 +13,7 @@ import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Timeout;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -23,6 +24,7 @@ import io.modelcontextprotocol.server.McpServer.SyncSpecification;
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 
+@Timeout(15)
 class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerIntegrationTests {
 
 	private static final int PORT = TomcatTestUtil.findAvailablePort();

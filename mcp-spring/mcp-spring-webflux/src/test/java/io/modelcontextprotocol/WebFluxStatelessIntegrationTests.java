@@ -8,6 +8,7 @@ import java.time.Duration;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Timeout;
 import org.springframework.http.server.reactive.HttpHandler;
 import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -26,6 +27,7 @@ import io.modelcontextprotocol.server.transport.WebFluxStatelessServerTransport;
 import reactor.netty.DisposableServer;
 import reactor.netty.http.server.HttpServer;
 
+@Timeout(15)
 class WebFluxStatelessIntegrationTests extends AbstractStatelessIntegrationTests {
 
 	private static final int PORT = TestUtil.findAvailablePort();
