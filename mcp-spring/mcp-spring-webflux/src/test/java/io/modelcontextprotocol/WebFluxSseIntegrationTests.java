@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol;
 
+import java.time.Duration;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.http.server.reactive.HttpHandler;
@@ -39,15 +41,19 @@ class WebFluxSseIntegrationTests extends AbstractMcpClientServerIntegrationTests
 	@Override
 	protected void prepareClients(int port, String mcpEndpoint) {
 
-		clientBuilders.put("httpclient",
-				McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
-					.sseEndpoint(CUSTOM_SSE_ENDPOINT)
-					.build()));
+		clientBuilders
+			.put("httpclient",
+					McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
+						.sseEndpoint(CUSTOM_SSE_ENDPOINT)
+						.build()).requestTimeout(Duration.ofHours(10)));
+
 		clientBuilders.put("webflux",
 				McpClient
 					.sync(WebFluxSseClientTransport.builder(WebClient.builder().baseUrl("http://localhost:" + PORT))
 						.sseEndpoint(CUSTOM_SSE_ENDPOINT)
-						.build()));
+						.build())
+					.requestTimeout(Duration.ofHours(10)));
+
 	}
 
 	@Override

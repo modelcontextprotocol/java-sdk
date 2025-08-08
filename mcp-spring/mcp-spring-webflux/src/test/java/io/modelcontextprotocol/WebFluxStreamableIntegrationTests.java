@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol;
 
+import java.time.Duration;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.http.server.reactive.HttpHandler;
@@ -37,15 +39,18 @@ class WebFluxStreamableIntegrationTests extends AbstractMcpClientServerIntegrati
 	@Override
 	protected void prepareClients(int port, String mcpEndpoint) {
 
-		clientBuilders.put("httpclient",
-				McpClient.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
-					.endpoint(CUSTOM_MESSAGE_ENDPOINT)
-					.build()));
+		clientBuilders
+			.put("httpclient",
+					McpClient.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
+						.endpoint(CUSTOM_MESSAGE_ENDPOINT)
+						.build()).requestTimeout(Duration.ofHours(10)));
 		clientBuilders.put("webflux",
-				McpClient.sync(WebClientStreamableHttpTransport
-					.builder(WebClient.builder().baseUrl("http://localhost:" + PORT))
-					.endpoint(CUSTOM_MESSAGE_ENDPOINT)
-					.build()));
+				McpClient
+					.sync(WebClientStreamableHttpTransport
+						.builder(WebClient.builder().baseUrl("http://localhost:" + PORT))
+						.endpoint(CUSTOM_MESSAGE_ENDPOINT)
+						.build())
+					.requestTimeout(Duration.ofHours(10)));
 	}
 
 	@Override
