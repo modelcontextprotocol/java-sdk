@@ -66,4 +66,8 @@ public interface McpStreamableServerTransportProvider extends McpServerTransport
 	 */
 	Mono<Void> closeGracefully();
 
+	@Override
+	default String protocolVersion() {
+		return "2025-03-26";
+	}
 }
