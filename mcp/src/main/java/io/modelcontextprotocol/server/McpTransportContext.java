@@ -47,4 +47,13 @@ public interface McpTransportContext {
 	 */
 	McpTransportContext copy();
 
+	/**
+	 * Sends a notification from the server to the client.
+	 * @param method notification method name
+	 * @param params any parameters or {@code null}
+	 */
+	default void sendNotification(String method, Object params) {
+		throw new UnsupportedOperationException("Not supported in this implementation of MCP transport context");
+	}
+
 }

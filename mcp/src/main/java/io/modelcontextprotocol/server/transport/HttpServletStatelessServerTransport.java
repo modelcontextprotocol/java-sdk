@@ -4,19 +4,11 @@
 
 package io.modelcontextprotocol.server.transport;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.PrintWriter;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
-
-import io.modelcontextprotocol.server.DefaultMcpTransportContext;
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
 import io.modelcontextprotocol.server.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
+import io.modelcontextprotocol.server.StatelessMcpTransportContext;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
@@ -26,7 +18,16 @@ import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
 
 /**
  * Implementation of an HttpServlet based {@link McpStatelessServerTransport}.
@@ -123,11 +124,16 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 			return;
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
+		AtomicInteger nextId = new AtomicInteger(0);
+		AtomicBoolean upgradedToSse = new AtomicBoolean(false);
+		BiConsumer<String, Object> notificationHandler = buildNotificationHandler(response, upgradedToSse, nextId);
+		McpTransportContext transportContext = this.contextExtractor.extract(request,
+				new StatelessMcpTransportContext(notificationHandler));
 
 		String accept = request.getHeader(ACCEPT);
 		if (accept == null || !(accept.contains(APPLICATION_JSON) && accept.contains(TEXT_EVENT_STREAM))) {
-			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, null, upgradedToSse.get(),
+					nextId.getAndIncrement(),
 					new McpError("Both application/json and text/event-stream required in Accept header"));
 			return;
 		}
@@ -149,18 +155,24 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
 						.block();
 
-					response.setContentType(APPLICATION_JSON);
-					response.setCharacterEncoding(UTF_8);
-					response.setStatus(HttpServletResponse.SC_OK);
-
 					String jsonResponseText = objectMapper.writeValueAsString(jsonrpcResponse);
-					PrintWriter writer = response.getWriter();
-					writer.write(jsonResponseText);
-					writer.flush();
+					if (upgradedToSse.get()) {
+						sendEvent(response.getWriter(), jsonResponseText, nextId.getAndIncrement());
+					}
+					else {
+						response.setContentType(APPLICATION_JSON);
+						response.setCharacterEncoding(UTF_8);
+						response.setStatus(HttpServletResponse.SC_OK);
+
+						PrintWriter writer = response.getWriter();
+						writer.write(jsonResponseText);
+						writer.flush();
+					}
 				}
 				catch (Exception e) {
 					logger.error("Failed to handle request: {}", e.getMessage());
-					this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+					this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, jsonrpcRequest.id(),
+							upgradedToSse.get(), nextId.getAndIncrement(),
 							new McpError("Failed to handle request: " + e.getMessage()));
 				}
 			}
@@ -173,23 +185,25 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 				}
 				catch (Exception e) {
 					logger.error("Failed to handle notification: {}", e.getMessage());
-					this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+					this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, null,
+							upgradedToSse.get(), nextId.getAndIncrement(),
 							new McpError("Failed to handle notification: " + e.getMessage()));
 				}
 			}
 			else {
-				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
-						new McpError("The server accepts either requests or notifications"));
+				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, null, upgradedToSse.get(),
+						nextId.getAndIncrement(), new McpError("The server accepts either requests or notifications"));
 			}
 		}
 		catch (IllegalArgumentException | IOException e) {
 			logger.error("Failed to deserialize message: {}", e.getMessage());
-			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, new McpError("Invalid message format"));
+			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, null, upgradedToSse.get(),
+					nextId.getAndIncrement(), new McpError("Invalid message format"));
 		}
 		catch (Exception e) {
 			logger.error("Unexpected error handling message: {}", e.getMessage());
-			this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-					new McpError("Unexpected error: " + e.getMessage()));
+			this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, null, upgradedToSse.get(),
+					nextId.getAndIncrement(), new McpError("Unexpected error: " + e.getMessage()));
 		}
 	}
 
@@ -197,17 +211,27 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 	 * Sends an error response to the client.
 	 * @param response The HTTP servlet response
 	 * @param httpCode The HTTP status code
+	 * @param upgradedToSse true if the response is upgraded to SSE, false otherwise
+	 * @param eventIdIfNeeded if upgradedToSse, the event ID to use, otherwise ignored
 	 * @param mcpError The MCP error to send
 	 * @throws IOException If an I/O error occurs
 	 */
-	private void responseError(HttpServletResponse response, int httpCode, McpError mcpError) throws IOException {
-		response.setContentType(APPLICATION_JSON);
-		response.setCharacterEncoding(UTF_8);
-		response.setStatus(httpCode);
-		String jsonError = objectMapper.writeValueAsString(mcpError);
-		PrintWriter writer = response.getWriter();
-		writer.write(jsonError);
-		writer.flush();
+	private void responseError(HttpServletResponse response, int httpCode, Object requestId, boolean upgradedToSse,
+			int eventIdIfNeeded, McpError mcpError) throws IOException {
+		if (upgradedToSse) {
+			String jsonError = objectMapper.writeValueAsString(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
+					requestId, null, mcpError.getJsonRpcError()));
+			sendEvent(response.getWriter(), jsonError, eventIdIfNeeded);
+		}
+		else {
+			response.setContentType(APPLICATION_JSON);
+			response.setCharacterEncoding(UTF_8);
+			response.setStatus(httpCode);
+			PrintWriter writer = response.getWriter();
+			String jsonError = objectMapper.writeValueAsString(mcpError);
+			writer.write(jsonError);
+			writer.flush();
+		}
 	}
 
 	/**
@@ -301,6 +325,45 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 			return new HttpServletStatelessServerTransport(objectMapper, mcpEndpoint, contextExtractor);
 		}
 
+	}
+
+	private BiConsumer<String, Object> buildNotificationHandler(HttpServletResponse response,
+			AtomicBoolean upgradedToSse, AtomicInteger nextId) {
+		AtomicBoolean responseInitialized = new AtomicBoolean(false);
+
+		return (notificationMethod, params) -> {
+			if (responseInitialized.compareAndSet(false, true)) {
+				response.setContentType(TEXT_EVENT_STREAM);
+				response.setCharacterEncoding(UTF_8);
+				response.setStatus(HttpServletResponse.SC_OK);
+			}
+
+			upgradedToSse.set(true);
+
+			McpSchema.JSONRPCNotification notification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
+					notificationMethod, params);
+			try {
+				sendEvent(response.getWriter(), objectMapper.writeValueAsString(notification),
+						nextId.getAndIncrement());
+			}
+			catch (IOException e) {
+				logger.error("Failed to handle notification: {}", e.getMessage());
+				throw new McpError(new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+						e.getMessage(), null));
+			}
+		};
+	}
+
+	private void sendEvent(PrintWriter writer, String data, int id) throws IOException {
+		// tested with MCP inspector. Event must consist of these two fields and only
+		// these two fields
+		writer.write("id: " + id + "\n");
+		writer.write("data: " + data + "\n\n");
+		writer.flush();
+
+		if (writer.checkError()) {
+			throw new IOException("Client disconnected");
+		}
 	}
 
 }
