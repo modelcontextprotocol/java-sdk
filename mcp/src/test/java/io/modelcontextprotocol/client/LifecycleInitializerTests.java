@@ -16,7 +16,6 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import io.modelcontextprotocol.spec.McpClientSession;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import reactor.core.publisher.Mono;
@@ -154,7 +153,7 @@ class LifecycleInitializerTests {
 			.thenReturn(Mono.just(unsupportedResult));
 
 		StepVerifier.create(initializer.withIntitialization("test", init -> Mono.just(init.initializeResult())))
-			.expectError(McpError.class)
+			.expectError(RuntimeException.class)
 			.verify();
 
 		verify(mockClientSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_INITIALIZED), any());
@@ -178,7 +177,7 @@ class LifecycleInitializerTests {
 					init -> Mono.just(init.initializeResult())), () -> virtualTimeScheduler, Long.MAX_VALUE)
 			.expectSubscription()
 			.expectNoEvent(INITIALIZE_TIMEOUT)
-			.expectError(McpError.class)
+			.expectError(RuntimeException.class)
 			.verify();
 	}
 
@@ -234,7 +233,7 @@ class LifecycleInitializerTests {
 			.thenReturn(Mono.error(new RuntimeException("Connection failed")));
 
 		StepVerifier.create(initializer.withIntitialization("test", init -> Mono.just(init.initializeResult())))
-			.expectError(McpError.class)
+			.expectError(RuntimeException.class)
 			.verify();
 
 		assertThat(initializer.isInitialized()).isFalse();

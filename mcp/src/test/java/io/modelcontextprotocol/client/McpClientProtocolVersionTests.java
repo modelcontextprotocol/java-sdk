@@ -113,7 +113,7 @@ class McpClientProtocolVersionTests {
 						new McpSchema.InitializeResult(unsupportedVersion, null,
 								new McpSchema.Implementation("test-server", "1.0.0"), null),
 						null));
-			}).expectError(McpError.class).verify();
+			}).expectError(RuntimeException.class).verify();
 		}
 		finally {
 			StepVerifier.create(client.closeGracefully()).verifyComplete();

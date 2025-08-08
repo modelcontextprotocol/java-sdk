@@ -289,9 +289,7 @@ class LifecycleInitializer {
 			return initializationJob.map(initializeResult -> this.initializationRef.get())
 				.timeout(this.initializationTimeout)
 				.onErrorResume(ex -> {
-					logger.warn("Failed to initialize", ex);
-					return Mono.error(
-							new McpError("Client failed to initialize " + actionName + " due to: " + ex.getMessage()));
+					return Mono.error(new RuntimeException("Client failed to initialize " + actionName, ex));
 				})
 				.flatMap(operation);
 		});
@@ -316,8 +314,10 @@ class LifecycleInitializer {
 					initializeResult.instructions());
 
 			if (!this.protocolVersions.contains(initializeResult.protocolVersion())) {
-				return Mono.error(new McpError(
-						"Unsupported protocol version from the server: " + initializeResult.protocolVersion()));
+				return Mono.error(McpError.builder(-32602)
+					.message("Unsupported protocol version")
+					.data("Unsupported protocol version from the server: " + initializeResult.protocolVersion())
+					.build());
 			}
 
 			return mcpClientSession.sendNotification(McpSchema.METHOD_NOTIFICATION_INITIALIZED, null)

@@ -190,7 +190,8 @@ public class McpAsyncClient {
 		// Sampling Handler
 		if (this.clientCapabilities.sampling() != null) {
 			if (features.samplingHandler() == null) {
-				throw new McpError("Sampling handler must not be null when client capabilities include sampling");
+				throw new IllegalArgumentException(
+						"Sampling handler must not be null when client capabilities include sampling");
 			}
 			this.samplingHandler = features.samplingHandler();
 			requestHandlers.put(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, samplingCreateMessageHandler());
@@ -199,7 +200,8 @@ public class McpAsyncClient {
 		// Elicitation Handler
 		if (this.clientCapabilities.elicitation() != null) {
 			if (features.elicitationHandler() == null) {
-				throw new McpError("Elicitation handler must not be null when client capabilities include elicitation");
+				throw new IllegalArgumentException(
+						"Elicitation handler must not be null when client capabilities include elicitation");
 			}
 			this.elicitationHandler = features.elicitationHandler();
 			requestHandlers.put(McpSchema.METHOD_ELICITATION_CREATE, elicitationCreateHandler());
@@ -413,15 +415,15 @@ public class McpAsyncClient {
 	public Mono<Void> addRoot(Root root) {
 
 		if (root == null) {
-			return Mono.error(new McpError("Root must not be null"));
+			return Mono.error(new IllegalArgumentException("Root must not be null"));
 		}
 
 		if (this.clientCapabilities.roots() == null) {
-			return Mono.error(new McpError("Client must be configured with roots capabilities"));
+			return Mono.error(new IllegalStateException("Client must be configured with roots capabilities"));
 		}
 
 		if (this.roots.containsKey(root.uri())) {
-			return Mono.error(new McpError("Root with uri '" + root.uri() + "' already exists"));
+			return Mono.error(new IllegalStateException("Root with uri '" + root.uri() + "' already exists"));
 		}
 
 		this.roots.put(root.uri(), root);
@@ -447,11 +449,11 @@ public class McpAsyncClient {
 	public Mono<Void> removeRoot(String rootUri) {
 
 		if (rootUri == null) {
-			return Mono.error(new McpError("Root uri must not be null"));
+			return Mono.error(new IllegalArgumentException("Root uri must not be null"));
 		}
 
 		if (this.clientCapabilities.roots() == null) {
-			return Mono.error(new McpError("Client must be configured with roots capabilities"));
+			return Mono.error(new IllegalStateException("Client must be configured with roots capabilities"));
 		}
 
 		Root removed = this.roots.remove(rootUri);
@@ -469,7 +471,7 @@ public class McpAsyncClient {
 			}
 			return Mono.empty();
 		}
-		return Mono.error(new McpError("Root with uri '" + rootUri + "' not found"));
+		return Mono.error(new IllegalStateException("Root with uri '" + rootUri + "' not found"));
 	}
 
 	/**
@@ -540,7 +542,7 @@ public class McpAsyncClient {
 	public Mono<McpSchema.CallToolResult> callTool(McpSchema.CallToolRequest callToolRequest) {
 		return this.initializer.withIntitialization("calling tools", init -> {
 			if (init.initializeResult().capabilities().tools() == null) {
-				return Mono.error(new McpError("Server does not provide tools capability"));
+				return Mono.error(new IllegalStateException("Server does not provide tools capability"));
 			}
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_TOOLS_CALL, callToolRequest, CALL_TOOL_RESULT_TYPE_REF);
@@ -569,7 +571,7 @@ public class McpAsyncClient {
 	public Mono<McpSchema.ListToolsResult> listTools(String cursor) {
 		return this.initializer.withIntitialization("listing tools", init -> {
 			if (init.initializeResult().capabilities().tools() == null) {
-				return Mono.error(new McpError("Server does not provide tools capability"));
+				return Mono.error(new IllegalStateException("Server does not provide tools capability"));
 			}
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_TOOLS_LIST, new McpSchema.PaginatedRequest(cursor),
@@ -633,7 +635,7 @@ public class McpAsyncClient {
 	public Mono<McpSchema.ListResourcesResult> listResources(String cursor) {
 		return this.initializer.withIntitialization("listing resources", init -> {
 			if (init.initializeResult().capabilities().resources() == null) {
-				return Mono.error(new McpError("Server does not provide the resources capability"));
+				return Mono.error(new IllegalStateException("Server does not provide the resources capability"));
 			}
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_RESOURCES_LIST, new McpSchema.PaginatedRequest(cursor),
@@ -665,7 +667,7 @@ public class McpAsyncClient {
 	public Mono<McpSchema.ReadResourceResult> readResource(McpSchema.ReadResourceRequest readResourceRequest) {
 		return this.initializer.withIntitialization("reading resources", init -> {
 			if (init.initializeResult().capabilities().resources() == null) {
-				return Mono.error(new McpError("Server does not provide the resources capability"));
+				return Mono.error(new IllegalStateException("Server does not provide the resources capability"));
 			}
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_RESOURCES_READ, readResourceRequest, READ_RESOURCE_RESULT_TYPE_REF);
@@ -703,7 +705,7 @@ public class McpAsyncClient {
 	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates(String cursor) {
 		return this.initializer.withIntitialization("listing resource templates", init -> {
 			if (init.initializeResult().capabilities().resources() == null) {
-				return Mono.error(new McpError("Server does not provide the resources capability"));
+				return Mono.error(new IllegalStateException("Server does not provide the resources capability"));
 			}
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_RESOURCES_TEMPLATES_LIST, new McpSchema.PaginatedRequest(cursor),
@@ -863,7 +865,7 @@ public class McpAsyncClient {
 	 */
 	public Mono<Void> setLoggingLevel(LoggingLevel loggingLevel) {
 		if (loggingLevel == null) {
-			return Mono.error(new McpError("Logging level must not be null"));
+			return Mono.error(new IllegalArgumentException("Logging level must not be null"));
 		}
 
 		return this.initializer.withIntitialization("setting logging level", init -> {

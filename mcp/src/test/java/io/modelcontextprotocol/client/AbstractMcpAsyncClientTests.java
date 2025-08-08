@@ -487,7 +487,8 @@ public abstract class AbstractMcpAsyncClientTests {
 	void testAddRootWithNullValue() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.addRoot(null))
-				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class).hasMessage("Root must not be null"))
+				.consumeErrorWith(e -> assertThat(e).isInstanceOf(IllegalArgumentException.class)
+					.hasMessage("Root must not be null"))
 				.verify();
 		});
 	}
@@ -506,7 +507,7 @@ public abstract class AbstractMcpAsyncClientTests {
 	void testRemoveNonExistentRoot() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.removeRoot("nonexistent-uri"))
-				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
+				.consumeErrorWith(e -> assertThat(e).isInstanceOf(IllegalStateException.class)
 					.hasMessage("Root with uri 'nonexistent-uri' not found"))
 				.verify();
 		});
