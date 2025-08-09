@@ -35,12 +35,19 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.client.RestClient;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
+import java.util.stream.Stream;
 
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.APPLICATION_JSON;
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.TEXT_EVENT_STREAM;
@@ -61,10 +68,13 @@ class HttpServletStatelessIntegrationTests {
 
 	private Tomcat tomcat;
 
+	private ObjectMapper objectMapper;
+
 	@BeforeEach
 	public void before() {
+		objectMapper = new ObjectMapper();
 		this.mcpStatelessServerTransport = HttpServletStatelessServerTransport.builder()
-			.objectMapper(new ObjectMapper())
+			.objectMapper(objectMapper)
 			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
 			.build();
 
@@ -215,6 +225,143 @@ class HttpServletStatelessIntegrationTests {
 			assertThat(samplingRequest.get().argument().value()).isEqualTo("py");
 			assertThat(samplingRequest.get().ref().type()).isEqualTo("ref/prompt");
 		}
+
+		mcpServer.close();
+	}
+
+	@Test
+	void testNotifications() throws Exception {
+
+		Tool tool = Tool.builder().name("test").build();
+		Tool exceptionTool = Tool.builder().name("exception").build();
+
+		final int PROGRESS_QTY = 1000;
+		final String progressMessage = "We're working on it...";
+
+		var progressToken = UUID.randomUUID().toString();
+		var callResponse = new CallToolResult(List.of(), null, null, Map.of("progressToken", progressToken));
+
+		McpStatelessServerFeatures.SyncToolSpecification toolSpecification = new McpStatelessServerFeatures.SyncToolSpecification(
+				tool, (transportContext, request) -> {
+					// Simulate sending progress notifications - send enough to ensure
+					// that cunked transfer encoding is used
+					for (int i = 0; i < PROGRESS_QTY; i++) {
+						transportContext.sendNotification(McpSchema.METHOD_NOTIFICATION_PROGRESS,
+								new McpSchema.ProgressNotification(progressToken, i, (double) PROGRESS_QTY,
+										progressMessage));
+					}
+					return callResponse;
+				});
+
+		McpStatelessServerFeatures.SyncToolSpecification exceptionToolSpecification = new McpStatelessServerFeatures.SyncToolSpecification(
+				exceptionTool, (transportContext, request) -> {
+					// send 1 progress so that the response gets upgraded
+					transportContext.sendNotification(McpSchema.METHOD_NOTIFICATION_PROGRESS,
+							new McpSchema.ProgressNotification(progressToken, 1, 5.0, progressMessage));
+					throw new McpError(new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INVALID_PARAMS,
+							"bad tool", Map.of()));
+				});
+
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(toolSpecification, exceptionToolSpecification)
+			.build();
+
+		HttpClient client = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
+		HttpRequest request = HttpRequest.newBuilder()
+			.method("POST",
+					HttpRequest.BodyPublishers.ofString(
+							objectMapper.writeValueAsString(new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
+									"tools/call", "1", new McpSchema.CallToolRequest("test", Map.of())))))
+			.header("Content-Type", APPLICATION_JSON)
+			.header("Accept", APPLICATION_JSON + "," + TEXT_EVENT_STREAM)
+			.uri(URI.create("http://localhost:" + PORT + CUSTOM_MESSAGE_ENDPOINT))
+			.build();
+
+		HttpResponse<Stream<String>> response = client.send(request, HttpResponse.BodyHandlers.ofLines());
+		assertThat(response.headers().firstValue("Transfer-Encoding")).contains("chunked");
+
+		List<String> responseBody = response.body().toList();
+
+		assertThat(responseBody).hasSize((PROGRESS_QTY + 1) * 3); // 3 lines per progress
+																	// notification + 4
+																	// for
+																	// the call result
+
+		Iterator<String> iterator = responseBody.iterator();
+		for (int i = 0; i < PROGRESS_QTY; ++i) {
+			String idLine = iterator.next();
+			String dataLine = iterator.next();
+			String blankLine = iterator.next();
+
+			McpSchema.ProgressNotification expectedNotification = new McpSchema.ProgressNotification(progressToken, i,
+					(double) PROGRESS_QTY, progressMessage);
+			McpSchema.JSONRPCNotification expectedJsonRpcNotification = new McpSchema.JSONRPCNotification(
+					McpSchema.JSONRPC_VERSION, McpSchema.METHOD_NOTIFICATION_PROGRESS, expectedNotification);
+
+			assertThat(idLine).isEqualTo("id: " + i);
+			assertThat(dataLine).isEqualTo("data: " + objectMapper.writeValueAsString(expectedJsonRpcNotification));
+			assertThat(blankLine).isBlank();
+		}
+
+		String idLine = iterator.next();
+		String dataLine = iterator.next();
+		String blankLine = iterator.next();
+
+		assertThat(idLine).isEqualTo("id: " + PROGRESS_QTY);
+		assertThat(dataLine).isEqualTo("data: " + objectMapper
+			.writeValueAsString(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, "1", callResponse, null)));
+		assertThat(blankLine).isBlank();
+
+		assertThat(iterator.hasNext()).isFalse();
+
+		// next, test the exception tool
+
+		request = HttpRequest.newBuilder()
+			.method("POST",
+					HttpRequest.BodyPublishers.ofString(
+							objectMapper.writeValueAsString(new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
+									"tools/call", "1", new McpSchema.CallToolRequest("exception", Map.of())))))
+			.header("Content-Type", APPLICATION_JSON)
+			.header("Accept", APPLICATION_JSON + "," + TEXT_EVENT_STREAM)
+			.uri(URI.create("http://localhost:" + PORT + CUSTOM_MESSAGE_ENDPOINT))
+			.build();
+
+		response = client.send(request, HttpResponse.BodyHandlers.ofLines());
+		assertThat(response.headers().firstValue("Transfer-Encoding")).contains("chunked");
+
+		responseBody = response.body().toList();
+
+		assertThat(responseBody).hasSize(6); // 1 progress notification + the error
+												// response
+
+		iterator = responseBody.iterator();
+
+		idLine = iterator.next();
+		dataLine = iterator.next();
+		blankLine = iterator.next();
+
+		McpSchema.ProgressNotification expectedNotification = new McpSchema.ProgressNotification(progressToken, 1, 5.0,
+				progressMessage);
+		McpSchema.JSONRPCNotification expectedJsonRpcNotification = new McpSchema.JSONRPCNotification(
+				McpSchema.JSONRPC_VERSION, McpSchema.METHOD_NOTIFICATION_PROGRESS, expectedNotification);
+
+		assertThat(idLine).isEqualTo("id: 0");
+		assertThat(dataLine).isEqualTo("data: " + objectMapper.writeValueAsString(expectedJsonRpcNotification));
+		assertThat(blankLine).isBlank();
+
+		idLine = iterator.next();
+		dataLine = iterator.next();
+		blankLine = iterator.next();
+
+		assertThat(iterator.hasNext()).isFalse();
+
+		assertThat(idLine).isEqualTo("id: 1");
+		assertThat(dataLine).isEqualTo(
+				"data: " + objectMapper.writeValueAsString(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, "1",
+						null, new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INVALID_PARAMS,
+								"bad tool", Map.of()))));
+		assertThat(blankLine).isBlank();
 
 		mcpServer.close();
 	}
