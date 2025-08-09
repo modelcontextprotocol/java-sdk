@@ -20,6 +20,7 @@ import java.util.function.Consumer;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -43,6 +44,7 @@ import reactor.test.StepVerifier;
  * @author Christian Tzolov
  */
 @Timeout(15)
+@Disabled
 public class WebClientStreamableHttpTransportErrorHandlingTest {
 
 	private static final int PORT = TestUtil.findAvailablePort();

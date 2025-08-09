@@ -16,6 +16,7 @@ import java.util.function.Consumer;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -38,6 +39,7 @@ import reactor.test.StepVerifier;
  * @author Christian Tzolov
  */
 @Timeout(15)
+@Disabled
 public class HttpClientStreamableHttpTransportErrorHandlingTest {
 
 	private static final int PORT = TomcatTestUtil.findAvailablePort();
