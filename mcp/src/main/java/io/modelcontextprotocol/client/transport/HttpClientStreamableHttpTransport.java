@@ -30,8 +30,8 @@ import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.McpTransportSession;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.spec.McpTransportStream;
@@ -288,9 +288,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 										}
 										catch (IOException ioException) {
-											return Flux.<McpSchema.JSONRPCMessage>error(
-													new McpError("Error parsing JSON-RPC message: "
-															+ responseEvent.sseEvent().data()));
+											return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
+													"Error parsing JSON-RPC message: " + responseEvent, ioException));
 										}
 									}
 									else {
@@ -304,19 +303,39 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 									return Flux.empty();
 								}
 								else if (statusCode == NOT_FOUND) {
-									String sessionIdRepresentation = sessionIdOrPlaceholder(transportSession);
-									McpTransportSessionNotFoundException exception = new McpTransportSessionNotFoundException(
-											"Session not found for session ID: " + sessionIdRepresentation);
-									return Flux.<McpSchema.JSONRPCMessage>error(exception);
+
+									if (transportSession != null && transportSession.sessionId().isPresent()) {
+										// only if the request was sent with a session id
+										// and the response is 404, we consider it a
+										// session not found error.
+										logger.debug("Session not found for session ID: {}",
+												transportSession.sessionId().get());
+										String sessionIdRepresentation = sessionIdOrPlaceholder(transportSession);
+										McpTransportSessionNotFoundException exception = new McpTransportSessionNotFoundException(
+												"Session not found for session ID: " + sessionIdRepresentation);
+										return Flux.<McpSchema.JSONRPCMessage>error(exception);
+									}
+									return Flux.<McpSchema.JSONRPCMessage>error(
+											new McpTransportException("Server Not Found. Status code:" + statusCode
+													+ ", response-event:" + responseEvent));
 								}
 								else if (statusCode == BAD_REQUEST) {
-									String sessionIdRepresentation = sessionIdOrPlaceholder(transportSession);
-									McpTransportSessionNotFoundException exception = new McpTransportSessionNotFoundException(
-											"Session not found for session ID: " + sessionIdRepresentation);
-									return Flux.<McpSchema.JSONRPCMessage>error(exception);
+									if (transportSession != null && transportSession.sessionId().isPresent()) {
+										// only if the request was sent with a session id
+										// and thre response is 404, we consider it a
+										// session not found error.
+										String sessionIdRepresentation = sessionIdOrPlaceholder(transportSession);
+										McpTransportSessionNotFoundException exception = new McpTransportSessionNotFoundException(
+												"Session not found for session ID: " + sessionIdRepresentation);
+										return Flux.<McpSchema.JSONRPCMessage>error(exception);
+									}
+									return Flux.<McpSchema.JSONRPCMessage>error(
+											new McpTransportException("Bad Request. Status code:" + statusCode
+													+ ", response-event:" + responseEvent));
+
 								}
 
-								return Flux.<McpSchema.JSONRPCMessage>error(new McpError(
+								return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
 										"Received unrecognized SSE event type: " + responseEvent.sseEvent().event()));
 							}).<McpSchema
 									.JSONRPCMessage>flatMap(
@@ -468,8 +487,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 									return Flux.from(sessionStream.consumeSseStream(Flux.just(idWithMessages)));
 								}
 								catch (IOException ioException) {
-									return Flux.<McpSchema.JSONRPCMessage>error(
-											new McpError("Error parsing JSON-RPC message: " + sseEvent.data()));
+									return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
+											"Error parsing JSON-RPC message: " + responseEvent, ioException));
 								}
 							});
 					}
@@ -485,8 +504,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 							return Mono.just(McpSchema.deserializeJsonRpcMessage(objectMapper, data));
 						}
 						catch (IOException e) {
-							// TODO: this should be a McpTransportError
-							return Mono.error(e);
+							return Mono.error(new McpTransportException(
+									"Error deserializing JSON-RPC message: " + responseEvent, e));
 						}
 					}
 					logger.warn("Unknown media type {} returned for POST in session {}", contentType,
@@ -496,18 +515,32 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 							new RuntimeException("Unknown media type returned: " + contentType));
 				}
 				else if (statusCode == NOT_FOUND) {
-					McpTransportSessionNotFoundException exception = new McpTransportSessionNotFoundException(
-							"Session not found for session ID: " + sessionRepresentation);
-					return Flux.<McpSchema.JSONRPCMessage>error(exception);
+					if (transportSession != null && transportSession.sessionId().isPresent()) {
+						// only if the request was sent with a session id and the
+						// response is 404, we consider it a session not found error.
+						logger.debug("Session not found for session ID: {}", transportSession.sessionId().get());
+						McpTransportSessionNotFoundException exception = new McpTransportSessionNotFoundException(
+								"Session not found for session ID: " + sessionRepresentation);
+						return Flux.<McpSchema.JSONRPCMessage>error(exception);
+					}
+					return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
+							"Server Not Found. Status code:" + statusCode + ", response-event:" + responseEvent));
 				}
-				// Some implementations can return 400 when presented with a
-				// session id that it doesn't know about, so we will
-				// invalidate the session
-				// https://github.com/modelcontextprotocol/typescript-sdk/issues/389
 				else if (statusCode == BAD_REQUEST) {
-					McpTransportSessionNotFoundException exception = new McpTransportSessionNotFoundException(
-							"Session not found for session ID: " + sessionRepresentation);
-					return Flux.<McpSchema.JSONRPCMessage>error(exception);
+					// Some implementations can return 400 when presented with a
+					// session id that it doesn't know about, so we will
+					// invalidate the session
+					// https://github.com/modelcontextprotocol/typescript-sdk/issues/389
+
+					if (transportSession != null && transportSession.sessionId().isPresent()) {
+						// only if the request was sent with a session id and the
+						// response is 404, we consider it a session not found error.
+						McpTransportSessionNotFoundException exception = new McpTransportSessionNotFoundException(
+								"Session not found for session ID: " + sessionRepresentation);
+						return Flux.<McpSchema.JSONRPCMessage>error(exception);
+					}
+					return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
+							"Bad Request. Status code:" + statusCode + ", response-event:" + responseEvent));
 				}
 
 				return Flux.<McpSchema.JSONRPCMessage>error(

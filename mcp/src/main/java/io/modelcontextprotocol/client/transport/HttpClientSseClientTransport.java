@@ -24,10 +24,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
 import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
+import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
 import reactor.core.Disposable;
@@ -431,7 +431,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 									return Flux.empty(); // No further processing needed
 								}
 								else {
-									sink.error(new McpError("Failed to handle SSE endpoint event"));
+									sink.error(new RuntimeException("Failed to handle SSE endpoint event"));
 								}
 							}
 							else if (MESSAGE_EVENT_TYPE.equals(responseEvent.sseEvent().event())) {
@@ -446,8 +446,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 							}
 						}
 						catch (IOException e) {
-							logger.error("Error processing SSE event", e);
-							sink.error(new McpError("Error processing SSE event"));
+							sink.error(new McpTransportException("Error processing SSE event", e));
 						}
 					}
 					return Flux.<McpSchema.JSONRPCMessage>error(
@@ -520,8 +519,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 				return Mono.just(objectMapper.writeValueAsString(message));
 			}
 			catch (IOException e) {
-				// TODO: why McpError and not RuntimeException?
-				return Mono.error(new McpError("Failed to serialize message"));
+				return Mono.error(new McpTransportException("Failed to serialize message", e));
 			}
 		});
 	}

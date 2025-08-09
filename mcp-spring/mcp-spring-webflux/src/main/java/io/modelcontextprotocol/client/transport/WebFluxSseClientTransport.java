@@ -14,7 +14,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.spec.ProtocolVersions;
@@ -197,8 +196,6 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 * @param handler a function that processes incoming JSON-RPC messages and returns
 	 * responses
 	 * @return a Mono that completes when the connection is fully established
-	 * @throws McpError if there's an error processing SSE events or if an unrecognized
-	 * event type is received
 	 */
 	@Override
 	public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
@@ -215,7 +212,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 				else {
 					// TODO: clarify with the spec if multiple events can be
 					// received
-					s.error(new McpError("Failed to handle SSE endpoint event"));
+					s.error(new RuntimeException("Failed to handle SSE endpoint event"));
 				}
 			}
 			else if (MESSAGE_EVENT_TYPE.equals(event.event())) {
