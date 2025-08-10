@@ -52,9 +52,9 @@ public class WebClientStreamableHttpTransportErrorHandlingTest {
 
 	private HttpServer server;
 
-	private AtomicReference<Integer> responseStatus = new AtomicReference<>(200);
+	private AtomicReference<Integer> serverResponseStatus = new AtomicReference<>(200);
 
-	private AtomicReference<String> sessionId = new AtomicReference<>(null);
+	private AtomicReference<String> currentServerSessionId = new AtomicReference<>(null);
 
 	private AtomicReference<String> lastReceivedSessionId = new AtomicReference<>(null);
 
@@ -93,7 +93,7 @@ public class WebClientStreamableHttpTransportErrorHandlingTest {
 			String requestSessionId = exchange.getRequestHeaders().getFirst(HttpHeaders.MCP_SESSION_ID);
 			lastReceivedSessionId.set(requestSessionId);
 
-			int status = responseStatus.get();
+			int status = serverResponseStatus.get();
 
 			// Track which request this is
 			if (firstRequestLatch.getCount() > 0) {
@@ -109,7 +109,7 @@ public class WebClientStreamableHttpTransportErrorHandlingTest {
 
 			// Don't include session ID in 404 and 400 responses - the implementation
 			// checks if the transport has a session stored locally
-			String responseSessionId = sessionId.get();
+			String responseSessionId = currentServerSessionId.get();
 			if (responseSessionId != null && status == 200) {
 				exchange.getResponseHeaders().set(HttpHeaders.MCP_SESSION_ID, responseSessionId);
 			}
@@ -144,8 +144,8 @@ public class WebClientStreamableHttpTransportErrorHandlingTest {
 	 */
 	@Test
 	void test404WithoutSessionId() {
-		responseStatus.set(404);
-		sessionId.set(null); // No session ID in response
+		serverResponseStatus.set(404);
+		currentServerSessionId.set(null); // No session ID in response
 
 		var testMessage = createTestMessage();
 
@@ -163,8 +163,8 @@ public class WebClientStreamableHttpTransportErrorHandlingTest {
 	@Test
 	void test404WithSessionId() throws InterruptedException {
 		// First establish a session
-		responseStatus.set(200);
-		sessionId.set("test-session-123");
+		serverResponseStatus.set(200);
+		currentServerSessionId.set("test-session-123");
 
 		// Set up exception handler to verify session invalidation
 		@SuppressWarnings("unchecked")
@@ -187,7 +187,7 @@ public class WebClientStreamableHttpTransportErrorHandlingTest {
 		assertThat(getRequestLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
 		// Now return 404 for next request
-		responseStatus.set(404);
+		serverResponseStatus.set(404);
 
 		// Use delaySubscription to ensure session is fully processed before next
 		// request
@@ -212,8 +212,8 @@ public class WebClientStreamableHttpTransportErrorHandlingTest {
 	 */
 	@Test
 	void test400WithoutSessionId() {
-		responseStatus.set(400);
-		sessionId.set(null); // No session ID
+		serverResponseStatus.set(400);
+		currentServerSessionId.set(null); // No session ID
 
 		var testMessage = createTestMessage();
 
@@ -232,8 +232,8 @@ public class WebClientStreamableHttpTransportErrorHandlingTest {
 	void test400WithSessionId() throws InterruptedException {
 
 		// First establish a session
-		responseStatus.set(200);
-		sessionId.set("test-session-456");
+		serverResponseStatus.set(200);
+		currentServerSessionId.set("test-session-456");
 
 		// Set up exception handler
 		@SuppressWarnings("unchecked")
@@ -258,7 +258,7 @@ public class WebClientStreamableHttpTransportErrorHandlingTest {
 		assertThat(getCompleted).isTrue();
 
 		// Now return 400 for next request (simulating unknown session ID)
-		responseStatus.set(400);
+		serverResponseStatus.set(400);
 
 		// Use delaySubscription to ensure session is fully processed before next
 		// request
@@ -284,8 +284,8 @@ public class WebClientStreamableHttpTransportErrorHandlingTest {
 	@Test
 	void testSessionRecoveryAfter404() {
 		// First establish a session
-		responseStatus.set(200);
-		sessionId.set("session-1");
+		serverResponseStatus.set(200);
+		currentServerSessionId.set("session-1");
 
 		// Send initial message to establish session
 		var testMessage = createTestMessage();
@@ -293,15 +293,15 @@ public class WebClientStreamableHttpTransportErrorHandlingTest {
 		// Use Mono.defer to ensure proper sequencing
 		Mono<Void> establishSession = transport.sendMessage(testMessage).then(Mono.defer(() -> {
 			// Simulate session loss - return 404
-			responseStatus.set(404);
+			serverResponseStatus.set(404);
 			return transport.sendMessage(testMessage).onErrorResume(McpTransportSessionNotFoundException.class, e -> {
 				// Expected error, continue with recovery
 				return Mono.empty();
 			});
 		})).then(Mono.defer(() -> {
 			// Now server is back with new session
-			responseStatus.set(200);
-			sessionId.set("session-2");
+			serverResponseStatus.set(200);
+			currentServerSessionId.set("session-2");
 			lastReceivedSessionId.set(null); // Reset to verify new session
 
 			// Should be able to establish new session
@@ -336,7 +336,7 @@ public class WebClientStreamableHttpTransportErrorHandlingTest {
 
 			if ("GET".equals(method)) {
 				sseConnectionLatch.countDown();
-				int status = responseStatus.get();
+				int status = serverResponseStatus.get();
 
 				if (status == 404 && requestSessionId != null) {
 					// 404 with session ID - should trigger SessionNotFoundException
@@ -358,7 +358,7 @@ public class WebClientStreamableHttpTransportErrorHandlingTest {
 			else {
 				// POST request handling
 				exchange.getResponseHeaders().set("Content-Type", "application/json");
-				String responseSessionId = sessionId.get();
+				String responseSessionId = currentServerSessionId.get();
 				if (responseSessionId != null) {
 					exchange.getResponseHeaders().set(HttpHeaders.MCP_SESSION_ID, responseSessionId);
 				}
@@ -370,8 +370,8 @@ public class WebClientStreamableHttpTransportErrorHandlingTest {
 		});
 
 		// Test with session ID - should get SessionNotFoundException
-		responseStatus.set(200);
-		sessionId.set("sse-session-1");
+		serverResponseStatus.set(200);
+		currentServerSessionId.set("sse-session-1");
 
 		var transport = WebClientStreamableHttpTransport.builder(WebClient.builder().baseUrl(HOST))
 			.endpoint("/mcp-sse")

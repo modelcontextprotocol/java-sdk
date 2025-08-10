@@ -16,7 +16,6 @@ import java.util.function.Consumer;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -47,9 +46,9 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 
 	private HttpServer server;
 
-	private AtomicReference<Integer> responseStatus = new AtomicReference<>(200);
+	private AtomicReference<Integer> serverResponseStatus = new AtomicReference<>(200);
 
-	private AtomicReference<String> sessionId = new AtomicReference<>(null);
+	private AtomicReference<String> currentServerSessionId = new AtomicReference<>(null);
 
 	private AtomicReference<String> lastReceivedSessionId = new AtomicReference<>(null);
 
@@ -60,32 +59,37 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 		server = HttpServer.create(new InetSocketAddress(PORT), 0);
 
 		// Configure the /mcp endpoint with dynamic response
-		server.createContext("/mcp", exchange -> {
-			// Capture session ID from request if present
-			String requestSessionId = exchange.getRequestHeaders().getFirst(HttpHeaders.MCP_SESSION_ID);
-			lastReceivedSessionId.set(requestSessionId);
-
-			int status = responseStatus.get();
-
-			// Set response headers
-			exchange.getResponseHeaders().set("Content-Type", "application/json");
-
-			// Add session ID to response if configured
-			String responseSessionId = sessionId.get();
-			if (responseSessionId != null) {
-				exchange.getResponseHeaders().set(HttpHeaders.MCP_SESSION_ID, responseSessionId);
-			}
-
-			// Send response based on configured status
-			if (status == 200) {
-				String response = "{\"jsonrpc\":\"2.0\",\"result\":{},\"id\":\"test-id\"}";
-				exchange.sendResponseHeaders(200, response.length());
-				exchange.getResponseBody().write(response.getBytes());
+		server.createContext("/mcp", httpExchange -> {
+			if ("DELETE".equals(httpExchange.getRequestMethod())) {
+				httpExchange.sendResponseHeaders(200, 0);
 			}
 			else {
-				exchange.sendResponseHeaders(status, 0);
+				// Capture session ID from request if present
+				String requestSessionId = httpExchange.getRequestHeaders().getFirst(HttpHeaders.MCP_SESSION_ID);
+				lastReceivedSessionId.set(requestSessionId);
+
+				int status = serverResponseStatus.get();
+
+				// Set response headers
+				httpExchange.getResponseHeaders().set("Content-Type", "application/json");
+
+				// Add session ID to response if configured
+				String responseSessionId = currentServerSessionId.get();
+				if (responseSessionId != null) {
+					httpExchange.getResponseHeaders().set(HttpHeaders.MCP_SESSION_ID, responseSessionId);
+				}
+
+				// Send response based on configured status
+				if (status == 200) {
+					String response = "{\"jsonrpc\":\"2.0\",\"result\":{},\"id\":\"test-id\"}";
+					httpExchange.sendResponseHeaders(200, response.length());
+					httpExchange.getResponseBody().write(response.getBytes());
+				}
+				else {
+					httpExchange.sendResponseHeaders(status, 0);
+				}
 			}
-			exchange.close();
+			httpExchange.close();
 		});
 
 		server.setExecutor(null);
@@ -107,10 +111,10 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 	 */
 	@Test
 	void test404WithoutSessionId() {
-		responseStatus.set(404);
-		sessionId.set(null); // No session ID in response
+		serverResponseStatus.set(404);
+		currentServerSessionId.set(null); // No session ID in response
 
-		var testMessage = createTestMessage();
+		var testMessage = createTestRequestMessage();
 
 		StepVerifier.create(transport.sendMessage(testMessage))
 			.expectErrorMatches(throwable -> throwable instanceof McpTransportException
@@ -127,8 +131,8 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 	@Test
 	void test404WithSessionId() {
 		// First establish a session
-		responseStatus.set(200);
-		sessionId.set("test-session-123");
+		serverResponseStatus.set(200);
+		currentServerSessionId.set("test-session-123");
 
 		// Set up exception handler to verify session invalidation
 		@SuppressWarnings("unchecked")
@@ -139,12 +143,12 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 		StepVerifier.create(transport.connect(msg -> msg)).verifyComplete();
 
 		// Send initial message to establish session
-		var testMessage = createTestMessage();
+		var testMessage = createTestRequestMessage();
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 
 		// The session should now be established, next request will include session ID
 		// Now return 404 for next request
-		responseStatus.set(404);
+		serverResponseStatus.set(404);
 
 		// Send another message - should get SessionNotFoundException
 		StepVerifier.create(transport.sendMessage(testMessage))
@@ -163,10 +167,10 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 	 */
 	@Test
 	void test400WithoutSessionId() {
-		responseStatus.set(400);
-		sessionId.set(null); // No session ID
+		serverResponseStatus.set(400);
+		currentServerSessionId.set(null); // No session ID
 
-		var testMessage = createTestMessage();
+		var testMessage = createTestRequestMessage();
 
 		StepVerifier.create(transport.sendMessage(testMessage))
 			.expectErrorMatches(throwable -> throwable instanceof McpTransportException
@@ -185,8 +189,8 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 	@Test
 	void test400WithSessionId() {
 		// First establish a session
-		responseStatus.set(200);
-		sessionId.set("test-session-456");
+		serverResponseStatus.set(200);
+		currentServerSessionId.set("test-session-456");
 
 		// Set up exception handler
 		@SuppressWarnings("unchecked")
@@ -197,12 +201,12 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 		StepVerifier.create(transport.connect(msg -> msg)).verifyComplete();
 
 		// Send initial message to establish session
-		var testMessage = createTestMessage();
+		var testMessage = createTestRequestMessage();
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 
 		// The session should now be established, next request will include session ID
 		// Now return 400 for next request (simulating unknown session ID)
-		responseStatus.set(400);
+		serverResponseStatus.set(400);
 
 		// Send another message - should get SessionNotFoundException
 		StepVerifier.create(transport.sendMessage(testMessage))
@@ -222,16 +226,18 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 	@Test
 	void testSessionRecoveryAfter404() {
 		// First establish a session
-		responseStatus.set(200);
-		sessionId.set("session-1");
+		serverResponseStatus.set(200);
+		currentServerSessionId.set("session-1");
 
 		// Send initial message to establish session
-		var testMessage = createTestMessage();
+		var testMessage = createTestRequestMessage();
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
+
+		assertThat(lastReceivedSessionId.get()).isNull();
 
 		// The session should now be established
 		// Simulate session loss - return 404
-		responseStatus.set(404);
+		serverResponseStatus.set(404);
 
 		// This should fail with SessionNotFoundException
 		StepVerifier.create(transport.sendMessage(testMessage))
@@ -239,8 +245,8 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 			.verify();
 
 		// Now server is back with new session
-		responseStatus.set(200);
-		sessionId.set("session-2");
+		serverResponseStatus.set(200);
+		currentServerSessionId.set("session-2");
 		lastReceivedSessionId.set(null); // Reset to verify new session
 
 		// Should be able to establish new session
@@ -270,7 +276,7 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 			String requestSessionId = exchange.getRequestHeaders().getFirst(HttpHeaders.MCP_SESSION_ID);
 
 			if ("GET".equals(method)) {
-				int status = responseStatus.get();
+				int status = serverResponseStatus.get();
 
 				if (status == 404 && requestSessionId != null) {
 					// 404 with session ID - should trigger SessionNotFoundException
@@ -292,7 +298,7 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 			else {
 				// POST request handling
 				exchange.getResponseHeaders().set("Content-Type", "application/json");
-				String responseSessionId = sessionId.get();
+				String responseSessionId = currentServerSessionId.get();
 				if (responseSessionId != null) {
 					exchange.getResponseHeaders().set(HttpHeaders.MCP_SESSION_ID, responseSessionId);
 				}
@@ -304,8 +310,8 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 		});
 
 		// Test with session ID - should get SessionNotFoundException
-		responseStatus.set(200);
-		sessionId.set("sse-session-1");
+		serverResponseStatus.set(200);
+		currentServerSessionId.set("sse-session-1");
 
 		var transport = HttpClientStreamableHttpTransport.builder(HOST)
 			.endpoint("/mcp-sse")
@@ -316,11 +322,11 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 		StepVerifier.create(transport.connect(msg -> msg)).verifyComplete();
 
 		// Send message to establish session
-		var testMessage = createTestMessage();
+		var testMessage = createTestRequestMessage();
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 
 		// Now simulate server returning 404 on reconnect
-		responseStatus.set(404);
+		serverResponseStatus.set(404);
 
 		// This should trigger reconnect which will fail
 		// The error should be handled internally and passed to exception handler
@@ -328,7 +334,7 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 		StepVerifier.create(transport.closeGracefully()).verifyComplete();
 	}
 
-	private McpSchema.JSONRPCRequest createTestMessage() {
+	private McpSchema.JSONRPCRequest createTestRequestMessage() {
 		var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_03_26,
 				McpSchema.ClientCapabilities.builder().roots(true).build(),
 				new McpSchema.Implementation("Test Client", "1.0.0"));
