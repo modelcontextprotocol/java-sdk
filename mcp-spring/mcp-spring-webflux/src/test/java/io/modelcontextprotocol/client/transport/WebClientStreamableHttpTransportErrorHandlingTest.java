@@ -44,7 +44,6 @@ import reactor.test.StepVerifier;
  * @author Christian Tzolov
  */
 @Timeout(15)
-@Disabled
 public class WebClientStreamableHttpTransportErrorHandlingTest {
 
 	private static final int PORT = TestUtil.findAvailablePort();

@@ -39,7 +39,6 @@ import reactor.test.StepVerifier;
  * @author Christian Tzolov
  */
 @Timeout(15)
-@Disabled
 public class HttpClientStreamableHttpTransportErrorHandlingTest {
 
 	private static final int PORT = TomcatTestUtil.findAvailablePort();
