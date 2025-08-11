@@ -10,6 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertWith;
 import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import java.net.URI;
@@ -28,6 +29,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -827,6 +829,61 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient" })
+	void testToolCallSuccessWithTranportContextExtraction(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		var expectedCallResponse = new McpSchema.CallToolResult(
+				List.of(new McpSchema.TextContent("CALL RESPONSE; ctx=value")), null);
+		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(emptyJsonSchema).build())
+			.callHandler((exchange, request) -> {
+
+				McpTransportContext transportContext = exchange.transportContext();
+				assertTrue(transportContext != null, "transportContext should not be null");
+				assertTrue(!transportContext.equals(McpTransportContext.EMPTY), "transportContext should not be empty");
+				String ctxValue = (String) transportContext.get("important");
+
+				try {
+					HttpResponse<String> response = HttpClient.newHttpClient()
+						.send(HttpRequest.newBuilder()
+							.uri(URI.create(
+									"https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md"))
+							.GET()
+							.build(), HttpResponse.BodyHandlers.ofString());
+					String responseBody = response.body();
+					assertThat(responseBody).isNotBlank();
+				}
+				catch (Exception e) {
+					e.printStackTrace();
+				}
+
+				return new McpSchema.CallToolResult(
+						List.of(new McpSchema.TextContent("CALL RESPONSE; ctx=" + ctxValue)), null);
+			})
+			.build();
+
+		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool1)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThat(mcpClient.listTools().tools()).contains(tool1.tool());
+
+			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+
+			assertThat(response).isNotNull().isEqualTo(expectedCallResponse);
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient" })
 	void testToolListChangeHandlingSuccess(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -1530,5 +1587,10 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			default -> 0.0;
 		};
 	}
+
+	protected static McpTransportContextExtractor<HttpServletRequest> extractor = (r, tc) -> {
+		tc.put("important", "value");
+		return tc;
+	};
 
 }
