@@ -37,11 +37,11 @@
 								Bundle-Name:            Bundle ${project.groupId} : ${project.artifactId}
 								version:                ${versionmask;===;${version_cleanup;${project.version}}}
 								Bundle-SymbolicName:    ${project.groupId}.${project.artifactId}
-								Bundle-Version:         ${version}
+								Bundle-Version:         ${project.version}
 								Automatic-Module-Name:  ${project.groupId}.${project.artifactId}
 								Import-Package:         jakarta.*;resolution:=optional, \
 								                        *;
-								Export-Package:         io.modelcontextprotocol.*;version="${version}";-noimport:=true
+								Export-Package:         io.modelcontextprotocol.*;version="${project.version}";-noimport:=true
 								-noimportjava:          true;
 								-nouses:                true;
 								-removeheaders:         Private-Package
