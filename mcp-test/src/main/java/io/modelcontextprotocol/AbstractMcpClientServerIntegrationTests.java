@@ -4,6 +4,33 @@
 
 package io.modelcontextprotocol;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.assertWith;
+import static org.awaitility.Awaitility.await;
+import static org.mockito.Mockito.mock;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
@@ -29,35 +56,8 @@ import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import net.javacrumbs.jsonunit.core.Option;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.assertWith;
-import static org.awaitility.Awaitility.await;
-import static org.mockito.Mockito.mock;
 
 public abstract class AbstractMcpClientServerIntegrationTests {
 
@@ -759,8 +759,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 					HttpResponse<String> response = HttpClient.newHttpClient()
 						.send(HttpRequest.newBuilder()
 							.uri(URI.create(
-									"https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README"
-											+ ".md"))
+									"https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md"))
 							.GET()
 							.build(), HttpResponse.BodyHandlers.ofString());
 					String responseBody = response.body();
@@ -845,8 +844,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 					HttpResponse<String> response = HttpClient.newHttpClient()
 						.send(HttpRequest.newBuilder()
 							.uri(URI.create(
-									"https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README"
-											+ ".md"))
+									"https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md"))
 							.GET()
 							.build(), HttpResponse.BodyHandlers.ofString());
 					String responseBody = response.body();
@@ -1058,7 +1056,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	@ValueSource(strings = { "httpclient", "webflux" })
 	void testProgressNotification(String clientType) throws InterruptedException {
 		int expectedNotificationsCount = 4; // 3 notifications + 1 for another progress
-		// token
+											// token
 		CountDownLatch latch = new CountDownLatch(expectedNotificationsCount);
 		// Create a list to store received logging notifications
 		List<McpSchema.ProgressNotification> receivedNotifications = new CopyOnWriteArrayList<>();
