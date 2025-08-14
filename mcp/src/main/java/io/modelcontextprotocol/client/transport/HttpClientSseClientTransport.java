@@ -247,8 +247,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 
 		private ObjectMapper objectMapper = new ObjectMapper();
 
-		private HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-			.header("Content-Type", "application/json");
+		private HttpRequest.Builder requestBuilder = HttpRequest.newBuilder();
 
 		private AsyncHttpRequestCustomizer httpRequestCustomizer = AsyncHttpRequestCustomizer.NOOP;
 
@@ -529,6 +528,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		return Mono.defer(() -> {
 			var builder = this.requestBuilder.copy()
 				.uri(requestUri)
+				.header("Content-Type", "application/json")
 				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
 				.POST(HttpRequest.BodyPublishers.ofString(body));
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", requestUri, body));
