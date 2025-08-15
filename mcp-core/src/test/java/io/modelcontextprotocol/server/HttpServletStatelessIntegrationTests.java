@@ -615,11 +615,9 @@ class HttpServletStatelessIntegrationTests {
 
 		byte[] content = JSON_MAPPER.writeValueAsBytes(jsonrpcRequest);
 		request.setContent(content);
-		request.addHeader("Content-Type", "application/json");
-		request.addHeader("Content-Length", Integer.toString(content.length));
+		request.addHeader("Content-Type", APPLICATION_JSON);
 		request.addHeader("Content-Length", Integer.toString(content.length));
 		request.addHeader("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM);
-		request.addHeader("Content-Type", APPLICATION_JSON);
 		request.addHeader("Cache-Control", "no-cache");
 		request.addHeader(HttpHeaders.PROTOCOL_VERSION, ProtocolVersions.MCP_2025_03_26);
 
