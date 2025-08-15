@@ -187,7 +187,7 @@ class ResponseSubscribers {
 
 		@Override
 		protected void hookOnComplete() {
-			if (this.eventBuilder.length() > 0) {
+			if (!this.eventBuilder.isEmpty()) {
 				String eventData = this.eventBuilder.toString();
 				SseEvent sseEvent = new SseEvent(currentEventId.get(), currentEventType.get(), eventData.trim());
 				this.sink.next(new SseResponseEvent(responseInfo, sseEvent));
@@ -233,9 +233,24 @@ class ResponseSubscribers {
 
 		@Override
 		protected void hookOnSubscribe(Subscription subscription) {
-			sink.onRequest(subscription::request);
+			var contentLength = responseInfo.headers().firstValue("Content-Length");
+			var useUnbounded = false;
+			if (contentLength.isPresent()) {
+				useUnbounded = Long.parseLong(contentLength.get()) > 0;
+			}
+			if (useUnbounded) {
+				sink.onRequest(n -> {
+					// Don't forward downstream requests directly - we manage our own
+					// requests
+				});
 
-			// Register disposal callback to cancel subscription when Flux is disposed
+				// Request unbounded items to consume the entire response body
+				subscription.request(Long.MAX_VALUE);
+			}
+			else {
+				sink.onRequest(subscription::request);
+			}
+
 			sink.onDispose(subscription::cancel);
 		}
 
