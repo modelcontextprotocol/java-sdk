@@ -422,17 +422,23 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", uri, jsonBody));
 			}).flatMapMany(requestBuilder -> Flux.<ResponseEvent>create(responseEventSink -> {
 
-				// Create the async request with proper body subscriber selection
-				Mono.fromFuture(this.httpClient
-					.sendAsync(requestBuilder.build(), this.toSendMessageBodySubscriber(responseEventSink))
-					.whenComplete((response, throwable) -> {
-						if (throwable != null) {
-							responseEventSink.error(throwable);
-						}
-						else {
-							logger.debug("SSE connection established successfully");
-						}
-					})).onErrorMap(CompletionException.class, t -> t.getCause()).onErrorComplete().subscribe();
+				// Create the async request with proper error handling and timeout
+				// The key insight: the response body is consumed by the BodySubscriber
+				// and flows through responseEventSink
+				// The CompletableFuture<HttpResponse<Void>> completes when headers are
+				// received, not when body is consumed
+				Mono.fromFuture(() -> this.httpClient.sendAsync(requestBuilder.build(),
+						this.toSendMessageBodySubscriber(responseEventSink)))
+					.doOnSuccess(response -> {
+						logger.debug("Success: " + response.statusCode());
+					})
+					.doOnError(throwable -> {
+						logger.error("HTTP request failed with message {}", throwable.getMessage(), throwable);
+						// Ensure the sink gets the error if it hasn't been completed yet
+						responseEventSink.error(throwable);
+					})
+					.onErrorMap(CompletionException.class, Throwable::getCause)
+					.subscribe();
 
 			})).flatMap(responseEvent -> {
 				if (transportSession.markInitialized(
@@ -497,6 +503,11 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						String data = ((ResponseSubscribers.AggregateResponseEvent) responseEvent).data();
 						if (sentMessage instanceof McpSchema.JSONRPCNotification && Utils.hasText(data)) {
 							logger.warn("Notification: {} received non-compliant response: {}", sentMessage, data);
+							return Mono.empty();
+						}
+
+						if (!Utils.hasText(data)) {
+							deliveredSink.success();
 							return Mono.empty();
 						}
 
