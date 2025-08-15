@@ -423,10 +423,6 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			}).flatMapMany(requestBuilder -> Flux.<ResponseEvent>create(responseEventSink -> {
 
 				// Create the async request with proper error handling and timeout
-				// The key insight: the response body is consumed by the BodySubscriber
-				// and flows through responseEventSink
-				// The CompletableFuture<HttpResponse<Void>> completes when headers are
-				// received, not when body is consumed
 				Mono.fromFuture(() -> this.httpClient.sendAsync(requestBuilder.build(),
 						this.toSendMessageBodySubscriber(responseEventSink)))
 					.doOnSuccess(response -> {
