@@ -271,6 +271,12 @@ public class McpServerSession implements McpLoggableSession {
 				}
 
 				resultMono = this.exchangeSink.asMono().flatMap(exchange -> {
+					// This legacy implementation assumes an exchange is established upon
+					// the initialization phase see: exchangeSink.tryEmitValue(...),
+					// which creates a cached immutable exchange.
+					// Here, we create a new exchange and copy over everything from that
+					// cached exchange, and use it for a single HTTP request, with the
+					// transport context passed in.
 					McpAsyncServerExchange newExchange = new McpAsyncServerExchange(exchange.sessionId(), this,
 							exchange.getClientCapabilities(), exchange.getClientInfo(), transportContext);
 					return handler.handle(newExchange, request.params());
@@ -308,6 +314,12 @@ public class McpServerSession implements McpLoggableSession {
 				return Mono.empty();
 			}
 			return this.exchangeSink.asMono().flatMap(exchange -> {
+				// This legacy implementation assumes an exchange is established upon
+				// the initialization phase see: exchangeSink.tryEmitValue(...),
+				// which creates a cached immutable exchange.
+				// Here, we create a new exchange and copy over everything from that
+				// cached exchange, and use it for a single HTTP request, with the
+				// transport context passed in.
 				McpAsyncServerExchange newExchange = new McpAsyncServerExchange(exchange.sessionId(), this,
 						exchange.getClientCapabilities(), exchange.getClientInfo(), transportContext);
 				return handler.handle(newExchange, notification.params());
