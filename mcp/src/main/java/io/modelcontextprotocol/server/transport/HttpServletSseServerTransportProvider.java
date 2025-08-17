@@ -149,7 +149,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	@Deprecated
 	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint) {
-		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, null, null);
+		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, null, (serverRequest, context) -> context);
 	}
 
 	/**
@@ -168,7 +168,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	@Deprecated
 	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval) {
-		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval, null);
+		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval,
+				(serverRequest, context) -> context);
 	}
 
 	/**
@@ -180,7 +181,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 * @param messageEndpoint The endpoint path where clients will send their messages
 	 * @param sseEndpoint The endpoint path where clients will establish SSE connections
 	 * @param keepAliveInterval The interval for keep-alive pings, or null to disable
-     * keep-alive functionality
+	 * keep-alive functionality
 	 * @param contextExtractor The extractor for transport context from the request.
 	 * @deprecated Use the builder {@link #builder()} instead for better configuration
 	 * options.
@@ -188,6 +189,11 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	private HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval,
 			McpTransportContextExtractor<HttpServletRequest> contextExtractor) {
+
+		Assert.notNull(objectMapper, "ObjectMapper must not be null");
+		Assert.notNull(messageEndpoint, "messageEndpoint must not be null");
+		Assert.notNull(sseEndpoint, "sseEndpoint must not be null");
+		Assert.notNull(contextExtractor, "Context extractor must not be null");
 
 		this.objectMapper = objectMapper;
 		this.baseUrl = baseUrl;
