@@ -371,7 +371,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 				body.append(line);
 			}
 
-			final McpTransportContext transportContext = contextExtractor.extract(request,
+			final McpTransportContext transportContext = this.contextExtractor.extract(request,
 					new DefaultMcpTransportContext());
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body.toString());
 
