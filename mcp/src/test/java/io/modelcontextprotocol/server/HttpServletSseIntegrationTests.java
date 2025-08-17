@@ -40,7 +40,7 @@ class HttpServletSseIntegrationTests extends AbstractMcpClientServerIntegrationT
 		// Create and configure the transport provider
 		mcpServerTransportProvider = HttpServletSseServerTransportProvider.builder()
 			.objectMapper(new ObjectMapper())
-			.contextExtractor(extractor)
+			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
 			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
 			.sseEndpoint(CUSTOM_SSE_ENDPOINT)
 			.build();
