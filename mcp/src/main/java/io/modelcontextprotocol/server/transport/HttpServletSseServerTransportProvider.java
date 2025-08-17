@@ -185,8 +185,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 * @deprecated Use the builder {@link #builder()} instead for better configuration
 	 * options.
 	 */
-	@Deprecated
-	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+	private HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval,
 			McpTransportContextExtractor<HttpServletRequest> contextExtractor) {
 
