@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertWith;
 import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.Mockito.mock;
 
 import java.net.URI;
@@ -24,12 +24,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.assertj.core.util.Strings;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -748,6 +750,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
+		var responseBodyIsNullOrBlank = new AtomicBoolean(false);
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(emptyJsonSchema).build())
@@ -761,7 +764,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 							.GET()
 							.build(), HttpResponse.BodyHandlers.ofString());
 					String responseBody = response.body();
-					assertThat(responseBody).isNotBlank();
+					responseBodyIsNullOrBlank.set(Strings.isNullOrEmpty(responseBody));
 				}
 				catch (Exception e) {
 					e.printStackTrace();
@@ -784,6 +787,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
 
+			assertFalse(responseBodyIsNullOrBlank.get(), "Response body should not be blank");
 			assertThat(response).isNotNull().isEqualTo(callResponse);
 		}
 
@@ -833,6 +837,10 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
+		var transportContextIsNull = new AtomicBoolean(false);
+		var transportContextIsEmpty = new AtomicBoolean(false);
+		var responseBodyIsNullOrBlank = new AtomicBoolean(false);
+
 		var expectedCallResponse = new McpSchema.CallToolResult(
 				List.of(new McpSchema.TextContent("CALL RESPONSE; ctx=value")), null);
 		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
@@ -840,8 +848,8 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.callHandler((exchange, request) -> {
 
 				McpTransportContext transportContext = exchange.transportContext();
-				assertTrue(transportContext != null, "transportContext should not be null");
-				assertTrue(!transportContext.equals(McpTransportContext.EMPTY), "transportContext should not be empty");
+				transportContextIsNull.set(transportContext == null);
+				transportContextIsEmpty.set(transportContext.equals(McpTransportContext.EMPTY));
 				String ctxValue = (String) transportContext.get("important");
 
 				try {
@@ -852,7 +860,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 							.GET()
 							.build(), HttpResponse.BodyHandlers.ofString());
 					String responseBody = response.body();
-					assertThat(responseBody).isNotBlank();
+					responseBodyIsNullOrBlank.set(Strings.isNullOrEmpty(responseBody));
 				}
 				catch (Exception e) {
 					e.printStackTrace();
@@ -876,6 +884,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
 
+			assertFalse(transportContextIsNull.get(), "transportContext should not be null");
+			assertFalse(transportContextIsEmpty.get(), "transportContext should not be empty");
+			assertFalse(responseBodyIsNullOrBlank.get(), "Response body should not be blank");
 			assertThat(response).isNotNull().isEqualTo(expectedCallResponse);
 		}
 
