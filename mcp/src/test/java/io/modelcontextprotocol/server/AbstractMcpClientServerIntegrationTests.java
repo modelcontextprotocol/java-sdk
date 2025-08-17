@@ -1599,7 +1599,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		};
 	}
 
-	protected static McpTransportContextExtractor<HttpServletRequest> extractor = (r, tc) -> {
+	protected static McpTransportContextExtractor<HttpServletRequest> TEST_CONTEXT_EXTRACTOR = (r, tc) -> {
 		tc.put("important", "value");
 		return tc;
 	};
