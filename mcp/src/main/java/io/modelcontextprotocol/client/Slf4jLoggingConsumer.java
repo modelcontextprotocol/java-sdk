@@ -31,16 +31,17 @@ public class Slf4jLoggingConsumer implements Consumer<McpSchema.LoggingMessageNo
 	// https://github.com/google/adk-java/pull/370. It's now been moved here to be useful
 	// to others.
 
+	private static final Logger LOG = LoggerFactory.getLogger(Slf4jLoggingConsumer.class);
+
 	@Override
 	public void accept(LoggingMessageNotification notif) {
-		Logger log = LoggerFactory.getLogger(notif.logger());
 		if (notif.meta().isEmpty()) {
 			// If no meta, then just log the data as a message
-			log.atLevel(convert(notif.level())).log(notif.data());
+			LOG.atLevel(convert(notif.level())).log(notif.data());
 		}
 		else {
 			// If there is meta, then log it as a structured log message
-			var builder = log.atLevel(convert(notif.level())).setMessage(notif.data());
+			var builder = LOG.atLevel(convert(notif.level())).setMessage(notif.data());
 			notif.meta().forEach((key, value) -> builder.addKeyValue(key, value));
 			builder.log();
 		}
