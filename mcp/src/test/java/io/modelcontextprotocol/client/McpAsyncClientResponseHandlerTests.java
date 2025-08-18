@@ -13,7 +13,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.MockMcpClientTransport;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
@@ -52,7 +51,7 @@ class McpAsyncClientResponseHandlerTests {
 						r.id(), mockInitResult, null);
 				t.simulateIncomingMessage(initResponse);
 			}
-		});
+		}).withProtocolVersion(McpSchema.LATEST_PROTOCOL_VERSION);
 	}
 
 	@Test
@@ -79,8 +78,9 @@ class McpAsyncClientResponseHandlerTests {
 
 		// Verify initialization result
 		assertThat(result).isNotNull();
-		assertThat(result.protocolVersion()).isEqualTo(McpSchema.LATEST_PROTOCOL_VERSION);
+		assertThat(result.protocolVersion()).isEqualTo(transport.protocolVersions().get(0));
 		assertThat(result.capabilities()).isEqualTo(serverCapabilities);
+		assertThat(result.capabilities().logging()).isNull();
 		assertThat(result.serverInfo()).isEqualTo(serverInfo);
 		assertThat(result.instructions()).isEqualTo("Test instructions");
 
@@ -373,7 +373,7 @@ class McpAsyncClientResponseHandlerTests {
 		// Create client with sampling capability but null handler
 		assertThatThrownBy(
 				() -> McpClient.async(transport).capabilities(ClientCapabilities.builder().sampling().build()).build())
-			.isInstanceOf(McpError.class)
+			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Sampling handler must not be null when client capabilities include sampling");
 	}
 
@@ -521,7 +521,7 @@ class McpAsyncClientResponseHandlerTests {
 		// Create client with elicitation capability but null handler
 		assertThatThrownBy(() -> McpClient.async(transport)
 			.capabilities(ClientCapabilities.builder().elicitation().build())
-			.build()).isInstanceOf(McpError.class)
+			.build()).isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Elicitation handler must not be null when client capabilities include elicitation");
 	}
 

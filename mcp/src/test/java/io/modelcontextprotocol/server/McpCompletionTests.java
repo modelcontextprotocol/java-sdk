@@ -1,3 +1,7 @@
+/*
+ * Copyright 2024-2025 the original author or authors.
+ */
+
 package io.modelcontextprotocol.server;
 
 import java.util.List;
@@ -23,10 +27,12 @@ import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CompleteRequest;
 import io.modelcontextprotocol.spec.McpSchema.CompleteResult;
+import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.Prompt;
 import io.modelcontextprotocol.spec.McpSchema.PromptArgument;
 import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
+import io.modelcontextprotocol.spec.McpSchema.Resource;
 import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
@@ -40,6 +46,8 @@ import io.modelcontextprotocol.spec.McpError;
 class McpCompletionTests {
 
 	private HttpServletSseServerTransportProvider mcpServerTransportProvider;
+
+	private static final int PORT = TomcatTestUtil.findAvailablePort();
 
 	private static final String CUSTOM_MESSAGE_ENDPOINT = "/otherPath/mcp/message";
 
@@ -55,7 +63,7 @@ class McpCompletionTests {
 			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
 			.build();
 
-		tomcat = TomcatTestUtil.createTomcatServer("", 3400, mcpServerTransportProvider);
+		tomcat = TomcatTestUtil.createTomcatServer("", PORT, mcpServerTransportProvider);
 		try {
 			tomcat.start();
 			assertThat(tomcat.getServer().getState()).isEqualTo(LifecycleState.STARTED);
@@ -64,7 +72,7 @@ class McpCompletionTests {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
 
-		this.clientBuilder = McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + 3400).build());
+		this.clientBuilder = McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT).build());
 	}
 
 	@AfterEach
@@ -78,7 +86,7 @@ class McpCompletionTests {
 				tomcat.destroy();
 			}
 			catch (LifecycleException e) {
-				throw new RuntimeException("Failed to stop Tomcat", e);
+				e.printStackTrace();
 			}
 		}
 	}
@@ -93,8 +101,13 @@ class McpCompletionTests {
 
 		ResourceReference resourceRef = new ResourceReference("ref/resource", "test://resource/{param}");
 
-		McpSchema.Resource resource = new McpSchema.Resource("test://resource/{param}", "Test Resource",
-				"A resource for testing", "text/plain", 123L, null);
+		var resource = Resource.builder()
+			.uri("test://resource/{param}")
+			.name("Test Resource")
+			.description("A resource for testing")
+			.mimeType("text/plain")
+			.size(123L)
+			.build();
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().completions().build())
@@ -193,8 +206,13 @@ class McpCompletionTests {
 			return new CompleteResult(new CompleteResult.CompleteCompletion(List.of(), 0, false));
 		};
 
-		McpSchema.Resource resource = new McpSchema.Resource("db://{database}/{table}", "Database Table",
-				"Resource representing a table in a database", "application/json", 456L, null);
+		McpSchema.Resource resource = Resource.builder()
+			.uri("db://{database}/{table}")
+			.name("Database Table")
+			.description("Resource representing a table in a database")
+			.mimeType("application/json")
+			.size(456L)
+			.build();
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().completions().build())
@@ -248,7 +266,10 @@ class McpCompletionTests {
 						// Check if database context is provided
 						if (request.context() == null || request.context().arguments() == null
 								|| !request.context().arguments().containsKey("database")) {
-							throw new McpError("Please select a database first to see available tables");
+
+							throw McpError.builder(ErrorCodes.INVALID_REQUEST)
+								.message("Please select a database first to see available tables")
+								.build();
 						}
 						// Normal completion if context is provided
 						String db = request.context().arguments().get("database");
@@ -262,8 +283,13 @@ class McpCompletionTests {
 			return new CompleteResult(new CompleteResult.CompleteCompletion(List.of(), 0, false));
 		};
 
-		McpSchema.Resource resource = new McpSchema.Resource("db://{database}/{table}", "Database Table",
-				"Resource representing a table in a database", "application/json", 456L, null);
+		McpSchema.Resource resource = Resource.builder()
+			.uri("db://{database}/{table}")
+			.name("Database Table")
+			.description("Resource representing a table in a database")
+			.mimeType("application/json")
+			.size(456L)
+			.build();
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().completions().build())

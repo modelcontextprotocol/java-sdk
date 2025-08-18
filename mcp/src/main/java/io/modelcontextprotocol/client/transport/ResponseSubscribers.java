@@ -1,6 +1,7 @@
 /*
 * Copyright 2024 - 2024 the original author or authors.
 */
+
 package io.modelcontextprotocol.client.transport;
 
 import java.net.http.HttpResponse;
@@ -11,7 +12,10 @@ import java.util.regex.Pattern;
 
 import org.reactivestreams.FlowAdapters;
 import org.reactivestreams.Subscription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import io.modelcontextprotocol.spec.McpTransportException;
 import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.FluxSink;
 
@@ -28,6 +32,8 @@ import reactor.core.publisher.FluxSink;
  * @author Dariusz Jędrzejczyk
  */
 class ResponseSubscribers {
+
+	private static final Logger logger = LoggerFactory.getLogger(ResponseSubscribers.class);
 
 	record SseEvent(String id, String event, String data) {
 	}
@@ -135,6 +141,7 @@ class ResponseSubscribers {
 
 		@Override
 		protected void hookOnNext(String line) {
+
 			if (line.isEmpty()) {
 				// Empty line means end of event
 				if (this.eventBuilder.length() > 0) {
@@ -163,6 +170,17 @@ class ResponseSubscribers {
 					if (matcher.find()) {
 						this.currentEventType.set(matcher.group(1).trim());
 					}
+				}
+				else if (line.startsWith(":")) {
+					// Ignore comment lines starting with ":"
+					// This is a no-op, just to skip comments
+					logger.debug("Ignoring comment line: {}", line);
+				}
+				else {
+					// If the response is not successful, emit an error
+					this.sink.error(new McpTransportException(
+							"Invalid SSE response. Status code: " + this.responseInfo.statusCode() + " Line: " + line));
+
 				}
 			}
 		}
@@ -228,10 +246,9 @@ class ResponseSubscribers {
 
 		@Override
 		protected void hookOnComplete() {
-			if (this.eventBuilder.length() > 0) {
-				String data = this.eventBuilder.toString();
-				this.sink.next(new AggregateResponseEvent(responseInfo, data));
-			}
+			String data = this.eventBuilder.toString();
+			this.sink.next(new AggregateResponseEvent(responseInfo, data));
+
 			this.sink.complete();
 		}
 

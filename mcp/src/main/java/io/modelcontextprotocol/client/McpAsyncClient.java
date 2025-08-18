@@ -1,9 +1,12 @@
 /*
  * Copyright 2024-2024 the original author or authors.
  */
+
 package io.modelcontextprotocol.client;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -100,6 +103,9 @@ public class McpAsyncClient {
 	public static final TypeReference<LoggingMessageNotification> LOGGING_MESSAGE_NOTIFICATION_TYPE_REF = new TypeReference<>() {
 	};
 
+	public static final TypeReference<McpSchema.ProgressNotification> PROGRESS_NOTIFICATION_TYPE_REF = new TypeReference<>() {
+	};
+
 	/**
 	 * Client capabilities.
 	 */
@@ -171,7 +177,10 @@ public class McpAsyncClient {
 		Map<String, RequestHandler<?>> requestHandlers = new HashMap<>();
 
 		// Ping MUST respond with an empty data, but not NULL response.
-		requestHandlers.put(McpSchema.METHOD_PING, params -> Mono.just(Map.of()));
+		requestHandlers.put(McpSchema.METHOD_PING, params -> {
+			logger.debug("Received ping: {}", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+			return Mono.just(Map.of());
+		});
 
 		// Roots List Request Handler
 		if (this.clientCapabilities.roots() != null) {
@@ -181,7 +190,8 @@ public class McpAsyncClient {
 		// Sampling Handler
 		if (this.clientCapabilities.sampling() != null) {
 			if (features.samplingHandler() == null) {
-				throw new McpError("Sampling handler must not be null when client capabilities include sampling");
+				throw new IllegalArgumentException(
+						"Sampling handler must not be null when client capabilities include sampling");
 			}
 			this.samplingHandler = features.samplingHandler();
 			requestHandlers.put(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, samplingCreateMessageHandler());
@@ -190,7 +200,8 @@ public class McpAsyncClient {
 		// Elicitation Handler
 		if (this.clientCapabilities.elicitation() != null) {
 			if (features.elicitationHandler() == null) {
-				throw new McpError("Elicitation handler must not be null when client capabilities include elicitation");
+				throw new IllegalArgumentException(
+						"Elicitation handler must not be null when client capabilities include elicitation");
 			}
 			this.elicitationHandler = features.elicitationHandler();
 			requestHandlers.put(McpSchema.METHOD_ELICITATION_CREATE, elicitationCreateHandler());
@@ -253,11 +264,28 @@ public class McpAsyncClient {
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_MESSAGE,
 				asyncLoggingNotificationHandler(loggingConsumersFinal));
 
-		this.initializer = new LifecycleInitializer(clientCapabilities, clientInfo,
-				List.of(McpSchema.LATEST_PROTOCOL_VERSION), initializationTimeout,
-				ctx -> new McpClientSession(requestTimeout, transport, requestHandlers, notificationHandlers,
-						con -> con.contextWrite(ctx)));
+		// Utility Progress Notification
+		List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumersFinal = new ArrayList<>();
+		progressConsumersFinal
+			.add((notification) -> Mono.fromRunnable(() -> logger.debug("Progress: {}", notification)));
+		if (!Utils.isEmpty(features.progressConsumers())) {
+			progressConsumersFinal.addAll(features.progressConsumers());
+		}
+		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_PROGRESS,
+				asyncProgressNotificationHandler(progressConsumersFinal));
+
+		this.initializer = new LifecycleInitializer(clientCapabilities, clientInfo, transport.protocolVersions(),
+				initializationTimeout, ctx -> new McpClientSession(requestTimeout, transport, requestHandlers,
+						notificationHandlers, con -> con.contextWrite(ctx)));
 		this.transport.setExceptionHandler(this.initializer::handleException);
+	}
+
+	/**
+	 * Get the current initialization result.
+	 * @return the initialization result.
+	 */
+	public McpSchema.InitializeResult getCurrentInitializationResult() {
+		return this.initializer.currentInitializationResult();
 	}
 
 	/**
@@ -387,15 +415,15 @@ public class McpAsyncClient {
 	public Mono<Void> addRoot(Root root) {
 
 		if (root == null) {
-			return Mono.error(new McpError("Root must not be null"));
+			return Mono.error(new IllegalArgumentException("Root must not be null"));
 		}
 
 		if (this.clientCapabilities.roots() == null) {
-			return Mono.error(new McpError("Client must be configured with roots capabilities"));
+			return Mono.error(new IllegalStateException("Client must be configured with roots capabilities"));
 		}
 
 		if (this.roots.containsKey(root.uri())) {
-			return Mono.error(new McpError("Root with uri '" + root.uri() + "' already exists"));
+			return Mono.error(new IllegalStateException("Root with uri '" + root.uri() + "' already exists"));
 		}
 
 		this.roots.put(root.uri(), root);
@@ -421,11 +449,11 @@ public class McpAsyncClient {
 	public Mono<Void> removeRoot(String rootUri) {
 
 		if (rootUri == null) {
-			return Mono.error(new McpError("Root uri must not be null"));
+			return Mono.error(new IllegalArgumentException("Root uri must not be null"));
 		}
 
 		if (this.clientCapabilities.roots() == null) {
-			return Mono.error(new McpError("Client must be configured with roots capabilities"));
+			return Mono.error(new IllegalStateException("Client must be configured with roots capabilities"));
 		}
 
 		Root removed = this.roots.remove(rootUri);
@@ -443,7 +471,7 @@ public class McpAsyncClient {
 			}
 			return Mono.empty();
 		}
-		return Mono.error(new McpError("Root with uri '" + rootUri + "' not found"));
+		return Mono.error(new IllegalStateException("Root with uri '" + rootUri + "' not found"));
 	}
 
 	/**
@@ -514,7 +542,7 @@ public class McpAsyncClient {
 	public Mono<McpSchema.CallToolResult> callTool(McpSchema.CallToolRequest callToolRequest) {
 		return this.initializer.withIntitialization("calling tools", init -> {
 			if (init.initializeResult().capabilities().tools() == null) {
-				return Mono.error(new McpError("Server does not provide tools capability"));
+				return Mono.error(new IllegalStateException("Server does not provide tools capability"));
 			}
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_TOOLS_CALL, callToolRequest, CALL_TOOL_RESULT_TYPE_REF);
@@ -543,7 +571,7 @@ public class McpAsyncClient {
 	public Mono<McpSchema.ListToolsResult> listTools(String cursor) {
 		return this.initializer.withIntitialization("listing tools", init -> {
 			if (init.initializeResult().capabilities().tools() == null) {
-				return Mono.error(new McpError("Server does not provide tools capability"));
+				return Mono.error(new IllegalStateException("Server does not provide tools capability"));
 			}
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_TOOLS_LIST, new McpSchema.PaginatedRequest(cursor),
@@ -607,7 +635,7 @@ public class McpAsyncClient {
 	public Mono<McpSchema.ListResourcesResult> listResources(String cursor) {
 		return this.initializer.withIntitialization("listing resources", init -> {
 			if (init.initializeResult().capabilities().resources() == null) {
-				return Mono.error(new McpError("Server does not provide the resources capability"));
+				return Mono.error(new IllegalStateException("Server does not provide the resources capability"));
 			}
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_RESOURCES_LIST, new McpSchema.PaginatedRequest(cursor),
@@ -639,7 +667,7 @@ public class McpAsyncClient {
 	public Mono<McpSchema.ReadResourceResult> readResource(McpSchema.ReadResourceRequest readResourceRequest) {
 		return this.initializer.withIntitialization("reading resources", init -> {
 			if (init.initializeResult().capabilities().resources() == null) {
-				return Mono.error(new McpError("Server does not provide the resources capability"));
+				return Mono.error(new IllegalStateException("Server does not provide the resources capability"));
 			}
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_RESOURCES_READ, readResourceRequest, READ_RESOURCE_RESULT_TYPE_REF);
@@ -677,7 +705,7 @@ public class McpAsyncClient {
 	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates(String cursor) {
 		return this.initializer.withIntitialization("listing resource templates", init -> {
 			if (init.initializeResult().capabilities().resources() == null) {
-				return Mono.error(new McpError("Server does not provide the resources capability"));
+				return Mono.error(new IllegalStateException("Server does not provide the resources capability"));
 			}
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_RESOURCES_TEMPLATES_LIST, new McpSchema.PaginatedRequest(cursor),
@@ -837,13 +865,38 @@ public class McpAsyncClient {
 	 */
 	public Mono<Void> setLoggingLevel(LoggingLevel loggingLevel) {
 		if (loggingLevel == null) {
-			return Mono.error(new McpError("Logging level must not be null"));
+			return Mono.error(new IllegalArgumentException("Logging level must not be null"));
 		}
 
 		return this.initializer.withIntitialization("setting logging level", init -> {
+			if (init.initializeResult().capabilities().logging() == null) {
+				return Mono.error(new IllegalStateException("Server's Logging capabilities are not enabled!"));
+			}
 			var params = new McpSchema.SetLevelRequest(loggingLevel);
 			return init.mcpSession().sendRequest(McpSchema.METHOD_LOGGING_SET_LEVEL, params, OBJECT_TYPE_REF).then();
 		});
+	}
+
+	/**
+	 * Create a notification handler for progress notifications from the server. This
+	 * handler automatically distributes progress notifications to all registered
+	 * consumers.
+	 * @param progressConsumers List of consumers that will be notified when a progress
+	 * message is received. Each consumer receives the progress notification.
+	 * @return A NotificationHandler that processes progress notifications by distributing
+	 * the message to all registered consumers
+	 */
+	private NotificationHandler asyncProgressNotificationHandler(
+			List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers) {
+
+		return params -> {
+			McpSchema.ProgressNotification progressNotification = transport.unmarshalFrom(params,
+					PROGRESS_NOTIFICATION_TYPE_REF);
+
+			return Flux.fromIterable(progressConsumers)
+				.flatMap(consumer -> consumer.apply(progressNotification))
+				.then();
+		};
 	}
 
 	/**

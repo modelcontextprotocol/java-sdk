@@ -16,9 +16,13 @@ import org.junit.jupiter.api.Timeout;
 @Timeout(15) // Giving extra time beyond the client timeout
 class StdioMcpSyncServerTests extends AbstractMcpSyncServerTests {
 
-	@Override
 	protected McpServerTransportProvider createMcpTransportProvider() {
 		return new StdioServerTransportProvider();
+	}
+
+	@Override
+	protected McpServer.SyncSpecification<?> prepareSyncServerBuilder() {
+		return McpServer.sync(createMcpTransportProvider());
 	}
 
 }

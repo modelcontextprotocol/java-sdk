@@ -12,8 +12,10 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -49,6 +51,7 @@ import io.modelcontextprotocol.spec.McpSchema.UnsubscribeRequest;
 import io.modelcontextprotocol.spec.McpTransport;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
 
 /**
@@ -420,7 +423,7 @@ public abstract class AbstractMcpAsyncClientTests {
 				.consumeNextWith(result -> {
 					assertThat(result.prompts()).isNotNull();
 					// Verify that the returned list is immutable
-					assertThatThrownBy(() -> result.prompts().add(new Prompt("test", "Test", "test", null)))
+					assertThatThrownBy(() -> result.prompts().add(new Prompt("test", "test", "test", null)))
 						.isInstanceOf(UnsupportedOperationException.class);
 				})
 				.verifyComplete();
@@ -483,7 +486,8 @@ public abstract class AbstractMcpAsyncClientTests {
 	void testAddRootWithNullValue() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.addRoot(null))
-				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class).hasMessage("Root must not be null"))
+				.consumeErrorWith(e -> assertThat(e).isInstanceOf(IllegalArgumentException.class)
+					.hasMessage("Root must not be null"))
 				.verify();
 		});
 	}
@@ -502,7 +506,7 @@ public abstract class AbstractMcpAsyncClientTests {
 	void testRemoveNonExistentRoot() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.removeRoot("nonexistent-uri"))
-				.consumeErrorWith(e -> assertThat(e).isInstanceOf(McpError.class)
+				.consumeErrorWith(e -> assertThat(e).isInstanceOf(IllegalStateException.class)
 					.hasMessage("Root with uri 'nonexistent-uri' not found"))
 				.verify();
 		});
@@ -790,6 +794,41 @@ public abstract class AbstractMcpAsyncClientTests {
 					})
 					.verifyComplete();
 			});
+	}
+
+	// ---------------------------------------
+	// Progress Notification Tests
+	// ---------------------------------------
+
+	@Test
+	void testProgressConsumer() {
+		Sinks.Many<McpSchema.ProgressNotification> sink = Sinks.many().unicast().onBackpressureBuffer();
+		List<McpSchema.ProgressNotification> receivedNotifications = new CopyOnWriteArrayList<>();
+
+		withClient(createMcpTransport(), builder -> builder.progressConsumer(notification -> {
+			receivedNotifications.add(notification);
+			sink.tryEmitNext(notification);
+			return Mono.empty();
+		}), client -> {
+			StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
+
+			// Call a tool that sends progress notifications
+			CallToolRequest request = CallToolRequest.builder()
+				.name("longRunningOperation")
+				.arguments(Map.of("duration", 1, "steps", 2))
+				.progressToken("test-token")
+				.build();
+
+			StepVerifier.create(client.callTool(request)).consumeNextWith(result -> {
+				assertThat(result).isNotNull();
+			}).verifyComplete();
+
+			// Use StepVerifier to verify the progress notifications via the sink
+			StepVerifier.create(sink.asFlux()).expectNextCount(2).thenCancel().verify(Duration.ofSeconds(3));
+
+			assertThat(receivedNotifications).hasSize(2);
+			assertThat(receivedNotifications.get(0).progressToken()).isEqualTo("test-token");
+		});
 	}
 
 }

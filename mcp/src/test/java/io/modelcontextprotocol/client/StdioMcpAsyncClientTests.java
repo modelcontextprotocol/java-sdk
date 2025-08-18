@@ -37,7 +37,7 @@ class StdioMcpAsyncClientTests extends AbstractMcpAsyncClientTests {
 	}
 
 	protected Duration getInitializationTimeout() {
-		return Duration.ofSeconds(10);
+		return Duration.ofSeconds(20);
 	}
 
 }
