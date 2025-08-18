@@ -38,6 +38,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * Implementation of a WebFlux based {@link McpStreamableServerTransportProvider}.
@@ -60,7 +61,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 	private McpStreamableServerSession.Factory sessionFactory;
 
-	private final ConcurrentHashMap<String, McpStreamableServerSession> sessions = new ConcurrentHashMap<>();
+	private ConcurrentMap<String, McpStreamableServerSession> sessions;
 
 	private McpTransportContextExtractor<ServerRequest> contextExtractor;
 
@@ -70,7 +71,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 	private WebFluxStreamableServerTransportProvider(ObjectMapper objectMapper, String mcpEndpoint,
 			McpTransportContextExtractor<ServerRequest> contextExtractor, boolean disallowDelete,
-			Duration keepAliveInterval) {
+			Duration keepAliveInterval, ConcurrentMap<String, McpStreamableServerSession> sessionsMap) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(mcpEndpoint, "Message endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
@@ -84,7 +85,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 			.POST(this.mcpEndpoint, this::handlePost)
 			.DELETE(this.mcpEndpoint, this::handleDelete)
 			.build();
-
+		this.sessions = sessionsMap;
 		if (keepAliveInterval != null) {
 			this.keepAliveScheduler = KeepAliveScheduler
 				.builder(() -> (isClosing) ? Flux.empty() : Flux.fromIterable(this.sessions.values()))
@@ -401,6 +402,8 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 		private Duration keepAliveInterval;
 
+		private ConcurrentMap<String, McpStreamableServerSession> sessionsMap = new ConcurrentHashMap<>();
+
 		private Builder() {
 			// used by a static method
 		}
@@ -469,6 +472,16 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		}
 
 		/**
+		 * Set the concurrentMap of active client sessions, keyed by mcp-session-id.
+		 * @param sessionsMap the map of active client sessions, keyed by mcp-session-id
+		 * @return @return this builder instance
+		 */
+		public Builder sessionsMap(ConcurrentMap<String, McpStreamableServerSession> sessionsMap) {
+			this.sessionsMap = sessionsMap;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link WebFluxStreamableServerTransportProvider} with
 		 * the configured settings.
 		 * @return A new WebFluxStreamableServerTransportProvider instance
@@ -479,7 +492,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 
 			return new WebFluxStreamableServerTransportProvider(objectMapper, mcpEndpoint, contextExtractor,
-					disallowDelete, keepAliveInterval);
+					disallowDelete, keepAliveInterval, sessionsMap);
 		}
 
 	}

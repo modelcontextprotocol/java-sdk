@@ -11,6 +11,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.slf4j.Logger;
@@ -105,7 +106,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	/**
 	 * Map of active client sessions, keyed by mcp-session-id.
 	 */
-	private final ConcurrentHashMap<String, McpStreamableServerSession> sessions = new ConcurrentHashMap<>();
+	private final ConcurrentMap<String, McpStreamableServerSession> sessions;
 
 	private McpTransportContextExtractor<HttpServletRequest> contextExtractor;
 
@@ -132,7 +133,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 */
 	private HttpServletStreamableServerTransportProvider(ObjectMapper objectMapper, String mcpEndpoint,
 			boolean disallowDelete, McpTransportContextExtractor<HttpServletRequest> contextExtractor,
-			Duration keepAliveInterval) {
+			Duration keepAliveInterval, ConcurrentMap<String, McpStreamableServerSession> sessionsMap) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(mcpEndpoint, "MCP endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
@@ -141,6 +142,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		this.mcpEndpoint = mcpEndpoint;
 		this.disallowDelete = disallowDelete;
 		this.contextExtractor = contextExtractor;
+		this.sessions = sessionsMap;
 
 		if (keepAliveInterval != null) {
 
@@ -773,6 +775,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		private Duration keepAliveInterval;
 
+		private ConcurrentMap<String, McpStreamableServerSession> sessionsMap = new ConcurrentHashMap<>();
+
 		/**
 		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
@@ -833,6 +837,16 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		/**
+		 * Set the concurrentMap of active client sessions, keyed by mcp-session-id.
+		 * @param sessionsMap the map of active client sessions, keyed by mcp-session-id
+		 * @return @return this builder instance
+		 */
+		public Builder sessionsMap(ConcurrentMap<String, McpStreamableServerSession> sessionsMap) {
+			this.sessionsMap = sessionsMap;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link HttpServletStreamableServerTransportProvider}
 		 * with the configured settings.
 		 * @return A new HttpServletStreamableServerTransportProvider instance
@@ -843,7 +857,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 
 			return new HttpServletStreamableServerTransportProvider(this.objectMapper, this.mcpEndpoint,
-					this.disallowDelete, this.contextExtractor, this.keepAliveInterval);
+					this.disallowDelete, this.contextExtractor, this.keepAliveInterval, this.sessionsMap);
 		}
 
 	}

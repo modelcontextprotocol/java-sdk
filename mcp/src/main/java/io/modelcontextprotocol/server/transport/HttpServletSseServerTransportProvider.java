@@ -9,9 +9,9 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -100,7 +100,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	private final String sseEndpoint;
 
 	/** Map of active client sessions, keyed by session ID */
-	private final Map<String, McpServerSession> sessions = new ConcurrentHashMap<>();
+	private final ConcurrentMap<String, McpServerSession> sessions;
 
 	/** Flag indicating if the transport is in the process of shutting down */
 	private final AtomicBoolean isClosing = new AtomicBoolean(false);
@@ -164,10 +164,17 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval) {
 
+		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval, new ConcurrentHashMap<>());
+	}
+
+	private HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+			String sseEndpoint, Duration keepAliveInterval, ConcurrentMap<String, McpServerSession> sessions) {
+
 		this.objectMapper = objectMapper;
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
+		this.sessions = sessions;
 
 		if (keepAliveInterval != null) {
 
@@ -536,6 +543,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 
 		private Duration keepAliveInterval;
 
+		private ConcurrentMap<String, McpServerSession> sessionsMap = new ConcurrentHashMap<>();
+
 		/**
 		 * Sets the JSON object mapper to use for message serialization/deserialization.
 		 * @param objectMapper The object mapper to use
@@ -596,6 +605,16 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		}
 
 		/**
+		 * Set the concurrentMap of active client sessions, keyed by mcp-session-id.
+		 * @param sessionsMap the map of active client sessions, keyed by mcp-session-id
+		 * @return @return this builder instance
+		 */
+		public Builder sessionsMap(ConcurrentMap<String, McpServerSession> sessionsMap) {
+			this.sessionsMap = sessionsMap;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of HttpServletSseServerTransportProvider with the
 		 * configured settings.
 		 * @return A new HttpServletSseServerTransportProvider instance
@@ -609,7 +628,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 				throw new IllegalStateException("MessageEndpoint must be set");
 			}
 			return new HttpServletSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint,
-					keepAliveInterval);
+					keepAliveInterval, this.sessionsMap);
 		}
 
 	}

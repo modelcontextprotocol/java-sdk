@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -113,7 +114,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	/**
 	 * Map of active client sessions, keyed by session ID.
 	 */
-	private final ConcurrentHashMap<String, McpServerSession> sessions = new ConcurrentHashMap<>();
+	private ConcurrentMap<String, McpServerSession> sessions;
 
 	/**
 	 * Flag indicating if the transport is shutting down.
@@ -194,10 +195,16 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	@Deprecated
 	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval) {
+		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval, new ConcurrentHashMap<>());
+	}
+
+	private WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+			String sseEndpoint, Duration keepAliveInterval, ConcurrentMap<String, McpServerSession> sessionsMap) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(baseUrl, "Message base path must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
+		Assert.notNull(sessionsMap, "Sessions map must not be null");
 
 		this.objectMapper = objectMapper;
 		this.baseUrl = baseUrl;
@@ -207,7 +214,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			.GET(this.sseEndpoint, this::handleSseConnection)
 			.POST(this.messageEndpoint, this::handleMessage)
 			.build();
-
+		this.sessions = sessionsMap;
 		if (keepAliveInterval != null) {
 
 			this.keepAliveScheduler = KeepAliveScheduler
@@ -458,6 +465,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 		private Duration keepAliveInterval;
 
+		private ConcurrentMap<String, McpServerSession> sessionsMap = new ConcurrentHashMap<>();
+
 		/**
 		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
@@ -520,6 +529,16 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		}
 
 		/**
+		 * Set the concurrentMap of active client sessions, keyed by mcp-session-id.
+		 * @param sessionsMap the map of active client sessions, keyed by mcp-session-id
+		 * @return @return this builder instance
+		 */
+		public Builder sessionsMap(ConcurrentMap<String, McpServerSession> sessionsMap) {
+			this.sessionsMap = sessionsMap;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link WebFluxSseServerTransportProvider} with the
 		 * configured settings.
 		 * @return A new WebFluxSseServerTransportProvider instance
@@ -530,7 +549,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			Assert.notNull(messageEndpoint, "Message endpoint must be set");
 
 			return new WebFluxSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint,
-					keepAliveInterval);
+					keepAliveInterval, sessionsMap);
 		}
 
 	}
