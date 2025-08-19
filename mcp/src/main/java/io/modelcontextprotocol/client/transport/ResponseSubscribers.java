@@ -141,7 +141,7 @@ class ResponseSubscribers {
 
 		@Override
 		protected void hookOnNext(String line) {
-
+			request(1);
 			if (line.isEmpty()) {
 				// Empty line means end of event
 				if (this.eventBuilder.length() > 0) {
