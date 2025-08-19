@@ -178,8 +178,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 * options.
 	 */
 	@Deprecated
-	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String contextPath, String baseUrl, String messageEndpoint,
-			String sseEndpoint) {
+	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String contextPath, String baseUrl,
+			String messageEndpoint, String sseEndpoint) {
 		this(objectMapper, contextPath, baseUrl, messageEndpoint, sseEndpoint, null);
 	}
 
@@ -199,8 +199,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 * options.
 	 */
 	@Deprecated
-	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String contextPath, String baseUrl, String messageEndpoint,
-			String sseEndpoint, Duration keepAliveInterval) {
+	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String contextPath, String baseUrl,
+			String messageEndpoint, String sseEndpoint, Duration keepAliveInterval) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(contextPath, "Context path must not be null");
 		Assert.notNull(baseUrl, "Message base path must not be null");
@@ -554,8 +554,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			Assert.notNull(objectMapper, "ObjectMapper must be set");
 			Assert.notNull(messageEndpoint, "Message endpoint must be set");
 
-			return new WebFluxSseServerTransportProvider(objectMapper, contextPath, baseUrl, messageEndpoint, sseEndpoint,
-					keepAliveInterval);
+			return new WebFluxSseServerTransportProvider(objectMapper, contextPath, baseUrl, messageEndpoint,
+					sseEndpoint, keepAliveInterval);
 		}
 
 	}

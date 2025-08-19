@@ -166,8 +166,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * options.
 	 */
 	@Deprecated
-	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String contextPath, String baseUrl, String messageEndpoint,
-			String sseEndpoint) {
+	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String contextPath, String baseUrl,
+			String messageEndpoint, String sseEndpoint) {
 		this(objectMapper, contextPath, baseUrl, messageEndpoint, sseEndpoint, null);
 	}
 
@@ -187,8 +187,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * options.
 	 */
 	@Deprecated
-	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String contextPath, String baseUrl, String messageEndpoint,
-			String sseEndpoint, Duration keepAliveInterval) {
+	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String contextPath, String baseUrl,
+			String messageEndpoint, String sseEndpoint, Duration keepAliveInterval) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(contextPath, "Context path must not be null");
 		Assert.notNull(baseUrl, "Message base URL must not be null");
@@ -594,8 +594,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			if (messageEndpoint == null) {
 				throw new IllegalStateException("MessageEndpoint must be set");
 			}
-			return new WebMvcSseServerTransportProvider(objectMapper, contextPath, baseUrl, messageEndpoint, sseEndpoint,
-					keepAliveInterval);
+			return new WebMvcSseServerTransportProvider(objectMapper, contextPath, baseUrl, messageEndpoint,
+					sseEndpoint, keepAliveInterval);
 		}
 
 	}
