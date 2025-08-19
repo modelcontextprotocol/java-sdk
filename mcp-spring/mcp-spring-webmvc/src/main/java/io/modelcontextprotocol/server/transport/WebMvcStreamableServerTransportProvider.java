@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
+import io.modelcontextprotocol.spec.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -26,13 +27,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.server.DefaultMcpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
-import io.modelcontextprotocol.spec.HttpHeaders;
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpStreamableServerSession;
-import io.modelcontextprotocol.spec.McpStreamableServerTransport;
-import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
-import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.KeepAliveScheduler;
 import reactor.core.publisher.Flux;
@@ -395,8 +389,11 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 						session.responseStream(jsonrpcRequest, sessionTransport)
 							.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
 							.block();
-					}
-					catch (Exception e) {
+					} catch (McpParamsValidationError e) {
+						var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), null,
+								new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INVALID_PARAMS, e.getMessage(), null));
+						sessionTransport.sendMessage(errorResponse).block();
+					} catch (Exception e) {
 						logger.error("Failed to handle request stream: {}", e.getMessage());
 						sseBuilder.error(e);
 					}
