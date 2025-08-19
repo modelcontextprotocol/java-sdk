@@ -1,3 +1,7 @@
+/*
+ * Copyright 2025-2025 the original author or authors.
+ */
+
 package io.modelcontextprotocol.client.transport;
 
 import java.io.IOException;
@@ -23,13 +27,17 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
+import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.McpTransportSession;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.spec.McpTransportStream;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.Utils;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -63,7 +71,11 @@ import reactor.util.function.Tuples;
  */
 public class WebClientStreamableHttpTransport implements McpClientTransport {
 
+	private static final String MISSING_SESSION_ID = "[missing_session_id]";
+
 	private static final Logger logger = LoggerFactory.getLogger(WebClientStreamableHttpTransport.class);
+
+	private static final String MCP_PROTOCOL_VERSION = ProtocolVersions.MCP_2025_03_26;
 
 	private static final String DEFAULT_ENDPOINT = "/mcp";
 
@@ -102,6 +114,11 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		this.activeSession.set(createTransportSession());
 	}
 
+	@Override
+	public List<String> protocolVersions() {
+		return List.of(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26);
+	}
+
 	/**
 	 * Create a stateful builder for creating {@link WebClientStreamableHttpTransport}
 	 * instances.
@@ -127,12 +144,17 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	private DefaultMcpTransportSession createTransportSession() {
 		Function<String, Publisher<Void>> onClose = sessionId -> sessionId == null ? Mono.empty()
-				: webClient.delete().uri(this.endpoint).headers(httpHeaders -> {
-					httpHeaders.add("mcp-session-id", sessionId);
-				}).retrieve().toBodilessEntity().onErrorComplete(e -> {
-					logger.warn("Got error when closing transport", e);
-					return true;
-				}).then();
+				: webClient.delete()
+					.uri(this.endpoint)
+					.header(HttpHeaders.MCP_SESSION_ID, sessionId)
+					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+					.retrieve()
+					.toBodilessEntity()
+					.onErrorComplete(e -> {
+						logger.warn("Got error when closing transport", e);
+						return true;
+					})
+					.then();
 		return new DefaultMcpTransportSession(onClose);
 	}
 
@@ -185,10 +207,11 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			Disposable connection = webClient.get()
 				.uri(this.endpoint)
 				.accept(MediaType.TEXT_EVENT_STREAM)
+				.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 				.headers(httpHeaders -> {
-					transportSession.sessionId().ifPresent(id -> httpHeaders.add("mcp-session-id", id));
+					transportSession.sessionId().ifPresent(id -> httpHeaders.add(HttpHeaders.MCP_SESSION_ID, id));
 					if (stream != null) {
-						stream.lastId().ifPresent(id -> httpHeaders.add("last-event-id", id));
+						stream.lastId().ifPresent(id -> httpHeaders.add(HttpHeaders.LAST_EVENT_ID, id));
 					}
 				})
 				.exchangeToFlux(response -> {
@@ -201,8 +224,13 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 						return Flux.empty();
 					}
 					else if (isNotFound(response)) {
-						String sessionIdRepresentation = sessionIdOrPlaceholder(transportSession);
-						return mcpSessionNotFoundError(sessionIdRepresentation);
+						if (transportSession.sessionId().isPresent()) {
+							String sessionIdRepresentation = sessionIdOrPlaceholder(transportSession);
+							return mcpSessionNotFoundError(sessionIdRepresentation);
+						}
+						else {
+							return this.extractError(response, MISSING_SESSION_ID);
+						}
 					}
 					else {
 						return response.<McpSchema.JSONRPCMessage>createError().doOnError(e -> {
@@ -244,14 +272,15 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 			Disposable connection = webClient.post()
 				.uri(this.endpoint)
-				.accept(MediaType.TEXT_EVENT_STREAM, MediaType.APPLICATION_JSON)
+				.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_EVENT_STREAM)
+				.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 				.headers(httpHeaders -> {
-					transportSession.sessionId().ifPresent(id -> httpHeaders.add("mcp-session-id", id));
+					transportSession.sessionId().ifPresent(id -> httpHeaders.add(HttpHeaders.MCP_SESSION_ID, id));
 				})
 				.bodyValue(message)
 				.exchangeToFlux(response -> {
 					if (transportSession
-						.markInitialized(response.headers().asHttpHeaders().getFirst("mcp-session-id"))) {
+						.markInitialized(response.headers().asHttpHeaders().getFirst(HttpHeaders.MCP_SESSION_ID))) {
 						// Once we have a session, we try to open an async stream for
 						// the server to send notifications and requests out-of-band.
 						reconnect(null).contextWrite(sink.contextView()).subscribe();
@@ -287,7 +316,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 								logger.trace("Received response to POST for session {}", sessionRepresentation);
 								// communicate to caller the message was delivered
 								sink.success();
-								return responseFlux(response);
+								return directResponseFlux(message, response);
 							}
 							else {
 								logger.warn("Unknown media type {} returned for POST in session {}", contentType,
@@ -297,10 +326,10 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 						}
 					}
 					else {
-						if (isNotFound(response)) {
+						if (isNotFound(response) && !sessionRepresentation.equals(MISSING_SESSION_ID)) {
 							return mcpSessionNotFoundError(sessionRepresentation);
 						}
-						return extractError(response, sessionRepresentation);
+						return this.extractError(response, sessionRepresentation);
 					}
 				})
 				.flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage)))
@@ -340,10 +369,11 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 				McpSchema.JSONRPCResponse jsonRpcResponse = objectMapper.readValue(body,
 						McpSchema.JSONRPCResponse.class);
 				jsonRpcError = jsonRpcResponse.error();
-				toPropagate = new McpError(jsonRpcError);
+				toPropagate = jsonRpcError != null ? new McpError(jsonRpcError)
+						: new McpTransportException("Can't parse the jsonResponse " + jsonRpcResponse);
 			}
 			catch (IOException ex) {
-				toPropagate = new RuntimeException("Sending request failed", e);
+				toPropagate = new McpTransportException("Sending request failed, " + e.getMessage(), e);
 				logger.debug("Received content together with {} HTTP code response: {}", response.statusCode(), body);
 			}
 
@@ -352,7 +382,11 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			// invalidate the session
 			// https://github.com/modelcontextprotocol/typescript-sdk/issues/389
 			if (responseException.getStatusCode().isSameCodeAs(HttpStatus.BAD_REQUEST)) {
-				return Mono.error(new McpTransportSessionNotFoundException(sessionRepresentation, toPropagate));
+				if (!sessionRepresentation.equals(MISSING_SESSION_ID)) {
+					return Mono.error(new McpTransportSessionNotFoundException(sessionRepresentation, toPropagate));
+				}
+				return Mono.error(new McpTransportException("Received 400 BAD REQUEST for session "
+						+ sessionRepresentation + ". " + toPropagate.getMessage(), toPropagate));
 			}
 			return Mono.error(toPropagate);
 		}).flux();
@@ -381,18 +415,25 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	}
 
 	private static String sessionIdOrPlaceholder(McpTransportSession<?> transportSession) {
-		return transportSession.sessionId().orElse("[missing_session_id]");
+		return transportSession.sessionId().orElse(MISSING_SESSION_ID);
 	}
 
-	private Flux<McpSchema.JSONRPCMessage> responseFlux(ClientResponse response) {
+	private Flux<McpSchema.JSONRPCMessage> directResponseFlux(McpSchema.JSONRPCMessage sentMessage,
+			ClientResponse response) {
 		return response.bodyToMono(String.class).<Iterable<McpSchema.JSONRPCMessage>>handle((responseMessage, s) -> {
 			try {
-				McpSchema.JSONRPCMessage jsonRpcResponse = McpSchema.deserializeJsonRpcMessage(objectMapper,
-						responseMessage);
-				s.next(List.of(jsonRpcResponse));
+				if (sentMessage instanceof McpSchema.JSONRPCNotification && Utils.hasText(responseMessage)) {
+					logger.warn("Notification: {} received non-compliant response: {}", sentMessage, responseMessage);
+					s.complete();
+				}
+				else {
+					McpSchema.JSONRPCMessage jsonRpcResponse = McpSchema.deserializeJsonRpcMessage(objectMapper,
+							responseMessage);
+					s.next(List.of(jsonRpcResponse));
+				}
 			}
 			catch (IOException e) {
-				s.error(e);
+				s.error(new McpTransportException(e));
 			}
 		}).flatMapIterable(Function.identity());
 	}
@@ -419,11 +460,12 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 				return Tuples.of(Optional.ofNullable(event.id()), List.of(message));
 			}
 			catch (IOException ioException) {
-				throw new McpError("Error parsing JSON-RPC message: " + event.data());
+				throw new McpTransportException("Error parsing JSON-RPC message: " + event.data(), ioException);
 			}
 		}
 		else {
-			throw new McpError("Received unrecognized SSE event type: " + event.event());
+			logger.debug("Received SSE event with type: {}", event);
+			return Tuples.of(Optional.empty(), List.of());
 		}
 	}
 

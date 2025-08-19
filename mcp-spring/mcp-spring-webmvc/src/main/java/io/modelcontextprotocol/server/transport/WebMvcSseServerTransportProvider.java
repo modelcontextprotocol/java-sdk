@@ -6,8 +6,10 @@ package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,9 +17,12 @@ import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.KeepAliveScheduler;
 import io.modelcontextprotocol.util.Utils;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -109,6 +114,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 */
 	private volatile boolean isClosing = false;
 
+	private KeepAliveScheduler keepAliveScheduler;
+
 	/**
 	 * Constructs a new WebMvcSseServerTransportProvider instance with the default SSE
 	 * endpoint.
@@ -118,7 +125,10 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * messages via HTTP POST. This endpoint will be communicated to clients through the
 	 * SSE connection's initial endpoint event.
 	 * @throws IllegalArgumentException if either objectMapper or messageEndpoint is null
+	 * @deprecated Use the builder {@link #builder()} instead for better configuration
+	 * options.
 	 */
+	@Deprecated
 	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint) {
 		this(objectMapper, messageEndpoint, DEFAULT_SSE_ENDPOINT);
 	}
@@ -132,7 +142,10 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * SSE connection's initial endpoint event.
 	 * @param sseEndpoint The endpoint URI where clients establish their SSE connections.
 	 * @throws IllegalArgumentException if any parameter is null
+	 * @deprecated Use the builder {@link #builder()} instead for better configuration
+	 * options.
 	 */
+	@Deprecated
 	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
 		this(objectMapper, "", "", messageEndpoint, sseEndpoint);
 	}
@@ -149,15 +162,37 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * SSE connection's initial endpoint event.
 	 * @param sseEndpoint The endpoint URI where clients establish their SSE connections.
 	 * @throws IllegalArgumentException if any parameter is null
+	 * @deprecated Use the builder {@link #builder()} instead for better configuration
+	 * options.
 	 */
-	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String contextPath, String baseUrl,
-			String messageEndpoint, String sseEndpoint) {
+	@Deprecated
+	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String contextPath, String baseUrl, String messageEndpoint,
+			String sseEndpoint) {
+		this(objectMapper, contextPath, baseUrl, messageEndpoint, sseEndpoint, null);
+	}
+
+	/**
+	 * Constructs a new WebMvcSseServerTransportProvider instance.
+	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
+	 * of messages.
+	 * @param baseUrl The base URL for the message endpoint, used to construct the full
+	 * endpoint URL for clients.
+	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
+	 * messages via HTTP POST. This endpoint will be communicated to clients through the
+	 * SSE connection's initial endpoint event.
+	 * @param sseEndpoint The endpoint URI where clients establish their SSE connections.
+	 * * @param keepAliveInterval The interval for sending keep-alive messages to
+	 * @throws IllegalArgumentException if any parameter is null
+	 * @deprecated Use the builder {@link #builder()} instead for better configuration
+	 * options.
+	 */
+	@Deprecated
+	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String contextPath, String baseUrl, String messageEndpoint,
+			String sseEndpoint, Duration keepAliveInterval) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.notNull(contextPath, "Context path must not be null");
 		Assert.notNull(baseUrl, "Message base URL must not be null");
-		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
 		Assert.hasText(messageEndpoint, "Message endpoint must not be empty");
-		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
 		Assert.hasText(sseEndpoint, "SSE endpoint must not be empty");
 
 		this.objectMapper = objectMapper;
@@ -169,6 +204,22 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			.GET(this.baseUrl + this.sseEndpoint, this::handleSseConnection)
 			.POST(this.baseUrl + this.messageEndpoint, this::handleMessage)
 			.build();
+
+		if (keepAliveInterval != null) {
+
+			this.keepAliveScheduler = KeepAliveScheduler
+				.builder(() -> (isClosing) ? Flux.empty() : Flux.fromIterable(sessions.values()))
+				.initialDelay(keepAliveInterval)
+				.interval(keepAliveInterval)
+				.build();
+
+			this.keepAliveScheduler.start();
+		}
+	}
+
+	@Override
+	public List<String> protocolVersions() {
+		return List.of(ProtocolVersions.MCP_2024_11_05);
 	}
 
 	@Override
@@ -216,10 +267,13 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		return Flux.fromIterable(sessions.values()).doFirst(() -> {
 			this.isClosing = true;
 			logger.debug("Initiating graceful shutdown with {} active sessions", sessions.size());
-		})
-			.flatMap(McpServerSession::closeGracefully)
-			.then()
-			.doOnSuccess(v -> logger.debug("Graceful shutdown completed"));
+		}).flatMap(McpServerSession::closeGracefully).then().doOnSuccess(v -> {
+			logger.debug("Graceful shutdown completed");
+			sessions.clear();
+			if (this.keepAliveScheduler != null) {
+				this.keepAliveScheduler.shutdown();
+			}
+		});
 	}
 
 	/**
@@ -348,6 +402,12 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		private final SseBuilder sseBuilder;
 
 		/**
+		 * Lock to ensure thread-safe access to the SSE builder when sending messages.
+		 * This prevents concurrent modifications that could lead to corrupted SSE events.
+		 */
+		private final ReentrantLock sseBuilderLock = new ReentrantLock();
+
+		/**
 		 * Creates a new session transport with the specified ID and SSE builder.
 		 * @param sessionId The unique identifier for this session
 		 * @param sseBuilder The SSE builder for sending server events to the client
@@ -366,6 +426,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		@Override
 		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
 			return Mono.fromRunnable(() -> {
+				sseBuilderLock.lock();
 				try {
 					String jsonText = objectMapper.writeValueAsString(message);
 					sseBuilder.id(sessionId).event(MESSAGE_EVENT_TYPE).data(jsonText);
@@ -374,6 +435,9 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				catch (Exception e) {
 					logger.error("Failed to send message to session {}: {}", sessionId, e.getMessage());
 					sseBuilder.error(e);
+				}
+				finally {
+					sseBuilderLock.unlock();
 				}
 			});
 		}
@@ -398,12 +462,16 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		public Mono<Void> closeGracefully() {
 			return Mono.fromRunnable(() -> {
 				logger.debug("Closing session transport: {}", sessionId);
+				sseBuilderLock.lock();
 				try {
 					sseBuilder.complete();
 					logger.debug("Successfully completed SSE builder for session {}", sessionId);
 				}
 				catch (Exception e) {
 					logger.warn("Failed to complete SSE builder for session {}: {}", sessionId, e.getMessage());
+				}
+				finally {
+					sseBuilderLock.unlock();
 				}
 			});
 		}
@@ -413,6 +481,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		 */
 		@Override
 		public void close() {
+			sseBuilderLock.lock();
 			try {
 				sseBuilder.complete();
 				logger.debug("Successfully completed SSE builder for session {}", sessionId);
@@ -420,6 +489,113 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			catch (Exception e) {
 				logger.warn("Failed to complete SSE builder for session {}: {}", sessionId, e.getMessage());
 			}
+			finally {
+				sseBuilderLock.unlock();
+			}
+		}
+
+	}
+
+	/**
+	 * Creates a new Builder instance for configuring and creating instances of
+	 * WebMvcSseServerTransportProvider.
+	 * @return A new Builder instance
+	 */
+	public static Builder builder() {
+		return new Builder();
+	}
+
+	/**
+	 * Builder for creating instances of WebMvcSseServerTransportProvider.
+	 * <p>
+	 * This builder provides a fluent API for configuring and creating instances of
+	 * WebMvcSseServerTransportProvider with custom settings.
+	 */
+	public static class Builder {
+
+		private ObjectMapper objectMapper = new ObjectMapper();
+
+		private String contextPath = "";
+
+		private String baseUrl = "";
+
+		private String messageEndpoint;
+
+		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
+
+		private Duration keepAliveInterval;
+
+		/**
+		 * Sets the JSON object mapper to use for message serialization/deserialization.
+		 * @param objectMapper The object mapper to use
+		 * @return This builder instance for method chaining
+		 */
+		public Builder objectMapper(ObjectMapper objectMapper) {
+			Assert.notNull(objectMapper, "ObjectMapper must not be null");
+			this.objectMapper = objectMapper;
+			return this;
+		}
+
+		/**
+		 * Sets the base URL for the server transport.
+		 * @param baseUrl The base URL to use
+		 * @return This builder instance for method chaining
+		 */
+		public Builder baseUrl(String baseUrl) {
+			Assert.notNull(baseUrl, "Base URL must not be null");
+			this.baseUrl = baseUrl;
+			return this;
+		}
+
+		/**
+		 * Sets the endpoint path where clients will send their messages.
+		 * @param messageEndpoint The message endpoint path
+		 * @return This builder instance for method chaining
+		 */
+		public Builder messageEndpoint(String messageEndpoint) {
+			Assert.hasText(messageEndpoint, "Message endpoint must not be empty");
+			this.messageEndpoint = messageEndpoint;
+			return this;
+		}
+
+		/**
+		 * Sets the endpoint path where clients will establish SSE connections.
+		 * <p>
+		 * If not specified, the default value of {@link #DEFAULT_SSE_ENDPOINT} will be
+		 * used.
+		 * @param sseEndpoint The SSE endpoint path
+		 * @return This builder instance for method chaining
+		 */
+		public Builder sseEndpoint(String sseEndpoint) {
+			Assert.hasText(sseEndpoint, "SSE endpoint must not be empty");
+			this.sseEndpoint = sseEndpoint;
+			return this;
+		}
+
+		/**
+		 * Sets the interval for keep-alive pings.
+		 * <p>
+		 * If not specified, keep-alive pings will be disabled.
+		 * @param keepAliveInterval The interval duration for keep-alive pings
+		 * @return This builder instance for method chaining
+		 */
+		public Builder keepAliveInterval(Duration keepAliveInterval) {
+			this.keepAliveInterval = keepAliveInterval;
+			return this;
+		}
+
+		/**
+		 * Builds a new instance of WebMvcSseServerTransportProvider with the configured
+		 * settings.
+		 * @return A new WebMvcSseServerTransportProvider instance
+		 * @throws IllegalStateException if objectMapper or messageEndpoint is not set
+		 */
+		public WebMvcSseServerTransportProvider build() {
+			if (messageEndpoint == null) {
+				throw new IllegalStateException("MessageEndpoint must be set");
+			}
+			return new WebMvcSseServerTransportProvider(objectMapper, contextPath, baseUrl, messageEndpoint, sseEndpoint,
+					keepAliveInterval);
 		}
 
 	}

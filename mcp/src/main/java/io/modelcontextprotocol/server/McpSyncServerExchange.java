@@ -28,6 +28,14 @@ public class McpSyncServerExchange {
 	}
 
 	/**
+	 * Provides the Session ID
+	 * @return session ID
+	 */
+	public String sessionId() {
+		return this.exchange.sessionId();
+	}
+
+	/**
 	 * Get the client capabilities that define the supported features and functionality.
 	 * @return The client capabilities
 	 */
@@ -41,6 +49,16 @@ public class McpSyncServerExchange {
 	 */
 	public McpSchema.Implementation getClientInfo() {
 		return this.exchange.getClientInfo();
+	}
+
+	/**
+	 * Provides the {@link McpTransportContext} associated with the transport layer. For
+	 * HTTP transports it can contain the metadata associated with the HTTP request that
+	 * triggered the processing.
+	 * @return the transport context object
+	 */
+	public McpTransportContext transportContext() {
+		return this.exchange.transportContext();
 	}
 
 	/**
@@ -105,6 +123,15 @@ public class McpSyncServerExchange {
 	 */
 	public void loggingNotification(LoggingMessageNotification loggingMessageNotification) {
 		this.exchange.loggingNotification(loggingMessageNotification).block();
+	}
+
+	/**
+	 * Sends a notification to the client that the current progress status has changed for
+	 * long-running operations.
+	 * @param progressNotification The progress notification to send
+	 */
+	public void progressNotification(McpSchema.ProgressNotification progressNotification) {
+		this.exchange.progressNotification(progressNotification).block();
 	}
 
 	/**

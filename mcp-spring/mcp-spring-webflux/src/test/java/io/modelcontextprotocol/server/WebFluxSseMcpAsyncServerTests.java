@@ -29,8 +29,7 @@ class WebFluxSseMcpAsyncServerTests extends AbstractMcpAsyncServerTests {
 
 	private DisposableServer httpServer;
 
-	@Override
-	protected McpServerTransportProvider createMcpTransportProvider() {
+	private McpServerTransportProvider createMcpTransportProvider() {
 		var transportProvider = new WebFluxSseServerTransportProvider.Builder().objectMapper(new ObjectMapper())
 			.messageEndpoint(MESSAGE_ENDPOINT)
 			.build();
@@ -39,6 +38,11 @@ class WebFluxSseMcpAsyncServerTests extends AbstractMcpAsyncServerTests {
 		ReactorHttpHandlerAdapter adapter = new ReactorHttpHandlerAdapter(httpHandler);
 		httpServer = HttpServer.create().port(PORT).handle(adapter).bindNow();
 		return transportProvider;
+	}
+
+	@Override
+	protected McpServer.AsyncSpecification<?> prepareAsyncServerBuilder() {
+		return McpServer.async(createMcpTransportProvider());
 	}
 
 	@Override

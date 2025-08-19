@@ -1,6 +1,7 @@
 /*
 * Copyright 2025 - 2025 the original author or authors.
 */
+
 package io.modelcontextprotocol.spec;
 
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
@@ -24,6 +25,7 @@ import net.javacrumbs.jsonunit.core.Option;
 
 /**
  * @author Christian Tzolov
+ * @author Anurag Pant
  */
 public class McpSchemaTests {
 
@@ -46,11 +48,12 @@ public class McpSchemaTests {
 	@Test
 	void testTextContentDeserialization() throws Exception {
 		McpSchema.TextContent textContent = mapper.readValue("""
-				{"type":"text","text":"XXX"}""", McpSchema.TextContent.class);
+				{"type":"text","text":"XXX","_meta":{"metaKey":"metaValue"}}""", McpSchema.TextContent.class);
 
 		assertThat(textContent).isNotNull();
 		assertThat(textContent.type()).isEqualTo("text");
 		assertThat(textContent.text()).isEqualTo("XXX");
+		assertThat(textContent.meta()).containsKey("metaKey");
 	}
 
 	@Test
@@ -78,11 +81,13 @@ public class McpSchemaTests {
 	@Test
 	void testImageContentDeserialization() throws Exception {
 		McpSchema.ImageContent imageContent = mapper.readValue("""
-				{"type":"image","data":"base64encodeddata","mimeType":"image/png"}""", McpSchema.ImageContent.class);
+				{"type":"image","data":"base64encodeddata","mimeType":"image/png","_meta":{"metaKey":"metaValue"}}""",
+				McpSchema.ImageContent.class);
 		assertThat(imageContent).isNotNull();
 		assertThat(imageContent.type()).isEqualTo("image");
 		assertThat(imageContent.data()).isEqualTo("base64encodeddata");
 		assertThat(imageContent.mimeType()).isEqualTo("image/png");
+		assertThat(imageContent.meta()).containsKey("metaKey");
 	}
 
 	@Test
@@ -100,11 +105,13 @@ public class McpSchemaTests {
 	@Test
 	void testAudioContentDeserialization() throws Exception {
 		McpSchema.AudioContent audioContent = mapper.readValue("""
-				{"type":"audio","data":"base64encodeddata","mimeType":"audio/wav"}""", McpSchema.AudioContent.class);
+				{"type":"audio","data":"base64encodeddata","mimeType":"audio/wav","_meta":{"metaKey":"metaValue"}}""",
+				McpSchema.AudioContent.class);
 		assertThat(audioContent).isNotNull();
 		assertThat(audioContent.type()).isEqualTo("audio");
 		assertThat(audioContent.data()).isEqualTo("base64encodeddata");
 		assertThat(audioContent.mimeType()).isEqualTo("audio/wav");
+		assertThat(audioContent.meta()).containsKey("metaKey");
 	}
 
 	@Test
@@ -164,7 +171,7 @@ public class McpSchemaTests {
 	void testEmbeddedResourceDeserialization() throws Exception {
 		McpSchema.EmbeddedResource embeddedResource = mapper.readValue(
 				"""
-						{"type":"resource","resource":{"uri":"resource://test","mimeType":"text/plain","text":"Sample resource content"}}""",
+						{"type":"resource","resource":{"uri":"resource://test","mimeType":"text/plain","text":"Sample resource content"},"_meta":{"metaKey":"metaValue"}}""",
 				McpSchema.EmbeddedResource.class);
 		assertThat(embeddedResource).isNotNull();
 		assertThat(embeddedResource.type()).isEqualTo("resource");
@@ -172,6 +179,7 @@ public class McpSchemaTests {
 		assertThat(embeddedResource.resource().uri()).isEqualTo("resource://test");
 		assertThat(embeddedResource.resource().mimeType()).isEqualTo("text/plain");
 		assertThat(((TextResourceContents) embeddedResource.resource()).text()).isEqualTo("Sample resource content");
+		assertThat(embeddedResource.meta()).containsKey("metaKey");
 	}
 
 	@Test
@@ -194,7 +202,7 @@ public class McpSchemaTests {
 	void testEmbeddedResourceWithBlobContentsDeserialization() throws Exception {
 		McpSchema.EmbeddedResource embeddedResource = mapper.readValue(
 				"""
-						{"type":"resource","resource":{"uri":"resource://test","mimeType":"application/octet-stream","blob":"base64encodedblob"}}""",
+						{"type":"resource","resource":{"uri":"resource://test","mimeType":"application/octet-stream","blob":"base64encodedblob","_meta":{"metaKey":"metaValue"}}}""",
 				McpSchema.EmbeddedResource.class);
 		assertThat(embeddedResource).isNotNull();
 		assertThat(embeddedResource.type()).isEqualTo("resource");
@@ -203,12 +211,14 @@ public class McpSchemaTests {
 		assertThat(embeddedResource.resource().mimeType()).isEqualTo("application/octet-stream");
 		assertThat(((McpSchema.BlobResourceContents) embeddedResource.resource()).blob())
 			.isEqualTo("base64encodedblob");
+		assertThat(((McpSchema.BlobResourceContents) embeddedResource.resource()).meta()).containsKey("metaKey");
 	}
 
 	@Test
 	void testResourceLink() throws Exception {
 		McpSchema.ResourceLink resourceLink = new McpSchema.ResourceLink("main.rs", "Main file",
-				"file:///project/src/main.rs", "Primary application entry point", "text/x-rust", null, null);
+				"file:///project/src/main.rs", "Primary application entry point", "text/x-rust", null, null,
+				Map.of("metaKey", "metaValue"));
 		String value = mapper.writeValueAsString(resourceLink);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -216,14 +226,14 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"type":"resource_link","name":"main.rs","title":"Main file","uri":"file:///project/src/main.rs","description":"Primary application entry point","mimeType":"text/x-rust"}"""));
+							{"type":"resource_link","name":"main.rs","title":"Main file","uri":"file:///project/src/main.rs","description":"Primary application entry point","mimeType":"text/x-rust","_meta":{"metaKey":"metaValue"}}"""));
 	}
 
 	@Test
 	void testResourceLinkDeserialization() throws Exception {
 		McpSchema.ResourceLink resourceLink = mapper.readValue(
 				"""
-						{"type":"resource_link","name":"main.rs","uri":"file:///project/src/main.rs","description":"Primary application entry point","mimeType":"text/x-rust"}""",
+						{"type":"resource_link","name":"main.rs","uri":"file:///project/src/main.rs","description":"Primary application entry point","mimeType":"text/x-rust","_meta":{"metaKey":"metaValue"}}""",
 				McpSchema.ResourceLink.class);
 		assertThat(resourceLink).isNotNull();
 		assertThat(resourceLink.type()).isEqualTo("resource_link");
@@ -231,6 +241,7 @@ public class McpSchemaTests {
 		assertThat(resourceLink.uri()).isEqualTo("file:///project/src/main.rs");
 		assertThat(resourceLink.description()).isEqualTo("Primary application entry point");
 		assertThat(resourceLink.mimeType()).isEqualTo("text/x-rust");
+		assertThat(resourceLink.meta()).containsEntry("metaKey", "metaValue");
 	}
 
 	// JSON-RPC Message Types Tests
@@ -307,8 +318,10 @@ public class McpSchemaTests {
 			.build();
 
 		McpSchema.Implementation clientInfo = new McpSchema.Implementation("test-client", "1.0.0");
+		Map<String, Object> meta = Map.of("metaKey", "metaValue");
 
-		McpSchema.InitializeRequest request = new McpSchema.InitializeRequest("2024-11-05", capabilities, clientInfo);
+		McpSchema.InitializeRequest request = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2024_11_05,
+				capabilities, clientInfo, meta);
 
 		String value = mapper.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -316,7 +329,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"protocolVersion":"2024-11-05","capabilities":{"roots":{"listChanged":true},"sampling":{}},"clientInfo":{"name":"test-client","version":"1.0.0"}}"""));
+							{"protocolVersion":"2024-11-05","capabilities":{"roots":{"listChanged":true},"sampling":{}},"clientInfo":{"name":"test-client","version":"1.0.0"},"_meta":{"metaKey":"metaValue"}}"""));
 	}
 
 	@Test
@@ -330,8 +343,8 @@ public class McpSchemaTests {
 
 		McpSchema.Implementation serverInfo = new McpSchema.Implementation("test-server", "1.0.0");
 
-		McpSchema.InitializeResult result = new McpSchema.InitializeResult("2024-11-05", capabilities, serverInfo,
-				"Server initialized successfully");
+		McpSchema.InitializeResult result = new McpSchema.InitializeResult(ProtocolVersions.MCP_2024_11_05,
+				capabilities, serverInfo, "Server initialized successfully");
 
 		String value = mapper.writeValueAsString(result);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -373,6 +386,7 @@ public class McpSchemaTests {
 			.mimeType("text/plain")
 			.size(256L)
 			.annotations(annotations)
+			.meta(Map.of("metaKey", "metaValue"))
 			.build();
 
 		String value = mapper.writeValueAsString(resource);
@@ -381,7 +395,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"uri":"resource://test","name":"Test Resource","description":"A test resource","mimeType":"text/plain","size":256,"annotations":{"audience":["user","assistant"],"priority":0.8}}"""));
+							{"uri":"resource://test","name":"Test Resource","description":"A test resource","mimeType":"text/plain","size":256,"annotations":{"audience":["user","assistant"],"priority":0.8},"_meta":{"metaKey":"metaValue"}}"""));
 	}
 
 	@Test
@@ -417,9 +431,10 @@ public class McpSchemaTests {
 	@Test
 	void testResourceTemplate() throws Exception {
 		McpSchema.Annotations annotations = new McpSchema.Annotations(Arrays.asList(McpSchema.Role.USER), 0.5);
+		Map<String, Object> meta = Map.of("metaKey", "metaValue");
 
 		McpSchema.ResourceTemplate template = new McpSchema.ResourceTemplate("resource://{param}/test", "Test Template",
-				"Test Template", "A test resource template", "text/plain", annotations);
+				"Test Template", "A test resource template", "text/plain", annotations, meta);
 
 		String value = mapper.writeValueAsString(template);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -427,7 +442,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"uriTemplate":"resource://{param}/test","name":"Test Template","title":"Test Template","description":"A test resource template","mimeType":"text/plain","annotations":{"audience":["user"],"priority":0.5}}"""));
+							{"uriTemplate":"resource://{param}/test","name":"Test Template","title":"Test Template","description":"A test resource template","mimeType":"text/plain","annotations":{"audience":["user"],"priority":0.5},"_meta":{"metaKey":"metaValue"}}"""));
 	}
 
 	@Test
@@ -438,8 +453,10 @@ public class McpSchemaTests {
 		McpSchema.Resource resource2 = new McpSchema.Resource("resource://test2", "Test Resource 2",
 				"Second test resource", "application/json", null);
 
+		Map<String, Object> meta = Map.of("metaKey", "metaValue");
+
 		McpSchema.ListResourcesResult result = new McpSchema.ListResourcesResult(Arrays.asList(resource1, resource2),
-				"next-cursor");
+				"next-cursor", meta);
 
 		String value = mapper.writeValueAsString(result);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -447,7 +464,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"resources":[{"uri":"resource://test1","name":"Test Resource 1","description":"First test resource","mimeType":"text/plain"},{"uri":"resource://test2","name":"Test Resource 2","description":"Second test resource","mimeType":"application/json"}],"nextCursor":"next-cursor"}"""));
+							{"resources":[{"uri":"resource://test1","name":"Test Resource 1","description":"First test resource","mimeType":"text/plain"},{"uri":"resource://test2","name":"Test Resource 2","description":"Second test resource","mimeType":"application/json"}],"nextCursor":"next-cursor","_meta":{"metaKey":"metaValue"}}"""));
 	}
 
 	@Test
@@ -472,14 +489,15 @@ public class McpSchemaTests {
 
 	@Test
 	void testReadResourceRequest() throws Exception {
-		McpSchema.ReadResourceRequest request = new McpSchema.ReadResourceRequest("resource://test");
+		McpSchema.ReadResourceRequest request = new McpSchema.ReadResourceRequest("resource://test",
+				Map.of("metaKey", "metaValue"));
 
 		String value = mapper.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
 			.isEqualTo(json("""
-					{"uri":"resource://test"}"""));
+					{"uri":"resource://test","_meta":{"metaKey":"metaValue"}}"""));
 	}
 
 	@Test
@@ -520,7 +538,8 @@ public class McpSchemaTests {
 		McpSchema.BlobResourceContents contents2 = new McpSchema.BlobResourceContents("resource://test2",
 				"application/octet-stream", "base64encodedblob");
 
-		McpSchema.ReadResourceResult result = new McpSchema.ReadResourceResult(Arrays.asList(contents1, contents2));
+		McpSchema.ReadResourceResult result = new McpSchema.ReadResourceResult(Arrays.asList(contents1, contents2),
+				Map.of("metaKey", "metaValue"));
 
 		String value = mapper.writeValueAsString(result);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -528,7 +547,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"contents":[{"uri":"resource://test1","mimeType":"text/plain","text":"Sample text content"},{"uri":"resource://test2","mimeType":"application/octet-stream","blob":"base64encodedblob"}]}"""));
+							{"contents":[{"uri":"resource://test1","mimeType":"text/plain","text":"Sample text content"},{"uri":"resource://test2","mimeType":"application/octet-stream","blob":"base64encodedblob"}],"_meta":{"metaKey":"metaValue"}}"""));
 	}
 
 	// Prompt Tests
@@ -541,7 +560,7 @@ public class McpSchemaTests {
 				false);
 
 		McpSchema.Prompt prompt = new McpSchema.Prompt("test-prompt", "Test Prompt", "A test prompt",
-				Arrays.asList(arg1, arg2));
+				Arrays.asList(arg1, arg2), Map.of("metaKey", "metaValue"));
 
 		String value = mapper.writeValueAsString(prompt);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -549,7 +568,7 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"name":"test-prompt","title":"Test Prompt","description":"A test prompt","arguments":[{"name":"arg1","title":"First argument","description":"First argument","required":true},{"name":"arg2","title":"Second argument","description":"Second argument","required":false}]}"""));
+							{"name":"test-prompt","title":"Test Prompt","description":"A test prompt","arguments":[{"name":"arg1","title":"First argument","description":"First argument","required":true},{"name":"arg2","title":"Second argument","description":"Second argument","required":false}],"_meta":{"metaKey":"metaValue"}}"""));
 	}
 
 	@Test
@@ -803,6 +822,34 @@ public class McpSchemaTests {
 		// Just verify the basic structure was preserved
 		assertThat(deserializedTool.inputSchema().defs()).isNotNull();
 		assertThat(deserializedTool.inputSchema().defs()).containsKey("Address");
+	}
+
+	@Test
+	void testToolWithMeta() throws Exception {
+		String schemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"name": {
+							"type": "string"
+						},
+						"value": {
+							"type": "number"
+						}
+					},
+					"required": ["name"]
+				}
+				""";
+
+		McpSchema.JsonSchema schema = mapper.readValue(schemaJson, McpSchema.JsonSchema.class);
+		Map<String, Object> meta = Map.of("metaKey", "metaValue");
+
+		McpSchema.Tool tool = new McpSchema.Tool("addressTool", "addressTool", "Handles addresses", schema, null, null,
+				meta);
+
+		// Verify that meta value was preserved
+		assertThat(tool.meta()).isNotNull();
+		assertThat(tool.meta()).containsKey("metaKey");
 	}
 
 	@Test
@@ -1510,14 +1557,14 @@ public class McpSchemaTests {
 
 	@Test
 	void testRoot() throws Exception {
-		McpSchema.Root root = new McpSchema.Root("file:///path/to/root", "Test Root");
+		McpSchema.Root root = new McpSchema.Root("file:///path/to/root", "Test Root", Map.of("metaKey", "metaValue"));
 
 		String value = mapper.writeValueAsString(root);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
 			.isEqualTo(json("""
-					{"uri":"file:///path/to/root","name":"Test Root"}"""));
+					{"uri":"file:///path/to/root","name":"Test Root","_meta":{"metaKey":"metaValue"}}"""));
 	}
 
 	@Test
@@ -1544,7 +1591,7 @@ public class McpSchemaTests {
 	@Test
 	void testProgressNotificationWithMessage() throws Exception {
 		McpSchema.ProgressNotification notification = new McpSchema.ProgressNotification("progress-token-123", 0.5, 1.0,
-				"Processing file 1 of 2");
+				"Processing file 1 of 2", Map.of("key", "value"));
 
 		String value = mapper.writeValueAsString(notification);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -1552,19 +1599,21 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(
 					json("""
-							{"progressToken":"progress-token-123","progress":0.5,"total":1.0,"message":"Processing file 1 of 2"}"""));
+							{"progressToken":"progress-token-123","progress":0.5,"total":1.0,"message":"Processing file 1 of 2","_meta":{"key":"value"}}"""));
 	}
 
 	@Test
 	void testProgressNotificationDeserialization() throws Exception {
-		McpSchema.ProgressNotification notification = mapper.readValue("""
-				{"progressToken":"token-456","progress":0.75,"total":1.0,"message":"Almost done"}""",
+		McpSchema.ProgressNotification notification = mapper.readValue(
+				"""
+						{"progressToken":"token-456","progress":0.75,"total":1.0,"message":"Almost done","_meta":{"key":"value"}}""",
 				McpSchema.ProgressNotification.class);
 
 		assertThat(notification.progressToken()).isEqualTo("token-456");
 		assertThat(notification.progress()).isEqualTo(0.75);
 		assertThat(notification.total()).isEqualTo(1.0);
 		assertThat(notification.message()).isEqualTo("Almost done");
+		assertThat(notification.meta()).containsEntry("key", "value");
 	}
 
 	@Test
