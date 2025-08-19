@@ -273,14 +273,14 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 							Mono<Void> stream = session.responseStream(jsonrpcRequest, st);
 							Disposable streamSubscription = stream.onErrorComplete(err -> {
 								if (err instanceof McpParamsValidationError) {
-									var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(),
-											null, new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INVALID_PARAMS,
-											err.getMessage(), null));
+									var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
+											jsonrpcRequest.id(), null, new McpSchema.JSONRPCResponse.JSONRPCError(
+													McpSchema.ErrorCodes.INVALID_PARAMS, err.getMessage(), null));
 
 									var event = ServerSentEvent.builder()
-											.event(MESSAGE_EVENT_TYPE)
-											.data(errorResponse)
-											.build();
+										.event(MESSAGE_EVENT_TYPE)
+										.data(errorResponse)
+										.build();
 
 									sink.next(event);
 									return true;

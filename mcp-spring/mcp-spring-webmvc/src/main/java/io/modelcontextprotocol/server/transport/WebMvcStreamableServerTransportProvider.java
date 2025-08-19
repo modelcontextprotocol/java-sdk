@@ -389,11 +389,14 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 						session.responseStream(jsonrpcRequest, sessionTransport)
 							.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
 							.block();
-					} catch (McpParamsValidationError e) {
-						var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), null,
-								new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INVALID_PARAMS, e.getMessage(), null));
+					}
+					catch (McpParamsValidationError e) {
+						var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
+								jsonrpcRequest.id(), null, new McpSchema.JSONRPCResponse.JSONRPCError(
+										McpSchema.ErrorCodes.INVALID_PARAMS, e.getMessage(), null));
 						sessionTransport.sendMessage(errorResponse).block();
-					} catch (Exception e) {
+					}
+					catch (Exception e) {
 						logger.error("Failed to handle request stream: {}", e.getMessage());
 						sseBuilder.error(e);
 					}
