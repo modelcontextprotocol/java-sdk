@@ -21,6 +21,7 @@ import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.KeepAliveScheduler;
+import io.modelcontextprotocol.util.Utils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -97,6 +98,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 
 	private final String baseUrl;
 
+	private final String contextPath;
+
 	private final RouterFunction<ServerResponse> routerFunction;
 
 	private McpServerSession.Factory sessionFactory;
@@ -144,13 +147,14 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 */
 	@Deprecated
 	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
-		this(objectMapper, "", messageEndpoint, sseEndpoint);
+		this(objectMapper, "", "", messageEndpoint, sseEndpoint);
 	}
 
 	/**
 	 * Constructs a new WebMvcSseServerTransportProvider instance.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
 	 * of messages.
+	 * @param contextPath The context path under which the server runs.
 	 * @param baseUrl The base URL for the message endpoint, used to construct the full
 	 * endpoint URL for clients.
 	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
@@ -162,9 +166,9 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * options.
 	 */
 	@Deprecated
-	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
-			String sseEndpoint) {
-		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, null);
+	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String contextPath, String baseUrl,
+			String messageEndpoint, String sseEndpoint) {
+		this(objectMapper, contextPath, baseUrl, messageEndpoint, sseEndpoint, null);
 	}
 
 	/**
@@ -183,20 +187,22 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * options.
 	 */
 	@Deprecated
-	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
-			String sseEndpoint, Duration keepAliveInterval) {
+	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String contextPath, String baseUrl,
+			String messageEndpoint, String sseEndpoint, Duration keepAliveInterval) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
+		Assert.notNull(contextPath, "Context path must not be null");
 		Assert.notNull(baseUrl, "Message base URL must not be null");
-		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
-		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
+		Assert.hasText(messageEndpoint, "Message endpoint must not be empty");
+		Assert.hasText(sseEndpoint, "SSE endpoint must not be empty");
 
 		this.objectMapper = objectMapper;
-		this.baseUrl = baseUrl;
+		this.contextPath = Utils.removeTrailingSlash(contextPath);
+		this.baseUrl = Utils.removeTrailingSlash(baseUrl);
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
 		this.routerFunction = RouterFunctions.route()
-			.GET(this.sseEndpoint, this::handleSseConnection)
-			.POST(this.messageEndpoint, this::handleMessage)
+			.GET(this.baseUrl + this.sseEndpoint, this::handleSseConnection)
+			.POST(this.baseUrl + this.messageEndpoint, this::handleMessage)
 			.build();
 
 		if (keepAliveInterval != null) {
@@ -324,7 +330,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				try {
 					sseBuilder.id(sessionId)
 						.event(ENDPOINT_EVENT_TYPE)
-						.data(this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId);
+						.data(this.contextPath + this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId);
 				}
 				catch (Exception e) {
 					logger.error("Failed to send initial endpoint event: {}", e.getMessage());
@@ -509,6 +515,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 
 		private ObjectMapper objectMapper = new ObjectMapper();
 
+		private String contextPath = "";
+
 		private String baseUrl = "";
 
 		private String messageEndpoint;
@@ -586,8 +594,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			if (messageEndpoint == null) {
 				throw new IllegalStateException("MessageEndpoint must be set");
 			}
-			return new WebMvcSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint,
-					keepAliveInterval);
+			return new WebMvcSseServerTransportProvider(objectMapper, contextPath, baseUrl, messageEndpoint,
+					sseEndpoint, keepAliveInterval);
 		}
 
 	}
