@@ -149,7 +149,6 @@ class ResponseSubscribers {
 
 					this.sink.next(new SseResponseEvent(responseInfo, sseEvent));
 					this.eventBuilder.setLength(0);
-					request(1);
 				}
 			}
 			else {
@@ -183,6 +182,7 @@ class ResponseSubscribers {
 
 				}
 			}
+			request(1);
 		}
 
 		@Override
