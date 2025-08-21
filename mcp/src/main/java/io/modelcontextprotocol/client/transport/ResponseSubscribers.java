@@ -141,7 +141,6 @@ class ResponseSubscribers {
 
 		@Override
 		protected void hookOnNext(String line) {
-			request(1);
 			if (line.isEmpty()) {
 				// Empty line means end of event
 				if (this.eventBuilder.length() > 0) {
@@ -150,6 +149,7 @@ class ResponseSubscribers {
 
 					this.sink.next(new SseResponseEvent(responseInfo, sseEvent));
 					this.eventBuilder.setLength(0);
+					request(1);
 				}
 			}
 			else {
