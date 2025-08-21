@@ -141,7 +141,6 @@ class ResponseSubscribers {
 
 		@Override
 		protected void hookOnNext(String line) {
-
 			if (line.isEmpty()) {
 				// Empty line means end of event
 				if (this.eventBuilder.length() > 0) {
@@ -158,23 +157,27 @@ class ResponseSubscribers {
 					if (matcher.find()) {
 						this.eventBuilder.append(matcher.group(1).trim()).append("\n");
 					}
+					upstream().request(1);
 				}
 				else if (line.startsWith("id:")) {
 					var matcher = EVENT_ID_PATTERN.matcher(line);
 					if (matcher.find()) {
 						this.currentEventId.set(matcher.group(1).trim());
 					}
+					upstream().request(1);
 				}
 				else if (line.startsWith("event:")) {
 					var matcher = EVENT_TYPE_PATTERN.matcher(line);
 					if (matcher.find()) {
 						this.currentEventType.set(matcher.group(1).trim());
 					}
+					upstream().request(1);
 				}
 				else if (line.startsWith(":")) {
 					// Ignore comment lines starting with ":"
 					// This is a no-op, just to skip comments
 					logger.debug("Ignoring comment line: {}", line);
+					upstream().request(1);
 				}
 				else {
 					// If the response is not successful, emit an error
