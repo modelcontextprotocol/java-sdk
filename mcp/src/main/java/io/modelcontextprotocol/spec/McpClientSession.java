@@ -35,6 +35,7 @@ import java.util.function.Function;
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @author Yanming Zhou
  */
 public class McpClientSession implements McpSession {
 
@@ -146,13 +147,18 @@ public class McpClientSession implements McpSession {
 
 	private void handle(McpSchema.JSONRPCMessage message) {
 		if (message instanceof McpSchema.JSONRPCResponse response) {
-			logger.debug("Received Response: {}", response);
-			var sink = pendingResponses.remove(response.id());
-			if (sink == null) {
-				logger.warn("Unexpected response for unknown id {}", response.id());
+			logger.debug("Received response: {}", response);
+			if (response.id() != null) {
+				var sink = pendingResponses.remove(response.id());
+				if (sink == null) {
+					logger.warn("Unexpected response for unknown id {}", response.id());
+				}
+				else {
+					sink.success(response);
+				}
 			}
 			else {
-				sink.success(response);
+				logger.debug("Discarded response without id");
 			}
 		}
 		else if (message instanceof McpSchema.JSONRPCRequest request) {
