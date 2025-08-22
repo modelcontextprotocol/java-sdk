@@ -1,37 +1,34 @@
 package io.modelcontextprotocol.transport.inmemory;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.Sinks;
 
 public class InMemoryServerTransportProvider implements McpServerTransportProvider {
 
-	private final Sinks.Many<McpSchema.JSONRPCMessage> toClientSink;
+	private final InMemoryServerTransport serverTransport;
+	private Disposable disposable;
 
-	private final Sinks.Many<McpSchema.JSONRPCMessage> toServerSink;
-
-	private final ObjectMapper objectMapper;
-
-	public InMemoryServerTransportProvider(Sinks.Many<McpSchema.JSONRPCMessage> toClientSink,
-			Sinks.Many<McpSchema.JSONRPCMessage> toServerSink, ObjectMapper objectMapper) {
-		this.toClientSink = toClientSink;
-		this.toServerSink = toServerSink;
-		this.objectMapper = objectMapper;
+	public InMemoryServerTransportProvider( InMemoryTransport transport ) {
+		serverTransport = new InMemoryServerTransport(transport);
 	}
 
 	@Override
 	public void setSessionFactory(McpServerSession.Factory sessionFactory) {
-		var session = sessionFactory.create(new InMemoryServerTransport(toClientSink, toServerSink, objectMapper));
-		toServerSink.asFlux().subscribe(message -> {
+
+		var session = sessionFactory.create(serverTransport);
+		disposable = serverTransport.serverSink().asFlux().subscribe(message -> {
 			session.handle(message).subscribe();
 		});
 	}
 
 	@Override
 	public Mono<Void> closeGracefully() {
+		if( disposable!=null && !disposable.isDisposed() ) {
+			disposable.dispose();
+		}
 		return Mono.empty();
 	}
 

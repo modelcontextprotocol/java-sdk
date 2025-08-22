@@ -1,22 +1,24 @@
 package io.modelcontextprotocol.transport.inmemory;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 
+import static java.util.Objects.requireNonNull;
+import static java.util.Optional.ofNullable;
+
 public class InMemoryServerTransport implements McpServerTransport {
 
-	private final Sinks.Many<McpSchema.JSONRPCMessage> toClientSink;
+	private final InMemoryTransport transport;
 
-	private final ObjectMapper objectMapper;
+	public InMemoryServerTransport( InMemoryTransport transport ) {
+		this.transport = requireNonNull(transport, "transport cannot be null");
+	}
 
-	public InMemoryServerTransport(Sinks.Many<McpSchema.JSONRPCMessage> toClientSink,
-			Sinks.Many<McpSchema.JSONRPCMessage> toServerSink, ObjectMapper objectMapper) {
-		this.toClientSink = toClientSink;
-		this.objectMapper = objectMapper;
+	public Sinks.Many<McpSchema.JSONRPCMessage> serverSink() {
+		return transport.serverSink();
 	}
 
 	@Override
@@ -26,13 +28,22 @@ public class InMemoryServerTransport implements McpServerTransport {
 
 	@Override
 	public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
-		toClientSink.tryEmitNext(message);
-		return Mono.empty();
+		var result = ofNullable( transport.clientSink())
+				.map( s -> s.tryEmitNext(message) )
+				.orElse( Sinks.EmitResult.FAIL_TERMINATED );
+		return switch( result ) {
+			case OK -> Mono.empty();
+            case FAIL_TERMINATED,
+				 FAIL_NON_SERIALIZED,
+				 FAIL_OVERFLOW,
+				 FAIL_CANCELLED,
+				 FAIL_ZERO_SUBSCRIBER -> Mono.error( () -> new Sinks.EmissionException(result) );
+        };
 	}
 
 	@Override
 	public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-		return this.objectMapper.convertValue(data, typeRef);
+		return transport.objectMapper().convertValue(data, typeRef);
 	}
 
 }
