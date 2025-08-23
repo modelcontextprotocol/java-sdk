@@ -1,13 +1,11 @@
 # MCP In-Memory Transport
 
-[![Maven Central](https://img.shields.io/maven-central/v/io.modelcontextprotocol.sdk/mcp-inmemory-transport)](https://central.sonatype.com/artifact/io.modelcontextprotocol.sdk/mcp-inmemory-transport)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-
 In-memory transport implementation for the Model Context Protocol (MCP) Java SDK.
 
 ## Overview
 
-The `mcp-inmemory-transport` module provides an in-memory transport layer for the Model Context Protocol (MCP) Java SDK. This transport is particularly useful for testing, local development, and scenarios where you need to establish direct communication between MCP client and server components without network overhead.
+The `mcp-inmemory-transport` module provides an in-memory transport layer for the Model Context Protocol (MCP) Java SDK. 
+This transport is particularly useful for testing, local development, and scenarios where you need to establish direct communication between MCP client and server components without network overhead.
 
 ## Features
 
