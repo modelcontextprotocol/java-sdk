@@ -107,4 +107,14 @@ public final class Utils {
 		return endpointPath.startsWith(basePath);
 	}
 
+	/**
+	 * Returns the first non-null value from the given arguments.
+	 * @param first The first argument
+	 * @param second The second argument
+	 * @return The first non-null value
+	 */
+	public static <T> T preferFirst(T first, T second) {
+		return second != null ? second : first;
+	}
+
 }
