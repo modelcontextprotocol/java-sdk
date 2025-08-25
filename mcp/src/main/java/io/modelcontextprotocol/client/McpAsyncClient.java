@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +23,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
@@ -154,6 +154,15 @@ public class McpAsyncClient {
 	private final LifecycleInitializer initializer;
 
 	/**
+	 * MCP provides a standardized way for servers to request tool invocation from
+	 * clients. This flow allows clients to maintain control over tool access, selection,
+	 * and permissions while enabling servers to leverage AI capabilities—with no server
+	 * API keys necessary. Servers can request tool invocation with optional tool
+	 * annotations to provide additional context to the tool.
+	 */
+	private Function<String, McpSchema.ToolAnnotations> toolAnnotationsHandler;
+
+	/**
 	 * Create a new McpAsyncClient with the given transport and session request-response
 	 * timeout.
 	 * @param transport the transport to use.
@@ -162,8 +171,7 @@ public class McpAsyncClient {
 	 * @param features the MCP Client supported features.
 	 */
 	McpAsyncClient(McpClientTransport transport, Duration requestTimeout, Duration initializationTimeout,
-			McpClientFeatures.Async features) {
-
+			McpClientFeatures.Async features, Function<String, McpSchema.ToolAnnotations> toolAnnotationsHandler) {
 		Assert.notNull(transport, "Transport must not be null");
 		Assert.notNull(requestTimeout, "Request timeout must not be null");
 		Assert.notNull(initializationTimeout, "Initialization timeout must not be null");
@@ -172,7 +180,7 @@ public class McpAsyncClient {
 		this.clientCapabilities = features.clientCapabilities();
 		this.transport = transport;
 		this.roots = new ConcurrentHashMap<>(features.roots());
-
+		this.toolAnnotationsHandler = toolAnnotationsHandler != null ? toolAnnotationsHandler : tool -> null;
 		// Request Handlers
 		Map<String, RequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -575,8 +583,46 @@ public class McpAsyncClient {
 			}
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_TOOLS_LIST, new McpSchema.PaginatedRequest(cursor),
-						LIST_TOOLS_RESULT_TYPE_REF);
+						LIST_TOOLS_RESULT_TYPE_REF)
+				.map(this::mergeToolsAnnotations);
 		});
+	}
+
+	private McpSchema.ListToolsResult mergeToolsAnnotations(McpSchema.ListToolsResult listToolsResult) {
+		if (listToolsResult == null || listToolsResult.tools() == null || listToolsResult.tools().isEmpty()) {
+			return listToolsResult;
+		}
+
+		List<McpSchema.Tool> mergedTools = listToolsResult.tools().stream().map(tool -> {
+			McpSchema.ToolAnnotations clientAnnoProperties = this.toolAnnotationsHandler.apply(tool.name());
+			if (clientAnnoProperties == null) {
+				return tool; // no update needed
+			}
+			McpSchema.ToolAnnotations mergedAnno = mergeAnnotations(tool.annotations(), clientAnnoProperties);
+			return McpSchema.Tool.builder()
+				.name(tool.name())
+				.title(tool.title())
+				.description(tool.description())
+				.inputSchema(tool.inputSchema())
+				.outputSchema(tool.outputSchema())
+				.annotations(mergedAnno)
+				.meta(tool.meta())
+				.build();
+		}).collect(Collectors.toList());
+		return new McpSchema.ListToolsResult(mergedTools, listToolsResult.nextCursor(), listToolsResult.meta());
+	}
+
+	private McpSchema.ToolAnnotations mergeAnnotations(McpSchema.ToolAnnotations remoteAnnotations,
+			McpSchema.ToolAnnotations clientAnnotations) {
+		if (remoteAnnotations == null) {
+			return clientAnnotations;
+		}
+		return new McpSchema.ToolAnnotations(Utils.preferFirst(clientAnnotations.title(), remoteAnnotations.title()),
+				Utils.mergeBoolean(clientAnnotations.readOnlyHint(), remoteAnnotations.readOnlyHint()),
+				Utils.mergeBoolean(clientAnnotations.destructiveHint(), remoteAnnotations.destructiveHint()),
+				Utils.mergeBoolean(clientAnnotations.idempotentHint(), remoteAnnotations.idempotentHint()),
+				Utils.mergeBoolean(clientAnnotations.openWorldHint(), remoteAnnotations.openWorldHint()),
+				Utils.mergeBoolean(clientAnnotations.returnDirect(), remoteAnnotations.returnDirect()));
 	}
 
 	private NotificationHandler asyncToolsChangeNotificationHandler(

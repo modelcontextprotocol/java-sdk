@@ -183,6 +183,8 @@ public interface McpClient {
 
 		private Function<ElicitRequest, ElicitResult> elicitationHandler;
 
+		private Function<String, McpSchema.ToolAnnotations> toolAnnotationsHandler;
+
 		private SyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
 			this.transport = transport;
@@ -410,6 +412,21 @@ public interface McpClient {
 		}
 
 		/**
+		 * Adds a handler to be invoked when tool annotations are requested. This allows
+		 * the client to provide additional information about tools, such as their
+		 * capabilities and usage instructions.
+		 * @param toolAnnotationsHandler A handler that receives the tool name and returns
+		 * the tool annotations. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if toolAnnotationsHandler is null
+		 */
+		public SyncSpec toolAnnotationsHandler(Function<String, McpSchema.ToolAnnotations> toolAnnotationsHandler) {
+			Assert.notNull(progressConsumers, "tool annotations handler must not be null");
+			this.toolAnnotationsHandler = toolAnnotationsHandler;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpSyncClient} with the provided configurations or
 		 * sensible defaults.
 		 * @return a new instance of {@link McpSyncClient}.
@@ -422,8 +439,8 @@ public interface McpClient {
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
-			return new McpSyncClient(
-					new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout, asyncFeatures));
+			return new McpSyncClient(new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout,
+					asyncFeatures, toolAnnotationsHandler));
 		}
 
 	}
@@ -473,6 +490,8 @@ public interface McpClient {
 		private Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler;
 
 		private Function<ElicitRequest, Mono<ElicitResult>> elicitationHandler;
+
+		private Function<String, McpSchema.ToolAnnotations> toolAnnotationsHandler;
 
 		private AsyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
@@ -721,6 +740,21 @@ public interface McpClient {
 		}
 
 		/**
+		 * Adds a handler to be invoked when tool annotations are requested. This allows
+		 * the client to provide additional information about tools, such as their
+		 * capabilities and usage instructions.
+		 * @param toolAnnotationsHandler A handler that receives the tool name and returns
+		 * the tool annotations. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if toolAnnotationsHandler is null
+		 */
+		public AsyncSpec toolAnnotationsHandler(Function<String, McpSchema.ToolAnnotations> toolAnnotationsHandler) {
+			Assert.notNull(toolAnnotationsHandler, "tool annotations handler must not be null");
+			this.toolAnnotationsHandler = toolAnnotationsHandler;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpAsyncClient} with the provided configurations
 		 * or sensible defaults.
 		 * @return a new instance of {@link McpAsyncClient}.
@@ -730,7 +764,8 @@ public interface McpClient {
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
 							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 							this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
-							this.samplingHandler, this.elicitationHandler));
+							this.samplingHandler, this.elicitationHandler),
+					toolAnnotationsHandler);
 		}
 
 	}
