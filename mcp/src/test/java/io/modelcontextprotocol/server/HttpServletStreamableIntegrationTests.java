@@ -40,6 +40,7 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 		// Create and configure the transport provider
 		mcpServerTransportProvider = HttpServletStreamableServerTransportProvider.builder()
 			.objectMapper(new ObjectMapper())
+			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
 			.mcpEndpoint(MESSAGE_ENDPOINT)
 			.keepAliveInterval(Duration.ofSeconds(1))
 			.build();
