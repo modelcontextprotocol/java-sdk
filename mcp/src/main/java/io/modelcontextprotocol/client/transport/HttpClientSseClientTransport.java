@@ -23,6 +23,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
+import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.ProtocolVersions;
@@ -65,8 +66,6 @@ import reactor.core.publisher.Sinks;
 public class HttpClientSseClientTransport implements McpClientTransport {
 
 	private static final String MCP_PROTOCOL_VERSION = ProtocolVersions.MCP_2024_11_05;
-
-	private static final String MCP_PROTOCOL_VERSION_HEADER_NAME = "MCP-Protocol-Version";
 
 	private static final Logger logger = LoggerFactory.getLogger(HttpClientSseClientTransport.class);
 
@@ -414,7 +413,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 				.uri(uri)
 				.header("Accept", "text/event-stream")
 				.header("Cache-Control", "no-cache")
-				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
+				.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 				.GET();
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null));
 		}).flatMap(requestBuilder -> Mono.create(sink -> {
@@ -540,7 +539,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		return Mono.defer(() -> {
 			var builder = this.requestBuilder.copy()
 				.uri(requestUri)
-				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
+				.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 				.POST(HttpRequest.BodyPublishers.ofString(body));
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", requestUri, body));
 		}).flatMap(customizedBuilder -> {
