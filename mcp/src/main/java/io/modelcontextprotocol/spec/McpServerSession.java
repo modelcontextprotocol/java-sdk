@@ -275,10 +275,20 @@ public class McpServerSession implements McpLoggableSession {
 			}
 			return resultMono
 				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
-				.onErrorResume(error -> Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-						null, new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-								error.getMessage(), null)))); // TODO: add error message
-																// through the data field
+				.onErrorResume(error -> {
+
+					var errorCode = McpSchema.ErrorCodes.INTERNAL_ERROR;
+
+					if (error instanceof McpParamsValidationError) {
+						errorCode = McpSchema.ErrorCodes.INVALID_PARAMS;
+					}
+
+					// TODO: add error message through the data field
+					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
+							new McpSchema.JSONRPCResponse.JSONRPCError(errorCode, error.getMessage(), null));
+
+					return Mono.just(errorResponse);
+				});
 		});
 	}
 

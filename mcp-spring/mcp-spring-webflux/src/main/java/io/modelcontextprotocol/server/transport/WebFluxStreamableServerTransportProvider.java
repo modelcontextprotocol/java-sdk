@@ -8,13 +8,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.server.DefaultMcpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
-import io.modelcontextprotocol.spec.HttpHeaders;
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpStreamableServerSession;
-import io.modelcontextprotocol.spec.McpStreamableServerTransport;
-import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
-import io.modelcontextprotocol.spec.ProtocolVersions;
+import io.modelcontextprotocol.spec.*;
 import io.modelcontextprotocol.server.McpTransportContext;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.KeepAliveScheduler;
@@ -282,6 +276,19 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 							WebFluxStreamableMcpSessionTransport st = new WebFluxStreamableMcpSessionTransport(sink);
 							Mono<Void> stream = session.responseStream(jsonrpcRequest, st);
 							Disposable streamSubscription = stream.onErrorComplete(err -> {
+								if (err instanceof McpParamsValidationError) {
+									var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
+											jsonrpcRequest.id(), null, new McpSchema.JSONRPCResponse.JSONRPCError(
+													McpSchema.ErrorCodes.INVALID_PARAMS, err.getMessage(), null));
+
+									var event = ServerSentEvent.builder()
+										.event(MESSAGE_EVENT_TYPE)
+										.data(errorResponse)
+										.build();
+
+									sink.next(event);
+									return true;
+								}
 								sink.error(err);
 								return true;
 							}).contextWrite(sink.contextView()).subscribe();
