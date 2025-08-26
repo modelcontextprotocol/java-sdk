@@ -9,9 +9,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.io.Reader;
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
@@ -24,6 +23,7 @@ import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -88,6 +88,11 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 		this.objectMapper = objectMapper;
 		this.inputStream = inputStream;
 		this.outputStream = outputStream;
+	}
+
+	@Override
+	public List<String> protocolVersions() {
+		return List.of(ProtocolVersions.MCP_2024_11_05);
 	}
 
 	@Override

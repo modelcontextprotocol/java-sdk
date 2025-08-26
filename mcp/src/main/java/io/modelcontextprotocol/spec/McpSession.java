@@ -4,13 +4,11 @@
 
 package io.modelcontextprotocol.spec;
 
-import java.util.Map;
-
 import com.fasterxml.jackson.core.type.TypeReference;
 import reactor.core.publisher.Mono;
 
 /**
- * Represents a Model Control Protocol (MCP) session that handles communication between
+ * Represents a Model Context Protocol (MCP) session that handles communication between
  * clients and the server. This interface provides methods for sending requests and
  * notifications, as well as managing the session lifecycle.
  *

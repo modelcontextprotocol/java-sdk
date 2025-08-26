@@ -1,11 +1,14 @@
 /*
  * Copyright 2024 - 2024 the original author or authors.
  */
+
 package io.modelcontextprotocol.server.transport;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -13,12 +16,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.server.DefaultMcpTransportContext;
+import io.modelcontextprotocol.server.McpTransportContext;
+import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.KeepAliveScheduler;
 import jakarta.servlet.AsyncContext;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
@@ -97,11 +105,19 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	/** Map of active client sessions, keyed by session ID */
 	private final Map<String, McpServerSession> sessions = new ConcurrentHashMap<>();
 
+	private McpTransportContextExtractor<HttpServletRequest> contextExtractor;
+
 	/** Flag indicating if the transport is in the process of shutting down */
 	private final AtomicBoolean isClosing = new AtomicBoolean(false);
 
 	/** Session factory for creating new sessions */
 	private McpServerSession.Factory sessionFactory;
+
+	/**
+	 * Keep-alive scheduler for managing session pings. Activated if keepAliveInterval is
+	 * set. Disabled by default.
+	 */
+	private KeepAliveScheduler keepAliveScheduler;
 
 	/**
 	 * Creates a new HttpServletSseServerTransportProvider instance with a custom SSE
@@ -110,7 +126,10 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 * serialization/deserialization
 	 * @param messageEndpoint The endpoint path where clients will send their messages
 	 * @param sseEndpoint The endpoint path where clients will establish SSE connections
+	 * @deprecated Use the builder {@link #builder()} instead for better configuration
+	 * options.
 	 */
+	@Deprecated
 	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint,
 			String sseEndpoint) {
 		this(objectMapper, DEFAULT_BASE_URL, messageEndpoint, sseEndpoint);
@@ -124,13 +143,79 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 * @param baseUrl The base URL for the server transport
 	 * @param messageEndpoint The endpoint path where clients will send their messages
 	 * @param sseEndpoint The endpoint path where clients will establish SSE connections
+	 * @deprecated Use the builder {@link #builder()} instead for better configuration
+	 * options.
 	 */
+	@Deprecated
 	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint) {
+		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, null, (serverRequest, context) -> context);
+	}
+
+	/**
+	 * Creates a new HttpServletSseServerTransportProvider instance with a custom SSE
+	 * endpoint.
+	 * @param objectMapper The JSON object mapper to use for message
+	 * serialization/deserialization
+	 * @param baseUrl The base URL for the server transport
+	 * @param messageEndpoint The endpoint path where clients will send their messages
+	 * @param sseEndpoint The endpoint path where clients will establish SSE connections
+	 * @param keepAliveInterval The interval for keep-alive pings, or null to disable
+	 * keep-alive functionality
+	 * @deprecated Use the builder {@link #builder()} instead for better configuration
+	 * options.
+	 */
+	@Deprecated
+	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+			String sseEndpoint, Duration keepAliveInterval) {
+		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval,
+				(serverRequest, context) -> context);
+	}
+
+	/**
+	 * Creates a new HttpServletSseServerTransportProvider instance with a custom SSE
+	 * endpoint.
+	 * @param objectMapper The JSON object mapper to use for message
+	 * serialization/deserialization
+	 * @param baseUrl The base URL for the server transport
+	 * @param messageEndpoint The endpoint path where clients will send their messages
+	 * @param sseEndpoint The endpoint path where clients will establish SSE connections
+	 * @param keepAliveInterval The interval for keep-alive pings, or null to disable
+	 * keep-alive functionality
+	 * @param contextExtractor The extractor for transport context from the request.
+	 * @deprecated Use the builder {@link #builder()} instead for better configuration
+	 * options.
+	 */
+	private HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+			String sseEndpoint, Duration keepAliveInterval,
+			McpTransportContextExtractor<HttpServletRequest> contextExtractor) {
+
+		Assert.notNull(objectMapper, "ObjectMapper must not be null");
+		Assert.notNull(messageEndpoint, "messageEndpoint must not be null");
+		Assert.notNull(sseEndpoint, "sseEndpoint must not be null");
+		Assert.notNull(contextExtractor, "Context extractor must not be null");
+
 		this.objectMapper = objectMapper;
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
+		this.contextExtractor = contextExtractor;
+
+		if (keepAliveInterval != null) {
+
+			this.keepAliveScheduler = KeepAliveScheduler
+				.builder(() -> (isClosing.get()) ? Flux.empty() : Flux.fromIterable(sessions.values()))
+				.initialDelay(keepAliveInterval)
+				.interval(keepAliveInterval)
+				.build();
+
+			this.keepAliveScheduler.start();
+		}
+	}
+
+	@Override
+	public List<String> protocolVersions() {
+		return List.of(ProtocolVersions.MCP_2024_11_05);
 	}
 
 	/**
@@ -286,10 +371,13 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 				body.append(line);
 			}
 
+			final McpTransportContext transportContext = this.contextExtractor.extract(request,
+					new DefaultMcpTransportContext());
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body.toString());
 
 			// Process the message through the session's handle method
-			session.handle(message).block(); // Block for Servlet compatibility
+			// Block for Servlet compatibility
+			session.handle(message).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext)).block();
 
 			response.setStatus(HttpServletResponse.SC_OK);
 		}
@@ -324,7 +412,13 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		isClosing.set(true);
 		logger.debug("Initiating graceful shutdown with {} active sessions", sessions.size());
 
-		return Flux.fromIterable(sessions.values()).flatMap(McpServerSession::closeGracefully).then();
+		return Flux.fromIterable(sessions.values()).flatMap(McpServerSession::closeGracefully).then().doOnSuccess(v -> {
+			sessions.clear();
+			logger.debug("Graceful shutdown completed");
+			if (this.keepAliveScheduler != null) {
+				this.keepAliveScheduler.shutdown();
+			}
+		});
 	}
 
 	/**
@@ -475,6 +569,10 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 
 		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
 
+		private McpTransportContextExtractor<HttpServletRequest> contextExtractor = (serverRequest, context) -> context;
+
+		private Duration keepAliveInterval;
+
 		/**
 		 * Sets the JSON object mapper to use for message serialization/deserialization.
 		 * @param objectMapper The object mapper to use
@@ -523,6 +621,31 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		}
 
 		/**
+		 * Sets the context extractor for extracting transport context from the request.
+		 * @param contextExtractor The context extractor to use. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if contextExtractor is null
+		 */
+		public HttpServletSseServerTransportProvider.Builder contextExtractor(
+				McpTransportContextExtractor<HttpServletRequest> contextExtractor) {
+			Assert.notNull(contextExtractor, "Context extractor must not be null");
+			this.contextExtractor = contextExtractor;
+			return this;
+		}
+
+		/**
+		 * Sets the interval for keep-alive pings.
+		 * <p>
+		 * If not specified, keep-alive pings will be disabled.
+		 * @param keepAliveInterval The interval duration for keep-alive pings
+		 * @return This builder instance for method chaining
+		 */
+		public Builder keepAliveInterval(Duration keepAliveInterval) {
+			this.keepAliveInterval = keepAliveInterval;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of HttpServletSseServerTransportProvider with the
 		 * configured settings.
 		 * @return A new HttpServletSseServerTransportProvider instance
@@ -535,7 +658,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			if (messageEndpoint == null) {
 				throw new IllegalStateException("MessageEndpoint must be set");
 			}
-			return new HttpServletSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint);
+			return new HttpServletSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint,
+					keepAliveInterval, contextExtractor);
 		}
 
 	}

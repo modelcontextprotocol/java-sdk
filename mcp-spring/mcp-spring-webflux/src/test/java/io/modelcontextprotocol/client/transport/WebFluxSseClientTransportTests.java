@@ -6,6 +6,7 @@ package io.modelcontextprotocol.client.transport;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
@@ -41,7 +42,8 @@ class WebFluxSseClientTransportTests {
 	static String host = "http://localhost:3001";
 
 	@SuppressWarnings("resource")
-	GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v1")
+	GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v2")
+		.withCommand("node dist/index.js sse")
 		.withLogConsumer(outputFrame -> System.out.println(outputFrame.getUtf8String()))
 		.withExposedPorts(3001)
 		.waitingFor(Wait.forHttp("/").forStatusCode(404));
@@ -74,6 +76,11 @@ class WebFluxSseClientTransportTests {
 
 		public int getInboundMessageCount() {
 			return inboundMessageCount.get();
+		}
+
+		public void simulateSseComment(String comment) {
+			events.tryEmitNext(ServerSentEvent.<String>builder().comment(comment).build());
+			inboundMessageCount.incrementAndGet();
 		}
 
 		public void simulateEndpointEvent(String jsonMessage) {
@@ -155,6 +162,27 @@ class WebFluxSseClientTransportTests {
 			.sseEndpoint("/custom-sse")
 			.build();
 		assertThatCode(() -> transport4.closeGracefully().block()).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testCommentSseMessage() {
+		// If the line starts with a character (:) are comment lins and should be ingored
+		// https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation
+
+		CopyOnWriteArrayList<Throwable> droppedErrors = new CopyOnWriteArrayList<>();
+		reactor.core.publisher.Hooks.onErrorDropped(droppedErrors::add);
+
+		try {
+			// Simulate receiving the SSE comment line
+			transport.simulateSseComment("sse comment");
+
+			StepVerifier.create(transport.closeGracefully()).verifyComplete();
+
+			assertThat(droppedErrors).hasSize(0);
+		}
+		finally {
+			reactor.core.publisher.Hooks.resetOnErrorDropped();
+		}
 	}
 
 	@Test

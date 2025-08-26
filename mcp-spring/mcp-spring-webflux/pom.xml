@@ -6,13 +6,13 @@
 	<parent>
 		<groupId>io.modelcontextprotocol.sdk</groupId>
 		<artifactId>mcp-parent</artifactId>
-		<version>0.10.0-SNAPSHOT</version>
+		<version>0.12.0-SNAPSHOT</version>
 		<relativePath>../../pom.xml</relativePath>
 	</parent>
 	<artifactId>mcp-spring-webflux</artifactId>
 	<packaging>jar</packaging>
-	<name>WebFlux implementation of the Java MCP SSE transport</name>
-	<description></description>
+	<name>WebFlux transports</name>
+	<description>WebFlux implementation for the SSE and Streamable Http Client and Server transports</description>
 	<url>https://github.com/modelcontextprotocol/java-sdk</url>
 
 	<scm>
@@ -25,13 +25,13 @@
 		<dependency>
 			<groupId>io.modelcontextprotocol.sdk</groupId>
 			<artifactId>mcp</artifactId>
-			<version>0.10.0-SNAPSHOT</version>
+			<version>0.12.0-SNAPSHOT</version>
 		</dependency>
 
 		<dependency>
 			<groupId>io.modelcontextprotocol.sdk</groupId>
 			<artifactId>mcp-test</artifactId>
-			<version>0.10.0-SNAPSHOT</version>
+			<version>0.12.0-SNAPSHOT</version>
 			<scope>test</scope>
 		</dependency>
 
@@ -83,6 +83,12 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
+			<groupId>net.bytebuddy</groupId>
+			<artifactId>byte-buddy</artifactId>
+			<version>${byte-buddy.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
 			<groupId>io.projectreactor</groupId>
 			<artifactId>reactor-test</artifactId>
 			<scope>test</scope>
@@ -91,6 +97,12 @@
 			<groupId>org.testcontainers</groupId>
 			<artifactId>junit-jupiter</artifactId>
 			<version>${testcontainers.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>toxiproxy</artifactId>
+			<version>${toxiproxy.version}</version>
 			<scope>test</scope>
 		</dependency>
 
@@ -112,6 +124,13 @@
 			<groupId>org.junit.jupiter</groupId>
 			<artifactId>junit-jupiter-params</artifactId>
 			<version>${junit-jupiter.version}</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>net.javacrumbs.json-unit</groupId>
+			<artifactId>json-unit-assertj</artifactId>
+			<version>${json-unit-assertj.version}</version>
 			<scope>test</scope>
 		</dependency>
 

@@ -6,14 +6,15 @@ package io.modelcontextprotocol.client;
 
 import java.time.Duration;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
 import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
 import io.modelcontextprotocol.util.Assert;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * A synchronous client implementation for the Model Context Protocol (MCP) that wraps an
@@ -73,6 +74,14 @@ public class McpSyncClient implements AutoCloseable {
 	}
 
 	/**
+	 * Get the current initialization result.
+	 * @return the initialization result.
+	 */
+	public McpSchema.InitializeResult getCurrentInitializationResult() {
+		return this.delegate.getCurrentInitializationResult();
+	}
+
+	/**
 	 * Get the server capabilities that define the supported features and functionality.
 	 * @return The server capabilities
 	 */
@@ -95,6 +104,14 @@ public class McpSyncClient implements AutoCloseable {
 	 */
 	public McpSchema.Implementation getServerInfo() {
 		return this.delegate.getServerInfo();
+	}
+
+	/**
+	 * Check if the client-server connection is initialized.
+	 * @return true if the client-server connection is initialized
+	 */
+	public boolean isInitialized() {
+		return this.delegate.isInitialized();
 	}
 
 	/**
@@ -212,8 +229,8 @@ public class McpSyncClient implements AutoCloseable {
 
 	/**
 	 * Retrieves the list of all tools provided by the server.
-	 * @return The list of tools result containing: - tools: List of available tools, each
-	 * with a name, description, and input schema - nextCursor: Optional cursor for
+	 * @return The list of all tools result containing: - tools: List of available tools,
+	 * each with a name, description, and input schema - nextCursor: Optional cursor for
 	 * pagination if more tools are available
 	 */
 	public McpSchema.ListToolsResult listTools() {
@@ -236,20 +253,20 @@ public class McpSyncClient implements AutoCloseable {
 	// --------------------------
 
 	/**
-	 * Send a resources/list request.
-	 * @param cursor the cursor
-	 * @return the list of resources result.
-	 */
-	public McpSchema.ListResourcesResult listResources(String cursor) {
-		return this.delegate.listResources(cursor).block();
-	}
-
-	/**
-	 * Send a resources/list request.
-	 * @return the list of resources result.
+	 * Retrieves the list of all resources provided by the server.
+	 * @return The list of all resources result
 	 */
 	public McpSchema.ListResourcesResult listResources() {
 		return this.delegate.listResources().block();
+	}
+
+	/**
+	 * Retrieves a paginated list of resources provided by the server.
+	 * @param cursor Optional pagination cursor from a previous list request
+	 * @return The list of resources result
+	 */
+	public McpSchema.ListResourcesResult listResources(String cursor) {
+		return this.delegate.listResources(cursor).block();
 	}
 
 	/**
@@ -271,23 +288,23 @@ public class McpSyncClient implements AutoCloseable {
 	}
 
 	/**
-	 * Resource templates allow servers to expose parameterized resources using URI
-	 * templates. Arguments may be auto-completed through the completion API.
-	 *
-	 * Request a list of resource templates the server has.
-	 * @param cursor the cursor
-	 * @return the list of resource templates result.
-	 */
-	public McpSchema.ListResourceTemplatesResult listResourceTemplates(String cursor) {
-		return this.delegate.listResourceTemplates(cursor).block();
-	}
-
-	/**
-	 * Request a list of resource templates the server has.
-	 * @return the list of resource templates result.
+	 * Retrieves the list of all resource templates provided by the server.
+	 * @return The list of all resource templates result.
 	 */
 	public McpSchema.ListResourceTemplatesResult listResourceTemplates() {
 		return this.delegate.listResourceTemplates().block();
+	}
+
+	/**
+	 * Resource templates allow servers to expose parameterized resources using URI
+	 * templates. Arguments may be auto-completed through the completion API.
+	 *
+	 * Retrieves a paginated list of resource templates provided by the server.
+	 * @param cursor Optional pagination cursor from a previous list request
+	 * @return The list of resource templates result.
+	 */
+	public McpSchema.ListResourceTemplatesResult listResourceTemplates(String cursor) {
+		return this.delegate.listResourceTemplates(cursor).block();
 	}
 
 	/**
@@ -315,12 +332,22 @@ public class McpSyncClient implements AutoCloseable {
 	// --------------------------
 	// Prompts
 	// --------------------------
-	public ListPromptsResult listPrompts(String cursor) {
-		return this.delegate.listPrompts(cursor).block();
-	}
 
+	/**
+	 * Retrieves the list of all prompts provided by the server.
+	 * @return The list of all prompts result.
+	 */
 	public ListPromptsResult listPrompts() {
 		return this.delegate.listPrompts().block();
+	}
+
+	/**
+	 * Retrieves a paginated list of prompts provided by the server.
+	 * @param cursor Optional pagination cursor from a previous list request
+	 * @return The list of prompts result.
+	 */
+	public ListPromptsResult listPrompts(String cursor) {
+		return this.delegate.listPrompts(cursor).block();
 	}
 
 	public GetPromptResult getPrompt(GetPromptRequest getPromptRequest) {

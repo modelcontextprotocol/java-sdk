@@ -1,6 +1,7 @@
 /*
 * Copyright 2025 - 2025 the original author or authors.
 */
+
 package io.modelcontextprotocol.server.transport;
 
 import java.io.IOException;
@@ -10,9 +11,12 @@ import java.net.ServerSocket;
 import jakarta.servlet.Servlet;
 import org.apache.catalina.Context;
 import org.apache.catalina.startup.Tomcat;
+import org.apache.tomcat.util.descriptor.web.FilterDef;
+import org.apache.tomcat.util.descriptor.web.FilterMap;
 
 /**
  * @author Christian Tzolov
+ * @author Daniel Garnier-Moiroux
  */
 public class TomcatTestUtil {
 
@@ -38,6 +42,16 @@ public class TomcatTestUtil {
 		wrapper.setAsyncSupported(true);
 		context.addChild(wrapper);
 		context.addServletMappingDecoded("/*", "mcpServlet");
+
+		var filterDef = new FilterDef();
+		filterDef.setFilterClass(McpTestServletFilter.class.getName());
+		filterDef.setFilterName(McpTestServletFilter.class.getSimpleName());
+		context.addFilterDef(filterDef);
+
+		var filterMap = new FilterMap();
+		filterMap.setFilterName(McpTestServletFilter.class.getSimpleName());
+		filterMap.addURLPattern("/*");
+		context.addFilterMap(filterMap);
 
 		var connector = tomcat.getConnector();
 		connector.setAsyncTimeout(3000);

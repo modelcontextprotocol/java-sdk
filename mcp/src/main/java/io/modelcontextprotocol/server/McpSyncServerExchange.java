@@ -5,7 +5,6 @@
 package io.modelcontextprotocol.server;
 
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 
 /**
@@ -29,6 +28,14 @@ public class McpSyncServerExchange {
 	}
 
 	/**
+	 * Provides the Session ID
+	 * @return session ID
+	 */
+	public String sessionId() {
+		return this.exchange.sessionId();
+	}
+
+	/**
 	 * Get the client capabilities that define the supported features and functionality.
 	 * @return The client capabilities
 	 */
@@ -42,6 +49,16 @@ public class McpSyncServerExchange {
 	 */
 	public McpSchema.Implementation getClientInfo() {
 		return this.exchange.getClientInfo();
+	}
+
+	/**
+	 * Provides the {@link McpTransportContext} associated with the transport layer. For
+	 * HTTP transports it can contain the metadata associated with the HTTP request that
+	 * triggered the processing.
+	 * @return the transport context object
+	 */
+	public McpTransportContext transportContext() {
+		return this.exchange.transportContext();
 	}
 
 	/**
@@ -65,6 +82,24 @@ public class McpSyncServerExchange {
 	}
 
 	/**
+	 * Creates a new elicitation. MCP provides a standardized way for servers to request
+	 * additional information from users through the client during interactions. This flow
+	 * allows clients to maintain control over user interactions and data sharing while
+	 * enabling servers to gather necessary information dynamically. Servers can request
+	 * structured data from users with optional JSON schemas to validate responses.
+	 * @param elicitRequest The request to create a new elicitation
+	 * @return A result containing the elicitation response.
+	 * @see McpSchema.ElicitRequest
+	 * @see McpSchema.ElicitResult
+	 * @see <a href=
+	 * "https://spec.modelcontextprotocol.io/specification/client/elicitation/">Elicitation
+	 * Specification</a>
+	 */
+	public McpSchema.ElicitResult createElicitation(McpSchema.ElicitRequest elicitRequest) {
+		return this.exchange.createElicitation(elicitRequest).block();
+	}
+
+	/**
 	 * Retrieves the list of all roots provided by the client.
 	 * @return The list of roots result.
 	 */
@@ -82,12 +117,29 @@ public class McpSyncServerExchange {
 	}
 
 	/**
-	 * Send a logging message notification to all connected clients. Messages below the
-	 * current minimum logging level will be filtered out.
+	 * Send a logging message notification to the client. Messages below the current
+	 * minimum logging level will be filtered out.
 	 * @param loggingMessageNotification The logging message to send
 	 */
 	public void loggingNotification(LoggingMessageNotification loggingMessageNotification) {
 		this.exchange.loggingNotification(loggingMessageNotification).block();
+	}
+
+	/**
+	 * Sends a notification to the client that the current progress status has changed for
+	 * long-running operations.
+	 * @param progressNotification The progress notification to send
+	 */
+	public void progressNotification(McpSchema.ProgressNotification progressNotification) {
+		this.exchange.progressNotification(progressNotification).block();
+	}
+
+	/**
+	 * Sends a synchronous ping request to the client.
+	 * @return
+	 */
+	public Object ping() {
+		return this.exchange.ping().block();
 	}
 
 }

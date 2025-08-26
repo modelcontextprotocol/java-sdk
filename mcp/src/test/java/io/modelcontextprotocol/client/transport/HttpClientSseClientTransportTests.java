@@ -7,23 +7,23 @@ package io.modelcontextprotocol.client.transport;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Mockito;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import reactor.core.publisher.Mono;
@@ -31,14 +31,17 @@ import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
 
 import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Tests for the {@link HttpClientSseClientTransport} class.
@@ -51,7 +54,8 @@ class HttpClientSseClientTransportTests {
 	static String host = "http://localhost:3001";
 
 	@SuppressWarnings("resource")
-	GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v1")
+	static GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v2")
+		.withCommand("node dist/index.js sse")
 		.withLogConsumer(outputFrame -> System.out.println(outputFrame.getUtf8String()))
 		.withExposedPorts(3001)
 		.waitingFor(Wait.forHttp("/").forStatusCode(404));
@@ -66,7 +70,9 @@ class HttpClientSseClientTransportTests {
 		private Sinks.Many<ServerSentEvent<String>> events = Sinks.many().unicast().onBackpressureBuffer();
 
 		public TestHttpClientSseClientTransport(final String baseUri) {
-			super(HttpClient.newHttpClient(), HttpRequest.newBuilder(), baseUri, "/sse", new ObjectMapper());
+			super(HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(),
+					HttpRequest.newBuilder().header("Content-Type", "application/json"), baseUri, "/sse",
+					new ObjectMapper(), AsyncHttpRequestCustomizer.NOOP);
 		}
 
 		public int getInboundMessageCount() {
@@ -85,15 +91,21 @@ class HttpClientSseClientTransportTests {
 
 	}
 
-	void startContainer() {
+	@BeforeAll
+	static void startContainer() {
 		container.start();
 		int port = container.getMappedPort(3001);
 		host = "http://" + container.getHost() + ":" + port;
+
+	}
+
+	@AfterAll
+	static void stopContainer() {
+		container.stop();
 	}
 
 	@BeforeEach
 	void setUp() {
-		startContainer();
 		transport = new TestHttpClientSseClientTransport(host);
 		transport.connect(Function.identity()).block();
 	}
@@ -103,11 +115,16 @@ class HttpClientSseClientTransportTests {
 		if (transport != null) {
 			assertThatCode(() -> transport.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
 		}
-		cleanup();
 	}
 
-	void cleanup() {
-		container.stop();
+	@Test
+	void testErrorOnBogusMessage() {
+		// bogus message
+		JSONRPCRequest bogusMessage = new JSONRPCRequest(null, null, "test-id", Map.of("key", "value"));
+
+		StepVerifier.create(transport.sendMessage(bogusMessage))
+			.verifyErrorMessage(
+					"Sending message failed with a non-OK HTTP code: 400 - Invalid message: {\"id\":\"test-id\",\"params\":{\"key\":\"value\"}}");
 	}
 
 	@Test
@@ -371,24 +388,73 @@ class HttpClientSseClientTransportTests {
 	}
 
 	@Test
-	@SuppressWarnings("unchecked")
-	void testResolvingClientEndpoint() {
-		HttpClient httpClient = Mockito.mock(HttpClient.class);
-		HttpResponse<Void> httpResponse = Mockito.mock(HttpResponse.class);
-		CompletableFuture<HttpResponse<Void>> future = new CompletableFuture<>();
-		future.complete(httpResponse);
-		when(httpClient.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(future);
+	void testRequestCustomizer() {
+		var mockCustomizer = mock(SyncHttpRequestCustomizer.class);
 
-		HttpClientSseClientTransport transport = new HttpClientSseClientTransport(httpClient, HttpRequest.newBuilder(),
-				"http://example.com", "http://example.com/sse", new ObjectMapper());
+		// Create a transport with the customizer
+		var customizedTransport = HttpClientSseClientTransport.builder(host)
+			.httpRequestCustomizer(mockCustomizer)
+			.build();
 
-		transport.connect(Function.identity());
+		// Connect
+		StepVerifier.create(customizedTransport.connect(Function.identity())).verifyComplete();
 
-		ArgumentCaptor<HttpRequest> httpRequestCaptor = ArgumentCaptor.forClass(HttpRequest.class);
-		verify(httpClient).sendAsync(httpRequestCaptor.capture(), any(HttpResponse.BodyHandler.class));
-		assertThat(httpRequestCaptor.getValue().uri()).isEqualTo(URI.create("http://example.com/sse"));
+		// Verify the customizer was called
+		verify(mockCustomizer).customize(any(), eq("GET"),
+				eq(UriComponentsBuilder.fromUriString(host).path("/sse").build().toUri()), isNull());
+		clearInvocations(mockCustomizer);
 
-		transport.closeGracefully().block();
+		// Send test message
+		var testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
+				Map.of("key", "value"));
+
+		// Subscribe to messages and verify
+		StepVerifier.create(customizedTransport.sendMessage(testMessage)).verifyComplete();
+
+		// Verify the customizer was called
+		var uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
+		verify(mockCustomizer).customize(any(), eq("POST"), uriArgumentCaptor.capture(), eq(
+				"{\"jsonrpc\":\"2.0\",\"method\":\"test-method\",\"id\":\"test-id\",\"params\":{\"key\":\"value\"}}"));
+		assertThat(uriArgumentCaptor.getValue().toString()).startsWith(host + "/message?sessionId=");
+
+		// Clean up
+		customizedTransport.closeGracefully().block();
+	}
+
+	@Test
+	void testAsyncRequestCustomizer() {
+		var mockCustomizer = mock(AsyncHttpRequestCustomizer.class);
+		when(mockCustomizer.customize(any(), any(), any(), any()))
+			.thenAnswer(invocation -> Mono.just(invocation.getArguments()[0]));
+
+		// Create a transport with the customizer
+		var customizedTransport = HttpClientSseClientTransport.builder(host)
+			.asyncHttpRequestCustomizer(mockCustomizer)
+			.build();
+
+		// Connect
+		StepVerifier.create(customizedTransport.connect(Function.identity())).verifyComplete();
+
+		// Verify the customizer was called
+		verify(mockCustomizer).customize(any(), eq("GET"),
+				eq(UriComponentsBuilder.fromUriString(host).path("/sse").build().toUri()), isNull());
+		clearInvocations(mockCustomizer);
+
+		// Send test message
+		var testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
+				Map.of("key", "value"));
+
+		// Subscribe to messages and verify
+		StepVerifier.create(customizedTransport.sendMessage(testMessage)).verifyComplete();
+
+		// Verify the customizer was called
+		var uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
+		verify(mockCustomizer).customize(any(), eq("POST"), uriArgumentCaptor.capture(), eq(
+				"{\"jsonrpc\":\"2.0\",\"method\":\"test-method\",\"id\":\"test-id\",\"params\":{\"key\":\"value\"}}"));
+		assertThat(uriArgumentCaptor.getValue().toString()).startsWith(host + "/message?sessionId=");
+
+		// Clean up
+		customizedTransport.closeGracefully().block();
 	}
 
 }
