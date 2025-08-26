@@ -54,6 +54,18 @@ public final class Utils {
 	}
 
 	/**
+	 * Removes the trailing slash character of the given String.
+	 * @param str the String to remove the trailing slash
+	 * @return the modified String.
+	 */
+	public static String removeTrailingSlash(String str) {
+		if (str.endsWith("/")) {
+			str = str.substring(0, str.length() - 1);
+		}
+		return str;
+	}
+
+	/**
 	 * Resolves the given endpoint URL against the base URL.
 	 * <ul>
 	 * <li>If the endpoint URL is relative, it will be resolved against the base URL.</li>
