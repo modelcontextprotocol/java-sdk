@@ -61,7 +61,7 @@
 
 		<assert4j.version>3.26.3</assert4j.version>
 		<junit.version>5.10.2</junit.version>
-		<mockito.version>5.17.0</mockito.version>
+		<mockito.version>5.2.0</mockito.version>
 		<testcontainers.version>1.20.4</testcontainers.version>
 		<byte-buddy.version>1.17.5</byte-buddy.version>
 		<toxiproxy.version>1.21.0</toxiproxy.version>
@@ -103,6 +103,7 @@
 	<modules>
 		<module>mcp-bom</module>
 		<module>mcp</module>
+		<module>mcp-inmemory-transport</module>
 		<module>mcp-spring/mcp-spring-webflux</module>
 		<module>mcp-spring/mcp-spring-webmvc</module>
 		<module>mcp-test</module>
@@ -182,7 +183,7 @@
 				<artifactId>maven-surefire-plugin</artifactId>
 				<version>${maven-surefire-plugin.version}</version>
 				<configuration>
-					<argLine>${surefireArgLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
+					<argLine>${surefireArgLine}</argLine>
 					<useFile>false</useFile>
 					<trimStackTrace>false</trimStackTrace>
 
