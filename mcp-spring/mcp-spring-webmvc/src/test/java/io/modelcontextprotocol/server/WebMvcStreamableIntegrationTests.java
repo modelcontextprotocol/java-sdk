@@ -3,24 +3,7 @@
  */
 package io.modelcontextprotocol.server;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-import java.time.Duration;
-
-import org.apache.catalina.LifecycleException;
-import org.apache.catalina.LifecycleState;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Timeout;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.servlet.config.annotation.EnableWebMvc;
-import org.springframework.web.servlet.function.RouterFunction;
-import org.springframework.web.servlet.function.ServerResponse;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.modelcontextprotocol.AbstractMcpClientServerIntegrationTests;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
@@ -28,7 +11,31 @@ import io.modelcontextprotocol.client.transport.WebClientStreamableHttpTransport
 import io.modelcontextprotocol.server.McpServer.AsyncSpecification;
 import io.modelcontextprotocol.server.McpServer.SyncSpecification;
 import io.modelcontextprotocol.server.transport.WebMvcStreamableServerTransportProvider;
+import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
+import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
+import io.modelcontextprotocol.spec.McpSchema.Tool;
+import org.apache.catalina.LifecycleException;
+import org.apache.catalina.LifecycleState;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.servlet.config.annotation.EnableWebMvc;
+import org.springframework.web.servlet.function.RouterFunction;
+import org.springframework.web.servlet.function.ServerResponse;
 import reactor.core.scheduler.Schedulers;
+
+import java.time.Duration;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Timeout(15)
 class WebMvcStreamableIntegrationTests extends AbstractMcpClientServerIntegrationTests {
@@ -137,6 +144,55 @@ class WebMvcStreamableIntegrationTests extends AbstractMcpClientServerIntegratio
 						.endpoint(mcpEndpoint)
 						.build())
 					.requestTimeout(Duration.ofHours(10)));
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testToolCallThrowMcpError(String clientType) {
+		String emptyJsonSchema = """
+				{
+					"$schema": "http://json-schema.org/draft-07/schema#",
+					"type": "object",
+					"properties": {}
+				}
+				""";
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
+			.tool(Tool.builder()
+				.name("toolThrowMcpError")
+				.description("toolThrowMcpError description")
+				.inputSchema(emptyJsonSchema)
+				.build())
+			.callHandler((exchange, request) -> {
+				throw new McpError(
+						new McpSchema.JSONRPCResponse.JSONRPCError(50000, "test exception message", Map.of("a", "b")));
+			})
+			.build();
+
+		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool1)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThat(mcpClient.listTools().tools()).contains(tool1.tool());
+			assertThatThrownBy(() -> mcpClient.callTool(new McpSchema.CallToolRequest("toolThrowMcpError", Map.of())))
+				.isInstanceOf(McpError.class)
+				.hasMessage("test exception message")
+				.satisfies(ex -> {
+					McpError mcpError = (McpError) ex;
+					assertThat(mcpError.getJsonRpcError()).isNotNull();
+					assertThat(mcpError.getJsonRpcError().code()).isEqualTo(50000);
+				});
+
+		}
+
+		mcpServer.close();
 	}
 
 }
