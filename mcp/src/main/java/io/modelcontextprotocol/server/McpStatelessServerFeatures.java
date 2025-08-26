@@ -67,10 +67,7 @@ public class McpStatelessServerFeatures {
 			this.serverCapabilities = (serverCapabilities != null) ? serverCapabilities
 					: new McpSchema.ServerCapabilities(null, // completions
 							null, // experimental
-							new McpSchema.ServerCapabilities.LoggingCapabilities(), // Enable
-																					// logging
-																					// by
-																					// default
+							null, // currently statless server doesn't support set logging
 							!Utils.isEmpty(prompts) ? new McpSchema.ServerCapabilities.PromptCapabilities(false) : null,
 							!Utils.isEmpty(resources)
 									? new McpSchema.ServerCapabilities.ResourceCapabilities(false, false) : null,
