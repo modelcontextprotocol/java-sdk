@@ -173,7 +173,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				.uri(uri)
 				.header("Cache-Control", "no-cache")
 				.header(HttpHeaders.MCP_SESSION_ID, sessionId)
-				.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+				.header(HttpHeaders.MCP_PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 				.DELETE();
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "DELETE", uri, null));
 		}).flatMap(requestBuilder -> {
@@ -243,7 +243,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				var builder = requestBuilder.uri(uri)
 					.header("Accept", TEXT_EVENT_STREAM)
 					.header("Cache-Control", "no-cache")
-					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+					.header(HttpHeaders.MCP_PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 					.GET();
 				return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null));
 			})
@@ -417,7 +417,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					.header("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
 					.header("Content-Type", APPLICATION_JSON)
 					.header("Cache-Control", "no-cache")
-					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+					.header(HttpHeaders.MCP_PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 					.POST(HttpRequest.BodyPublishers.ofString(jsonBody));
 				return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", uri, jsonBody));
 			}).flatMapMany(requestBuilder -> Flux.<ResponseEvent>create(responseEventSink -> {
