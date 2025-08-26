@@ -215,6 +215,7 @@ public class McpServerSession implements McpLoggableSession {
 			else if (message instanceof McpSchema.JSONRPCRequest request) {
 				logger.debug("Received request: {}", request);
 				return handleIncomingRequest(request).onErrorResume(error -> {
+					logger.error("Error handling request: {}", error.getMessage(), error);
 					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
 							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 									error.getMessage(), null));
@@ -270,10 +271,15 @@ public class McpServerSession implements McpLoggableSession {
 			}
 			return resultMono
 				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
-				.onErrorResume(error -> Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-						null, new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-								error.getMessage(), null)))); // TODO: add error message
-																// through the data field
+				.onErrorResume(error -> {
+					logger.error("Error processing request {}: {}", request.method(), error.getMessage(), error);
+					return Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
+							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+									error.getMessage(), null))); // TODO: add error
+																	// message
+																	// through the data
+																	// field
+				});
 		});
 	}
 
