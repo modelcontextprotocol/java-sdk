@@ -5,45 +5,41 @@
 package io.modelcontextprotocol.server;
 
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+
+import io.modelcontextprotocol.util.Assert;
 
 /**
- * Default implementation for {@link McpTransportContext} which uses a Thread-safe map.
- * Objects of this kind are mutable.
+ * Default implementation for {@link McpTransportContext} which uses a map as storage.
  *
  * @author Dariusz Jędrzejczyk
+ * @author Daniel Garnier-Moiroux
  */
-public class DefaultMcpTransportContext implements McpTransportContext {
+class DefaultMcpTransportContext implements McpTransportContext {
 
-	private final Map<String, Object> storage;
+	private final Map<String, Object> metadata;
 
-	/**
-	 * Create an empty instance.
-	 */
-	public DefaultMcpTransportContext() {
-		this.storage = new ConcurrentHashMap<>();
-	}
-
-	DefaultMcpTransportContext(Map<String, Object> storage) {
-		this.storage = storage;
+	DefaultMcpTransportContext(Map<String, Object> metadata) {
+		Assert.notNull(metadata, "The metadata cannot be null");
+		this.metadata = metadata;
 	}
 
 	@Override
 	public Object get(String key) {
-		return this.storage.get(key);
+		return this.metadata.get(key);
 	}
 
 	@Override
-	public void put(String key, Object value) {
-		this.storage.put(key, value);
+	public boolean equals(Object o) {
+		if (o == null || getClass() != o.getClass())
+			return false;
+
+		DefaultMcpTransportContext that = (DefaultMcpTransportContext) o;
+		return this.metadata.equals(that.metadata);
 	}
 
-	/**
-	 * Allows copying the contents.
-	 * @return new instance with the copy of the underlying map
-	 */
-	public McpTransportContext copy() {
-		return new DefaultMcpTransportContext(new ConcurrentHashMap<>(this.storage));
+	@Override
+	public int hashCode() {
+		return this.metadata.hashCode();
 	}
 
 }

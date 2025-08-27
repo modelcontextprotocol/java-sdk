@@ -19,7 +19,6 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.modelcontextprotocol.server.DefaultMcpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.HttpHeaders;
@@ -274,7 +273,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		logger.debug("Handling GET request for session: {}", sessionId);
 
-		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
+		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		try {
 			response.setContentType(TEXT_EVENT_STREAM);
@@ -383,7 +382,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			badRequestErrors.add("application/json required in Accept header");
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
+		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		try {
 			BufferedReader reader = request.getReader();
@@ -541,7 +540,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			return;
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
+		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		if (request.getHeader(HttpHeaders.MCP_SESSION_ID) == null) {
 			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
@@ -769,7 +768,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		private boolean disallowDelete = false;
 
-		private McpTransportContextExtractor<HttpServletRequest> contextExtractor = (serverRequest, context) -> context;
+		private McpTransportContextExtractor<HttpServletRequest> contextExtractor = (
+				serverRequest) -> McpTransportContext.EMPTY;
 
 		private Duration keepAliveInterval;
 

@@ -7,6 +7,7 @@ package io.modelcontextprotocol.server;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
+import java.util.Map;
 
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
@@ -94,9 +95,7 @@ class HttpServletSseIntegrationTests extends AbstractMcpClientServerIntegrationT
 	protected void prepareClients(int port, String mcpEndpoint) {
 	}
 
-	static McpTransportContextExtractor<HttpServletRequest> TEST_CONTEXT_EXTRACTOR = (r, tc) -> {
-		tc.put("important", "value");
-		return tc;
-	};
+	static McpTransportContextExtractor<HttpServletRequest> TEST_CONTEXT_EXTRACTOR = (r) -> McpTransportContext
+		.create(Map.of("important", "value"));
 
 }

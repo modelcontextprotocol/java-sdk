@@ -397,8 +397,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		}
 
 		try {
-			final McpTransportContext transportContext = this.contextExtractor.extract(request,
-					new DefaultMcpTransportContext());
+			final McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 			String body = request.body(String.class);
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);

@@ -101,7 +101,7 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
+		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		List<MediaType> acceptHeaders = request.headers().asHttpHeaders().getAccept();
 		if (!(acceptHeaders.contains(MediaType.APPLICATION_JSON)

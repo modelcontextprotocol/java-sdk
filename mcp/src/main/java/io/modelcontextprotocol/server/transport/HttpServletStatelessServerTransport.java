@@ -13,7 +13,6 @@ import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.modelcontextprotocol.server.DefaultMcpTransportContext;
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
 import io.modelcontextprotocol.server.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
@@ -123,7 +122,7 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 			return;
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
+		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		String accept = request.getHeader(ACCEPT);
 		if (accept == null || !(accept.contains(APPLICATION_JSON) && accept.contains(TEXT_EVENT_STREAM))) {
@@ -241,7 +240,8 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 
 		private String mcpEndpoint = "/mcp";
 
-		private McpTransportContextExtractor<HttpServletRequest> contextExtractor = (serverRequest, context) -> context;
+		private McpTransportContextExtractor<HttpServletRequest> contextExtractor = (
+				serverRequest) -> McpTransportContext.EMPTY;
 
 		private Builder() {
 			// used by a static method

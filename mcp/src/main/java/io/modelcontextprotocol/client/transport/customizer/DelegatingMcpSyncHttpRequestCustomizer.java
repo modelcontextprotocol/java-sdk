@@ -4,10 +4,12 @@
 
 package io.modelcontextprotocol.client.transport.customizer;
 
-import io.modelcontextprotocol.util.Assert;
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.util.List;
+
+import io.modelcontextprotocol.server.McpTransportContext;
+import io.modelcontextprotocol.util.Assert;
 
 /**
  * Composable {@link McpSyncHttpRequestCustomizer} that applies multiple customizers, in
@@ -25,8 +27,9 @@ public class DelegatingMcpSyncHttpRequestCustomizer implements McpSyncHttpReques
 	}
 
 	@Override
-	public void customize(HttpRequest.Builder builder, String method, URI endpoint, String body) {
-		this.delegates.forEach(delegate -> delegate.customize(builder, method, endpoint, body));
+	public void customize(HttpRequest.Builder builder, String method, URI endpoint, String body,
+			McpTransportContext context) {
+		this.delegates.forEach(delegate -> delegate.customize(builder, method, endpoint, body, context));
 	}
 
 }
