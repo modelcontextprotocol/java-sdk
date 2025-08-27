@@ -33,6 +33,7 @@ import reactor.core.publisher.MonoSink;
  * capability without the insight into the transport-specific details of HTTP handling.
  *
  * @author Dariusz Jędrzejczyk
+ * @author Yanming Zhou
  */
 public class McpStreamableServerSession implements McpLoggableSession {
 
@@ -214,19 +215,25 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	 */
 	public Mono<Void> accept(McpSchema.JSONRPCResponse response) {
 		return Mono.defer(() -> {
-			var stream = this.requestIdToStream.get(response.id());
-			if (stream == null) {
-				return Mono.error(new McpError("Unexpected response for unknown id " + response.id())); // TODO
-																										// JSONize
-			}
-			// TODO: encapsulate this inside the stream itself
-			var sink = stream.pendingResponses.remove(response.id());
-			if (sink == null) {
-				return Mono.error(new McpError("Unexpected response for unknown id " + response.id())); // TODO
-																										// JSONize
+			logger.debug("Received response: {}", response);
+			if (response.id() != null) {
+				var stream = this.requestIdToStream.get(response.id());
+				if (stream == null) {
+					return Mono.error(new McpError("Unexpected response for unknown id " + response.id())); // TODO
+					// JSONize
+				}
+				// TODO: encapsulate this inside the stream itself
+				var sink = stream.pendingResponses.remove(response.id());
+				if (sink == null) {
+					return Mono.error(new McpError("Unexpected response for unknown id " + response.id())); // TODO
+					// JSONize
+				}
+				else {
+					sink.success(response);
+				}
 			}
 			else {
-				sink.success(response);
+				logger.debug("Discarded response without id");
 			}
 			return Mono.empty();
 		});
