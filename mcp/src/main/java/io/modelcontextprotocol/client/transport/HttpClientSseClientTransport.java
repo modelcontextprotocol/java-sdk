@@ -25,11 +25,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpRequestCustomizer;
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
+import io.modelcontextprotocol.server.McpTransportContext;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.spec.McpTransportException;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
 import reactor.core.Disposable;
@@ -410,14 +411,15 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
 		var uri = Utils.resolveUri(this.baseUri, this.sseEndpoint);
 
-		return Mono.defer(() -> {
+		return Mono.deferContextual(ctx -> {
 			var builder = requestBuilder.copy()
 				.uri(uri)
 				.header("Accept", "text/event-stream")
 				.header("Cache-Control", "no-cache")
 				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
 				.GET();
-			return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null));
+			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
+			return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
 		}).flatMap(requestBuilder -> Mono.create(sink -> {
 			Disposable connection = Flux.<ResponseEvent>create(sseSink -> this.httpClient
 				.sendAsync(requestBuilder.build(),
@@ -538,13 +540,14 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 
 	private Mono<HttpResponse<String>> sendHttpPost(final String endpoint, final String body) {
 		final URI requestUri = Utils.resolveUri(baseUri, endpoint);
-		return Mono.defer(() -> {
+		return Mono.deferContextual(ctx -> {
 			var builder = this.requestBuilder.copy()
 				.uri(requestUri)
 				.header("Content-Type", "application/json")
 				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
 				.POST(HttpRequest.BodyPublishers.ofString(body));
-			return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", requestUri, body));
+			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
+			return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", requestUri, body, transportContext));
 		}).flatMap(customizedBuilder -> {
 			var request = customizedBuilder.build();
 			return Mono.fromFuture(httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()));

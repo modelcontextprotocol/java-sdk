@@ -54,7 +54,7 @@ class McpAsyncServerExchangeTests {
 		clientInfo = new McpSchema.Implementation("test-client", "1.0.0");
 
 		exchange = new McpAsyncServerExchange("testSessionId", mockSession, clientCapabilities, clientInfo,
-				new DefaultMcpTransportContext());
+				McpTransportContext.EMPTY);
 	}
 
 	@Test

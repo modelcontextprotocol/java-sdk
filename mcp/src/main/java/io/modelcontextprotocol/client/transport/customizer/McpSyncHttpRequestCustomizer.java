@@ -6,16 +6,23 @@ package io.modelcontextprotocol.client.transport.customizer;
 
 import java.net.URI;
 import java.net.http.HttpRequest;
+
 import reactor.util.annotation.Nullable;
+
+import io.modelcontextprotocol.client.McpClient.SyncSpec;
+import io.modelcontextprotocol.server.McpTransportContext;
 
 /**
  * Customize {@link HttpRequest.Builder} before executing the request, either in SSE or
- * Streamable HTTP transport.
+ * Streamable HTTP transport. Do not rely on thread-locals in this implementation, instead
+ * use {@link SyncSpec#transportContextProvider} to extract context, and then consume it
+ * through {@link McpTransportContext}.
  *
  * @author Daniel Garnier-Moiroux
  */
 public interface McpSyncHttpRequestCustomizer {
 
-	void customize(HttpRequest.Builder builder, String method, URI endpoint, @Nullable String body);
+	void customize(HttpRequest.Builder builder, String method, URI endpoint, @Nullable String body,
+			McpTransportContext context);
 
 }

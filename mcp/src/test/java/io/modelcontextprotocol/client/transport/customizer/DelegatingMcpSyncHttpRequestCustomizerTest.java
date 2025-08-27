@@ -10,6 +10,8 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import io.modelcontextprotocol.server.McpTransportContext;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
@@ -30,19 +32,20 @@ class DelegatingMcpSyncHttpRequestCustomizerTest {
 		var mockCustomizer = Mockito.mock(McpSyncHttpRequestCustomizer.class);
 		var customizer = new DelegatingMcpSyncHttpRequestCustomizer(List.of(mockCustomizer));
 
-		customizer.customize(TEST_BUILDER, "GET", TEST_URI, "{\"everybody\": \"needs somebody\"}");
+		var context = McpTransportContext.EMPTY;
+		customizer.customize(TEST_BUILDER, "GET", TEST_URI, "{\"everybody\": \"needs somebody\"}", context);
 
-		verify(mockCustomizer).customize(TEST_BUILDER, "GET", TEST_URI, "{\"everybody\": \"needs somebody\"}");
+		verify(mockCustomizer).customize(TEST_BUILDER, "GET", TEST_URI, "{\"everybody\": \"needs somebody\"}", context);
 	}
 
 	@Test
 	void delegatesInOrder() {
 		var testHeaderName = "x-test";
 		var customizer = new DelegatingMcpSyncHttpRequestCustomizer(
-				List.of((builder, method, uri, body) -> builder.header(testHeaderName, "one"),
-						(builder, method, uri, body) -> builder.header(testHeaderName, "two")));
+				List.of((builder, method, uri, body, ctx) -> builder.header(testHeaderName, "one"),
+						(builder, method, uri, body, ctx) -> builder.header(testHeaderName, "two")));
 
-		customizer.customize(TEST_BUILDER, "GET", TEST_URI, "");
+		customizer.customize(TEST_BUILDER, "GET", TEST_URI, null, McpTransportContext.EMPTY);
 		var request = TEST_BUILDER.build();
 
 		assertThat(request.headers().allValues(testHeaderName)).containsExactly("one", "two");

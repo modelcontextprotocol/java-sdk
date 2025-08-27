@@ -6,10 +6,13 @@ package io.modelcontextprotocol.client.transport.customizer;
 
 import java.net.URI;
 import java.net.http.HttpRequest;
+
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.annotation.Nullable;
+
+import io.modelcontextprotocol.server.McpTransportContext;
 
 /**
  * Customize {@link HttpRequest.Builder} before executing the request, in either SSE or
@@ -22,7 +25,7 @@ import reactor.util.annotation.Nullable;
 public interface McpAsyncHttpRequestCustomizer {
 
 	Publisher<HttpRequest.Builder> customize(HttpRequest.Builder builder, String method, URI endpoint,
-			@Nullable String body);
+			@Nullable String body, McpTransportContext context);
 
 	McpAsyncHttpRequestCustomizer NOOP = new Noop();
 
@@ -33,8 +36,8 @@ public interface McpAsyncHttpRequestCustomizer {
 	 * blocking implementation, consider using {@link Schedulers#boundedElastic()}.
 	 */
 	static McpAsyncHttpRequestCustomizer fromSync(McpSyncHttpRequestCustomizer customizer) {
-		return (builder, method, uri, body) -> Mono.fromSupplier(() -> {
-			customizer.customize(builder, method, uri, body);
+		return (builder, method, uri, body, context) -> Mono.fromSupplier(() -> {
+			customizer.customize(builder, method, uri, body, context);
 			return builder;
 		});
 	}
@@ -43,7 +46,7 @@ public interface McpAsyncHttpRequestCustomizer {
 
 		@Override
 		public Publisher<HttpRequest.Builder> customize(HttpRequest.Builder builder, String method, URI endpoint,
-				String body) {
+				String body, McpTransportContext context) {
 			return Mono.just(builder);
 		}
 

@@ -344,7 +344,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
+		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		return ServerResponse.ok()
 			.contentType(MediaType.TEXT_EVENT_STREAM)
@@ -401,7 +401,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 				.bodyValue(new McpError("Session not found: " + request.queryParam("sessionId").get()));
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
+		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		return request.bodyToMono(String.class).flatMap(body -> {
 			try {

@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import io.modelcontextprotocol.server.McpTransportContext;
+
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -31,25 +33,28 @@ class DelegatingMcpAsyncHttpRequestCustomizerTest {
 	@Test
 	void delegates() {
 		var mockCustomizer = mock(McpAsyncHttpRequestCustomizer.class);
-		when(mockCustomizer.customize(any(), any(), any(), any()))
+		when(mockCustomizer.customize(any(), any(), any(), any(), any()))
 			.thenAnswer(invocation -> Mono.just(invocation.getArguments()[0]));
 		var customizer = new DelegatingMcpAsyncHttpRequestCustomizer(List.of(mockCustomizer));
 
-		StepVerifier.create(customizer.customize(TEST_BUILDER, "GET", TEST_URI, "{\"everybody\": \"needs somebody\"}"))
+		var context = McpTransportContext.EMPTY;
+		StepVerifier
+			.create(customizer.customize(TEST_BUILDER, "GET", TEST_URI, "{\"everybody\": \"needs somebody\"}", context))
 			.expectNext(TEST_BUILDER)
 			.verifyComplete();
 
-		verify(mockCustomizer).customize(TEST_BUILDER, "GET", TEST_URI, "{\"everybody\": \"needs somebody\"}");
+		verify(mockCustomizer).customize(TEST_BUILDER, "GET", TEST_URI, "{\"everybody\": \"needs somebody\"}", context);
 	}
 
 	@Test
 	void delegatesInOrder() {
 		var customizer = new DelegatingMcpAsyncHttpRequestCustomizer(
-				List.of((builder, method, uri, body) -> Mono.just(builder.copy().header("x-test", "one")),
-						(builder, method, uri, body) -> Mono.just(builder.copy().header("x-test", "two"))));
+				List.of((builder, method, uri, body, ctx) -> Mono.just(builder.copy().header("x-test", "one")),
+						(builder, method, uri, body, ctx) -> Mono.just(builder.copy().header("x-test", "two"))));
 
 		var headers = Mono
-			.from(customizer.customize(TEST_BUILDER, "GET", TEST_URI, "{\"everybody\": \"needs somebody\"}"))
+			.from(customizer.customize(TEST_BUILDER, "GET", TEST_URI, "{\"everybody\": \"needs somebody\"}",
+					McpTransportContext.EMPTY))
 			.map(HttpRequest.Builder::build)
 			.map(HttpRequest::headers)
 			.flatMapIterable(h -> h.allValues("x-test"));

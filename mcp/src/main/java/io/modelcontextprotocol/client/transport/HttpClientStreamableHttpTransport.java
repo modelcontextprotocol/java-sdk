@@ -28,6 +28,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpRequestCustomizer;
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
+import io.modelcontextprotocol.server.McpTransportContext;
 import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
 import io.modelcontextprotocol.spec.HttpHeaders;
@@ -170,14 +171,15 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	private Publisher<Void> createDelete(String sessionId) {
 
 		var uri = Utils.resolveUri(this.baseUri, this.endpoint);
-		return Mono.defer(() -> {
+		return Mono.deferContextual(ctx -> {
 			var builder = this.requestBuilder.copy()
 				.uri(uri)
 				.header("Cache-Control", "no-cache")
 				.header(HttpHeaders.MCP_SESSION_ID, sessionId)
 				.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 				.DELETE();
-			return Mono.from(this.httpRequestCustomizer.customize(builder, "DELETE", uri, null));
+			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
+			return Mono.from(this.httpRequestCustomizer.customize(builder, "DELETE", uri, null, transportContext));
 		}).flatMap(requestBuilder -> {
 			var request = requestBuilder.build();
 			return Mono.fromFuture(() -> this.httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()));
@@ -230,7 +232,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			final McpTransportSession<Disposable> transportSession = this.activeSession.get();
 			var uri = Utils.resolveUri(this.baseUri, this.endpoint);
 
-			Disposable connection = Mono.defer(() -> {
+			Disposable connection = Mono.deferContextual(connectionCtx -> {
 				HttpRequest.Builder requestBuilder = this.requestBuilder.copy();
 
 				if (transportSession != null && transportSession.sessionId().isPresent()) {
@@ -247,7 +249,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					.header("Cache-Control", "no-cache")
 					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 					.GET();
-				return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null));
+				var transportContext = connectionCtx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
+				return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
 			})
 				.flatMapMany(
 						requestBuilder -> Flux.<ResponseEvent>create(
@@ -407,7 +410,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			var uri = Utils.resolveUri(this.baseUri, this.endpoint);
 			String jsonBody = this.toString(sentMessage);
 
-			Disposable connection = Mono.defer(() -> {
+			Disposable connection = Mono.deferContextual(ctx -> {
 				HttpRequest.Builder requestBuilder = this.requestBuilder.copy();
 
 				if (transportSession != null && transportSession.sessionId().isPresent()) {
@@ -421,7 +424,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					.header("Cache-Control", "no-cache")
 					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 					.POST(HttpRequest.BodyPublishers.ofString(jsonBody));
-				return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", uri, jsonBody));
+				var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
+				return Mono
+					.from(this.httpRequestCustomizer.customize(builder, "POST", uri, jsonBody, transportContext));
 			}).flatMapMany(requestBuilder -> Flux.<ResponseEvent>create(responseEventSink -> {
 
 				// Create the async request with proper body subscriber selection
