@@ -30,6 +30,7 @@ import java.util.List;
  * Implementation of a WebFlux based {@link McpStatelessServerTransport}.
  *
  * @author Dariusz Jędrzejczyk
+ * @author Yanming Zhou
  */
 public class WebFluxStatelessServerTransport implements McpStatelessServerTransport {
 
@@ -100,8 +101,7 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
 
 		List<MediaType> acceptHeaders = request.headers().asHttpHeaders().getAccept();
-		if (!(acceptHeaders.contains(MediaType.APPLICATION_JSON)
-				&& acceptHeaders.contains(MediaType.TEXT_EVENT_STREAM))) {
+		if (!acceptHeaders.contains(MediaType.APPLICATION_JSON)) {
 			return ServerResponse.badRequest().build();
 		}
 

@@ -33,6 +33,7 @@ import reactor.core.publisher.Mono;
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @author Yanming Zhou
  */
 @WebServlet(asyncSupported = true)
 public class HttpServletStatelessServerTransport extends HttpServlet implements McpStatelessServerTransport {
@@ -126,9 +127,9 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
 
 		String accept = request.getHeader(ACCEPT);
-		if (accept == null || !(accept.contains(APPLICATION_JSON) && accept.contains(TEXT_EVENT_STREAM))) {
+		if (accept == null || !accept.contains(APPLICATION_JSON)) {
 			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
-					new McpError("Both application/json and text/event-stream required in Accept header"));
+					new McpError("application/json required in Accept header"));
 			return;
 		}
 

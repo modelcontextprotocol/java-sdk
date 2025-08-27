@@ -34,6 +34,7 @@ import java.util.List;
  * {@link io.modelcontextprotocol.server.transport.WebFluxStatelessServerTransport}
  *
  * @author Christian Tzolov
+ * @author Yanming Zhou
  */
 public class WebMvcStatelessServerTransport implements McpStatelessServerTransport {
 
@@ -104,8 +105,7 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
 
 		List<MediaType> acceptHeaders = request.headers().asHttpHeaders().getAccept();
-		if (!(acceptHeaders.contains(MediaType.APPLICATION_JSON)
-				&& acceptHeaders.contains(MediaType.TEXT_EVENT_STREAM))) {
+		if (!acceptHeaders.contains(MediaType.APPLICATION_JSON)) {
 			return ServerResponse.badRequest().build();
 		}
 
