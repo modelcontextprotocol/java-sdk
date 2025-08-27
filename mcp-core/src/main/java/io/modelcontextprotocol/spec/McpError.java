@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.spec;
 
+import com.fasterxml.jackson.annotation.JsonValue;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse.JSONRPCError;
 import io.modelcontextprotocol.util.Assert;
 
@@ -20,7 +21,8 @@ public class McpError extends RuntimeException {
 	public static final Function<String, McpError> RESOURCE_NOT_FOUND = resourceUri -> new McpError(new JSONRPCError(
 			McpSchema.ErrorCodes.RESOURCE_NOT_FOUND, "Resource not found", Map.of("uri", resourceUri)));
 
-	private JSONRPCError jsonRpcError;
+	@JsonValue
+	private final JSONRPCError jsonRpcError;
 
 	public McpError(JSONRPCError jsonRpcError) {
 		super(jsonRpcError.message());
@@ -30,6 +32,7 @@ public class McpError extends RuntimeException {
 	@Deprecated
 	public McpError(Object error) {
 		super(error.toString());
+		this.jsonRpcError = new JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR, error.toString(), null);
 	}
 
 	public JSONRPCError getJsonRpcError() {
