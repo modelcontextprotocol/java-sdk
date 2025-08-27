@@ -588,7 +588,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 		private ObjectMapper objectMapper;
 
-		private HttpClient.Builder clientBuilder = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1);
+		private HttpClient.Builder clientBuilder = HttpClient.newBuilder()
+			.version(HttpClient.Version.HTTP_1_1)
+			.followRedirects(HttpClient.Redirect.NORMAL);
 
 		private String endpoint = DEFAULT_ENDPOINT;
 
