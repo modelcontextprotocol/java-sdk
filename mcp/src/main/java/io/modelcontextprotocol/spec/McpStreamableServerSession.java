@@ -142,6 +142,10 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		return listeningStream;
 	}
 
+	public McpLoggableSession getListeningStream() {
+		return this.listeningStreamRef.get();
+	}
+
 	// TODO: keep track of history by keeping a map from eventId to stream and then
 	// iterate over the events using the lastEventId
 	public Flux<McpSchema.JSONRPCMessage> replay(Object lastEventId) {

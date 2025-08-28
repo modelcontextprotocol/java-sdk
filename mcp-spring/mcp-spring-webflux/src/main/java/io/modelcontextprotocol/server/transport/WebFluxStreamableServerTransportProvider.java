@@ -10,8 +10,10 @@ import io.modelcontextprotocol.server.DefaultMcpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.spec.McpLoggableSession;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpStreamableServerSession;
+import io.modelcontextprotocol.spec.McpStreamableServerSession.McpStreamableServerSessionStream;
 import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.ProtocolVersions;
@@ -187,11 +189,17 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 				return ServerResponse.notFound().build();
 			}
 
-			if (request.headers().asHttpHeaders().containsKey(HttpHeaders.LAST_EVENT_ID)) {
+			McpLoggableSession listenedStream = session.getListeningStream();
+			boolean replayRequest = request.headers().asHttpHeaders().containsKey(HttpHeaders.LAST_EVENT_ID);
+			if (replayRequest) {
 				String lastId = request.headers().asHttpHeaders().getFirst(HttpHeaders.LAST_EVENT_ID);
 				return ServerResponse.ok()
 					.contentType(MediaType.TEXT_EVENT_STREAM)
 					.body(session.replay(lastId), ServerSentEvent.class);
+			}
+			if (listenedStream instanceof McpStreamableServerSessionStream) {
+				logger.debug("Listening stream for session: {} exists.", sessionId);
+				return ServerResponse.ok().build();
 			}
 
 			return ServerResponse.ok()

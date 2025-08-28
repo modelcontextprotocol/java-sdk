@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
+import io.modelcontextprotocol.spec.McpLoggableSession;
+import io.modelcontextprotocol.spec.McpStreamableServerSession.McpStreamableServerSessionStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -273,6 +275,13 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		logger.debug("Handling GET request for session: {}", sessionId);
+		McpLoggableSession listenedStream = session.getListeningStream();
+		boolean replayRequest = request.getHeader(HttpHeaders.LAST_EVENT_ID) != null;
+		if (!replayRequest && listenedStream instanceof McpStreamableServerSessionStream) {
+			logger.debug("Listening stream for session: {} exists.", sessionId);
+			response.setStatus(HttpServletResponse.SC_OK);
+			return;
+		}
 
 		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
 
@@ -290,7 +299,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 					sessionId, asyncContext, response.getWriter());
 
 			// Check if this is a replay request
-			if (request.getHeader(HttpHeaders.LAST_EVENT_ID) != null) {
+			if (replayRequest) {
 				String lastId = request.getHeader(HttpHeaders.LAST_EVENT_ID);
 
 				try {
