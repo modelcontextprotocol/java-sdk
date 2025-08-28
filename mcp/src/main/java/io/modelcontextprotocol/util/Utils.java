@@ -107,4 +107,32 @@ public final class Utils {
 		return endpointPath.startsWith(basePath);
 	}
 
+	/**
+	 * Returns the first non-null value from the given arguments.
+	 * @param first The first argument
+	 * @param second The second argument
+	 * @return The first non-null value
+	 */
+	public static <T> T preferFirst(T first, T second) {
+		return second != null ? second : first;
+	}
+
+
+	/**
+	 * Merges two boolean values. If the first value is null, the second value is returned.
+	 * If the second value is null, false is returned.
+	 * @param first The first boolean value
+	 * @param second The second boolean value
+	 * @return The merged boolean value
+	 */
+	public static Boolean mergeBoolean(Boolean first, Boolean second) {
+		if (first == null) {
+			return second;
+		}
+		if (second == null) {
+			return false;
+		}
+		return first && second;
+	}
+
 }
