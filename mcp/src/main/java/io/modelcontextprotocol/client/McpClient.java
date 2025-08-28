@@ -12,6 +12,11 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.modelcontextprotocol.server.McpServer.AsyncSpecification;
+import io.modelcontextprotocol.spec.DefaultJsonSchemaValidator;
+import io.modelcontextprotocol.spec.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransport;
@@ -97,6 +102,7 @@ import reactor.core.publisher.Mono;
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @author Anurag Pant
  * @see McpAsyncClient
  * @see McpSyncClient
  * @see McpTransport
@@ -182,6 +188,8 @@ public interface McpClient {
 		private Function<CreateMessageRequest, CreateMessageResult> samplingHandler;
 
 		private Function<ElicitRequest, ElicitResult> elicitationHandler;
+
+		private JsonSchemaValidator jsonSchemaValidator;
 
 		private SyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
@@ -410,11 +418,26 @@ public interface McpClient {
 		}
 
 		/**
+		 * Sets the JSON schema validator to use for validating tool responses against
+		 * output schemas.
+		 * @param jsonSchemaValidator The validator to use. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if jsonSchemaValidator is null
+		 */
+		public SyncSpec jsonSchemaValidator(JsonSchemaValidator jsonSchemaValidator) {
+			Assert.notNull(jsonSchemaValidator, "JsonSchemaValidator must not be null");
+			this.jsonSchemaValidator = jsonSchemaValidator;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpSyncClient} with the provided configurations or
 		 * sensible defaults.
 		 * @return a new instance of {@link McpSyncClient}.
 		 */
 		public McpSyncClient build() {
+			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
+					: new DefaultJsonSchemaValidator();
 			McpClientFeatures.Sync syncFeatures = new McpClientFeatures.Sync(this.clientInfo, this.capabilities,
 					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 					this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers, this.samplingHandler,
@@ -423,7 +446,8 @@ public interface McpClient {
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
 			return new McpSyncClient(
-					new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout, asyncFeatures));
+					new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout, asyncFeatures),
+					jsonSchemaValidator);
 		}
 
 	}
