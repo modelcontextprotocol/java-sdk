@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
+import io.modelcontextprotocol.spec.McpLoggableSession;
+import io.modelcontextprotocol.spec.McpStreamableServerSession.McpStreamableServerSessionStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -252,7 +254,12 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		}
 
 		logger.debug("Handling GET request for session: {}", sessionId);
-
+		McpLoggableSession listenedStream = session.getListeningStream();
+		boolean replayRequest = request.headers().asHttpHeaders().containsKey(HttpHeaders.LAST_EVENT_ID);
+		if (!replayRequest && listenedStream instanceof McpStreamableServerSessionStream) {
+			logger.debug("Listening stream for session: {} exists.", sessionId);
+			return ServerResponse.ok().build();
+		}
 		try {
 			return ServerResponse.sse(sseBuilder -> {
 				sseBuilder.onTimeout(() -> {
@@ -263,9 +270,8 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 						sessionId, sseBuilder);
 
 				// Check if this is a replay request
-				if (request.headers().asHttpHeaders().containsKey(HttpHeaders.LAST_EVENT_ID)) {
+				if (replayRequest) {
 					String lastId = request.headers().asHttpHeaders().getFirst(HttpHeaders.LAST_EVENT_ID);
-
 					try {
 						session.replay(lastId)
 							.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
