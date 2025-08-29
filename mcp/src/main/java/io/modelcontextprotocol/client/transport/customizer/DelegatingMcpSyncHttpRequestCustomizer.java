@@ -8,7 +8,7 @@ import java.net.URI;
 import java.net.http.HttpRequest;
 import java.util.List;
 
-import io.modelcontextprotocol.server.McpTransportContext;
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.util.Assert;
 
 /**
