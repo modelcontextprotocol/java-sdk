@@ -17,11 +17,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 
 /**
- * Tests for {@link DelegatingMcpSyncHttpRequestCustomizer}.
+ * Tests for {@link DelegatingMcpSyncHttpClientRequestCustomizer}.
  *
  * @author Daniel Garnier-Moiroux
  */
-class DelegatingMcpSyncHttpRequestCustomizerTest {
+class DelegatingMcpSyncHttpClientRequestCustomizerTest {
 
 	private static final URI TEST_URI = URI.create("https://example.com");
 
@@ -29,8 +29,8 @@ class DelegatingMcpSyncHttpRequestCustomizerTest {
 
 	@Test
 	void delegates() {
-		var mockCustomizer = Mockito.mock(McpSyncHttpRequestCustomizer.class);
-		var customizer = new DelegatingMcpSyncHttpRequestCustomizer(List.of(mockCustomizer));
+		var mockCustomizer = Mockito.mock(McpSyncHttpClientRequestCustomizer.class);
+		var customizer = new DelegatingMcpSyncHttpClientRequestCustomizer(List.of(mockCustomizer));
 
 		var context = McpTransportContext.EMPTY;
 		customizer.customize(TEST_BUILDER, "GET", TEST_URI, "{\"everybody\": \"needs somebody\"}", context);
@@ -41,7 +41,7 @@ class DelegatingMcpSyncHttpRequestCustomizerTest {
 	@Test
 	void delegatesInOrder() {
 		var testHeaderName = "x-test";
-		var customizer = new DelegatingMcpSyncHttpRequestCustomizer(
+		var customizer = new DelegatingMcpSyncHttpClientRequestCustomizer(
 				List.of((builder, method, uri, body, ctx) -> builder.header(testHeaderName, "one"),
 						(builder, method, uri, body, ctx) -> builder.header(testHeaderName, "two")));
 
@@ -53,7 +53,7 @@ class DelegatingMcpSyncHttpRequestCustomizerTest {
 
 	@Test
 	void constructorRequiresNonNull() {
-		assertThatThrownBy(() -> new DelegatingMcpAsyncHttpRequestCustomizer(null))
+		assertThatThrownBy(() -> new DelegatingMcpAsyncHttpClientRequestCustomizer(null))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Customizers must not be null");
 	}

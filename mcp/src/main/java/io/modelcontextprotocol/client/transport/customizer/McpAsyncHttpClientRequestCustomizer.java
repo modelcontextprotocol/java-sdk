@@ -22,12 +22,12 @@ import io.modelcontextprotocol.common.McpTransportContext;
  *
  * @author Daniel Garnier-Moiroux
  */
-public interface McpAsyncHttpRequestCustomizer {
+public interface McpAsyncHttpClientRequestCustomizer {
 
 	Publisher<HttpRequest.Builder> customize(HttpRequest.Builder builder, String method, URI endpoint,
 			@Nullable String body, McpTransportContext context);
 
-	McpAsyncHttpRequestCustomizer NOOP = new Noop();
+	McpAsyncHttpClientRequestCustomizer NOOP = new Noop();
 
 	/**
 	 * Wrap a sync implementation in an async wrapper.
@@ -35,14 +35,14 @@ public interface McpAsyncHttpRequestCustomizer {
 	 * Do NOT wrap a blocking implementation for use in a non-blocking context. For a
 	 * blocking implementation, consider using {@link Schedulers#boundedElastic()}.
 	 */
-	static McpAsyncHttpRequestCustomizer fromSync(McpSyncHttpRequestCustomizer customizer) {
+	static McpAsyncHttpClientRequestCustomizer fromSync(McpSyncHttpClientRequestCustomizer customizer) {
 		return (builder, method, uri, body, context) -> Mono.fromSupplier(() -> {
 			customizer.customize(builder, method, uri, body, context);
 			return builder;
 		});
 	}
 
-	class Noop implements McpAsyncHttpRequestCustomizer {
+	class Noop implements McpAsyncHttpClientRequestCustomizer {
 
 		@Override
 		public Publisher<HttpRequest.Builder> customize(HttpRequest.Builder builder, String method, URI endpoint,

@@ -4,8 +4,8 @@
 
 package io.modelcontextprotocol.client.transport;
 
-import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpRequestCustomizer;
-import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpRequestCustomizer;
+import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
 import java.net.URI;
@@ -71,7 +71,7 @@ class HttpClientStreamableHttpTransportTest {
 	@Test
 	void testRequestCustomizer() throws URISyntaxException {
 		var uri = new URI(host + "/mcp");
-		var mockRequestCustomizer = mock(McpSyncHttpRequestCustomizer.class);
+		var mockRequestCustomizer = mock(McpSyncHttpClientRequestCustomizer.class);
 
 		var transport = HttpClientStreamableHttpTransport.builder(host)
 			.httpRequestCustomizer(mockRequestCustomizer)
@@ -99,7 +99,7 @@ class HttpClientStreamableHttpTransportTest {
 	@Test
 	void testAsyncRequestCustomizer() throws URISyntaxException {
 		var uri = new URI(host + "/mcp");
-		var mockRequestCustomizer = mock(McpAsyncHttpRequestCustomizer.class);
+		var mockRequestCustomizer = mock(McpAsyncHttpClientRequestCustomizer.class);
 		when(mockRequestCustomizer.customize(any(), any(), any(), any(), any()))
 			.thenAnswer(invocation -> Mono.just(invocation.getArguments()[0]));
 

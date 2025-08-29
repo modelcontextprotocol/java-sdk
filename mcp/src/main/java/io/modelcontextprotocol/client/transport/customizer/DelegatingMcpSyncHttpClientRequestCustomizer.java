@@ -12,16 +12,16 @@ import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.util.Assert;
 
 /**
- * Composable {@link McpSyncHttpRequestCustomizer} that applies multiple customizers, in
- * order.
+ * Composable {@link McpSyncHttpClientRequestCustomizer} that applies multiple
+ * customizers, in order.
  *
  * @author Daniel Garnier-Moiroux
  */
-public class DelegatingMcpSyncHttpRequestCustomizer implements McpSyncHttpRequestCustomizer {
+public class DelegatingMcpSyncHttpClientRequestCustomizer implements McpSyncHttpClientRequestCustomizer {
 
-	private final List<McpSyncHttpRequestCustomizer> delegates;
+	private final List<McpSyncHttpClientRequestCustomizer> delegates;
 
-	public DelegatingMcpSyncHttpRequestCustomizer(List<McpSyncHttpRequestCustomizer> customizers) {
+	public DelegatingMcpSyncHttpClientRequestCustomizer(List<McpSyncHttpClientRequestCustomizer> customizers) {
 		Assert.notNull(customizers, "Customizers must not be null");
 		this.delegates = customizers;
 	}

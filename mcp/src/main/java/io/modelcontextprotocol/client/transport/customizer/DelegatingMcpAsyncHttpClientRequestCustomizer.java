@@ -15,16 +15,16 @@ import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
 
 /**
- * Composable {@link McpAsyncHttpRequestCustomizer} that applies multiple customizers, in
- * order.
+ * Composable {@link McpAsyncHttpClientRequestCustomizer} that applies multiple
+ * customizers, in order.
  *
  * @author Daniel Garnier-Moiroux
  */
-public class DelegatingMcpAsyncHttpRequestCustomizer implements McpAsyncHttpRequestCustomizer {
+public class DelegatingMcpAsyncHttpClientRequestCustomizer implements McpAsyncHttpClientRequestCustomizer {
 
-	private final List<McpAsyncHttpRequestCustomizer> customizers;
+	private final List<McpAsyncHttpClientRequestCustomizer> customizers;
 
-	public DelegatingMcpAsyncHttpRequestCustomizer(List<McpAsyncHttpRequestCustomizer> customizers) {
+	public DelegatingMcpAsyncHttpClientRequestCustomizer(List<McpAsyncHttpClientRequestCustomizer> customizers) {
 		Assert.notNull(customizers, "Customizers must not be null");
 		this.customizers = customizers;
 	}

@@ -22,8 +22,8 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpRequestCustomizer;
-import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpRequestCustomizer;
+import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpClientTransport;
@@ -115,7 +115,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	/**
 	 * Customizer to modify requests before they are executed.
 	 */
-	private final McpAsyncHttpRequestCustomizer httpRequestCustomizer;
+	private final McpAsyncHttpClientRequestCustomizer httpRequestCustomizer;
 
 	/**
 	 * Creates a new transport instance with default HTTP client and object mapper.
@@ -189,7 +189,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	@Deprecated(forRemoval = true)
 	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
 			String sseEndpoint, ObjectMapper objectMapper) {
-		this(httpClient, requestBuilder, baseUri, sseEndpoint, objectMapper, McpAsyncHttpRequestCustomizer.NOOP);
+		this(httpClient, requestBuilder, baseUri, sseEndpoint, objectMapper, McpAsyncHttpClientRequestCustomizer.NOOP);
 	}
 
 	/**
@@ -205,7 +205,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 * @throws IllegalArgumentException if objectMapper, clientBuilder, or headers is null
 	 */
 	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
-			String sseEndpoint, ObjectMapper objectMapper, McpAsyncHttpRequestCustomizer httpRequestCustomizer) {
+			String sseEndpoint, ObjectMapper objectMapper, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.hasText(baseUri, "baseUri must not be empty");
 		Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
@@ -249,7 +249,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 
 		private HttpRequest.Builder requestBuilder = HttpRequest.newBuilder();
 
-		private McpAsyncHttpRequestCustomizer httpRequestCustomizer = McpAsyncHttpRequestCustomizer.NOOP;
+		private McpAsyncHttpClientRequestCustomizer httpRequestCustomizer = McpAsyncHttpClientRequestCustomizer.NOOP;
 
 		private Duration connectTimeout = Duration.ofSeconds(10);
 
@@ -355,16 +355,17 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		 * executing them.
 		 * <p>
 		 * This overrides the customizer from
-		 * {@link #asyncHttpRequestCustomizer(McpAsyncHttpRequestCustomizer)}.
+		 * {@link #asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer)}.
 		 * <p>
-		 * Do NOT use a blocking {@link McpSyncHttpRequestCustomizer} in a non-blocking
-		 * context. Use {@link #asyncHttpRequestCustomizer(McpAsyncHttpRequestCustomizer)}
+		 * Do NOT use a blocking {@link McpSyncHttpClientRequestCustomizer} in a
+		 * non-blocking context. Use
+		 * {@link #asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer)}
 		 * instead.
 		 * @param syncHttpRequestCustomizer the request customizer
 		 * @return this builder
 		 */
-		public Builder httpRequestCustomizer(McpSyncHttpRequestCustomizer syncHttpRequestCustomizer) {
-			this.httpRequestCustomizer = McpAsyncHttpRequestCustomizer.fromSync(syncHttpRequestCustomizer);
+		public Builder httpRequestCustomizer(McpSyncHttpClientRequestCustomizer syncHttpRequestCustomizer) {
+			this.httpRequestCustomizer = McpAsyncHttpClientRequestCustomizer.fromSync(syncHttpRequestCustomizer);
 			return this;
 		}
 
@@ -373,13 +374,13 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		 * executing them.
 		 * <p>
 		 * This overrides the customizer from
-		 * {@link #httpRequestCustomizer(McpSyncHttpRequestCustomizer)}.
+		 * {@link #httpRequestCustomizer(McpSyncHttpClientRequestCustomizer)}.
 		 * <p>
 		 * Do NOT use a blocking implementation in a non-blocking context.
 		 * @param asyncHttpRequestCustomizer the request customizer
 		 * @return this builder
 		 */
-		public Builder asyncHttpRequestCustomizer(McpAsyncHttpRequestCustomizer asyncHttpRequestCustomizer) {
+		public Builder asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer asyncHttpRequestCustomizer) {
 			this.httpRequestCustomizer = asyncHttpRequestCustomizer;
 			return this;
 		}
