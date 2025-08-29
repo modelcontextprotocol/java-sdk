@@ -13,7 +13,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
-import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpRequestCustomizer;
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpClientTransport;
 
@@ -37,7 +37,7 @@ public class HttpClientStreamableHttpSyncClientTests extends AbstractMcpSyncClie
 		.withExposedPorts(3001)
 		.waitingFor(Wait.forHttp("/").forStatusCode(404));
 
-	private final McpSyncHttpRequestCustomizer requestCustomizer = mock(McpSyncHttpRequestCustomizer.class);
+	private final McpSyncHttpClientRequestCustomizer requestCustomizer = mock(McpSyncHttpClientRequestCustomizer.class);
 
 	@Override
 	protected McpClientTransport createMcpTransport() {

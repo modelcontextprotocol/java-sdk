@@ -16,8 +16,8 @@ import java.util.function.Function;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpRequestCustomizer;
-import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpRequestCustomizer;
+import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
@@ -79,7 +79,7 @@ class HttpClientSseClientTransportTests {
 		public TestHttpClientSseClientTransport(final String baseUri) {
 			super(HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(),
 					HttpRequest.newBuilder().header("Content-Type", "application/json"), baseUri, "/sse",
-					new ObjectMapper(), McpAsyncHttpRequestCustomizer.NOOP);
+					new ObjectMapper(), McpAsyncHttpClientRequestCustomizer.NOOP);
 		}
 
 		public int getInboundMessageCount() {
@@ -396,7 +396,7 @@ class HttpClientSseClientTransportTests {
 
 	@Test
 	void testRequestCustomizer() {
-		var mockCustomizer = mock(McpSyncHttpRequestCustomizer.class);
+		var mockCustomizer = mock(McpSyncHttpClientRequestCustomizer.class);
 
 		// Create a transport with the customizer
 		var customizedTransport = HttpClientSseClientTransport.builder(host)
@@ -437,7 +437,7 @@ class HttpClientSseClientTransportTests {
 
 	@Test
 	void testAsyncRequestCustomizer() {
-		var mockCustomizer = mock(McpAsyncHttpRequestCustomizer.class);
+		var mockCustomizer = mock(McpAsyncHttpClientRequestCustomizer.class);
 		when(mockCustomizer.customize(any(), any(), any(), any(), any()))
 			.thenAnswer(invocation -> Mono.just(invocation.getArguments()[0]));
 

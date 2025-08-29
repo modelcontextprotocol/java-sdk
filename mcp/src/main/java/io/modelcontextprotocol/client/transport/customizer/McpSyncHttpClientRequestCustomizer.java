@@ -20,7 +20,7 @@ import io.modelcontextprotocol.common.McpTransportContext;
  *
  * @author Daniel Garnier-Moiroux
  */
-public interface McpSyncHttpRequestCustomizer {
+public interface McpSyncHttpClientRequestCustomizer {
 
 	void customize(HttpRequest.Builder builder, String method, URI endpoint, @Nullable String body,
 			McpTransportContext context);

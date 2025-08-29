@@ -20,11 +20,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Tests for {@link DelegatingMcpAsyncHttpRequestCustomizer}.
+ * Tests for {@link DelegatingMcpAsyncHttpClientRequestCustomizer}.
  *
  * @author Daniel Garnier-Moiroux
  */
-class DelegatingMcpAsyncHttpRequestCustomizerTest {
+class DelegatingMcpAsyncHttpClientRequestCustomizerTest {
 
 	private static final URI TEST_URI = URI.create("https://example.com");
 
@@ -32,10 +32,10 @@ class DelegatingMcpAsyncHttpRequestCustomizerTest {
 
 	@Test
 	void delegates() {
-		var mockCustomizer = mock(McpAsyncHttpRequestCustomizer.class);
+		var mockCustomizer = mock(McpAsyncHttpClientRequestCustomizer.class);
 		when(mockCustomizer.customize(any(), any(), any(), any(), any()))
 			.thenAnswer(invocation -> Mono.just(invocation.getArguments()[0]));
-		var customizer = new DelegatingMcpAsyncHttpRequestCustomizer(List.of(mockCustomizer));
+		var customizer = new DelegatingMcpAsyncHttpClientRequestCustomizer(List.of(mockCustomizer));
 
 		var context = McpTransportContext.EMPTY;
 		StepVerifier
@@ -48,7 +48,7 @@ class DelegatingMcpAsyncHttpRequestCustomizerTest {
 
 	@Test
 	void delegatesInOrder() {
-		var customizer = new DelegatingMcpAsyncHttpRequestCustomizer(
+		var customizer = new DelegatingMcpAsyncHttpClientRequestCustomizer(
 				List.of((builder, method, uri, body, ctx) -> Mono.just(builder.copy().header("x-test", "one")),
 						(builder, method, uri, body, ctx) -> Mono.just(builder.copy().header("x-test", "two"))));
 
@@ -64,7 +64,7 @@ class DelegatingMcpAsyncHttpRequestCustomizerTest {
 
 	@Test
 	void constructorRequiresNonNull() {
-		assertThatThrownBy(() -> new DelegatingMcpAsyncHttpRequestCustomizer(null))
+		assertThatThrownBy(() -> new DelegatingMcpAsyncHttpClientRequestCustomizer(null))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Customizers must not be null");
 	}
