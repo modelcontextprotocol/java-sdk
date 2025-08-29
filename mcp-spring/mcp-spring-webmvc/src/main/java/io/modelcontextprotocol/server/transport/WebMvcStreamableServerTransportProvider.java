@@ -23,8 +23,7 @@ import org.springframework.web.servlet.function.ServerResponse.SseBuilder;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.modelcontextprotocol.server.DefaultMcpTransportContext;
-import io.modelcontextprotocol.server.McpTransportContext;
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpError;
@@ -238,7 +237,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 			return ServerResponse.badRequest().body("Invalid Accept header. Expected TEXT_EVENT_STREAM");
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
+		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
 			return ServerResponse.badRequest().body("Session ID required in mcp-session-id header");
@@ -322,7 +321,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 				.body(new McpError("Invalid Accept headers. Expected TEXT_EVENT_STREAM and APPLICATION_JSON"));
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
+		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		try {
 			String body = request.body(String.class);
@@ -431,7 +430,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 			return ServerResponse.status(HttpStatus.METHOD_NOT_ALLOWED).build();
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
+		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
 			return ServerResponse.badRequest().body("Session ID required in mcp-session-id header");
@@ -604,7 +603,8 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 
 		private boolean disallowDelete = false;
 
-		private McpTransportContextExtractor<ServerRequest> contextExtractor = (serverRequest, context) -> context;
+		private McpTransportContextExtractor<ServerRequest> contextExtractor = (
+				serverRequest) -> McpTransportContext.EMPTY;
 
 		private Duration keepAliveInterval;
 

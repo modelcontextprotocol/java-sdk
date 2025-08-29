@@ -25,9 +25,10 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpRequestCustomizer;
-import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpRequestCustomizer;
+import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
 import io.modelcontextprotocol.spec.HttpHeaders;
@@ -115,7 +116,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private final boolean resumableStreams;
 
-	private final McpAsyncHttpRequestCustomizer httpRequestCustomizer;
+	private final McpAsyncHttpClientRequestCustomizer httpRequestCustomizer;
 
 	private final AtomicReference<DefaultMcpTransportSession> activeSession = new AtomicReference<>();
 
@@ -125,7 +126,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private HttpClientStreamableHttpTransport(ObjectMapper objectMapper, HttpClient httpClient,
 			HttpRequest.Builder requestBuilder, String baseUri, String endpoint, boolean resumableStreams,
-			boolean openConnectionOnStartup, McpAsyncHttpRequestCustomizer httpRequestCustomizer) {
+			boolean openConnectionOnStartup, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer) {
 		this.objectMapper = objectMapper;
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
@@ -170,14 +171,15 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	private Publisher<Void> createDelete(String sessionId) {
 
 		var uri = Utils.resolveUri(this.baseUri, this.endpoint);
-		return Mono.defer(() -> {
+		return Mono.deferContextual(ctx -> {
 			var builder = this.requestBuilder.copy()
 				.uri(uri)
 				.header("Cache-Control", "no-cache")
 				.header(HttpHeaders.MCP_SESSION_ID, sessionId)
 				.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 				.DELETE();
-			return Mono.from(this.httpRequestCustomizer.customize(builder, "DELETE", uri, null));
+			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
+			return Mono.from(this.httpRequestCustomizer.customize(builder, "DELETE", uri, null, transportContext));
 		}).flatMap(requestBuilder -> {
 			var request = requestBuilder.build();
 			return Mono.fromFuture(() -> this.httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()));
@@ -230,7 +232,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			final McpTransportSession<Disposable> transportSession = this.activeSession.get();
 			var uri = Utils.resolveUri(this.baseUri, this.endpoint);
 
-			Disposable connection = Mono.defer(() -> {
+			Disposable connection = Mono.deferContextual(connectionCtx -> {
 				HttpRequest.Builder requestBuilder = this.requestBuilder.copy();
 
 				if (transportSession != null && transportSession.sessionId().isPresent()) {
@@ -247,7 +249,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					.header("Cache-Control", "no-cache")
 					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 					.GET();
-				return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null));
+				var transportContext = connectionCtx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
+				return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
 			})
 				.flatMapMany(
 						requestBuilder -> Flux.<ResponseEvent>create(
@@ -407,7 +410,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			var uri = Utils.resolveUri(this.baseUri, this.endpoint);
 			String jsonBody = this.toString(sentMessage);
 
-			Disposable connection = Mono.defer(() -> {
+			Disposable connection = Mono.deferContextual(ctx -> {
 				HttpRequest.Builder requestBuilder = this.requestBuilder.copy();
 
 				if (transportSession != null && transportSession.sessionId().isPresent()) {
@@ -421,7 +424,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					.header("Cache-Control", "no-cache")
 					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 					.POST(HttpRequest.BodyPublishers.ofString(jsonBody));
-				return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", uri, jsonBody));
+				var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
+				return Mono
+					.from(this.httpRequestCustomizer.customize(builder, "POST", uri, jsonBody, transportContext));
 			}).flatMapMany(requestBuilder -> Flux.<ResponseEvent>create(responseEventSink -> {
 
 				// Create the async request with proper body subscriber selection
@@ -600,7 +605,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 		private HttpRequest.Builder requestBuilder = HttpRequest.newBuilder();
 
-		private McpAsyncHttpRequestCustomizer httpRequestCustomizer = McpAsyncHttpRequestCustomizer.NOOP;
+		private McpAsyncHttpClientRequestCustomizer httpRequestCustomizer = McpAsyncHttpClientRequestCustomizer.NOOP;
 
 		private Duration connectTimeout = Duration.ofSeconds(10);
 
@@ -711,16 +716,17 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 * executing them.
 		 * <p>
 		 * This overrides the customizer from
-		 * {@link #asyncHttpRequestCustomizer(McpAsyncHttpRequestCustomizer)}.
+		 * {@link #asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer)}.
 		 * <p>
-		 * Do NOT use a blocking {@link McpSyncHttpRequestCustomizer} in a non-blocking
-		 * context. Use {@link #asyncHttpRequestCustomizer(McpAsyncHttpRequestCustomizer)}
+		 * Do NOT use a blocking {@link McpSyncHttpClientRequestCustomizer} in a
+		 * non-blocking context. Use
+		 * {@link #asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer)}
 		 * instead.
 		 * @param syncHttpRequestCustomizer the request customizer
 		 * @return this builder
 		 */
-		public Builder httpRequestCustomizer(McpSyncHttpRequestCustomizer syncHttpRequestCustomizer) {
-			this.httpRequestCustomizer = McpAsyncHttpRequestCustomizer.fromSync(syncHttpRequestCustomizer);
+		public Builder httpRequestCustomizer(McpSyncHttpClientRequestCustomizer syncHttpRequestCustomizer) {
+			this.httpRequestCustomizer = McpAsyncHttpClientRequestCustomizer.fromSync(syncHttpRequestCustomizer);
 			return this;
 		}
 
@@ -729,13 +735,13 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 * executing them.
 		 * <p>
 		 * This overrides the customizer from
-		 * {@link #httpRequestCustomizer(McpSyncHttpRequestCustomizer)}.
+		 * {@link #httpRequestCustomizer(McpSyncHttpClientRequestCustomizer)}.
 		 * <p>
 		 * Do NOT use a blocking implementation in a non-blocking context.
 		 * @param asyncHttpRequestCustomizer the request customizer
 		 * @return this builder
 		 */
-		public Builder asyncHttpRequestCustomizer(McpAsyncHttpRequestCustomizer asyncHttpRequestCustomizer) {
+		public Builder asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer asyncHttpRequestCustomizer) {
 			this.httpRequestCustomizer = asyncHttpRequestCustomizer;
 			return this;
 		}

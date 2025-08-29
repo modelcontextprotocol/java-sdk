@@ -5,6 +5,7 @@
 package io.modelcontextprotocol;
 
 import java.time.Duration;
+import java.util.Map;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.client.transport.WebClientStreamableHttpTransport;
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServer.AsyncSpecification;
 import io.modelcontextprotocol.server.McpServer.SyncSpecification;
@@ -40,10 +42,8 @@ class WebFluxStreamableIntegrationTests extends AbstractMcpClientServerIntegrati
 
 	private WebFluxStreamableServerTransportProvider mcpStreamableServerTransportProvider;
 
-	static McpTransportContextExtractor<ServerRequest> TEST_CONTEXT_EXTRACTOR = (r, tc) -> {
-		tc.put("important", "value");
-		return tc;
-	};
+	static McpTransportContextExtractor<ServerRequest> TEST_CONTEXT_EXTRACTOR = (r) -> McpTransportContext
+		.create(Map.of("important", "value"));
 
 	@Override
 	protected void prepareClients(int port, String mcpEndpoint) {

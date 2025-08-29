@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.server;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;

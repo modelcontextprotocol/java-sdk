@@ -5,10 +5,12 @@
 package io.modelcontextprotocol.client;
 
 import java.time.Duration;
+import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
@@ -63,14 +65,20 @@ public class McpSyncClient implements AutoCloseable {
 
 	private final McpAsyncClient delegate;
 
+	private final Supplier<McpTransportContext> contextProvider;
+
 	/**
 	 * Create a new McpSyncClient with the given delegate.
 	 * @param delegate the asynchronous kernel on top of which this synchronous client
 	 * provides a blocking API.
+	 * @param contextProvider the supplier of context before calling any non-blocking
+	 * operation on underlying delegate
 	 */
-	McpSyncClient(McpAsyncClient delegate) {
+	McpSyncClient(McpAsyncClient delegate, Supplier<McpTransportContext> contextProvider) {
 		Assert.notNull(delegate, "The delegate can not be null");
+		Assert.notNull(contextProvider, "The contextProvider can not be null");
 		this.delegate = delegate;
+		this.contextProvider = contextProvider;
 	}
 
 	/**
@@ -177,28 +185,34 @@ public class McpSyncClient implements AutoCloseable {
 	public McpSchema.InitializeResult initialize() {
 		// TODO: block takes no argument here as we assume the async client is
 		// configured with a requestTimeout at all times
-		return this.delegate.initialize().block();
+		var context = this.contextProvider.get();
+		return this.delegate.initialize().contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)).block();
 	}
 
 	/**
 	 * Send a roots/list_changed notification.
 	 */
 	public void rootsListChangedNotification() {
-		this.delegate.rootsListChangedNotification().block();
+		var context = this.contextProvider.get();
+		this.delegate.rootsListChangedNotification()
+			.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context))
+			.block();
 	}
 
 	/**
 	 * Add a roots dynamically.
 	 */
 	public void addRoot(McpSchema.Root root) {
-		this.delegate.addRoot(root).block();
+		var context = this.contextProvider.get();
+		this.delegate.addRoot(root).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)).block();
 	}
 
 	/**
 	 * Remove a root dynamically.
 	 */
 	public void removeRoot(String rootUri) {
-		this.delegate.removeRoot(rootUri).block();
+		var context = this.contextProvider.get();
+		this.delegate.removeRoot(rootUri).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)).block();
 	}
 
 	/**
@@ -206,7 +220,8 @@ public class McpSyncClient implements AutoCloseable {
 	 * @return
 	 */
 	public Object ping() {
-		return this.delegate.ping().block();
+		var context = this.contextProvider.get();
+		return this.delegate.ping().contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)).block();
 	}
 
 	// --------------------------
@@ -224,7 +239,11 @@ public class McpSyncClient implements AutoCloseable {
 	 * Boolean indicating if the execution failed (true) or succeeded (false/absent)
 	 */
 	public McpSchema.CallToolResult callTool(McpSchema.CallToolRequest callToolRequest) {
-		return this.delegate.callTool(callToolRequest).block();
+		var context = this.contextProvider.get();
+		return this.delegate.callTool(callToolRequest)
+			.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context))
+			.block();
+
 	}
 
 	/**
@@ -234,7 +253,8 @@ public class McpSyncClient implements AutoCloseable {
 	 * pagination if more tools are available
 	 */
 	public McpSchema.ListToolsResult listTools() {
-		return this.delegate.listTools().block();
+		var context = this.contextProvider.get();
+		return this.delegate.listTools().contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)).block();
 	}
 
 	/**
@@ -245,7 +265,9 @@ public class McpSyncClient implements AutoCloseable {
 	 * pagination if more tools are available
 	 */
 	public McpSchema.ListToolsResult listTools(String cursor) {
-		return this.delegate.listTools(cursor).block();
+		var context = this.contextProvider.get();
+		return this.delegate.listTools(cursor).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)).block();
+
 	}
 
 	// --------------------------
@@ -257,7 +279,9 @@ public class McpSyncClient implements AutoCloseable {
 	 * @return The list of all resources result
 	 */
 	public McpSchema.ListResourcesResult listResources() {
-		return this.delegate.listResources().block();
+		var context = this.contextProvider.get();
+		return this.delegate.listResources().contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)).block();
+
 	}
 
 	/**
@@ -266,7 +290,11 @@ public class McpSyncClient implements AutoCloseable {
 	 * @return The list of resources result
 	 */
 	public McpSchema.ListResourcesResult listResources(String cursor) {
-		return this.delegate.listResources(cursor).block();
+		var context = this.contextProvider.get();
+		return this.delegate.listResources(cursor)
+			.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context))
+			.block();
+
 	}
 
 	/**
@@ -275,7 +303,11 @@ public class McpSyncClient implements AutoCloseable {
 	 * @return the resource content.
 	 */
 	public McpSchema.ReadResourceResult readResource(McpSchema.Resource resource) {
-		return this.delegate.readResource(resource).block();
+		var context = this.contextProvider.get();
+		return this.delegate.readResource(resource)
+			.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context))
+			.block();
+
 	}
 
 	/**
@@ -284,7 +316,11 @@ public class McpSyncClient implements AutoCloseable {
 	 * @return the resource content.
 	 */
 	public McpSchema.ReadResourceResult readResource(McpSchema.ReadResourceRequest readResourceRequest) {
-		return this.delegate.readResource(readResourceRequest).block();
+		var context = this.contextProvider.get();
+		return this.delegate.readResource(readResourceRequest)
+			.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context))
+			.block();
+
 	}
 
 	/**
@@ -292,7 +328,11 @@ public class McpSyncClient implements AutoCloseable {
 	 * @return The list of all resource templates result.
 	 */
 	public McpSchema.ListResourceTemplatesResult listResourceTemplates() {
-		return this.delegate.listResourceTemplates().block();
+		var context = this.contextProvider.get();
+		return this.delegate.listResourceTemplates()
+			.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context))
+			.block();
+
 	}
 
 	/**
@@ -304,7 +344,11 @@ public class McpSyncClient implements AutoCloseable {
 	 * @return The list of resource templates result.
 	 */
 	public McpSchema.ListResourceTemplatesResult listResourceTemplates(String cursor) {
-		return this.delegate.listResourceTemplates(cursor).block();
+		var context = this.contextProvider.get();
+		return this.delegate.listResourceTemplates(cursor)
+			.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context))
+			.block();
+
 	}
 
 	/**
@@ -317,7 +361,11 @@ public class McpSyncClient implements AutoCloseable {
 	 * subscribe to.
 	 */
 	public void subscribeResource(McpSchema.SubscribeRequest subscribeRequest) {
-		this.delegate.subscribeResource(subscribeRequest).block();
+		var context = this.contextProvider.get();
+		this.delegate.subscribeResource(subscribeRequest)
+			.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context))
+			.block();
+
 	}
 
 	/**
@@ -326,7 +374,11 @@ public class McpSyncClient implements AutoCloseable {
 	 * to unsubscribe from.
 	 */
 	public void unsubscribeResource(McpSchema.UnsubscribeRequest unsubscribeRequest) {
-		this.delegate.unsubscribeResource(unsubscribeRequest).block();
+		var context = this.contextProvider.get();
+		this.delegate.unsubscribeResource(unsubscribeRequest)
+			.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context))
+			.block();
+
 	}
 
 	// --------------------------
@@ -338,7 +390,8 @@ public class McpSyncClient implements AutoCloseable {
 	 * @return The list of all prompts result.
 	 */
 	public ListPromptsResult listPrompts() {
-		return this.delegate.listPrompts().block();
+		var context = this.contextProvider.get();
+		return this.delegate.listPrompts().contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)).block();
 	}
 
 	/**
@@ -347,11 +400,17 @@ public class McpSyncClient implements AutoCloseable {
 	 * @return The list of prompts result.
 	 */
 	public ListPromptsResult listPrompts(String cursor) {
-		return this.delegate.listPrompts(cursor).block();
+		var context = this.contextProvider.get();
+		return this.delegate.listPrompts(cursor).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)).block();
+
 	}
 
 	public GetPromptResult getPrompt(GetPromptRequest getPromptRequest) {
-		return this.delegate.getPrompt(getPromptRequest).block();
+		var context = this.contextProvider.get();
+		return this.delegate.getPrompt(getPromptRequest)
+			.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context))
+			.block();
+
 	}
 
 	/**
@@ -359,7 +418,11 @@ public class McpSyncClient implements AutoCloseable {
 	 * @param loggingLevel the min logging level
 	 */
 	public void setLoggingLevel(McpSchema.LoggingLevel loggingLevel) {
-		this.delegate.setLoggingLevel(loggingLevel).block();
+		var context = this.contextProvider.get();
+		this.delegate.setLoggingLevel(loggingLevel)
+			.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context))
+			.block();
+
 	}
 
 	/**
@@ -369,7 +432,11 @@ public class McpSyncClient implements AutoCloseable {
 	 * @return the completion result containing suggested values.
 	 */
 	public McpSchema.CompleteResult completeCompletion(McpSchema.CompleteRequest completeRequest) {
-		return this.delegate.completeCompletion(completeRequest).block();
+		var context = this.contextProvider.get();
+		return this.delegate.completeCompletion(completeRequest)
+			.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context))
+			.block();
+
 	}
 
 }

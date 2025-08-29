@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol.server;
 
+import io.modelcontextprotocol.common.McpTransportContext;
+
 /**
  * The contract for extracting metadata from a generic transport request of type
  * {@link T}.
@@ -15,14 +17,11 @@ package io.modelcontextprotocol.server;
 public interface McpTransportContextExtractor<T> {
 
 	/**
-	 * Given an empty context, provides the means to fill it with transport-specific
-	 * metadata extracted from the request.
+	 * Extract transport-specific metadata from the request into an McpTransportContext.
 	 * @param request the generic representation for the request in the context of a
 	 * specific transport implementation
-	 * @param transportContext the mutable context which can be filled in with metadata
-	 * @return the context filled in with metadata. It can be the same instance as
-	 * provided or a new one.
+	 * @return the context containing the metadata
 	 */
-	McpTransportContext extract(T request, McpTransportContext transportContext);
+	McpTransportContext extract(T request);
 
 }

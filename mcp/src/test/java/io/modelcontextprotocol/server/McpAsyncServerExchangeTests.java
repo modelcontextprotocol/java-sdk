@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.server;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -54,7 +55,7 @@ class McpAsyncServerExchangeTests {
 		clientInfo = new McpSchema.Implementation("test-client", "1.0.0");
 
 		exchange = new McpAsyncServerExchange("testSessionId", mockSession, clientCapabilities, clientInfo,
-				new DefaultMcpTransportContext());
+				McpTransportContext.EMPTY);
 	}
 
 	@Test
