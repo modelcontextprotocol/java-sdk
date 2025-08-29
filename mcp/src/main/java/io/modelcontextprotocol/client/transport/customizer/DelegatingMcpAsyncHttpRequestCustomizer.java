@@ -9,7 +9,7 @@ import java.util.List;
 
 import org.reactivestreams.Publisher;
 
-import io.modelcontextprotocol.server.McpTransportContext;
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.util.Assert;
 
 import reactor.core.publisher.Mono;

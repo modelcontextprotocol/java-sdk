@@ -10,7 +10,7 @@ import java.net.http.HttpRequest;
 import reactor.util.annotation.Nullable;
 
 import io.modelcontextprotocol.client.McpClient.SyncSpec;
-import io.modelcontextprotocol.server.McpTransportContext;
+import io.modelcontextprotocol.common.McpTransportContext;
 
 /**
  * Customize {@link HttpRequest.Builder} before executing the request, either in SSE or

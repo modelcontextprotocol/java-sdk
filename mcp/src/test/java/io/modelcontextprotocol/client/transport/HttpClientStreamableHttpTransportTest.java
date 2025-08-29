@@ -6,7 +6,7 @@ package io.modelcontextprotocol.client.transport;
 
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpRequestCustomizer;
-import io.modelcontextprotocol.server.McpTransportContext;
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -15,7 +15,6 @@ import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import reactor.core.publisher.Mono;

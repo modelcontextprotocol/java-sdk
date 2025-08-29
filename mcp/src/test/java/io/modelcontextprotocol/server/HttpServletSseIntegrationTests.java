@@ -6,6 +6,7 @@ package io.modelcontextprotocol.server;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import java.time.Duration;
 import java.util.Map;
 

@@ -12,8 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.modelcontextprotocol.server.DefaultMcpTransportContext;
-import io.modelcontextprotocol.server.McpTransportContext;
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -201,7 +200,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval) {
 		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval,
-				(serverRequest, context) -> context);
+				(serverRequest) -> McpTransportContext.EMPTY);
 	}
 
 	/**
@@ -491,7 +490,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 		private Duration keepAliveInterval;
 
-		private McpTransportContextExtractor<ServerRequest> contextExtractor = (serverRequest, context) -> context;
+		private McpTransportContextExtractor<ServerRequest> contextExtractor = (
+				serverRequest) -> McpTransportContext.EMPTY;
 
 		/**
 		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP

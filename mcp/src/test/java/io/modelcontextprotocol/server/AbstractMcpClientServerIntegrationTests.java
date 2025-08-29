@@ -12,6 +12,7 @@ import static org.assertj.core.api.Assertions.assertWith;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;

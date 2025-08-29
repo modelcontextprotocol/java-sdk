@@ -23,8 +23,7 @@ import org.springframework.web.servlet.function.ServerResponse.SseBuilder;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.modelcontextprotocol.server.DefaultMcpTransportContext;
-import io.modelcontextprotocol.server.McpTransportContext;
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpError;
@@ -604,7 +603,8 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 
 		private boolean disallowDelete = false;
 
-		private McpTransportContextExtractor<ServerRequest> contextExtractor = (serverRequest, context) -> context;
+		private McpTransportContextExtractor<ServerRequest> contextExtractor = (
+				serverRequest) -> McpTransportContext.EMPTY;
 
 		private Duration keepAliveInterval;
 
