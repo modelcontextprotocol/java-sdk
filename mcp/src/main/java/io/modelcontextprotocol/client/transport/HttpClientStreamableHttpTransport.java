@@ -25,6 +25,8 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpRequestCustomizer;
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpRequestCustomizer;
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
 import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
@@ -113,7 +115,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private final boolean resumableStreams;
 
-	private final AsyncHttpRequestCustomizer httpRequestCustomizer;
+	private final McpAsyncHttpRequestCustomizer httpRequestCustomizer;
 
 	private final AtomicReference<DefaultMcpTransportSession> activeSession = new AtomicReference<>();
 
@@ -123,7 +125,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private HttpClientStreamableHttpTransport(ObjectMapper objectMapper, HttpClient httpClient,
 			HttpRequest.Builder requestBuilder, String baseUri, String endpoint, boolean resumableStreams,
-			boolean openConnectionOnStartup, AsyncHttpRequestCustomizer httpRequestCustomizer) {
+			boolean openConnectionOnStartup, McpAsyncHttpRequestCustomizer httpRequestCustomizer) {
 		this.objectMapper = objectMapper;
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
@@ -588,9 +590,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 		private ObjectMapper objectMapper;
 
-		private HttpClient.Builder clientBuilder = HttpClient.newBuilder()
-			.version(HttpClient.Version.HTTP_1_1)
-			.connectTimeout(Duration.ofSeconds(10));
+		private HttpClient.Builder clientBuilder = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1);
 
 		private String endpoint = DEFAULT_ENDPOINT;
 
@@ -600,7 +600,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 		private HttpRequest.Builder requestBuilder = HttpRequest.newBuilder();
 
-		private AsyncHttpRequestCustomizer httpRequestCustomizer = AsyncHttpRequestCustomizer.NOOP;
+		private McpAsyncHttpRequestCustomizer httpRequestCustomizer = McpAsyncHttpRequestCustomizer.NOOP;
+
+		private Duration connectTimeout = Duration.ofSeconds(10);
 
 		/**
 		 * Creates a new builder with the specified base URI.
@@ -709,16 +711,16 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 * executing them.
 		 * <p>
 		 * This overrides the customizer from
-		 * {@link #asyncHttpRequestCustomizer(AsyncHttpRequestCustomizer)}.
+		 * {@link #asyncHttpRequestCustomizer(McpAsyncHttpRequestCustomizer)}.
 		 * <p>
-		 * Do NOT use a blocking {@link SyncHttpRequestCustomizer} in a non-blocking
-		 * context. Use {@link #asyncHttpRequestCustomizer(AsyncHttpRequestCustomizer)}
+		 * Do NOT use a blocking {@link McpSyncHttpRequestCustomizer} in a non-blocking
+		 * context. Use {@link #asyncHttpRequestCustomizer(McpAsyncHttpRequestCustomizer)}
 		 * instead.
 		 * @param syncHttpRequestCustomizer the request customizer
 		 * @return this builder
 		 */
-		public Builder httpRequestCustomizer(SyncHttpRequestCustomizer syncHttpRequestCustomizer) {
-			this.httpRequestCustomizer = AsyncHttpRequestCustomizer.fromSync(syncHttpRequestCustomizer);
+		public Builder httpRequestCustomizer(McpSyncHttpRequestCustomizer syncHttpRequestCustomizer) {
+			this.httpRequestCustomizer = McpAsyncHttpRequestCustomizer.fromSync(syncHttpRequestCustomizer);
 			return this;
 		}
 
@@ -727,14 +729,25 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 * executing them.
 		 * <p>
 		 * This overrides the customizer from
-		 * {@link #httpRequestCustomizer(SyncHttpRequestCustomizer)}.
+		 * {@link #httpRequestCustomizer(McpSyncHttpRequestCustomizer)}.
 		 * <p>
 		 * Do NOT use a blocking implementation in a non-blocking context.
 		 * @param asyncHttpRequestCustomizer the request customizer
 		 * @return this builder
 		 */
-		public Builder asyncHttpRequestCustomizer(AsyncHttpRequestCustomizer asyncHttpRequestCustomizer) {
+		public Builder asyncHttpRequestCustomizer(McpAsyncHttpRequestCustomizer asyncHttpRequestCustomizer) {
 			this.httpRequestCustomizer = asyncHttpRequestCustomizer;
+			return this;
+		}
+
+		/**
+		 * Sets the connection timeout for the HTTP client.
+		 * @param connectTimeout the connection timeout duration
+		 * @return this builder
+		 */
+		public Builder connectTimeout(Duration connectTimeout) {
+			Assert.notNull(connectTimeout, "connectTimeout must not be null");
+			this.connectTimeout = connectTimeout;
 			return this;
 		}
 
@@ -746,8 +759,10 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		public HttpClientStreamableHttpTransport build() {
 			ObjectMapper objectMapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
 
-			return new HttpClientStreamableHttpTransport(objectMapper, clientBuilder.build(), requestBuilder, baseUri,
-					endpoint, resumableStreams, openConnectionOnStartup, httpRequestCustomizer);
+			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
+
+			return new HttpClientStreamableHttpTransport(objectMapper, httpClient, requestBuilder, baseUri, endpoint,
+					resumableStreams, openConnectionOnStartup, httpRequestCustomizer);
 		}
 
 	}

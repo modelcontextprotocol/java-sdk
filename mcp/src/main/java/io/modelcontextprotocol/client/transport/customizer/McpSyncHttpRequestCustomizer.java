@@ -2,7 +2,7 @@
  * Copyright 2024-2025 the original author or authors.
  */
 
-package io.modelcontextprotocol.client.transport;
+package io.modelcontextprotocol.client.transport.customizer;
 
 import java.net.URI;
 import java.net.http.HttpRequest;
@@ -14,7 +14,7 @@ import reactor.util.annotation.Nullable;
  *
  * @author Daniel Garnier-Moiroux
  */
-public interface SyncHttpRequestCustomizer {
+public interface McpSyncHttpRequestCustomizer {
 
 	void customize(HttpRequest.Builder builder, String method, URI endpoint, @Nullable String body);
 

@@ -191,7 +191,9 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 				String lastId = request.headers().asHttpHeaders().getFirst(HttpHeaders.LAST_EVENT_ID);
 				return ServerResponse.ok()
 					.contentType(MediaType.TEXT_EVENT_STREAM)
-					.body(session.replay(lastId), ServerSentEvent.class);
+					.body(session.replay(lastId)
+						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext)),
+							ServerSentEvent.class);
 			}
 
 			return ServerResponse.ok()
@@ -202,7 +204,9 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 					McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
 						.listeningStream(sessionTransport);
 					sink.onDispose(listeningStream::close);
-				}), ServerSentEvent.class);
+					// TODO Clarify why the outer context is not present in the
+					// Flux.create sink?
+				}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext)), ServerSentEvent.class);
 
 		}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext));
 	}
@@ -282,7 +286,10 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 								return true;
 							}).contextWrite(sink.contextView()).subscribe();
 							sink.onCancel(streamSubscription);
-						}), ServerSentEvent.class);
+							// TODO Clarify why the outer context is not present in the
+							// Flux.create sink?
+						}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext)),
+								ServerSentEvent.class);
 				}
 				else {
 					return ServerResponse.badRequest().bodyValue(new McpError("Unknown message type"));

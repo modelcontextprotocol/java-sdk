@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Timeout;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.servlet.function.ServerRequest;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
@@ -39,6 +40,11 @@ class WebMvcStreamableIntegrationTests extends AbstractMcpClientServerIntegratio
 
 	private WebMvcStreamableServerTransportProvider mcpServerTransportProvider;
 
+	static McpTransportContextExtractor<ServerRequest> TEST_CONTEXT_EXTRACTOR = (r, tc) -> {
+		tc.put("important", "value");
+		return tc;
+	};
+
 	@Configuration
 	@EnableWebMvc
 	static class TestConfig {
@@ -47,6 +53,7 @@ class WebMvcStreamableIntegrationTests extends AbstractMcpClientServerIntegratio
 		public WebMvcStreamableServerTransportProvider webMvcStreamableServerTransportProvider() {
 			return WebMvcStreamableServerTransportProvider.builder()
 				.objectMapper(new ObjectMapper())
+				.contextExtractor(TEST_CONTEXT_EXTRACTOR)
 				.mcpEndpoint(MESSAGE_ENDPOINT)
 				.build();
 		}

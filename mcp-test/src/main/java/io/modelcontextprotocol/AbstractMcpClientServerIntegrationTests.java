@@ -23,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -36,6 +37,7 @@ import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
+import io.modelcontextprotocol.server.McpTransportContext;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -55,6 +57,7 @@ import io.modelcontextprotocol.spec.McpSchema.Role;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
+import io.modelcontextprotocol.util.Utils;
 import net.javacrumbs.jsonunit.core.Option;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -750,6 +753,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
+		var responseBodyIsNullOrBlank = new AtomicBoolean(false);
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(emptyJsonSchema).build())
@@ -763,7 +767,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 							.GET()
 							.build(), HttpResponse.BodyHandlers.ofString());
 					String responseBody = response.body();
-					assertThat(responseBody).isNotBlank();
+					responseBodyIsNullOrBlank.set(!Utils.hasText(responseBody));
 				}
 				catch (Exception e) {
 					e.printStackTrace();
@@ -786,6 +790,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
 
+			assertThat(responseBodyIsNullOrBlank.get()).isFalse();
 			assertThat(response).isNotNull().isEqualTo(callResponse);
 		}
 
@@ -824,6 +829,62 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			assertThatExceptionOfType(McpError.class)
 				.isThrownBy(() -> mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of())))
 				.withMessageContaining("Timeout on blocking read");
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testToolCallSuccessWithTranportContextExtraction(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		var transportContextIsNull = new AtomicBoolean(false);
+		var transportContextIsEmpty = new AtomicBoolean(false);
+		var responseBodyIsNullOrBlank = new AtomicBoolean(false);
+
+		var expectedCallResponse = new McpSchema.CallToolResult(
+				List.of(new McpSchema.TextContent("CALL RESPONSE; ctx=value")), null);
+		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(emptyJsonSchema).build())
+			.callHandler((exchange, request) -> {
+
+				McpTransportContext transportContext = exchange.transportContext();
+				transportContextIsNull.set(transportContext == null);
+				transportContextIsEmpty.set(transportContext.equals(McpTransportContext.EMPTY));
+				String ctxValue = (String) transportContext.get("important");
+
+				try {
+					String responseBody = "TOOL RESPONSE";
+					responseBodyIsNullOrBlank.set(!Utils.hasText(responseBody));
+				}
+				catch (Exception e) {
+					e.printStackTrace();
+				}
+
+				return new McpSchema.CallToolResult(
+						List.of(new McpSchema.TextContent("CALL RESPONSE; ctx=" + ctxValue)), null);
+			})
+			.build();
+
+		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool1)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThat(mcpClient.listTools().tools()).contains(tool1.tool());
+
+			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+
+			assertThat(transportContextIsNull.get()).isFalse();
+			assertThat(transportContextIsEmpty.get()).isFalse();
+			assertThat(responseBodyIsNullOrBlank.get()).isFalse();
+			assertThat(response).isNotNull().isEqualTo(expectedCallResponse);
 		}
 
 		mcpServer.close();

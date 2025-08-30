@@ -23,6 +23,7 @@ import io.modelcontextprotocol.server.McpServer.AsyncSpecification;
 import io.modelcontextprotocol.server.McpServer.SyncSpecification;
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
+import jakarta.servlet.http.HttpServletRequest;
 
 @Timeout(15)
 class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerIntegrationTests {
@@ -40,6 +41,7 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 		// Create and configure the transport provider
 		mcpServerTransportProvider = HttpServletStreamableServerTransportProvider.builder()
 			.objectMapper(new ObjectMapper())
+			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
 			.mcpEndpoint(MESSAGE_ENDPOINT)
 			.keepAliveInterval(Duration.ofSeconds(1))
 			.build();
@@ -89,5 +91,10 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 	@Override
 	protected void prepareClients(int port, String mcpEndpoint) {
 	}
+
+	static McpTransportContextExtractor<HttpServletRequest> TEST_CONTEXT_EXTRACTOR = (r, tc) -> {
+		tc.put("important", "value");
+		return tc;
+	};
 
 }

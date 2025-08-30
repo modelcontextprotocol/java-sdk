@@ -17,6 +17,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import org.springframework.web.servlet.function.RouterFunction;
+import org.springframework.web.servlet.function.ServerRequest;
 import org.springframework.web.servlet.function.ServerResponse;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,6 +40,11 @@ class WebMvcSseIntegrationTests extends AbstractMcpClientServerIntegrationTests 
 
 	private WebMvcSseServerTransportProvider mcpServerTransportProvider;
 
+	static McpTransportContextExtractor<ServerRequest> TEST_CONTEXT_EXTRACTOR = (r, tc) -> {
+		tc.put("important", "value");
+		return tc;
+	};
+
 	@Override
 	protected void prepareClients(int port, String mcpEndpoint) {
 
@@ -60,6 +66,7 @@ class WebMvcSseIntegrationTests extends AbstractMcpClientServerIntegrationTests 
 			return WebMvcSseServerTransportProvider.builder()
 				.objectMapper(new ObjectMapper())
 				.messageEndpoint(MESSAGE_ENDPOINT)
+				.contextExtractor(TEST_CONTEXT_EXTRACTOR)
 				.build();
 		}
 

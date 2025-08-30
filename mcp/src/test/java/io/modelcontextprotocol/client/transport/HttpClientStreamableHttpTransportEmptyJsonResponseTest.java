@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Timeout;
 
 import com.sun.net.httpserver.HttpServer;
 
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpRequestCustomizer;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.ProtocolVersions;
@@ -70,7 +71,7 @@ public class HttpClientStreamableHttpTransportEmptyJsonResponseTest {
 	void testNotificationInitialized() throws URISyntaxException {
 
 		var uri = new URI(host + "/mcp");
-		var mockRequestCustomizer = mock(SyncHttpRequestCustomizer.class);
+		var mockRequestCustomizer = mock(McpSyncHttpRequestCustomizer.class);
 		var transport = HttpClientStreamableHttpTransport.builder(host)
 			.httpRequestCustomizer(mockRequestCustomizer)
 			.build();
