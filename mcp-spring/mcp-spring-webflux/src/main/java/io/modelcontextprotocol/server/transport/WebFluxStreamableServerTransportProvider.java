@@ -190,16 +190,17 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 			}
 
 			McpLoggableSession listenedStream = session.getListeningStream();
-			boolean replayRequest = request.headers().asHttpHeaders().containsKey(HttpHeaders.LAST_EVENT_ID);
-			if (replayRequest) {
+			if (request.headers().asHttpHeaders().containsKey(HttpHeaders.LAST_EVENT_ID)) {
 				String lastId = request.headers().asHttpHeaders().getFirst(HttpHeaders.LAST_EVENT_ID);
 				return ServerResponse.ok()
 					.contentType(MediaType.TEXT_EVENT_STREAM)
 					.body(session.replay(lastId), ServerSentEvent.class);
 			}
 			if (listenedStream instanceof McpStreamableServerSessionStream) {
-				logger.debug("Listening stream for session: {} exists.", sessionId);
-				return ServerResponse.ok().build();
+				logger.debug(
+						"Listening stream already exists for this session:{} and will be closed to make way for the new listening SSE stream",
+						sessionId);
+				listenedStream.close();
 			}
 
 			return ServerResponse.ok()

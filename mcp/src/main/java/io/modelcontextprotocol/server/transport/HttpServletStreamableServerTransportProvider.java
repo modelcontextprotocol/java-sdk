@@ -275,14 +275,6 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		logger.debug("Handling GET request for session: {}", sessionId);
-		McpLoggableSession listenedStream = session.getListeningStream();
-		boolean replayRequest = request.getHeader(HttpHeaders.LAST_EVENT_ID) != null;
-		if (!replayRequest && listenedStream instanceof McpStreamableServerSessionStream) {
-			logger.debug("Listening stream for session: {} exists.", sessionId);
-			response.setStatus(HttpServletResponse.SC_OK);
-			return;
-		}
-
 		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
 
 		try {
@@ -299,7 +291,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 					sessionId, asyncContext, response.getWriter());
 
 			// Check if this is a replay request
-			if (replayRequest) {
+			if (request.getHeader(HttpHeaders.LAST_EVENT_ID) != null) {
 				String lastId = request.getHeader(HttpHeaders.LAST_EVENT_ID);
 
 				try {
@@ -324,6 +316,13 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				}
 			}
 			else {
+				McpLoggableSession listenedStream = session.getListeningStream();
+				if (listenedStream instanceof McpStreamableServerSessionStream) {
+					logger.debug(
+							"Listening stream already exists for this session:{} and will be closed to make way for the new listening SSE stream",
+							sessionId);
+					listenedStream.close();
+				}
 				// Establish new listening stream
 				McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
 					.listeningStream(sessionTransport);

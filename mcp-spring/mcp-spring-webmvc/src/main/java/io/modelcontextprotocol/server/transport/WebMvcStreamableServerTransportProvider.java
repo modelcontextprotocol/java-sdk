@@ -254,12 +254,6 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		}
 
 		logger.debug("Handling GET request for session: {}", sessionId);
-		McpLoggableSession listenedStream = session.getListeningStream();
-		boolean replayRequest = request.headers().asHttpHeaders().containsKey(HttpHeaders.LAST_EVENT_ID);
-		if (!replayRequest && listenedStream instanceof McpStreamableServerSessionStream) {
-			logger.debug("Listening stream for session: {} exists.", sessionId);
-			return ServerResponse.ok().build();
-		}
 		try {
 			return ServerResponse.sse(sseBuilder -> {
 				sseBuilder.onTimeout(() -> {
@@ -270,7 +264,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 						sessionId, sseBuilder);
 
 				// Check if this is a replay request
-				if (replayRequest) {
+				if (request.headers().asHttpHeaders().containsKey(HttpHeaders.LAST_EVENT_ID)) {
 					String lastId = request.headers().asHttpHeaders().getFirst(HttpHeaders.LAST_EVENT_ID);
 					try {
 						session.replay(lastId)
@@ -294,6 +288,13 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 					}
 				}
 				else {
+					McpLoggableSession listenedStream = session.getListeningStream();
+					if (listenedStream instanceof McpStreamableServerSessionStream) {
+						logger.debug(
+								"Listening stream already exists for this session:{} and will be closed to make way for the new listening SSE stream",
+								sessionId);
+						listenedStream.close();
+					}
 					// Establish new listening stream
 					McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
 						.listeningStream(sessionTransport);
