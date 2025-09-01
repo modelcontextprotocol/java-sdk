@@ -10,8 +10,6 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
-import io.modelcontextprotocol.spec.McpLoggableSession;
-import io.modelcontextprotocol.spec.McpStreamableServerSession.McpStreamableServerSessionStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -254,6 +252,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		}
 
 		logger.debug("Handling GET request for session: {}", sessionId);
+
 		try {
 			return ServerResponse.sse(sseBuilder -> {
 				sseBuilder.onTimeout(() -> {
@@ -266,6 +265,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 				// Check if this is a replay request
 				if (request.headers().asHttpHeaders().containsKey(HttpHeaders.LAST_EVENT_ID)) {
 					String lastId = request.headers().asHttpHeaders().getFirst(HttpHeaders.LAST_EVENT_ID);
+
 					try {
 						session.replay(lastId)
 							.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
@@ -288,13 +288,6 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 					}
 				}
 				else {
-					McpLoggableSession listenedStream = session.getListeningStream();
-					if (listenedStream instanceof McpStreamableServerSessionStream) {
-						logger.debug(
-								"Listening stream already exists for this session:{} and will be closed to make way for the new listening SSE stream",
-								sessionId);
-						listenedStream.close();
-					}
 					// Establish new listening stream
 					McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
 						.listeningStream(sessionTransport);

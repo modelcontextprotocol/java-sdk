@@ -4,6 +4,18 @@
 
 package io.modelcontextprotocol.spec;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.server.McpAsyncServerExchange;
+import io.modelcontextprotocol.server.McpNotificationHandler;
+import io.modelcontextprotocol.server.McpRequestHandler;
+import io.modelcontextprotocol.server.McpTransportContext;
+import io.modelcontextprotocol.util.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.publisher.MonoSink;
+
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
@@ -11,20 +23,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.fasterxml.jackson.core.type.TypeReference;
-
-import io.modelcontextprotocol.server.McpAsyncServerExchange;
-import io.modelcontextprotocol.server.McpNotificationHandler;
-import io.modelcontextprotocol.server.McpRequestHandler;
-import io.modelcontextprotocol.server.McpTransportContext;
-import io.modelcontextprotocol.util.Assert;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-import reactor.core.publisher.MonoSink;
 
 /**
  * Representation of a Streamable HTTP server session that keeps track of mapping
@@ -138,12 +136,14 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	 */
 	public McpStreamableServerSessionStream listeningStream(McpStreamableServerTransport transport) {
 		McpStreamableServerSessionStream listeningStream = new McpStreamableServerSessionStream(transport);
-		this.listeningStreamRef.set(listeningStream);
+		McpLoggableSession listenedStream = this.listeningStreamRef.getAndSet(listeningStream);
+		if (listenedStream != null) {
+			logger.debug(
+					"Listening stream already exists for this session:{} and will be closed to make way for the new listening SSE stream",
+					this.id);
+			listenedStream.closeGracefully().block();
+		}
 		return listeningStream;
-	}
-
-	public McpLoggableSession getListeningStream() {
-		return this.listeningStreamRef.get();
 	}
 
 	// TODO: keep track of history by keeping a map from eventId to stream and then

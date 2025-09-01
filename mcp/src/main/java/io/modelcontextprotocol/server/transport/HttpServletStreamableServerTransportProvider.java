@@ -13,8 +13,6 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
-import io.modelcontextprotocol.spec.McpLoggableSession;
-import io.modelcontextprotocol.spec.McpStreamableServerSession.McpStreamableServerSessionStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -275,6 +273,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		logger.debug("Handling GET request for session: {}", sessionId);
+
 		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
 
 		try {
@@ -316,13 +315,6 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				}
 			}
 			else {
-				McpLoggableSession listenedStream = session.getListeningStream();
-				if (listenedStream instanceof McpStreamableServerSessionStream) {
-					logger.debug(
-							"Listening stream already exists for this session:{} and will be closed to make way for the new listening SSE stream",
-							sessionId);
-					listenedStream.close();
-				}
 				// Establish new listening stream
 				McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
 					.listeningStream(sessionTransport);
