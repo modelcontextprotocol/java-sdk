@@ -594,6 +594,7 @@ public class McpAsyncServer {
 			var resourceList = this.resources.values()
 				.stream()
 				.map(McpServerFeatures.AsyncResourceSpecification::resource)
+				.filter(resource -> !resource.uri().contains("{"))
 				.toList();
 			return Mono.just(new McpSchema.ListResourcesResult(resourceList, null));
 		};

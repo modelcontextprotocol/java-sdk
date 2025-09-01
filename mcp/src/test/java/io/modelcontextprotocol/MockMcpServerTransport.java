@@ -53,6 +53,14 @@ public class MockMcpServerTransport implements McpServerTransport {
 		return !sent.isEmpty() ? sent.get(sent.size() - 1) : null;
 	}
 
+	public void clearSentMessages() {
+		sent.clear();
+	}
+
+	public List<McpSchema.JSONRPCMessage> getAllSentMessages() {
+		return new ArrayList<>(sent);
+	}
+
 	@Override
 	public Mono<Void> closeGracefully() {
 		return Mono.empty();

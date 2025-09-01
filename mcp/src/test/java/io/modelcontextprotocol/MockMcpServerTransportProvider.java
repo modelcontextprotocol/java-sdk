@@ -44,7 +44,7 @@ public class MockMcpServerTransportProvider implements McpServerTransportProvide
 	}
 
 	public void simulateIncomingMessage(McpSchema.JSONRPCMessage message) {
-		session.handle(message).subscribe();
+		session.handle(message).block();
 	}
 
 }
