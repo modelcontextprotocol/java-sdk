@@ -4,6 +4,10 @@
 
 package io.modelcontextprotocol.common;
 
+import java.util.Map;
+import java.util.function.BiFunction;
+import java.util.function.Supplier;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpClient.SyncSpec;
@@ -16,43 +20,62 @@ import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpStatelessServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
-import io.modelcontextprotocol.server.transport.HttpServletSseServerTransportProvider;
-import io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport;
-import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
-import io.modelcontextprotocol.server.transport.TomcatTestUtil;
+import io.modelcontextprotocol.server.TestUtil;
+import io.modelcontextprotocol.server.TomcatTestUtil;
+import io.modelcontextprotocol.server.TomcatTestUtil.TomcatServer;
+import io.modelcontextprotocol.server.transport.WebMvcSseServerTransportProvider;
+import io.modelcontextprotocol.server.transport.WebMvcStatelessServerTransport;
+import io.modelcontextprotocol.server.transport.WebMvcStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
-import jakarta.servlet.Servlet;
-import jakarta.servlet.http.HttpServletRequest;
-import java.util.Map;
-import java.util.function.BiFunction;
-import java.util.function.Supplier;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
-import org.apache.catalina.startup.Tomcat;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+import org.springframework.web.servlet.config.annotation.EnableWebMvc;
+import org.springframework.web.servlet.function.RouterFunction;
+import org.springframework.web.servlet.function.ServerRequest;
+import org.springframework.web.servlet.function.ServerResponse;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Test both Client and Server {@link McpTransportContext} integration, in two steps.
+ * Integration tests for {@link McpTransportContext} propagation between MCP clients and
+ * servers using Spring WebMVC transport implementations.
+ *
  * <p>
- * First, the client calls a tool and writes data stored in a thread-local to an HTTP
- * header using {@link SyncSpec#transportContextProvider(Supplier)} and
- * {@link McpSyncHttpClientRequestCustomizer}.
- * <p>
- * Then the server reads the header with a {@link McpTransportContextExtractor} and
- * returns the value as the result of the tool call.
+ * This test class validates the end-to-end flow of transport context propagation across
+ * different MCP transport mechanisms in a Spring WebMVC environment. It demonstrates how
+ * contextual information can be passed from client to server through HTTP headers and
+ * properly extracted and utilized on the server side.
+ *
+ * <h2>Transport Types Tested</h2>
+ * <ul>
+ * <li><b>Stateless</b>: Tests context propagation with
+ * {@link WebMvcStatelessServerTransport} where each request is independent</li>
+ * <li><b>Streamable HTTP</b>: Tests context propagation with
+ * {@link WebMvcStreamableServerTransportProvider} supporting stateful server
+ * sessions</li>
+ * <li><b>Server-Sent Events (SSE)</b>: Tests context propagation with
+ * {@link WebMvcSseServerTransportProvider} for long-lived connections</li>
+ * </ul>
  *
  * @author Daniel Garnier-Moiroux
+ * @author Christian Tzolov
+ * @see McpTransportContext
+ * @see McpTransportContextExtractor
+ * @see McpSyncHttpClientRequestCustomizer
  */
 @Timeout(15)
 public class McpTransportContextIntegrationTests {
 
-	private static final int PORT = TomcatTestUtil.findAvailablePort();
+	private static final int PORT = TestUtil.findAvailablePort();
 
-	private Tomcat tomcat;
+	private TomcatServer tomcatServer;
 
 	private static final ThreadLocal<String> CLIENT_SIDE_HEADER_VALUE_HOLDER = new ThreadLocal<>();
 
@@ -72,12 +95,6 @@ public class McpTransportContextIntegrationTests {
 		}
 	};
 
-	private final McpTransportContextExtractor<HttpServletRequest> serverContextExtractor = (HttpServletRequest r) -> {
-		var headerValue = r.getHeader(HEADER_NAME);
-		return headerValue != null ? McpTransportContext.create(Map.of("server-side-header-value", headerValue))
-				: McpTransportContext.EMPTY;
-	};
-
 	private final BiFunction<McpTransportContext, McpSchema.CallToolRequest, McpSchema.CallToolResult> statelessHandler = (
 			transportContext,
 			request) -> new McpSchema.CallToolResult(transportContext.get("server-side-header-value").toString(), null);
@@ -85,24 +102,87 @@ public class McpTransportContextIntegrationTests {
 	private final BiFunction<McpSyncServerExchange, McpSchema.CallToolRequest, McpSchema.CallToolResult> statefulHandler = (
 			exchange, request) -> statelessHandler.apply(exchange.transportContext(), request);
 
-	private final HttpServletStatelessServerTransport statelessServerTransport = HttpServletStatelessServerTransport
-		.builder()
-		.objectMapper(new ObjectMapper())
-		.contextExtractor(serverContextExtractor)
-		.build();
+	@Configuration
+	static class TestCommonConfig {
 
-	private final HttpServletStreamableServerTransportProvider streamableServerTransport = HttpServletStreamableServerTransportProvider
-		.builder()
-		.objectMapper(new ObjectMapper())
-		.contextExtractor(serverContextExtractor)
-		.build();
+		@Bean
+		public McpTransportContextExtractor<ServerRequest> serverContextExtractor() {
+			return (ServerRequest r) -> {
+				String headerValue = r.servletRequest().getHeader(HEADER_NAME);
+				return headerValue != null ? McpTransportContext.create(Map.of("server-side-header-value", headerValue))
+						: McpTransportContext.EMPTY;
+			};
+		};
 
-	private final HttpServletSseServerTransportProvider sseServerTransport = HttpServletSseServerTransportProvider
-		.builder()
-		.objectMapper(new ObjectMapper())
-		.contextExtractor(serverContextExtractor)
-		.messageEndpoint("/message")
-		.build();
+	}
+
+	@Configuration
+	@EnableWebMvc
+	@Import(TestCommonConfig.class)
+	static class TestStatelessConfig {
+
+		@Bean
+		public WebMvcStatelessServerTransport webMvcStatelessServerTransport(
+				McpTransportContextExtractor<ServerRequest> serverContextExtractor) {
+
+			return WebMvcStatelessServerTransport.builder()
+				.objectMapper(new ObjectMapper())
+				.contextExtractor(serverContextExtractor)
+				.build();
+		}
+
+		@Bean
+		public RouterFunction<ServerResponse> routerFunction(WebMvcStatelessServerTransport transportProvider) {
+			return transportProvider.getRouterFunction();
+		}
+
+	}
+
+	@Configuration
+	@EnableWebMvc
+	@Import(TestCommonConfig.class)
+	static class TestStreamableHttpConfig {
+
+		@Bean
+		public WebMvcStreamableServerTransportProvider webMvcStreamableServerTransport(
+				McpTransportContextExtractor<ServerRequest> serverContextExtractor) {
+
+			return WebMvcStreamableServerTransportProvider.builder()
+				.objectMapper(new ObjectMapper())
+				.contextExtractor(serverContextExtractor)
+				.build();
+		}
+
+		@Bean
+		public RouterFunction<ServerResponse> routerFunction(
+				WebMvcStreamableServerTransportProvider transportProvider) {
+			return transportProvider.getRouterFunction();
+		}
+
+	}
+
+	@Configuration
+	@EnableWebMvc
+	@Import(TestCommonConfig.class)
+	static class TestSseConfig {
+
+		@Bean
+		public WebMvcSseServerTransportProvider webMvcSseServerTransport(
+				McpTransportContextExtractor<ServerRequest> serverContextExtractor) {
+
+			return WebMvcSseServerTransportProvider.builder()
+				.objectMapper(new ObjectMapper())
+				.contextExtractor(serverContextExtractor)
+				.messageEndpoint("/mcp/message")
+				.build();
+		}
+
+		@Bean
+		public RouterFunction<ServerResponse> routerFunction(WebMvcSseServerTransportProvider transportProvider) {
+			return transportProvider.getRouterFunction();
+		}
+
+	}
 
 	private final McpSyncClient streamableClient = McpClient
 		.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
@@ -126,21 +206,14 @@ public class McpTransportContextIntegrationTests {
 	@AfterEach
 	public void after() {
 		CLIENT_SIDE_HEADER_VALUE_HOLDER.remove();
-		if (statelessServerTransport != null) {
-			statelessServerTransport.closeGracefully().block();
-		}
-		if (streamableServerTransport != null) {
-			streamableServerTransport.closeGracefully().block();
-		}
-		if (sseServerTransport != null) {
-			sseServerTransport.closeGracefully().block();
-		}
 		stopTomcat();
 	}
 
 	@Test
 	void statelessServer() {
-		startTomcat(statelessServerTransport);
+		startTomcat(TestStatelessConfig.class);
+
+		var statelessServerTransport = tomcatServer.appContext().getBean(WebMvcStatelessServerTransport.class);
 
 		var mcpServer = McpServer.sync(statelessServerTransport)
 			.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
@@ -166,7 +239,11 @@ public class McpTransportContextIntegrationTests {
 
 	@Test
 	void streamableServer() {
-		startTomcat(streamableServerTransport);
+
+		startTomcat(TestStreamableHttpConfig.class);
+
+		var streamableServerTransport = tomcatServer.appContext()
+			.getBean(WebMvcStreamableServerTransportProvider.class);
 
 		var mcpServer = McpServer.sync(streamableServerTransport)
 			.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
@@ -192,7 +269,9 @@ public class McpTransportContextIntegrationTests {
 
 	@Test
 	void sseServer() {
-		startTomcat(sseServerTransport);
+		startTomcat(TestSseConfig.class);
+
+		var sseServerTransport = tomcatServer.appContext().getBean(WebMvcSseServerTransportProvider.class);
 
 		var mcpServer = McpServer.sync(sseServerTransport)
 			.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
@@ -215,11 +294,11 @@ public class McpTransportContextIntegrationTests {
 		mcpServer.close();
 	}
 
-	private void startTomcat(Servlet transport) {
-		tomcat = TomcatTestUtil.createTomcatServer("", PORT, transport);
+	private void startTomcat(Class<?> componentClass) {
+		tomcatServer = TomcatTestUtil.createTomcatServer("", PORT, componentClass);
 		try {
-			tomcat.start();
-			assertThat(tomcat.getServer().getState()).isEqualTo(LifecycleState.STARTED);
+			tomcatServer.tomcat().start();
+			assertThat(tomcatServer.tomcat().getServer().getState()).isEqualTo(LifecycleState.STARTED);
 		}
 		catch (Exception e) {
 			throw new RuntimeException("Failed to start Tomcat", e);
@@ -227,10 +306,10 @@ public class McpTransportContextIntegrationTests {
 	}
 
 	private void stopTomcat() {
-		if (tomcat != null) {
+		if (tomcatServer != null && tomcatServer.tomcat() != null) {
 			try {
-				tomcat.stop();
-				tomcat.destroy();
+				tomcatServer.tomcat().stop();
+				tomcatServer.tomcat().destroy();
 			}
 			catch (LifecycleException e) {
 				throw new RuntimeException("Failed to stop Tomcat", e);
