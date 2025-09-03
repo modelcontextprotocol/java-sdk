@@ -13,7 +13,9 @@ import java.util.function.Function;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -42,7 +44,7 @@ class WebFluxSseClientTransportTests {
 	static String host = "http://localhost:3001";
 
 	@SuppressWarnings("resource")
-	GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v2")
+	static GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v2")
 		.withCommand("node dist/index.js sse")
 		.withLogConsumer(outputFrame -> System.out.println(outputFrame.getUtf8String()))
 		.withExposedPorts(3001)
@@ -95,15 +97,20 @@ class WebFluxSseClientTransportTests {
 
 	}
 
-	void startContainer() {
+	@BeforeAll
+	static void startContainer() {
 		container.start();
 		int port = container.getMappedPort(3001);
 		host = "http://" + container.getHost() + ":" + port;
 	}
 
+	@AfterAll
+	static void cleanup() {
+		container.stop();
+	}
+
 	@BeforeEach
 	void setUp() {
-		startContainer();
 		webClientBuilder = WebClient.builder().baseUrl(host);
 		objectMapper = new ObjectMapper();
 		transport = new TestSseClientTransport(webClientBuilder, objectMapper);
@@ -115,11 +122,6 @@ class WebFluxSseClientTransportTests {
 		if (transport != null) {
 			assertThatCode(() -> transport.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
 		}
-		cleanup();
-	}
-
-	void cleanup() {
-		container.stop();
 	}
 
 	@Test

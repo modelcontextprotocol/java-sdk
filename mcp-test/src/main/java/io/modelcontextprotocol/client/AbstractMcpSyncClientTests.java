@@ -66,12 +66,6 @@ public abstract class AbstractMcpSyncClientTests {
 
 	abstract protected McpClientTransport createMcpTransport();
 
-	protected void onStart() {
-	}
-
-	protected void onClose() {
-	}
-
 	protected Duration getRequestTimeout() {
 		return Duration.ofSeconds(14);
 	}
@@ -112,17 +106,6 @@ public abstract class AbstractMcpSyncClientTests {
 		finally {
 			assertThat(client.closeGracefully()).isTrue();
 		}
-	}
-
-	@BeforeEach
-	void setUp() {
-		onStart();
-
-	}
-
-	@AfterEach
-	void tearDown() {
-		onClose();
 	}
 
 	static final Object DUMMY_RETURN_VALUE = new Object();
