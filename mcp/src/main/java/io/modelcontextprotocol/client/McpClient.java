@@ -11,10 +11,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpTransport;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
@@ -22,6 +23,7 @@ import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
 import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.Implementation;
 import io.modelcontextprotocol.spec.McpSchema.Root;
+import io.modelcontextprotocol.spec.McpTransport;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
 
@@ -182,6 +184,8 @@ public interface McpClient {
 		private Function<CreateMessageRequest, CreateMessageResult> samplingHandler;
 
 		private Function<ElicitRequest, ElicitResult> elicitationHandler;
+
+		private Supplier<McpTransportContext> contextProvider = () -> McpTransportContext.EMPTY;
 
 		private SyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
@@ -410,6 +414,22 @@ public interface McpClient {
 		}
 
 		/**
+		 * Add a provider of {@link McpTransportContext}, providing a context before
+		 * calling any client operation. This allows to extract thread-locals and hand
+		 * them over to the underlying transport.
+		 * <p>
+		 * There is no direct equivalent in {@link AsyncSpec}. To achieve the same result,
+		 * append {@code contextWrite(McpTransportContext.KEY, context)} to any
+		 * {@link McpAsyncClient} call.
+		 * @param contextProvider A supplier to create a context
+		 * @return This builder for method chaining
+		 */
+		public SyncSpec transportContextProvider(Supplier<McpTransportContext> contextProvider) {
+			this.contextProvider = contextProvider;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpSyncClient} with the provided configurations or
 		 * sensible defaults.
 		 * @return a new instance of {@link McpSyncClient}.
@@ -423,7 +443,8 @@ public interface McpClient {
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
 			return new McpSyncClient(
-					new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout, asyncFeatures));
+					new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout, asyncFeatures),
+					this.contextProvider);
 		}
 
 	}

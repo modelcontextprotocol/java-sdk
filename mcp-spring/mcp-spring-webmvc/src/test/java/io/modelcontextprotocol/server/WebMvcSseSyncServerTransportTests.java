@@ -36,7 +36,10 @@ class WebMvcSseSyncServerTransportTests extends AbstractMcpSyncServerTests {
 
 		@Bean
 		public WebMvcSseServerTransportProvider webMvcSseServerTransportProvider() {
-			return new WebMvcSseServerTransportProvider(new ObjectMapper(), MESSAGE_ENDPOINT);
+			return WebMvcSseServerTransportProvider.builder()
+				.objectMapper(new ObjectMapper())
+				.messageEndpoint(MESSAGE_ENDPOINT)
+				.build();
 		}
 
 		@Bean

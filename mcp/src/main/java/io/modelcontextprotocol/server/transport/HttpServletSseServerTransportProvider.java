@@ -16,6 +16,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
@@ -102,6 +104,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	/** Map of active client sessions, keyed by session ID */
 	private final Map<String, McpServerSession> sessions = new ConcurrentHashMap<>();
 
+	private McpTransportContextExtractor<HttpServletRequest> contextExtractor;
+
 	/** Flag indicating if the transport is in the process of shutting down */
 	private final AtomicBoolean isClosing = new AtomicBoolean(false);
 
@@ -144,7 +148,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	@Deprecated
 	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint) {
-		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, null);
+		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, null, (serverRequest) -> McpTransportContext.EMPTY);
 	}
 
 	/**
@@ -163,11 +167,38 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	@Deprecated
 	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval) {
+		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval,
+				(serverRequest) -> McpTransportContext.EMPTY);
+	}
+
+	/**
+	 * Creates a new HttpServletSseServerTransportProvider instance with a custom SSE
+	 * endpoint.
+	 * @param objectMapper The JSON object mapper to use for message
+	 * serialization/deserialization
+	 * @param baseUrl The base URL for the server transport
+	 * @param messageEndpoint The endpoint path where clients will send their messages
+	 * @param sseEndpoint The endpoint path where clients will establish SSE connections
+	 * @param keepAliveInterval The interval for keep-alive pings, or null to disable
+	 * keep-alive functionality
+	 * @param contextExtractor The extractor for transport context from the request.
+	 * @deprecated Use the builder {@link #builder()} instead for better configuration
+	 * options.
+	 */
+	private HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+			String sseEndpoint, Duration keepAliveInterval,
+			McpTransportContextExtractor<HttpServletRequest> contextExtractor) {
+
+		Assert.notNull(objectMapper, "ObjectMapper must not be null");
+		Assert.notNull(messageEndpoint, "messageEndpoint must not be null");
+		Assert.notNull(sseEndpoint, "sseEndpoint must not be null");
+		Assert.notNull(contextExtractor, "Context extractor must not be null");
 
 		this.objectMapper = objectMapper;
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
+		this.contextExtractor = contextExtractor;
 
 		if (keepAliveInterval != null) {
 
@@ -339,10 +370,12 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 				body.append(line);
 			}
 
+			final McpTransportContext transportContext = this.contextExtractor.extract(request);
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body.toString());
 
 			// Process the message through the session's handle method
-			session.handle(message).block(); // Block for Servlet compatibility
+			// Block for Servlet compatibility
+			session.handle(message).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext)).block();
 
 			response.setStatus(HttpServletResponse.SC_OK);
 		}
@@ -534,6 +567,9 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 
 		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
 
+		private McpTransportContextExtractor<HttpServletRequest> contextExtractor = (
+				serverRequest) -> McpTransportContext.EMPTY;
+
 		private Duration keepAliveInterval;
 
 		/**
@@ -584,6 +620,19 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		}
 
 		/**
+		 * Sets the context extractor for extracting transport context from the request.
+		 * @param contextExtractor The context extractor to use. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if contextExtractor is null
+		 */
+		public HttpServletSseServerTransportProvider.Builder contextExtractor(
+				McpTransportContextExtractor<HttpServletRequest> contextExtractor) {
+			Assert.notNull(contextExtractor, "Context extractor must not be null");
+			this.contextExtractor = contextExtractor;
+			return this;
+		}
+
+		/**
 		 * Sets the interval for keep-alive pings.
 		 * <p>
 		 * If not specified, keep-alive pings will be disabled.
@@ -609,7 +658,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 				throw new IllegalStateException("MessageEndpoint must be set");
 			}
 			return new HttpServletSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint,
-					keepAliveInterval);
+					keepAliveInterval, contextExtractor);
 		}
 
 	}

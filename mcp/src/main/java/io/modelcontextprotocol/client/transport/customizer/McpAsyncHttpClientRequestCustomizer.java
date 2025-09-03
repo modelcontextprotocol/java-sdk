@@ -2,14 +2,17 @@
  * Copyright 2024-2025 the original author or authors.
  */
 
-package io.modelcontextprotocol.client.transport;
+package io.modelcontextprotocol.client.transport.customizer;
 
 import java.net.URI;
 import java.net.http.HttpRequest;
+
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.annotation.Nullable;
+
+import io.modelcontextprotocol.common.McpTransportContext;
 
 /**
  * Customize {@link HttpRequest.Builder} before executing the request, in either SSE or
@@ -19,12 +22,12 @@ import reactor.util.annotation.Nullable;
  *
  * @author Daniel Garnier-Moiroux
  */
-public interface AsyncHttpRequestCustomizer {
+public interface McpAsyncHttpClientRequestCustomizer {
 
 	Publisher<HttpRequest.Builder> customize(HttpRequest.Builder builder, String method, URI endpoint,
-			@Nullable String body);
+			@Nullable String body, McpTransportContext context);
 
-	AsyncHttpRequestCustomizer NOOP = new Noop();
+	McpAsyncHttpClientRequestCustomizer NOOP = new Noop();
 
 	/**
 	 * Wrap a sync implementation in an async wrapper.
@@ -32,18 +35,18 @@ public interface AsyncHttpRequestCustomizer {
 	 * Do NOT wrap a blocking implementation for use in a non-blocking context. For a
 	 * blocking implementation, consider using {@link Schedulers#boundedElastic()}.
 	 */
-	static AsyncHttpRequestCustomizer fromSync(SyncHttpRequestCustomizer customizer) {
-		return (builder, method, uri, body) -> Mono.fromSupplier(() -> {
-			customizer.customize(builder, method, uri, body);
+	static McpAsyncHttpClientRequestCustomizer fromSync(McpSyncHttpClientRequestCustomizer customizer) {
+		return (builder, method, uri, body, context) -> Mono.fromSupplier(() -> {
+			customizer.customize(builder, method, uri, body, context);
 			return builder;
 		});
 	}
 
-	class Noop implements AsyncHttpRequestCustomizer {
+	class Noop implements McpAsyncHttpClientRequestCustomizer {
 
 		@Override
 		public Publisher<HttpRequest.Builder> customize(HttpRequest.Builder builder, String method, URI endpoint,
-				String body) {
+				String body, McpTransportContext context) {
 			return Mono.just(builder);
 		}
 

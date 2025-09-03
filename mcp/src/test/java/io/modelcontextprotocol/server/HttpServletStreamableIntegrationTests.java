@@ -6,7 +6,9 @@ package io.modelcontextprotocol.server;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import java.time.Duration;
+import java.util.Map;
 
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
@@ -23,6 +25,7 @@ import io.modelcontextprotocol.server.McpServer.AsyncSpecification;
 import io.modelcontextprotocol.server.McpServer.SyncSpecification;
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
+import jakarta.servlet.http.HttpServletRequest;
 
 @Timeout(15)
 class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerIntegrationTests {
@@ -40,6 +43,7 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 		// Create and configure the transport provider
 		mcpServerTransportProvider = HttpServletStreamableServerTransportProvider.builder()
 			.objectMapper(new ObjectMapper())
+			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
 			.mcpEndpoint(MESSAGE_ENDPOINT)
 			.keepAliveInterval(Duration.ofSeconds(1))
 			.build();
@@ -89,5 +93,8 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 	@Override
 	protected void prepareClients(int port, String mcpEndpoint) {
 	}
+
+	static McpTransportContextExtractor<HttpServletRequest> TEST_CONTEXT_EXTRACTOR = (r) -> McpTransportContext
+		.create(Map.of("important", "value"));
 
 }

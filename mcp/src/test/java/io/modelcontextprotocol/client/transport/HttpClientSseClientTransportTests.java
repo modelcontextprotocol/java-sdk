@@ -15,8 +15,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
+
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -62,6 +67,8 @@ class HttpClientSseClientTransportTests {
 
 	private TestHttpClientSseClientTransport transport;
 
+	private final McpTransportContext context = McpTransportContext.create(Map.of("some-key", "some-value"));
+
 	// Test class to access protected methods
 	static class TestHttpClientSseClientTransport extends HttpClientSseClientTransport {
 
@@ -72,7 +79,7 @@ class HttpClientSseClientTransportTests {
 		public TestHttpClientSseClientTransport(final String baseUri) {
 			super(HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(),
 					HttpRequest.newBuilder().header("Content-Type", "application/json"), baseUri, "/sse",
-					new ObjectMapper(), AsyncHttpRequestCustomizer.NOOP);
+					new ObjectMapper(), McpAsyncHttpClientRequestCustomizer.NOOP);
 		}
 
 		public int getInboundMessageCount() {
@@ -389,7 +396,7 @@ class HttpClientSseClientTransportTests {
 
 	@Test
 	void testRequestCustomizer() {
-		var mockCustomizer = mock(SyncHttpRequestCustomizer.class);
+		var mockCustomizer = mock(McpSyncHttpClientRequestCustomizer.class);
 
 		// Create a transport with the customizer
 		var customizedTransport = HttpClientSseClientTransport.builder(host)
@@ -397,11 +404,14 @@ class HttpClientSseClientTransportTests {
 			.build();
 
 		// Connect
-		StepVerifier.create(customizedTransport.connect(Function.identity())).verifyComplete();
+		StepVerifier
+			.create(customizedTransport.connect(Function.identity())
+				.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)))
+			.verifyComplete();
 
 		// Verify the customizer was called
 		verify(mockCustomizer).customize(any(), eq("GET"),
-				eq(UriComponentsBuilder.fromUriString(host).path("/sse").build().toUri()), isNull());
+				eq(UriComponentsBuilder.fromUriString(host).path("/sse").build().toUri()), isNull(), eq(context));
 		clearInvocations(mockCustomizer);
 
 		// Send test message
@@ -409,12 +419,16 @@ class HttpClientSseClientTransportTests {
 				Map.of("key", "value"));
 
 		// Subscribe to messages and verify
-		StepVerifier.create(customizedTransport.sendMessage(testMessage)).verifyComplete();
+		StepVerifier
+			.create(customizedTransport.sendMessage(testMessage)
+				.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)))
+			.verifyComplete();
 
 		// Verify the customizer was called
 		var uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
 		verify(mockCustomizer).customize(any(), eq("POST"), uriArgumentCaptor.capture(), eq(
-				"{\"jsonrpc\":\"2.0\",\"method\":\"test-method\",\"id\":\"test-id\",\"params\":{\"key\":\"value\"}}"));
+				"{\"jsonrpc\":\"2.0\",\"method\":\"test-method\",\"id\":\"test-id\",\"params\":{\"key\":\"value\"}}"),
+				eq(context));
 		assertThat(uriArgumentCaptor.getValue().toString()).startsWith(host + "/message?sessionId=");
 
 		// Clean up
@@ -423,8 +437,8 @@ class HttpClientSseClientTransportTests {
 
 	@Test
 	void testAsyncRequestCustomizer() {
-		var mockCustomizer = mock(AsyncHttpRequestCustomizer.class);
-		when(mockCustomizer.customize(any(), any(), any(), any()))
+		var mockCustomizer = mock(McpAsyncHttpClientRequestCustomizer.class);
+		when(mockCustomizer.customize(any(), any(), any(), any(), any()))
 			.thenAnswer(invocation -> Mono.just(invocation.getArguments()[0]));
 
 		// Create a transport with the customizer
@@ -433,11 +447,14 @@ class HttpClientSseClientTransportTests {
 			.build();
 
 		// Connect
-		StepVerifier.create(customizedTransport.connect(Function.identity())).verifyComplete();
+		StepVerifier
+			.create(customizedTransport.connect(Function.identity())
+				.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)))
+			.verifyComplete();
 
 		// Verify the customizer was called
 		verify(mockCustomizer).customize(any(), eq("GET"),
-				eq(UriComponentsBuilder.fromUriString(host).path("/sse").build().toUri()), isNull());
+				eq(UriComponentsBuilder.fromUriString(host).path("/sse").build().toUri()), isNull(), eq(context));
 		clearInvocations(mockCustomizer);
 
 		// Send test message
@@ -445,12 +462,16 @@ class HttpClientSseClientTransportTests {
 				Map.of("key", "value"));
 
 		// Subscribe to messages and verify
-		StepVerifier.create(customizedTransport.sendMessage(testMessage)).verifyComplete();
+		StepVerifier
+			.create(customizedTransport.sendMessage(testMessage)
+				.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)))
+			.verifyComplete();
 
 		// Verify the customizer was called
 		var uriArgumentCaptor = ArgumentCaptor.forClass(URI.class);
 		verify(mockCustomizer).customize(any(), eq("POST"), uriArgumentCaptor.capture(), eq(
-				"{\"jsonrpc\":\"2.0\",\"method\":\"test-method\",\"id\":\"test-id\",\"params\":{\"key\":\"value\"}}"));
+				"{\"jsonrpc\":\"2.0\",\"method\":\"test-method\",\"id\":\"test-id\",\"params\":{\"key\":\"value\"}}"),
+				eq(context));
 		assertThat(uriArgumentCaptor.getValue().toString()).startsWith(host + "/message?sessionId=");
 
 		// Clean up

@@ -22,12 +22,15 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.spec.McpTransportException;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
 import reactor.core.Disposable;
@@ -112,7 +115,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	/**
 	 * Customizer to modify requests before they are executed.
 	 */
-	private final AsyncHttpRequestCustomizer httpRequestCustomizer;
+	private final McpAsyncHttpClientRequestCustomizer httpRequestCustomizer;
 
 	/**
 	 * Creates a new transport instance with default HTTP client and object mapper.
@@ -186,7 +189,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	@Deprecated(forRemoval = true)
 	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
 			String sseEndpoint, ObjectMapper objectMapper) {
-		this(httpClient, requestBuilder, baseUri, sseEndpoint, objectMapper, AsyncHttpRequestCustomizer.NOOP);
+		this(httpClient, requestBuilder, baseUri, sseEndpoint, objectMapper, McpAsyncHttpClientRequestCustomizer.NOOP);
 	}
 
 	/**
@@ -202,7 +205,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 * @throws IllegalArgumentException if objectMapper, clientBuilder, or headers is null
 	 */
 	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
-			String sseEndpoint, ObjectMapper objectMapper, AsyncHttpRequestCustomizer httpRequestCustomizer) {
+			String sseEndpoint, ObjectMapper objectMapper, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer) {
 		Assert.notNull(objectMapper, "ObjectMapper must not be null");
 		Assert.hasText(baseUri, "baseUri must not be empty");
 		Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
@@ -244,10 +247,9 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 
 		private ObjectMapper objectMapper = new ObjectMapper();
 
-		private HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-			.header("Content-Type", "application/json");
+		private HttpRequest.Builder requestBuilder = HttpRequest.newBuilder();
 
-		private AsyncHttpRequestCustomizer httpRequestCustomizer = AsyncHttpRequestCustomizer.NOOP;
+		private McpAsyncHttpClientRequestCustomizer httpRequestCustomizer = McpAsyncHttpClientRequestCustomizer.NOOP;
 
 		private Duration connectTimeout = Duration.ofSeconds(10);
 
@@ -353,16 +355,17 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		 * executing them.
 		 * <p>
 		 * This overrides the customizer from
-		 * {@link #asyncHttpRequestCustomizer(AsyncHttpRequestCustomizer)}.
+		 * {@link #asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer)}.
 		 * <p>
-		 * Do NOT use a blocking {@link SyncHttpRequestCustomizer} in a non-blocking
-		 * context. Use {@link #asyncHttpRequestCustomizer(AsyncHttpRequestCustomizer)}
+		 * Do NOT use a blocking {@link McpSyncHttpClientRequestCustomizer} in a
+		 * non-blocking context. Use
+		 * {@link #asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer)}
 		 * instead.
 		 * @param syncHttpRequestCustomizer the request customizer
 		 * @return this builder
 		 */
-		public Builder httpRequestCustomizer(SyncHttpRequestCustomizer syncHttpRequestCustomizer) {
-			this.httpRequestCustomizer = AsyncHttpRequestCustomizer.fromSync(syncHttpRequestCustomizer);
+		public Builder httpRequestCustomizer(McpSyncHttpClientRequestCustomizer syncHttpRequestCustomizer) {
+			this.httpRequestCustomizer = McpAsyncHttpClientRequestCustomizer.fromSync(syncHttpRequestCustomizer);
 			return this;
 		}
 
@@ -371,13 +374,13 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		 * executing them.
 		 * <p>
 		 * This overrides the customizer from
-		 * {@link #httpRequestCustomizer(SyncHttpRequestCustomizer)}.
+		 * {@link #httpRequestCustomizer(McpSyncHttpClientRequestCustomizer)}.
 		 * <p>
 		 * Do NOT use a blocking implementation in a non-blocking context.
 		 * @param asyncHttpRequestCustomizer the request customizer
 		 * @return this builder
 		 */
-		public Builder asyncHttpRequestCustomizer(AsyncHttpRequestCustomizer asyncHttpRequestCustomizer) {
+		public Builder asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer asyncHttpRequestCustomizer) {
 			this.httpRequestCustomizer = asyncHttpRequestCustomizer;
 			return this;
 		}
@@ -409,14 +412,15 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
 		var uri = Utils.resolveUri(this.baseUri, this.sseEndpoint);
 
-		return Mono.defer(() -> {
+		return Mono.deferContextual(ctx -> {
 			var builder = requestBuilder.copy()
 				.uri(uri)
 				.header("Accept", "text/event-stream")
 				.header("Cache-Control", "no-cache")
 				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
 				.GET();
-			return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null));
+			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
+			return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
 		}).flatMap(requestBuilder -> Mono.create(sink -> {
 			Disposable connection = Flux.<ResponseEvent>create(sseSink -> this.httpClient
 				.sendAsync(requestBuilder.build(),
@@ -537,12 +541,14 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 
 	private Mono<HttpResponse<String>> sendHttpPost(final String endpoint, final String body) {
 		final URI requestUri = Utils.resolveUri(baseUri, endpoint);
-		return Mono.defer(() -> {
+		return Mono.deferContextual(ctx -> {
 			var builder = this.requestBuilder.copy()
 				.uri(requestUri)
+				.header("Content-Type", "application/json")
 				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
 				.POST(HttpRequest.BodyPublishers.ofString(body));
-			return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", requestUri, body));
+			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
+			return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", requestUri, body, transportContext));
 		}).flatMap(customizedBuilder -> {
 			var request = customizedBuilder.build();
 			return Mono.fromFuture(httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()));

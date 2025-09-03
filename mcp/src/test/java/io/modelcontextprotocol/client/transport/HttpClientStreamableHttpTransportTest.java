@@ -4,9 +4,13 @@
 
 package io.modelcontextprotocol.client.transport;
 
+import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Map;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -16,6 +20,7 @@ import org.testcontainers.containers.wait.strategy.Wait;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
@@ -31,6 +36,9 @@ import static org.mockito.Mockito.when;
 class HttpClientStreamableHttpTransportTest {
 
 	static String host = "http://localhost:3001";
+
+	private McpTransportContext context = McpTransportContext
+		.create(Map.of("test-transport-context-key", "some-value"));
 
 	@SuppressWarnings("resource")
 	static GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v2")
@@ -63,7 +71,7 @@ class HttpClientStreamableHttpTransportTest {
 	@Test
 	void testRequestCustomizer() throws URISyntaxException {
 		var uri = new URI(host + "/mcp");
-		var mockRequestCustomizer = mock(SyncHttpRequestCustomizer.class);
+		var mockRequestCustomizer = mock(McpSyncHttpClientRequestCustomizer.class);
 
 		var transport = HttpClientStreamableHttpTransport.builder(host)
 			.httpRequestCustomizer(mockRequestCustomizer)
@@ -77,19 +85,22 @@ class HttpClientStreamableHttpTransportTest {
 			var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
 					"test-id", initializeRequest);
 
-			StepVerifier.create(t.sendMessage(testMessage)).verifyComplete();
+			StepVerifier
+				.create(t.sendMessage(testMessage).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)))
+				.verifyComplete();
 
 			// Verify the customizer was called
 			verify(mockRequestCustomizer, atLeastOnce()).customize(any(), eq("POST"), eq(uri), eq(
-					"{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":\"test-id\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{\"roots\":{\"listChanged\":true}},\"clientInfo\":{\"name\":\"Spring AI MCP Client\",\"version\":\"0.3.1\"}}}"));
+					"{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":\"test-id\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{\"roots\":{\"listChanged\":true}},\"clientInfo\":{\"name\":\"Spring AI MCP Client\",\"version\":\"0.3.1\"}}}"),
+					eq(context));
 		});
 	}
 
 	@Test
 	void testAsyncRequestCustomizer() throws URISyntaxException {
 		var uri = new URI(host + "/mcp");
-		var mockRequestCustomizer = mock(AsyncHttpRequestCustomizer.class);
-		when(mockRequestCustomizer.customize(any(), any(), any(), any()))
+		var mockRequestCustomizer = mock(McpAsyncHttpClientRequestCustomizer.class);
+		when(mockRequestCustomizer.customize(any(), any(), any(), any(), any()))
 			.thenAnswer(invocation -> Mono.just(invocation.getArguments()[0]));
 
 		var transport = HttpClientStreamableHttpTransport.builder(host)
@@ -104,11 +115,14 @@ class HttpClientStreamableHttpTransportTest {
 			var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
 					"test-id", initializeRequest);
 
-			StepVerifier.create(t.sendMessage(testMessage)).verifyComplete();
+			StepVerifier
+				.create(t.sendMessage(testMessage).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)))
+				.verifyComplete();
 
 			// Verify the customizer was called
 			verify(mockRequestCustomizer, atLeastOnce()).customize(any(), eq("POST"), eq(uri), eq(
-					"{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":\"test-id\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{\"roots\":{\"listChanged\":true}},\"clientInfo\":{\"name\":\"Spring AI MCP Client\",\"version\":\"0.3.1\"}}}"));
+					"{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":\"test-id\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{\"roots\":{\"listChanged\":true}},\"clientInfo\":{\"name\":\"Spring AI MCP Client\",\"version\":\"0.3.1\"}}}"),
+					eq(context));
 		});
 	}
 
