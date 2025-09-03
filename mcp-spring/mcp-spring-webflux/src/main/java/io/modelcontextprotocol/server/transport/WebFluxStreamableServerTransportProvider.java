@@ -12,6 +12,7 @@ import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpStreamableServerSession;
+import io.modelcontextprotocol.spec.McpStreamableServerSession.McpStreamableServerSessionStream;
 import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.ProtocolVersions;
@@ -199,9 +200,16 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 				.body(Flux.<ServerSentEvent<?>>create(sink -> {
 					WebFluxStreamableMcpSessionTransport sessionTransport = new WebFluxStreamableMcpSessionTransport(
 							sink);
-					McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
-						.listeningStream(sessionTransport);
-					sink.onDispose(listeningStream::close);
+					session.listeningStream(sessionTransport)
+						.doOnNext(serverSessionStream -> sink
+							.onDispose(() -> serverSessionStream.closeGracefully().subscribe(v -> {
+							}, error -> logger.warn("Failed to close listening stream gracefully", error))))
+						.doOnError(error -> {
+							logger.error("Failed to create listening stream", error);
+							sink.error(error);
+						})
+						.subscribe(serverSessionStream -> logger.debug("Listening stream created successfully"),
+								sink::error);
 				}), ServerSentEvent.class);
 
 		}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext));

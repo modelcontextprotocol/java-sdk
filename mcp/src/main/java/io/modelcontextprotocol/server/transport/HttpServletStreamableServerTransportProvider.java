@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
+import io.modelcontextprotocol.spec.McpStreamableServerSession.McpStreamableServerSessionStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -316,33 +317,36 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			}
 			else {
 				// Establish new listening stream
-				McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
-					.listeningStream(sessionTransport);
+				session.listeningStream(sessionTransport)
+					.doOnNext(serverSessionStream -> asyncContext.addListener(new jakarta.servlet.AsyncListener() {
+						@Override
+						public void onComplete(jakarta.servlet.AsyncEvent event) throws IOException {
+							logger.debug("SSE connection completed for session: {}", sessionId);
+							serverSessionStream.close();
+						}
 
-				asyncContext.addListener(new jakarta.servlet.AsyncListener() {
-					@Override
-					public void onComplete(jakarta.servlet.AsyncEvent event) throws IOException {
-						logger.debug("SSE connection completed for session: {}", sessionId);
-						listeningStream.close();
-					}
+						@Override
+						public void onTimeout(jakarta.servlet.AsyncEvent event) throws IOException {
+							logger.debug("SSE connection timed out for session: {}", sessionId);
+							serverSessionStream.close();
+						}
 
-					@Override
-					public void onTimeout(jakarta.servlet.AsyncEvent event) throws IOException {
-						logger.debug("SSE connection timed out for session: {}", sessionId);
-						listeningStream.close();
-					}
+						@Override
+						public void onError(jakarta.servlet.AsyncEvent event) throws IOException {
+							logger.debug("SSE connection error for session: {}", sessionId);
+							serverSessionStream.close();
+						}
 
-					@Override
-					public void onError(jakarta.servlet.AsyncEvent event) throws IOException {
-						logger.debug("SSE connection error for session: {}", sessionId);
-						listeningStream.close();
-					}
+						@Override
+						public void onStartAsync(jakarta.servlet.AsyncEvent event) throws IOException {
+							// No action needed
+						}
+					}))
+					.doOnError(error -> {
+						logger.error("Failed to create listening stream", error);
+					})
+					.subscribe(serverSessionStream -> logger.debug("Listening stream created successfully"));
 
-					@Override
-					public void onStartAsync(jakarta.servlet.AsyncEvent event) throws IOException {
-						// No action needed
-					}
-				});
 			}
 		}
 		catch (Exception e) {

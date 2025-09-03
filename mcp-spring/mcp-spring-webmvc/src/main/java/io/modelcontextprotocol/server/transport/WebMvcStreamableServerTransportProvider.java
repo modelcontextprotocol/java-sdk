@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
+import io.modelcontextprotocol.spec.McpStreamableServerSession.McpStreamableServerSessionStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -289,13 +290,15 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 				}
 				else {
 					// Establish new listening stream
-					McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
+					Mono<McpStreamableServerSession.McpStreamableServerSessionStream> listeningStream = session
 						.listeningStream(sessionTransport);
-
-					sseBuilder.onComplete(() -> {
+					listeningStream.subscribe(serverSessionStream -> sseBuilder.onComplete(() -> {
 						logger.debug("SSE connection completed for session: {}", sessionId);
-						listeningStream.close();
-					});
+						serverSessionStream.close();
+					}), error -> {
+						sseBuilder.error(error);
+						logger.error("Failed to create listening stream", error);
+					}, () -> logger.debug("Listening stream created successfully"));
 				}
 			}, Duration.ZERO);
 		}

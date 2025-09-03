@@ -134,16 +134,16 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	 * @param transport The dedicated SSE transport stream
 	 * @return a stream representation
 	 */
-	public McpStreamableServerSessionStream listeningStream(McpStreamableServerTransport transport) {
+	public Mono<McpStreamableServerSessionStream> listeningStream(McpStreamableServerTransport transport) {
 		McpStreamableServerSessionStream listeningStream = new McpStreamableServerSessionStream(transport);
-		McpLoggableSession listenedStream = this.listeningStreamRef.getAndSet(listeningStream);
-		if (listenedStream != null) {
+		McpLoggableSession oldStream = this.listeningStreamRef.getAndSet(listeningStream);
+		if (oldStream != null) {
 			logger.debug(
 					"Listening stream already exists for this session:{} and will be closed to make way for the new listening SSE stream",
 					this.id);
-			listenedStream.closeGracefully().block();
+			return oldStream.closeGracefully().thenReturn(listeningStream);
 		}
-		return listeningStream;
+		return Mono.just(listeningStream);
 	}
 
 	// TODO: keep track of history by keeping a map from eventId to stream and then
