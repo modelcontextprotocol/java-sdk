@@ -6,14 +6,13 @@ package io.modelcontextprotocol.common;
 
 import java.util.Map;
 import java.util.function.BiFunction;
-import java.util.function.Supplier;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpAsyncClient;
 import io.modelcontextprotocol.client.McpClient;
-import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
+import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpServer;
@@ -51,16 +50,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>
  * The tests cover multiple transport configurations with async servers:
  * <ul>
- * <li>Stateless server with async/sync streamable HTTP clients</li>
- * <li>Streamable server with async/sync streamable HTTP clients</li>
- * <li>SSE (Server-Sent Events) server with async/sync SSE clients</li>
+ * <li>Stateless server with async streamable HTTP clients</li>
+ * <li>Streamable server with async streamable HTTP clients</li>
+ * <li>SSE (Server-Sent Events) server with async SSE clients</li>
  * </ul>
  *
  * <h2>Context Propagation Flow</h2>
  * <ol>
- * <li>Client-side: Context data is stored (either in ThreadLocal for sync clients or
- * Reactor Context for async clients) and injected into HTTP headers via
- * {@link McpSyncHttpClientRequestCustomizer}</li>
+ * <li>Client-side: Context data is stored in the Reactor Context and injected into HTTP
+ * headers via {@link McpSyncHttpClientRequestCustomizer}</li>
  * <li>Transport: The context travels as HTTP headers (specifically "x-test" header in
  * these tests)</li>
  * <li>Server-side: A {@link McpTransportContextExtractor} extracts the header value and
@@ -69,26 +67,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * result</li>
  * </ol>
  *
- * <h2>Key Components</h2>
- * <ul>
- * <li>{@link McpTransportContext} - Container for contextual data</li>
- * <li>{@link McpSyncHttpClientRequestCustomizer} - Customizes HTTP requests to include
- * context headers</li>
- * <li>{@link McpTransportContextExtractor} - Extracts context from incoming HTTP
- * requests</li>
- * <li>ThreadLocal (sync) / Reactor Context (async) - Storage mechanisms for context
- * data</li>
- * </ul>
- *
  * <p>
  * All tests use an embedded Tomcat server running on a dynamically allocated port to
  * ensure isolation and prevent port conflicts during parallel test execution.
  *
  * @author Daniel Garnier-Moiroux
  * @author Christian Tzolov
- * @see McpTransportContext
- * @see McpTransportContextExtractor
- * @see SyncServerMcpTransportContextIntegrationTests
  */
 @Timeout(15)
 public class AsyncServerMcpTransportContextIntegrationTests {
@@ -97,22 +81,15 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 
 	private Tomcat tomcat;
 
-	private static final ThreadLocal<String> CLIENT_SIDE_HEADER_VALUE_HOLDER = new ThreadLocal<>();
-
 	private static final String HEADER_NAME = "x-test";
 
-	private final Supplier<McpTransportContext> clientContextProvider = () -> {
-		var headerValue = CLIENT_SIDE_HEADER_VALUE_HOLDER.get();
-		return headerValue != null ? McpTransportContext.create(Map.of("client-side-header-value", headerValue))
-				: McpTransportContext.EMPTY;
-	};
-
-	private final McpSyncHttpClientRequestCustomizer clientRequestCustomizer = (builder, method, endpoint, body,
+	private final McpAsyncHttpClientRequestCustomizer asyncClientRequestCustomizer = (builder, method, endpoint, body,
 			context) -> {
 		var headerValue = context.get("client-side-header-value");
 		if (headerValue != null) {
 			builder.header(HEADER_NAME, headerValue.toString());
 		}
+		return Mono.just(builder);
 	};
 
 	private final McpTransportContextExtractor<HttpServletRequest> serverContextExtractor = (HttpServletRequest r) -> {
@@ -142,28 +119,14 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 
 	private final McpAsyncClient asyncStreamableClient = McpClient
 		.async(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
-			.httpRequestCustomizer(clientRequestCustomizer)
+			.asyncHttpRequestCustomizer(asyncClientRequestCustomizer)
 			.build())
-		.build();
-
-	private final McpSyncClient syncStreamableClient = McpClient
-		.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
-			.httpRequestCustomizer(clientRequestCustomizer)
-			.build())
-		.transportContextProvider(clientContextProvider)
 		.build();
 
 	private final McpAsyncClient asyncSseClient = McpClient
 		.async(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
-			.httpRequestCustomizer(clientRequestCustomizer)
+			.asyncHttpRequestCustomizer(asyncClientRequestCustomizer)
 			.build())
-		.build();
-
-	private final McpSyncClient sseClient = McpClient
-		.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
-			.httpRequestCustomizer(clientRequestCustomizer)
-			.build())
-		.transportContextProvider(clientContextProvider)
 		.build();
 
 	private final McpSchema.Tool tool = McpSchema.Tool.builder()
@@ -184,7 +147,6 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 
 	@AfterEach
 	public void after() {
-		CLIENT_SIDE_HEADER_VALUE_HOLDER.remove();
 		if (statelessServerTransport != null) {
 			statelessServerTransport.closeGracefully().block();
 		}
@@ -193,6 +155,12 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 		}
 		if (sseServerTransport != null) {
 			sseServerTransport.closeGracefully().block();
+		}
+		if (asyncStreamableClient != null) {
+			asyncStreamableClient.closeGracefully().block();
+		}
+		if (asyncSseClient != null) {
+			asyncSseClient.closeGracefully().block();
 		}
 		stopTomcat();
 	}
@@ -229,32 +197,6 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 	}
 
 	@Test
-	void syncClientStatelessServer() {
-		startTomcat(statelessServerTransport);
-
-		var mcpServer = McpServer.async(statelessServerTransport)
-			.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
-			.tools(new McpStatelessServerFeatures.AsyncToolSpecification(tool, asyncStatelessHandler))
-			.build();
-
-		McpSchema.InitializeResult initResult = syncStreamableClient.initialize();
-		assertThat(initResult).isNotNull();
-
-		CLIENT_SIDE_HEADER_VALUE_HOLDER.set("some important value");
-		McpSchema.CallToolResult response = syncStreamableClient
-			.callTool(new McpSchema.CallToolRequest("test-tool", Map.of()));
-
-		assertThat(response).isNotNull();
-		assertThat(response.content()).hasSize(1)
-			.first()
-			.extracting(McpSchema.TextContent.class::cast)
-			.extracting(McpSchema.TextContent::text)
-			.isEqualTo("some important value");
-
-		mcpServer.close();
-	}
-
-	@Test
 	void asyncClientStreamableServer() {
 		startTomcat(streamableServerTransport);
 
@@ -286,32 +228,6 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 	}
 
 	@Test
-	void syncClientStreamableServer() {
-		startTomcat(streamableServerTransport);
-
-		var mcpServer = McpServer.async(streamableServerTransport)
-			.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
-			.tools(new McpServerFeatures.AsyncToolSpecification(tool, null, asyncStatefulHandler))
-			.build();
-
-		McpSchema.InitializeResult initResult = syncStreamableClient.initialize();
-		assertThat(initResult).isNotNull();
-
-		CLIENT_SIDE_HEADER_VALUE_HOLDER.set("some important value");
-		McpSchema.CallToolResult response = syncStreamableClient
-			.callTool(new McpSchema.CallToolRequest("test-tool", Map.of()));
-
-		assertThat(response).isNotNull();
-		assertThat(response.content()).hasSize(1)
-			.first()
-			.extracting(McpSchema.TextContent.class::cast)
-			.extracting(McpSchema.TextContent::text)
-			.isEqualTo("some important value");
-
-		mcpServer.close();
-	}
-
-	@Test
 	void asyncClientSseServer() {
 		startTomcat(sseServerTransport);
 
@@ -338,31 +254,6 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 					.isEqualTo("some important value");
 			})
 			.verifyComplete();
-
-		mcpServer.close();
-	}
-
-	@Test
-	void syncClientSseServer() {
-		startTomcat(sseServerTransport);
-
-		var mcpServer = McpServer.async(sseServerTransport)
-			.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
-			.tools(new McpServerFeatures.AsyncToolSpecification(tool, null, asyncStatefulHandler))
-			.build();
-
-		McpSchema.InitializeResult initResult = sseClient.initialize();
-		assertThat(initResult).isNotNull();
-
-		CLIENT_SIDE_HEADER_VALUE_HOLDER.set("some important value");
-		McpSchema.CallToolResult response = sseClient.callTool(new McpSchema.CallToolRequest("test-tool", Map.of()));
-
-		assertThat(response).isNotNull();
-		assertThat(response.content()).hasSize(1)
-			.first()
-			.extracting(McpSchema.TextContent.class::cast)
-			.extracting(McpSchema.TextContent::text)
-			.isEqualTo("some important value");
 
 		mcpServer.close();
 	}

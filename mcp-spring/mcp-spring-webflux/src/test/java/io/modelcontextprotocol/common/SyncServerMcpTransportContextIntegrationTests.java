@@ -169,6 +169,12 @@ public class SyncServerMcpTransportContextIntegrationTests {
 		if (sseServerTransport != null) {
 			sseServerTransport.closeGracefully().block();
 		}
+		if (streamableClient != null) {
+			streamableClient.closeGracefully();
+		}
+		if (sseClient != null) {
+			sseClient.closeGracefully();
+		}
 		stopHttpServer();
 	}
 
