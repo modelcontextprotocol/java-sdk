@@ -87,7 +87,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			assertThat(client.initialize()).isNotNull();
 
 		}
-		server.closeGracefully();
+		finally {
+			server.closeGracefully().block();
+		}
 	}
 
 	// ---------------------------------------
@@ -124,7 +126,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 					.hasMessage("Client must be configured with sampling capabilities");
 			}
 		}
-		server.closeGracefully();
+		finally {
+			server.closeGracefully().block();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -191,7 +195,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 				assertThat(result.stopReason()).isEqualTo(CreateMessageResult.StopReason.STOP_SEQUENCE);
 			});
 		}
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully().block();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -214,11 +220,6 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			return new CreateMessageResult(Role.USER, new McpSchema.TextContent("Test message"), "MockModelName",
 					CreateMessageResult.StopReason.STOP_SEQUENCE);
 		};
-
-		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
-			.capabilities(ClientCapabilities.builder().sampling().build())
-			.sampling(samplingHandler)
-			.build();
 
 		// Server
 
@@ -252,26 +253,31 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.requestTimeout(Duration.ofSeconds(4))
 			.tools(tool)
 			.build();
+		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+			.capabilities(ClientCapabilities.builder().sampling().build())
+			.sampling(samplingHandler)
+			.build()) {
 
-		InitializeResult initResult = mcpClient.initialize();
-		assertThat(initResult).isNotNull();
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
 
-		CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
 
-		assertThat(response).isNotNull();
-		assertThat(response).isEqualTo(callResponse);
+			assertThat(response).isNotNull();
+			assertThat(response).isEqualTo(callResponse);
 
-		assertWith(samplingResult.get(), result -> {
-			assertThat(result).isNotNull();
-			assertThat(result.role()).isEqualTo(Role.USER);
-			assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
-			assertThat(((McpSchema.TextContent) result.content()).text()).isEqualTo("Test message");
-			assertThat(result.model()).isEqualTo("MockModelName");
-			assertThat(result.stopReason()).isEqualTo(CreateMessageResult.StopReason.STOP_SEQUENCE);
-		});
-
-		mcpClient.close();
-		mcpServer.close();
+			assertWith(samplingResult.get(), result -> {
+				assertThat(result).isNotNull();
+				assertThat(result.role()).isEqualTo(Role.USER);
+				assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
+				assertThat(((McpSchema.TextContent) result.content()).text()).isEqualTo("Test message");
+				assertThat(result.model()).isEqualTo("MockModelName");
+				assertThat(result.stopReason()).isEqualTo(CreateMessageResult.StopReason.STOP_SEQUENCE);
+			});
+		}
+		finally {
+			mcpServer.closeGracefully().block();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -292,11 +298,6 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			return new CreateMessageResult(Role.USER, new McpSchema.TextContent("Test message"), "MockModelName",
 					CreateMessageResult.StopReason.STOP_SEQUENCE);
 		};
-
-		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
-			.capabilities(ClientCapabilities.builder().sampling().build())
-			.sampling(samplingHandler)
-			.build();
 
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
@@ -325,15 +326,21 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.tools(tool)
 			.build();
 
-		InitializeResult initResult = mcpClient.initialize();
-		assertThat(initResult).isNotNull();
+		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+			.capabilities(ClientCapabilities.builder().sampling().build())
+			.sampling(samplingHandler)
+			.build()) {
 
-		assertThatExceptionOfType(McpError.class).isThrownBy(() -> {
-			mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
-		}).withMessageContaining("1000ms");
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
 
-		mcpClient.close();
-		mcpServer.close();
+			assertThatExceptionOfType(McpError.class).isThrownBy(() -> {
+				mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+			}).withMessageContaining("1000ms");
+		}
+		finally {
+			mcpServer.closeGracefully().block();
+		}
 	}
 
 	// ---------------------------------------
@@ -366,7 +373,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 					.hasMessage("Client must be configured with elicitation capabilities");
 			}
 		}
-		server.closeGracefully().block();
+		finally {
+			server.closeGracefully().block();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -421,7 +430,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			assertThat(response).isNotNull();
 			assertThat(response).isEqualTo(callResponse);
 		}
-		mcpServer.closeGracefully().block();
+		finally {
+			mcpServer.closeGracefully().block();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -435,11 +446,6 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			assertThat(request.requestedSchema()).isNotNull();
 			return new ElicitResult(ElicitResult.Action.ACCEPT, Map.of("message", request.message()));
 		};
-
-		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
-			.capabilities(ClientCapabilities.builder().elicitation().build())
-			.elicitation(elicitationHandler)
-			.build();
 
 		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
 				null);
@@ -467,21 +473,27 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.tools(tool)
 			.build();
 
-		InitializeResult initResult = mcpClient.initialize();
-		assertThat(initResult).isNotNull();
+		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+			.capabilities(ClientCapabilities.builder().elicitation().build())
+			.elicitation(elicitationHandler)
+			.build()) {
 
-		CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
 
-		assertThat(response).isNotNull();
-		assertThat(response).isEqualTo(callResponse);
-		assertWith(resultRef.get(), result -> {
-			assertThat(result).isNotNull();
-			assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
-			assertThat(result.content().get("message")).isEqualTo("Test message");
-		});
+			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
 
-		mcpClient.closeGracefully();
-		mcpServer.closeGracefully().block();
+			assertThat(response).isNotNull();
+			assertThat(response).isEqualTo(callResponse);
+			assertWith(resultRef.get(), result -> {
+				assertThat(result).isNotNull();
+				assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+				assertThat(result.content().get("message")).isEqualTo("Test message");
+			});
+		}
+		finally {
+			mcpServer.closeGracefully().block();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -506,11 +518,6 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			}
 			return new ElicitResult(ElicitResult.Action.ACCEPT, Map.of("message", request.message()));
 		};
-
-		var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
-			.capabilities(ClientCapabilities.builder().elicitation().build())
-			.elicitation(elicitationHandler)
-			.build();
 
 		CallToolResult callResponse = new CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 
@@ -537,18 +544,24 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.tools(tool)
 			.build();
 
-		InitializeResult initResult = mcpClient.initialize();
-		assertThat(initResult).isNotNull();
+		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+			.capabilities(ClientCapabilities.builder().elicitation().build())
+			.elicitation(elicitationHandler)
+			.build()) {
 
-		assertThatExceptionOfType(McpError.class).isThrownBy(() -> {
-			mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
-		}).withMessageContaining("within 1000ms");
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
 
-		ElicitResult elicitResult = resultRef.get();
-		assertThat(elicitResult).isNull();
+			assertThatExceptionOfType(McpError.class).isThrownBy(() -> {
+				mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+			}).withMessageContaining("within 1000ms");
 
-		mcpClient.closeGracefully();
-		mcpServer.closeGracefully().block();
+			ElicitResult elicitResult = resultRef.get();
+			assertThat(elicitResult).isNull();
+		}
+		finally {
+			mcpServer.closeGracefully().block();
+		}
 	}
 
 	// ---------------------------------------
@@ -597,8 +610,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 				assertThat(rootsRef.get()).containsAll(List.of(roots.get(1), root3));
 			});
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -635,8 +649,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 				assertThat(e).isInstanceOf(McpError.class).hasMessage("Roots not supported");
 			}
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -664,8 +679,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 				assertThat(rootsRef.get()).isEmpty();
 			});
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -697,8 +713,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 				assertThat(rootsRef2.get()).containsAll(roots);
 			});
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -728,8 +745,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 				assertThat(rootsRef.get()).containsAll(roots);
 			});
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	// ---------------------------------------
@@ -789,8 +807,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			assertThat(responseBodyIsNullOrBlank.get()).isFalse();
 			assertThat(response).isNotNull().isEqualTo(callResponse);
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -826,8 +845,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 				.isThrownBy(() -> mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of())))
 				.withMessageContaining("Timeout on blocking read");
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -882,8 +902,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			assertThat(responseBodyIsNullOrBlank.get()).isFalse();
 			assertThat(response).isNotNull().isEqualTo(expectedCallResponse);
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -974,8 +995,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 				assertThat(toolsRef.get()).containsAll(List.of(tool2.tool()));
 			});
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -991,8 +1013,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	// ---------------------------------------
@@ -1056,7 +1079,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.build();
 
 		var mcpServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
-			.capabilities(ServerCapabilities.builder().logging().tools(true).build())
+			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(tool)
 			.build();
 
@@ -1103,7 +1126,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			assertThat(notificationMap.get("Another error message").logger()).isEqualTo("test-logger");
 			assertThat(notificationMap.get("Another error message").data()).isEqualTo("Another error message");
 		}
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully().block();
+		}
 	}
 
 	// ---------------------------------------
@@ -1208,7 +1233,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			assertThat(notificationMap.get("Processing completed").message()).isEqualTo("Processing completed");
 		}
 		finally {
-			mcpServer.close();
+			mcpServer.closeGracefully().block();
 		}
 	}
 
@@ -1258,8 +1283,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			assertThat(samplingRequest.get().argument().value()).isEqualTo("py");
 			assertThat(samplingRequest.get().ref().type()).isEqualTo("ref/prompt");
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	// ---------------------------------------
@@ -1320,8 +1346,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			// Verify execution order
 			assertThat(executionOrder.get()).isEqualTo("123");
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully().block();
+		}
 	}
 
 	// ---------------------------------------
@@ -1396,8 +1423,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 				.isEqualTo(json("""
 						{"result":5.0,"operation":"2 + 3","timestamp":"2024-01-01T10:00:00Z"}"""));
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -1450,8 +1478,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			String errorMessage = ((McpSchema.TextContent) response.content().get(0)).text();
 			assertThat(errorMessage).contains("Validation failed");
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -1500,8 +1529,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			assertThat(errorMessage).isEqualTo(
 					"Response missing structured content which is expected when calling tool with non-empty outputSchema");
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -1577,8 +1607,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 				.isEqualTo(json("""
 						{"count":3,"message":"Dynamic execution"}"""));
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	private double evaluateExpression(String expression) {

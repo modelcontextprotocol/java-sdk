@@ -151,8 +151,9 @@ class HttpServletStatelessIntegrationTests {
 			assertThat(response).isNotNull();
 			assertThat(response).isEqualTo(callResponse);
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.close();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -167,8 +168,9 @@ class HttpServletStatelessIntegrationTests {
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.close();
+		}
 	}
 
 	// ---------------------------------------
@@ -218,8 +220,9 @@ class HttpServletStatelessIntegrationTests {
 			assertThat(samplingRequest.get().argument().value()).isEqualTo("py");
 			assertThat(samplingRequest.get().ref().type()).isEqualTo("ref/prompt");
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.close();
+		}
 	}
 
 	// ---------------------------------------
@@ -290,8 +293,9 @@ class HttpServletStatelessIntegrationTests {
 				.isEqualTo(json("""
 						{"result":5.0,"operation":"2 + 3","timestamp":"2024-01-01T10:00:00Z"}"""));
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.close();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -342,8 +346,9 @@ class HttpServletStatelessIntegrationTests {
 			String errorMessage = ((McpSchema.TextContent) response.content().get(0)).text();
 			assertThat(errorMessage).contains("Validation failed");
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.close();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -391,8 +396,9 @@ class HttpServletStatelessIntegrationTests {
 			assertThat(errorMessage).isEqualTo(
 					"Response missing structured content which is expected when calling tool with non-empty outputSchema");
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.close();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -465,8 +471,9 @@ class HttpServletStatelessIntegrationTests {
 				.isEqualTo(json("""
 						{"count":3,"message":"Dynamic execution"}"""));
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.close();
+		}
 	}
 
 	@Test
