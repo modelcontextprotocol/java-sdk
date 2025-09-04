@@ -16,8 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.server.DefaultMcpTransportContext;
-import io.modelcontextprotocol.server.McpTransportContext;
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -149,7 +148,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	@Deprecated
 	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint) {
-		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, null, (serverRequest, context) -> context);
+		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, null, (serverRequest) -> McpTransportContext.EMPTY);
 	}
 
 	/**
@@ -169,7 +168,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval) {
 		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval,
-				(serverRequest, context) -> context);
+				(serverRequest) -> McpTransportContext.EMPTY);
 	}
 
 	/**
@@ -371,8 +370,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 				body.append(line);
 			}
 
-			final McpTransportContext transportContext = this.contextExtractor.extract(request,
-					new DefaultMcpTransportContext());
+			final McpTransportContext transportContext = this.contextExtractor.extract(request);
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body.toString());
 
 			// Process the message through the session's handle method
@@ -569,7 +567,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 
 		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
 
-		private McpTransportContextExtractor<HttpServletRequest> contextExtractor = (serverRequest, context) -> context;
+		private McpTransportContextExtractor<HttpServletRequest> contextExtractor = (
+				serverRequest) -> McpTransportContext.EMPTY;
 
 		private Duration keepAliveInterval;
 

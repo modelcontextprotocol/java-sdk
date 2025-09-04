@@ -4,12 +4,26 @@
 
 package io.modelcontextprotocol.client;
 
+import java.net.URI;
+import java.util.Map;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpClientTransport;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 @Timeout(15)
 public class HttpClientStreamableHttpSyncClientTests extends AbstractMcpSyncClientTests {
@@ -18,27 +32,42 @@ public class HttpClientStreamableHttpSyncClientTests extends AbstractMcpSyncClie
 
 	// Uses the https://github.com/tzolov/mcp-everything-server-docker-image
 	@SuppressWarnings("resource")
-	GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v2")
+	static GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v2")
 		.withCommand("node dist/index.js streamableHttp")
 		.withLogConsumer(outputFrame -> System.out.println(outputFrame.getUtf8String()))
 		.withExposedPorts(3001)
 		.waitingFor(Wait.forHttp("/").forStatusCode(404));
 
-	@Override
-	protected McpClientTransport createMcpTransport() {
-		return HttpClientStreamableHttpTransport.builder(host).build();
-	}
+	private final McpSyncHttpClientRequestCustomizer requestCustomizer = mock(McpSyncHttpClientRequestCustomizer.class);
 
 	@Override
-	protected void onStart() {
+	protected McpClientTransport createMcpTransport() {
+		return HttpClientStreamableHttpTransport.builder(host).httpRequestCustomizer(requestCustomizer).build();
+	}
+
+	@BeforeAll
+	static void startContainer() {
 		container.start();
 		int port = container.getMappedPort(3001);
 		host = "http://" + container.getHost() + ":" + port;
 	}
 
-	@Override
-	public void onClose() {
+	@AfterAll
+	static void stopContainer() {
 		container.stop();
+	}
+
+	@Test
+	void customizesRequests() {
+		var mcpTransportContext = McpTransportContext.create(Map.of("some-key", "some-value"));
+		withClient(createMcpTransport(), syncSpec -> syncSpec.transportContextProvider(() -> mcpTransportContext),
+				mcpSyncClient -> {
+					mcpSyncClient.initialize();
+
+					verify(requestCustomizer, atLeastOnce()).customize(any(), eq("POST"), eq(URI.create(host + "/mcp")),
+							eq("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"),
+							eq(mcpTransportContext));
+				});
 	}
 
 }

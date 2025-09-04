@@ -14,8 +14,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.modelcontextprotocol.server.DefaultMcpTransportContext;
-import io.modelcontextprotocol.server.McpTransportContext;
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -192,7 +191,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	public WebMvcSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval) {
 		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval,
-				(serverRequest, context) -> context);
+				(serverRequest) -> McpTransportContext.EMPTY);
 	}
 
 	/**
@@ -397,8 +396,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		}
 
 		try {
-			final McpTransportContext transportContext = this.contextExtractor.extract(request,
-					new DefaultMcpTransportContext());
+			final McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 			String body = request.body(String.class);
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
@@ -553,7 +551,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 
 		private Duration keepAliveInterval;
 
-		private McpTransportContextExtractor<ServerRequest> contextExtractor = (serverRequest, context) -> context;
+		private McpTransportContextExtractor<ServerRequest> contextExtractor = (
+				serverRequest) -> McpTransportContext.EMPTY;
 
 		/**
 		 * Sets the JSON object mapper to use for message serialization/deserialization.

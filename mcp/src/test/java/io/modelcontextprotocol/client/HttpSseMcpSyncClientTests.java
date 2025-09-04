@@ -4,11 +4,27 @@
 
 package io.modelcontextprotocol.client;
 
-import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
-import io.modelcontextprotocol.spec.McpClientTransport;
+import java.net.URI;
+import java.util.Map;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
+
+import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
+import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.spec.McpClientTransport;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 /**
  * Tests for the {@link McpSyncClient} with {@link HttpClientSseClientTransport}.
@@ -18,31 +34,45 @@ import org.testcontainers.containers.wait.strategy.Wait;
 @Timeout(15) // Giving extra time beyond the client timeout
 class HttpSseMcpSyncClientTests extends AbstractMcpSyncClientTests {
 
-	String host = "http://localhost:3003";
+	static String host = "http://localhost:3003";
 
 	// Uses the https://github.com/tzolov/mcp-everything-server-docker-image
 	@SuppressWarnings("resource")
-	GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v2")
+	static GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v2")
 		.withCommand("node dist/index.js sse")
 		.withLogConsumer(outputFrame -> System.out.println(outputFrame.getUtf8String()))
 		.withExposedPorts(3001)
 		.waitingFor(Wait.forHttp("/").forStatusCode(404));
 
-	@Override
-	protected McpClientTransport createMcpTransport() {
-		return HttpClientSseClientTransport.builder(host).build();
-	}
+	private final McpSyncHttpClientRequestCustomizer requestCustomizer = mock(McpSyncHttpClientRequestCustomizer.class);
 
 	@Override
-	protected void onStart() {
+	protected McpClientTransport createMcpTransport() {
+		return HttpClientSseClientTransport.builder(host).httpRequestCustomizer(requestCustomizer).build();
+	}
+
+	@BeforeAll
+	static void startContainer() {
 		container.start();
 		int port = container.getMappedPort(3001);
 		host = "http://" + container.getHost() + ":" + port;
 	}
 
-	@Override
-	protected void onClose() {
+	@AfterAll
+	static void stopContainer() {
 		container.stop();
+	}
+
+	@Test
+	void customizesRequests() {
+		var mcpTransportContext = McpTransportContext.create(Map.of("some-key", "some-value"));
+		withClient(createMcpTransport(), syncSpec -> syncSpec.transportContextProvider(() -> mcpTransportContext),
+				mcpSyncClient -> {
+					mcpSyncClient.initialize();
+
+					verify(requestCustomizer, atLeastOnce()).customize(any(), eq("GET"), eq(URI.create(host + "/sse")),
+							isNull(), eq(mcpTransportContext));
+				});
 	}
 
 }

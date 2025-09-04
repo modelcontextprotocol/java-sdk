@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import io.modelcontextprotocol.common.McpTransportContext;
+
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -18,11 +20,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Tests for {@link DelegatingMcpAsyncHttpRequestCustomizer}.
+ * Tests for {@link DelegatingMcpAsyncHttpClientRequestCustomizer}.
  *
  * @author Daniel Garnier-Moiroux
  */
-class DelegatingMcpAsyncHttpRequestCustomizerTest {
+class DelegatingMcpAsyncHttpClientRequestCustomizerTest {
 
 	private static final URI TEST_URI = URI.create("https://example.com");
 
@@ -30,26 +32,29 @@ class DelegatingMcpAsyncHttpRequestCustomizerTest {
 
 	@Test
 	void delegates() {
-		var mockCustomizer = mock(McpAsyncHttpRequestCustomizer.class);
-		when(mockCustomizer.customize(any(), any(), any(), any()))
+		var mockCustomizer = mock(McpAsyncHttpClientRequestCustomizer.class);
+		when(mockCustomizer.customize(any(), any(), any(), any(), any()))
 			.thenAnswer(invocation -> Mono.just(invocation.getArguments()[0]));
-		var customizer = new DelegatingMcpAsyncHttpRequestCustomizer(List.of(mockCustomizer));
+		var customizer = new DelegatingMcpAsyncHttpClientRequestCustomizer(List.of(mockCustomizer));
 
-		StepVerifier.create(customizer.customize(TEST_BUILDER, "GET", TEST_URI, "{\"everybody\": \"needs somebody\"}"))
+		var context = McpTransportContext.EMPTY;
+		StepVerifier
+			.create(customizer.customize(TEST_BUILDER, "GET", TEST_URI, "{\"everybody\": \"needs somebody\"}", context))
 			.expectNext(TEST_BUILDER)
 			.verifyComplete();
 
-		verify(mockCustomizer).customize(TEST_BUILDER, "GET", TEST_URI, "{\"everybody\": \"needs somebody\"}");
+		verify(mockCustomizer).customize(TEST_BUILDER, "GET", TEST_URI, "{\"everybody\": \"needs somebody\"}", context);
 	}
 
 	@Test
 	void delegatesInOrder() {
-		var customizer = new DelegatingMcpAsyncHttpRequestCustomizer(
-				List.of((builder, method, uri, body) -> Mono.just(builder.copy().header("x-test", "one")),
-						(builder, method, uri, body) -> Mono.just(builder.copy().header("x-test", "two"))));
+		var customizer = new DelegatingMcpAsyncHttpClientRequestCustomizer(
+				List.of((builder, method, uri, body, ctx) -> Mono.just(builder.copy().header("x-test", "one")),
+						(builder, method, uri, body, ctx) -> Mono.just(builder.copy().header("x-test", "two"))));
 
 		var headers = Mono
-			.from(customizer.customize(TEST_BUILDER, "GET", TEST_URI, "{\"everybody\": \"needs somebody\"}"))
+			.from(customizer.customize(TEST_BUILDER, "GET", TEST_URI, "{\"everybody\": \"needs somebody\"}",
+					McpTransportContext.EMPTY))
 			.map(HttpRequest.Builder::build)
 			.map(HttpRequest::headers)
 			.flatMapIterable(h -> h.allValues("x-test"));
@@ -59,7 +64,7 @@ class DelegatingMcpAsyncHttpRequestCustomizerTest {
 
 	@Test
 	void constructorRequiresNonNull() {
-		assertThatThrownBy(() -> new DelegatingMcpAsyncHttpRequestCustomizer(null))
+		assertThatThrownBy(() -> new DelegatingMcpAsyncHttpClientRequestCustomizer(null))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Customizers must not be null");
 	}

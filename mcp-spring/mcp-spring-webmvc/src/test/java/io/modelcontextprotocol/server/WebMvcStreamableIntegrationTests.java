@@ -6,6 +6,7 @@ package io.modelcontextprotocol.server;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
+import java.util.Map;
 
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
@@ -26,6 +27,7 @@ import io.modelcontextprotocol.AbstractMcpClientServerIntegrationTests;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.client.transport.WebClientStreamableHttpTransport;
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpServer.AsyncSpecification;
 import io.modelcontextprotocol.server.McpServer.SyncSpecification;
 import io.modelcontextprotocol.server.transport.WebMvcStreamableServerTransportProvider;
@@ -40,10 +42,8 @@ class WebMvcStreamableIntegrationTests extends AbstractMcpClientServerIntegratio
 
 	private WebMvcStreamableServerTransportProvider mcpServerTransportProvider;
 
-	static McpTransportContextExtractor<ServerRequest> TEST_CONTEXT_EXTRACTOR = (r, tc) -> {
-		tc.put("important", "value");
-		return tc;
-	};
+	static McpTransportContextExtractor<ServerRequest> TEST_CONTEXT_EXTRACTOR = r -> McpTransportContext
+		.create(Map.of("important", "value"));
 
 	@Configuration
 	@EnableWebMvc
