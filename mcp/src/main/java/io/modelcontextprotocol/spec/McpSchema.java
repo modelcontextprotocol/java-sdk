@@ -25,6 +25,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.modelcontextprotocol.util.Assert;
+import reactor.util.annotation.Nullable;
 
 /**
  * Based on the <a href="http://www.jsonrpc.org/specification">JSON-RPC 2.0
@@ -36,6 +37,7 @@ import io.modelcontextprotocol.util.Assert;
  * @author Luca Chang
  * @author Surbhi Bansal
  * @author Anurag Pant
+ * @author Yanming Zhou
  */
 public final class McpSchema {
 
@@ -281,7 +283,7 @@ public final class McpSchema {
 	// @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
 	public record JSONRPCResponse( // @formatter:off
 		@JsonProperty("jsonrpc") String jsonrpc,
-		@JsonProperty("id") Object id,
+		@JsonProperty("id") @Nullable Object id,
 		@JsonProperty("result") Object result,
 		@JsonProperty("error") JSONRPCError error) implements JSONRPCMessage { // @formatter:on
 
