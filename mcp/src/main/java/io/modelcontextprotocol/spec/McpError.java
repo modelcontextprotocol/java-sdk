@@ -4,12 +4,14 @@
 
 package io.modelcontextprotocol.spec;
 
+import com.fasterxml.jackson.annotation.JsonValue;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse.JSONRPCError;
 import io.modelcontextprotocol.util.Assert;
 
 public class McpError extends RuntimeException {
 
-	private JSONRPCError jsonRpcError;
+	@JsonValue
+	private final JSONRPCError jsonRpcError;
 
 	public McpError(JSONRPCError jsonRpcError) {
 		super(jsonRpcError.message());
@@ -19,6 +21,7 @@ public class McpError extends RuntimeException {
 	@Deprecated
 	public McpError(Object error) {
 		super(error.toString());
+		this.jsonRpcError = new JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR, error.toString(), null);
 	}
 
 	public JSONRPCError getJsonRpcError() {
