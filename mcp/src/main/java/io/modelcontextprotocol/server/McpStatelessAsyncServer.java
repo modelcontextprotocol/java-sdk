@@ -249,6 +249,11 @@ public class McpStatelessAsyncServer {
 
 			return this.delegateHandler.apply(transportContext, request).map(result -> {
 
+				if (result.isError() != null && result.isError()) {
+					// If the tool call resulted in an error, skip further validation
+					return result;
+				}
+
 				if (outputSchema == null) {
 					if (result.structuredContent() != null) {
 						logger.warn(

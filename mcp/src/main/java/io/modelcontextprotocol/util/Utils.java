@@ -9,6 +9,7 @@ import reactor.util.annotation.Nullable;
 import java.net.URI;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Miscellaneous utility methods.
@@ -105,6 +106,15 @@ public final class Utils {
 			basePath = basePath.substring(0, basePath.length() - 1);
 		}
 		return endpointPath.startsWith(basePath);
+	}
+
+	public static Throwable findRootCause(Throwable throwable) {
+		Objects.requireNonNull(throwable);
+		Throwable rootCause = throwable;
+		while (rootCause.getCause() != null && rootCause.getCause() != rootCause) {
+			rootCause = rootCause.getCause();
+		}
+		return rootCause;
 	}
 
 }

@@ -4,14 +4,6 @@
 
 package io.modelcontextprotocol;
 
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
-import static org.assertj.core.api.Assertions.assertWith;
-import static org.awaitility.Awaitility.await;
-import static org.mockito.Mockito.mock;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -28,9 +20,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -59,8 +48,17 @@ import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.util.Utils;
 import net.javacrumbs.jsonunit.core.Option;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertWith;
+import static org.awaitility.Awaitility.await;
+import static org.mockito.Mockito.mock;
 
 public abstract class AbstractMcpClientServerIntegrationTests {
 
@@ -108,8 +106,8 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(emptyJsonSchema).build())
 			.callHandler((exchange, request) -> {
-				exchange.createMessage(mock(McpSchema.CreateMessageRequest.class)).block();
-				return Mono.just(mock(CallToolResult.class));
+				return exchange.createMessage(mock(McpSchema.CreateMessageRequest.class))
+					.then(Mono.just(mock(CallToolResult.class)));
 			})
 			.build();
 
@@ -122,13 +120,15 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 			assertThat(client.initialize()).isNotNull();
 
-			try {
-				client.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
-			}
-			catch (McpError e) {
-				assertThat(e).isInstanceOf(McpError.class)
-					.hasMessage("Client must be configured with sampling capabilities");
-			}
+			McpSchema.CallToolResult callToolResult = client.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+
+			// Tool errors should be reported within the result object, not as MCP
+			// protocol-level errors. This allows the LLM to see and potentially
+			// handle the error.
+			assertThat(callToolResult).isNotNull();
+			assertThat(callToolResult.isError()).isTrue();
+			assertThat(callToolResult.content()).containsExactly(new McpSchema.TextContent(
+					"Error calling tool: Client must be configured with sampling capabilities"));
 		}
 		finally {
 			server.closeGracefully().block();
@@ -338,9 +338,16 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
 
-			assertThatExceptionOfType(McpError.class).isThrownBy(() -> {
-				mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
-			}).withMessageContaining("1000ms");
+			McpSchema.CallToolResult callToolResult = mcpClient
+				.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+
+			// Tool errors should be reported within the result object, not as MCP
+			// protocol-level errors. This allows the LLM to see and potentially
+			// handle the error.
+			assertThat(callToolResult).isNotNull();
+			assertThat(callToolResult.isError()).isTrue();
+			assertThat(callToolResult.content()).containsExactly(new McpSchema.TextContent(
+					"Error calling tool: Did not observe any item or terminal signal within 1000ms in 'source(MonoCreate)' (and no fallback has been configured)"));
 		}
 		finally {
 			mcpServer.closeGracefully().block();
@@ -556,9 +563,16 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
 
-			assertThatExceptionOfType(McpError.class).isThrownBy(() -> {
-				mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
-			}).withMessageContaining("within 1000ms");
+			McpSchema.CallToolResult callToolResult = mcpClient
+				.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+
+			// Tool errors should be reported within the result object, not as MCP
+			// protocol-level errors. This allows the LLM to see and potentially
+			// handle the error.
+			assertThat(callToolResult).isNotNull();
+			assertThat(callToolResult.isError()).isTrue();
+			assertThat(callToolResult.content()).containsExactly(new McpSchema.TextContent(
+					"Error calling tool: Did not observe any item or terminal signal within 1000ms in 'source(MonoCreate)' (and no fallback has been configured)"));
 
 			ElicitResult elicitResult = resultRef.get();
 			assertThat(elicitResult).isNull();
@@ -842,12 +856,16 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
 
-			// We expect the tool call to fail immediately with the exception raised by
-			// the offending tool
-			// instead of getting back a timeout.
-			assertThatExceptionOfType(McpError.class)
-				.isThrownBy(() -> mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of())))
-				.withMessageContaining("Timeout on blocking read");
+			McpSchema.CallToolResult callToolResult = mcpClient
+				.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+
+			// Tool errors should be reported within the result object, not as MCP
+			// protocol-level errors. This allows the LLM to see and potentially
+			// handle the error.
+			assertThat(callToolResult).isNotNull();
+			assertThat(callToolResult.isError()).isTrue();
+			assertThat(callToolResult.content()).containsExactly(new McpSchema.TextContent(
+					"Error calling tool: Timeout on blocking read for 1000000000 NANOSECONDS"));
 		}
 		finally {
 			mcpServer.closeGracefully();
