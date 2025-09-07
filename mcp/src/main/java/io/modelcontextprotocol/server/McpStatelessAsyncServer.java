@@ -11,7 +11,9 @@ import io.modelcontextprotocol.spec.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
+import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
 import io.modelcontextprotocol.util.Assert;
@@ -380,11 +382,31 @@ public class McpStatelessAsyncServer {
 				.findAny();
 
 			if (toolSpecification.isEmpty()) {
-				return Mono.error(new McpError("Tool not found: " + callToolRequest.name()));
+				return Mono.error(new McpError(new JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INVALID_PARAMS,
+						"Unknown tool: invalid_tool_name", "Tool not found: " + callToolRequest.name())));
 			}
+			else {
+				return toolSpecification.get().callHandler().apply(ctx, callToolRequest).onErrorResume(error -> {
+					logger.error("Error calling tool: {}", callToolRequest.name(), error);
 
-			return toolSpecification.map(tool -> tool.callHandler().apply(ctx, callToolRequest))
-				.orElse(Mono.error(new McpError("Tool not found: " + callToolRequest.name())));
+					// TODO: Should we handle the McpError+JsonRcpError specaially (e.g.
+					// propagate)
+					// or always return a CallToolResult with isError=true?
+					if (error instanceof McpError mcpError && mcpError.getJsonRpcError() != null) {
+						// If the error is already an MCP error, propagate it as is
+						return Mono.error(mcpError);
+					}
+
+					// Tool errors should be reported within the result object, not as MCP
+					// protocol-level errors. This allows the LLM to see and potentially
+					// handle the error.
+					return Mono.just(CallToolResult.builder()
+						.isError(true)
+						.content(List
+							.of(new TextContent("Error calling tool: " + Utils.findRootCause(error).getMessage())))
+						.build());
+				});
+			}
 		};
 	}
 

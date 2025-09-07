@@ -108,6 +108,12 @@ public final class Utils {
 		return endpointPath.startsWith(basePath);
 	}
 
+	/**
+	 * Finds the root cause of the given throwable by traversing the cause chain.
+	 * @param throwable The throwable to analyze
+	 * @return The root cause throwable
+	 * @throws NullPointerException if the provided throwable is null
+	 */
 	public static Throwable findRootCause(Throwable throwable) {
 		Objects.requireNonNull(throwable);
 		Throwable rootCause = throwable;

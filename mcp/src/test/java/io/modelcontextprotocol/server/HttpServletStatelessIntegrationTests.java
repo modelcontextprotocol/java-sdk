@@ -300,6 +300,64 @@ class HttpServletStatelessIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient" })
+	void testStructuredOutputWithInHandlerError(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Create a tool with output schema
+		Map<String, Object> outputSchema = Map.of(
+				"type", "object", "properties", Map.of("result", Map.of("type", "number"), "operation",
+						Map.of("type", "string"), "timestamp", Map.of("type", "string")),
+				"required", List.of("result", "operation"));
+
+		Tool calculatorTool = Tool.builder()
+			.name("calculator")
+			.description("Performs mathematical calculations")
+			.outputSchema(outputSchema)
+			.build();
+
+		// Handler that throws an exception to simulate an error
+		McpStatelessServerFeatures.SyncToolSpecification tool = McpStatelessServerFeatures.SyncToolSpecification
+			.builder()
+			.tool(calculatorTool)
+			.callHandler((exchange, request) -> {
+				throw new RuntimeException("Simulated in-handler error");
+			})
+			.build();
+
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Verify tool is listed with output schema
+			var toolsList = mcpClient.listTools();
+			assertThat(toolsList.tools()).hasSize(1);
+			assertThat(toolsList.tools().get(0).name()).isEqualTo("calculator");
+			// Note: outputSchema might be null in sync server, but validation still works
+
+			// Call tool with valid structured output
+			CallToolResult response = mcpClient
+				.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3")));
+
+			assertThat(response).isNotNull();
+			assertThat(response.isError()).isTrue();
+			assertThat(response.content()).isNotEmpty();
+			assertThat(response.content())
+				.containsExactly(new McpSchema.TextContent("Error calling tool: Simulated in-handler error"));
+			assertThat(response.structuredContent()).isNull();
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient" })
 	void testStructuredOutputValidationFailure(String clientType) {
 		var clientBuilder = clientBuilders.get(clientType);
 
@@ -477,7 +535,57 @@ class HttpServletStatelessIntegrationTests {
 	}
 
 	@Test
-	void testThrownMcpError() throws Exception {
+	void testThrownMcpErrorAndJsonRpcError() throws Exception {
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.build();
+
+		Tool testTool = Tool.builder().name("test").description("test").build();
+
+		McpStatelessServerFeatures.SyncToolSpecification toolSpec = new McpStatelessServerFeatures.SyncToolSpecification(
+				testTool, (transportContext, request) -> {
+					throw new RuntimeException("testing");
+				});
+
+		mcpServer.addTool(toolSpec);
+
+		McpSchema.CallToolRequest callToolRequest = new McpSchema.CallToolRequest("test", Map.of());
+		McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
+				McpSchema.METHOD_TOOLS_CALL, "test", callToolRequest);
+
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", CUSTOM_MESSAGE_ENDPOINT);
+		MockHttpServletResponse response = new MockHttpServletResponse();
+
+		byte[] content = new ObjectMapper().writeValueAsBytes(jsonrpcRequest);
+		request.setContent(content);
+		request.addHeader("Content-Type", "application/json");
+		request.addHeader("Content-Length", Integer.toString(content.length));
+		request.addHeader("Content-Length", Integer.toString(content.length));
+		request.addHeader("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM);
+		request.addHeader("Content-Type", APPLICATION_JSON);
+		request.addHeader("Cache-Control", "no-cache");
+		request.addHeader(HttpHeaders.PROTOCOL_VERSION, ProtocolVersions.MCP_2025_03_26);
+
+		mcpStatelessServerTransport.service(request, response);
+
+		McpSchema.JSONRPCResponse jsonrpcResponse = new ObjectMapper().readValue(response.getContentAsByteArray(),
+				McpSchema.JSONRPCResponse.class);
+
+		CallToolResult callToolResult = new ObjectMapper().convertValue(jsonrpcResponse.result(), CallToolResult.class);
+
+		assertThat(callToolResult).isNotNull();
+		assertThat(callToolResult.isError()).isTrue();
+		assertThat(callToolResult.content()).isNotEmpty();
+		assertThat(callToolResult.content()).containsExactly(new McpSchema.TextContent("Error calling tool: testing"));
+		assertThat(callToolResult.structuredContent()).isNull();
+
+		mcpServer.close();
+	}
+
+	@Test
+	@Timeout(15000)
+	void testThrownNonMcpError() throws Exception {
 		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
@@ -508,10 +616,21 @@ class HttpServletStatelessIntegrationTests {
 		request.addHeader("Content-Type", APPLICATION_JSON);
 		request.addHeader("Cache-Control", "no-cache");
 		request.addHeader(HttpHeaders.PROTOCOL_VERSION, ProtocolVersions.MCP_2025_03_26);
+
 		mcpStatelessServerTransport.service(request, response);
 
 		McpSchema.JSONRPCResponse jsonrpcResponse = new ObjectMapper().readValue(response.getContentAsByteArray(),
 				McpSchema.JSONRPCResponse.class);
+
+		// CallToolResult callToolResult = new
+		// ObjectMapper().convertValue(jsonrpcResponse.result(), CallToolResult.class);
+
+		// assertThat(callToolResult).isNotNull();
+		// assertThat(callToolResult.isError()).isTrue();
+		// assertThat(callToolResult.content()).isNotEmpty();
+		// assertThat(callToolResult.content())
+		// .containsExactly(new McpSchema.TextContent("Error calling tool: testing"));
+		// assertThat(callToolResult.structuredContent()).isNull();
 
 		assertThat(jsonrpcResponse.error())
 			.isEqualTo(new McpSchema.JSONRPCResponse.JSONRPCError(12345, "testing", Map.of("a", "b")));
