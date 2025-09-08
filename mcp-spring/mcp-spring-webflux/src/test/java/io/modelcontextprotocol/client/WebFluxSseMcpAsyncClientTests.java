@@ -6,6 +6,8 @@ package io.modelcontextprotocol.client;
 
 import java.time.Duration;
 
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Timeout;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.testcontainers.containers.GenericContainer;
@@ -26,7 +28,7 @@ class WebFluxSseMcpAsyncClientTests extends AbstractMcpAsyncClientTests {
 
 	// Uses the https://github.com/tzolov/mcp-everything-server-docker-image
 	@SuppressWarnings("resource")
-	GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v2")
+	static GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v3")
 		.withCommand("node dist/index.js sse")
 		.withLogConsumer(outputFrame -> System.out.println(outputFrame.getUtf8String()))
 		.withExposedPorts(3001)
@@ -37,15 +39,15 @@ class WebFluxSseMcpAsyncClientTests extends AbstractMcpAsyncClientTests {
 		return WebFluxSseClientTransport.builder(WebClient.builder().baseUrl(host)).build();
 	}
 
-	@Override
-	protected void onStart() {
+	@BeforeAll
+	static void startContainer() {
 		container.start();
 		int port = container.getMappedPort(3001);
 		host = "http://" + container.getHost() + ":" + port;
 	}
 
-	@Override
-	public void onClose() {
+	@AfterAll
+	static void stopContainer() {
 		container.stop();
 	}
 

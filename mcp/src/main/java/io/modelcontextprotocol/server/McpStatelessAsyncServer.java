@@ -11,7 +11,9 @@ import io.modelcontextprotocol.spec.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
+import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
 import io.modelcontextprotocol.util.Assert;
@@ -249,6 +251,11 @@ public class McpStatelessAsyncServer {
 
 			return this.delegateHandler.apply(transportContext, request).map(result -> {
 
+				if (Boolean.TRUE.equals(result.isError())) {
+					// If the tool call resulted in an error, skip further validation
+					return result;
+				}
+
 				if (outputSchema == null) {
 					if (result.structuredContent() != null) {
 						logger.warn(
@@ -375,11 +382,11 @@ public class McpStatelessAsyncServer {
 				.findAny();
 
 			if (toolSpecification.isEmpty()) {
-				return Mono.error(new McpError("Tool not found: " + callToolRequest.name()));
+				return Mono.error(new McpError(new JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INVALID_PARAMS,
+						"Unknown tool: invalid_tool_name", "Tool not found: " + callToolRequest.name())));
 			}
 
-			return toolSpecification.map(tool -> tool.callHandler().apply(ctx, callToolRequest))
-				.orElse(Mono.error(new McpError("Tool not found: " + callToolRequest.name())));
+			return toolSpecification.get().callHandler().apply(ctx, callToolRequest);
 		};
 	}
 

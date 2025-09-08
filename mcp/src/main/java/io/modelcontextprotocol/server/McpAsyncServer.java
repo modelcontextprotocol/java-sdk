@@ -29,10 +29,12 @@ import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
+import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
@@ -376,6 +378,11 @@ public class McpAsyncServer {
 
 			return this.delegateCallToolResult.apply(exchange, request).map(result -> {
 
+				if (Boolean.TRUE.equals(result.isError())) {
+					// If the tool call resulted in an error, skip further validation
+					return result;
+				}
+
 				if (outputSchema == null) {
 					if (result.structuredContent() != null) {
 						logger.warn(
@@ -507,11 +514,11 @@ public class McpAsyncServer {
 				.findAny();
 
 			if (toolSpecification.isEmpty()) {
-				return Mono.error(new McpError("Tool not found: " + callToolRequest.name()));
+				return Mono.error(new McpError(new JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INVALID_PARAMS,
+						"Unknown tool: invalid_tool_name", "Tool not found: " + callToolRequest.name())));
 			}
 
-			return toolSpecification.map(tool -> Mono.defer(() -> tool.callHandler().apply(exchange, callToolRequest)))
-				.orElse(Mono.error(new McpError("Tool not found: " + callToolRequest.name())));
+			return toolSpecification.get().callHandler().apply(exchange, callToolRequest);
 		};
 	}
 
@@ -594,6 +601,7 @@ public class McpAsyncServer {
 			var resourceList = this.resources.values()
 				.stream()
 				.map(McpServerFeatures.AsyncResourceSpecification::resource)
+				.filter(resource -> !resource.uri().contains("{"))
 				.toList();
 			return Mono.just(new McpSchema.ListResourcesResult(resourceList, null));
 		};

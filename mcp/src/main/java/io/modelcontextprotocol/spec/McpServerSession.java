@@ -204,13 +204,20 @@ public class McpServerSession implements McpLoggableSession {
 			// TODO handle errors for communication to without initialization happening
 			// first
 			if (message instanceof McpSchema.JSONRPCResponse response) {
-				logger.debug("Received Response: {}", response);
-				var sink = pendingResponses.remove(response.id());
-				if (sink == null) {
-					logger.warn("Unexpected response for unknown id {}", response.id());
+				logger.debug("Received response: {}", response);
+				if (response.id() != null) {
+					var sink = pendingResponses.remove(response.id());
+					if (sink == null) {
+						logger.warn("Unexpected response for unknown id {}", response.id());
+					}
+					else {
+						sink.success(response);
+					}
 				}
 				else {
-					sink.success(response);
+					logger.error("Discarded MCP request response without session id. "
+							+ "This is an indication of a bug in the request sender code that can lead to memory "
+							+ "leaks as pending requests will never be completed.");
 				}
 				return Mono.empty();
 			}

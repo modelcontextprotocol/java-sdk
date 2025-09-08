@@ -48,7 +48,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Daniel Garnier-Moiroux
  */
 @Timeout(15)
-public class McpTransportContextIntegrationTests {
+public class SyncServerMcpTransportContextIntegrationTests {
 
 	private static final int PORT = TomcatTestUtil.findAvailablePort();
 
@@ -134,6 +134,12 @@ public class McpTransportContextIntegrationTests {
 		}
 		if (sseServerTransport != null) {
 			sseServerTransport.closeGracefully().block();
+		}
+		if (streamableClient != null) {
+			streamableClient.closeGracefully();
+		}
+		if (sseClient != null) {
+			sseClient.closeGracefully();
 		}
 		stopTomcat();
 	}

@@ -68,12 +68,6 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	abstract protected McpClientTransport createMcpTransport();
 
-	protected void onStart() {
-	}
-
-	protected void onClose() {
-	}
-
 	protected Duration getRequestTimeout() {
 		return Duration.ofSeconds(14);
 	}
@@ -116,16 +110,6 @@ public abstract class AbstractMcpAsyncClientTests {
 		finally {
 			StepVerifier.create(client.closeGracefully()).expectComplete().verify(Duration.ofSeconds(10));
 		}
-	}
-
-	@BeforeEach
-	void setUp() {
-		onStart();
-	}
-
-	@AfterEach
-	void tearDown() {
-		onClose();
 	}
 
 	<T> void verifyNotificationSucceedsWithImplicitInitialization(Function<McpAsyncClient, Mono<T>> operation,

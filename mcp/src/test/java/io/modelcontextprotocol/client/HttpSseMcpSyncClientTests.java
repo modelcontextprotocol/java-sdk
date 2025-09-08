@@ -7,6 +7,8 @@ package io.modelcontextprotocol.client;
 import java.net.URI;
 import java.util.Map;
 
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.testcontainers.containers.GenericContainer;
@@ -17,7 +19,6 @@ import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequ
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpClientTransport;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -33,11 +34,11 @@ import static org.mockito.Mockito.verify;
 @Timeout(15) // Giving extra time beyond the client timeout
 class HttpSseMcpSyncClientTests extends AbstractMcpSyncClientTests {
 
-	String host = "http://localhost:3003";
+	static String host = "http://localhost:3003";
 
 	// Uses the https://github.com/tzolov/mcp-everything-server-docker-image
 	@SuppressWarnings("resource")
-	GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v2")
+	static GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v3")
 		.withCommand("node dist/index.js sse")
 		.withLogConsumer(outputFrame -> System.out.println(outputFrame.getUtf8String()))
 		.withExposedPorts(3001)
@@ -50,15 +51,15 @@ class HttpSseMcpSyncClientTests extends AbstractMcpSyncClientTests {
 		return HttpClientSseClientTransport.builder(host).httpRequestCustomizer(requestCustomizer).build();
 	}
 
-	@Override
-	protected void onStart() {
+	@BeforeAll
+	static void startContainer() {
 		container.start();
 		int port = container.getMappedPort(3001);
 		host = "http://" + container.getHost() + ":" + port;
 	}
 
-	@Override
-	protected void onClose() {
+	@AfterAll
+	static void stopContainer() {
 		container.stop();
 	}
 

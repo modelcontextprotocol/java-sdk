@@ -63,7 +63,7 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 			if ("DELETE".equals(httpExchange.getRequestMethod())) {
 				httpExchange.sendResponseHeaders(200, 0);
 			}
-			else {
+			else if ("POST".equals(httpExchange.getRequestMethod())) {
 				// Capture session ID from request if present
 				String requestSessionId = httpExchange.getRequestHeaders().getFirst(HttpHeaders.MCP_SESSION_ID);
 				lastReceivedSessionId.set(requestSessionId);

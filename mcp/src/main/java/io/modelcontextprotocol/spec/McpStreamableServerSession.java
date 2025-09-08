@@ -21,6 +21,7 @@ import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpNotificationHandler;
 import io.modelcontextprotocol.server.McpRequestHandler;
+import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -33,6 +34,7 @@ import reactor.core.publisher.MonoSink;
  * capability without the insight into the transport-specific details of HTTP handling.
  *
  * @author Dariusz Jędrzejczyk
+ * @author Yanming Zhou
  */
 public class McpStreamableServerSession implements McpLoggableSession {
 
@@ -220,19 +222,30 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	 */
 	public Mono<Void> accept(McpSchema.JSONRPCResponse response) {
 		return Mono.defer(() -> {
-			var stream = this.requestIdToStream.get(response.id());
-			if (stream == null) {
-				return Mono.error(new McpError("Unexpected response for unknown id " + response.id())); // TODO
-																										// JSONize
-			}
-			// TODO: encapsulate this inside the stream itself
-			var sink = stream.pendingResponses.remove(response.id());
-			if (sink == null) {
-				return Mono.error(new McpError("Unexpected response for unknown id " + response.id())); // TODO
-																										// JSONize
+			logger.debug("Received response: {}", response);
+
+			if (response.id() != null) {
+				var stream = this.requestIdToStream.get(response.id());
+				if (stream == null) {
+					return Mono.error(McpError.builder(ErrorCodes.INTERNAL_ERROR)
+						.message("Unexpected response for unknown id " + response.id())
+						.build());
+				}
+				// TODO: encapsulate this inside the stream itself
+				var sink = stream.pendingResponses.remove(response.id());
+				if (sink == null) {
+					return Mono.error(McpError.builder(ErrorCodes.INTERNAL_ERROR)
+						.message("Unexpected response for unknown id " + response.id())
+						.build());
+				}
+				else {
+					sink.success(response);
+				}
 			}
 			else {
-				sink.success(response);
+				logger.error("Discarded MCP request response without session id. "
+						+ "This is an indication of a bug in the request sender code that can lead to memory "
+						+ "leaks as pending requests will never be completed.");
 			}
 			return Mono.empty();
 		});
