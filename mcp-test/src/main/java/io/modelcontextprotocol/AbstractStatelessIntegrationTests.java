@@ -19,10 +19,12 @@ import io.modelcontextprotocol.server.McpServer.StatelessAsyncSpecification;
 import io.modelcontextprotocol.server.McpServer.StatelessSyncSpecification;
 import io.modelcontextprotocol.server.McpStatelessServerFeatures;
 import io.modelcontextprotocol.server.McpStatelessSyncServer;
+import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
+import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import net.javacrumbs.jsonunit.core.Option;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -32,6 +34,7 @@ import reactor.core.publisher.Mono;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.awaitility.Awaitility.await;
 
 public abstract class AbstractStatelessIntegrationTests {
@@ -156,16 +159,12 @@ public abstract class AbstractStatelessIntegrationTests {
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
 
-			McpSchema.CallToolResult callToolResult = mcpClient
-				.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
-
-			// Tool errors should be reported within the result object, not as MCP
-			// protocol-level errors. This allows the LLM to see and potentially
-			// handle the error.
-			assertThat(callToolResult).isNotNull();
-			assertThat(callToolResult.isError()).isTrue();
-			assertThat(callToolResult.content()).containsExactly(new McpSchema.TextContent(
-					"Error calling tool: Timeout on blocking read for 1000000000 NANOSECONDS"));
+			// We expect the tool call to fail immediately with the exception raised by
+			// the offending tool
+			// instead of getting back a timeout.
+			assertThatExceptionOfType(McpError.class)
+				.isThrownBy(() -> mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of())))
+				.withMessageContaining("Timeout on blocking read");
 		}
 		finally {
 			mcpServer.closeGracefully();
@@ -372,9 +371,10 @@ public abstract class AbstractStatelessIntegrationTests {
 		McpStatelessServerFeatures.SyncToolSpecification tool = McpStatelessServerFeatures.SyncToolSpecification
 			.builder()
 			.tool(calculatorTool)
-			.callHandler((exchange, request) -> {
-				throw new RuntimeException("Simulated in-handler error");
-			})
+			.callHandler((exchange, request) -> CallToolResult.builder()
+				.isError(true)
+				.content(List.of(new TextContent("Error calling tool: Simulated in-handler error")))
+				.build())
 			.build();
 
 		var mcpServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")

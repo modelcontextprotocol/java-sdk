@@ -517,20 +517,8 @@ public class McpAsyncServer {
 				return Mono.error(new McpError(new JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INVALID_PARAMS,
 						"Unknown tool: invalid_tool_name", "Tool not found: " + callToolRequest.name())));
 			}
-			else {
-				return toolSpecification.get().callHandler().apply(exchange, callToolRequest).onErrorResume(error -> {
-					logger.error("Error calling tool: {}", callToolRequest.name(), error);
 
-					// Tool errors should be reported within the result object, not as MCP
-					// protocol-level errors. This allows the LLM to see and potentially
-					// handle the error.
-					return Mono.just(CallToolResult.builder()
-						.isError(true)
-						.content(List
-							.of(new TextContent("Error calling tool: " + Utils.findRootCause(error).getMessage())))
-						.build());
-				});
-			}
+			return toolSpecification.get().callHandler().apply(exchange, callToolRequest);
 		};
 	}
 

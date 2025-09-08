@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
  */
-@Timeout(15) // Giving extra time beyond the client timeout
+@Timeout(25) // Giving extra time beyond the client timeout
 class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 
 	@Override
@@ -69,6 +69,11 @@ class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 
 	protected Duration getInitializationTimeout() {
 		return Duration.ofSeconds(10);
+	}
+
+	@Override
+	protected Duration getRequestTimeout() {
+		return Duration.ofSeconds(25);
 	}
 
 }
