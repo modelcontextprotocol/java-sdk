@@ -4,12 +4,6 @@
 
 package io.modelcontextprotocol;
 
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
-import static org.awaitility.Awaitility.await;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -19,9 +13,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
-
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.server.McpServer.StatelessAsyncSpecification;
@@ -33,9 +24,18 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
+import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import net.javacrumbs.jsonunit.core.Option;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
+
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.awaitility.Awaitility.await;
 
 public abstract class AbstractStatelessIntegrationTests {
 
@@ -66,7 +66,9 @@ public abstract class AbstractStatelessIntegrationTests {
 			assertThat(client.initialize()).isNotNull();
 
 		}
-		server.closeGracefully();
+		finally {
+			server.closeGracefully().block();
+		}
 	}
 
 	// ---------------------------------------
@@ -126,8 +128,9 @@ public abstract class AbstractStatelessIntegrationTests {
 
 			assertThat(response).isNotNull().isEqualTo(callResponse);
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully().block();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -163,8 +166,9 @@ public abstract class AbstractStatelessIntegrationTests {
 				.isThrownBy(() -> mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of())))
 				.withMessageContaining("Timeout on blocking read");
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -244,8 +248,9 @@ public abstract class AbstractStatelessIntegrationTests {
 
 			mcpServer.addTool(tool2);
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -261,8 +266,9 @@ public abstract class AbstractStatelessIntegrationTests {
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	// ---------------------------------------
@@ -339,8 +345,67 @@ public abstract class AbstractStatelessIntegrationTests {
 				.isEqualTo(json("""
 						{"result":5.0,"operation":"2 + 3","timestamp":"2024-01-01T10:00:00Z"}"""));
 		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
 
-		mcpServer.close();
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testStructuredOutputWithInHandlerError(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Create a tool with output schema
+		Map<String, Object> outputSchema = Map.of(
+				"type", "object", "properties", Map.of("result", Map.of("type", "number"), "operation",
+						Map.of("type", "string"), "timestamp", Map.of("type", "string")),
+				"required", List.of("result", "operation"));
+
+		Tool calculatorTool = Tool.builder()
+			.name("calculator")
+			.description("Performs mathematical calculations")
+			.outputSchema(outputSchema)
+			.build();
+
+		// Handler that throws an exception to simulate an error
+		McpStatelessServerFeatures.SyncToolSpecification tool = McpStatelessServerFeatures.SyncToolSpecification
+			.builder()
+			.tool(calculatorTool)
+			.callHandler((exchange, request) -> CallToolResult.builder()
+				.isError(true)
+				.content(List.of(new TextContent("Error calling tool: Simulated in-handler error")))
+				.build())
+			.build();
+
+		var mcpServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Verify tool is listed with output schema
+			var toolsList = mcpClient.listTools();
+			assertThat(toolsList.tools()).hasSize(1);
+			assertThat(toolsList.tools().get(0).name()).isEqualTo("calculator");
+			// Note: outputSchema might be null in sync server, but validation still works
+
+			// Call tool with valid structured output
+			CallToolResult response = mcpClient
+				.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3")));
+
+			assertThat(response).isNotNull();
+			assertThat(response.isError()).isTrue();
+			assertThat(response.content()).isNotEmpty();
+			assertThat(response.content())
+				.containsExactly(new McpSchema.TextContent("Error calling tool: Simulated in-handler error"));
+			assertThat(response.structuredContent()).isNull();
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -394,8 +459,9 @@ public abstract class AbstractStatelessIntegrationTests {
 			String errorMessage = ((McpSchema.TextContent) response.content().get(0)).text();
 			assertThat(errorMessage).contains("Validation failed");
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -444,8 +510,9 @@ public abstract class AbstractStatelessIntegrationTests {
 			assertThat(errorMessage).isEqualTo(
 					"Response missing structured content which is expected when calling tool with non-empty outputSchema");
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
@@ -521,8 +588,9 @@ public abstract class AbstractStatelessIntegrationTests {
 				.isEqualTo(json("""
 						{"count":3,"message":"Dynamic execution"}"""));
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	private double evaluateExpression(String expression) {

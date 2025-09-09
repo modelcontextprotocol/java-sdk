@@ -10,6 +10,7 @@ import eu.rekawek.toxiproxy.model.ToxicDirection;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransport;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,7 +49,7 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 
 	// Uses the https://github.com/tzolov/mcp-everything-server-docker-image
 	@SuppressWarnings("resource")
-	static GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v2")
+	static GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v3")
 		.withCommand("node dist/index.js streamableHttp")
 		.withLogConsumer(outputFrame -> System.out.println(outputFrame.getUtf8String()))
 		.withNetwork(network)
@@ -134,10 +135,13 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 		AtomicReference<McpAsyncClient> client = new AtomicReference<>();
 
 		assertThatCode(() -> {
+			// Do not advertise roots. Otherwise, the server will list roots during
+			// initialization. The client responds asynchronously, and there might be a
+			// rest condition in tests where we disconnect right after initialization.
 			McpClient.AsyncSpec builder = McpClient.async(transport)
 				.requestTimeout(getRequestTimeout())
 				.initializationTimeout(getInitializationTimeout())
-				.capabilities(McpSchema.ClientCapabilities.builder().roots(true).build());
+				.capabilities(McpSchema.ClientCapabilities.builder().build());
 			builder = customizer.apply(builder);
 			client.set(builder.build());
 		}).doesNotThrowAnyException();
