@@ -4,8 +4,8 @@
 
 package io.modelcontextprotocol.server;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.spec.json.TypeRef;
+import io.modelcontextprotocol.spec.json.McpJsonMapper;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpError;
@@ -13,7 +13,6 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
-import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
 import io.modelcontextprotocol.util.Assert;
@@ -48,7 +47,7 @@ public class McpStatelessAsyncServer {
 
 	private final McpStatelessServerTransport mcpTransportProvider;
 
-	private final ObjectMapper objectMapper;
+	private final McpJsonMapper jsonMapper;
 
 	private final McpSchema.ServerCapabilities serverCapabilities;
 
@@ -72,11 +71,11 @@ public class McpStatelessAsyncServer {
 
 	private final JsonSchemaValidator jsonSchemaValidator;
 
-	McpStatelessAsyncServer(McpStatelessServerTransport mcpTransport, ObjectMapper objectMapper,
+	McpStatelessAsyncServer(McpStatelessServerTransport mcpTransport, McpJsonMapper jsonMapper,
 			McpStatelessServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
 		this.mcpTransportProvider = mcpTransport;
-		this.objectMapper = objectMapper;
+		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
 		this.serverCapabilities = features.serverCapabilities();
 		this.instructions = features.instructions();
@@ -132,7 +131,7 @@ public class McpStatelessAsyncServer {
 	// ---------------------------------------
 	private McpStatelessRequestHandler<McpSchema.InitializeResult> asyncInitializeRequestHandler() {
 		return (ctx, req) -> Mono.defer(() -> {
-			McpSchema.InitializeRequest initializeRequest = this.objectMapper.convertValue(req,
+			McpSchema.InitializeRequest initializeRequest = this.jsonMapper.convertValue(req,
 					McpSchema.InitializeRequest.class);
 
 			logger.info("Client initialize request - Protocol: {}, Capabilities: {}, Info: {}",
@@ -373,8 +372,8 @@ public class McpStatelessAsyncServer {
 
 	private McpStatelessRequestHandler<CallToolResult> toolsCallRequestHandler() {
 		return (ctx, params) -> {
-			McpSchema.CallToolRequest callToolRequest = objectMapper.convertValue(params,
-					new TypeReference<McpSchema.CallToolRequest>() {
+			McpSchema.CallToolRequest callToolRequest = jsonMapper.convertValue(params,
+					new TypeRef<McpSchema.CallToolRequest>() {
 					});
 
 			Optional<McpStatelessServerFeatures.AsyncToolSpecification> toolSpecification = this.tools.stream()
@@ -476,8 +475,8 @@ public class McpStatelessAsyncServer {
 
 	private McpStatelessRequestHandler<McpSchema.ReadResourceResult> resourcesReadRequestHandler() {
 		return (ctx, params) -> {
-			McpSchema.ReadResourceRequest resourceRequest = objectMapper.convertValue(params,
-					new TypeReference<McpSchema.ReadResourceRequest>() {
+			McpSchema.ReadResourceRequest resourceRequest = jsonMapper.convertValue(params,
+					new TypeRef<McpSchema.ReadResourceRequest>() {
 					});
 			var resourceUri = resourceRequest.uri();
 
@@ -566,8 +565,8 @@ public class McpStatelessAsyncServer {
 
 	private McpStatelessRequestHandler<McpSchema.GetPromptResult> promptsGetRequestHandler() {
 		return (ctx, params) -> {
-			McpSchema.GetPromptRequest promptRequest = objectMapper.convertValue(params,
-					new TypeReference<McpSchema.GetPromptRequest>() {
+			McpSchema.GetPromptRequest promptRequest = jsonMapper.convertValue(params,
+					new TypeRef<McpSchema.GetPromptRequest>() {
 					});
 
 			// Implement prompt retrieval logic here

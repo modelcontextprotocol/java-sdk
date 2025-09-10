@@ -4,7 +4,7 @@
 
 package io.modelcontextprotocol.client;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.spec.json.TypeRef;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -73,8 +73,13 @@ class McpAsyncClientTests {
 			}
 
 			@Override
-			public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-				return OBJECT_MAPPER.convertValue(data, typeRef);
+			public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+				return OBJECT_MAPPER.convertValue(data, new com.fasterxml.jackson.core.type.TypeReference<T>() {
+					@Override
+					public java.lang.reflect.Type getType() {
+						return typeRef.getType();
+					}
+				});
 			}
 		};
 

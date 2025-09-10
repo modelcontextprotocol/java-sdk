@@ -8,7 +8,7 @@ import io.modelcontextprotocol.common.McpTransportContext;
 import java.util.ArrayList;
 import java.util.Collections;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.spec.json.TypeRef;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpLoggableSession;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -37,16 +37,16 @@ public class McpAsyncServerExchange {
 
 	private final McpTransportContext transportContext;
 
-	private static final TypeReference<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeReference<>() {
+	private static final TypeRef<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeRef<>() {
 	};
 
-	private static final TypeReference<McpSchema.ListRootsResult> LIST_ROOTS_RESULT_TYPE_REF = new TypeReference<>() {
+	private static final TypeRef<McpSchema.ListRootsResult> LIST_ROOTS_RESULT_TYPE_REF = new TypeRef<>() {
 	};
 
-	private static final TypeReference<McpSchema.ElicitResult> ELICITATION_RESULT_TYPE_REF = new TypeReference<>() {
+	private static final TypeRef<McpSchema.ElicitResult> ELICITATION_RESULT_TYPE_REF = new TypeRef<>() {
 	};
 
-	public static final TypeReference<Object> OBJECT_TYPE_REF = new TypeReference<>() {
+	public static final TypeRef<Object> OBJECT_TYPE_REF = new TypeRef<>() {
 	};
 
 	/**

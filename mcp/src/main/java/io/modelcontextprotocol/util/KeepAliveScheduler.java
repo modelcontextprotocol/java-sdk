@@ -11,7 +11,7 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.spec.json.TypeRef;
 
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSession;
@@ -33,7 +33,7 @@ public class KeepAliveScheduler {
 
 	private static final Logger logger = LoggerFactory.getLogger(KeepAliveScheduler.class);
 
-	private static final TypeReference<Object> OBJECT_TYPE_REF = new TypeReference<>() {
+	private static final TypeRef<Object> OBJECT_TYPE_REF = new TypeRef<>() {
 	};
 
 	/** Initial delay before the first keepAlive call */

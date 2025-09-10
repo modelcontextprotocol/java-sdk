@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
 import org.junit.jupiter.api.AfterAll;
@@ -64,7 +65,7 @@ class WebFluxSseClientTransportTests {
 		private Sinks.Many<ServerSentEvent<String>> events = Sinks.many().unicast().onBackpressureBuffer();
 
 		public TestSseClientTransport(WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
-			super(webClientBuilder, objectMapper);
+			super(webClientBuilder, new JacksonMcpJsonMapper(objectMapper));
 		}
 
 		@Override

@@ -21,8 +21,8 @@ import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.spec.json.McpJsonMapper;
+import io.modelcontextprotocol.spec.json.TypeRef;
 
 import io.modelcontextprotocol.spec.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpClientSession;
@@ -34,7 +34,6 @@ import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
-import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
@@ -93,7 +92,7 @@ public class McpAsyncServer {
 
 	private final McpServerTransportProviderBase mcpTransportProvider;
 
-	private final ObjectMapper objectMapper;
+	private final McpJsonMapper jsonMapper;
 
 	private final JsonSchemaValidator jsonSchemaValidator;
 
@@ -126,13 +125,13 @@ public class McpAsyncServer {
 	 * @param mcpTransportProvider The transport layer implementation for MCP
 	 * communication.
 	 * @param features The MCP server supported features.
-	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
+	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
 	 */
-	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
+	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
 		this.mcpTransportProvider = mcpTransportProvider;
-		this.objectMapper = objectMapper;
+		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
 		this.serverCapabilities = features.serverCapabilities().mutate().logging().build();
 		this.instructions = features.instructions();
@@ -153,11 +152,11 @@ public class McpAsyncServer {
 				requestTimeout, transport, this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers));
 	}
 
-	McpAsyncServer(McpStreamableServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
+	McpAsyncServer(McpStreamableServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
 		this.mcpTransportProvider = mcpTransportProvider;
-		this.objectMapper = objectMapper;
+		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
 		this.serverCapabilities = features.serverCapabilities().mutate().logging().build();
 		this.instructions = features.instructions();
@@ -505,8 +504,8 @@ public class McpAsyncServer {
 
 	private McpRequestHandler<CallToolResult> toolsCallRequestHandler() {
 		return (exchange, params) -> {
-			McpSchema.CallToolRequest callToolRequest = objectMapper.convertValue(params,
-					new TypeReference<McpSchema.CallToolRequest>() {
+			McpSchema.CallToolRequest callToolRequest = jsonMapper.convertValue(params,
+					new TypeRef<McpSchema.CallToolRequest>() {
 					});
 
 			Optional<McpServerFeatures.AsyncToolSpecification> toolSpecification = this.tools.stream()
@@ -633,8 +632,8 @@ public class McpAsyncServer {
 
 	private McpRequestHandler<McpSchema.ReadResourceResult> resourcesReadRequestHandler() {
 		return (exchange, params) -> {
-			McpSchema.ReadResourceRequest resourceRequest = objectMapper.convertValue(params,
-					new TypeReference<McpSchema.ReadResourceRequest>() {
+			McpSchema.ReadResourceRequest resourceRequest = jsonMapper.convertValue(params,
+					new TypeRef<McpSchema.ReadResourceRequest>() {
 					});
 			var resourceUri = resourceRequest.uri();
 
@@ -742,8 +741,8 @@ public class McpAsyncServer {
 
 	private McpRequestHandler<McpSchema.GetPromptResult> promptsGetRequestHandler() {
 		return (exchange, params) -> {
-			McpSchema.GetPromptRequest promptRequest = objectMapper.convertValue(params,
-					new TypeReference<McpSchema.GetPromptRequest>() {
+			McpSchema.GetPromptRequest promptRequest = jsonMapper.convertValue(params,
+					new TypeRef<McpSchema.GetPromptRequest>() {
 					});
 
 			// Implement prompt retrieval logic here
@@ -790,9 +789,8 @@ public class McpAsyncServer {
 		return (exchange, params) -> {
 			return Mono.defer(() -> {
 
-				SetLevelRequest newMinLoggingLevel = objectMapper.convertValue(params,
-						new TypeReference<SetLevelRequest>() {
-						});
+				SetLevelRequest newMinLoggingLevel = jsonMapper.convertValue(params, new TypeRef<SetLevelRequest>() {
+				});
 
 				exchange.setMinLoggingLevel(newMinLoggingLevel.level());
 

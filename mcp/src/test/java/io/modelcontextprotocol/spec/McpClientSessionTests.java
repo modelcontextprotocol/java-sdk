@@ -7,8 +7,8 @@ package io.modelcontextprotocol.spec;
 import java.time.Duration;
 import java.util.Map;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import io.modelcontextprotocol.MockMcpClientTransport;
+import io.modelcontextprotocol.spec.json.TypeRef;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -68,7 +68,7 @@ class McpClientSessionTests {
 			.hasMessageContaining("transport can not be null");
 	}
 
-	TypeReference<String> responseType = new TypeReference<>() {
+	TypeRef<String> responseType = new TypeRef<>() {
 	};
 
 	@Test

@@ -19,6 +19,7 @@ import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
+import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -75,7 +76,8 @@ class StdioServerTransportProviderTests {
 		when(mockSession.closeGracefully()).thenReturn(Mono.empty());
 		when(mockSession.sendNotification(any(), any())).thenReturn(Mono.empty());
 
-		transportProvider = new StdioServerTransportProvider(objectMapper, System.in, testOutPrintStream);
+		transportProvider = new StdioServerTransportProvider(new JacksonMcpJsonMapper(objectMapper), System.in,
+				testOutPrintStream);
 	}
 
 	@AfterEach
@@ -105,7 +107,8 @@ class StdioServerTransportProviderTests {
 		String jsonMessage = "{\"jsonrpc\":\"2.0\",\"method\":\"test\",\"params\":{},\"id\":1}\n";
 		InputStream stream = new ByteArrayInputStream(jsonMessage.getBytes(StandardCharsets.UTF_8));
 
-		transportProvider = new StdioServerTransportProvider(objectMapper, stream, System.out);
+		transportProvider = new StdioServerTransportProvider(new JacksonMcpJsonMapper(objectMapper), stream,
+				System.out);
 		// Set up a real session to capture the message
 		AtomicReference<McpSchema.JSONRPCMessage> capturedMessage = new AtomicReference<>();
 		CountDownLatch messageLatch = new CountDownLatch(1);
@@ -200,7 +203,8 @@ class StdioServerTransportProviderTests {
 		String jsonMessage = "{invalid json}\n";
 		InputStream stream = new ByteArrayInputStream(jsonMessage.getBytes(StandardCharsets.UTF_8));
 
-		transportProvider = new StdioServerTransportProvider(objectMapper, stream, testOutPrintStream);
+		transportProvider = new StdioServerTransportProvider(new JacksonMcpJsonMapper(objectMapper), stream,
+				testOutPrintStream);
 
 		// Set up a session factory
 		transportProvider.setSessionFactory(sessionFactory);

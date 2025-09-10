@@ -4,7 +4,7 @@
 
 package io.modelcontextprotocol.spec;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.spec.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
 
@@ -31,7 +31,7 @@ public class MissingMcpTransportSession implements McpLoggableSession {
 	}
 
 	@Override
-	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {
+	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeRef<T> typeRef) {
 		return Mono.error(new IllegalStateException("Stream unavailable for session " + this.sessionId));
 	}
 

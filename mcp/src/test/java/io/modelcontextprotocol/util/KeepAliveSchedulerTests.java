@@ -16,7 +16,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.spec.json.TypeRef;
 
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSession;
@@ -259,7 +259,7 @@ class KeepAliveSchedulerTests {
 		private boolean shouldFailPing = false;
 
 		@Override
-		public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {
+		public <T> Mono<T> sendRequest(String method, Object requestParams, TypeRef<T> typeRef) {
 			if (McpSchema.METHOD_PING.equals(method)) {
 				pingCount.incrementAndGet();
 				if (shouldFailPing) {

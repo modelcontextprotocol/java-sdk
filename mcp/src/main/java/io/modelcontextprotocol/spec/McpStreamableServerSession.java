@@ -15,7 +15,7 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.spec.json.TypeRef;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
@@ -110,7 +110,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	}
 
 	@Override
-	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {
+	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeRef<T> typeRef) {
 		return Mono.defer(() -> {
 			McpLoggableSession listeningStream = this.listeningStreamRef.get();
 			return listeningStream.sendRequest(method, requestParams, typeRef);
@@ -347,7 +347,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		}
 
 		@Override
-		public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {
+		public <T> Mono<T> sendRequest(String method, Object requestParams, TypeRef<T> typeRef) {
 			String requestId = McpStreamableServerSession.this.generateRequestId();
 
 			McpStreamableServerSession.this.requestIdToStream.put(requestId, this);

@@ -14,7 +14,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.spec.json.TypeRef;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
@@ -25,6 +25,8 @@ import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.spec.json.McpJsonMapper;
+import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.util.KeepAliveScheduler;
 import jakarta.servlet.AsyncContext;
 import jakarta.servlet.ServletException;
@@ -89,8 +91,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 
 	public static final String DEFAULT_BASE_URL = "";
 
-	/** JSON object mapper for serialization/deserialization */
-	private final ObjectMapper objectMapper;
+	/** JSON mapper for serialization/deserialization */
+	private final McpJsonMapper jsonMapper;
 
 	/** Base URL for the server transport */
 	private final String baseUrl;
@@ -131,7 +133,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	@Deprecated
 	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint,
 			String sseEndpoint) {
-		this(objectMapper, DEFAULT_BASE_URL, messageEndpoint, sseEndpoint);
+		this(new JacksonMcpJsonMapper(objectMapper), DEFAULT_BASE_URL, messageEndpoint, sseEndpoint, null,
+				(serverRequest) -> McpTransportContext.EMPTY);
 	}
 
 	/**
@@ -148,7 +151,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	@Deprecated
 	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint) {
-		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, null, (serverRequest) -> McpTransportContext.EMPTY);
+		this(new JacksonMcpJsonMapper(objectMapper), baseUrl, messageEndpoint, sseEndpoint, null,
+				(serverRequest) -> McpTransportContext.EMPTY);
 	}
 
 	/**
@@ -167,14 +171,14 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	@Deprecated
 	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval) {
-		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval,
+		this(new JacksonMcpJsonMapper(objectMapper), baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval,
 				(serverRequest) -> McpTransportContext.EMPTY);
 	}
 
 	/**
 	 * Creates a new HttpServletSseServerTransportProvider instance with a custom SSE
 	 * endpoint.
-	 * @param objectMapper The JSON object mapper to use for message
+	 * @param jsonMapper The JSON object mapper to use for message
 	 * serialization/deserialization
 	 * @param baseUrl The base URL for the server transport
 	 * @param messageEndpoint The endpoint path where clients will send their messages
@@ -185,16 +189,16 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 * @deprecated Use the builder {@link #builder()} instead for better configuration
 	 * options.
 	 */
-	private HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+	private HttpServletSseServerTransportProvider(McpJsonMapper jsonMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval,
 			McpTransportContextExtractor<HttpServletRequest> contextExtractor) {
 
-		Assert.notNull(objectMapper, "ObjectMapper must not be null");
+		Assert.notNull(jsonMapper, "JsonMapper must not be null");
 		Assert.notNull(messageEndpoint, "messageEndpoint must not be null");
 		Assert.notNull(sseEndpoint, "sseEndpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
 
-		this.objectMapper = objectMapper;
+		this.jsonMapper = jsonMapper;
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
@@ -342,7 +346,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			response.setContentType(APPLICATION_JSON);
 			response.setCharacterEncoding(UTF_8);
 			response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-			String jsonError = objectMapper.writeValueAsString(new McpError("Session ID missing in message endpoint"));
+			String jsonError = jsonMapper.writeValueAsString(new McpError("Session ID missing in message endpoint"));
 			PrintWriter writer = response.getWriter();
 			writer.write(jsonError);
 			writer.flush();
@@ -355,7 +359,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			response.setContentType(APPLICATION_JSON);
 			response.setCharacterEncoding(UTF_8);
 			response.setStatus(HttpServletResponse.SC_NOT_FOUND);
-			String jsonError = objectMapper.writeValueAsString(new McpError("Session not found: " + sessionId));
+			String jsonError = jsonMapper.writeValueAsString(new McpError("Session not found: " + sessionId));
 			PrintWriter writer = response.getWriter();
 			writer.write(jsonError);
 			writer.flush();
@@ -371,7 +375,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			}
 
 			final McpTransportContext transportContext = this.contextExtractor.extract(request);
-			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body.toString());
+			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body.toString());
 
 			// Process the message through the session's handle method
 			// Block for Servlet compatibility
@@ -386,7 +390,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 				response.setContentType(APPLICATION_JSON);
 				response.setCharacterEncoding(UTF_8);
 				response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-				String jsonError = objectMapper.writeValueAsString(mcpError);
+				String jsonError = jsonMapper.writeValueAsString(mcpError);
 				PrintWriter writer = response.getWriter();
 				writer.write(jsonError);
 				writer.flush();
@@ -482,7 +486,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
 			return Mono.fromRunnable(() -> {
 				try {
-					String jsonText = objectMapper.writeValueAsString(message);
+					String jsonText = jsonMapper.writeValueAsString(message);
 					sendEvent(writer, MESSAGE_EVENT_TYPE, jsonText);
 					logger.debug("Message sent to session {}", sessionId);
 				}
@@ -495,15 +499,15 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		}
 
 		/**
-		 * Converts data from one type to another using the configured ObjectMapper.
+		 * Converts data from one type to another using the configured JsonMapper.
 		 * @param data The source data object to convert
 		 * @param typeRef The target type reference
 		 * @return The converted object of type T
 		 * @param <T> The target type
 		 */
 		@Override
-		public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-			return objectMapper.convertValue(data, typeRef);
+		public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+			return jsonMapper.convertValue(data, typeRef);
 		}
 
 		/**
@@ -561,6 +565,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 
 		private ObjectMapper objectMapper = new ObjectMapper();
 
+		private McpJsonMapper jsonMapper;
+
 		private String baseUrl = DEFAULT_BASE_URL;
 
 		private String messageEndpoint;
@@ -577,9 +583,23 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		 * @param objectMapper The object mapper to use
 		 * @return This builder instance for method chaining
 		 */
+		@Deprecated(forRemoval = true)
 		public Builder objectMapper(ObjectMapper objectMapper) {
 			Assert.notNull(objectMapper, "ObjectMapper must not be null");
 			this.objectMapper = objectMapper;
+			return this;
+		}
+
+		/**
+		 * Sets the JsonMapper implementation to use for serialization/deserialization. If
+		 * not specified, a JacksonJsonMapper will be created from the configured
+		 * ObjectMapper.
+		 * @param jsonMapper The JsonMapper to use
+		 * @return This builder instance for method chaining
+		 */
+		public Builder jsonMapper(McpJsonMapper jsonMapper) {
+			Assert.notNull(jsonMapper, "JsonMapper must not be null");
+			this.jsonMapper = jsonMapper;
 			return this;
 		}
 
@@ -657,7 +677,9 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			if (messageEndpoint == null) {
 				throw new IllegalStateException("MessageEndpoint must be set");
 			}
-			return new HttpServletSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint,
+			McpJsonMapper effectiveMapper = (this.jsonMapper != null) ? this.jsonMapper
+					: new JacksonMcpJsonMapper(objectMapper);
+			return new HttpServletSseServerTransportProvider(effectiveMapper, baseUrl, messageEndpoint, sseEndpoint,
 					keepAliveInterval, contextExtractor);
 		}
 

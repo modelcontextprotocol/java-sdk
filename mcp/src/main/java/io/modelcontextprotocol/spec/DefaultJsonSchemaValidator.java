@@ -21,6 +21,8 @@ import com.networknt.schema.SpecVersion;
 import com.networknt.schema.ValidationMessage;
 
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.spec.json.McpJsonMapper;
+import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
 
 /**
  * Default implementation of the {@link JsonSchemaValidator} interface. This class
@@ -46,6 +48,24 @@ public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 
 	public DefaultJsonSchemaValidator(ObjectMapper objectMapper) {
 		this.objectMapper = objectMapper;
+		this.schemaFactory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
+		this.schemaCache = new ConcurrentHashMap<>();
+	}
+
+	/**
+	 * Alternate constructor that accepts a JsonMapper. If the mapper is backed by
+	 * Jackson, the underlying ObjectMapper will be reused; otherwise a new ObjectMapper
+	 * will be created for schema validation only.
+	 */
+	public DefaultJsonSchemaValidator(McpJsonMapper jsonMapper) {
+		ObjectMapper mapper;
+		if (jsonMapper instanceof JacksonMcpJsonMapper jacksonJsonMapper) {
+			mapper = jacksonJsonMapper.getObjectMapper();
+		}
+		else {
+			mapper = new ObjectMapper();
+		}
+		this.objectMapper = mapper;
 		this.schemaFactory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
 		this.schemaCache = new ConcurrentHashMap<>();
 	}

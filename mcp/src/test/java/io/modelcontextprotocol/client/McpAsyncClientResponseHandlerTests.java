@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.spec.json.TypeRef;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.MockMcpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -321,7 +321,7 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(response.error()).isNull();
 
 		McpSchema.CreateMessageResult result = transport.unmarshalFrom(response.result(),
-				new TypeReference<McpSchema.CreateMessageResult>() {
+				new TypeRef<McpSchema.CreateMessageResult>() {
 				});
 		assertThat(result).isNotNull();
 		assertThat(result.role()).isEqualTo(McpSchema.Role.ASSISTANT);
@@ -425,7 +425,7 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(response.id()).isEqualTo("test-id");
 		assertThat(response.error()).isNull();
 
-		McpSchema.ElicitResult result = transport.unmarshalFrom(response.result(), new TypeReference<>() {
+		McpSchema.ElicitResult result = transport.unmarshalFrom(response.result(), new TypeRef<>() {
 		});
 		assertThat(result).isNotNull();
 		assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
@@ -470,7 +470,7 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(response.id()).isEqualTo("test-id");
 		assertThat(response.error()).isNull();
 
-		McpSchema.ElicitResult result = transport.unmarshalFrom(response.result(), new TypeReference<>() {
+		McpSchema.ElicitResult result = transport.unmarshalFrom(response.result(), new TypeRef<>() {
 		});
 		assertThat(result).isNotNull();
 		assertThat(result.action()).isEqualTo(action);

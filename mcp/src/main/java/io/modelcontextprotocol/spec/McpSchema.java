@@ -21,8 +21,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.spec.json.McpJsonMapper;
+import io.modelcontextprotocol.spec.json.TypeRef;
+import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
 
 import io.modelcontextprotocol.util.Assert;
 
@@ -111,7 +112,19 @@ public final class McpSchema {
 	// Elicitation Methods
 	public static final String METHOD_ELICITATION_CREATE = "elicitation/create";
 
-	private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+	private static volatile McpJsonMapper JSON_MAPPER = new JacksonMcpJsonMapper(
+			new com.fasterxml.jackson.databind.ObjectMapper());
+
+	/**
+	 * Allows overriding the default JSON mapper used internally by schema helper methods.
+	 * This is optional; callers can also pass a JsonMapper directly to
+	 * deserializeJsonRpcMessage.
+	 * @param mapper The JsonMapper to use
+	 */
+	public static void setJsonMapper(McpJsonMapper mapper) {
+		Assert.notNull(mapper, "jsonMapper must not be null");
+		JSON_MAPPER = mapper;
+	}
 
 	// ---------------------------
 	// JSON-RPC Error Codes
@@ -178,12 +191,12 @@ public final class McpSchema {
 
 	}
 
-	private static final TypeReference<HashMap<String, Object>> MAP_TYPE_REF = new TypeReference<>() {
+	private static final TypeRef<HashMap<String, Object>> MAP_TYPE_REF = new TypeRef<>() {
 	};
 
 	/**
 	 * Deserializes a JSON string into a JSONRPCMessage object.
-	 * @param objectMapper The ObjectMapper instance to use for deserialization
+	 * @param jsonMapper The JsonMapper instance to use for deserialization
 	 * @param jsonText The JSON string to deserialize
 	 * @return A JSONRPCMessage instance using either the {@link JSONRPCRequest},
 	 * {@link JSONRPCNotification}, or {@link JSONRPCResponse} classes.
@@ -191,25 +204,31 @@ public final class McpSchema {
 	 * @throws IllegalArgumentException If the JSON structure doesn't match any known
 	 * message type
 	 */
-	public static JSONRPCMessage deserializeJsonRpcMessage(ObjectMapper objectMapper, String jsonText)
+	public static JSONRPCMessage deserializeJsonRpcMessage(McpJsonMapper jsonMapper, String jsonText)
 			throws IOException {
 
 		logger.debug("Received JSON message: {}", jsonText);
 
-		var map = objectMapper.readValue(jsonText, MAP_TYPE_REF);
+		var map = jsonMapper.readValue(jsonText, MAP_TYPE_REF);
 
 		// Determine message type based on specific JSON structure
 		if (map.containsKey("method") && map.containsKey("id")) {
-			return objectMapper.convertValue(map, JSONRPCRequest.class);
+			return jsonMapper.convertValue(map, JSONRPCRequest.class);
 		}
 		else if (map.containsKey("method") && !map.containsKey("id")) {
-			return objectMapper.convertValue(map, JSONRPCNotification.class);
+			return jsonMapper.convertValue(map, JSONRPCNotification.class);
 		}
 		else if (map.containsKey("result") || map.containsKey("error")) {
-			return objectMapper.convertValue(map, JSONRPCResponse.class);
+			return jsonMapper.convertValue(map, JSONRPCResponse.class);
 		}
 
 		throw new IllegalArgumentException("Cannot deserialize JSONRPCMessage: " + jsonText);
+	}
+
+	@Deprecated(forRemoval = true)
+	public static JSONRPCMessage deserializeJsonRpcMessage(com.fasterxml.jackson.databind.ObjectMapper objectMapper,
+			String jsonText) throws IOException {
+		return deserializeJsonRpcMessage(new JacksonMcpJsonMapper(objectMapper), jsonText);
 	}
 
 	// ---------------------------
@@ -1394,7 +1413,7 @@ public final class McpSchema {
 
 	private static Map<String, Object> schemaToMap(String schema) {
 		try {
-			return OBJECT_MAPPER.readValue(schema, MAP_TYPE_REF);
+			return JSON_MAPPER.readValue(schema, MAP_TYPE_REF);
 		}
 		catch (IOException e) {
 			throw new IllegalArgumentException("Invalid schema: " + schema, e);
@@ -1403,7 +1422,7 @@ public final class McpSchema {
 
 	private static JsonSchema parseSchema(String schema) {
 		try {
-			return OBJECT_MAPPER.readValue(schema, JsonSchema.class);
+			return JSON_MAPPER.readValue(schema, JsonSchema.class);
 		}
 		catch (IOException e) {
 			throw new IllegalArgumentException("Invalid schema: " + schema, e);
@@ -1437,7 +1456,7 @@ public final class McpSchema {
 
 		private static Map<String, Object> parseJsonArguments(String jsonArguments) {
 			try {
-				return OBJECT_MAPPER.readValue(jsonArguments, MAP_TYPE_REF);
+				return JSON_MAPPER.readValue(jsonArguments, MAP_TYPE_REF);
 			}
 			catch (IOException e) {
 				throw new IllegalArgumentException("Invalid arguments: " + jsonArguments, e);
@@ -1575,7 +1594,7 @@ public final class McpSchema {
 			public Builder structuredContent(String structuredContent) {
 				Assert.hasText(structuredContent, "structuredContent must not be empty");
 				try {
-					this.structuredContent = OBJECT_MAPPER.readValue(structuredContent, MAP_TYPE_REF);
+					this.structuredContent = JSON_MAPPER.readValue(structuredContent, MAP_TYPE_REF);
 				}
 				catch (IOException e) {
 					throw new IllegalArgumentException("Invalid structured content: " + structuredContent, e);

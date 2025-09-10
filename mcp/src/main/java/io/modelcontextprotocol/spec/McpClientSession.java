@@ -4,7 +4,7 @@
 
 package io.modelcontextprotocol.spec;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.spec.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
@@ -254,7 +254,7 @@ public class McpClientSession implements McpSession {
 	 * @return A Mono containing the response
 	 */
 	@Override
-	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef) {
+	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeRef<T> typeRef) {
 		String requestId = this.generateRequestId();
 
 		return Mono.deferContextual(ctx -> Mono.<McpSchema.JSONRPCResponse>create(pendingResponseSink -> {

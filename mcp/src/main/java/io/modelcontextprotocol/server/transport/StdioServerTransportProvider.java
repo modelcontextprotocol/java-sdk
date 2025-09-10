@@ -15,7 +15,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.spec.json.TypeRef;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -25,6 +25,8 @@ import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.spec.json.McpJsonMapper;
+import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -44,7 +46,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 
 	private static final Logger logger = LoggerFactory.getLogger(StdioServerTransportProvider.class);
 
-	private final ObjectMapper objectMapper;
+	private final McpJsonMapper jsonMapper;
 
 	private final InputStream inputStream;
 
@@ -61,31 +63,35 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	 * streams.
 	 */
 	public StdioServerTransportProvider() {
-		this(new ObjectMapper());
+		this(new JacksonMcpJsonMapper(new com.fasterxml.jackson.databind.ObjectMapper()), System.in, System.out);
 	}
 
 	/**
 	 * Creates a new StdioServerTransportProvider with the specified ObjectMapper and
 	 * System streams.
 	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
+	 * @deprecated Prefer
+	 * {@link StdioServerTransportProvider#StdioServerTransportProvider(McpJsonMapper, InputStream, OutputStream)}
+	 * or use the no-arg constructor which defaults to a JacksonJsonMapper internally.
 	 */
+	@Deprecated(forRemoval = true)
 	public StdioServerTransportProvider(ObjectMapper objectMapper) {
-		this(objectMapper, System.in, System.out);
+		this(new JacksonMcpJsonMapper(objectMapper), System.in, System.out);
 	}
 
 	/**
 	 * Creates a new StdioServerTransportProvider with the specified ObjectMapper and
 	 * streams.
-	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
+	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
 	 * @param inputStream The input stream to read from
 	 * @param outputStream The output stream to write to
 	 */
-	public StdioServerTransportProvider(ObjectMapper objectMapper, InputStream inputStream, OutputStream outputStream) {
-		Assert.notNull(objectMapper, "The ObjectMapper can not be null");
+	public StdioServerTransportProvider(McpJsonMapper jsonMapper, InputStream inputStream, OutputStream outputStream) {
+		Assert.notNull(jsonMapper, "The JsonMapper can not be null");
 		Assert.notNull(inputStream, "The InputStream can not be null");
 		Assert.notNull(outputStream, "The OutputStream can not be null");
 
-		this.objectMapper = objectMapper;
+		this.jsonMapper = jsonMapper;
 		this.inputStream = inputStream;
 		this.outputStream = outputStream;
 	}
@@ -165,8 +171,8 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 		}
 
 		@Override
-		public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-			return objectMapper.convertValue(data, typeRef);
+		public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+			return jsonMapper.convertValue(data, typeRef);
 		}
 
 		@Override
@@ -219,7 +225,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 								logger.debug("Received JSON message: {}", line);
 
 								try {
-									McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper,
+									McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper,
 											line);
 									if (!this.inboundSink.tryEmitNext(message).isSuccess()) {
 										// logIfNotClosing("Failed to enqueue message");
@@ -263,7 +269,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 				 .handle((message, sink) -> {
 					 if (message != null && !isClosing.get()) {
 						 try {
-							 String jsonMessage = objectMapper.writeValueAsString(message);
+							 String jsonMessage = jsonMapper.writeValueAsString(message);
 							 // Escape any embedded newlines in the JSON message as per spec
 							 jsonMessage = jsonMessage.replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\n");
 	

@@ -4,7 +4,7 @@
 
 package io.modelcontextprotocol.spec;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.spec.json.TypeRef;
 import reactor.core.publisher.Mono;
 
 /**
@@ -37,7 +37,7 @@ public interface McpSession {
 	 * @param typeRef the TypeReference describing the expected response type
 	 * @return a Mono that will emit the response when received
 	 */
-	<T> Mono<T> sendRequest(String method, Object requestParams, TypeReference<T> typeRef);
+	<T> Mono<T> sendRequest(String method, Object requestParams, TypeRef<T> typeRef);
 
 	/**
 	 * Sends a notification to the model client or server without parameters.

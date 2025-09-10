@@ -16,11 +16,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.spec.json.McpJsonMapper;
+import io.modelcontextprotocol.spec.json.TypeRef;
+import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
 
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
@@ -97,8 +99,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	/** HTTP request builder for building requests to send messages to the server */
 	private final HttpRequest.Builder requestBuilder;
 
-	/** JSON object mapper for message serialization/deserialization */
-	protected ObjectMapper objectMapper;
+	/** JSON mapper for message serialization/deserialization */
+	protected McpJsonMapper jsonMapper;
 
 	/** Flag indicating if the transport is in closing state */
 	private volatile boolean isClosing = false;
@@ -125,7 +127,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 */
 	@Deprecated(forRemoval = true)
 	public HttpClientSseClientTransport(String baseUri) {
-		this(HttpClient.newBuilder(), baseUri, new ObjectMapper());
+		this(HttpClient.newBuilder(), baseUri, new com.fasterxml.jackson.databind.ObjectMapper());
 	}
 
 	/**
@@ -138,7 +140,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 * constructor will be removed in future versions.
 	 */
 	@Deprecated(forRemoval = true)
-	public HttpClientSseClientTransport(HttpClient.Builder clientBuilder, String baseUri, ObjectMapper objectMapper) {
+	public HttpClientSseClientTransport(HttpClient.Builder clientBuilder, String baseUri,
+			com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
 		this(clientBuilder, baseUri, DEFAULT_SSE_ENDPOINT, objectMapper);
 	}
 
@@ -154,7 +157,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 */
 	@Deprecated(forRemoval = true)
 	public HttpClientSseClientTransport(HttpClient.Builder clientBuilder, String baseUri, String sseEndpoint,
-			ObjectMapper objectMapper) {
+			com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
 		this(clientBuilder, HttpRequest.newBuilder(), baseUri, sseEndpoint, objectMapper);
 	}
 
@@ -188,8 +191,9 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 */
 	@Deprecated(forRemoval = true)
 	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
-			String sseEndpoint, ObjectMapper objectMapper) {
-		this(httpClient, requestBuilder, baseUri, sseEndpoint, objectMapper, McpAsyncHttpClientRequestCustomizer.NOOP);
+			String sseEndpoint, com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
+		this(httpClient, requestBuilder, baseUri, sseEndpoint, new JacksonMcpJsonMapper(objectMapper),
+				McpAsyncHttpClientRequestCustomizer.NOOP);
 	}
 
 	/**
@@ -199,14 +203,14 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 * @param requestBuilder the HTTP request builder to use
 	 * @param baseUri the base URI of the MCP server
 	 * @param sseEndpoint the SSE endpoint path
-	 * @param objectMapper the object mapper for JSON serialization/deserialization
+	 * @param jsonMapper the object mapper for JSON serialization/deserialization
 	 * @param httpRequestCustomizer customizer for the requestBuilder before executing
 	 * requests
 	 * @throws IllegalArgumentException if objectMapper, clientBuilder, or headers is null
 	 */
 	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
-			String sseEndpoint, ObjectMapper objectMapper, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer) {
-		Assert.notNull(objectMapper, "ObjectMapper must not be null");
+			String sseEndpoint, McpJsonMapper jsonMapper, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer) {
+		Assert.notNull(jsonMapper, "jsonMapper must not be null");
 		Assert.hasText(baseUri, "baseUri must not be empty");
 		Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
 		Assert.notNull(httpClient, "httpClient must not be null");
@@ -214,7 +218,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		Assert.notNull(httpRequestCustomizer, "httpRequestCustomizer must not be null");
 		this.baseUri = URI.create(baseUri);
 		this.sseEndpoint = sseEndpoint;
-		this.objectMapper = objectMapper;
+		this.jsonMapper = jsonMapper;
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
 		this.httpRequestCustomizer = httpRequestCustomizer;
@@ -245,7 +249,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 
 		private HttpClient.Builder clientBuilder = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1);
 
-		private ObjectMapper objectMapper = new ObjectMapper();
+		private McpJsonMapper jsonMapper = new JacksonMcpJsonMapper(new com.fasterxml.jackson.databind.ObjectMapper());
 
 		private HttpRequest.Builder requestBuilder = HttpRequest.newBuilder();
 
@@ -343,10 +347,24 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		 * Sets the object mapper for JSON serialization/deserialization.
 		 * @param objectMapper the object mapper
 		 * @return this builder
+		 * @deprecated Prefer {@link #jsonMapper(McpJsonMapper)}. This method will be
+		 * removed in a future release.
 		 */
-		public Builder objectMapper(ObjectMapper objectMapper) {
+		@Deprecated(forRemoval = true)
+		public Builder objectMapper(com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
 			Assert.notNull(objectMapper, "objectMapper must not be null");
-			this.objectMapper = objectMapper;
+			this.jsonMapper = new JacksonMcpJsonMapper(objectMapper);
+			return this;
+		}
+
+		/**
+		 * Sets the JSON mapper implementation to use for serialization/deserialization.
+		 * @param jsonMapper the JSON mapper
+		 * @return this builder
+		 */
+		public Builder jsonMapper(McpJsonMapper jsonMapper) {
+			Assert.notNull(jsonMapper, "jsonMapper must not be null");
+			this.jsonMapper = jsonMapper;
 			return this;
 		}
 
@@ -402,7 +420,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		 */
 		public HttpClientSseClientTransport build() {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
-			return new HttpClientSseClientTransport(httpClient, requestBuilder, baseUri, sseEndpoint, objectMapper,
+			return new HttpClientSseClientTransport(httpClient, requestBuilder, baseUri, sseEndpoint, jsonMapper,
 					httpRequestCustomizer);
 		}
 
@@ -450,7 +468,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 								}
 							}
 							else if (MESSAGE_EVENT_TYPE.equals(responseEvent.sseEvent().event())) {
-								JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper,
+								JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper,
 										responseEvent.sseEvent().data());
 								sink.success();
 								return Flux.just(message);
@@ -531,7 +549,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	private Mono<String> serializeMessage(final JSONRPCMessage message) {
 		return Mono.defer(() -> {
 			try {
-				return Mono.just(objectMapper.writeValueAsString(message));
+				return Mono.just(jsonMapper.writeValueAsString(message));
 			}
 			catch (IOException e) {
 				return Mono.error(new McpTransportException("Failed to serialize message", e));
@@ -582,8 +600,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 * @return the unmarshalled object
 	 */
 	@Override
-	public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-		return this.objectMapper.convertValue(data, typeRef);
+	public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+		return this.jsonMapper.convertValue(data, typeRef);
 	}
 
 }

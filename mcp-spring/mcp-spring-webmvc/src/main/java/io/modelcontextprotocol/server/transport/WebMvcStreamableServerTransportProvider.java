@@ -22,6 +22,8 @@ import org.springframework.web.servlet.function.ServerResponse.SseBuilder;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.spec.json.TypeRef;
+import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
@@ -546,8 +548,8 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		 * @param <T> The target type
 		 */
 		@Override
-		public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-			return objectMapper.convertValue(data, typeRef);
+		public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+			return new JacksonMcpJsonMapper(objectMapper).convertValue(data, typeRef);
 		}
 
 		/**
