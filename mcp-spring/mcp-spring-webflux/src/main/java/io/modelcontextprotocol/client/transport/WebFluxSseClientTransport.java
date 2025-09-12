@@ -9,9 +9,8 @@ import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
-import io.modelcontextprotocol.spec.json.McpJsonMapper;
-import io.modelcontextprotocol.spec.json.TypeRef;
-import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
 
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpClientTransport;
@@ -129,17 +128,6 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 * HTTP POST requests.
 	 */
 	private String sseEndpoint;
-
-	/**
-	 * Constructs a new SseClientTransport with the specified WebClient builder. Uses a
-	 * default ObjectMapper instance for JSON processing.
-	 * @param webClientBuilder the WebClient.Builder to use for creating the WebClient
-	 * instance
-	 * @throws IllegalArgumentException if webClientBuilder is null
-	 */
-	public WebFluxSseClientTransport(WebClient.Builder webClientBuilder) {
-		this(webClientBuilder, new JacksonMcpJsonMapper(new com.fasterxml.jackson.databind.ObjectMapper()));
-	}
 
 	/**
 	 * Constructs a new SseClientTransport with the specified WebClient builder and
@@ -377,7 +365,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 
 		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
 
-		private McpJsonMapper jsonMapper = new JacksonMcpJsonMapper(new com.fasterxml.jackson.databind.ObjectMapper());
+		private McpJsonMapper jsonMapper;
 
 		/**
 		 * Creates a new builder with the specified WebClient.Builder.
@@ -400,19 +388,6 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 		}
 
 		/**
-		 * Sets the object mapper for JSON serialization/deserialization.
-		 * @param objectMapper the Jackson ObjectMapper
-		 * @return this builder
-		 * @deprecated Use {@link #jsonMapper(McpJsonMapper)} instead
-		 */
-		@Deprecated(forRemoval = true)
-		public Builder objectMapper(com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "objectMapper must not be null");
-			this.jsonMapper = new JacksonMcpJsonMapper(objectMapper);
-			return this;
-		}
-
-		/**
 		 * Sets the JSON mapper for serialization/deserialization.
 		 * @param jsonMapper the JsonMapper to use
 		 * @return this builder
@@ -428,7 +403,8 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 		 * @return a new transport instance
 		 */
 		public WebFluxSseClientTransport build() {
-			return new WebFluxSseClientTransport(webClientBuilder, jsonMapper, sseEndpoint);
+			return new WebFluxSseClientTransport(webClientBuilder,
+					jsonMapper == null ? McpJsonMapper.createDefault() : jsonMapper, sseEndpoint);
 		}
 
 	}

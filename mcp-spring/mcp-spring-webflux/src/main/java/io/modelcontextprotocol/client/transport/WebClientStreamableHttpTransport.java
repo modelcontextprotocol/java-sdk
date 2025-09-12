@@ -22,9 +22,8 @@ import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
-import io.modelcontextprotocol.spec.json.TypeRef;
-import io.modelcontextprotocol.spec.json.McpJsonMapper;
-import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.json.McpJsonMapper;
 
 import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
@@ -490,17 +489,6 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		}
 
 		/**
-		 * Configure the {@link ObjectMapper} to use.
-		 * @param objectMapper instance to use
-		 * @return the builder instance
-		 */
-		public Builder objectMapper(com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "ObjectMapper must not be null");
-			this.jsonMapper = new JacksonMcpJsonMapper(objectMapper);
-			return this;
-		}
-
-		/**
 		 * Configure the {@link McpJsonMapper} to use.
 		 * @param jsonMapper instance to use
 		 * @return the builder instance
@@ -566,11 +554,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		 * @return a new instance of {@link WebClientStreamableHttpTransport}
 		 */
 		public WebClientStreamableHttpTransport build() {
-			McpJsonMapper jsonMapper = this.jsonMapper != null ? this.jsonMapper
-					: new JacksonMcpJsonMapper(new com.fasterxml.jackson.databind.ObjectMapper());
-
-			return new WebClientStreamableHttpTransport(jsonMapper, this.webClientBuilder, endpoint, resumableStreams,
-					openConnectionOnStartup);
+			return new WebClientStreamableHttpTransport(jsonMapper == null ? McpJsonMapper.createDefault() : jsonMapper,
+					webClientBuilder, endpoint, resumableStreams, openConnectionOnStartup);
 		}
 
 	}

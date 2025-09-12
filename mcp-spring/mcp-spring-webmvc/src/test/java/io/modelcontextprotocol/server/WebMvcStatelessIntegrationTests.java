@@ -19,8 +19,6 @@ import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.modelcontextprotocol.AbstractStatelessIntegrationTests;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
@@ -46,10 +44,7 @@ class WebMvcStatelessIntegrationTests extends AbstractStatelessIntegrationTests 
 		@Bean
 		public WebMvcStatelessServerTransport webMvcStatelessServerTransport() {
 
-			return WebMvcStatelessServerTransport.builder()
-				.objectMapper(new ObjectMapper())
-				.messageEndpoint(MESSAGE_ENDPOINT)
-				.build();
+			return WebMvcStatelessServerTransport.builder().messageEndpoint(MESSAGE_ENDPOINT).build();
 
 		}
 

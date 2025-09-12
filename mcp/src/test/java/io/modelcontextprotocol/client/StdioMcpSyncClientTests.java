@@ -17,6 +17,8 @@ import org.junit.jupiter.api.Timeout;
 import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
 
+import static io.modelcontextprotocol.client.ServerParameterUtils.createServerParameters;
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -37,18 +39,8 @@ class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 
 	@Override
 	protected McpClientTransport createMcpTransport() {
-		ServerParameters stdioParams;
-		if (System.getProperty("os.name").toLowerCase().contains("win")) {
-			stdioParams = ServerParameters.builder("cmd.exe")
-				.args("/c", "npx.cmd", "-y", "@modelcontextprotocol/server-everything", "stdio")
-				.build();
-		}
-		else {
-			stdioParams = ServerParameters.builder("npx")
-				.args("-y", "@modelcontextprotocol/server-everything", "stdio")
-				.build();
-		}
-		return new StdioClientTransport(stdioParams);
+		ServerParameters stdioParams = createServerParameters();
+		return new StdioClientTransport(stdioParams, JSON_MAPPER);
 	}
 
 	@Test

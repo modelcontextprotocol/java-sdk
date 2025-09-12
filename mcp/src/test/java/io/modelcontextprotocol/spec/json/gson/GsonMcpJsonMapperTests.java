@@ -1,8 +1,7 @@
 package io.modelcontextprotocol.spec.json.gson;
 
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.json.TypeRef;
-import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -63,9 +62,9 @@ class GsonMcpJsonMapperTests {
 		});
 		assertEquals("Bob", toMap.get("name"));
 		assertEquals(42.0, ((Number) toMap.get("age")).doubleValue(), 0.0); // Gson may
-																			// emit double
-																			// for
-																			// primitives
+		// emit double
+		// for
+		// primitives
 	}
 
 	@Test
@@ -102,41 +101,32 @@ class GsonMcpJsonMapperTests {
 	void integrateWithMcpSchemaStaticMapperForStringParsing() {
 		var gsonMapper = new GsonMcpJsonMapper();
 
-		// Save and restore static mapper to avoid affecting other tests
-		var originalMapper = new JacksonMcpJsonMapper(new com.fasterxml.jackson.databind.ObjectMapper());
-		try {
-			McpSchema.setJsonMapper(gsonMapper);
+		// Tool builder parsing of input/output schema strings
+		var tool = McpSchema.Tool.builder().name("echo").description("Echo tool").inputSchema(gsonMapper, """
+				{
+				  "type": "object",
+				  "properties": { "x": { "type": "integer" } },
+				  "required": ["x"]
+				}
+				""").outputSchema(gsonMapper, """
+				{
+				  "type": "object",
+				  "properties": { "y": { "type": "string" } }
+				}
+				""").build();
 
-			// Tool builder parsing of input/output schema strings
-			var tool = McpSchema.Tool.builder().name("echo").description("Echo tool").inputSchema("""
-					{
-					  "type": "object",
-					  "properties": { "x": { "type": "integer" } },
-					  "required": ["x"]
-					}
-					""").outputSchema("""
-					{
-					  "type": "object",
-					  "properties": { "y": { "type": "string" } }
-					}
-					""").build();
+		assertNotNull(tool.inputSchema());
+		assertNotNull(tool.outputSchema());
+		assertTrue(tool.outputSchema().containsKey("properties"));
 
-			assertNotNull(tool.inputSchema());
-			assertNotNull(tool.outputSchema());
-			assertTrue(tool.outputSchema().containsKey("properties"));
+		// CallToolRequest builder parsing of JSON arguments string
+		var call = McpSchema.CallToolRequest.builder().name("echo").arguments(gsonMapper, "{\"x\": 123}").build();
 
-			// CallToolRequest builder parsing of JSON arguments string
-			var call = McpSchema.CallToolRequest.builder().name("echo").arguments("{\"x\": 123}").build();
+		assertEquals("echo", call.name());
+		assertNotNull(call.arguments());
+		assertTrue(call.arguments().get("x") instanceof Number);
+		assertEquals(123.0, ((Number) call.arguments().get("x")).doubleValue(), 0.0);
 
-			assertEquals("echo", call.name());
-			assertNotNull(call.arguments());
-			assertTrue(call.arguments().get("x") instanceof Number);
-			assertEquals(123.0, ((Number) call.arguments().get("x")).doubleValue(), 0.0);
-		}
-		finally {
-			// restore to a Jackson-backed default to avoid side effects
-			McpSchema.setJsonMapper(originalMapper);
-		}
 	}
 
 }

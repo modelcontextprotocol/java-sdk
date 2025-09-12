@@ -1,4 +1,4 @@
-package io.modelcontextprotocol.spec.json;
+package io.modelcontextprotocol.json;
 
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;

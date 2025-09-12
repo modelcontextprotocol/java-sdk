@@ -4,9 +4,7 @@
 
 package io.modelcontextprotocol.server.transport;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.json.McpJsonMapper;
-import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
@@ -167,19 +165,6 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 		}
 
 		/**
-		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
-		 * messages.
-		 * @param objectMapper The ObjectMapper instance. Must not be null.
-		 * @return this builder instance
-		 * @throws IllegalArgumentException if objectMapper is null
-		 */
-		public Builder objectMapper(ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "ObjectMapper must not be null");
-			this.jsonMapper = new JacksonMcpJsonMapper(objectMapper);
-			return this;
-		}
-
-		/**
 		 * Sets the JsonMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
 		 * @param jsonMapper The JsonMapper instance. Must not be null.
@@ -227,12 +212,9 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 		 * @throws IllegalStateException if required parameters are not set
 		 */
 		public WebFluxStatelessServerTransport build() {
-			if (this.jsonMapper == null) {
-				throw new IllegalStateException("JsonMapper must be set");
-			}
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
-
-			return new WebFluxStatelessServerTransport(jsonMapper, mcpEndpoint, contextExtractor);
+			return new WebFluxStatelessServerTransport(jsonMapper == null ? McpJsonMapper.createDefault() : jsonMapper,
+					mcpEndpoint, contextExtractor);
 		}
 
 	}

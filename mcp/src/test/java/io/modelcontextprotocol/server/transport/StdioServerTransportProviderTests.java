@@ -14,12 +14,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
-import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -27,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -51,8 +50,6 @@ class StdioServerTransportProviderTests {
 
 	private StdioServerTransportProvider transportProvider;
 
-	private ObjectMapper objectMapper;
-
 	private McpServerSession.Factory sessionFactory;
 
 	private McpServerSession mockSession;
@@ -65,8 +62,6 @@ class StdioServerTransportProviderTests {
 		System.setOut(testOutPrintStream);
 		System.setErr(testOutPrintStream);
 
-		objectMapper = new ObjectMapper();
-
 		// Create mocks for session factory and session
 		mockSession = mock(McpServerSession.class);
 		sessionFactory = mock(McpServerSession.Factory.class);
@@ -76,8 +71,7 @@ class StdioServerTransportProviderTests {
 		when(mockSession.closeGracefully()).thenReturn(Mono.empty());
 		when(mockSession.sendNotification(any(), any())).thenReturn(Mono.empty());
 
-		transportProvider = new StdioServerTransportProvider(new JacksonMcpJsonMapper(objectMapper), System.in,
-				testOutPrintStream);
+		transportProvider = new StdioServerTransportProvider(JSON_MAPPER, System.in, testOutPrintStream);
 	}
 
 	@AfterEach
@@ -107,8 +101,7 @@ class StdioServerTransportProviderTests {
 		String jsonMessage = "{\"jsonrpc\":\"2.0\",\"method\":\"test\",\"params\":{},\"id\":1}\n";
 		InputStream stream = new ByteArrayInputStream(jsonMessage.getBytes(StandardCharsets.UTF_8));
 
-		transportProvider = new StdioServerTransportProvider(new JacksonMcpJsonMapper(objectMapper), stream,
-				System.out);
+		transportProvider = new StdioServerTransportProvider(JSON_MAPPER, stream, System.out);
 		// Set up a real session to capture the message
 		AtomicReference<McpSchema.JSONRPCMessage> capturedMessage = new AtomicReference<>();
 		CountDownLatch messageLatch = new CountDownLatch(1);
@@ -188,7 +181,7 @@ class StdioServerTransportProviderTests {
 	@Test
 	void shouldHandleNotificationBeforeSessionFactoryIsSet() {
 
-		transportProvider = new StdioServerTransportProvider(objectMapper);
+		transportProvider = new StdioServerTransportProvider(JSON_MAPPER);
 		// Send notification before setting session factory
 		StepVerifier.create(transportProvider.notifyClients("testNotification", Map.of("key", "value")))
 			.verifyErrorSatisfies(error -> {
@@ -203,8 +196,7 @@ class StdioServerTransportProviderTests {
 		String jsonMessage = "{invalid json}\n";
 		InputStream stream = new ByteArrayInputStream(jsonMessage.getBytes(StandardCharsets.UTF_8));
 
-		transportProvider = new StdioServerTransportProvider(new JacksonMcpJsonMapper(objectMapper), stream,
-				testOutPrintStream);
+		transportProvider = new StdioServerTransportProvider(JSON_MAPPER, stream, testOutPrintStream);
 
 		// Set up a session factory
 		transportProvider.setSessionFactory(sessionFactory);

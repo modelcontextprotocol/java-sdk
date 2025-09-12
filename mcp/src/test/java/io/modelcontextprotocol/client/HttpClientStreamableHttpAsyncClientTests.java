@@ -28,7 +28,6 @@ public class HttpClientStreamableHttpAsyncClientTests extends AbstractMcpAsyncCl
 
 	@Override
 	protected McpClientTransport createMcpTransport() {
-
 		return HttpClientStreamableHttpTransport.builder(host).build();
 	}
 

@@ -453,12 +453,13 @@ public class McpServerFeatures {
 	 *
 	 * <pre>{@code
 	 * McpServerFeatures.SyncToolSpecification.builder()
-	 * 		.tool(new Tool(
-	 * 				"calculator",
-	 * 				"Performs mathematical calculations",
-	 * 				new JsonSchemaObject()
+	 * 		.tool(Tool.builder()
+	 * 				.name("calculator")
+	 * 				.title("Performs mathematical calculations")
+	 * 				.inputSchema(new JsonSchemaObject()
 	 * 						.required("expression")
-	 * 						.property("expression", JsonSchemaType.STRING)))
+	 * 						.property("expression", JsonSchemaType.STRING))
+	 * 				.build()
 	 * 		.toolHandler((exchange, req) -> {
 	 * 			String expr = (String) req.arguments().get("expression");
 	 * 			return new CallToolResult("Result: " + evaluate(expr));

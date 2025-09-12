@@ -4,14 +4,13 @@
 
 package io.modelcontextprotocol.client;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import io.modelcontextprotocol.spec.json.TypeRef;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.MockMcpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
@@ -24,6 +23,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import reactor.core.publisher.Mono;
 
 import static io.modelcontextprotocol.spec.McpSchema.METHOD_INITIALIZE;
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -93,7 +93,7 @@ class McpAsyncClientResponseHandlerTests {
 	}
 
 	@Test
-	void testToolsChangeNotificationHandling() throws JsonProcessingException {
+	void testToolsChangeNotificationHandling() throws IOException {
 		MockMcpClientTransport transport = initializationEnabledTransport();
 
 		// Create a list to store received tools for verification
@@ -110,8 +110,11 @@ class McpAsyncClientResponseHandlerTests {
 
 		// Create a mock tools list that the server will return
 		Map<String, Object> inputSchema = Map.of("type", "object", "properties", Map.of(), "required", List.of());
-		McpSchema.Tool mockTool = new McpSchema.Tool("test-tool-1", "Test Tool 1 Description",
-				new ObjectMapper().writeValueAsString(inputSchema));
+		McpSchema.Tool mockTool = McpSchema.Tool.builder()
+			.name("test-tool-1")
+			.description("Test Tool 1 Description")
+			.inputSchema(JSON_MAPPER, JSON_MAPPER.writeValueAsString(inputSchema))
+			.build();
 
 		// Create page 1 response with nextPageToken
 		String nextPageToken = "page2Token";
@@ -131,9 +134,11 @@ class McpAsyncClientResponseHandlerTests {
 		transport.simulateIncomingMessage(toolsListResponse1);
 
 		// Create mock tools for page 2
-		McpSchema.Tool mockTool2 = new McpSchema.Tool("test-tool-2", "Test Tool 2 Description",
-				new ObjectMapper().writeValueAsString(inputSchema));
-
+		McpSchema.Tool mockTool2 = McpSchema.Tool.builder()
+			.name("test-tool-2")
+			.description("Test Tool 2 Description")
+			.inputSchema(JSON_MAPPER, JSON_MAPPER.writeValueAsString(inputSchema))
+			.build();
 		// Create page 2 response with no nextPageToken (last page)
 		McpSchema.ListToolsResult mockToolsResult2 = new McpSchema.ListToolsResult(List.of(mockTool2), null);
 

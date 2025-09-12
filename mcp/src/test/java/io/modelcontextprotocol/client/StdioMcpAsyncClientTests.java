@@ -11,6 +11,9 @@ import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import org.junit.jupiter.api.Timeout;
 
+import static io.modelcontextprotocol.client.ServerParameterUtils.createServerParameters;
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
+
 /**
  * Tests for the {@link McpAsyncClient} with {@link StdioClientTransport}.
  *
@@ -29,18 +32,7 @@ class StdioMcpAsyncClientTests extends AbstractMcpAsyncClientTests {
 
 	@Override
 	protected McpClientTransport createMcpTransport() {
-		ServerParameters stdioParams;
-		if (System.getProperty("os.name").toLowerCase().contains("win")) {
-			stdioParams = ServerParameters.builder("cmd.exe")
-				.args("/c", "npx.cmd", "-y", "@modelcontextprotocol/server-everything", "stdio")
-				.build();
-		}
-		else {
-			stdioParams = ServerParameters.builder("npx")
-				.args("-y", "@modelcontextprotocol/server-everything", "stdio")
-				.build();
-		}
-		return new StdioClientTransport(stdioParams);
+		return new StdioClientTransport(createServerParameters(), JSON_MAPPER);
 	}
 
 	protected Duration getInitializationTimeout() {

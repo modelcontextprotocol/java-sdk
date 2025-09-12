@@ -4,8 +4,7 @@
 
 package io.modelcontextprotocol.client;
 
-import io.modelcontextprotocol.spec.json.TypeRef;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.ProtocolVersions;
@@ -16,6 +15,7 @@ import reactor.core.publisher.Mono;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 class McpAsyncClientTests {
@@ -30,8 +30,6 @@ class McpAsyncClientTests {
 			ProtocolVersions.MCP_2024_11_05, MOCK_SERVER_CAPABILITIES, MOCK_SERVER_INFO, "Test instructions");
 
 	private static final String CONTEXT_KEY = "context.key";
-
-	private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
 	@Test
 	void validateContextPassedToTransportConnect() {
@@ -74,7 +72,7 @@ class McpAsyncClientTests {
 
 			@Override
 			public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
-				return OBJECT_MAPPER.convertValue(data, new com.fasterxml.jackson.core.type.TypeReference<T>() {
+				return JSON_MAPPER.convertValue(data, new TypeRef<>() {
 					@Override
 					public java.lang.reflect.Type getType() {
 						return typeRef.getType();

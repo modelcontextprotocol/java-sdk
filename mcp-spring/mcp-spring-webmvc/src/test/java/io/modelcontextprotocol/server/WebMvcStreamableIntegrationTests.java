@@ -21,8 +21,6 @@ import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.modelcontextprotocol.AbstractMcpClientServerIntegrationTests;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
@@ -52,7 +50,6 @@ class WebMvcStreamableIntegrationTests extends AbstractMcpClientServerIntegratio
 		@Bean
 		public WebMvcStreamableServerTransportProvider webMvcStreamableServerTransportProvider() {
 			return WebMvcStreamableServerTransportProvider.builder()
-				.objectMapper(new ObjectMapper())
 				.contextExtractor(TEST_CONTEXT_EXTRACTOR)
 				.mcpEndpoint(MESSAGE_ENDPOINT)
 				.build();

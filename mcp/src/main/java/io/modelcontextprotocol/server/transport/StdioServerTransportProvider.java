@@ -15,8 +15,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
-import io.modelcontextprotocol.spec.json.TypeRef;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
@@ -25,8 +24,7 @@ import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
-import io.modelcontextprotocol.spec.json.McpJsonMapper;
-import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.json.McpJsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -59,24 +57,12 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	private final Sinks.One<Void> inboundReady = Sinks.one();
 
 	/**
-	 * Creates a new StdioServerTransportProvider with a default ObjectMapper and System
-	 * streams.
-	 */
-	public StdioServerTransportProvider() {
-		this(new JacksonMcpJsonMapper(new com.fasterxml.jackson.databind.ObjectMapper()), System.in, System.out);
-	}
-
-	/**
 	 * Creates a new StdioServerTransportProvider with the specified ObjectMapper and
 	 * System streams.
-	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
-	 * @deprecated Prefer
-	 * {@link StdioServerTransportProvider#StdioServerTransportProvider(McpJsonMapper, InputStream, OutputStream)}
-	 * or use the no-arg constructor which defaults to a JacksonJsonMapper internally.
+	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
 	 */
-	@Deprecated(forRemoval = true)
-	public StdioServerTransportProvider(ObjectMapper objectMapper) {
-		this(new JacksonMcpJsonMapper(objectMapper), System.in, System.out);
+	public StdioServerTransportProvider(McpJsonMapper jsonMapper) {
+		this(jsonMapper, System.in, System.out);
 	}
 
 	/**

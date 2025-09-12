@@ -7,7 +7,6 @@ package io.modelcontextprotocol.common;
 import java.util.Map;
 import java.util.function.BiFunction;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpAsyncClient;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
@@ -100,19 +99,16 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 
 	private final HttpServletStatelessServerTransport statelessServerTransport = HttpServletStatelessServerTransport
 		.builder()
-		.objectMapper(new ObjectMapper())
 		.contextExtractor(serverContextExtractor)
 		.build();
 
 	private final HttpServletStreamableServerTransportProvider streamableServerTransport = HttpServletStreamableServerTransportProvider
 		.builder()
-		.objectMapper(new ObjectMapper())
 		.contextExtractor(serverContextExtractor)
 		.build();
 
 	private final HttpServletSseServerTransportProvider sseServerTransport = HttpServletSseServerTransportProvider
 		.builder()
-		.objectMapper(new ObjectMapper())
 		.contextExtractor(serverContextExtractor)
 		.messageEndpoint("/message")
 		.build();

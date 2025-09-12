@@ -16,13 +16,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.modelcontextprotocol.spec.json.McpJsonMapper;
-import io.modelcontextprotocol.spec.json.TypeRef;
-import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
 
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
@@ -120,83 +118,6 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	private final McpAsyncHttpClientRequestCustomizer httpRequestCustomizer;
 
 	/**
-	 * Creates a new transport instance with default HTTP client and object mapper.
-	 * @param baseUri the base URI of the MCP server
-	 * @deprecated Use {@link HttpClientSseClientTransport#builder(String)} instead. This
-	 * constructor will be removed in future versions.
-	 */
-	@Deprecated(forRemoval = true)
-	public HttpClientSseClientTransport(String baseUri) {
-		this(HttpClient.newBuilder(), baseUri, new com.fasterxml.jackson.databind.ObjectMapper());
-	}
-
-	/**
-	 * Creates a new transport instance with custom HTTP client builder and object mapper.
-	 * @param clientBuilder the HTTP client builder to use
-	 * @param baseUri the base URI of the MCP server
-	 * @param objectMapper the object mapper for JSON serialization/deserialization
-	 * @throws IllegalArgumentException if objectMapper or clientBuilder is null
-	 * @deprecated Use {@link HttpClientSseClientTransport#builder(String)} instead. This
-	 * constructor will be removed in future versions.
-	 */
-	@Deprecated(forRemoval = true)
-	public HttpClientSseClientTransport(HttpClient.Builder clientBuilder, String baseUri,
-			com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
-		this(clientBuilder, baseUri, DEFAULT_SSE_ENDPOINT, objectMapper);
-	}
-
-	/**
-	 * Creates a new transport instance with custom HTTP client builder and object mapper.
-	 * @param clientBuilder the HTTP client builder to use
-	 * @param baseUri the base URI of the MCP server
-	 * @param sseEndpoint the SSE endpoint path
-	 * @param objectMapper the object mapper for JSON serialization/deserialization
-	 * @throws IllegalArgumentException if objectMapper or clientBuilder is null
-	 * @deprecated Use {@link HttpClientSseClientTransport#builder(String)} instead. This
-	 * constructor will be removed in future versions.
-	 */
-	@Deprecated(forRemoval = true)
-	public HttpClientSseClientTransport(HttpClient.Builder clientBuilder, String baseUri, String sseEndpoint,
-			com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
-		this(clientBuilder, HttpRequest.newBuilder(), baseUri, sseEndpoint, objectMapper);
-	}
-
-	/**
-	 * Creates a new transport instance with custom HTTP client builder, object mapper,
-	 * and headers.
-	 * @param clientBuilder the HTTP client builder to use
-	 * @param requestBuilder the HTTP request builder to use
-	 * @param baseUri the base URI of the MCP server
-	 * @param sseEndpoint the SSE endpoint path
-	 * @param objectMapper the object mapper for JSON serialization/deserialization
-	 * @throws IllegalArgumentException if objectMapper, clientBuilder, or headers is null
-	 * @deprecated Use {@link HttpClientSseClientTransport#builder(String)} instead. This
-	 * constructor will be removed in future versions.
-	 */
-	@Deprecated(forRemoval = true)
-	public HttpClientSseClientTransport(HttpClient.Builder clientBuilder, HttpRequest.Builder requestBuilder,
-			String baseUri, String sseEndpoint, ObjectMapper objectMapper) {
-		this(clientBuilder.build(), requestBuilder, baseUri, sseEndpoint, objectMapper);
-	}
-
-	/**
-	 * Creates a new transport instance with custom HTTP client builder, object mapper,
-	 * and headers.
-	 * @param httpClient the HTTP client to use
-	 * @param requestBuilder the HTTP request builder to use
-	 * @param baseUri the base URI of the MCP server
-	 * @param sseEndpoint the SSE endpoint path
-	 * @param objectMapper the object mapper for JSON serialization/deserialization
-	 * @throws IllegalArgumentException if objectMapper, clientBuilder, or headers is null
-	 */
-	@Deprecated(forRemoval = true)
-	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
-			String sseEndpoint, com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
-		this(httpClient, requestBuilder, baseUri, sseEndpoint, new JacksonMcpJsonMapper(objectMapper),
-				McpAsyncHttpClientRequestCustomizer.NOOP);
-	}
-
-	/**
 	 * Creates a new transport instance with custom HTTP client builder, object mapper,
 	 * and headers.
 	 * @param httpClient the HTTP client to use
@@ -249,7 +170,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 
 		private HttpClient.Builder clientBuilder = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1);
 
-		private McpJsonMapper jsonMapper = new JacksonMcpJsonMapper(new com.fasterxml.jackson.databind.ObjectMapper());
+		private McpJsonMapper jsonMapper;
 
 		private HttpRequest.Builder requestBuilder = HttpRequest.newBuilder();
 
@@ -344,20 +265,6 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		}
 
 		/**
-		 * Sets the object mapper for JSON serialization/deserialization.
-		 * @param objectMapper the object mapper
-		 * @return this builder
-		 * @deprecated Prefer {@link #jsonMapper(McpJsonMapper)}. This method will be
-		 * removed in a future release.
-		 */
-		@Deprecated(forRemoval = true)
-		public Builder objectMapper(com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "objectMapper must not be null");
-			this.jsonMapper = new JacksonMcpJsonMapper(objectMapper);
-			return this;
-		}
-
-		/**
 		 * Sets the JSON mapper implementation to use for serialization/deserialization.
 		 * @param jsonMapper the JSON mapper
 		 * @return this builder
@@ -420,8 +327,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		 */
 		public HttpClientSseClientTransport build() {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
-			return new HttpClientSseClientTransport(httpClient, requestBuilder, baseUri, sseEndpoint, jsonMapper,
-					httpRequestCustomizer);
+			return new HttpClientSseClientTransport(httpClient, requestBuilder, baseUri, sseEndpoint,
+					jsonMapper == null ? McpJsonMapper.createDefault() : jsonMapper, httpRequestCustomizer);
 		}
 
 	}

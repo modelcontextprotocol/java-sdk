@@ -20,7 +20,6 @@ import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
 
-import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -37,6 +36,7 @@ import reactor.test.StepVerifier;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
@@ -77,8 +77,7 @@ class HttpClientSseClientTransportTests {
 
 		public TestHttpClientSseClientTransport(final String baseUri) {
 			super(HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(),
-					HttpRequest.newBuilder().header("Content-Type", "application/json"), baseUri, "/sse",
-					new JacksonMcpJsonMapper(new com.fasterxml.jackson.databind.ObjectMapper()),
+					HttpRequest.newBuilder().header("Content-Type", "application/json"), baseUri, "/sse", JSON_MAPPER,
 					McpAsyncHttpClientRequestCustomizer.NOOP);
 		}
 

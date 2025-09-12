@@ -4,7 +4,7 @@
 
 package io.modelcontextprotocol.spec;
 
-import io.modelcontextprotocol.spec.json.TypeRef;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;

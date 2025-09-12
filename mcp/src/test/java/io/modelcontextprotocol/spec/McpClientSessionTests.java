@@ -8,7 +8,7 @@ import java.time.Duration;
 import java.util.Map;
 
 import io.modelcontextprotocol.MockMcpClientTransport;
-import io.modelcontextprotocol.spec.json.TypeRef;
+import io.modelcontextprotocol.json.TypeRef;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.spec;
 
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -17,7 +18,6 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
 
 import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
@@ -29,14 +29,12 @@ import net.javacrumbs.jsonunit.core.Option;
  */
 public class McpSchemaTests {
 
-	ObjectMapper mapper = new ObjectMapper();
-
 	// Content Types Tests
 
 	@Test
 	void testTextContent() throws Exception {
 		McpSchema.TextContent test = new McpSchema.TextContent("XXX");
-		String value = mapper.writeValueAsString(test);
+		String value = JSON_MAPPER.writeValueAsString(test);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -47,7 +45,7 @@ public class McpSchemaTests {
 
 	@Test
 	void testTextContentDeserialization() throws Exception {
-		McpSchema.TextContent textContent = mapper.readValue("""
+		McpSchema.TextContent textContent = JSON_MAPPER.readValue("""
 				{"type":"text","text":"XXX","_meta":{"metaKey":"metaValue"}}""", McpSchema.TextContent.class);
 
 		assertThat(textContent).isNotNull();
@@ -59,7 +57,7 @@ public class McpSchemaTests {
 	@Test
 	void testContentDeserializationWrongType() throws Exception {
 
-		assertThatThrownBy(() -> mapper.readValue("""
+		assertThatThrownBy(() -> JSON_MAPPER.readValue("""
 				{"type":"WRONG","text":"XXX"}""", McpSchema.TextContent.class))
 			.isInstanceOf(InvalidTypeIdException.class)
 			.hasMessageContaining(
@@ -69,7 +67,7 @@ public class McpSchemaTests {
 	@Test
 	void testImageContent() throws Exception {
 		McpSchema.ImageContent test = new McpSchema.ImageContent(null, null, "base64encodeddata", "image/png");
-		String value = mapper.writeValueAsString(test);
+		String value = JSON_MAPPER.writeValueAsString(test);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -80,7 +78,7 @@ public class McpSchemaTests {
 
 	@Test
 	void testImageContentDeserialization() throws Exception {
-		McpSchema.ImageContent imageContent = mapper.readValue("""
+		McpSchema.ImageContent imageContent = JSON_MAPPER.readValue("""
 				{"type":"image","data":"base64encodeddata","mimeType":"image/png","_meta":{"metaKey":"metaValue"}}""",
 				McpSchema.ImageContent.class);
 		assertThat(imageContent).isNotNull();
@@ -93,7 +91,7 @@ public class McpSchemaTests {
 	@Test
 	void testAudioContent() throws Exception {
 		McpSchema.AudioContent audioContent = new McpSchema.AudioContent(null, "base64encodeddata", "audio/wav");
-		String value = mapper.writeValueAsString(audioContent);
+		String value = JSON_MAPPER.writeValueAsString(audioContent);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -104,7 +102,7 @@ public class McpSchemaTests {
 
 	@Test
 	void testAudioContentDeserialization() throws Exception {
-		McpSchema.AudioContent audioContent = mapper.readValue("""
+		McpSchema.AudioContent audioContent = JSON_MAPPER.readValue("""
 				{"type":"audio","data":"base64encodeddata","mimeType":"audio/wav","_meta":{"metaKey":"metaValue"}}""",
 				McpSchema.AudioContent.class);
 		assertThat(audioContent).isNotNull();
@@ -140,7 +138,7 @@ public class McpSchemaTests {
 			.meta(meta)
 			.build();
 
-		String value = mapper.writeValueAsString(request);
+		String value = JSON_MAPPER.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -158,7 +156,7 @@ public class McpSchemaTests {
 
 		McpSchema.EmbeddedResource test = new McpSchema.EmbeddedResource(null, null, resourceContents);
 
-		String value = mapper.writeValueAsString(test);
+		String value = JSON_MAPPER.writeValueAsString(test);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -169,7 +167,7 @@ public class McpSchemaTests {
 
 	@Test
 	void testEmbeddedResourceDeserialization() throws Exception {
-		McpSchema.EmbeddedResource embeddedResource = mapper.readValue(
+		McpSchema.EmbeddedResource embeddedResource = JSON_MAPPER.readValue(
 				"""
 						{"type":"resource","resource":{"uri":"resource://test","mimeType":"text/plain","text":"Sample resource content"},"_meta":{"metaKey":"metaValue"}}""",
 				McpSchema.EmbeddedResource.class);
@@ -189,7 +187,7 @@ public class McpSchemaTests {
 
 		McpSchema.EmbeddedResource test = new McpSchema.EmbeddedResource(null, null, resourceContents);
 
-		String value = mapper.writeValueAsString(test);
+		String value = JSON_MAPPER.writeValueAsString(test);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -200,7 +198,7 @@ public class McpSchemaTests {
 
 	@Test
 	void testEmbeddedResourceWithBlobContentsDeserialization() throws Exception {
-		McpSchema.EmbeddedResource embeddedResource = mapper.readValue(
+		McpSchema.EmbeddedResource embeddedResource = JSON_MAPPER.readValue(
 				"""
 						{"type":"resource","resource":{"uri":"resource://test","mimeType":"application/octet-stream","blob":"base64encodedblob","_meta":{"metaKey":"metaValue"}}}""",
 				McpSchema.EmbeddedResource.class);
@@ -219,7 +217,7 @@ public class McpSchemaTests {
 		McpSchema.ResourceLink resourceLink = new McpSchema.ResourceLink("main.rs", "Main file",
 				"file:///project/src/main.rs", "Primary application entry point", "text/x-rust", null, null,
 				Map.of("metaKey", "metaValue"));
-		String value = mapper.writeValueAsString(resourceLink);
+		String value = JSON_MAPPER.writeValueAsString(resourceLink);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -231,7 +229,7 @@ public class McpSchemaTests {
 
 	@Test
 	void testResourceLinkDeserialization() throws Exception {
-		McpSchema.ResourceLink resourceLink = mapper.readValue(
+		McpSchema.ResourceLink resourceLink = JSON_MAPPER.readValue(
 				"""
 						{"type":"resource_link","name":"main.rs","uri":"file:///project/src/main.rs","description":"Primary application entry point","mimeType":"text/x-rust","_meta":{"metaKey":"metaValue"}}""",
 				McpSchema.ResourceLink.class);
@@ -254,7 +252,7 @@ public class McpSchemaTests {
 		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, "method_name", 1,
 				params);
 
-		String value = mapper.writeValueAsString(request);
+		String value = JSON_MAPPER.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -270,7 +268,7 @@ public class McpSchemaTests {
 		McpSchema.JSONRPCNotification notification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
 				"notification_method", params);
 
-		String value = mapper.writeValueAsString(notification);
+		String value = JSON_MAPPER.writeValueAsString(notification);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -285,7 +283,7 @@ public class McpSchemaTests {
 
 		McpSchema.JSONRPCResponse response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, 1, result, null);
 
-		String value = mapper.writeValueAsString(response);
+		String value = JSON_MAPPER.writeValueAsString(response);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -300,7 +298,7 @@ public class McpSchemaTests {
 
 		McpSchema.JSONRPCResponse response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, 1, null, error);
 
-		String value = mapper.writeValueAsString(response);
+		String value = JSON_MAPPER.writeValueAsString(response);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -323,7 +321,7 @@ public class McpSchemaTests {
 		McpSchema.InitializeRequest request = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2024_11_05,
 				capabilities, clientInfo, meta);
 
-		String value = mapper.writeValueAsString(request);
+		String value = JSON_MAPPER.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -346,7 +344,7 @@ public class McpSchemaTests {
 		McpSchema.InitializeResult result = new McpSchema.InitializeResult(ProtocolVersions.MCP_2024_11_05,
 				capabilities, serverInfo, "Server initialized successfully");
 
-		String value = mapper.writeValueAsString(result);
+		String value = JSON_MAPPER.writeValueAsString(result);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -365,7 +363,7 @@ public class McpSchemaTests {
 		McpSchema.Resource resource = new McpSchema.Resource("resource://test", "Test Resource", "A test resource",
 				"text/plain", annotations);
 
-		String value = mapper.writeValueAsString(resource);
+		String value = JSON_MAPPER.writeValueAsString(resource);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -389,7 +387,7 @@ public class McpSchemaTests {
 			.meta(Map.of("metaKey", "metaValue"))
 			.build();
 
-		String value = mapper.writeValueAsString(resource);
+		String value = JSON_MAPPER.writeValueAsString(resource);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -436,7 +434,7 @@ public class McpSchemaTests {
 		McpSchema.ResourceTemplate template = new McpSchema.ResourceTemplate("resource://{param}/test", "Test Template",
 				"Test Template", "A test resource template", "text/plain", annotations, meta);
 
-		String value = mapper.writeValueAsString(template);
+		String value = JSON_MAPPER.writeValueAsString(template);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -458,7 +456,7 @@ public class McpSchemaTests {
 		McpSchema.ListResourcesResult result = new McpSchema.ListResourcesResult(Arrays.asList(resource1, resource2),
 				"next-cursor", meta);
 
-		String value = mapper.writeValueAsString(result);
+		String value = JSON_MAPPER.writeValueAsString(result);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -478,7 +476,7 @@ public class McpSchemaTests {
 		McpSchema.ListResourceTemplatesResult result = new McpSchema.ListResourceTemplatesResult(
 				Arrays.asList(template1, template2), "next-cursor");
 
-		String value = mapper.writeValueAsString(result);
+		String value = JSON_MAPPER.writeValueAsString(result);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -492,7 +490,7 @@ public class McpSchemaTests {
 		McpSchema.ReadResourceRequest request = new McpSchema.ReadResourceRequest("resource://test",
 				Map.of("metaKey", "metaValue"));
 
-		String value = mapper.writeValueAsString(request);
+		String value = JSON_MAPPER.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -507,7 +505,7 @@ public class McpSchemaTests {
 
 		McpSchema.ReadResourceRequest request = new McpSchema.ReadResourceRequest("resource://test", meta);
 
-		String value = mapper.writeValueAsString(request);
+		String value = JSON_MAPPER.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -521,7 +519,7 @@ public class McpSchemaTests {
 
 	@Test
 	void testReadResourceRequestDeserialization() throws Exception {
-		McpSchema.ReadResourceRequest request = mapper.readValue("""
+		McpSchema.ReadResourceRequest request = JSON_MAPPER.readValue("""
 				{"uri":"resource://test","_meta":{"progressToken":"test-token"}}""",
 				McpSchema.ReadResourceRequest.class);
 
@@ -541,7 +539,7 @@ public class McpSchemaTests {
 		McpSchema.ReadResourceResult result = new McpSchema.ReadResourceResult(Arrays.asList(contents1, contents2),
 				Map.of("metaKey", "metaValue"));
 
-		String value = mapper.writeValueAsString(result);
+		String value = JSON_MAPPER.writeValueAsString(result);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -562,7 +560,7 @@ public class McpSchemaTests {
 		McpSchema.Prompt prompt = new McpSchema.Prompt("test-prompt", "Test Prompt", "A test prompt",
 				Arrays.asList(arg1, arg2), Map.of("metaKey", "metaValue"));
 
-		String value = mapper.writeValueAsString(prompt);
+		String value = JSON_MAPPER.writeValueAsString(prompt);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -577,7 +575,7 @@ public class McpSchemaTests {
 
 		McpSchema.PromptMessage message = new McpSchema.PromptMessage(McpSchema.Role.USER, content);
 
-		String value = mapper.writeValueAsString(message);
+		String value = JSON_MAPPER.writeValueAsString(message);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -598,7 +596,7 @@ public class McpSchemaTests {
 		McpSchema.ListPromptsResult result = new McpSchema.ListPromptsResult(Arrays.asList(prompt1, prompt2),
 				"next-cursor");
 
-		String value = mapper.writeValueAsString(result);
+		String value = JSON_MAPPER.writeValueAsString(result);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -615,7 +613,7 @@ public class McpSchemaTests {
 
 		McpSchema.GetPromptRequest request = new McpSchema.GetPromptRequest("test-prompt", arguments);
 
-		assertThat(mapper.readValue("""
+		assertThat(JSON_MAPPER.readValue("""
 				{"name":"test-prompt","arguments":{"arg1":"value1","arg2":42}}""", McpSchema.GetPromptRequest.class))
 			.isEqualTo(request);
 	}
@@ -631,7 +629,7 @@ public class McpSchemaTests {
 
 		McpSchema.GetPromptRequest request = new McpSchema.GetPromptRequest("test-prompt", arguments, meta);
 
-		String value = mapper.writeValueAsString(request);
+		String value = JSON_MAPPER.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -656,7 +654,7 @@ public class McpSchemaTests {
 		McpSchema.GetPromptResult result = new McpSchema.GetPromptResult("A test prompt result",
 				Arrays.asList(message1, message2));
 
-		String value = mapper.writeValueAsString(result);
+		String value = JSON_MAPPER.writeValueAsString(result);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -696,16 +694,16 @@ public class McpSchemaTests {
 				""";
 
 		// Deserialize the original string to a JsonSchema object
-		McpSchema.JsonSchema schema = mapper.readValue(schemaJson, McpSchema.JsonSchema.class);
+		McpSchema.JsonSchema schema = JSON_MAPPER.readValue(schemaJson, McpSchema.JsonSchema.class);
 
 		// Serialize the object back to a string
-		String serialized = mapper.writeValueAsString(schema);
+		String serialized = JSON_MAPPER.writeValueAsString(schema);
 
 		// Deserialize again
-		McpSchema.JsonSchema deserialized = mapper.readValue(serialized, McpSchema.JsonSchema.class);
+		McpSchema.JsonSchema deserialized = JSON_MAPPER.readValue(serialized, McpSchema.JsonSchema.class);
 
 		// Serialize one more time and compare with the first serialization
-		String serializedAgain = mapper.writeValueAsString(deserialized);
+		String serializedAgain = JSON_MAPPER.writeValueAsString(deserialized);
 
 		// The two serialized strings should be the same
 		assertThatJson(serializedAgain).when(Option.IGNORING_ARRAY_ORDER).isEqualTo(json(serialized));
@@ -739,16 +737,16 @@ public class McpSchemaTests {
 				""";
 
 		// Deserialize the original string to a JsonSchema object
-		McpSchema.JsonSchema schema = mapper.readValue(schemaJson, McpSchema.JsonSchema.class);
+		McpSchema.JsonSchema schema = JSON_MAPPER.readValue(schemaJson, McpSchema.JsonSchema.class);
 
 		// Serialize the object back to a string
-		String serialized = mapper.writeValueAsString(schema);
+		String serialized = JSON_MAPPER.writeValueAsString(schema);
 
 		// Deserialize again
-		McpSchema.JsonSchema deserialized = mapper.readValue(serialized, McpSchema.JsonSchema.class);
+		McpSchema.JsonSchema deserialized = JSON_MAPPER.readValue(serialized, McpSchema.JsonSchema.class);
 
 		// Serialize one more time and compare with the first serialization
-		String serializedAgain = mapper.writeValueAsString(deserialized);
+		String serializedAgain = JSON_MAPPER.writeValueAsString(deserialized);
 
 		// The two serialized strings should be the same
 		assertThatJson(serializedAgain).when(Option.IGNORING_ARRAY_ORDER).isEqualTo(json(serialized));
@@ -771,9 +769,13 @@ public class McpSchemaTests {
 				}
 				""";
 
-		McpSchema.Tool tool = new McpSchema.Tool("test-tool", "A test tool", schemaJson);
+		McpSchema.Tool tool = McpSchema.Tool.builder()
+			.name("test-tool")
+			.description("A test tool")
+			.inputSchema(JSON_MAPPER, schemaJson)
+			.build();
 
-		String value = mapper.writeValueAsString(tool);
+		String value = JSON_MAPPER.writeValueAsString(tool);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -805,16 +807,20 @@ public class McpSchemaTests {
 				}
 				""";
 
-		McpSchema.Tool tool = new McpSchema.Tool("addressTool", "Handles addresses", complexSchemaJson);
+		McpSchema.Tool tool = McpSchema.Tool.builder()
+			.name("addressTool")
+			.title("Handles addresses")
+			.inputSchema(JSON_MAPPER, complexSchemaJson)
+			.build();
 
 		// Serialize the tool to a string
-		String serialized = mapper.writeValueAsString(tool);
+		String serialized = JSON_MAPPER.writeValueAsString(tool);
 
 		// Deserialize back to a Tool object
-		McpSchema.Tool deserializedTool = mapper.readValue(serialized, McpSchema.Tool.class);
+		McpSchema.Tool deserializedTool = JSON_MAPPER.readValue(serialized, McpSchema.Tool.class);
 
 		// Serialize again and compare with first serialization
-		String serializedAgain = mapper.writeValueAsString(deserializedTool);
+		String serializedAgain = JSON_MAPPER.writeValueAsString(deserializedTool);
 
 		// The two serialized strings should be the same
 		assertThatJson(serializedAgain).when(Option.IGNORING_ARRAY_ORDER).isEqualTo(json(serialized));
@@ -841,11 +847,16 @@ public class McpSchemaTests {
 				}
 				""";
 
-		McpSchema.JsonSchema schema = mapper.readValue(schemaJson, McpSchema.JsonSchema.class);
+		McpSchema.JsonSchema schema = JSON_MAPPER.readValue(schemaJson, McpSchema.JsonSchema.class);
 		Map<String, Object> meta = Map.of("metaKey", "metaValue");
 
-		McpSchema.Tool tool = new McpSchema.Tool("addressTool", "addressTool", "Handles addresses", schema, null, null,
-				meta);
+		McpSchema.Tool tool = McpSchema.Tool.builder()
+			.name("addressTool")
+			.title("addressTool")
+			.description("Handles addresses")
+			.inputSchema(schema)
+			.meta(meta)
+			.build();
 
 		// Verify that meta value was preserved
 		assertThat(tool.meta()).isNotNull();
@@ -871,9 +882,14 @@ public class McpSchemaTests {
 		McpSchema.ToolAnnotations annotations = new McpSchema.ToolAnnotations("A test tool", false, false, false, false,
 				false);
 
-		McpSchema.Tool tool = new McpSchema.Tool("test-tool", "A test tool", schemaJson, annotations);
+		McpSchema.Tool tool = McpSchema.Tool.builder()
+			.name("test-tool")
+			.description("A test tool")
+			.inputSchema(JSON_MAPPER, schemaJson)
+			.annotations(annotations)
+			.build();
 
-		String value = mapper.writeValueAsString(tool);
+		String value = JSON_MAPPER.writeValueAsString(tool);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -934,9 +950,14 @@ public class McpSchemaTests {
 				}
 				""";
 
-		McpSchema.Tool tool = new McpSchema.Tool("test-tool", "A test tool", inputSchemaJson, outputSchemaJson, null);
+		McpSchema.Tool tool = McpSchema.Tool.builder()
+			.name("test-tool")
+			.description("A test tool")
+			.inputSchema(JSON_MAPPER, inputSchemaJson)
+			.outputSchema(JSON_MAPPER, outputSchemaJson)
+			.build();
 
-		String value = mapper.writeValueAsString(tool);
+		String value = JSON_MAPPER.writeValueAsString(tool);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -996,10 +1017,15 @@ public class McpSchemaTests {
 		McpSchema.ToolAnnotations annotations = new McpSchema.ToolAnnotations("A test tool with output", true, false,
 				true, false, true);
 
-		McpSchema.Tool tool = new McpSchema.Tool("test-tool", "A test tool", inputSchemaJson, outputSchemaJson,
-				annotations);
+		McpSchema.Tool tool = McpSchema.Tool.builder()
+			.name("test-tool")
+			.description("A test tool")
+			.inputSchema(JSON_MAPPER, inputSchemaJson)
+			.outputSchema(JSON_MAPPER, outputSchemaJson)
+			.annotations(annotations)
+			.build();
 
-		String value = mapper.writeValueAsString(tool);
+		String value = JSON_MAPPER.writeValueAsString(tool);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -1063,7 +1089,7 @@ public class McpSchemaTests {
 				}
 				""";
 
-		McpSchema.Tool tool = mapper.readValue(toolJson, McpSchema.Tool.class);
+		McpSchema.Tool tool = JSON_MAPPER.readValue(toolJson, McpSchema.Tool.class);
 
 		assertThat(tool).isNotNull();
 		assertThat(tool.name()).isEqualTo("test-tool");
@@ -1097,7 +1123,7 @@ public class McpSchemaTests {
 				}
 				""";
 
-		McpSchema.Tool tool = mapper.readValue(toolJson, McpSchema.Tool.class);
+		McpSchema.Tool tool = JSON_MAPPER.readValue(toolJson, McpSchema.Tool.class);
 
 		assertThat(tool).isNotNull();
 		assertThat(tool.name()).isEqualTo("test-tool");
@@ -1115,7 +1141,7 @@ public class McpSchemaTests {
 
 		McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("test-tool", arguments);
 
-		String value = mapper.writeValueAsString(request);
+		String value = JSON_MAPPER.writeValueAsString(request);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -1127,14 +1153,14 @@ public class McpSchemaTests {
 	@Test
 	void testCallToolRequestJsonArguments() throws Exception {
 
-		McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("test-tool", """
+		McpSchema.CallToolRequest request = new McpSchema.CallToolRequest(JSON_MAPPER, "test-tool", """
 				{
 					"name": "test",
 					"value": 42
 				}
 				""");
 
-		String value = mapper.writeValueAsString(request);
+		String value = JSON_MAPPER.writeValueAsString(request);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -1151,7 +1177,7 @@ public class McpSchemaTests {
 			.arguments(Map.of("name", "test", "value", 42))
 			.progressToken("tool-progress-123")
 			.build();
-		String value = mapper.writeValueAsString(request);
+		String value = JSON_MAPPER.writeValueAsString(request);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -1170,14 +1196,18 @@ public class McpSchemaTests {
 		Map<String, Object> meta = new HashMap<>();
 		meta.put("progressToken", "json-builder-789");
 
-		McpSchema.CallToolRequest request = McpSchema.CallToolRequest.builder().name("test-tool").arguments("""
-				{
-					"name": "test",
-					"value": 42
-				}
-				""").meta(meta).build();
+		McpSchema.CallToolRequest request = McpSchema.CallToolRequest.builder()
+			.name("test-tool")
+			.arguments(JSON_MAPPER, """
+					{
+						"name": "test",
+						"value": 42
+					}
+					""")
+			.meta(meta)
+			.build();
 
-		String value = mapper.writeValueAsString(request);
+		String value = JSON_MAPPER.writeValueAsString(request);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -1208,7 +1238,7 @@ public class McpSchemaTests {
 
 		McpSchema.CallToolResult result = new McpSchema.CallToolResult(Collections.singletonList(content), false);
 
-		String value = mapper.writeValueAsString(result);
+		String value = JSON_MAPPER.writeValueAsString(result);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -1224,7 +1254,7 @@ public class McpSchemaTests {
 			.isError(false)
 			.build();
 
-		String value = mapper.writeValueAsString(result);
+		String value = JSON_MAPPER.writeValueAsString(result);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -1244,7 +1274,7 @@ public class McpSchemaTests {
 			.isError(false)
 			.build();
 
-		String value = mapper.writeValueAsString(result);
+		String value = JSON_MAPPER.writeValueAsString(result);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -1262,7 +1292,7 @@ public class McpSchemaTests {
 
 		McpSchema.CallToolResult result = McpSchema.CallToolResult.builder().content(contents).isError(true).build();
 
-		String value = mapper.writeValueAsString(result);
+		String value = JSON_MAPPER.writeValueAsString(result);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -1279,7 +1309,7 @@ public class McpSchemaTests {
 			.isError(true)
 			.build();
 
-		String value = mapper.writeValueAsString(result);
+		String value = JSON_MAPPER.writeValueAsString(result);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -1297,8 +1327,8 @@ public class McpSchemaTests {
 			.isError(false)
 			.build();
 
-		String value1 = mapper.writeValueAsString(result1);
-		String value2 = mapper.writeValueAsString(result2);
+		String value1 = JSON_MAPPER.writeValueAsString(result1);
+		String value2 = JSON_MAPPER.writeValueAsString(result2);
 
 		// Both should produce the same JSON
 		assertThat(value1).isEqualTo(value2);
@@ -1336,7 +1366,7 @@ public class McpSchemaTests {
 			.metadata(metadata)
 			.build();
 
-		String value = mapper.writeValueAsString(request);
+		String value = JSON_MAPPER.writeValueAsString(request);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -1357,7 +1387,7 @@ public class McpSchemaTests {
 			.stopReason(McpSchema.CreateMessageResult.StopReason.END_TURN)
 			.build();
 
-		String value = mapper.writeValueAsString(result);
+		String value = JSON_MAPPER.writeValueAsString(result);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -1372,7 +1402,7 @@ public class McpSchemaTests {
 		String input = """
 				{"role":"assistant","content":{"type":"text","text":"Assistant response"},"model":"gpt-4","stopReason":"arbitrary value"}""";
 
-		McpSchema.CreateMessageResult value = mapper.readValue(input, McpSchema.CreateMessageResult.class);
+		McpSchema.CreateMessageResult value = JSON_MAPPER.readValue(input, McpSchema.CreateMessageResult.class);
 
 		McpSchema.TextContent expectedContent = new McpSchema.TextContent("Assistant response");
 		McpSchema.CreateMessageResult expected = McpSchema.CreateMessageResult.builder()
@@ -1393,7 +1423,7 @@ public class McpSchemaTests {
 					Map.of("foo", Map.of("type", "string"))))
 			.build();
 
-		String value = mapper.writeValueAsString(request);
+		String value = JSON_MAPPER.writeValueAsString(request);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -1409,7 +1439,7 @@ public class McpSchemaTests {
 			.message(McpSchema.ElicitResult.Action.ACCEPT)
 			.build();
 
-		String value = mapper.writeValueAsString(result);
+		String value = JSON_MAPPER.writeValueAsString(result);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -1432,7 +1462,7 @@ public class McpSchemaTests {
 			.meta(meta)
 			.build();
 
-		String value = mapper.writeValueAsString(request);
+		String value = JSON_MAPPER.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -1449,7 +1479,7 @@ public class McpSchemaTests {
 	void testPaginatedRequestNoArgs() throws Exception {
 		McpSchema.PaginatedRequest request = new McpSchema.PaginatedRequest();
 
-		String value = mapper.writeValueAsString(request);
+		String value = JSON_MAPPER.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -1465,7 +1495,7 @@ public class McpSchemaTests {
 	void testPaginatedRequestWithCursor() throws Exception {
 		McpSchema.PaginatedRequest request = new McpSchema.PaginatedRequest("cursor123");
 
-		String value = mapper.writeValueAsString(request);
+		String value = JSON_MAPPER.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -1484,7 +1514,7 @@ public class McpSchemaTests {
 
 		McpSchema.PaginatedRequest request = new McpSchema.PaginatedRequest("cursor123", meta);
 
-		String value = mapper.writeValueAsString(request);
+		String value = JSON_MAPPER.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -1498,7 +1528,7 @@ public class McpSchemaTests {
 
 	@Test
 	void testPaginatedRequestDeserialization() throws Exception {
-		McpSchema.PaginatedRequest request = mapper.readValue("""
+		McpSchema.PaginatedRequest request = JSON_MAPPER.readValue("""
 				{"cursor":"test-cursor","_meta":{"progressToken":"test-token"}}""", McpSchema.PaginatedRequest.class);
 
 		assertThat(request.cursor()).isEqualTo("test-cursor");
@@ -1516,7 +1546,7 @@ public class McpSchemaTests {
 
 		McpSchema.CompleteRequest request = new McpSchema.CompleteRequest(promptRef, argument);
 
-		String value = mapper.writeValueAsString(request);
+		String value = JSON_MAPPER.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -1540,7 +1570,7 @@ public class McpSchemaTests {
 
 		McpSchema.CompleteRequest request = new McpSchema.CompleteRequest(resourceRef, argument, meta, null);
 
-		String value = mapper.writeValueAsString(request);
+		String value = JSON_MAPPER.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -1559,7 +1589,7 @@ public class McpSchemaTests {
 	void testRoot() throws Exception {
 		McpSchema.Root root = new McpSchema.Root("file:///path/to/root", "Test Root", Map.of("metaKey", "metaValue"));
 
-		String value = mapper.writeValueAsString(root);
+		String value = JSON_MAPPER.writeValueAsString(root);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -1575,7 +1605,7 @@ public class McpSchemaTests {
 
 		McpSchema.ListRootsResult result = new McpSchema.ListRootsResult(Arrays.asList(root1, root2), "next-cursor");
 
-		String value = mapper.writeValueAsString(result);
+		String value = JSON_MAPPER.writeValueAsString(result);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
@@ -1593,7 +1623,7 @@ public class McpSchemaTests {
 		McpSchema.ProgressNotification notification = new McpSchema.ProgressNotification("progress-token-123", 0.5, 1.0,
 				"Processing file 1 of 2", Map.of("key", "value"));
 
-		String value = mapper.writeValueAsString(notification);
+		String value = JSON_MAPPER.writeValueAsString(notification);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
@@ -1604,7 +1634,7 @@ public class McpSchemaTests {
 
 	@Test
 	void testProgressNotificationDeserialization() throws Exception {
-		McpSchema.ProgressNotification notification = mapper.readValue(
+		McpSchema.ProgressNotification notification = JSON_MAPPER.readValue(
 				"""
 						{"progressToken":"token-456","progress":0.75,"total":1.0,"message":"Almost done","_meta":{"key":"value"}}""",
 				McpSchema.ProgressNotification.class);
@@ -1621,7 +1651,7 @@ public class McpSchemaTests {
 		McpSchema.ProgressNotification notification = new McpSchema.ProgressNotification("progress-token-789", 0.25,
 				null, null);
 
-		String value = mapper.writeValueAsString(notification);
+		String value = JSON_MAPPER.writeValueAsString(notification);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()

@@ -8,12 +8,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.modelcontextprotocol.spec.json.McpJsonMapper;
-import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.json.McpJsonMapper;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
@@ -250,20 +248,6 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		}
 
 		/**
-		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
-		 * messages.
-		 * @param objectMapper The ObjectMapper instance. Must not be null.
-		 * @return this builder instance
-		 * @throws IllegalArgumentException if objectMapper is null
-		 */
-		@Deprecated(forRemoval = true)
-		public Builder objectMapper(ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "ObjectMapper must not be null");
-			this.jsonMapper = new JacksonMcpJsonMapper(objectMapper);
-			return this;
-		}
-
-		/**
 		 * Sets the JsonMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
 		 * @param jsonMapper The JsonMapper instance. Must not be null.
@@ -311,12 +295,9 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		 * @throws IllegalStateException if required parameters are not set
 		 */
 		public HttpServletStatelessServerTransport build() {
-			if (this.jsonMapper == null) {
-				throw new IllegalStateException("JsonMapper must be set");
-			}
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
-
-			return new HttpServletStatelessServerTransport(jsonMapper, mcpEndpoint, contextExtractor);
+			return new HttpServletStatelessServerTransport(
+					jsonMapper == null ? McpJsonMapper.createDefault() : jsonMapper, mcpEndpoint, contextExtractor);
 		}
 
 	}

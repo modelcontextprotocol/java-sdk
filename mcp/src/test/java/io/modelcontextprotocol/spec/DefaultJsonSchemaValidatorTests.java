@@ -16,6 +16,7 @@ import static org.mockito.Mockito.when;
 import java.util.Map;
 import java.util.stream.Stream;
 
+import io.modelcontextprotocol.json.schema.jackson.DefaultJsonSchemaValidator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -27,7 +28,7 @@ import org.mockito.MockitoAnnotations;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.modelcontextprotocol.spec.JsonSchemaValidator.ValidationResponse;
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator.ValidationResponse;
 
 /**
  * Tests for {@link DefaultJsonSchemaValidator}.

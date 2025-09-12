@@ -12,7 +12,6 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandler;
 import java.time.Duration;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicReference;
@@ -23,10 +22,8 @@ import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.modelcontextprotocol.spec.json.TypeRef;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.json.McpJsonMapper;
-import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.json.McpJsonMapper;
 
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
@@ -596,7 +593,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 		private final String baseUri;
 
-		private McpJsonMapper jsonMapper = new JacksonMcpJsonMapper(new ObjectMapper());
+		private McpJsonMapper jsonMapper;
 
 		private HttpClient.Builder clientBuilder = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1);
 
@@ -662,19 +659,6 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		public Builder customizeRequest(final Consumer<HttpRequest.Builder> requestCustomizer) {
 			Assert.notNull(requestCustomizer, "requestCustomizer must not be null");
 			requestCustomizer.accept(requestBuilder);
-			return this;
-		}
-
-		/**
-		 * Configure the {@link ObjectMapper} to use.
-		 * @param objectMapper instance to use
-		 * @return the builder instance
-		 * @deprecated Use {@link #jsonMapper(McpJsonMapper)} instead
-		 */
-		@Deprecated(forRemoval = true)
-		public Builder objectMapper(ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "ObjectMapper must not be null");
-			this.jsonMapper = new JacksonMcpJsonMapper(objectMapper);
 			return this;
 		}
 
@@ -780,9 +764,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 */
 		public HttpClientStreamableHttpTransport build() {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
-
-			return new HttpClientStreamableHttpTransport(this.jsonMapper, httpClient, requestBuilder, baseUri, endpoint,
-					resumableStreams, openConnectionOnStartup, httpRequestCustomizer);
+			return new HttpClientStreamableHttpTransport(
+					jsonMapper == null ? McpJsonMapper.createDefault() : jsonMapper, httpClient, requestBuilder,
+					baseUri, endpoint, resumableStreams, openConnectionOnStartup, httpRequestCustomizer);
 		}
 
 	}

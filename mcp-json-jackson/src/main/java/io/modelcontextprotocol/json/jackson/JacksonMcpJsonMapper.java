@@ -1,9 +1,9 @@
-package io.modelcontextprotocol.spec.json.jackson;
+package io.modelcontextprotocol.json.jackson;
 
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.json.McpJsonMapper;
-import io.modelcontextprotocol.spec.json.TypeRef;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
 
 import java.io.IOException;
 

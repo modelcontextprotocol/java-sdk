@@ -15,9 +15,8 @@ import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import io.modelcontextprotocol.spec.json.TypeRef;
-import io.modelcontextprotocol.spec.json.McpJsonMapper;
-import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
@@ -71,15 +70,6 @@ public class StdioClientTransport implements McpClientTransport {
 	private Consumer<String> stdErrorHandler = error -> logger.info("STDERR Message received: {}", error);
 
 	/**
-	 * Creates a new StdioClientTransport with the specified parameters and default
-	 * ObjectMapper.
-	 * @param params The parameters for configuring the server process
-	 */
-	public StdioClientTransport(ServerParameters params) {
-		this(params, new JacksonMcpJsonMapper(new com.fasterxml.jackson.databind.ObjectMapper()));
-	}
-
-	/**
 	 * Creates a new StdioClientTransport with the specified parameters and JsonMapper.
 	 * @param params The parameters for configuring the server process
 	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
@@ -101,16 +91,6 @@ public class StdioClientTransport implements McpClientTransport {
 		this.inboundScheduler = Schedulers.fromExecutorService(Executors.newSingleThreadExecutor(), "inbound");
 		this.outboundScheduler = Schedulers.fromExecutorService(Executors.newSingleThreadExecutor(), "outbound");
 		this.errorScheduler = Schedulers.fromExecutorService(Executors.newSingleThreadExecutor(), "error");
-	}
-
-	/**
-	 * Creates a new StdioClientTransport with the specified parameters and ObjectMapper.
-	 * @deprecated Use {@link #StdioClientTransport(ServerParameters, McpJsonMapper)}
-	 * instead.
-	 */
-	@Deprecated(forRemoval = true)
-	public StdioClientTransport(ServerParameters params, com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
-		this(params, new JacksonMcpJsonMapper(objectMapper));
 	}
 
 	/**

@@ -2,12 +2,13 @@
  * Copyright 2024-2024 the original author or authors.
  */
 
-package io.modelcontextprotocol.spec;
+package io.modelcontextprotocol.json.schema.jackson;
 
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,10 +20,6 @@ import com.networknt.schema.JsonSchema;
 import com.networknt.schema.JsonSchemaFactory;
 import com.networknt.schema.SpecVersion;
 import com.networknt.schema.ValidationMessage;
-
-import io.modelcontextprotocol.util.Assert;
-import io.modelcontextprotocol.spec.json.McpJsonMapper;
-import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
 
 /**
  * Default implementation of the {@link JsonSchemaValidator} interface. This class
@@ -52,29 +49,14 @@ public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 		this.schemaCache = new ConcurrentHashMap<>();
 	}
 
-	/**
-	 * Alternate constructor that accepts a JsonMapper. If the mapper is backed by
-	 * Jackson, the underlying ObjectMapper will be reused; otherwise a new ObjectMapper
-	 * will be created for schema validation only.
-	 */
-	public DefaultJsonSchemaValidator(McpJsonMapper jsonMapper) {
-		ObjectMapper mapper;
-		if (jsonMapper instanceof JacksonMcpJsonMapper jacksonJsonMapper) {
-			mapper = jacksonJsonMapper.getObjectMapper();
-		}
-		else {
-			mapper = new ObjectMapper();
-		}
-		this.objectMapper = mapper;
-		this.schemaFactory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
-		this.schemaCache = new ConcurrentHashMap<>();
-	}
-
 	@Override
 	public ValidationResponse validate(Map<String, Object> schema, Map<String, Object> structuredContent) {
-
-		Assert.notNull(schema, "Schema must not be null");
-		Assert.notNull(structuredContent, "Structured content must not be null");
+		if (schema == null) {
+			throw new IllegalArgumentException("Schema must not be null");
+		}
+		if (structuredContent == null) {
+			throw new IllegalArgumentException("Structured content must not be null");
+		}
 
 		try {
 

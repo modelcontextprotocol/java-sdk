@@ -9,8 +9,8 @@ import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
-import io.modelcontextprotocol.spec.json.TypeRef;
-import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCNotification;
@@ -94,7 +94,7 @@ public class MockMcpTransport implements McpClientTransport, McpServerTransport 
 
 	@Override
 	public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
-		return new JacksonMcpJsonMapper(new com.fasterxml.jackson.databind.ObjectMapper()).convertValue(data, typeRef);
+		return McpJsonMapper.createDefault().convertValue(data, typeRef);
 	}
 
 }

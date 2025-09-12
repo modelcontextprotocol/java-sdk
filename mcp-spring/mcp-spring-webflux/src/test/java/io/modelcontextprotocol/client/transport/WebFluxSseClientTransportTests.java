@@ -11,7 +11,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.spec.json.jackson.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
 import org.junit.jupiter.api.AfterAll;
@@ -30,6 +31,7 @@ import reactor.test.StepVerifier;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import static io.modelcontextprotocol.utils.McpJsonMapperUtils.JSON_MAPPER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -55,8 +57,6 @@ class WebFluxSseClientTransportTests {
 
 	private WebClient.Builder webClientBuilder;
 
-	private ObjectMapper objectMapper;
-
 	// Test class to access protected methods
 	static class TestSseClientTransport extends WebFluxSseClientTransport {
 
@@ -64,8 +64,8 @@ class WebFluxSseClientTransportTests {
 
 		private Sinks.Many<ServerSentEvent<String>> events = Sinks.many().unicast().onBackpressureBuffer();
 
-		public TestSseClientTransport(WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
-			super(webClientBuilder, new JacksonMcpJsonMapper(objectMapper));
+		public TestSseClientTransport(WebClient.Builder webClientBuilder, McpJsonMapper jsonMapper) {
+			super(webClientBuilder, jsonMapper);
 		}
 
 		@Override
@@ -113,8 +113,7 @@ class WebFluxSseClientTransportTests {
 	@BeforeEach
 	void setUp() {
 		webClientBuilder = WebClient.builder().baseUrl(host);
-		objectMapper = new ObjectMapper();
-		transport = new TestSseClientTransport(webClientBuilder, objectMapper);
+		transport = new TestSseClientTransport(webClientBuilder, JSON_MAPPER);
 		transport.connect(Function.identity()).block();
 	}
 
@@ -132,12 +131,13 @@ class WebFluxSseClientTransportTests {
 
 	@Test
 	void constructorValidation() {
-		assertThatThrownBy(() -> new WebFluxSseClientTransport(null)).isInstanceOf(IllegalArgumentException.class)
+		assertThatThrownBy(() -> new WebFluxSseClientTransport(null, JSON_MAPPER))
+			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("WebClient.Builder must not be null");
 
 		assertThatThrownBy(() -> new WebFluxSseClientTransport(webClientBuilder, null))
 			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("ObjectMapper must not be null");
+			.hasMessageContaining("jsonMapper must not be null");
 	}
 
 	@Test
@@ -149,7 +149,7 @@ class WebFluxSseClientTransportTests {
 		// Test builder with custom ObjectMapper
 		ObjectMapper customMapper = new ObjectMapper();
 		WebFluxSseClientTransport transport2 = WebFluxSseClientTransport.builder(webClientBuilder)
-			.objectMapper(customMapper)
+			.jsonMapper(new JacksonMcpJsonMapper(customMapper))
 			.build();
 		assertThatCode(() -> transport2.closeGracefully().block()).doesNotThrowAnyException();
 
@@ -161,7 +161,6 @@ class WebFluxSseClientTransportTests {
 
 		// Test builder with all custom parameters
 		WebFluxSseClientTransport transport4 = WebFluxSseClientTransport.builder(webClientBuilder)
-			.objectMapper(customMapper)
 			.sseEndpoint("/custom-sse")
 			.build();
 		assertThatCode(() -> transport4.closeGracefully().block()).doesNotThrowAnyException();

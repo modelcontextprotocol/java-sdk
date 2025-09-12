@@ -1,6 +1,9 @@
-package io.modelcontextprotocol.spec.json;
+package io.modelcontextprotocol.json;
 
 import java.io.IOException;
+import java.util.ServiceLoader;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 /**
  * Abstraction for JSON serialization/deserialization to decouple the SDK from any
@@ -82,5 +85,52 @@ public interface McpJsonMapper {
 	 * @throws IOException on serialization errors
 	 */
 	byte[] writeValueAsBytes(Object value) throws IOException;
+
+	/**
+	 * Resolves the default {@link McpJsonMapper}.
+	 * @return The default {@link McpJsonMapper}
+	 * @throws IllegalStateException If no {@link McpJsonMapper} implementation exists on
+	 * the classpath.
+	 */
+	static McpJsonMapper createDefault() {
+		AtomicReference<IllegalStateException> ex = new AtomicReference<>();
+		return ServiceLoader.load(McpJsonMapperSupplier.class).stream().flatMap(p -> {
+			try {
+				McpJsonMapperSupplier supplier = p.get();
+				return Stream.ofNullable(supplier);
+			}
+			catch (Exception e) {
+				addException(ex, e);
+				return Stream.empty();
+			}
+		}).flatMap(jsonMapperSupplier -> {
+			try {
+				return Stream.of(jsonMapperSupplier.get());
+			}
+			catch (Exception e) {
+				addException(ex, e);
+				return Stream.empty();
+			}
+		}).findFirst().orElseThrow(() -> {
+			if (ex.get() != null) {
+				return ex.get();
+			}
+			else {
+				return new IllegalStateException("No default McpJsonMapper implementation found");
+			}
+		});
+	}
+
+	private static void addException(AtomicReference<IllegalStateException> ref, Exception toAdd) {
+		ref.updateAndGet(existing -> {
+			if (existing == null) {
+				return new IllegalStateException("Failed to initialize default McpJsonMapper", toAdd);
+			}
+			else {
+				existing.addSuppressed(toAdd);
+				return existing;
+			}
+		});
+	}
 
 }

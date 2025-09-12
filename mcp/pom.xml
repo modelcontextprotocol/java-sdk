@@ -65,6 +65,18 @@
 	</build>
 
 	<dependencies>
+        <dependency>
+            <groupId>io.modelcontextprotocol.sdk</groupId>
+            <artifactId>mcp-json</artifactId>
+            <version>0.13.0-SNAPSHOT</version>
+        </dependency>
+
+        <dependency>
+            <groupId>io.modelcontextprotocol.sdk</groupId>
+            <artifactId>mcp-json-jackson</artifactId>
+            <version>0.13.0-SNAPSHOT</version>
+            <scope>test</scope>
+        </dependency>
 
 		<dependency>
 			<groupId>org.slf4j</groupId>
@@ -74,7 +86,7 @@
 
 		<dependency>
 			<groupId>com.fasterxml.jackson.core</groupId>
-			<artifactId>jackson-databind</artifactId>
+			<artifactId>jackson-annotations</artifactId>
 			<version>${jackson.version}</version>
 		</dependency>
 
@@ -83,11 +95,6 @@
 			<artifactId>reactor-core</artifactId>
 		</dependency>
 
-		<dependency>
-			<groupId>com.networknt</groupId>
-			<artifactId>json-schema-validator</artifactId>
-			<version>${json-schema-validator.version}</version>
-		</dependency>
 
 		<!-- Used by the HttpServletSseServerTransport -->
 		<dependency>
@@ -216,14 +223,13 @@
 			<scope>test</scope>
 		</dependency>
 
-		<!-- Test-only JSON library for the Gson-based McpJsonMapper example -->
-		<dependency>
-			<groupId>com.google.code.gson</groupId>
-			<artifactId>gson</artifactId>
-			<version>2.10.1</version>
-			<scope>test</scope>
-		</dependency>
-
+        <!-- Test-only JSON library for the Gson-based McpJsonMapper example -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
+            <scope>test</scope>
+        </dependency>
 	</dependencies>
 
 
