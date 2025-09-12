@@ -62,6 +62,7 @@ import reactor.core.publisher.Mono;
  *
  * @author Christian Tzolov
  * @author Alexandros Pappas
+ * @author Yanming Zhou
  * @see McpServerTransportProvider
  * @see HttpServlet
  */
@@ -317,20 +318,30 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		}
 		catch (Exception e) {
 			logger.error("Error processing message: {}", e.getMessage());
-			try {
-				McpError mcpError = new McpError(e.getMessage());
-				response.setContentType(APPLICATION_JSON);
-				response.setCharacterEncoding(UTF_8);
-				response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-				String jsonError = jsonMapper.writeValueAsString(mcpError);
-				PrintWriter writer = response.getWriter();
-				writer.write(jsonError);
-				writer.flush();
-			}
-			catch (IOException ex) {
-				logger.error(FAILED_TO_SEND_ERROR_RESPONSE, ex.getMessage());
-				response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error processing message");
-			}
+			responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, new McpError(e.getMessage()));
+		}
+	}
+
+	/**
+	 * Sends an error response to the client.
+	 * @param response The HTTP servlet response
+	 * @param httpCode The HTTP status code
+	 * @param mcpError The MCP error to send
+	 * @throws IOException If an I/O error occurs
+	 */
+	private void responseError(HttpServletResponse response, int httpCode, McpError mcpError) throws IOException {
+		try {
+			response.setContentType(APPLICATION_JSON);
+			response.setCharacterEncoding(UTF_8);
+			response.setStatus(httpCode);
+			String jsonError = jsonMapper.writeValueAsString(mcpError);
+			PrintWriter writer = response.getWriter();
+			writer.write(jsonError);
+			writer.flush();
+		}
+		catch (IOException ex) {
+			logger.error(FAILED_TO_SEND_ERROR_RESPONSE, ex.getMessage());
+			response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error processing message");
 		}
 	}
 
