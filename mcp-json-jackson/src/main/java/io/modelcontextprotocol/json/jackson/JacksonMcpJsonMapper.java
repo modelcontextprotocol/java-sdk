@@ -15,6 +15,13 @@ public final class JacksonMcpJsonMapper implements McpJsonMapper {
 
 	private final ObjectMapper objectMapper;
 
+    /**
+     * Constructs a new JacksonMcpJsonMapper instance with the given ObjectMapper.
+     *
+     * @param objectMapper the ObjectMapper to be used for JSON serialization and deserialization.
+     *                     Must not be null.
+     * @throws IllegalArgumentException if the provided ObjectMapper is null.
+     */
 	public JacksonMcpJsonMapper(ObjectMapper objectMapper) {
 		if (objectMapper == null) {
 			throw new IllegalArgumentException("ObjectMapper must not be null");
@@ -22,6 +29,11 @@ public final class JacksonMcpJsonMapper implements McpJsonMapper {
 		this.objectMapper = objectMapper;
 	}
 
+    /**
+     * Returns the underlying Jackson {@link ObjectMapper} used for JSON serialization and deserialization.
+     *
+     * @return the ObjectMapper instance
+     */
 	public ObjectMapper getObjectMapper() {
 		return objectMapper;
 	}

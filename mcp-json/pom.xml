@@ -10,8 +10,8 @@
 	</parent>
 	<artifactId>mcp-json</artifactId>
 	<packaging>jar</packaging>
-	<name>Java MCP SDK JSON Schema</name>
-	<description>Java MCP SDK JSON Schema API</description>
+	<name>Java MCP SDK JSON Support</name>
+	<description>Java MCP SDK JSON Support API</description>
 	<url>https://github.com/modelcontextprotocol/java-sdk</url>
 	<scm>
 		<url>https://github.com/modelcontextprotocol/java-sdk</url>
