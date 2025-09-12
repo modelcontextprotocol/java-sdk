@@ -680,7 +680,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		public WebMvcStreamableServerTransportProvider build() {
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 			return new WebMvcStreamableServerTransportProvider(
-					jsonMapper == null ? McpJsonMapper.createDefault() : jsonMapper, mcpEndpoint, disallowDelete,
+					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, mcpEndpoint, disallowDelete,
 					contextExtractor, keepAliveInterval);
 		}
 

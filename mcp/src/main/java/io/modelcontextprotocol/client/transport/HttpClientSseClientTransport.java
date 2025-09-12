@@ -328,7 +328,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		public HttpClientSseClientTransport build() {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
 			return new HttpClientSseClientTransport(httpClient, requestBuilder, baseUri, sseEndpoint,
-					jsonMapper == null ? McpJsonMapper.createDefault() : jsonMapper, httpRequestCustomizer);
+					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, httpRequestCustomizer);
 		}
 
 	}

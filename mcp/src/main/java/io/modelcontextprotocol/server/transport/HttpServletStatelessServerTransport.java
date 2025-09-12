@@ -296,8 +296,8 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		 */
 		public HttpServletStatelessServerTransport build() {
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
-			return new HttpServletStatelessServerTransport(
-					jsonMapper == null ? McpJsonMapper.createDefault() : jsonMapper, mcpEndpoint, contextExtractor);
+			return new HttpServletStatelessServerTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+					mcpEndpoint, contextExtractor);
 		}
 
 	}

@@ -46,50 +46,23 @@ public interface JsonSchemaValidator {
 	ValidationResponse validate(Map<String, Object> schema, Map<String, Object> structuredContent);
 
 	/**
-	 * Resolves the default {@link JsonSchemaValidator}.
+	 * Creates the default {@link JsonSchemaValidator}.
 	 * @return The default {@link JsonSchemaValidator}
 	 * @throws IllegalStateException If no {@link JsonSchemaValidator} implementation
 	 * exists on the classpath.
 	 */
 	static JsonSchemaValidator createDefault() {
-		AtomicReference<IllegalStateException> ex = new AtomicReference<>();
-		return ServiceLoader.load(JsonSchemaValidatorSupplier.class).stream().flatMap(p -> {
-			try {
-				JsonSchemaValidatorSupplier supplier = p.get();
-				return Stream.ofNullable(supplier);
-			}
-			catch (Exception e) {
-				addException(ex, e);
-				return Stream.empty();
-			}
-		}).flatMap(jsonMapperSupplier -> {
-			try {
-				return Stream.of(jsonMapperSupplier.get());
-			}
-			catch (Exception e) {
-				addException(ex, e);
-				return Stream.empty();
-			}
-		}).findFirst().orElseThrow(() -> {
-			if (ex.get() != null) {
-				return ex.get();
-			}
-			else {
-				return new IllegalStateException("No default JsonSchemaValidatorSupplier implementation found");
-			}
-		});
+		return JsonSchemaInternal.createDefaultValidator();
 	}
 
-	private static void addException(AtomicReference<IllegalStateException> ref, Exception toAdd) {
-		ref.updateAndGet(existing -> {
-			if (existing == null) {
-				return new IllegalStateException("Failed to initialize default JsonSchemaValidatorSupplier", toAdd);
-			}
-			else {
-				existing.addSuppressed(toAdd);
-				return existing;
-			}
-		});
+	/**
+	 * Returns the default {@link JsonSchemaValidator}.
+	 * @return The default {@link JsonSchemaValidator}
+	 * @throws IllegalStateException If no {@link JsonSchemaValidator} implementation
+	 * exists on the classpath.
+	 */
+	static JsonSchemaValidator getDefault() {
+		return JsonSchemaInternal.getDefaultValidator();
 	}
 
 }
