@@ -289,6 +289,7 @@ class LifecycleInitializer {
 			return initializationJob.map(initializeResult -> this.initializationRef.get())
 				.timeout(this.initializationTimeout)
 				.onErrorResume(ex -> {
+					this.initializationRef.compareAndSet(newInit, null);
 					return Mono.error(new RuntimeException("Client failed to initialize " + actionName, ex));
 				})
 				.flatMap(operation);
