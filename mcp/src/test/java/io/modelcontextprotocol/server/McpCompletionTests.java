@@ -12,13 +12,12 @@ import java.util.function.BiFunction;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
@@ -59,7 +58,6 @@ class McpCompletionTests {
 	public void before() {
 		// Create and con figure the transport provider
 		mcpServerTransportProvider = HttpServletSseServerTransportProvider.builder()
-			.objectMapper(new ObjectMapper())
 			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
 			.build();
 

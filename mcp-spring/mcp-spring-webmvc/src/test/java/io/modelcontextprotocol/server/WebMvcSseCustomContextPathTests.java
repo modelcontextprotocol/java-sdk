@@ -3,7 +3,6 @@
  */
 package io.modelcontextprotocol.server;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.server.transport.WebMvcSseServerTransportProvider;
@@ -92,7 +91,6 @@ class WebMvcSseCustomContextPathTests {
 		public WebMvcSseServerTransportProvider webMvcSseServerTransportProvider() {
 
 			return WebMvcSseServerTransportProvider.builder()
-				.objectMapper(new ObjectMapper())
 				.baseUrl(CUSTOM_CONTEXT_PATH)
 				.messageEndpoint(MESSAGE_ENDPOINT)
 				.sseEndpoint(WebMvcSseServerTransportProvider.DEFAULT_SSE_ENDPOINT)

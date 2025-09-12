@@ -8,8 +8,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiConsumer;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCNotification;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
@@ -67,8 +67,8 @@ public class MockMcpServerTransport implements McpServerTransport {
 	}
 
 	@Override
-	public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-		return new ObjectMapper().convertValue(data, typeRef);
+	public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+		return McpJsonMapper.getDefault().convertValue(data, typeRef);
 	}
 
 }

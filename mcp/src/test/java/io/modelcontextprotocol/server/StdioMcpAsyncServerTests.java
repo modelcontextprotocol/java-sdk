@@ -8,6 +8,8 @@ import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.junit.jupiter.api.Timeout;
 
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
+
 /**
  * Tests for {@link McpAsyncServer} using {@link StdioServerTransport}.
  *
@@ -17,7 +19,7 @@ import org.junit.jupiter.api.Timeout;
 class StdioMcpAsyncServerTests extends AbstractMcpAsyncServerTests {
 
 	protected McpServerTransportProvider createMcpTransportProvider() {
-		return new StdioServerTransportProvider();
+		return new StdioServerTransportProvider(JSON_MAPPER);
 	}
 
 	@Override

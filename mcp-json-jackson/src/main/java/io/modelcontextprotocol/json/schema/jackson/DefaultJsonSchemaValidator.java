@@ -2,12 +2,13 @@
  * Copyright 2024-2024 the original author or authors.
  */
 
-package io.modelcontextprotocol.spec;
+package io.modelcontextprotocol.json.schema.jackson;
 
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,8 +20,6 @@ import com.networknt.schema.JsonSchema;
 import com.networknt.schema.JsonSchemaFactory;
 import com.networknt.schema.SpecVersion;
 import com.networknt.schema.ValidationMessage;
-
-import io.modelcontextprotocol.util.Assert;
 
 /**
  * Default implementation of the {@link JsonSchemaValidator} interface. This class
@@ -52,9 +51,12 @@ public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 
 	@Override
 	public ValidationResponse validate(Map<String, Object> schema, Map<String, Object> structuredContent) {
-
-		Assert.notNull(schema, "Schema must not be null");
-		Assert.notNull(structuredContent, "Structured content must not be null");
+		if (schema == null) {
+			throw new IllegalArgumentException("Schema must not be null");
+		}
+		if (structuredContent == null) {
+			throw new IllegalArgumentException("Structured content must not be null");
+		}
 
 		try {
 

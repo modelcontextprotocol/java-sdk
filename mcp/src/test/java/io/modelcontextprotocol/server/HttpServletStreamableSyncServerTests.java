@@ -6,8 +6,6 @@ package io.modelcontextprotocol.server;
 
 import org.junit.jupiter.api.Timeout;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 
@@ -21,10 +19,7 @@ import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 class HttpServletStreamableSyncServerTests extends AbstractMcpSyncServerTests {
 
 	protected McpStreamableServerTransportProvider createMcpTransportProvider() {
-		return HttpServletStreamableServerTransportProvider.builder()
-			.objectMapper(new ObjectMapper())
-			.mcpEndpoint("/mcp/message")
-			.build();
+		return HttpServletStreamableServerTransportProvider.builder().mcpEndpoint("/mcp/message").build();
 	}
 
 	@Override

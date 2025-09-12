@@ -11,13 +11,13 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.McpJsonMapper;
 
-import io.modelcontextprotocol.spec.DefaultJsonSchemaValidator;
-import io.modelcontextprotocol.spec.JsonSchemaValidator;
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
@@ -67,7 +67,7 @@ import reactor.core.publisher.Mono;
  * Example of creating a basic synchronous server: <pre>{@code
  * McpServer.sync(transportProvider)
  *     .serverInfo("my-server", "1.0.0")
- *     .tool(new Tool("calculator", "Performs calculations", schema),
+ *     .tool(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
  *           (exchange, args) -> new CallToolResult("Result: " + calculate(args)))
  *     .build();
  * }</pre>
@@ -75,7 +75,7 @@ import reactor.core.publisher.Mono;
  * Example of creating a basic asynchronous server: <pre>{@code
  * McpServer.async(transportProvider)
  *     .serverInfo("my-server", "1.0.0")
- *     .tool(new Tool("calculator", "Performs calculations", schema),
+ *     .tool(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
  *           (exchange, args) -> Mono.fromSupplier(() -> calculate(args))
  *               .map(result -> new CallToolResult("Result: " + result)))
  *     .build();
@@ -227,11 +227,12 @@ public interface McpServer {
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
 					this.instructions);
-			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
-			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
-					: new DefaultJsonSchemaValidator(mapper);
-			return new McpAsyncServer(this.transportProvider, mapper, features, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator);
+
+			var jsonSchemaValidator = (this.jsonSchemaValidator != null) ? this.jsonSchemaValidator
+					: JsonSchemaValidator.getDefault();
+
+			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator);
 		}
 
 	}
@@ -254,11 +255,10 @@ public interface McpServer {
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
 					this.instructions);
-			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
-					: new DefaultJsonSchemaValidator(mapper);
-			return new McpAsyncServer(this.transportProvider, mapper, features, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator);
+					: JsonSchemaValidator.getDefault();
+			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator);
 		}
 
 	}
@@ -270,7 +270,7 @@ public interface McpServer {
 
 		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
 
-		ObjectMapper objectMapper;
+		McpJsonMapper jsonMapper;
 
 		McpSchema.Implementation serverInfo = DEFAULT_SERVER_INFO;
 
@@ -417,7 +417,7 @@ public interface McpServer {
 		 * <p>
 		 * Example usage: <pre>{@code
 		 * .tool(
-		 *     new Tool("calculator", "Performs calculations", schema),
+		 *     Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
 		 *     (exchange, args) -> Mono.fromSupplier(() -> calculate(args))
 		 *         .map(result -> new CallToolResult("Result: " + result))
 		 * )
@@ -765,14 +765,14 @@ public interface McpServer {
 		}
 
 		/**
-		 * Sets the object mapper to use for serializing and deserializing JSON messages.
-		 * @param objectMapper the instance to use. Must not be null.
+		 * Sets the JsonMapper to use for serializing and deserializing JSON messages.
+		 * @param jsonMapper the mapper to use. Must not be null.
 		 * @return This builder instance for method chaining.
-		 * @throws IllegalArgumentException if objectMapper is null
+		 * @throws IllegalArgumentException if jsonMapper is null
 		 */
-		public AsyncSpecification<S> objectMapper(ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "ObjectMapper must not be null");
-			this.objectMapper = objectMapper;
+		public AsyncSpecification<S> jsonMapper(McpJsonMapper jsonMapper) {
+			Assert.notNull(jsonMapper, "JsonMapper must not be null");
+			this.jsonMapper = jsonMapper;
 			return this;
 		}
 
@@ -813,13 +813,11 @@ public interface McpServer {
 					this.rootsChangeHandlers, this.instructions);
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures,
 					this.immediateExecution);
-			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
-			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
-					: new DefaultJsonSchemaValidator(mapper);
 
-			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator);
-
+			var asyncServer = new McpAsyncServer(transportProvider,
+					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, asyncFeatures, requestTimeout,
+					uriTemplateManagerFactory,
+					jsonSchemaValidator != null ? jsonSchemaValidator : JsonSchemaValidator.getDefault());
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -846,13 +844,11 @@ public interface McpServer {
 					this.rootsChangeHandlers, this.instructions);
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures,
 					this.immediateExecution);
-			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
-					: new DefaultJsonSchemaValidator(mapper);
-
-			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures, this.requestTimeout,
+					: JsonSchemaValidator.getDefault();
+			var asyncServer = new McpAsyncServer(transportProvider,
+					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, asyncFeatures, this.requestTimeout,
 					this.uriTemplateManagerFactory, jsonSchemaValidator);
-
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -865,7 +861,7 @@ public interface McpServer {
 
 		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
 
-		ObjectMapper objectMapper;
+		McpJsonMapper jsonMapper;
 
 		McpSchema.Implementation serverInfo = DEFAULT_SERVER_INFO;
 
@@ -1014,7 +1010,7 @@ public interface McpServer {
 		 * <p>
 		 * Example usage: <pre>{@code
 		 * .tool(
-		 *     new Tool("calculator", "Performs calculations", schema),
+		 *     Tool.builder().name("calculator").title("Performs calculations".inputSchema(schema).build(),
 		 *     (exchange, args) -> new CallToolResult("Result: " + calculate(args))
 		 * )
 		 * }</pre>
@@ -1363,14 +1359,14 @@ public interface McpServer {
 		}
 
 		/**
-		 * Sets the object mapper to use for serializing and deserializing JSON messages.
-		 * @param objectMapper the instance to use. Must not be null.
+		 * Sets the JsonMapper to use for serializing and deserializing JSON messages.
+		 * @param jsonMapper the mapper to use. Must not be null.
 		 * @return This builder instance for method chaining.
-		 * @throws IllegalArgumentException if objectMapper is null
+		 * @throws IllegalArgumentException if jsonMapper is null
 		 */
-		public SyncSpecification<S> objectMapper(ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "ObjectMapper must not be null");
-			this.objectMapper = objectMapper;
+		public SyncSpecification<S> jsonMapper(McpJsonMapper jsonMapper) {
+			Assert.notNull(jsonMapper, "JsonMapper must not be null");
+			this.jsonMapper = jsonMapper;
 			return this;
 		}
 
@@ -1404,7 +1400,7 @@ public interface McpServer {
 
 		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
 
-		ObjectMapper objectMapper;
+		McpJsonMapper jsonMapper;
 
 		McpSchema.Implementation serverInfo = DEFAULT_SERVER_INFO;
 
@@ -1821,14 +1817,14 @@ public interface McpServer {
 		}
 
 		/**
-		 * Sets the object mapper to use for serializing and deserializing JSON messages.
-		 * @param objectMapper the instance to use. Must not be null.
+		 * Sets the JsonMapper to use for serializing and deserializing JSON messages.
+		 * @param jsonMapper the mapper to use. Must not be null.
 		 * @return This builder instance for method chaining.
-		 * @throws IllegalArgumentException if objectMapper is null
+		 * @throws IllegalArgumentException if jsonMapper is null
 		 */
-		public StatelessAsyncSpecification objectMapper(ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "ObjectMapper must not be null");
-			this.objectMapper = objectMapper;
+		public StatelessAsyncSpecification jsonMapper(McpJsonMapper jsonMapper) {
+			Assert.notNull(jsonMapper, "JsonMapper must not be null");
+			this.jsonMapper = jsonMapper;
 			return this;
 		}
 
@@ -1849,11 +1845,9 @@ public interface McpServer {
 		public McpStatelessAsyncServer build() {
 			var features = new McpStatelessServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions);
-			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
-			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
-					: new DefaultJsonSchemaValidator(mapper);
-			return new McpStatelessAsyncServer(this.transport, mapper, features, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator);
+			return new McpStatelessAsyncServer(transport, jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+					features, requestTimeout, uriTemplateManagerFactory,
+					jsonSchemaValidator != null ? jsonSchemaValidator : JsonSchemaValidator.getDefault());
 		}
 
 	}
@@ -1866,7 +1860,7 @@ public interface McpServer {
 
 		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
 
-		ObjectMapper objectMapper;
+		McpJsonMapper jsonMapper;
 
 		McpSchema.Implementation serverInfo = DEFAULT_SERVER_INFO;
 
@@ -2283,14 +2277,14 @@ public interface McpServer {
 		}
 
 		/**
-		 * Sets the object mapper to use for serializing and deserializing JSON messages.
-		 * @param objectMapper the instance to use. Must not be null.
+		 * Sets the JsonMapper to use for serializing and deserializing JSON messages.
+		 * @param jsonMapper the mapper to use. Must not be null.
 		 * @return This builder instance for method chaining.
-		 * @throws IllegalArgumentException if objectMapper is null
+		 * @throws IllegalArgumentException if jsonMapper is null
 		 */
-		public StatelessSyncSpecification objectMapper(ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "ObjectMapper must not be null");
-			this.objectMapper = objectMapper;
+		public StatelessSyncSpecification jsonMapper(McpJsonMapper jsonMapper) {
+			Assert.notNull(jsonMapper, "JsonMapper must not be null");
+			this.jsonMapper = jsonMapper;
 			return this;
 		}
 
@@ -2325,31 +2319,13 @@ public interface McpServer {
 		}
 
 		public McpStatelessSyncServer build() {
-			/*
-			 * McpServerFeatures.Sync syncFeatures = new
-			 * McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,
-			 * this.tools, this.resources, this.resourceTemplates, this.prompts,
-			 * this.completions, this.rootsChangeHandlers, this.instructions);
-			 * McpServerFeatures.Async asyncFeatures =
-			 * McpServerFeatures.Async.fromSync(syncFeatures, this.immediateExecution);
-			 * var mapper = this.objectMapper != null ? this.objectMapper : new
-			 * ObjectMapper(); var jsonSchemaValidator = this.jsonSchemaValidator != null
-			 * ? this.jsonSchemaValidator : new DefaultJsonSchemaValidator(mapper);
-			 *
-			 * var asyncServer = new McpAsyncServer(this.transportProvider, mapper,
-			 * asyncFeatures, this.requestTimeout, this.uriTemplateManagerFactory,
-			 * jsonSchemaValidator);
-			 *
-			 * return new McpSyncServer(asyncServer, this.immediateExecution);
-			 */
 			var syncFeatures = new McpStatelessServerFeatures.Sync(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions);
 			var asyncFeatures = McpStatelessServerFeatures.Async.fromSync(syncFeatures, this.immediateExecution);
-			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
-			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
-					: new DefaultJsonSchemaValidator(mapper);
-			var asyncServer = new McpStatelessAsyncServer(this.transport, mapper, asyncFeatures, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator);
+			var asyncServer = new McpStatelessAsyncServer(transport,
+					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, asyncFeatures, requestTimeout,
+					uriTemplateManagerFactory,
+					this.jsonSchemaValidator != null ? this.jsonSchemaValidator : JsonSchemaValidator.getDefault());
 			return new McpStatelessSyncServer(asyncServer, this.immediateExecution);
 		}
 

@@ -16,8 +16,6 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerRequest;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.client.transport.WebClientStreamableHttpTransport;
@@ -76,7 +74,6 @@ class WebFluxStreamableIntegrationTests extends AbstractMcpClientServerIntegrati
 	public void before() {
 
 		this.mcpStreamableServerTransportProvider = WebFluxStreamableServerTransportProvider.builder()
-			.objectMapper(new ObjectMapper())
 			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
 			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
 			.build();

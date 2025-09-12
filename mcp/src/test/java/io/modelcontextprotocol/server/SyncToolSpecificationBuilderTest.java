@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.server;
 
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -24,16 +25,10 @@ import io.modelcontextprotocol.spec.McpSchema.Tool;
  */
 class SyncToolSpecificationBuilderTest {
 
-	String emptyJsonSchema = """
-			{
-				"type": "object"
-			}
-			""";
-
 	@Test
 	void builderShouldCreateValidSyncToolSpecification() {
 
-		Tool tool = new Tool("test-tool", "A test tool", emptyJsonSchema);
+		Tool tool = Tool.builder().name("test-tool").title("A test tool").inputSchema(EMPTY_JSON_SCHEMA).build();
 
 		McpServerFeatures.SyncToolSpecification specification = McpServerFeatures.SyncToolSpecification.builder()
 			.tool(tool)
@@ -55,7 +50,7 @@ class SyncToolSpecificationBuilderTest {
 
 	@Test
 	void builderShouldThrowExceptionWhenCallToolIsNull() {
-		Tool tool = new Tool("test-tool", "A test tool", emptyJsonSchema);
+		Tool tool = Tool.builder().name("test-tool").description("A test tool").inputSchema(EMPTY_JSON_SCHEMA).build();
 
 		assertThatThrownBy(() -> McpServerFeatures.SyncToolSpecification.builder().tool(tool).build())
 			.isInstanceOf(IllegalArgumentException.class)
@@ -64,7 +59,7 @@ class SyncToolSpecificationBuilderTest {
 
 	@Test
 	void builderShouldAllowMethodChaining() {
-		Tool tool = new Tool("test-tool", "A test tool", emptyJsonSchema);
+		Tool tool = Tool.builder().name("test-tool").description("A test tool").inputSchema(EMPTY_JSON_SCHEMA).build();
 		McpServerFeatures.SyncToolSpecification.Builder builder = McpServerFeatures.SyncToolSpecification.builder();
 
 		// Then - verify method chaining returns the same builder instance
@@ -74,7 +69,11 @@ class SyncToolSpecificationBuilderTest {
 
 	@Test
 	void builtSpecificationShouldExecuteCallToolCorrectly() {
-		Tool tool = new Tool("calculator", "Simple calculator", emptyJsonSchema);
+		Tool tool = Tool.builder()
+			.name("calculator")
+			.description("Simple calculator")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
 		String expectedResult = "42";
 
 		McpServerFeatures.SyncToolSpecification specification = McpServerFeatures.SyncToolSpecification.builder()

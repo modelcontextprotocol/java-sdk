@@ -16,8 +16,6 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerRequest;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
@@ -79,7 +77,6 @@ class WebFluxSseIntegrationTests extends AbstractMcpClientServerIntegrationTests
 	public void before() {
 
 		this.mcpServerTransportProvider = new WebFluxSseServerTransportProvider.Builder()
-			.objectMapper(new ObjectMapper())
 			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
 			.sseEndpoint(CUSTOM_SSE_ENDPOINT)
 			.contextExtractor(TEST_CONTEXT_EXTRACTOR)

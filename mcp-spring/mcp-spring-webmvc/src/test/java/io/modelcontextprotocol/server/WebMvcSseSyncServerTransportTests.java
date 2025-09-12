@@ -4,7 +4,6 @@
 
 package io.modelcontextprotocol.server;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.server.transport.WebMvcSseServerTransportProvider;
 import org.apache.catalina.Context;
 import org.apache.catalina.LifecycleException;
@@ -36,10 +35,7 @@ class WebMvcSseSyncServerTransportTests extends AbstractMcpSyncServerTests {
 
 		@Bean
 		public WebMvcSseServerTransportProvider webMvcSseServerTransportProvider() {
-			return WebMvcSseServerTransportProvider.builder()
-				.objectMapper(new ObjectMapper())
-				.messageEndpoint(MESSAGE_ENDPOINT)
-				.build();
+			return WebMvcSseServerTransportProvider.builder().messageEndpoint(MESSAGE_ENDPOINT).build();
 		}
 
 		@Bean

@@ -2,9 +2,12 @@
  * Copyright 2024-2024 the original author or authors.
  */
 
-package io.modelcontextprotocol.spec;
+package io.modelcontextprotocol.json.schema;
 
 import java.util.Map;
+import java.util.ServiceLoader;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 /**
  * Interface for validating structured content against a JSON schema. This interface
@@ -22,7 +25,7 @@ public interface JsonSchemaValidator {
 	 * @param jsonStructuredOutput The text structured content in JSON format if the
 	 * validation was successful, otherwise null.
 	 */
-	public record ValidationResponse(boolean valid, String errorMessage, String jsonStructuredOutput) {
+	record ValidationResponse(boolean valid, String errorMessage, String jsonStructuredOutput) {
 
 		public static ValidationResponse asValid(String jsonStructuredOutput) {
 			return new ValidationResponse(true, null, jsonStructuredOutput);
@@ -41,5 +44,25 @@ public interface JsonSchemaValidator {
 	 * not.
 	 */
 	ValidationResponse validate(Map<String, Object> schema, Map<String, Object> structuredContent);
+
+	/**
+	 * Creates the default {@link JsonSchemaValidator}.
+	 * @return The default {@link JsonSchemaValidator}
+	 * @throws IllegalStateException If no {@link JsonSchemaValidator} implementation
+	 * exists on the classpath.
+	 */
+	static JsonSchemaValidator createDefault() {
+		return JsonSchemaInternal.createDefaultValidator();
+	}
+
+	/**
+	 * Returns the default {@link JsonSchemaValidator}.
+	 * @return The default {@link JsonSchemaValidator}
+	 * @throws IllegalStateException If no {@link JsonSchemaValidator} implementation
+	 * exists on the classpath.
+	 */
+	static JsonSchemaValidator getDefault() {
+		return JsonSchemaInternal.getDefaultValidator();
+	}
 
 }

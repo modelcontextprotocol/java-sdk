@@ -14,8 +14,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -38,6 +36,7 @@ import reactor.test.StepVerifier;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
@@ -78,8 +77,8 @@ class HttpClientSseClientTransportTests {
 
 		public TestHttpClientSseClientTransport(final String baseUri) {
 			super(HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(),
-					HttpRequest.newBuilder().header("Content-Type", "application/json"), baseUri, "/sse",
-					new ObjectMapper(), McpAsyncHttpClientRequestCustomizer.NOOP);
+					HttpRequest.newBuilder().header("Content-Type", "application/json"), baseUri, "/sse", JSON_MAPPER,
+					McpAsyncHttpClientRequestCustomizer.NOOP);
 		}
 
 		public int getInboundMessageCount() {

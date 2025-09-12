@@ -8,7 +8,6 @@ import java.util.Map;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
@@ -40,7 +39,6 @@ import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerRequest;
 import org.springframework.web.servlet.function.ServerResponse;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -223,10 +221,7 @@ public class McpTransportContextIntegrationTests {
 		@Bean
 		public WebMvcStatelessServerTransport webMvcStatelessServerTransport() {
 
-			return WebMvcStatelessServerTransport.builder()
-				.objectMapper(new ObjectMapper())
-				.contextExtractor(serverContextExtractor)
-				.build();
+			return WebMvcStatelessServerTransport.builder().contextExtractor(serverContextExtractor).build();
 		}
 
 		@Bean
@@ -251,10 +246,7 @@ public class McpTransportContextIntegrationTests {
 		@Bean
 		public WebMvcStreamableServerTransportProvider webMvcStreamableServerTransport() {
 
-			return WebMvcStreamableServerTransportProvider.builder()
-				.objectMapper(new ObjectMapper())
-				.contextExtractor(serverContextExtractor)
-				.build();
+			return WebMvcStreamableServerTransportProvider.builder().contextExtractor(serverContextExtractor).build();
 		}
 
 		@Bean
@@ -281,7 +273,6 @@ public class McpTransportContextIntegrationTests {
 		public WebMvcSseServerTransportProvider webMvcSseServerTransport() {
 
 			return WebMvcSseServerTransportProvider.builder()
-				.objectMapper(new ObjectMapper())
 				.contextExtractor(serverContextExtractor)
 				.messageEndpoint("/mcp/message")
 				.build();
