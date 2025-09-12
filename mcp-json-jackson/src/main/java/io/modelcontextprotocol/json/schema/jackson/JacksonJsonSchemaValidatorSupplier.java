@@ -12,12 +12,11 @@ import io.modelcontextprotocol.json.schema.JsonSchemaValidatorSupplier;
  */
 public class JacksonJsonSchemaValidatorSupplier implements JsonSchemaValidatorSupplier {
 
-    /**
-     * Returns a new instance of {@link JsonSchemaValidator} that uses the Jackson library
-     * for JSON schema validation.
-     *
-     * @return A {@link JsonSchemaValidator} instance.
-     */
+	/**
+	 * Returns a new instance of {@link JsonSchemaValidator} that uses the Jackson library
+	 * for JSON schema validation.
+	 * @return A {@link JsonSchemaValidator} instance.
+	 */
 	@Override
 	public JsonSchemaValidator get() {
 		return new DefaultJsonSchemaValidator();

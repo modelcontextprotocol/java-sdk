@@ -11,16 +11,15 @@ public abstract class TypeRef<T> {
 
 	private final Type type;
 
-    /**
-     * Constructs a new TypeRef instance, capturing the generic type information
-     * of the subclass. This constructor should be called from an anonymous subclass
-     * to capture the actual type arguments. For example:
-     * <pre>
-     * TypeRef&lt;List&lt;Foo&gt;&gt; ref = new TypeRef&lt;&gt;(){};
-     * </pre>
-     *
-     * @throws IllegalStateException if TypeRef is not subclassed with actual type information
-     */
+	/**
+	 * Constructs a new TypeRef instance, capturing the generic type information of the
+	 * subclass. This constructor should be called from an anonymous subclass to capture
+	 * the actual type arguments. For example: <pre>
+	 * TypeRef&lt;List&lt;Foo&gt;&gt; ref = new TypeRef&lt;&gt;(){};
+	 * </pre>
+	 * @throws IllegalStateException if TypeRef is not subclassed with actual type
+	 * information
+	 */
 	protected TypeRef() {
 		Type superClass = getClass().getGenericSuperclass();
 		if (superClass instanceof Class) {
@@ -29,11 +28,11 @@ public abstract class TypeRef<T> {
 		this.type = ((ParameterizedType) superClass).getActualTypeArguments()[0];
 	}
 
-    /**
-     * Returns the captured type information.
-     *
-     * @return the Type representing the actual type argument captured by this TypeRef instance
-     */
+	/**
+	 * Returns the captured type information.
+	 * @return the Type representing the actual type argument captured by this TypeRef
+	 * instance
+	 */
 	public Type getType() {
 		return type;
 	}
