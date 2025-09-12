@@ -230,7 +230,10 @@ class LifecycleInitializerTests {
 	@Test
 	void shouldHandleInitializationFailure() {
 		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any()))
-			.thenReturn(Mono.error(new RuntimeException("Connection failed")));
+			// fail once
+			.thenReturn(Mono.error(new RuntimeException("Connection failed")))
+			// succeeds on the second call
+			.thenReturn(Mono.just(MOCK_INIT_RESULT));
 
 		StepVerifier.create(initializer.withIntitialization("test", init -> Mono.just(init.initializeResult())))
 			.expectError(RuntimeException.class)
@@ -238,6 +241,15 @@ class LifecycleInitializerTests {
 
 		assertThat(initializer.isInitialized()).isFalse();
 		assertThat(initializer.currentInitializationResult()).isNull();
+
+		// The initializer can recover from previous errors
+		StepVerifier
+			.create(initializer.withIntitialization("successful init", init -> Mono.just(init.initializeResult())))
+			.expectNext(MOCK_INIT_RESULT)
+			.verifyComplete();
+
+		assertThat(initializer.isInitialized()).isTrue();
+		assertThat(initializer.currentInitializationResult()).isEqualTo(MOCK_INIT_RESULT);
 	}
 
 	@Test
