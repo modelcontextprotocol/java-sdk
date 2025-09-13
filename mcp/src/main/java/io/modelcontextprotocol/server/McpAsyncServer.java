@@ -4,46 +4,24 @@
 
 package io.modelcontextprotocol.server;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.function.BiFunction;
-
-import io.modelcontextprotocol.spec.DefaultMcpStreamableServerSessionFactory;
-import io.modelcontextprotocol.spec.McpServerTransportProviderBase;
-import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
-import io.modelcontextprotocol.spec.JsonSchemaValidator;
-import io.modelcontextprotocol.spec.McpClientSession;
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse;
-import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
-import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
-import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
-import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
-import io.modelcontextprotocol.spec.McpSchema.TextContent;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
-import io.modelcontextprotocol.spec.McpServerSession;
-import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.*;
+import io.modelcontextprotocol.spec.McpSchema.*;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.Utils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.time.Duration;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiFunction;
 
 /**
  * The Model Context Protocol (MCP) server implementation that provides asynchronous
@@ -148,9 +126,8 @@ public class McpAsyncServer {
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
 
 		this.protocolVersions = mcpTransportProvider.protocolVersions();
-
-		mcpTransportProvider.setSessionFactory(transport -> new McpServerSession(UUID.randomUUID().toString(),
-				requestTimeout, transport, this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers));
+		mcpTransportProvider.setSessionFactory(new DefaultMcpServerSessionFactory(requestTimeout,
+				this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers));
 	}
 
 	McpAsyncServer(McpStreamableServerTransportProvider mcpTransportProvider, ObjectMapper objectMapper,
