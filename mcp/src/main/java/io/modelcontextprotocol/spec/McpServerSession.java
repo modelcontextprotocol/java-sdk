@@ -123,6 +123,22 @@ public class McpServerSession implements McpLoggableSession {
 	}
 
 	/**
+	 * Retrieve the current client info of the session.
+	 * @return the client information, such as name and version
+	 */
+	public McpSchema.Implementation getClientInfo() {
+		return this.clientInfo.get();
+	}
+
+	/**
+	 * Retrieve the current client capabilities of the session.
+	 * @return the client capabilities, such as supported features
+	 */
+	public McpSchema.ClientCapabilities getClientCapabilities() {
+		return this.clientCapabilities.get();
+	}
+
+	/**
 	 * Called upon successful initialization sequence between the client and the server
 	 * with the client capabilities and information.
 	 *
