@@ -11,9 +11,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -23,8 +20,9 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.modelcontextprotocol.util.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Based on the <a href="http://www.jsonrpc.org/specification">JSON-RPC 2.0
@@ -1508,15 +1506,21 @@ public final class McpSchema {
 	public record CallToolResult( // @formatter:off
 		@JsonProperty("content") List<Content> content,
 		@JsonProperty("isError") Boolean isError,
-		@JsonProperty("structuredContent") Map<String, Object> structuredContent,
+		@JsonProperty("structuredContent") Object structuredContent,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
 
-		// backwards compatibility constructor
+		/**
+		 * @deprecated use the builder instead.
+		 */
+		@Deprecated
 		public CallToolResult(List<Content> content, Boolean isError) {
-			this(content, isError, null, null);
+			this(content, isError, (Object) null, null);
 		}
 
-		// backwards compatibility constructor
+		/**
+		 * @deprecated use the builder instead.
+		 */
+		@Deprecated
 		public CallToolResult(List<Content> content, Boolean isError, Map<String, Object> structuredContent) {
 			this(content, isError, structuredContent, null);
 		}
@@ -1551,7 +1555,7 @@ public final class McpSchema {
 
 			private Boolean isError = false;
 
-			private Map<String, Object> structuredContent;
+			private Object structuredContent;
 
 			private Map<String, Object> meta;
 
@@ -1566,7 +1570,7 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder structuredContent(Map<String, Object> structuredContent) {
+			public Builder structuredContent(Object structuredContent) {
 				Assert.notNull(structuredContent, "structuredContent must not be null");
 				this.structuredContent = structuredContent;
 				return this;
@@ -1644,7 +1648,7 @@ public final class McpSchema {
 			 * @return a new CallToolResult instance
 			 */
 			public CallToolResult build() {
-				return new CallToolResult(content, isError, structuredContent, meta);
+				return new CallToolResult(content, isError, (Object) structuredContent, meta);
 			}
 
 		}

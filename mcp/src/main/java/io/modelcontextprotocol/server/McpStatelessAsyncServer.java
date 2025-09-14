@@ -293,8 +293,11 @@ public class McpStatelessAsyncServer {
 					// TextContent block.)
 					// https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content
 
-					return new CallToolResult(List.of(new McpSchema.TextContent(validation.jsonStructuredOutput())),
-							result.isError(), result.structuredContent());
+					return CallToolResult.builder()
+						.content(List.of(new McpSchema.TextContent(validation.jsonStructuredOutput())))
+						.isError(result.isError())
+						.structuredContent(result.structuredContent())
+						.build();
 				}
 
 				return result;

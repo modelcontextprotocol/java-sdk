@@ -40,6 +40,6 @@ public interface JsonSchemaValidator {
 	 * @return A ValidationResponse indicating whether the validation was successful or
 	 * not.
 	 */
-	ValidationResponse validate(Map<String, Object> schema, Map<String, Object> structuredContent);
+	ValidationResponse validate(Map<String, Object> schema, Object structuredContent);
 
 }

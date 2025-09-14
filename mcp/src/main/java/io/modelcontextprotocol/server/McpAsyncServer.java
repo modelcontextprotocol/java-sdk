@@ -15,15 +15,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
 
-import io.modelcontextprotocol.spec.DefaultMcpStreamableServerSessionFactory;
-import io.modelcontextprotocol.spec.McpServerTransportProviderBase;
-import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
+import io.modelcontextprotocol.spec.DefaultMcpStreamableServerSessionFactory;
 import io.modelcontextprotocol.spec.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpError;
@@ -34,14 +28,17 @@ import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
-import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.McpServerTransportProviderBase;
+import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.Utils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -420,8 +417,11 @@ public class McpAsyncServer {
 					// TextContent block.)
 					// https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content
 
-					return new CallToolResult(List.of(new McpSchema.TextContent(validation.jsonStructuredOutput())),
-							result.isError(), result.structuredContent());
+					return CallToolResult.builder()
+						.content(List.of(new McpSchema.TextContent(validation.jsonStructuredOutput())))
+						.isError(result.isError())
+						.structuredContent(result.structuredContent())
+						.build();
 				}
 
 				return result;

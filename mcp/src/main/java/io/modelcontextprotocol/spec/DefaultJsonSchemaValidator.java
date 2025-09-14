@@ -51,7 +51,7 @@ public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 	}
 
 	@Override
-	public ValidationResponse validate(Map<String, Object> schema, Map<String, Object> structuredContent) {
+	public ValidationResponse validate(Map<String, Object> schema, Object structuredContent) {
 
 		Assert.notNull(schema, "Schema must not be null");
 		Assert.notNull(structuredContent, "Structured content must not be null");

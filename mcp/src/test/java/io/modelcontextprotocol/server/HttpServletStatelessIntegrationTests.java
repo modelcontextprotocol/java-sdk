@@ -302,6 +302,67 @@ class HttpServletStatelessIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient" })
+	void testStructuredOutputOfObjectArrayValidationSuccess(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Create a tool with output schema that returns an array of objects
+		Map<String, Object> outputSchema = Map
+			.of( // @formatter:off
+			"type", "array",
+			"items", Map.of(
+				"type", "object",
+				"properties", Map.of(
+					"name", Map.of("type", "string"),
+					"age", Map.of("type", "number")),					
+				"required", List.of("name", "age"))); // @formatter:on
+
+		Tool calculatorTool = Tool.builder()
+			.name("getMembers")
+			.description("Returns a list of members")
+			.outputSchema(outputSchema)
+			.build();
+
+		McpStatelessServerFeatures.SyncToolSpecification tool = McpStatelessServerFeatures.SyncToolSpecification
+			.builder()
+			.tool(calculatorTool)
+			.callHandler((exchange, request) -> {
+				return CallToolResult.builder()
+					.structuredContent(List.of(Map.of("name", "John", "age", 30), Map.of("name", "Peter", "age", 25)))
+					.build();
+			})
+			.build();
+
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			assertThat(mcpClient.initialize()).isNotNull();
+
+			// Call tool with valid structured output of type array
+			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("getMembers", Map.of()));
+
+			assertThat(response).isNotNull();
+			assertThat(response.isError()).isFalse();
+
+			assertThat(response.structuredContent()).isNotNull();
+			assertThatJson(response.structuredContent()).when(Option.IGNORING_ARRAY_ORDER)
+				.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+				.isArray()
+				.hasSize(2)
+				.containsExactlyInAnyOrder(json("""
+						{"name":"John","age":30}"""), json("""
+						{"name":"Peter","age":25}"""));
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient" })
 	void testStructuredOutputWithInHandlerError(String clientType) {
 		var clientBuilder = clientBuilders.get(clientType);
 

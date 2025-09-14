@@ -1206,7 +1206,9 @@ public class McpSchemaTests {
 	void testCallToolResult() throws Exception {
 		McpSchema.TextContent content = new McpSchema.TextContent("Tool execution result");
 
-		McpSchema.CallToolResult result = new McpSchema.CallToolResult(Collections.singletonList(content), false);
+		McpSchema.CallToolResult result = McpSchema.CallToolResult.builder()
+			.content(Collections.singletonList(content))
+			.build();
 
 		String value = mapper.writeValueAsString(result);
 
