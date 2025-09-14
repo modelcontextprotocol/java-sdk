@@ -2203,6 +2203,7 @@ public final class McpSchema {
 	 * @param uri The updated resource uri.
 	 * @param meta See specification for notes on _meta usage
 	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ResourcesUpdatedNotification(// @formatter:off
 		@JsonProperty("uri") String uri,
@@ -2224,6 +2225,7 @@ public final class McpSchema {
 	 * @param data JSON-serializable logging data.
 	 * @param meta See specification for notes on _meta usage
 	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record LoggingMessageNotification( // @formatter:off
 		@JsonProperty("level") LoggingLevel level,
