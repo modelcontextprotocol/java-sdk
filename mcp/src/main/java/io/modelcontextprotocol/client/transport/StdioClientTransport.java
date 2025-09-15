@@ -15,6 +15,7 @@ import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import com.fasterxml.jackson.core.JacksonException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpClientTransport;
@@ -268,6 +269,11 @@ public class StdioClientTransport implements McpClientTransport {
 						}
 					}
 					catch (Exception e) {
+						if (e instanceof JacksonException) {
+							// in typescript-server-sdk, console.log will use stdout, so ignore
+							logger.debug(line);
+							continue;
+						}
 						if (!isClosing) {
 							logger.error("Error processing inbound message for line: {}", line, e);
 						}
