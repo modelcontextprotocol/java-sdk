@@ -94,4 +94,105 @@ public class McpUriTemplateManagerTests {
 		assertFalse(uriTemplateManager.matches("/api/users/123/comments/456"));
 	}
 
+	@Test
+	void shouldHandleSpecialCharactersInVariableValues() {
+		Map<String, String> values = this.uriTemplateFactory.create("/api/users/{userId}/files/{fileName}")
+			.extractVariableValues("/api/users/user@example.com/files/my-file.txt");
+		assertEquals(2, values.size());
+		assertEquals("user@example.com", values.get("userId"));
+		assertEquals("my-file.txt", values.get("fileName"));
+	}
+
+	@Test
+	void shouldHandleComplexNestedPaths() {
+		var uriTemplateManager = this.uriTemplateFactory
+			.create("/api/v1/organizations/{orgId}/projects/{projectId}/tasks/{taskId}");
+
+		List<String> variables = uriTemplateManager.getVariableNames();
+		assertEquals(3, variables.size());
+		assertEquals("orgId", variables.get(0));
+		assertEquals("projectId", variables.get(1));
+		assertEquals("taskId", variables.get(2));
+
+		Map<String, String> values = uriTemplateManager
+			.extractVariableValues("/api/v1/organizations/acme/projects/web-app/tasks/1");
+		assertEquals("acme", values.get("orgId"));
+		assertEquals("web-app", values.get("projectId"));
+		assertEquals("1", values.get("taskId"));
+	}
+
+	@Test
+	void shouldNotMatchWhenPathSegmentCountDiffers() {
+		var uriTemplateManager = this.uriTemplateFactory.create("/api/users/{userId}/posts/{postId}");
+
+		assertFalse(uriTemplateManager.matches("/api/users/1"));
+		assertFalse(uriTemplateManager.matches("/api/users/1/posts"));
+		assertFalse(uriTemplateManager.matches("/api/users/1/posts/1/comments"));
+	}
+
+	@Test
+	void shouldNotMatchWhenStaticSegmentsDiffer() {
+		var uriTemplateManager = this.uriTemplateFactory.create("/api/users/{userId}/posts/{postId}");
+
+		assertFalse(uriTemplateManager.matches("/api/user/1/posts/1"));
+		assertFalse(uriTemplateManager.matches("/api/users/1/post/1"));
+		assertFalse(uriTemplateManager.matches("/v1/users/1/posts/1"));
+	}
+
+	@Test
+	void shouldHandleVariableAtBeginningOfPath() {
+		var uriTemplateManager = this.uriTemplateFactory.create("/{version}/api/users/{userId}");
+
+		List<String> variables = uriTemplateManager.getVariableNames();
+		assertEquals(2, variables.size());
+		assertEquals("version", variables.get(0));
+		assertEquals("userId", variables.get(1));
+
+		assertTrue(uriTemplateManager.matches("/v1/api/users/1"));
+
+		Map<String, String> values = uriTemplateManager.extractVariableValues("/v1/api/users/1");
+		assertEquals("v1", values.get("version"));
+		assertEquals("1", values.get("userId"));
+	}
+
+	@Test
+	void shouldHandleTemplateWithSingleVariable() {
+		var uriTemplateManager = this.uriTemplateFactory.create("/api/users/{id}");
+
+		List<String> variables = uriTemplateManager.getVariableNames();
+		assertEquals(1, variables.size());
+		assertEquals("id", variables.get(0));
+
+		Map<String, String> values = uriTemplateManager.extractVariableValues("/api/users/1");
+		assertEquals("1", values.get("id"));
+
+		assertTrue(uriTemplateManager.matches("/api/users/1"));
+	}
+
+	@Test
+	void shouldHandleRootPathTemplate() {
+		var uriTemplateManager = this.uriTemplateFactory.create("/{id}");
+
+		List<String> variables = uriTemplateManager.getVariableNames();
+		assertEquals(1, variables.size());
+		assertEquals("id", variables.get(0));
+
+		assertTrue(uriTemplateManager.matches("/1"));
+		assertFalse(uriTemplateManager.matches("/1/something"));
+
+		Map<String, String> values = uriTemplateManager.extractVariableValues("/abc");
+		assertEquals("abc", values.get("id"));
+	}
+
+	@Test
+	void shouldHandleConsecutiveVariables() {
+		var uriTemplateManager = this.uriTemplateFactory.create("/api/{version}/{userId}");
+
+		assertTrue(uriTemplateManager.matches("/api/v1/1"));
+
+		Map<String, String> values = uriTemplateManager.extractVariableValues("/api/v2/1");
+		assertEquals("v2", values.get("version"));
+		assertEquals("1", values.get("userId"));
+	}
+
 }
