@@ -14,7 +14,7 @@ public interface HttpHeaders {
 	/**
 	 * Identifies individual MCP sessions.
 	 */
-	String MCP_SESSION_ID = "mcp-session-id";
+	String MCP_SESSION_ID = "Mcp-Session-Id";
 
 	/**
 	 * Identifies events within an SSE Stream.
