@@ -23,7 +23,7 @@ final class JsonSchemaInternal {
 	 */
 	static JsonSchemaValidator getDefaultValidator() {
 		if (defaultValidator == null) {
-			defaultValidator = JsonSchemaInternal.getDefaultValidator();
+			defaultValidator = JsonSchemaInternal.createDefaultValidator();
 		}
 		return defaultValidator;
 	}
