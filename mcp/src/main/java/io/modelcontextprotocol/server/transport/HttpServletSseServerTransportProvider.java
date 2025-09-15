@@ -119,6 +119,20 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	private KeepAliveScheduler keepAliveScheduler;
 
 	/**
+	 * Creates a new HttpServletSseServerTransportProvider instance with the default SSE
+	 * endpoint.
+	 * @param objectMapper The JSON object mapper to use for message
+	 * serialization/deserialization
+	 * @param messageEndpoint The endpoint path where clients will send their messages
+	 * @deprecated Use the builder {@link #builder()} instead for better configuration
+	 * options.
+	 */
+	@Deprecated
+	public HttpServletSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint) {
+		this(objectMapper, messageEndpoint, DEFAULT_SSE_ENDPOINT);
+	}
+
+	/**
 	 * Creates a new HttpServletSseServerTransportProvider instance with a custom SSE
 	 * endpoint.
 	 * @param jsonMapper The JSON object mapper to use for message
