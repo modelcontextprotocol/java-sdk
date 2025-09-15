@@ -8,7 +8,7 @@
 		<artifactId>mcp-parent</artifactId>
 		<version>0.13.0-SNAPSHOT</version>
 	</parent>
-	<artifactId>mcp-json-jackson</artifactId>
+	<artifactId>mcp-json-jackson2</artifactId>
 	<packaging>jar</packaging>
 	<name>Java MCP SDK JSON Jackson</name>
 	<description>Java MCP SDK JSON implementation based on Jackson</description>

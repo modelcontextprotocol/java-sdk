@@ -1,3 +1,6 @@
+/*
+ * Copyright 2025 - 2025 the original author or authors.
+ */
 package io.modelcontextprotocol.json.jackson;
 
 import io.modelcontextprotocol.json.McpJsonMapper;

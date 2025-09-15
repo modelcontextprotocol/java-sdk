@@ -103,7 +103,7 @@
 	<modules>
 		<module>mcp-bom</module>
 		<module>mcp</module>
-        <module>mcp-json-jackson</module>
+        <module>mcp-json-jackson2</module>
         <module>mcp-json</module>
 		<module>mcp-spring/mcp-spring-webflux</module>
 		<module>mcp-spring/mcp-spring-webmvc</module>

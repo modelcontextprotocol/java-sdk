@@ -1,7 +1,6 @@
 /*
  * Copyright 2024-2024 the original author or authors.
  */
-
 package io.modelcontextprotocol.json.schema.jackson;
 
 import java.util.Map;
