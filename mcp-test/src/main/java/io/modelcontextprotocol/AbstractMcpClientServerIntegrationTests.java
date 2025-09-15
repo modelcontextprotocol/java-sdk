@@ -4,6 +4,17 @@
 
 package io.modelcontextprotocol;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.assertWith;
+import static org.awaitility.Awaitility.await;
+import static org.mockito.Mockito.mock;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.PrintStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -20,6 +31,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import io.modelcontextprotocol.spec.McpClientTransport;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -49,22 +64,14 @@ import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.util.Utils;
 import net.javacrumbs.jsonunit.core.Option;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
-import static org.assertj.core.api.Assertions.assertWith;
-import static org.awaitility.Awaitility.await;
-import static org.mockito.Mockito.mock;
 
 public abstract class AbstractMcpClientServerIntegrationTests {
 
 	protected ConcurrentHashMap<String, McpClient.SyncSpec> clientBuilders = new ConcurrentHashMap<>();
+
+	protected ConcurrentHashMap<String, McpClientTransport> clientTransportBuilders = new ConcurrentHashMap<>();
 
 	abstract protected void prepareClients(int port, String mcpEndpoint);
 
@@ -856,7 +863,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient", "webflux" })
-	void testToolCallSuccessWithTranportContextExtraction(String clientType) {
+	void testToolCallSuccessWithTransportContextExtraction(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
@@ -1020,6 +1027,32 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		finally {
 			mcpServer.closeGracefully();
 		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient", "webflux" })
+	void testListeningStreamWillClosedWhenNew(String clientType) throws IOException {
+		var clientTransport = clientTransportBuilders.get(clientType);
+		if (clientTransport == null) {
+			return;
+		}
+		PrintStream originalOut = System.out;
+		ByteArrayOutputStream capturedOutput = new ByteArrayOutputStream();
+		System.setOut(new PrintStream(capturedOutput));
+
+		var clientBuilder = clientBuilders.get(clientType);
+		var mcpServer = prepareSyncServerBuilder().build();
+		var mcpClient = clientBuilder.build();
+		InitializeResult initResult = mcpClient.initialize();
+		assertThat(initResult).isNotNull();
+		clientTransport.connect(message -> Mono.empty()).subscribe();
+		await().atMost(Duration.ofSeconds(1)).untilAsserted(() -> {
+			assertThat(capturedOutput.toString().contains("Listening stream already exists for this session")).isTrue();
+		});
+		System.setOut(originalOut);
+		capturedOutput.close();
+		mcpClient.close();
+		mcpServer.close();
 	}
 
 	// ---------------------------------------
