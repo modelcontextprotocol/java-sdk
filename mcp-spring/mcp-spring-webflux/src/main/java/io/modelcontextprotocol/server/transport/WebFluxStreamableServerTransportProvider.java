@@ -42,6 +42,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Implementation of a WebFlux based {@link McpStreamableServerTransportProvider}.
  *
  * @author Dariusz Jędrzejczyk
+ * @author Yanming Zhou
  */
 public class WebFluxStreamableServerTransportProvider implements McpStreamableServerTransportProvider {
 
@@ -170,12 +171,17 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		return Mono.defer(() -> {
 			List<MediaType> acceptHeaders = request.headers().asHttpHeaders().getAccept();
 			if (!acceptHeaders.contains(MediaType.TEXT_EVENT_STREAM)) {
-				return ServerResponse.badRequest().build();
+				return ServerResponse.badRequest()
+					.bodyValue(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+						.message("Invalid Accept headers. Expected text/event-stream")
+						.build());
 			}
 
 			if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
-				return ServerResponse.badRequest().build(); // TODO: say we need a session
-															// id
+				return ServerResponse.badRequest()
+					.bodyValue(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+						.message("Missing header " + HttpHeaders.MCP_SESSION_ID)
+						.build());
 			}
 
 			String sessionId = request.headers().asHttpHeaders().getFirst(HttpHeaders.MCP_SESSION_ID);
@@ -225,7 +231,10 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		List<MediaType> acceptHeaders = request.headers().asHttpHeaders().getAccept();
 		if (!(acceptHeaders.contains(MediaType.APPLICATION_JSON)
 				&& acceptHeaders.contains(MediaType.TEXT_EVENT_STREAM))) {
-			return ServerResponse.badRequest().build();
+			return ServerResponse.badRequest()
+				.bodyValue(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+					.message("Invalid Accept headers. Expected application/json and text/event-stream")
+					.build());
 		}
 
 		return request.bodyToMono(String.class).<ServerResponse>flatMap(body -> {
@@ -257,7 +266,10 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 				}
 
 				if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
-					return ServerResponse.badRequest().bodyValue(new McpError("Session ID missing"));
+					return ServerResponse.badRequest()
+						.bodyValue(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+							.message("Session ID missing")
+							.build());
 				}
 
 				String sessionId = request.headers().asHttpHeaders().getFirst(HttpHeaders.MCP_SESSION_ID);
@@ -265,7 +277,9 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 				if (session == null) {
 					return ServerResponse.status(HttpStatus.NOT_FOUND)
-						.bodyValue(new McpError("Session not found: " + sessionId));
+						.bodyValue(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+							.message("Session not found: " + sessionId)
+							.build());
 				}
 
 				if (message instanceof McpSchema.JSONRPCResponse jsonrpcResponse) {
@@ -291,12 +305,18 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 								ServerSentEvent.class);
 				}
 				else {
-					return ServerResponse.badRequest().bodyValue(new McpError("Unknown message type"));
+					return ServerResponse.badRequest()
+						.bodyValue(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+							.message("Unknown message type")
+							.build());
 				}
 			}
 			catch (IllegalArgumentException | IOException e) {
 				logger.error("Failed to deserialize message: {}", e.getMessage());
-				return ServerResponse.badRequest().bodyValue(new McpError("Invalid message format"));
+				return ServerResponse.badRequest()
+					.bodyValue(McpError.builder(McpSchema.ErrorCodes.PARSE_ERROR)
+						.message("Invalid message format")
+						.build());
 			}
 		})
 			.switchIfEmpty(ServerResponse.badRequest().build())
@@ -312,8 +332,10 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 		return Mono.defer(() -> {
 			if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
-				return ServerResponse.badRequest().build(); // TODO: say we need a session
-															// id
+				return ServerResponse.badRequest()
+					.bodyValue(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+						.message("Missing header " + HttpHeaders.MCP_SESSION_ID)
+						.build());
 			}
 
 			if (this.disallowDelete) {
