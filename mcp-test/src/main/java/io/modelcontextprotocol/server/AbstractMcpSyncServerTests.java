@@ -4,7 +4,6 @@
 
 package io.modelcontextprotocol.server;
 
-import static io.modelcontextprotocol.utils.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -14,6 +13,8 @@ import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;

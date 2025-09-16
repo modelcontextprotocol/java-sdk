@@ -6,10 +6,13 @@ package io.modelcontextprotocol;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.provider.Arguments;
+
 import org.springframework.http.server.reactive.HttpHandler;
 import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -42,6 +45,10 @@ class WebFluxStreamableIntegrationTests extends AbstractMcpClientServerIntegrati
 
 	static McpTransportContextExtractor<ServerRequest> TEST_CONTEXT_EXTRACTOR = (r) -> McpTransportContext
 		.create(Map.of("important", "value"));
+
+	static Stream<Arguments> getTestParameters() {
+		return Stream.of(Arguments.of("httpclient"), Arguments.of("webflux"));
+	}
 
 	@Override
 	protected void prepareClients(int port, String mcpEndpoint) {

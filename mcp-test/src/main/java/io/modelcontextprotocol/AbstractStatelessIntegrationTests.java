@@ -28,10 +28,11 @@ import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import net.javacrumbs.jsonunit.core.Option;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 
-import static io.modelcontextprotocol.utils.ToolsUtils.EMPTY_JSON_SCHEMA;
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -49,7 +50,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	abstract protected StatelessSyncSpecification prepareSyncServerBuilder();
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("getTestParameters")
 	void simple(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -76,7 +77,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	// Tools Tests
 	// ---------------------------------------
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("getTestParameters")
 	void testToolCallSuccess(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -126,7 +127,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("getTestParameters")
 	void testThrowingToolCallIsCaughtBeforeTimeout(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -164,7 +165,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("getTestParameters")
 	void testToolListChangeHandlingSuccess(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -246,7 +247,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("getTestParameters")
 	void testInitialize(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -267,7 +268,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	// Tool Structured Output Schema Tests
 	// ---------------------------------------
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("getTestParameters")
 	void testStructuredOutputValidationSuccess(String clientType) {
 		var clientBuilder = clientBuilders.get(clientType);
 
@@ -342,7 +343,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("getTestParameters")
 	void testStructuredOutputOfObjectArrayValidationSuccess(String clientType) {
 		var clientBuilder = clientBuilders.get(clientType);
 
@@ -402,7 +403,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("getTestParameters")
 	void testStructuredOutputWithInHandlerError(String clientType) {
 		var clientBuilder = clientBuilders.get(clientType);
 
@@ -460,7 +461,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("getTestParameters")
 	void testStructuredOutputValidationFailure(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -516,7 +517,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("getTestParameters")
 	void testStructuredOutputMissingStructuredContent(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -567,7 +568,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("getTestParameters")
 	void testStructuredOutputRuntimeToolAddition(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);

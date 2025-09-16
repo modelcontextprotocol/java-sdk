@@ -1,4 +1,4 @@
-package io.modelcontextprotocol.utils;
+package io.modelcontextprotocol.util;
 
 import io.modelcontextprotocol.spec.McpSchema;
 

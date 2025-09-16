@@ -4,7 +4,6 @@
 
 package io.modelcontextprotocol.client;
 
-import static io.modelcontextprotocol.utils.McpJsonMapperUtils.JSON_MAPPER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -23,7 +22,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import io.modelcontextprotocol.json.McpJsonMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -53,6 +51,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
+
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 
 /**
  * Test suite for the {@link McpAsyncClient} that can be used with different

@@ -6,12 +6,15 @@ package io.modelcontextprotocol.server;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
+import java.util.stream.Stream;
 
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.provider.Arguments;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -36,6 +39,10 @@ class WebMvcStatelessIntegrationTests extends AbstractStatelessIntegrationTests 
 	private static final String MESSAGE_ENDPOINT = "/mcp/message";
 
 	private WebMvcStatelessServerTransport mcpServerTransport;
+
+	static Stream<Arguments> getTestParameters() {
+		return Stream.of(Arguments.of("httpclient"), Arguments.of("webflux"));
+	}
 
 	@Configuration
 	@EnableWebMvc

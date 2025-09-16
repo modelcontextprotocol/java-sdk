@@ -6,6 +6,7 @@ package io.modelcontextprotocol.server;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
@@ -21,6 +22,7 @@ import org.apache.catalina.startup.Tomcat;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.provider.Arguments;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -36,6 +38,10 @@ class HttpServletSseIntegrationTests extends AbstractMcpClientServerIntegrationT
 	private HttpServletSseServerTransportProvider mcpServerTransportProvider;
 
 	private Tomcat tomcat;
+
+	static Stream<Arguments> getTestParameters() {
+		return Stream.of(Arguments.of("httpclient"));
+	}
 
 	@BeforeEach
 	public void before() {

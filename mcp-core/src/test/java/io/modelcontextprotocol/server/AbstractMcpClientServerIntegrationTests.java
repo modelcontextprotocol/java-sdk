@@ -46,6 +46,7 @@ import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.util.Utils;
 import net.javacrumbs.jsonunit.core.Option;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -70,7 +71,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	abstract protected McpServer.SyncSpecification<?> prepareSyncServerBuilder();
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void simple(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -78,7 +79,6 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		var server = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.requestTimeout(Duration.ofSeconds(1000))
 			.build();
-
 		try (
 				// Create client without sampling capabilities
 				var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
@@ -97,7 +97,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	// Sampling Tests
 	// ---------------------------------------
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testCreateMessageWithoutSamplingCapabilities(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -133,7 +133,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testCreateMessageSuccess(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -202,7 +202,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testCreateMessageWithRequestTimeoutSuccess(String clientType) throws InterruptedException {
 
 		// Client
@@ -282,7 +282,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testCreateMessageWithRequestTimeoutFail(String clientType) throws InterruptedException {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -348,7 +348,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	// Elicitation Tests
 	// ---------------------------------------
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testCreateElicitationWithoutElicitationCapabilities(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -380,7 +380,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testCreateElicitationSuccess(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -437,7 +437,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testCreateElicitationWithRequestTimeoutSuccess(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -498,7 +498,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testCreateElicitationWithRequestTimeoutFail(String clientType) {
 
 		var latch = new CountDownLatch(1);
@@ -569,7 +569,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	// Roots Tests
 	// ---------------------------------------
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testRootsSuccess(String clientType) {
 		var clientBuilder = clientBuilders.get(clientType);
 
@@ -617,7 +617,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testRootsWithoutCapability(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -656,7 +656,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testRootsNotificationWithEmptyRootsList(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -686,7 +686,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testRootsWithMultipleHandlers(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -720,7 +720,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testRootsServerCloseWithActiveSubscription(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -755,7 +755,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	// Tools Tests
 	// ---------------------------------------
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testToolCallSuccess(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -806,7 +806,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testThrowingToolCallIsCaughtBeforeTimeout(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -844,7 +844,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testToolCallSuccessWithTranportContextExtraction(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -901,7 +901,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testToolListChangeHandlingSuccess(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -994,7 +994,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testInitialize(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -1015,7 +1015,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	// Logging Tests
 	// ---------------------------------------
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testLoggingNotification(String clientType) throws InterruptedException {
 		int expectedNotificationsCount = 3;
 		CountDownLatch latch = new CountDownLatch(expectedNotificationsCount);
@@ -1128,7 +1128,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	// Progress Tests
 	// ---------------------------------------
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testProgressNotification(String clientType) throws InterruptedException {
 		int expectedNotificationsCount = 4; // 3 notifications + 1 for another progress
 											// token
@@ -1234,7 +1234,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	// Completion Tests
 	// ---------------------------------------
 	@ParameterizedTest(name = "{0} : Completion call")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testCompletionShouldReturnExpectedSuggestions(String clientType) {
 		var clientBuilder = clientBuilders.get(clientType);
 
@@ -1256,7 +1256,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 							List.of(new PromptArgument("language", "Language", "string", false))),
 					(mcpSyncServerExchange, getPromptRequest) -> null))
 			.completions(new McpServerFeatures.SyncCompletionSpecification(
-					new PromptReference("ref/prompt", "code_review", "Code review"), completionHandler))
+					new McpSchema.PromptReference("ref/prompt", "code_review", "Code review"), completionHandler))
 			.build();
 
 		try (var mcpClient = clientBuilder.build()) {
@@ -1285,7 +1285,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	// Ping Tests
 	// ---------------------------------------
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testPingSuccess(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -1348,7 +1348,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	// Tool Structured Output Schema Tests
 	// ---------------------------------------
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testStructuredOutputValidationSuccess(String clientType) {
 		var clientBuilder = clientBuilders.get(clientType);
 
@@ -1593,7 +1593,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testStructuredOutputMissingStructuredContent(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -1644,7 +1644,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
+	@MethodSource("getTestParameters")
 	void testStructuredOutputRuntimeToolAddition(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);

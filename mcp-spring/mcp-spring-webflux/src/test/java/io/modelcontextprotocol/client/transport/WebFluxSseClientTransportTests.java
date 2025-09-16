@@ -31,7 +31,7 @@ import reactor.test.StepVerifier;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import static io.modelcontextprotocol.utils.McpJsonMapperUtils.JSON_MAPPER;
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

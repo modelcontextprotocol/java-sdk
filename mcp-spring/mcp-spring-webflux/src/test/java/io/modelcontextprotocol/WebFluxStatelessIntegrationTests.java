@@ -5,10 +5,13 @@
 package io.modelcontextprotocol;
 
 import java.time.Duration;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.provider.Arguments;
+
 import org.springframework.http.server.reactive.HttpHandler;
 import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -34,6 +37,10 @@ class WebFluxStatelessIntegrationTests extends AbstractStatelessIntegrationTests
 	private DisposableServer httpServer;
 
 	private WebFluxStatelessServerTransport mcpStreamableServerTransport;
+
+	static Stream<Arguments> getTestParameters() {
+		return Stream.of(Arguments.of("httpclient"), Arguments.of("webflux"));
+	}
 
 	@Override
 	protected void prepareClients(int port, String mcpEndpoint) {
