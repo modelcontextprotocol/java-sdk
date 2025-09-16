@@ -16,6 +16,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse.JSONRPCError;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -436,8 +438,11 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 				.flatMap(body -> sendHttpPost(messageEndpointUri, body).handle((response, sink) -> {
 					if (response.statusCode() != 200 && response.statusCode() != 201 && response.statusCode() != 202
 							&& response.statusCode() != 206) {
-						sink.error(new RuntimeException("Sending message failed with a non-OK HTTP code: "
-								+ response.statusCode() + " - " + response.body()));
+						sink.error(
+								new McpError(new JSONRPCError(
+										ErrorCodes.INVALID_REQUEST, "Sending message failed with a non-OK HTTP code: "
+												+ response.statusCode() + " - " + response.body(),
+										response.statusCode())));
 					}
 					else {
 						sink.next(response);
