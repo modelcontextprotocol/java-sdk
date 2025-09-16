@@ -4,6 +4,25 @@
 
 package io.modelcontextprotocol.client.transport;
 
+import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
+import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
+import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.spec.*;
+import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.Utils;
+import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.Disposable;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
+import reactor.core.publisher.Mono;
+import reactor.util.function.Tuple2;
+import reactor.util.function.Tuples;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -12,41 +31,12 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandler;
 import java.time.Duration;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
-
-import org.reactivestreams.Publisher;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.json.McpJsonMapper;
-
-import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
-import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
-import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
-import io.modelcontextprotocol.common.McpTransportContext;
-import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
-import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
-import io.modelcontextprotocol.spec.HttpHeaders;
-import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpTransportException;
-import io.modelcontextprotocol.spec.McpTransportSession;
-import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
-import io.modelcontextprotocol.spec.McpTransportStream;
-import io.modelcontextprotocol.spec.ProtocolVersions;
-import io.modelcontextprotocol.util.Assert;
-import io.modelcontextprotocol.util.Utils;
-import reactor.core.Disposable;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.FluxSink;
-import reactor.core.publisher.Mono;
-import reactor.util.function.Tuple2;
-import reactor.util.function.Tuples;
 
 /**
  * An implementation of the Streamable HTTP protocol as defined by the
@@ -87,7 +77,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	 */
 	private final HttpClient httpClient;
 
-	/** HTTP request builder for building requests to send messages to the server */
+	/**
+	 * HTTP request builder for building requests to send messages to the server
+	 */
 	private final HttpRequest.Builder requestBuilder;
 
 	/**
@@ -442,8 +434,11 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					})).onErrorMap(CompletionException.class, t -> t.getCause()).onErrorComplete().subscribe();
 
 			})).flatMap(responseEvent -> {
-				if (transportSession.markInitialized(
-						responseEvent.responseInfo().headers().firstValue("mcp-session-id").orElseGet(() -> null))) {
+				String mcpSessionId = responseEvent.responseInfo()
+					.headers()
+					.firstValue("mcp-session-id")
+					.orElseGet(() -> null);
+				if (Objects.nonNull(mcpSessionId) && transportSession.markInitialized(mcpSessionId)) {
 					// Once we have a session, we try to open an async stream for
 					// the server to send notifications and requests out-of-band.
 
