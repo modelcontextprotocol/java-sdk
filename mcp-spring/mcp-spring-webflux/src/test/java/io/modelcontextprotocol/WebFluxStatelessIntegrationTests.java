@@ -38,7 +38,7 @@ class WebFluxStatelessIntegrationTests extends AbstractStatelessIntegrationTests
 
 	private WebFluxStatelessServerTransport mcpStreamableServerTransport;
 
-	static Stream<Arguments> getTestParameters() {
+	static Stream<Arguments> clientsForTesting() {
 		return Stream.of(Arguments.of("httpclient"), Arguments.of("webflux"));
 	}
 

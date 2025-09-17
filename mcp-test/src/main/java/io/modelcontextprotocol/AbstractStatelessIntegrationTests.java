@@ -50,7 +50,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	abstract protected StatelessSyncSpecification prepareSyncServerBuilder();
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@MethodSource("getTestParameters")
+	@MethodSource("clientsForTesting")
 	void simple(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -77,7 +77,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	// Tools Tests
 	// ---------------------------------------
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@MethodSource("getTestParameters")
+	@MethodSource("clientsForTesting")
 	void testToolCallSuccess(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -127,7 +127,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@MethodSource("getTestParameters")
+	@MethodSource("clientsForTesting")
 	void testThrowingToolCallIsCaughtBeforeTimeout(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -165,7 +165,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@MethodSource("getTestParameters")
+	@MethodSource("clientsForTesting")
 	void testToolListChangeHandlingSuccess(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -247,7 +247,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@MethodSource("getTestParameters")
+	@MethodSource("clientsForTesting")
 	void testInitialize(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -268,7 +268,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	// Tool Structured Output Schema Tests
 	// ---------------------------------------
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@MethodSource("getTestParameters")
+	@MethodSource("clientsForTesting")
 	void testStructuredOutputValidationSuccess(String clientType) {
 		var clientBuilder = clientBuilders.get(clientType);
 
@@ -343,7 +343,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@MethodSource("getTestParameters")
+	@MethodSource("clientsForTesting")
 	void testStructuredOutputOfObjectArrayValidationSuccess(String clientType) {
 		var clientBuilder = clientBuilders.get(clientType);
 
@@ -403,7 +403,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@MethodSource("getTestParameters")
+	@MethodSource("clientsForTesting")
 	void testStructuredOutputWithInHandlerError(String clientType) {
 		var clientBuilder = clientBuilders.get(clientType);
 
@@ -461,7 +461,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@MethodSource("getTestParameters")
+	@MethodSource("clientsForTesting")
 	void testStructuredOutputValidationFailure(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -517,7 +517,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@MethodSource("getTestParameters")
+	@MethodSource("clientsForTesting")
 	void testStructuredOutputMissingStructuredContent(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -568,7 +568,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@MethodSource("getTestParameters")
+	@MethodSource("clientsForTesting")
 	void testStructuredOutputRuntimeToolAddition(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);

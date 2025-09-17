@@ -48,7 +48,7 @@ class WebFluxSseIntegrationTests extends AbstractMcpClientServerIntegrationTests
 	static McpTransportContextExtractor<ServerRequest> TEST_CONTEXT_EXTRACTOR = (r) -> McpTransportContext
 		.create(Map.of("important", "value"));
 
-	static Stream<Arguments> getTestParameters() {
+	static Stream<Arguments> clientsForTesting() {
 		return Stream.of(Arguments.of("httpclient"), Arguments.of("webflux"));
 	}
 

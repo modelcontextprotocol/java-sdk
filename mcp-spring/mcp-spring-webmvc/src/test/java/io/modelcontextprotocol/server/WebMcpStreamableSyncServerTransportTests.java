@@ -21,7 +21,7 @@ import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import reactor.netty.DisposableServer;
 
 /**
- * Tests for {@link McpAsyncServer} using {@link WebFluxSseServerTransportProvider}.
+ * Tests for {@link McpAsyncServer} using {@link WebMvcSseServerTransportProvider}.
  *
  * @author Christian Tzolov
  */

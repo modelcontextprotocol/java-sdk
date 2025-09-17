@@ -37,7 +37,7 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 
 	private Tomcat tomcat;
 
-	static Stream<Arguments> getTestParameters() {
+	static Stream<Arguments> clientsForTesting() {
 		return Stream.of(Arguments.of("httpclient"));
 	}
 
