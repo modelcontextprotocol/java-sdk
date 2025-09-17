@@ -106,7 +106,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	private final AtomicReference<Consumer<Throwable>> exceptionHandler = new AtomicReference<>();
 
 	private WebClientStreamableHttpTransport(McpJsonMapper jsonMapper, WebClient.Builder webClientBuilder,
-											 String endpoint, boolean resumableStreams, boolean openConnectionOnStartup) {
+			String endpoint, boolean resumableStreams, boolean openConnectionOnStartup) {
 		this.jsonMapper = jsonMapper;
 		this.webClient = webClientBuilder.build();
 		this.endpoint = endpoint;
@@ -146,16 +146,16 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	private DefaultMcpTransportSession createTransportSession() {
 		Function<String, Publisher<Void>> onClose = sessionId -> sessionId == null ? Mono.empty()
 				: webClient.delete()
-				.uri(this.endpoint)
-				.header(HttpHeaders.MCP_SESSION_ID, sessionId)
-				.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
-				.retrieve()
-				.toBodilessEntity()
-				.onErrorComplete(e -> {
-					logger.warn("Got error when closing transport", e);
-					return true;
-				})
-				.then();
+					.uri(this.endpoint)
+					.header(HttpHeaders.MCP_SESSION_ID, sessionId)
+					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+					.retrieve()
+					.toBodilessEntity()
+					.onErrorComplete(e -> {
+						logger.warn("Got error when closing transport", e);
+						return true;
+					})
+					.then();
 		return new DefaultMcpTransportSession(onClose);
 	}
 
@@ -206,52 +206,52 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			final McpTransportSession<Disposable> transportSession = this.activeSession.get();
 
 			Disposable connection = webClient.get()
-					.uri(this.endpoint)
-					.accept(MediaType.TEXT_EVENT_STREAM)
-					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
-					.headers(httpHeaders -> {
-						transportSession.sessionId().ifPresent(id -> httpHeaders.add(HttpHeaders.MCP_SESSION_ID, id));
-						if (stream != null) {
-							stream.lastId().ifPresent(id -> httpHeaders.add(HttpHeaders.LAST_EVENT_ID, id));
-						}
-					})
-					.exchangeToFlux(response -> {
-						if (isEventStream(response)) {
-							logger.debug("Established SSE stream via GET");
-							return eventStream(stream, response);
-						}
-						else if (isNotAllowed(response)) {
-							logger.debug("The server does not support SSE streams, using request-response mode.");
-							return Flux.empty();
-						}
-						else if (isNotFound(response)) {
-							if (transportSession.sessionId().isPresent()) {
-								String sessionIdRepresentation = sessionIdOrPlaceholder(transportSession);
-								return mcpSessionNotFoundError(sessionIdRepresentation);
-							}
-							else {
-								return this.extractError(response, MISSING_SESSION_ID);
-							}
+				.uri(this.endpoint)
+				.accept(MediaType.TEXT_EVENT_STREAM)
+				.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+				.headers(httpHeaders -> {
+					transportSession.sessionId().ifPresent(id -> httpHeaders.add(HttpHeaders.MCP_SESSION_ID, id));
+					if (stream != null) {
+						stream.lastId().ifPresent(id -> httpHeaders.add(HttpHeaders.LAST_EVENT_ID, id));
+					}
+				})
+				.exchangeToFlux(response -> {
+					if (isEventStream(response)) {
+						logger.debug("Established SSE stream via GET");
+						return eventStream(stream, response);
+					}
+					else if (isNotAllowed(response)) {
+						logger.debug("The server does not support SSE streams, using request-response mode.");
+						return Flux.empty();
+					}
+					else if (isNotFound(response)) {
+						if (transportSession.sessionId().isPresent()) {
+							String sessionIdRepresentation = sessionIdOrPlaceholder(transportSession);
+							return mcpSessionNotFoundError(sessionIdRepresentation);
 						}
 						else {
-							return response.<McpSchema.JSONRPCMessage>createError().doOnError(e -> {
-								logger.info("Opening an SSE stream failed. This can be safely ignored.", e);
-							}).flux();
+							return this.extractError(response, MISSING_SESSION_ID);
 						}
-					})
-					.flatMap(jsonrpcMessage -> this.handler.get().apply(Mono.just(jsonrpcMessage)))
-					.onErrorComplete(t -> {
-						this.handleException(t);
-						return true;
-					})
-					.doFinally(s -> {
-						Disposable ref = disposableRef.getAndSet(null);
-						if (ref != null) {
-							transportSession.removeConnection(ref);
-						}
-					})
-					.contextWrite(ctx)
-					.subscribe();
+					}
+					else {
+						return response.<McpSchema.JSONRPCMessage>createError().doOnError(e -> {
+							logger.info("Opening an SSE stream failed. This can be safely ignored.", e);
+						}).flux();
+					}
+				})
+				.flatMap(jsonrpcMessage -> this.handler.get().apply(Mono.just(jsonrpcMessage)))
+				.onErrorComplete(t -> {
+					this.handleException(t);
+					return true;
+				})
+				.doFinally(s -> {
+					Disposable ref = disposableRef.getAndSet(null);
+					if (ref != null) {
+						transportSession.removeConnection(ref);
+					}
+				})
+				.contextWrite(ctx)
+				.subscribe();
 
 			disposableRef.set(connection);
 			transportSession.addConnection(connection);
@@ -272,83 +272,83 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			final McpTransportSession<Disposable> transportSession = this.activeSession.get();
 
 			Disposable connection = webClient.post()
-					.uri(this.endpoint)
-					.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_EVENT_STREAM)
-					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
-					.headers(httpHeaders -> {
-						transportSession.sessionId().ifPresent(id -> httpHeaders.add(HttpHeaders.MCP_SESSION_ID, id));
-					})
-					.bodyValue(message)
-					.exchangeToFlux(response -> {
-						String mcpSessionId = response.headers().asHttpHeaders().getFirst(HttpHeaders.MCP_SESSION_ID);
-						if (StringUtils.hasText(mcpSessionId) && transportSession.markInitialized(mcpSessionId)) {
-							// Once we have a session, we try to open an async stream for
-							// the server to send notifications and requests out-of-band.
-							reconnect(null).contextWrite(sink.contextView()).subscribe();
-						}
+				.uri(this.endpoint)
+				.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_EVENT_STREAM)
+				.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+				.headers(httpHeaders -> {
+					transportSession.sessionId().ifPresent(id -> httpHeaders.add(HttpHeaders.MCP_SESSION_ID, id));
+				})
+				.bodyValue(message)
+				.exchangeToFlux(response -> {
+					String mcpSessionId = response.headers().asHttpHeaders().getFirst(HttpHeaders.MCP_SESSION_ID);
+					if (StringUtils.hasText(mcpSessionId) && transportSession.markInitialized(mcpSessionId)) {
+						// Once we have a session, we try to open an async stream for
+						// the server to send notifications and requests out-of-band.
+						reconnect(null).contextWrite(sink.contextView()).subscribe();
+					}
 
-						String sessionRepresentation = sessionIdOrPlaceholder(transportSession);
+					String sessionRepresentation = sessionIdOrPlaceholder(transportSession);
 
-						// The spec mentions only ACCEPTED, but the existing SDKs can return
-						// 200 OK for notifications
-						if (response.statusCode().is2xxSuccessful()) {
-							Optional<MediaType> contentType = response.headers().contentType();
-							// Existing SDKs consume notifications with no response body nor
-							// content type
-							if (contentType.isEmpty()) {
-								logger.trace("Message was successfully sent via POST for session {}",
-										sessionRepresentation);
-								// signal the caller that the message was successfully
-								// delivered
-								sink.success();
-								// communicate to downstream there is no streamed data coming
-								return Flux.empty();
-							}
-							else {
-								MediaType mediaType = contentType.get();
-								if (mediaType.isCompatibleWith(MediaType.TEXT_EVENT_STREAM)) {
-									logger.debug("Established SSE stream via POST");
-									// communicate to caller that the message was delivered
-									sink.success();
-									// starting a stream
-									return newEventStream(response, sessionRepresentation);
-								}
-								else if (mediaType.isCompatibleWith(MediaType.APPLICATION_JSON)) {
-									logger.trace("Received response to POST for session {}", sessionRepresentation);
-									// communicate to caller the message was delivered
-									sink.success();
-									return directResponseFlux(message, response);
-								}
-								else {
-									logger.warn("Unknown media type {} returned for POST in session {}", contentType,
-											sessionRepresentation);
-									return Flux.error(new RuntimeException("Unknown media type returned: " + contentType));
-								}
-							}
+					// The spec mentions only ACCEPTED, but the existing SDKs can return
+					// 200 OK for notifications
+					if (response.statusCode().is2xxSuccessful()) {
+						Optional<MediaType> contentType = response.headers().contentType();
+						// Existing SDKs consume notifications with no response body nor
+						// content type
+						if (contentType.isEmpty()) {
+							logger.trace("Message was successfully sent via POST for session {}",
+									sessionRepresentation);
+							// signal the caller that the message was successfully
+							// delivered
+							sink.success();
+							// communicate to downstream there is no streamed data coming
+							return Flux.empty();
 						}
 						else {
-							if (isNotFound(response) && !sessionRepresentation.equals(MISSING_SESSION_ID)) {
-								return mcpSessionNotFoundError(sessionRepresentation);
+							MediaType mediaType = contentType.get();
+							if (mediaType.isCompatibleWith(MediaType.TEXT_EVENT_STREAM)) {
+								logger.debug("Established SSE stream via POST");
+								// communicate to caller that the message was delivered
+								sink.success();
+								// starting a stream
+								return newEventStream(response, sessionRepresentation);
 							}
-							return this.extractError(response, sessionRepresentation);
+							else if (mediaType.isCompatibleWith(MediaType.APPLICATION_JSON)) {
+								logger.trace("Received response to POST for session {}", sessionRepresentation);
+								// communicate to caller the message was delivered
+								sink.success();
+								return directResponseFlux(message, response);
+							}
+							else {
+								logger.warn("Unknown media type {} returned for POST in session {}", contentType,
+										sessionRepresentation);
+								return Flux.error(new RuntimeException("Unknown media type returned: " + contentType));
+							}
 						}
-					})
-					.flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage)))
-					.onErrorComplete(t -> {
-						// handle the error first
-						this.handleException(t);
-						// inform the caller of sendMessage
-						sink.error(t);
-						return true;
-					})
-					.doFinally(s -> {
-						Disposable ref = disposableRef.getAndSet(null);
-						if (ref != null) {
-							transportSession.removeConnection(ref);
+					}
+					else {
+						if (isNotFound(response) && !sessionRepresentation.equals(MISSING_SESSION_ID)) {
+							return mcpSessionNotFoundError(sessionRepresentation);
 						}
-					})
-					.contextWrite(sink.contextView())
-					.subscribe();
+						return this.extractError(response, sessionRepresentation);
+					}
+				})
+				.flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage)))
+				.onErrorComplete(t -> {
+					// handle the error first
+					this.handleException(t);
+					// inform the caller of sendMessage
+					sink.error(t);
+					return true;
+				})
+				.doFinally(s -> {
+					Disposable ref = disposableRef.getAndSet(null);
+					if (ref != null) {
+						transportSession.removeConnection(ref);
+					}
+				})
+				.contextWrite(sink.contextView())
+				.subscribe();
 			disposableRef.set(connection);
 			transportSession.addConnection(connection);
 		});
@@ -419,7 +419,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	}
 
 	private Flux<McpSchema.JSONRPCMessage> directResponseFlux(McpSchema.JSONRPCMessage sentMessage,
-															  ClientResponse response) {
+			ClientResponse response) {
 		return response.bodyToMono(String.class).<Iterable<McpSchema.JSONRPCMessage>>handle((responseMessage, s) -> {
 			try {
 				if (sentMessage instanceof McpSchema.JSONRPCNotification && Utils.hasText(responseMessage)) {
