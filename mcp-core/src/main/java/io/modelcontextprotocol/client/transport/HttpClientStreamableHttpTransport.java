@@ -77,7 +77,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(HttpClientStreamableHttpTransport.class);
 
-	private static final String MCP_PROTOCOL_VERSION = ProtocolVersions.MCP_2025_03_26;
+	private static final String MCP_PROTOCOL_VERSION = ProtocolVersions.MCP_2025_06_18;
 
 	private static final String DEFAULT_ENDPOINT = "/mcp";
 
@@ -140,7 +140,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	@Override
 	public List<String> protocolVersions() {
-		return List.of(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26);
+		return List.of(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26,
+				ProtocolVersions.MCP_2025_06_18);
 	}
 
 	public static Builder builder(String baseUri) {

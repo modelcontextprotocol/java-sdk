@@ -44,7 +44,7 @@ public final class McpSchema {
 	}
 
 	@Deprecated
-	public static final String LATEST_PROTOCOL_VERSION = ProtocolVersions.MCP_2025_03_26;
+	public static final String LATEST_PROTOCOL_VERSION = ProtocolVersions.MCP_2025_06_18;
 
 	public static final String JSONRPC_VERSION = "2.0";
 
