@@ -653,7 +653,13 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Annotations( // @formatter:off
 		@JsonProperty("audience") List<Role> audience,
-		@JsonProperty("priority") Double priority) { // @formatter:on
+		@JsonProperty("priority") Double priority,
+		@JsonProperty("lastModified") String lastModified
+		) { // @formatter:on
+
+		public Annotations(List<Role> audience, Double priority) {
+			this(audience, priority, null);
+		}
 	}
 
 	/**
