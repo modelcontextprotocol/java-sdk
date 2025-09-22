@@ -26,6 +26,7 @@ import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientReq
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
@@ -68,8 +69,6 @@ import reactor.core.publisher.Sinks;
 public class HttpClientSseClientTransport implements McpClientTransport {
 
 	private static final String MCP_PROTOCOL_VERSION = ProtocolVersions.MCP_2024_11_05;
-
-	private static final String MCP_PROTOCOL_VERSION_HEADER_NAME = "MCP-Protocol-Version";
 
 	private static final Logger logger = LoggerFactory.getLogger(HttpClientSseClientTransport.class);
 
@@ -342,7 +341,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 				.uri(uri)
 				.header("Accept", "text/event-stream")
 				.header("Cache-Control", "no-cache")
-				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
+				.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 				.GET();
 			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
@@ -470,7 +469,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			var builder = this.requestBuilder.copy()
 				.uri(requestUri)
 				.header("Content-Type", "application/json")
-				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
+				.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 				.POST(HttpRequest.BodyPublishers.ofString(body));
 			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", requestUri, body, transportContext));
