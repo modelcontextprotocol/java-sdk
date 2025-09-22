@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
@@ -19,9 +20,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.modelcontextprotocol.json.TypeRef;
-
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpClientTransport;
+import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
@@ -75,6 +77,7 @@ import reactor.core.publisher.Mono;
  * @author Dariusz Jędrzejczyk
  * @author Christian Tzolov
  * @author Jihoon Kim
+ * @author Anurag Pant
  * @see McpClient
  * @see McpSchema
  * @see McpClientSession
@@ -153,15 +156,32 @@ public class McpAsyncClient {
 	private final LifecycleInitializer initializer;
 
 	/**
+	 * JSON schema validator to use for validating tool responses against output schemas.
+	 */
+	private final JsonSchemaValidator jsonSchemaValidator;
+
+	/**
+	 * Cached tool output schemas.
+	 */
+	private final ConcurrentHashMap<String, Optional<Map<String, Object>>> toolsOutputSchemaCache;
+
+	/**
+	 * Whether to enable automatic schema caching during callTool operations.
+	 */
+	private final boolean enableCallToolSchemaCaching;
+
+	/**
 	 * Create a new McpAsyncClient with the given transport and session request-response
 	 * timeout.
 	 * @param transport the transport to use.
 	 * @param requestTimeout the session request-response timeout.
 	 * @param initializationTimeout the max timeout to await for the client-server
-	 * @param features the MCP Client supported features.
+	 * @param jsonSchemaValidator the JSON schema validator to use for validating tool
+	 * @param features the MCP Client supported features. responses against output
+	 * schemas.
 	 */
 	McpAsyncClient(McpClientTransport transport, Duration requestTimeout, Duration initializationTimeout,
-			McpClientFeatures.Async features) {
+			JsonSchemaValidator jsonSchemaValidator, McpClientFeatures.Async features) {
 
 		Assert.notNull(transport, "Transport must not be null");
 		Assert.notNull(requestTimeout, "Request timeout must not be null");
@@ -171,6 +191,9 @@ public class McpAsyncClient {
 		this.clientCapabilities = features.clientCapabilities();
 		this.transport = transport;
 		this.roots = new ConcurrentHashMap<>(features.roots());
+		this.jsonSchemaValidator = jsonSchemaValidator;
+		this.toolsOutputSchemaCache = new ConcurrentHashMap<>();
+		this.enableCallToolSchemaCaching = features.enableCallToolSchemaCaching();
 
 		// Request Handlers
 		Map<String, RequestHandler<?>> requestHandlers = new HashMap<>();
@@ -539,13 +562,59 @@ public class McpAsyncClient {
 	 * @see #listTools()
 	 */
 	public Mono<McpSchema.CallToolResult> callTool(McpSchema.CallToolRequest callToolRequest) {
-		return this.initializer.withIntitialization("calling tools", init -> {
-			if (init.initializeResult().capabilities().tools() == null) {
-				return Mono.error(new IllegalStateException("Server does not provide tools capability"));
-			}
-			return init.mcpSession()
-				.sendRequest(McpSchema.METHOD_TOOLS_CALL, callToolRequest, CALL_TOOL_RESULT_TYPE_REF);
+		return Mono.defer(() -> {
+			// Conditionally cache schemas if needed, otherwise return empty Mono
+			Mono<Void> cachingStep = (this.enableCallToolSchemaCaching
+					&& !this.toolsOutputSchemaCache.containsKey(callToolRequest.name())) ? this.listTools().then()
+							: Mono.empty();
+
+			return cachingStep.then(this.initializer.withIntitialization("calling tool", init -> {
+				if (init.initializeResult().capabilities().tools() == null) {
+					return Mono.error(new IllegalStateException("Server does not provide tools capability"));
+				}
+
+				return init.mcpSession()
+					.sendRequest(McpSchema.METHOD_TOOLS_CALL, callToolRequest, CALL_TOOL_RESULT_TYPE_REF)
+					.flatMap(result -> validateToolResult(callToolRequest.name(), result));
+			}));
 		});
+	}
+
+	/**
+	 * Calls a tool provided by the server and validates the result against the cached
+	 * output schema.
+	 * @param toolName The name of the tool to call
+	 * @param result The result of the tool call
+	 * @return A Mono that emits the validated tool result
+	 */
+	private Mono<McpSchema.CallToolResult> validateToolResult(String toolName, McpSchema.CallToolResult result) {
+		Optional<Map<String, Object>> optOutputSchema = toolsOutputSchemaCache.get(toolName);
+
+		if (result != null && result.isError() != null && !result.isError()) {
+			if (optOutputSchema == null) {
+				// Tool not found in cache - skip validation and proceed
+				logger.debug("Tool '{}' not found in cache, skipping validation", toolName);
+				return Mono.just(result);
+			}
+			else {
+				if (optOutputSchema.isPresent()) {
+					// Validate the tool output against the cached output schema
+					var validation = this.jsonSchemaValidator.validate(optOutputSchema.get(),
+							result.structuredContent());
+					if (!validation.valid()) {
+						logger.warn("Tool call result validation failed: {}", validation.errorMessage());
+						return Mono.just(new McpSchema.CallToolResult(validation.errorMessage(), true));
+					}
+				}
+				else if (result.structuredContent() != null) {
+					logger.warn(
+							"Calling a tool with no outputSchema is not expected to return result with structured content, but got: {}",
+							result.structuredContent());
+				}
+			}
+		}
+
+		return Mono.just(result);
 	}
 
 	/**
@@ -574,7 +643,16 @@ public class McpAsyncClient {
 			}
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_TOOLS_LIST, new McpSchema.PaginatedRequest(cursor),
-						LIST_TOOLS_RESULT_TYPE_REF);
+						LIST_TOOLS_RESULT_TYPE_REF)
+				.map(result -> {
+					if (result.tools() != null) {
+						// Cache tools output schema
+						result.tools()
+							.forEach(tool -> this.toolsOutputSchemaCache.put(tool.name(),
+									Optional.ofNullable(tool.outputSchema())));
+					}
+					return result;
+				});
 		});
 	}
 
