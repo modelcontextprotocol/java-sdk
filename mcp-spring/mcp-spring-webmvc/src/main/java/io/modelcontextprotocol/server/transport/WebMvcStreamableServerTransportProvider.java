@@ -89,7 +89,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 	private McpStreamableServerSession.Factory sessionFactory;
 
 	/**
-	 * Map of active client sessions, keyed by mcp-session-id.
+	 * Map of active client sessions, keyed by Mcp-Session-Id.
 	 */
 	private final ConcurrentHashMap<String, McpStreamableServerSession> sessions = new ConcurrentHashMap<>();
 
@@ -241,7 +241,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
-			return ServerResponse.badRequest().body("Session ID required in mcp-session-id header");
+			return ServerResponse.badRequest().body("Session ID required in " + HttpHeaders.MCP_SESSION_ID + " header");
 		}
 
 		String sessionId = request.headers().asHttpHeaders().getFirst(HttpHeaders.MCP_SESSION_ID);
@@ -434,7 +434,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
-			return ServerResponse.badRequest().body("Session ID required in mcp-session-id header");
+			return ServerResponse.badRequest().body("Session ID required in " + HttpHeaders.MCP_SESSION_ID + " header");
 		}
 
 		String sessionId = request.headers().asHttpHeaders().getFirst(HttpHeaders.MCP_SESSION_ID);
