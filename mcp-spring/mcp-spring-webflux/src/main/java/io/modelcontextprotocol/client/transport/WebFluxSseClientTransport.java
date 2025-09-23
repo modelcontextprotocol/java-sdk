@@ -247,7 +247,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 				return webClient.post()
 					.uri(messageEndpointUri)
 					.contentType(MediaType.APPLICATION_JSON)
-					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+					.header(HttpHeaders.MCP_PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 					.bodyValue(jsonText)
 					.retrieve()
 					.toBodilessEntity()
@@ -280,7 +280,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 			.get()
 			.uri(this.sseEndpoint)
 			.accept(MediaType.TEXT_EVENT_STREAM)
-			.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+			.header(HttpHeaders.MCP_PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 			.retrieve()
 			.bodyToFlux(SSE_TYPE)
 			.retryWhen(Retry.from(retrySignal -> retrySignal.handle(inboundRetryHandler)));
