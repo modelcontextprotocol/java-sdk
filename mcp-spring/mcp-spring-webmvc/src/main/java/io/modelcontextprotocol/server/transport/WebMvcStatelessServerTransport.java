@@ -4,8 +4,8 @@
 
 package io.modelcontextprotocol.server.transport;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
@@ -38,7 +38,7 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 
 	private static final Logger logger = LoggerFactory.getLogger(WebMvcStatelessServerTransport.class);
 
-	private final ObjectMapper objectMapper;
+	private final McpJsonMapper jsonMapper;
 
 	private final String mcpEndpoint;
 
@@ -50,13 +50,13 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 
 	private volatile boolean isClosing = false;
 
-	private WebMvcStatelessServerTransport(ObjectMapper objectMapper, String mcpEndpoint,
+	private WebMvcStatelessServerTransport(McpJsonMapper jsonMapper, String mcpEndpoint,
 			McpTransportContextExtractor<ServerRequest> contextExtractor) {
-		Assert.notNull(objectMapper, "objectMapper must not be null");
+		Assert.notNull(jsonMapper, "jsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "mcpEndpoint must not be null");
 		Assert.notNull(contextExtractor, "contextExtractor must not be null");
 
-		this.objectMapper = objectMapper;
+		this.jsonMapper = jsonMapper;
 		this.mcpEndpoint = mcpEndpoint;
 		this.contextExtractor = contextExtractor;
 		this.routerFunction = RouterFunctions.route()
@@ -110,7 +110,7 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 
 		try {
 			String body = request.body(String.class);
-			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
+			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
 
 			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
 				try {
@@ -171,7 +171,7 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 	 */
 	public static class Builder {
 
-		private ObjectMapper objectMapper;
+		private McpJsonMapper jsonMapper;
 
 		private String mcpEndpoint = "/mcp";
 
@@ -185,13 +185,13 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 		/**
 		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
-		 * @param objectMapper The ObjectMapper instance. Must not be null.
+		 * @param jsonMapper The ObjectMapper instance. Must not be null.
 		 * @return this builder instance
-		 * @throws IllegalArgumentException if objectMapper is null
+		 * @throws IllegalArgumentException if jsonMapper is null
 		 */
-		public Builder objectMapper(ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "ObjectMapper must not be null");
-			this.objectMapper = objectMapper;
+		public Builder jsonMapper(McpJsonMapper jsonMapper) {
+			Assert.notNull(jsonMapper, "ObjectMapper must not be null");
+			this.jsonMapper = jsonMapper;
 			return this;
 		}
 
@@ -230,10 +230,9 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 		 * @throws IllegalStateException if required parameters are not set
 		 */
 		public WebMvcStatelessServerTransport build() {
-			Assert.notNull(objectMapper, "ObjectMapper must be set");
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
-
-			return new WebMvcStatelessServerTransport(objectMapper, mcpEndpoint, contextExtractor);
+			return new WebMvcStatelessServerTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+					mcpEndpoint, contextExtractor);
 		}
 
 	}

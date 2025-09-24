@@ -9,8 +9,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
@@ -97,7 +97,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 	public static final String DEFAULT_BASE_URL = "";
 
-	private final ObjectMapper objectMapper;
+	private final McpJsonMapper jsonMapper;
 
 	/**
 	 * Base URL for the message endpoint. This is used to construct the full URL for
@@ -132,81 +132,9 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	private KeepAliveScheduler keepAliveScheduler;
 
 	/**
-	 * Constructs a new WebFlux SSE server transport provider instance with the default
-	 * SSE endpoint.
-	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
-	 * of MCP messages. Must not be null.
-	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
-	 * messages. This endpoint will be communicated to clients during SSE connection
-	 * setup. Must not be null.
-	 * @throws IllegalArgumentException if either parameter is null
-	 * @deprecated Use the builder {@link #builder()} instead for better configuration
-	 * options.
-	 */
-	@Deprecated
-	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint) {
-		this(objectMapper, messageEndpoint, DEFAULT_SSE_ENDPOINT);
-	}
-
-	/**
 	 * Constructs a new WebFlux SSE server transport provider instance.
-	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
-	 * of MCP messages. Must not be null.
-	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
-	 * messages. This endpoint will be communicated to clients during SSE connection
-	 * setup. Must not be null.
-	 * @throws IllegalArgumentException if either parameter is null
-	 * @deprecated Use the builder {@link #builder()} instead for better configuration
-	 * options.
-	 */
-	@Deprecated
-	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String messageEndpoint, String sseEndpoint) {
-		this(objectMapper, DEFAULT_BASE_URL, messageEndpoint, sseEndpoint);
-	}
-
-	/**
-	 * Constructs a new WebFlux SSE server transport provider instance.
-	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
-	 * of MCP messages. Must not be null.
-	 * @param baseUrl webflux message base path
-	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
-	 * messages. This endpoint will be communicated to clients during SSE connection
-	 * setup. Must not be null.
-	 * @throws IllegalArgumentException if either parameter is null
-	 * @deprecated Use the builder {@link #builder()} instead for better configuration
-	 * options.
-	 */
-	@Deprecated
-	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
-			String sseEndpoint) {
-		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, null);
-	}
-
-	/**
-	 * Constructs a new WebFlux SSE server transport provider instance.
-	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
-	 * of MCP messages. Must not be null.
-	 * @param baseUrl webflux message base path
-	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
-	 * messages. This endpoint will be communicated to clients during SSE connection
-	 * setup. Must not be null.
-	 * @param sseEndpoint The SSE endpoint path. Must not be null.
-	 * @param keepAliveInterval The interval for sending keep-alive pings to clients.
-	 * @throws IllegalArgumentException if either parameter is null
-	 * @deprecated Use the builder {@link #builder()} instead for better configuration
-	 * options.
-	 */
-	@Deprecated
-	public WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
-			String sseEndpoint, Duration keepAliveInterval) {
-		this(objectMapper, baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval,
-				(serverRequest) -> McpTransportContext.EMPTY);
-	}
-
-	/**
-	 * Constructs a new WebFlux SSE server transport provider instance.
-	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
-	 * of MCP messages. Must not be null.
+	 * @param jsonMapper The ObjectMapper to use for JSON serialization/deserialization of
+	 * MCP messages. Must not be null.
 	 * @param baseUrl webflux message base path
 	 * @param messageEndpoint The endpoint URI where clients should send their JSON-RPC
 	 * messages. This endpoint will be communicated to clients during SSE connection
@@ -217,16 +145,16 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 * context from HTTP requests. Must not be null.
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
-	private WebFluxSseServerTransportProvider(ObjectMapper objectMapper, String baseUrl, String messageEndpoint,
+	private WebFluxSseServerTransportProvider(McpJsonMapper jsonMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval,
 			McpTransportContextExtractor<ServerRequest> contextExtractor) {
-		Assert.notNull(objectMapper, "ObjectMapper must not be null");
+		Assert.notNull(jsonMapper, "ObjectMapper must not be null");
 		Assert.notNull(baseUrl, "Message base path must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
 
-		this.objectMapper = objectMapper;
+		this.jsonMapper = jsonMapper;
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
@@ -404,7 +332,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 		return request.bodyToMono(String.class).flatMap(body -> {
 			try {
-				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
+				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
 				return session.handle(message).flatMap(response -> ServerResponse.ok().build()).onErrorResume(error -> {
 					logger.error("Error processing  message: {}", error.getMessage());
 					// TODO: instead of signalling the error, just respond with 200 OK
@@ -433,7 +361,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
 			return Mono.fromSupplier(() -> {
 				try {
-					return objectMapper.writeValueAsString(message);
+					return jsonMapper.writeValueAsString(message);
 				}
 				catch (IOException e) {
 					throw Exceptions.propagate(e);
@@ -452,8 +380,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		}
 
 		@Override
-		public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-			return objectMapper.convertValue(data, typeRef);
+		public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+			return jsonMapper.convertValue(data, typeRef);
 		}
 
 		@Override
@@ -480,7 +408,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 */
 	public static class Builder {
 
-		private ObjectMapper objectMapper;
+		private McpJsonMapper jsonMapper;
 
 		private String baseUrl = DEFAULT_BASE_URL;
 
@@ -494,15 +422,15 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 				serverRequest) -> McpTransportContext.EMPTY;
 
 		/**
-		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
+		 * Sets the McpJsonMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
-		 * @param objectMapper The ObjectMapper instance. Must not be null.
+		 * @param jsonMapper The McpJsonMapper instance. Must not be null.
 		 * @return this builder instance
-		 * @throws IllegalArgumentException if objectMapper is null
+		 * @throws IllegalArgumentException if jsonMapper is null
 		 */
-		public Builder objectMapper(ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "ObjectMapper must not be null");
-			this.objectMapper = objectMapper;
+		public Builder jsonMapper(McpJsonMapper jsonMapper) {
+			Assert.notNull(jsonMapper, "JsonMapper must not be null");
+			this.jsonMapper = jsonMapper;
 			return this;
 		}
 
@@ -577,11 +505,9 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		 * @throws IllegalStateException if required parameters are not set
 		 */
 		public WebFluxSseServerTransportProvider build() {
-			Assert.notNull(objectMapper, "ObjectMapper must be set");
 			Assert.notNull(messageEndpoint, "Message endpoint must be set");
-
-			return new WebFluxSseServerTransportProvider(objectMapper, baseUrl, messageEndpoint, sseEndpoint,
-					keepAliveInterval, contextExtractor);
+			return new WebFluxSseServerTransportProvider(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+					baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval, contextExtractor);
 		}
 
 	}

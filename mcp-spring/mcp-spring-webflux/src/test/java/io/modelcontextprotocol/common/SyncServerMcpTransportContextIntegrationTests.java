@@ -8,7 +8,6 @@ import java.util.Map;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.WebClientStreamableHttpTransport;
@@ -105,18 +104,15 @@ public class SyncServerMcpTransportContextIntegrationTests {
 	};
 
 	private final WebFluxStatelessServerTransport statelessServerTransport = WebFluxStatelessServerTransport.builder()
-		.objectMapper(new ObjectMapper())
 		.contextExtractor(serverContextExtractor)
 		.build();
 
 	private final WebFluxStreamableServerTransportProvider streamableServerTransport = WebFluxStreamableServerTransportProvider
 		.builder()
-		.objectMapper(new ObjectMapper())
 		.contextExtractor(serverContextExtractor)
 		.build();
 
 	private final WebFluxSseServerTransportProvider sseServerTransport = WebFluxSseServerTransportProvider.builder()
-		.objectMapper(new ObjectMapper())
 		.contextExtractor(serverContextExtractor)
 		.messageEndpoint("/mcp/message")
 		.build();

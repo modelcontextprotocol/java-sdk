@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
-import io.modelcontextprotocol.spec.McpStreamableServerSession.McpStreamableServerSessionStream;
+import io.modelcontextprotocol.json.McpJsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -21,8 +21,7 @@ import org.springframework.web.servlet.function.ServerRequest;
 import org.springframework.web.servlet.function.ServerResponse;
 import org.springframework.web.servlet.function.ServerResponse.SseBuilder;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.TypeRef;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
@@ -83,7 +82,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 	 */
 	private final boolean disallowDelete;
 
-	private final ObjectMapper objectMapper;
+	private final McpJsonMapper jsonMapper;
 
 	private final RouterFunction<ServerResponse> routerFunction;
 
@@ -105,7 +104,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 
 	/**
 	 * Constructs a new WebMvcStreamableServerTransportProvider instance.
-	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
+	 * @param jsonMapper The McpJsonMapper to use for JSON serialization/deserialization
 	 * of messages.
 	 * @param baseUrl The base URL for the message endpoint, used to construct the full
 	 * endpoint URL for clients.
@@ -114,14 +113,14 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 	 * @param disallowDelete Whether to disallow DELETE requests on the endpoint.
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
-	private WebMvcStreamableServerTransportProvider(ObjectMapper objectMapper, String mcpEndpoint,
+	private WebMvcStreamableServerTransportProvider(McpJsonMapper jsonMapper, String mcpEndpoint,
 			boolean disallowDelete, McpTransportContextExtractor<ServerRequest> contextExtractor,
 			Duration keepAliveInterval) {
-		Assert.notNull(objectMapper, "ObjectMapper must not be null");
+		Assert.notNull(jsonMapper, "McpJsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "MCP endpoint must not be null");
 		Assert.notNull(contextExtractor, "McpTransportContextExtractor must not be null");
 
-		this.objectMapper = objectMapper;
+		this.jsonMapper = jsonMapper;
 		this.mcpEndpoint = mcpEndpoint;
 		this.disallowDelete = disallowDelete;
 		this.contextExtractor = contextExtractor;
@@ -144,7 +143,8 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 
 	@Override
 	public List<String> protocolVersions() {
-		return List.of(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26);
+		return List.of(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26,
+				ProtocolVersions.MCP_2025_06_18);
 	}
 
 	@Override
@@ -328,13 +328,13 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 
 		try {
 			String body = request.body(String.class);
-			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
+			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
 
 			// Handle initialization request
 			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest
 					&& jsonrpcRequest.method().equals(McpSchema.METHOD_INITIALIZE)) {
-				McpSchema.InitializeRequest initializeRequest = objectMapper.convertValue(jsonrpcRequest.params(),
-						new TypeReference<McpSchema.InitializeRequest>() {
+				McpSchema.InitializeRequest initializeRequest = jsonMapper.convertValue(jsonrpcRequest.params(),
+						new TypeRef<McpSchema.InitializeRequest>() {
 						});
 				McpStreamableServerSession.McpStreamableServerSessionInit init = this.sessionFactory
 					.startSession(initializeRequest);
@@ -519,7 +519,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 						return;
 					}
 
-					String jsonText = objectMapper.writeValueAsString(message);
+					String jsonText = jsonMapper.writeValueAsString(message);
 					this.sseBuilder.id(messageId != null ? messageId : this.sessionId)
 						.event(MESSAGE_EVENT_TYPE)
 						.data(jsonText);
@@ -542,15 +542,15 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		}
 
 		/**
-		 * Converts data from one type to another using the configured ObjectMapper.
+		 * Converts data from one type to another using the configured McpJsonMapper.
 		 * @param data The source data object to convert
 		 * @param typeRef The target type reference
 		 * @return The converted object of type T
 		 * @param <T> The target type
 		 */
 		@Override
-		public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-			return objectMapper.convertValue(data, typeRef);
+		public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+			return jsonMapper.convertValue(data, typeRef);
 		}
 
 		/**
@@ -600,7 +600,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 	 */
 	public static class Builder {
 
-		private ObjectMapper objectMapper;
+		private McpJsonMapper jsonMapper;
 
 		private String mcpEndpoint = "/mcp";
 
@@ -612,15 +612,15 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		private Duration keepAliveInterval;
 
 		/**
-		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
+		 * Sets the McpJsonMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
-		 * @param objectMapper The ObjectMapper instance. Must not be null.
+		 * @param jsonMapper The McpJsonMapper instance. Must not be null.
 		 * @return this builder instance
-		 * @throws IllegalArgumentException if objectMapper is null
+		 * @throws IllegalArgumentException if jsonMapper is null
 		 */
-		public Builder objectMapper(ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "ObjectMapper must not be null");
-			this.objectMapper = objectMapper;
+		public Builder jsonMapper(McpJsonMapper jsonMapper) {
+			Assert.notNull(jsonMapper, "McpJsonMapper must not be null");
+			this.jsonMapper = jsonMapper;
 			return this;
 		}
 
@@ -681,11 +681,10 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		 * @throws IllegalStateException if required parameters are not set
 		 */
 		public WebMvcStreamableServerTransportProvider build() {
-			Assert.notNull(this.objectMapper, "ObjectMapper must be set");
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
-
-			return new WebMvcStreamableServerTransportProvider(this.objectMapper, this.mcpEndpoint, this.disallowDelete,
-					this.contextExtractor, this.keepAliveInterval);
+			return new WebMvcStreamableServerTransportProvider(
+					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, mcpEndpoint, disallowDelete,
+					contextExtractor, keepAliveInterval);
 		}
 
 	}

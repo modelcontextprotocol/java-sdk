@@ -4,7 +4,7 @@
 
 package io.modelcontextprotocol.server.transport;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
@@ -34,7 +34,7 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 
 	private static final Logger logger = LoggerFactory.getLogger(WebFluxStatelessServerTransport.class);
 
-	private final ObjectMapper objectMapper;
+	private final McpJsonMapper jsonMapper;
 
 	private final String mcpEndpoint;
 
@@ -46,13 +46,13 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 
 	private volatile boolean isClosing = false;
 
-	private WebFluxStatelessServerTransport(ObjectMapper objectMapper, String mcpEndpoint,
+	private WebFluxStatelessServerTransport(McpJsonMapper jsonMapper, String mcpEndpoint,
 			McpTransportContextExtractor<ServerRequest> contextExtractor) {
-		Assert.notNull(objectMapper, "objectMapper must not be null");
+		Assert.notNull(jsonMapper, "jsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "mcpEndpoint must not be null");
 		Assert.notNull(contextExtractor, "contextExtractor must not be null");
 
-		this.objectMapper = objectMapper;
+		this.jsonMapper = jsonMapper;
 		this.mcpEndpoint = mcpEndpoint;
 		this.contextExtractor = contextExtractor;
 		this.routerFunction = RouterFunctions.route()
@@ -106,13 +106,20 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 
 		return request.bodyToMono(String.class).<ServerResponse>flatMap(body -> {
 			try {
-				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
+				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
 
 				if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
-					return this.mcpHandler.handleRequest(transportContext, jsonrpcRequest)
-						.flatMap(jsonrpcResponse -> ServerResponse.ok()
-							.contentType(MediaType.APPLICATION_JSON)
-							.bodyValue(jsonrpcResponse));
+					return this.mcpHandler.handleRequest(transportContext, jsonrpcRequest).flatMap(jsonrpcResponse -> {
+						try {
+							String json = jsonMapper.writeValueAsString(jsonrpcResponse);
+							return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).bodyValue(json);
+						}
+						catch (IOException e) {
+							logger.error("Failed to serialize response: {}", e.getMessage());
+							return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+								.bodyValue(new McpError("Failed to serialize response"));
+						}
+					});
 				}
 				else if (message instanceof McpSchema.JSONRPCNotification jsonrpcNotification) {
 					return this.mcpHandler.handleNotification(transportContext, jsonrpcNotification)
@@ -146,7 +153,7 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 	 */
 	public static class Builder {
 
-		private ObjectMapper objectMapper;
+		private McpJsonMapper jsonMapper;
 
 		private String mcpEndpoint = "/mcp";
 
@@ -158,15 +165,15 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 		}
 
 		/**
-		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
+		 * Sets the JsonMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
-		 * @param objectMapper The ObjectMapper instance. Must not be null.
+		 * @param jsonMapper The JsonMapper instance. Must not be null.
 		 * @return this builder instance
-		 * @throws IllegalArgumentException if objectMapper is null
+		 * @throws IllegalArgumentException if jsonMapper is null
 		 */
-		public Builder objectMapper(ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "ObjectMapper must not be null");
-			this.objectMapper = objectMapper;
+		public Builder jsonMapper(McpJsonMapper jsonMapper) {
+			Assert.notNull(jsonMapper, "JsonMapper must not be null");
+			this.jsonMapper = jsonMapper;
 			return this;
 		}
 
@@ -205,10 +212,9 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 		 * @throws IllegalStateException if required parameters are not set
 		 */
 		public WebFluxStatelessServerTransport build() {
-			Assert.notNull(objectMapper, "ObjectMapper must be set");
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
-
-			return new WebFluxStatelessServerTransport(objectMapper, mcpEndpoint, contextExtractor);
+			return new WebFluxStatelessServerTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+					mcpEndpoint, contextExtractor);
 		}
 
 	}

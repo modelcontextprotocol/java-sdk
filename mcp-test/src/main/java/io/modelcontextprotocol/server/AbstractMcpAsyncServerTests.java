@@ -26,6 +26,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -95,18 +96,10 @@ public abstract class AbstractMcpAsyncServerTests {
 	// ---------------------------------------
 	// Tools Tests
 	// ---------------------------------------
-	String emptyJsonSchema = """
-			{
-				"$schema": "http://json-schema.org/draft-07/schema#",
-				"type": "object",
-				"properties": {}
-			}
-			""";
-
 	@Test
 	@Deprecated
 	void testAddTool() {
-		Tool newTool = new McpSchema.Tool("new-tool", "New test tool", emptyJsonSchema);
+		Tool newTool = Tool.builder().name("new-tool").title("New test tool").inputSchema(EMPTY_JSON_SCHEMA).build();
 		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.build();
@@ -120,7 +113,7 @@ public abstract class AbstractMcpAsyncServerTests {
 
 	@Test
 	void testAddToolCall() {
-		Tool newTool = new McpSchema.Tool("new-tool", "New test tool", emptyJsonSchema);
+		Tool newTool = Tool.builder().name("new-tool").title("New test tool").inputSchema(EMPTY_JSON_SCHEMA).build();
 		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.build();
@@ -136,7 +129,11 @@ public abstract class AbstractMcpAsyncServerTests {
 	@Test
 	@Deprecated
 	void testAddDuplicateTool() {
-		Tool duplicateTool = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
+		Tool duplicateTool = McpSchema.Tool.builder()
+			.name(TEST_TOOL_NAME)
+			.title("Duplicate tool")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
 
 		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
@@ -156,7 +153,11 @@ public abstract class AbstractMcpAsyncServerTests {
 
 	@Test
 	void testAddDuplicateToolCall() {
-		Tool duplicateTool = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
+		Tool duplicateTool = McpSchema.Tool.builder()
+			.name(TEST_TOOL_NAME)
+			.title("Duplicate tool")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
 
 		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
@@ -176,8 +177,11 @@ public abstract class AbstractMcpAsyncServerTests {
 
 	@Test
 	void testDuplicateToolCallDuringBuilding() {
-		Tool duplicateTool = new Tool("duplicate-build-toolcall", "Duplicate toolcall during building",
-				emptyJsonSchema);
+		Tool duplicateTool = McpSchema.Tool.builder()
+			.name("duplicate-build-toolcall")
+			.title("Duplicate toolcall during building")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
 
 		assertThatThrownBy(() -> prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
@@ -189,7 +193,11 @@ public abstract class AbstractMcpAsyncServerTests {
 
 	@Test
 	void testDuplicateToolsInBatchListRegistration() {
-		Tool duplicateTool = new Tool("batch-list-tool", "Duplicate tool in batch list", emptyJsonSchema);
+		Tool duplicateTool = McpSchema.Tool.builder()
+			.name("batch-list-tool")
+			.title("Duplicate tool in batch list")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
 		List<McpServerFeatures.AsyncToolSpecification> specs = List.of(
 				McpServerFeatures.AsyncToolSpecification.builder()
 					.tool(duplicateTool)
@@ -210,7 +218,11 @@ public abstract class AbstractMcpAsyncServerTests {
 
 	@Test
 	void testDuplicateToolsInBatchVarargsRegistration() {
-		Tool duplicateTool = new Tool("batch-varargs-tool", "Duplicate tool in batch varargs", emptyJsonSchema);
+		Tool duplicateTool = McpSchema.Tool.builder()
+			.name("batch-varargs-tool")
+			.title("Duplicate tool in batch varargs")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
 
 		assertThatThrownBy(() -> prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
@@ -229,8 +241,11 @@ public abstract class AbstractMcpAsyncServerTests {
 
 	@Test
 	void testRemoveTool() {
-		Tool too = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
-
+		Tool too = McpSchema.Tool.builder()
+			.name(TEST_TOOL_NAME)
+			.title("Duplicate tool")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
 		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.toolCall(too, (exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
@@ -256,7 +271,11 @@ public abstract class AbstractMcpAsyncServerTests {
 
 	@Test
 	void testNotifyToolsListChanged() {
-		Tool too = new McpSchema.Tool(TEST_TOOL_NAME, "Duplicate tool", emptyJsonSchema);
+		Tool too = McpSchema.Tool.builder()
+			.name(TEST_TOOL_NAME)
+			.title("Duplicate tool")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
 
 		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())

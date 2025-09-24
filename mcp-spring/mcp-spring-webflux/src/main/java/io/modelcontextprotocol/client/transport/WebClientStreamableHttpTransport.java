@@ -22,8 +22,8 @@ import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.json.McpJsonMapper;
 
 import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
@@ -75,7 +75,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebClientStreamableHttpTransport.class);
 
-	private static final String MCP_PROTOCOL_VERSION = ProtocolVersions.MCP_2025_03_26;
+	private static final String MCP_PROTOCOL_VERSION = ProtocolVersions.MCP_2025_06_18;
 
 	private static final String DEFAULT_ENDPOINT = "/mcp";
 
@@ -88,7 +88,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	private static final ParameterizedTypeReference<ServerSentEvent<String>> PARAMETERIZED_TYPE_REF = new ParameterizedTypeReference<>() {
 	};
 
-	private final ObjectMapper objectMapper;
+	private final McpJsonMapper jsonMapper;
 
 	private final WebClient webClient;
 
@@ -104,9 +104,9 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	private final AtomicReference<Consumer<Throwable>> exceptionHandler = new AtomicReference<>();
 
-	private WebClientStreamableHttpTransport(ObjectMapper objectMapper, WebClient.Builder webClientBuilder,
+	private WebClientStreamableHttpTransport(McpJsonMapper jsonMapper, WebClient.Builder webClientBuilder,
 			String endpoint, boolean resumableStreams, boolean openConnectionOnStartup) {
-		this.objectMapper = objectMapper;
+		this.jsonMapper = jsonMapper;
 		this.webClient = webClientBuilder.build();
 		this.endpoint = endpoint;
 		this.resumableStreams = resumableStreams;
@@ -116,7 +116,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	@Override
 	public List<String> protocolVersions() {
-		return List.of(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26);
+		return List.of(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26,
+				ProtocolVersions.MCP_2025_06_18);
 	}
 
 	/**
@@ -366,8 +367,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = null;
 			Exception toPropagate;
 			try {
-				McpSchema.JSONRPCResponse jsonRpcResponse = objectMapper.readValue(body,
-						McpSchema.JSONRPCResponse.class);
+				McpSchema.JSONRPCResponse jsonRpcResponse = jsonMapper.readValue(body, McpSchema.JSONRPCResponse.class);
 				jsonRpcError = jsonRpcResponse.error();
 				toPropagate = jsonRpcError != null ? new McpError(jsonRpcError)
 						: new McpTransportException("Can't parse the jsonResponse " + jsonRpcResponse);
@@ -427,7 +427,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 					s.complete();
 				}
 				else {
-					McpSchema.JSONRPCMessage jsonRpcResponse = McpSchema.deserializeJsonRpcMessage(objectMapper,
+					McpSchema.JSONRPCMessage jsonRpcResponse = McpSchema.deserializeJsonRpcMessage(jsonMapper,
 							responseMessage);
 					s.next(List.of(jsonRpcResponse));
 				}
@@ -447,8 +447,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	}
 
 	@Override
-	public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-		return this.objectMapper.convertValue(data, typeRef);
+	public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+		return this.jsonMapper.convertValue(data, typeRef);
 	}
 
 	private Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> parse(ServerSentEvent<String> event) {
@@ -456,7 +456,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			try {
 				// We don't support batching ATM and probably won't since the next version
 				// considers removing it.
-				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.objectMapper, event.data());
+				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.jsonMapper, event.data());
 				return Tuples.of(Optional.ofNullable(event.id()), List.of(message));
 			}
 			catch (IOException ioException) {
@@ -474,7 +474,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	 */
 	public static class Builder {
 
-		private ObjectMapper objectMapper;
+		private McpJsonMapper jsonMapper;
 
 		private WebClient.Builder webClientBuilder;
 
@@ -490,13 +490,13 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		}
 
 		/**
-		 * Configure the {@link ObjectMapper} to use.
-		 * @param objectMapper instance to use
+		 * Configure the {@link McpJsonMapper} to use.
+		 * @param jsonMapper instance to use
 		 * @return the builder instance
 		 */
-		public Builder objectMapper(ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "ObjectMapper must not be null");
-			this.objectMapper = objectMapper;
+		public Builder jsonMapper(McpJsonMapper jsonMapper) {
+			Assert.notNull(jsonMapper, "JsonMapper must not be null");
+			this.jsonMapper = jsonMapper;
 			return this;
 		}
 
@@ -555,10 +555,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		 * @return a new instance of {@link WebClientStreamableHttpTransport}
 		 */
 		public WebClientStreamableHttpTransport build() {
-			ObjectMapper objectMapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
-
-			return new WebClientStreamableHttpTransport(objectMapper, this.webClientBuilder, endpoint, resumableStreams,
-					openConnectionOnStartup);
+			return new WebClientStreamableHttpTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+					webClientBuilder, endpoint, resumableStreams, openConnectionOnStartup);
 		}
 
 	}

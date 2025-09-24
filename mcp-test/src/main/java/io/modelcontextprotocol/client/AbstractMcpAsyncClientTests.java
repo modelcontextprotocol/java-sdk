@@ -22,8 +22,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -53,6 +51,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
+
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 
 /**
  * Test suite for the {@link McpAsyncClient} that can be used with different
@@ -176,7 +176,12 @@ public abstract class AbstractMcpAsyncClientTests {
 				.consumeNextWith(result -> {
 					assertThat(result.tools()).isNotNull();
 					// Verify that the returned list is immutable
-					assertThatThrownBy(() -> result.tools().add(new Tool("test", "test", "{\"type\":\"object\"}")))
+					assertThatThrownBy(() -> result.tools()
+						.add(Tool.builder()
+							.name("test")
+							.title("test")
+							.inputSchema(JSON_MAPPER, "{\"type\":\"object\"}")
+							.build()))
 						.isInstanceOf(UnsupportedOperationException.class);
 				})
 				.verifyComplete();
