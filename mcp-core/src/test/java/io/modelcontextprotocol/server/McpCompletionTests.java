@@ -97,7 +97,7 @@ class McpCompletionTests {
 			return new CompleteResult(new CompleteResult.CompleteCompletion(List.of("test-completion"), 1, false));
 		};
 
-		ResourceReference resourceRef = new ResourceReference("ref/resource", "test://resource/{param}");
+		ResourceReference resourceRef = new ResourceReference(ResourceReference.TYPE, "test://resource/{param}");
 
 		var resource = Resource.builder()
 			.uri("test://resource/{param}")
@@ -152,7 +152,7 @@ class McpCompletionTests {
 			.prompts(new McpServerFeatures.SyncPromptSpecification(prompt,
 					(mcpSyncServerExchange, getPromptRequest) -> null))
 			.completions(new McpServerFeatures.SyncCompletionSpecification(
-					new PromptReference("ref/prompt", "test-prompt"), completionHandler))
+					new PromptReference(PromptReference.TYPE, "test-prompt"), completionHandler))
 			.build();
 
 		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
@@ -161,7 +161,7 @@ class McpCompletionTests {
 			assertThat(initResult).isNotNull();
 
 			// Test without context
-			CompleteRequest request = new CompleteRequest(new PromptReference("ref/prompt", "test-prompt"),
+			CompleteRequest request = new CompleteRequest(new PromptReference(PromptReference.TYPE, "test-prompt"),
 					new CompleteRequest.CompleteArgument("arg", "val"));
 
 			CompleteResult result = mcpClient.completeCompletion(request);
@@ -217,7 +217,7 @@ class McpCompletionTests {
 			.resources(new McpServerFeatures.SyncResourceSpecification(resource,
 					(exchange, req) -> new ReadResourceResult(List.of())))
 			.completions(new McpServerFeatures.SyncCompletionSpecification(
-					new ResourceReference("ref/resource", "db://{database}/{table}"), completionHandler))
+					new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"), completionHandler))
 			.build();
 
 		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
@@ -227,7 +227,7 @@ class McpCompletionTests {
 
 			// First, complete database
 			CompleteRequest dbRequest = new CompleteRequest(
-					new ResourceReference("ref/resource", "db://{database}/{table}"),
+					new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"),
 					new CompleteRequest.CompleteArgument("database", ""));
 
 			CompleteResult dbResult = mcpClient.completeCompletion(dbRequest);
@@ -235,7 +235,7 @@ class McpCompletionTests {
 
 			// Then complete table with database context
 			CompleteRequest tableRequest = new CompleteRequest(
-					new ResourceReference("ref/resource", "db://{database}/{table}"),
+					new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"),
 					new CompleteRequest.CompleteArgument("table", ""),
 					new CompleteRequest.CompleteContext(Map.of("database", "users_db")));
 
@@ -244,7 +244,7 @@ class McpCompletionTests {
 
 			// Different database gives different tables
 			CompleteRequest tableRequest2 = new CompleteRequest(
-					new ResourceReference("ref/resource", "db://{database}/{table}"),
+					new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"),
 					new CompleteRequest.CompleteArgument("table", ""),
 					new CompleteRequest.CompleteContext(Map.of("database", "products_db")));
 
@@ -294,7 +294,7 @@ class McpCompletionTests {
 			.resources(new McpServerFeatures.SyncResourceSpecification(resource,
 					(exchange, req) -> new ReadResourceResult(List.of())))
 			.completions(new McpServerFeatures.SyncCompletionSpecification(
-					new ResourceReference("ref/resource", "db://{database}/{table}"), completionHandler))
+					new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"), completionHandler))
 			.build();
 
 		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample" + "client", "0.0.0"))
@@ -304,7 +304,7 @@ class McpCompletionTests {
 
 			// Try to complete table without database context - should raise error
 			CompleteRequest requestWithoutContext = new CompleteRequest(
-					new ResourceReference("ref/resource", "db://{database}/{table}"),
+					new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"),
 					new CompleteRequest.CompleteArgument("table", ""));
 
 			assertThatExceptionOfType(McpError.class)
@@ -313,7 +313,7 @@ class McpCompletionTests {
 
 			// Now complete with proper context - should work normally
 			CompleteRequest requestWithContext = new CompleteRequest(
-					new ResourceReference("ref/resource", "db://{database}/{table}"),
+					new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"),
 					new CompleteRequest.CompleteArgument("table", ""),
 					new CompleteRequest.CompleteContext(Map.of("database", "test_db")));
 

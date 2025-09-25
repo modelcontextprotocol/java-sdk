@@ -298,7 +298,14 @@ public interface McpServer {
 		 */
 		final Map<String, McpServerFeatures.AsyncResourceSpecification> resources = new HashMap<>();
 
-		final List<ResourceTemplate> resourceTemplates = new ArrayList<>();
+		/**
+		 * The Model Context Protocol (MCP) provides a standardized way for servers to
+		 * expose resource templates to clients. Resource templates allow servers to
+		 * define parameterized URIs that clients can use to access dynamic resources.
+		 * Each resource template includes variables that clients can fill in to form
+		 * concrete resource URIs.
+		 */
+		final Map<String, McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates = new HashMap<>();
 
 		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
@@ -585,40 +592,37 @@ public interface McpServer {
 		}
 
 		/**
-		 * Sets the resource templates that define patterns for dynamic resource access.
-		 * Templates use URI patterns with placeholders that can be filled at runtime.
-		 *
-		 * <p>
-		 * Example usage: <pre>{@code
-		 * .resourceTemplates(
-		 *     new ResourceTemplate("file://{path}", "Access files by path"),
-		 *     new ResourceTemplate("db://{table}/{id}", "Access database records")
-		 * )
-		 * }</pre>
-		 * @param resourceTemplates List of resource templates. If null, clears existing
-		 * templates.
+		 * Registers multiple resource templates with their specifications using a List.
+		 * This method is useful when resource templates need to be added in bulk from a
+		 * collection.
+		 * @param resourceTemplatesSpec Map of template URI to specification. Must not be
+		 * null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
-		public AsyncSpecification<S> resourceTemplates(List<ResourceTemplate> resourceTemplates) {
-			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			this.resourceTemplates.addAll(resourceTemplates);
+		public AsyncSpecification<S> resourceTemplates(
+				Map<String, McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplatesSpec) {
+			Assert.notNull(resourceTemplatesSpec, "Resource templates must not be null");
+			this.resourceTemplates.putAll(resourceTemplatesSpec);
 			return this;
 		}
 
 		/**
-		 * Sets the resource templates using varargs for convenience. This is an
-		 * alternative to {@link #resourceTemplates(List)}.
-		 * @param resourceTemplates The resource templates to set.
+		 * Registers multiple resource templates with their specifications using a List.
+		 * This method is useful when resource templates need to be added in bulk from a
+		 * collection.
+		 * @param resourceTemplatesSpec Map of template URI to specification. Must not be
+		 * null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(List)
 		 */
-		public AsyncSpecification<S> resourceTemplates(ResourceTemplate... resourceTemplates) {
-			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			for (ResourceTemplate resourceTemplate : resourceTemplates) {
-				this.resourceTemplates.add(resourceTemplate);
+		public AsyncSpecification<S> resourceTemplates(
+				McpServerFeatures.AsyncResourceTemplateSpecification... resourceTemplatesSpec) {
+			Assert.notNull(resourceTemplatesSpec, "Resource templates must not be null");
+			for (McpServerFeatures.AsyncResourceTemplateSpecification resource : resourceTemplatesSpec) {
+				this.resourceTemplates.put(resource.resourceTemplate().uriTemplate(), resource);
 			}
 			return this;
 		}
@@ -887,7 +891,14 @@ public interface McpServer {
 		 */
 		final Map<String, McpServerFeatures.SyncResourceSpecification> resources = new HashMap<>();
 
-		final List<ResourceTemplate> resourceTemplates = new ArrayList<>();
+		/**
+		 * The Model Context Protocol (MCP) provides a standardized way for servers to
+		 * expose resource templates to clients. Resource templates allow servers to
+		 * define parameterized URIs that clients can use to access dynamic resources.
+		 * Each resource template includes variables that clients can fill in to form
+		 * concrete resource URIs.
+		 */
+		final Map<String, McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplates = new HashMap<>();
 
 		JsonSchemaValidator jsonSchemaValidator;
 
@@ -1179,23 +1190,18 @@ public interface McpServer {
 		/**
 		 * Sets the resource templates that define patterns for dynamic resource access.
 		 * Templates use URI patterns with placeholders that can be filled at runtime.
-		 *
-		 * <p>
-		 * Example usage: <pre>{@code
-		 * .resourceTemplates(
-		 *     new ResourceTemplate("file://{path}", "Access files by path"),
-		 *     new ResourceTemplate("db://{table}/{id}", "Access database records")
-		 * )
-		 * }</pre>
-		 * @param resourceTemplates List of resource templates. If null, clears existing
-		 * templates.
+		 * @param resourceTemplates List of resource template specifications. Must not be
+		 * null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
-		public SyncSpecification<S> resourceTemplates(List<ResourceTemplate> resourceTemplates) {
+		public SyncSpecification<S> resourceTemplates(
+				List<McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			this.resourceTemplates.addAll(resourceTemplates);
+			for (McpServerFeatures.SyncResourceTemplateSpecification resource : resourceTemplates) {
+				this.resourceTemplates.put(resource.resourceTemplate().uriTemplate(), resource);
+			}
 			return this;
 		}
 
@@ -1207,10 +1213,11 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if resourceTemplates is null
 		 * @see #resourceTemplates(List)
 		 */
-		public SyncSpecification<S> resourceTemplates(ResourceTemplate... resourceTemplates) {
+		public SyncSpecification<S> resourceTemplates(
+				McpServerFeatures.SyncResourceTemplateSpecification... resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			for (ResourceTemplate resourceTemplate : resourceTemplates) {
-				this.resourceTemplates.add(resourceTemplate);
+			for (McpServerFeatures.SyncResourceTemplateSpecification resourceTemplate : resourceTemplates) {
+				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
 			}
 			return this;
 		}
@@ -1428,7 +1435,14 @@ public interface McpServer {
 		 */
 		final Map<String, McpStatelessServerFeatures.AsyncResourceSpecification> resources = new HashMap<>();
 
-		final List<ResourceTemplate> resourceTemplates = new ArrayList<>();
+		/**
+		 * The Model Context Protocol (MCP) provides a standardized way for servers to
+		 * expose resource templates to clients. Resource templates allow servers to
+		 * define parameterized URIs that clients can use to access dynamic resources.
+		 * Each resource template includes variables that clients can fill in to form
+		 * concrete resource URIs.
+		 */
+		final Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates = new HashMap<>();
 
 		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
@@ -1684,23 +1698,16 @@ public interface McpServer {
 		/**
 		 * Sets the resource templates that define patterns for dynamic resource access.
 		 * Templates use URI patterns with placeholders that can be filled at runtime.
-		 *
-		 * <p>
-		 * Example usage: <pre>{@code
-		 * .resourceTemplates(
-		 *     new ResourceTemplate("file://{path}", "Access files by path"),
-		 *     new ResourceTemplate("db://{table}/{id}", "Access database records")
-		 * )
-		 * }</pre>
 		 * @param resourceTemplates List of resource templates. If null, clears existing
 		 * templates.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
-		public StatelessAsyncSpecification resourceTemplates(List<ResourceTemplate> resourceTemplates) {
+		public StatelessAsyncSpecification resourceTemplates(
+				Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplatesSpec) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			this.resourceTemplates.addAll(resourceTemplates);
+			this.resourceTemplates.putAll(resourceTemplates);
 			return this;
 		}
 
@@ -1712,10 +1719,11 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(List)
 		 */
-		public StatelessAsyncSpecification resourceTemplates(ResourceTemplate... resourceTemplates) {
+		public StatelessAsyncSpecification resourceTemplates(
+				McpStatelessServerFeatures.AsyncResourceTemplateSpecification... resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			for (ResourceTemplate resourceTemplate : resourceTemplates) {
-				this.resourceTemplates.add(resourceTemplate);
+			for (McpStatelessServerFeatures.AsyncResourceTemplateSpecification resourceTemplate : resourceTemplates) {
+				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
 			}
 			return this;
 		}
@@ -1888,7 +1896,14 @@ public interface McpServer {
 		 */
 		final Map<String, McpStatelessServerFeatures.SyncResourceSpecification> resources = new HashMap<>();
 
-		final List<ResourceTemplate> resourceTemplates = new ArrayList<>();
+		/**
+		 * The Model Context Protocol (MCP) provides a standardized way for servers to
+		 * expose resource templates to clients. Resource templates allow servers to
+		 * define parameterized URIs that clients can use to access dynamic resources.
+		 * Each resource template includes variables that clients can fill in to form
+		 * concrete resource URIs.
+		 */
+		final Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplates = new HashMap<>();
 
 		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
@@ -2144,23 +2159,16 @@ public interface McpServer {
 		/**
 		 * Sets the resource templates that define patterns for dynamic resource access.
 		 * Templates use URI patterns with placeholders that can be filled at runtime.
-		 *
-		 * <p>
-		 * Example usage: <pre>{@code
-		 * .resourceTemplates(
-		 *     new ResourceTemplate("file://{path}", "Access files by path"),
-		 *     new ResourceTemplate("db://{table}/{id}", "Access database records")
-		 * )
-		 * }</pre>
 		 * @param resourceTemplates List of resource templates. If null, clears existing
 		 * templates.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
-		public StatelessSyncSpecification resourceTemplates(List<ResourceTemplate> resourceTemplates) {
+		public StatelessSyncSpecification resourceTemplates(
+				Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplatesSpec) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			this.resourceTemplates.addAll(resourceTemplates);
+			this.resourceTemplates.putAll(resourceTemplates);
 			return this;
 		}
 
@@ -2172,10 +2180,11 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(List)
 		 */
-		public StatelessSyncSpecification resourceTemplates(ResourceTemplate... resourceTemplates) {
+		public StatelessSyncSpecification resourceTemplates(
+				McpStatelessServerFeatures.SyncResourceTemplateSpecification... resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			for (ResourceTemplate resourceTemplate : resourceTemplates) {
-				this.resourceTemplates.add(resourceTemplate);
+			for (McpStatelessServerFeatures.SyncResourceTemplateSpecification resourceTemplate : resourceTemplates) {
+				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
 			}
 			return this;
 		}

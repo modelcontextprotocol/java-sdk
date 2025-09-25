@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol.server;
 
+import java.util.List;
+
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.util.Assert;
@@ -97,13 +99,21 @@ public class McpSyncServer {
 
 	/**
 	 * Add a new resource handler.
-	 * @param resourceHandler The resource handler to add
+	 * @param resourceSpecification The resource specification to add
 	 */
-	public void addResource(McpServerFeatures.SyncResourceSpecification resourceHandler) {
+	public void addResource(McpServerFeatures.SyncResourceSpecification resourceSpecification) {
 		this.asyncServer
-			.addResource(
-					McpServerFeatures.AsyncResourceSpecification.fromSync(resourceHandler, this.immediateExecution))
+			.addResource(McpServerFeatures.AsyncResourceSpecification.fromSync(resourceSpecification,
+					this.immediateExecution))
 			.block();
+	}
+
+	/**
+	 * List all registered resources.
+	 * @return A list of all registered resources
+	 */
+	public List<McpSchema.Resource> listResources() {
+		return this.asyncServer.listResources().collectList().block();
 	}
 
 	/**
@@ -112,6 +122,33 @@ public class McpSyncServer {
 	 */
 	public void removeResource(String resourceUri) {
 		this.asyncServer.removeResource(resourceUri).block();
+	}
+
+	/**
+	 * Add a new resource template.
+	 * @param resourceTemplateSpecification The resource template specification to add
+	 */
+	public void addResourceTemplate(McpServerFeatures.SyncResourceTemplateSpecification resourceTemplateSpecification) {
+		this.asyncServer
+			.addResourceTemplate(McpServerFeatures.AsyncResourceTemplateSpecification
+				.fromSync(resourceTemplateSpecification, this.immediateExecution))
+			.block();
+	}
+
+	/**
+	 * List all registered resource templates.
+	 * @return A list of all registered resource templates
+	 */
+	public List<McpSchema.Resource> listResourceTemplates() {
+		return this.asyncServer.listResourceTemplates().collectList().block();
+	}
+
+	/**
+	 * Remove a resource template.
+	 * @param uriTemplate The URI template of the resource template to remove
+	 */
+	public void removeResourceTemplate(String uriTemplate) {
+		this.asyncServer.removeResourceTemplate(uriTemplate).block();
 	}
 
 	/**

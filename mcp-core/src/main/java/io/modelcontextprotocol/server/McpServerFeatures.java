@@ -41,7 +41,7 @@ public class McpServerFeatures {
 	 */
 	record Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 			List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
-			List<McpSchema.ResourceTemplate> resourceTemplates,
+			Map<String, McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
 			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
@@ -53,7 +53,7 @@ public class McpServerFeatures {
 		 * @param serverCapabilities The server capabilities
 		 * @param tools The list of tool specifications
 		 * @param resources The map of resource specifications
-		 * @param resourceTemplates The list of resource templates
+		 * @param resourceTemplates The map of resource templates
 		 * @param prompts The map of prompt specifications
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
@@ -61,7 +61,7 @@ public class McpServerFeatures {
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
-				List<McpSchema.ResourceTemplate> resourceTemplates,
+				Map<String, McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
 				Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
 				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
@@ -84,7 +84,7 @@ public class McpServerFeatures {
 
 			this.tools = (tools != null) ? tools : List.of();
 			this.resources = (resources != null) ? resources : Map.of();
-			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : List.of();
+			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : Map.of();
 			this.prompts = (prompts != null) ? prompts : Map.of();
 			this.completions = (completions != null) ? completions : Map.of();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : List.of();
@@ -112,6 +112,11 @@ public class McpServerFeatures {
 				resources.put(key, AsyncResourceSpecification.fromSync(resource, immediateExecution));
 			});
 
+			Map<String, AsyncResourceTemplateSpecification> resourceTemplates = new HashMap<>();
+			syncSpec.resourceTemplates().forEach((key, resource) -> {
+				resourceTemplates.put(key, AsyncResourceTemplateSpecification.fromSync(resource, immediateExecution));
+			});
+
 			Map<String, AsyncPromptSpecification> prompts = new HashMap<>();
 			syncSpec.prompts().forEach((key, prompt) -> {
 				prompts.put(key, AsyncPromptSpecification.fromSync(prompt, immediateExecution));
@@ -130,8 +135,8 @@ public class McpServerFeatures {
 					.subscribeOn(Schedulers.boundedElastic()));
 			}
 
-			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources,
-					syncSpec.resourceTemplates(), prompts, completions, rootChangeConsumers, syncSpec.instructions());
+			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources, resourceTemplates,
+					prompts, completions, rootChangeConsumers, syncSpec.instructions());
 		}
 	}
 
@@ -151,7 +156,7 @@ public class McpServerFeatures {
 	record Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 			List<McpServerFeatures.SyncToolSpecification> tools,
 			Map<String, McpServerFeatures.SyncResourceSpecification> resources,
-			List<McpSchema.ResourceTemplate> resourceTemplates,
+			Map<String, McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions,
 			List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers, String instructions) {
@@ -171,7 +176,7 @@ public class McpServerFeatures {
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpServerFeatures.SyncToolSpecification> tools,
 				Map<String, McpServerFeatures.SyncResourceSpecification> resources,
-				List<McpSchema.ResourceTemplate> resourceTemplates,
+				Map<String, McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
 				Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions,
 				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers,
@@ -194,7 +199,7 @@ public class McpServerFeatures {
 
 			this.tools = (tools != null) ? tools : new ArrayList<>();
 			this.resources = (resources != null) ? resources : new HashMap<>();
-			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : new ArrayList<>();
+			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : Map.of();
 			this.prompts = (prompts != null) ? prompts : new HashMap<>();
 			this.completions = (completions != null) ? completions : new HashMap<>();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : new ArrayList<>();
@@ -349,6 +354,47 @@ public class McpServerFeatures {
 				return null;
 			}
 			return new AsyncResourceSpecification(resource.resource(), (exchange, req) -> {
+				var resourceResult = Mono
+					.fromCallable(() -> resource.readHandler().apply(new McpSyncServerExchange(exchange), req));
+				return immediateExecution ? resourceResult : resourceResult.subscribeOn(Schedulers.boundedElastic());
+			});
+		}
+	}
+
+	/**
+	 * Specification of a resource template with its synchronous handler function.
+	 * Resource templates allow servers to expose parameterized resources using URI
+	 * templates: <a href=https://datatracker.ietf.org/doc/html/rfc6570> URI
+	 * templates.</a>. Arguments may be auto-completed through <a href=
+	 * "https://modelcontextprotocol.io/specification/2025-06-18/server/utilities/completion">the
+	 * completion API</a>.
+	 *
+	 * Templates support:
+	 * <ul>
+	 * <li>Parameterized resource definitions
+	 * <li>Dynamic content generation
+	 * <li>Consistent resource formatting
+	 * <li>Contextual data injection
+	 * </ul>
+	 *
+	 * @param resourceTemplate The resource template definition including name,
+	 * description, and parameter schema
+	 * @param readHandler The function that handles resource read requests. The function's
+	 * first argument is an {@link McpSyncServerExchange} upon which the server can
+	 * interact with the connected client. The second arguments is a
+	 * {@link McpSchema.ReadResourceRequest}. {@link McpSchema.ResourceTemplate}
+	 * {@link McpSchema.ReadResourceResult}
+	 */
+	public record AsyncResourceTemplateSpecification(McpSchema.ResourceTemplate resourceTemplate,
+			BiFunction<McpAsyncServerExchange, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
+
+		static AsyncResourceTemplateSpecification fromSync(SyncResourceTemplateSpecification resource,
+				boolean immediateExecution) {
+			// FIXME: This is temporary, proper validation should be implemented
+			if (resource == null) {
+				return null;
+			}
+			return new AsyncResourceTemplateSpecification(resource.resourceTemplate(), (exchange, req) -> {
 				var resourceResult = Mono
 					.fromCallable(() -> resource.readHandler().apply(new McpSyncServerExchange(exchange), req));
 				return immediateExecution ? resourceResult : resourceResult.subscribeOn(Schedulers.boundedElastic());
@@ -572,6 +618,34 @@ public class McpServerFeatures {
 	 * {@link io.modelcontextprotocol.spec.McpSchema.ReadResourceRequest}.
 	 */
 	public record SyncResourceSpecification(McpSchema.Resource resource,
+			BiFunction<McpSyncServerExchange, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
+	}
+
+	/**
+	 * Specification of a resource template with its synchronous handler function.
+	 * Resource templates allow servers to expose parameterized resources using URI
+	 * templates: <a href=https://datatracker.ietf.org/doc/html/rfc6570> URI
+	 * templates.</a>. Arguments may be auto-completed through <a href=
+	 * "https://modelcontextprotocol.io/specification/2025-06-18/server/utilities/completion">the
+	 * completion API</a>.
+	 *
+	 * Templates support:
+	 * <ul>
+	 * <li>Parameterized resource definitions
+	 * <li>Dynamic content generation
+	 * <li>Consistent resource formatting
+	 * <li>Contextual data injection
+	 * </ul>
+	 *
+	 * @param resourceTemplate The resource template definition including name,
+	 * description, and parameter schema
+	 * @param readHandler The function that handles resource read requests. The function's
+	 * first argument is an {@link McpSyncServerExchange} upon which the server can
+	 * interact with the connected client. The second arguments is a
+	 * {@link McpSchema.ReadResourceRequest}. {@link McpSchema.ResourceTemplate}
+	 * {@link McpSchema.ReadResourceResult}
+	 */
+	public record SyncResourceTemplateSpecification(McpSchema.ResourceTemplate resourceTemplate,
 			BiFunction<McpSyncServerExchange, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
 	}
 

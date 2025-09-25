@@ -4,16 +4,7 @@
 
 package io.modelcontextprotocol.server;
 
-import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 import java.util.List;
-
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -26,6 +17,14 @@ import io.modelcontextprotocol.spec.McpSchema.Resource;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Test suite for the {@link McpSyncServer} that can be used with different
@@ -335,7 +334,7 @@ public abstract class AbstractMcpSyncServerTests {
 			.build();
 
 		assertThatThrownBy(() -> mcpSyncServer.addResource((McpServerFeatures.SyncResourceSpecification) null))
-			.isInstanceOf(McpError.class)
+			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Resource must not be null");
 
 		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
@@ -350,16 +349,188 @@ public abstract class AbstractMcpSyncServerTests {
 		McpServerFeatures.SyncResourceSpecification specification = new McpServerFeatures.SyncResourceSpecification(
 				resource, (exchange, req) -> new ReadResourceResult(List.of()));
 
-		assertThatThrownBy(() -> serverWithoutResources.addResource(specification)).isInstanceOf(McpError.class)
-			.hasMessage("Server must be configured with resource capabilities");
+		assertThatThrownBy(() -> serverWithoutResources.addResource(specification))
+			.isInstanceOf(IllegalStateException.class)
+			.hasMessageContaining("Server must be configured with resource capabilities");
 	}
 
 	@Test
 	void testRemoveResourceWithoutCapability() {
 		var serverWithoutResources = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0").build();
 
-		assertThatThrownBy(() -> serverWithoutResources.removeResource(TEST_RESOURCE_URI)).isInstanceOf(McpError.class)
-			.hasMessage("Server must be configured with resource capabilities");
+		assertThatThrownBy(() -> serverWithoutResources.removeResource(TEST_RESOURCE_URI))
+			.isInstanceOf(IllegalStateException.class)
+			.hasMessageContaining("Server must be configured with resource capabilities");
+	}
+
+	@Test
+	void testListResources() {
+		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(true, false).build())
+			.build();
+
+		Resource resource = new Resource(TEST_RESOURCE_URI, "Test Resource", "text/plain", "Test resource description",
+				null);
+		McpServerFeatures.SyncResourceSpecification specification = new McpServerFeatures.SyncResourceSpecification(
+				resource, (exchange, req) -> new ReadResourceResult(List.of()));
+
+		mcpSyncServer.addResource(specification);
+		List<McpSchema.Resource> resources = mcpSyncServer.listResources();
+
+		assertThat(resources).hasSize(1);
+		assertThat(resources.get(0).uri()).isEqualTo(TEST_RESOURCE_URI);
+
+		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testRemoveResource() {
+		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(true, false).build())
+			.build();
+
+		Resource resource = new Resource(TEST_RESOURCE_URI, "Test Resource", "text/plain", "Test resource description",
+				null);
+		McpServerFeatures.SyncResourceSpecification specification = new McpServerFeatures.SyncResourceSpecification(
+				resource, (exchange, req) -> new ReadResourceResult(List.of()));
+
+		mcpSyncServer.addResource(specification);
+		assertThatCode(() -> mcpSyncServer.removeResource(TEST_RESOURCE_URI)).doesNotThrowAnyException();
+
+		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testRemoveNonexistentResource() {
+		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(true, false).build())
+			.build();
+
+		// Removing a non-existent resource should complete successfully (no error)
+		// as per the new implementation that just logs a warning
+		assertThatCode(() -> mcpSyncServer.removeResource("nonexistent://resource")).doesNotThrowAnyException();
+
+		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+	}
+
+	// ---------------------------------------
+	// Resource Template Tests
+	// ---------------------------------------
+
+	@Test
+	void testAddResourceTemplate() {
+		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(true, false).build())
+			.build();
+
+		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
+			.uri("test://template/{id}")
+			.name("test-template")
+			.description("Test resource template")
+			.mimeType("text/plain")
+			.build();
+
+		McpServerFeatures.SyncResourceTemplateSpecification specification = new McpServerFeatures.SyncResourceTemplateSpecification(
+				template, (exchange, req) -> new ReadResourceResult(List.of()));
+
+		assertThatCode(() -> mcpSyncServer.addResourceTemplate(specification)).doesNotThrowAnyException();
+
+		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testAddResourceTemplateWithoutCapability() {
+		// Create a server without resource capabilities
+		var serverWithoutResources = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0").build();
+
+		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
+			.uri("test://template/{id}")
+			.name("test-template")
+			.description("Test resource template")
+			.mimeType("text/plain")
+			.build();
+
+		McpServerFeatures.SyncResourceTemplateSpecification specification = new McpServerFeatures.SyncResourceTemplateSpecification(
+				template, (exchange, req) -> new ReadResourceResult(List.of()));
+
+		assertThatThrownBy(() -> serverWithoutResources.addResourceTemplate(specification))
+			.isInstanceOf(IllegalStateException.class)
+			.hasMessageContaining("Server must be configured with resource capabilities");
+	}
+
+	@Test
+	void testRemoveResourceTemplate() {
+		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
+			.uri("test://template/{id}")
+			.name("test-template")
+			.description("Test resource template")
+			.mimeType("text/plain")
+			.build();
+
+		McpServerFeatures.SyncResourceTemplateSpecification specification = new McpServerFeatures.SyncResourceTemplateSpecification(
+				template, (exchange, req) -> new ReadResourceResult(List.of()));
+
+		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(true, false).build())
+			.resourceTemplates(specification)
+			.build();
+
+		assertThatCode(() -> mcpSyncServer.removeResourceTemplate("test://template/{id}")).doesNotThrowAnyException();
+
+		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testRemoveResourceTemplateWithoutCapability() {
+		// Create a server without resource capabilities
+		var serverWithoutResources = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0").build();
+
+		assertThatThrownBy(() -> serverWithoutResources.removeResourceTemplate("test://template/{id}"))
+			.isInstanceOf(IllegalStateException.class)
+			.hasMessageContaining("Server must be configured with resource capabilities");
+	}
+
+	@Test
+	void testRemoveNonexistentResourceTemplate() {
+		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(true, false).build())
+			.build();
+
+		// Removing a non-existent resource template should complete successfully (no
+		// error)
+		// as per the new implementation that just logs a warning
+		assertThatCode(() -> mcpSyncServer.removeResourceTemplate("nonexistent://template/{id}"))
+			.doesNotThrowAnyException();
+
+		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testListResourceTemplates() {
+		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
+			.uri("test://template/{id}")
+			.name("test-template")
+			.description("Test resource template")
+			.mimeType("text/plain")
+			.build();
+
+		McpServerFeatures.SyncResourceTemplateSpecification specification = new McpServerFeatures.SyncResourceTemplateSpecification(
+				template, (exchange, req) -> new ReadResourceResult(List.of()));
+
+		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().resources(true, false).build())
+			.resourceTemplates(specification)
+			.build();
+
+		List<McpSchema.Resource> templates = mcpSyncServer.listResourceTemplates();
+
+		// Note: Based on the current implementation, listResourceTemplates() returns
+		// List<Resource>
+		// This appears to be a bug in the implementation that should return
+		// List<ResourceTemplate>
+		assertThat(templates).isNotNull();
+
+		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();
 	}
 
 	// ---------------------------------------

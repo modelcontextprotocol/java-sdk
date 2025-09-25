@@ -20,7 +20,6 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
-
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -150,11 +149,24 @@ public final class McpSchema {
 
 	}
 
-	public sealed interface Request
+	/**
+	 * Base interface for MCP objects that include optional metadata in the `_meta` field.
+	 */
+	public interface Meta {
+
+		/**
+		 * @see <a href=
+		 * "https://modelcontextprotocol.io/specification/2025-06-18/basic/index#meta">Specification</a>
+		 * for notes on _meta usage
+		 * @return additional metadata related to this resource.
+		 */
+		Map<String, Object> meta();
+
+	}
+
+	public sealed interface Request extends Meta
 			permits InitializeRequest, CallToolRequest, CreateMessageRequest, ElicitRequest, CompleteRequest,
 			GetPromptRequest, ReadResourceRequest, SubscribeRequest, UnsubscribeRequest, PaginatedRequest {
-
-		Map<String, Object> meta();
 
 		default String progressToken() {
 			if (meta() != null && meta().containsKey("progressToken")) {
@@ -165,18 +177,14 @@ public final class McpSchema {
 
 	}
 
-	public sealed interface Result permits InitializeResult, ListResourcesResult, ListResourceTemplatesResult,
-			ReadResourceResult, ListPromptsResult, GetPromptResult, ListToolsResult, CallToolResult,
-			CreateMessageResult, ElicitResult, CompleteResult, ListRootsResult {
-
-		Map<String, Object> meta();
+	public sealed interface Result extends Meta permits InitializeResult, ListResourcesResult,
+			ListResourceTemplatesResult, ReadResourceResult, ListPromptsResult, GetPromptResult, ListToolsResult,
+			CallToolResult, CreateMessageResult, ElicitResult, CompleteResult, ListRootsResult {
 
 	}
 
-	public sealed interface Notification
+	public sealed interface Notification extends Meta
 			permits ProgressNotification, LoggingMessageNotification, ResourcesUpdatedNotification {
-
-		Map<String, Object> meta();
 
 	}
 
@@ -609,7 +617,7 @@ public final class McpSchema {
 	public record Implementation( // @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("title") String title,
-		@JsonProperty("version") String version) implements BaseMetadata { // @formatter:on			
+		@JsonProperty("version") String version) implements Identifier { // @formatter:on			
 
 		public Implementation(String name, String version) {
 			this(name, null, version);
@@ -668,7 +676,9 @@ public final class McpSchema {
 	 * interface is implemented by both {@link Resource} and {@link ResourceLink} to
 	 * provide a consistent way to access resource metadata.
 	 */
-	public interface ResourceContent extends BaseMetadata {
+	public interface ResourceContent extends Identifier, Annotated, Meta {
+
+		// name & title from Identifier
 
 		String uri();
 
@@ -678,15 +688,15 @@ public final class McpSchema {
 
 		Long size();
 
-		Annotations annotations();
+		// annotations from Annotated
+		// meta from Meta
 
 	}
 
 	/**
-	 * Base interface for metadata with name (identifier) and title (display name)
-	 * properties.
+	 * Base interface with name (identifier) and title (display name) properties.
 	 */
-	public interface BaseMetadata {
+	public interface Identifier {
 
 		/**
 		 * Intended for programmatic or logical use, but used as a display name in past
@@ -732,7 +742,7 @@ public final class McpSchema {
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("size") Long size,
 		@JsonProperty("annotations") Annotations annotations,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, ResourceContent { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements ResourceContent { // @formatter:on
 
 		/**
 		 * @deprecated Only exists for backwards-compatibility purposes. Use
@@ -862,7 +872,7 @@ public final class McpSchema {
 		@JsonProperty("description") String description,
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("annotations") Annotations annotations,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, BaseMetadata { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Identifier, Meta { // @formatter:on
 
 		public ResourceTemplate(String uriTemplate, String name, String title, String description, String mimeType,
 				Annotations annotations) {
@@ -872,6 +882,70 @@ public final class McpSchema {
 		public ResourceTemplate(String uriTemplate, String name, String description, String mimeType,
 				Annotations annotations) {
 			this(uriTemplate, name, null, description, mimeType, annotations);
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+
+			private String uriTemplate;
+
+			private String name;
+
+			private String title;
+
+			private String description;
+
+			private String mimeType;
+
+			private Annotations annotations;
+
+			private Map<String, Object> meta;
+
+			public Builder uri(String uri) {
+				this.uriTemplate = uri;
+				return this;
+			}
+
+			public Builder name(String name) {
+				this.name = name;
+				return this;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder mimeType(String mimeType) {
+				this.mimeType = mimeType;
+				return this;
+			}
+
+			public Builder annotations(Annotations annotations) {
+				this.annotations = annotations;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public ResourceTemplate build() {
+				Assert.hasText(uriTemplate, "uri must not be empty");
+				Assert.hasText(name, "name must not be empty");
+
+				return new ResourceTemplate(uriTemplate, name, title, description, mimeType, annotations, meta);
+			}
+
 		}
 	}
 
@@ -993,7 +1067,7 @@ public final class McpSchema {
 	@JsonTypeInfo(use = JsonTypeInfo.Id.DEDUCTION, include = As.PROPERTY)
 	@JsonSubTypes({ @JsonSubTypes.Type(value = TextResourceContents.class, name = "text"),
 			@JsonSubTypes.Type(value = BlobResourceContents.class, name = "blob") })
-	public sealed interface ResourceContents permits TextResourceContents, BlobResourceContents {
+	public sealed interface ResourceContents extends Meta permits TextResourceContents, BlobResourceContents {
 
 		/**
 		 * The URI of this resource.
@@ -1006,14 +1080,6 @@ public final class McpSchema {
 		 * @return the MIME type of this resource.
 		 */
 		String mimeType();
-
-		/**
-		 * @see <a href=
-		 * "https://modelcontextprotocol.io/specification/2025-06-18/basic/index#meta">Specification</a>
-		 * for notes on _meta usage
-		 * @return additional metadata related to this resource.
-		 */
-		Map<String, Object> meta();
 
 	}
 
@@ -1081,7 +1147,7 @@ public final class McpSchema {
 		@JsonProperty("title") String title,
 		@JsonProperty("description") String description,
 		@JsonProperty("arguments") List<PromptArgument> arguments,
-		@JsonProperty("_meta") Map<String, Object> meta) implements BaseMetadata { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements Identifier { // @formatter:on
 
 		public Prompt(String name, String description, List<PromptArgument> arguments) {
 			this(name, null, description, arguments != null ? arguments : new ArrayList<>());
@@ -1106,7 +1172,7 @@ public final class McpSchema {
 		@JsonProperty("name") String name,
 		@JsonProperty("title") String title,
 		@JsonProperty("description") String description,
-		@JsonProperty("required") Boolean required) implements BaseMetadata { // @formatter:on
+		@JsonProperty("required") Boolean required) implements Identifier { // @formatter:on
 
 		public PromptArgument(String name, String description, Boolean required) {
 			this(name, null, description, required);
@@ -2306,14 +2372,16 @@ public final class McpSchema {
 	public record PromptReference( // @formatter:off
 		@JsonProperty("type") String type,
 		@JsonProperty("name") String name,
-		@JsonProperty("title") String title ) implements McpSchema.CompleteReference, BaseMetadata { // @formatter:on
+		@JsonProperty("title") String title ) implements McpSchema.CompleteReference, Identifier { // @formatter:on
+
+		public static final String TYPE = "ref/prompt";
 
 		public PromptReference(String type, String name) {
 			this(type, name, null);
 		}
 
 		public PromptReference(String name) {
-			this("ref/prompt", name, null);
+			this(TYPE, name, null);
 		}
 
 		@Override
@@ -2350,8 +2418,10 @@ public final class McpSchema {
 		@JsonProperty("type") String type,
 		@JsonProperty("uri") String uri) implements McpSchema.CompleteReference { // @formatter:on
 
+		public static final String TYPE = "ref/resource";
+
 		public ResourceReference(String uri) {
-			this("ref/resource", uri);
+			this(TYPE, uri);
 		}
 
 		@Override
@@ -2414,8 +2484,9 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record CompleteResult(@JsonProperty("completion") CompleteCompletion completion,
-			@JsonProperty("_meta") Map<String, Object> meta) implements Result {
+	public record CompleteResult(// @formatter:off
+			@JsonProperty("completion") CompleteCompletion completion,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
 
 		// backwards compatibility constructor
 		public CompleteResult(CompleteCompletion completion) {
@@ -2447,9 +2518,8 @@ public final class McpSchema {
 			@JsonSubTypes.Type(value = AudioContent.class, name = "audio"),
 			@JsonSubTypes.Type(value = EmbeddedResource.class, name = "resource"),
 			@JsonSubTypes.Type(value = ResourceLink.class, name = "resource_link") })
-	public sealed interface Content permits TextContent, ImageContent, AudioContent, EmbeddedResource, ResourceLink {
-
-		Map<String, Object> meta();
+	public sealed interface Content extends Meta
+			permits TextContent, ImageContent, AudioContent, EmbeddedResource, ResourceLink {
 
 		default String type() {
 			if (this instanceof TextContent) {
@@ -2674,29 +2744,7 @@ public final class McpSchema {
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("size") Long size,
 		@JsonProperty("annotations") Annotations annotations,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Content, ResourceContent { // @formatter:on
-
-		/**
-		 * @deprecated Only exists for backwards-compatibility purposes. Use
-		 * {@link ResourceLink#ResourceLink(String, String, String, String, String, Long, Annotations)}
-		 * instead.
-		 */
-		@Deprecated
-		public ResourceLink(String name, String title, String uri, String description, String mimeType, Long size,
-				Annotations annotations) {
-			this(name, title, uri, description, mimeType, size, annotations, null);
-		}
-
-		/**
-		 * @deprecated Only exists for backwards-compatibility purposes. Use
-		 * {@link ResourceLink#ResourceLink(String, String, String, String, String, Long, Annotations)}
-		 * instead.
-		 */
-		@Deprecated
-		public ResourceLink(String name, String uri, String description, String mimeType, Long size,
-				Annotations annotations) {
-			this(name, null, uri, description, mimeType, size, annotations);
-		}
+		@JsonProperty("_meta") Map<String, Object> meta) implements Content, ResourceContent { // @formatter:on
 
 		public static Builder builder() {
 			return new Builder();
