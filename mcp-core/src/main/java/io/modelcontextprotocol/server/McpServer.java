@@ -595,16 +595,18 @@ public interface McpServer {
 		 * Registers multiple resource templates with their specifications using a List.
 		 * This method is useful when resource templates need to be added in bulk from a
 		 * collection.
-		 * @param resourceTemplatesSpec Map of template URI to specification. Must not be
+		 * @param resourceTemplates Map of template URI to specification. Must not be
 		 * null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
 		public AsyncSpecification<S> resourceTemplates(
-				Map<String, McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplatesSpec) {
-			Assert.notNull(resourceTemplatesSpec, "Resource templates must not be null");
-			this.resourceTemplates.putAll(resourceTemplatesSpec);
+				List<McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates) {
+			Assert.notNull(resourceTemplates, "Resource templates must not be null");
+			for (var resourceTemplate : resourceTemplates) {
+				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
+			}
 			return this;
 		}
 
@@ -612,16 +614,16 @@ public interface McpServer {
 		 * Registers multiple resource templates with their specifications using a List.
 		 * This method is useful when resource templates need to be added in bulk from a
 		 * collection.
-		 * @param resourceTemplatesSpec Map of template URI to specification. Must not be
+		 * @param resourceTemplates List of template URI to specification. Must not be
 		 * null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(List)
 		 */
 		public AsyncSpecification<S> resourceTemplates(
-				McpServerFeatures.AsyncResourceTemplateSpecification... resourceTemplatesSpec) {
-			Assert.notNull(resourceTemplatesSpec, "Resource templates must not be null");
-			for (McpServerFeatures.AsyncResourceTemplateSpecification resource : resourceTemplatesSpec) {
+				McpServerFeatures.AsyncResourceTemplateSpecification... resourceTemplates) {
+			Assert.notNull(resourceTemplates, "Resource templates must not be null");
+			for (McpServerFeatures.AsyncResourceTemplateSpecification resource : resourceTemplates) {
 				this.resourceTemplates.put(resource.resourceTemplate().uriTemplate(), resource);
 			}
 			return this;
@@ -1705,7 +1707,7 @@ public interface McpServer {
 		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
 		public StatelessAsyncSpecification resourceTemplates(
-				Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplatesSpec) {
+				Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
 			this.resourceTemplates.putAll(resourceTemplates);
 			return this;
@@ -2159,16 +2161,18 @@ public interface McpServer {
 		/**
 		 * Sets the resource templates that define patterns for dynamic resource access.
 		 * Templates use URI patterns with placeholders that can be filled at runtime.
-		 * @param resourceTemplates List of resource templates. If null, clears existing
-		 * templates.
+		 * @param resourceTemplatesSpec List of resource templates. If null, clears
+		 * existing templates.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
 		public StatelessSyncSpecification resourceTemplates(
-				Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplatesSpec) {
-			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			this.resourceTemplates.putAll(resourceTemplates);
+				List<McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplatesSpec) {
+			Assert.notNull(resourceTemplatesSpec, "Resource templates must not be null");
+			for (var resourceTemplate : resourceTemplatesSpec) {
+				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
+			}
 			return this;
 		}
 
