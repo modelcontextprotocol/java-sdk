@@ -1707,9 +1707,11 @@ public interface McpServer {
 		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
 		public StatelessAsyncSpecification resourceTemplates(
-				Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates) {
+				List<McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			this.resourceTemplates.putAll(resourceTemplates);
+			for (var resourceTemplate : resourceTemplates) {
+				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
+			}
 			return this;
 		}
 
