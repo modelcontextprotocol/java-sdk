@@ -139,7 +139,7 @@ public class McpSyncServer {
 	 * List all registered resource templates.
 	 * @return A list of all registered resource templates
 	 */
-	public List<McpSchema.Resource> listResourceTemplates() {
+	public List<McpSchema.ResourceTemplate> listResourceTemplates() {
 		return this.asyncServer.listResourceTemplates().collectList().block();
 	}
 

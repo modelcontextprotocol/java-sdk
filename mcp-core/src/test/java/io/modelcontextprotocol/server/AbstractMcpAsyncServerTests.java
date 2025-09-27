@@ -437,7 +437,7 @@ public abstract class AbstractMcpAsyncServerTests {
 			.build();
 
 		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
-			.uri("test://template/{id}")
+			.uriTemplate("test://template/{id}")
 			.name("test-template")
 			.description("Test resource template")
 			.mimeType("text/plain")
@@ -457,7 +457,7 @@ public abstract class AbstractMcpAsyncServerTests {
 		McpAsyncServer serverWithoutResources = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
 
 		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
-			.uri("test://template/{id}")
+			.uriTemplate("test://template/{id}")
 			.name("test-template")
 			.description("Test resource template")
 			.mimeType("text/plain")
@@ -475,7 +475,7 @@ public abstract class AbstractMcpAsyncServerTests {
 	@Test
 	void testRemoveResourceTemplate() {
 		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
-			.uri("test://template/{id}")
+			.uriTemplate("test://template/{id}")
 			.name("test-template")
 			.description("Test resource template")
 			.mimeType("text/plain")
@@ -523,7 +523,7 @@ public abstract class AbstractMcpAsyncServerTests {
 	@Test
 	void testListResourceTemplates() {
 		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
-			.uri("test://template/{id}")
+			.uriTemplate("test://template/{id}")
 			.name("test-template")
 			.description("Test resource template")
 			.mimeType("text/plain")

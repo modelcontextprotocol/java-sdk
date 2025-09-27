@@ -633,8 +633,9 @@ public class McpAsyncServer {
 	 * List all registered resource templates.
 	 * @return A Flux stream of all registered resource templates
 	 */
-	public Flux<McpSchema.Resource> listResourceTemplates() {
-		return Flux.fromIterable(this.resources.values()).map(McpServerFeatures.AsyncResourceSpecification::resource);
+	public Flux<McpSchema.ResourceTemplate> listResourceTemplates() {
+		return Flux.fromIterable(this.resourceTemplates.values())
+			.map(McpServerFeatures.AsyncResourceTemplateSpecification::resourceTemplate);
 	}
 
 	/**
@@ -683,7 +684,6 @@ public class McpAsyncServer {
 			var resourceList = this.resources.values()
 				.stream()
 				.map(McpServerFeatures.AsyncResourceSpecification::resource)
-				// .filter(resource -> !resource.uri().contains("{"))
 				.toList();
 			return Mono.just(new McpSchema.ListResourcesResult(resourceList, null));
 		};

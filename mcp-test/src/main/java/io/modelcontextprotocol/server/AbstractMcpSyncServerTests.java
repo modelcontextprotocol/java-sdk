@@ -423,7 +423,7 @@ public abstract class AbstractMcpSyncServerTests {
 			.build();
 
 		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
-			.uri("test://template/{id}")
+			.uriTemplate("test://template/{id}")
 			.name("test-template")
 			.description("Test resource template")
 			.mimeType("text/plain")
@@ -443,7 +443,7 @@ public abstract class AbstractMcpSyncServerTests {
 		var serverWithoutResources = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0").build();
 
 		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
-			.uri("test://template/{id}")
+			.uriTemplate("test://template/{id}")
 			.name("test-template")
 			.description("Test resource template")
 			.mimeType("text/plain")
@@ -460,7 +460,7 @@ public abstract class AbstractMcpSyncServerTests {
 	@Test
 	void testRemoveResourceTemplate() {
 		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
-			.uri("test://template/{id}")
+			.uriTemplate("test://template/{id}")
 			.name("test-template")
 			.description("Test resource template")
 			.mimeType("text/plain")
@@ -507,7 +507,7 @@ public abstract class AbstractMcpSyncServerTests {
 	@Test
 	void testListResourceTemplates() {
 		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
-			.uri("test://template/{id}")
+			.uriTemplate("test://template/{id}")
 			.name("test-template")
 			.description("Test resource template")
 			.mimeType("text/plain")
@@ -521,12 +521,8 @@ public abstract class AbstractMcpSyncServerTests {
 			.resourceTemplates(specification)
 			.build();
 
-		List<McpSchema.Resource> templates = mcpSyncServer.listResourceTemplates();
+		List<McpSchema.ResourceTemplate> templates = mcpSyncServer.listResourceTemplates();
 
-		// Note: Based on the current implementation, listResourceTemplates() returns
-		// List<Resource>
-		// This appears to be a bug in the implementation that should return
-		// List<ResourceTemplate>
 		assertThat(templates).isNotNull();
 
 		assertThatCode(() -> mcpSyncServer.closeGracefully()).doesNotThrowAnyException();

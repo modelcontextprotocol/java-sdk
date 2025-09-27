@@ -63,7 +63,7 @@ public class ResourceTemplateManagementTests {
 			.build();
 
 		ResourceTemplate template = ResourceTemplate.builder()
-			.uri(TEST_TEMPLATE_URI)
+			.uriTemplate(TEST_TEMPLATE_URI)
 			.name(TEST_TEMPLATE_NAME)
 			.description("Test resource template")
 			.mimeType("text/plain")
@@ -83,7 +83,7 @@ public class ResourceTemplateManagementTests {
 			.build();
 
 		ResourceTemplate template = ResourceTemplate.builder()
-			.uri(TEST_TEMPLATE_URI)
+			.uriTemplate(TEST_TEMPLATE_URI)
 			.name(TEST_TEMPLATE_NAME)
 			.description("Test resource template")
 			.mimeType("text/plain")
@@ -104,7 +104,7 @@ public class ResourceTemplateManagementTests {
 	@Test
 	void testRemoveResourceTemplate() {
 		ResourceTemplate template = ResourceTemplate.builder()
-			.uri(TEST_TEMPLATE_URI)
+			.uriTemplate(TEST_TEMPLATE_URI)
 			.name(TEST_TEMPLATE_NAME)
 			.description("Test resource template")
 			.mimeType("text/plain")
@@ -155,14 +155,14 @@ public class ResourceTemplateManagementTests {
 	@Test
 	void testReplaceExistingResourceTemplate() {
 		ResourceTemplate originalTemplate = ResourceTemplate.builder()
-			.uri(TEST_TEMPLATE_URI)
+			.uriTemplate(TEST_TEMPLATE_URI)
 			.name(TEST_TEMPLATE_NAME)
 			.description("Original template")
 			.mimeType("text/plain")
 			.build();
 
 		ResourceTemplate updatedTemplate = ResourceTemplate.builder()
-			.uri(TEST_TEMPLATE_URI)
+			.uriTemplate(TEST_TEMPLATE_URI)
 			.name(TEST_TEMPLATE_NAME)
 			.description("Updated template")
 			.mimeType("application/json")
@@ -191,7 +191,7 @@ public class ResourceTemplateManagementTests {
 	@Test
 	void testSyncAddResourceTemplate() {
 		ResourceTemplate template = ResourceTemplate.builder()
-			.uri(TEST_TEMPLATE_URI)
+			.uriTemplate(TEST_TEMPLATE_URI)
 			.name(TEST_TEMPLATE_NAME)
 			.description("Test resource template")
 			.mimeType("text/plain")
@@ -213,7 +213,7 @@ public class ResourceTemplateManagementTests {
 	@Test
 	void testSyncRemoveResourceTemplate() {
 		ResourceTemplate template = ResourceTemplate.builder()
-			.uri(TEST_TEMPLATE_URI)
+			.uriTemplate(TEST_TEMPLATE_URI)
 			.name(TEST_TEMPLATE_NAME)
 			.description("Test resource template")
 			.mimeType("text/plain")
@@ -240,14 +240,14 @@ public class ResourceTemplateManagementTests {
 	@Test
 	void testResourceTemplateMapBasedStorage() {
 		ResourceTemplate template1 = ResourceTemplate.builder()
-			.uri("test://template1/{id}")
+			.uriTemplate("test://template1/{id}")
 			.name("template1")
 			.description("First template")
 			.mimeType("text/plain")
 			.build();
 
 		ResourceTemplate template2 = ResourceTemplate.builder()
-			.uri("test://template2/{id}")
+			.uriTemplate("test://template2/{id}")
 			.name("template2")
 			.description("Second template")
 			.mimeType("application/json")
@@ -275,7 +275,7 @@ public class ResourceTemplateManagementTests {
 	void testResourceTemplateBuilderWithMap() {
 		// Test that the new Map-based builder methods work correctly
 		ResourceTemplate template = ResourceTemplate.builder()
-			.uri(TEST_TEMPLATE_URI)
+			.uriTemplate(TEST_TEMPLATE_URI)
 			.name(TEST_TEMPLATE_NAME)
 			.description("Test resource template")
 			.mimeType("text/plain")

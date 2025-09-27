@@ -904,7 +904,7 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
-			public Builder uri(String uri) {
+			public Builder uriTemplate(String uri) {
 				this.uriTemplate = uri;
 				return this;
 			}
