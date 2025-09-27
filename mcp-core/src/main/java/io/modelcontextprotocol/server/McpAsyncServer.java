@@ -322,25 +322,24 @@ public class McpAsyncServer {
 	 */
 	public Mono<Void> addTool(McpServerFeatures.AsyncToolSpecification toolSpecification) {
 		if (toolSpecification == null) {
-			return Mono.error(new McpError("Tool specification must not be null"));
+			return Mono.error(new IllegalArgumentException("Tool specification must not be null"));
 		}
 		if (toolSpecification.tool() == null) {
-			return Mono.error(new McpError("Tool must not be null"));
+			return Mono.error(new IllegalArgumentException("Tool must not be null"));
 		}
 		if (toolSpecification.call() == null && toolSpecification.callHandler() == null) {
-			return Mono.error(new McpError("Tool call handler must not be null"));
+			return Mono.error(new IllegalArgumentException("Tool call handler must not be null"));
 		}
 		if (this.serverCapabilities.tools() == null) {
-			return Mono.error(new McpError("Server must be configured with tool capabilities"));
+			return Mono.error(new IllegalStateException("Server must be configured with tool capabilities"));
 		}
 
 		var wrappedToolSpecification = withStructuredOutputHandling(this.jsonSchemaValidator, toolSpecification);
 
 		return Mono.defer(() -> {
-			// Check for duplicate tool names
-			if (this.tools.stream().anyMatch(th -> th.tool().name().equals(wrappedToolSpecification.tool().name()))) {
-				return Mono.error(
-						new McpError("Tool with name '" + wrappedToolSpecification.tool().name() + "' already exists"));
+			// Remove tools with duplicate tool names first
+			if (this.tools.removeIf(th -> th.tool().name().equals(wrappedToolSpecification.tool().name()))) {
+				logger.warn("Replace existing Tool with name '{}'", wrappedToolSpecification.tool().name());
 			}
 
 			this.tools.add(wrappedToolSpecification);
@@ -465,29 +464,39 @@ public class McpAsyncServer {
 	}
 
 	/**
+	 * List all registered tools.
+	 * @return A Flux stream of all registered tools
+	 */
+	public Flux<Tool> listTools() {
+		return Flux.fromIterable(this.tools).map(McpServerFeatures.AsyncToolSpecification::tool);
+	}
+
+	/**
 	 * Remove a tool handler at runtime.
 	 * @param toolName The name of the tool handler to remove
 	 * @return Mono that completes when clients have been notified of the change
 	 */
 	public Mono<Void> removeTool(String toolName) {
 		if (toolName == null) {
-			return Mono.error(new McpError("Tool name must not be null"));
+			return Mono.error(new IllegalArgumentException("Tool name must not be null"));
 		}
 		if (this.serverCapabilities.tools() == null) {
-			return Mono.error(new McpError("Server must be configured with tool capabilities"));
+			return Mono.error(new IllegalStateException("Server must be configured with tool capabilities"));
 		}
 
 		return Mono.defer(() -> {
-			boolean removed = this.tools
-				.removeIf(toolSpecification -> toolSpecification.tool().name().equals(toolName));
-			if (removed) {
+			if (this.tools.removeIf(toolSpecification -> toolSpecification.tool().name().equals(toolName))) {
+
 				logger.debug("Removed tool handler: {}", toolName);
 				if (this.serverCapabilities.tools().listChanged()) {
 					return notifyToolsListChanged();
 				}
-				return Mono.empty();
 			}
-			return Mono.error(new McpError("Tool with name '" + toolName + "' not found"));
+			else {
+				logger.warn("Ignore as a Tool with name '{}' not found", toolName);
+			}
+
+			return Mono.empty();
 		});
 	}
 
@@ -518,8 +527,10 @@ public class McpAsyncServer {
 				.findAny();
 
 			if (toolSpecification.isEmpty()) {
-				return Mono.error(new McpError(new JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INVALID_PARAMS,
-						"Unknown tool: invalid_tool_name", "Tool not found: " + callToolRequest.name())));
+				return Mono.error(McpError.builder(McpSchema.ErrorCodes.INVALID_PARAMS)
+					.message("Unknown tool: invalid_tool_name")
+					.data("Tool not found: " + callToolRequest.name())
+					.build());
 			}
 
 			return toolSpecification.get().callHandler().apply(exchange, callToolRequest);
@@ -747,30 +758,34 @@ public class McpAsyncServer {
 	 */
 	public Mono<Void> addPrompt(McpServerFeatures.AsyncPromptSpecification promptSpecification) {
 		if (promptSpecification == null) {
-			return Mono.error(new McpError("Prompt specification must not be null"));
+			return Mono.error(new IllegalArgumentException("Prompt specification must not be null"));
 		}
 		if (this.serverCapabilities.prompts() == null) {
-			return Mono.error(new McpError("Server must be configured with prompt capabilities"));
+			return Mono.error(new IllegalStateException("Server must be configured with prompt capabilities"));
 		}
 
 		return Mono.defer(() -> {
-			McpServerFeatures.AsyncPromptSpecification specification = this.prompts
-				.putIfAbsent(promptSpecification.prompt().name(), promptSpecification);
-			if (specification != null) {
-				return Mono.error(
-						new McpError("Prompt with name '" + promptSpecification.prompt().name() + "' already exists"));
+			var previous = this.prompts.put(promptSpecification.prompt().name(), promptSpecification);
+			if (previous != null) {
+				logger.warn("Replace existing Prompt with name '{}'", promptSpecification.prompt().name());
 			}
-
-			logger.debug("Added prompt handler: {}", promptSpecification.prompt().name());
-
-			// Servers that declared the listChanged capability SHOULD send a
-			// notification,
-			// when the list of available prompts changes
+			else {
+				logger.debug("Added prompt handler: {}", promptSpecification.prompt().name());
+			}
 			if (this.serverCapabilities.prompts().listChanged()) {
-				return notifyPromptsListChanged();
+				return this.notifyPromptsListChanged();
 			}
+
 			return Mono.empty();
 		});
+	}
+
+	/**
+	 * List all registered prompts.
+	 * @return A Flux stream of all registered prompts
+	 */
+	public Flux<McpSchema.Prompt> listPrompts() {
+		return Flux.fromIterable(this.prompts.values()).map(McpServerFeatures.AsyncPromptSpecification::prompt);
 	}
 
 	/**
@@ -780,10 +795,10 @@ public class McpAsyncServer {
 	 */
 	public Mono<Void> removePrompt(String promptName) {
 		if (promptName == null) {
-			return Mono.error(new McpError("Prompt name must not be null"));
+			return Mono.error(new IllegalArgumentException("Prompt name must not be null"));
 		}
 		if (this.serverCapabilities.prompts() == null) {
-			return Mono.error(new McpError("Server must be configured with prompt capabilities"));
+			return Mono.error(new IllegalStateException("Server must be configured with prompt capabilities"));
 		}
 
 		return Mono.defer(() -> {
@@ -791,14 +806,15 @@ public class McpAsyncServer {
 
 			if (removed != null) {
 				logger.debug("Removed prompt handler: {}", promptName);
-				// Servers that declared the listChanged capability SHOULD send a
-				// notification, when the list of available prompts changes
 				if (this.serverCapabilities.prompts().listChanged()) {
 					return this.notifyPromptsListChanged();
 				}
 				return Mono.empty();
 			}
-			return Mono.error(new McpError("Prompt with name '" + promptName + "' not found"));
+			else {
+				logger.warn("Ignore as a Prompt with name '{}' not found", promptName);
+			}
+			return Mono.empty();
 		});
 	}
 
@@ -834,8 +850,12 @@ public class McpAsyncServer {
 
 			// Implement prompt retrieval logic here
 			McpServerFeatures.AsyncPromptSpecification specification = this.prompts.get(promptRequest.name());
+
 			if (specification == null) {
-				return Mono.error(new McpError("Prompt not found: " + promptRequest.name()));
+				return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
+					.message("Invalid prompt name")
+					.data("Prompt not found: " + promptRequest.name())
+					.build());
 			}
 
 			return Mono.defer(() -> specification.promptHandler().apply(exchange, promptRequest));

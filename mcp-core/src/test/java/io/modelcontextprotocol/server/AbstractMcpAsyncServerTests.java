@@ -145,13 +145,9 @@ public abstract class AbstractMcpAsyncServerTests {
 			.tool(duplicateTool, (exchange, args) -> Mono.just(new CallToolResult(List.of(), false)))
 			.build();
 
-		StepVerifier
-			.create(mcpAsyncServer.addTool(new McpServerFeatures.AsyncToolSpecification(duplicateTool,
-					(exchange, args) -> Mono.just(new CallToolResult(List.of(), false)))))
-			.verifyErrorSatisfies(error -> {
-				assertThat(error).isInstanceOf(McpError.class)
-					.hasMessage("Tool with name '" + TEST_TOOL_NAME + "' already exists");
-			});
+		StepVerifier.create(mcpAsyncServer.addTool(new McpServerFeatures.AsyncToolSpecification(duplicateTool,
+				(exchange, args) -> Mono.just(new CallToolResult(List.of(), false)))))
+			.verifyComplete();
 
 		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
 	}
@@ -172,10 +168,7 @@ public abstract class AbstractMcpAsyncServerTests {
 		StepVerifier.create(mcpAsyncServer.addTool(McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(duplicateTool)
 			.callHandler((exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
-			.build())).verifyErrorSatisfies(error -> {
-				assertThat(error).isInstanceOf(McpError.class)
-					.hasMessage("Tool with name '" + TEST_TOOL_NAME + "' already exists");
-			});
+			.build())).verifyComplete();
 
 		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
 	}
@@ -269,9 +262,7 @@ public abstract class AbstractMcpAsyncServerTests {
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.build();
 
-		StepVerifier.create(mcpAsyncServer.removeTool("nonexistent-tool")).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(McpError.class).hasMessage("Tool with name 'nonexistent-tool' not found");
-		});
+		StepVerifier.create(mcpAsyncServer.removeTool("nonexistent-tool")).verifyComplete();
 
 		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
 	}
@@ -512,9 +503,6 @@ public abstract class AbstractMcpAsyncServerTests {
 			.capabilities(ServerCapabilities.builder().resources(true, false).build())
 			.build();
 
-		// Removing a non-existent resource template should complete successfully (no
-		// error)
-		// as per the new implementation that just logs a warning
 		StepVerifier.create(mcpAsyncServer.removeResourceTemplate("nonexistent://template/{id}")).verifyComplete();
 
 		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
@@ -570,7 +558,8 @@ public abstract class AbstractMcpAsyncServerTests {
 
 		StepVerifier.create(mcpAsyncServer.addPrompt((McpServerFeatures.AsyncPromptSpecification) null))
 			.verifyErrorSatisfies(error -> {
-				assertThat(error).isInstanceOf(McpError.class).hasMessage("Prompt specification must not be null");
+				assertThat(error).isInstanceOf(IllegalArgumentException.class)
+					.hasMessage("Prompt specification must not be null");
 			});
 	}
 
@@ -585,7 +574,7 @@ public abstract class AbstractMcpAsyncServerTests {
 					.of(new PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent("Test content"))))));
 
 		StepVerifier.create(serverWithoutPrompts.addPrompt(specification)).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(McpError.class)
+			assertThat(error).isInstanceOf(IllegalStateException.class)
 				.hasMessage("Server must be configured with prompt capabilities");
 		});
 	}
@@ -596,7 +585,7 @@ public abstract class AbstractMcpAsyncServerTests {
 		McpAsyncServer serverWithoutPrompts = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
 
 		StepVerifier.create(serverWithoutPrompts.removePrompt(TEST_PROMPT_NAME)).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(McpError.class)
+			assertThat(error).isInstanceOf(IllegalStateException.class)
 				.hasMessage("Server must be configured with prompt capabilities");
 		});
 	}
@@ -626,10 +615,7 @@ public abstract class AbstractMcpAsyncServerTests {
 			.capabilities(ServerCapabilities.builder().prompts(true).build())
 			.build();
 
-		StepVerifier.create(mcpAsyncServer2.removePrompt("nonexistent-prompt")).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(McpError.class)
-				.hasMessage("Prompt with name 'nonexistent-prompt' not found");
-		});
+		StepVerifier.create(mcpAsyncServer2.removePrompt("nonexistent-prompt")).verifyComplete();
 
 		assertThatCode(() -> mcpAsyncServer2.closeGracefully().block(Duration.ofSeconds(10)))
 			.doesNotThrowAnyException();

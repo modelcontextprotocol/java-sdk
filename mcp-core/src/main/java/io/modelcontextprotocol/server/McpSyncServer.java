@@ -90,6 +90,14 @@ public class McpSyncServer {
 	}
 
 	/**
+	 * List all registered tools.
+	 * @return A list of all registered tools
+	 */
+	public List<McpSchema.Tool> listTools() {
+		return this.asyncServer.listTools().collectList().block();
+	}
+
+	/**
 	 * Remove a tool handler.
 	 * @param toolName The name of the tool handler to remove
 	 */
@@ -160,6 +168,14 @@ public class McpSyncServer {
 			.addPrompt(
 					McpServerFeatures.AsyncPromptSpecification.fromSync(promptSpecification, this.immediateExecution))
 			.block();
+	}
+
+	/**
+	 * List all registered prompts.
+	 * @return A list of all registered prompts
+	 */
+	public List<McpSchema.Prompt> listPrompts() {
+		return this.asyncServer.listPrompts().collectList().block();
 	}
 
 	/**
