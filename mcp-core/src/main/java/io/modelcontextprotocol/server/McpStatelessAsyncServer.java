@@ -12,6 +12,8 @@ import io.modelcontextprotocol.server.McpStatelessServerFeatures.AsyncResourceTe
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import io.modelcontextprotocol.spec.McpSchema.CompleteResult.CompleteCompletion;
+import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
@@ -667,55 +669,105 @@ public class McpStatelessAsyncServer {
 		};
 	}
 
+	private static final Mono<McpSchema.CompleteResult> EMPTY_COMPLETION_RESULT = Mono
+		.just(new McpSchema.CompleteResult(new CompleteCompletion(List.of(), 0, false)));
+
 	private McpStatelessRequestHandler<McpSchema.CompleteResult> completionCompleteRequestHandler() {
 		return (ctx, params) -> {
 			McpSchema.CompleteRequest request = parseCompletionParams(params);
 
 			if (request.ref() == null) {
-				return Mono.error(new McpError("ref must not be null"));
+				return Mono.error(
+						McpError.builder(ErrorCodes.INVALID_PARAMS).message("Completion ref must not be null").build());
 			}
 
 			if (request.ref().type() == null) {
-				return Mono.error(new McpError("type must not be null"));
+				return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
+					.message("Completion ref type must not be null")
+					.build());
 			}
 
 			String type = request.ref().type();
 
 			String argumentName = request.argument().name();
 
-			// check if the referenced resource exists
+			// Check if valid a Prompt exists for this completion request
 			if (type.equals(PromptReference.TYPE)
 					&& request.ref() instanceof McpSchema.PromptReference promptReference) {
+
 				McpStatelessServerFeatures.AsyncPromptSpecification promptSpec = this.prompts
 					.get(promptReference.name());
 				if (promptSpec == null) {
-					return Mono.error(new McpError("Prompt not found: " + promptReference.name()));
+					return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
+						.message("Prompt not found: " + promptReference.name())
+						.build());
 				}
-				if (promptSpec.prompt().arguments().stream().noneMatch(arg -> arg.name().equals(argumentName))) {
+				if (!promptSpec.prompt()
+					.arguments()
+					.stream()
+					.filter(arg -> arg.name().equals(argumentName))
+					.findFirst()
+					.isPresent()) {
 
-					return Mono.error(new McpError("Argument not found: " + argumentName));
+					logger.warn("Argument not found: {} in prompt: {}", argumentName, promptReference.name());
+
+					return EMPTY_COMPLETION_RESULT;
 				}
 			}
 
+			// Check if valid Resource or ResourceTemplate exists for this completion
+			// request
 			if (type.equals(ResourceReference.TYPE)
 					&& request.ref() instanceof McpSchema.ResourceReference resourceReference) {
-				McpStatelessServerFeatures.AsyncResourceSpecification resourceSpec = resources
-					.get(resourceReference.uri());
-				if (resourceSpec == null) {
-					return Mono.error(RESOURCE_NOT_FOUND.apply(resourceReference.uri()));
-				}
-				if (!uriTemplateManagerFactory.create(resourceSpec.resource().uri())
-					.getVariableNames()
-					.contains(argumentName)) {
-					return Mono.error(new McpError("Argument not found: " + argumentName));
+
+				var uriTemplateManager = uriTemplateManagerFactory.create(resourceReference.uri());
+
+				if (!uriTemplateManager.isUriTemplate(resourceReference.uri())) {
+					// Attempting to autocomplete a fixed resource URI is not an error in
+					// the spec (but probably should be).
+					return EMPTY_COMPLETION_RESULT;
 				}
 
+				McpStatelessServerFeatures.AsyncResourceSpecification resourceSpec = this
+					.findResourceSpecification(resourceReference.uri())
+					.orElse(null);
+
+				if (resourceSpec != null) {
+					if (!uriTemplateManagerFactory.create(resourceSpec.resource().uri())
+						.getVariableNames()
+						.contains(argumentName)) {
+
+						return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
+							.message("Argument not found: " + argumentName + " in resource: " + resourceReference.uri())
+							.build());
+					}
+				}
+				else {
+					var templateSpec = this.findResourceTemplateSpecification(resourceReference.uri()).orElse(null);
+					if (templateSpec != null) {
+
+						if (!uriTemplateManagerFactory.create(templateSpec.resourceTemplate().uriTemplate())
+							.getVariableNames()
+							.contains(argumentName)) {
+
+							return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
+								.message("Argument not found: " + argumentName + " in resource template: "
+										+ resourceReference.uri())
+								.build());
+						}
+					}
+					else {
+						return Mono.error(RESOURCE_NOT_FOUND.apply(resourceReference.uri()));
+					}
+				}
 			}
 
 			McpStatelessServerFeatures.AsyncCompletionSpecification specification = this.completions.get(request.ref());
 
 			if (specification == null) {
-				return Mono.error(new McpError("AsyncCompletionSpecification not found: " + request.ref()));
+				return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
+					.message("AsyncCompletionSpecification not found: " + request.ref())
+					.build());
 			}
 
 			return specification.completionHandler().apply(ctx, request);
