@@ -36,6 +36,15 @@ public class McpError extends RuntimeException {
 		return jsonRpcError;
 	}
 
+	@Override
+	public String toString() {
+		var message = super.toString();
+		if (jsonRpcError != null) {
+			return message + jsonRpcError.toString();
+		}
+		return message;
+	}
+
 	public static Builder builder(int errorCode) {
 		return new Builder(errorCode);
 	}

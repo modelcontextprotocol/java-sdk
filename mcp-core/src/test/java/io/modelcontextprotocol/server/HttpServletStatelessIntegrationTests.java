@@ -194,7 +194,7 @@ class HttpServletStatelessIntegrationTests {
 							List.of(new PromptArgument("language", "Language", "string", false))),
 					(transportContext, getPromptRequest) -> null))
 			.completions(new McpStatelessServerFeatures.SyncCompletionSpecification(
-					new PromptReference("ref/prompt", "code_review", "Code review"), completionHandler))
+					new PromptReference(PromptReference.TYPE, "code_review", "Code review"), completionHandler))
 			.build();
 
 		try (var mcpClient = clientBuilder.build()) {
@@ -203,7 +203,7 @@ class HttpServletStatelessIntegrationTests {
 			assertThat(initResult).isNotNull();
 
 			CompleteRequest request = new CompleteRequest(
-					new PromptReference("ref/prompt", "code_review", "Code review"),
+					new PromptReference(PromptReference.TYPE, "code_review", "Code review"),
 					new CompleteRequest.CompleteArgument("language", "py"));
 
 			CompleteResult result = mcpClient.completeCompletion(request);
@@ -212,7 +212,7 @@ class HttpServletStatelessIntegrationTests {
 
 			assertThat(samplingRequest.get().argument().name()).isEqualTo("language");
 			assertThat(samplingRequest.get().argument().value()).isEqualTo("py");
-			assertThat(samplingRequest.get().ref().type()).isEqualTo("ref/prompt");
+			assertThat(samplingRequest.get().ref().type()).isEqualTo(PromptReference.TYPE);
 		}
 		finally {
 			mcpServer.close();

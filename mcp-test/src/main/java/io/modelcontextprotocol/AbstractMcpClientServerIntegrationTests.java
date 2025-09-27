@@ -1260,7 +1260,8 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 							List.of(new PromptArgument("language", "Language", "string", false))),
 					(mcpSyncServerExchange, getPromptRequest) -> null))
 			.completions(new McpServerFeatures.SyncCompletionSpecification(
-					new McpSchema.PromptReference("ref/prompt", "code_review", "Code review"), completionHandler))
+					new McpSchema.PromptReference(PromptReference.TYPE, "code_review", "Code review"),
+					completionHandler))
 			.build();
 
 		try (var mcpClient = clientBuilder.build()) {
@@ -1269,7 +1270,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			assertThat(initResult).isNotNull();
 
 			CompleteRequest request = new CompleteRequest(
-					new PromptReference("ref/prompt", "code_review", "Code review"),
+					new PromptReference(PromptReference.TYPE, "code_review", "Code review"),
 					new CompleteRequest.CompleteArgument("language", "py"));
 
 			CompleteResult result = mcpClient.completeCompletion(request);
@@ -1278,7 +1279,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 			assertThat(samplingRequest.get().argument().name()).isEqualTo("language");
 			assertThat(samplingRequest.get().argument().value()).isEqualTo("py");
-			assertThat(samplingRequest.get().ref().type()).isEqualTo("ref/prompt");
+			assertThat(samplingRequest.get().ref().type()).isEqualTo(PromptReference.TYPE);
 		}
 		finally {
 			mcpServer.closeGracefully();

@@ -33,9 +33,7 @@ public class DefaultMcpUriTemplateManager implements McpUriTemplateManager {
 	 * @param uriTemplate The URI template to be used for variable extraction
 	 */
 	public DefaultMcpUriTemplateManager(String uriTemplate) {
-		if (uriTemplate == null || uriTemplate.isEmpty()) {
-			throw new IllegalArgumentException("URI template must not be null or empty");
-		}
+		Assert.hasText(uriTemplate, "URI template must not be null or empty");
 		this.uriTemplate = uriTemplate;
 	}
 
@@ -48,10 +46,6 @@ public class DefaultMcpUriTemplateManager implements McpUriTemplateManager {
 	 */
 	@Override
 	public List<String> getVariableNames() {
-		if (uriTemplate == null || uriTemplate.isEmpty()) {
-			return List.of();
-		}
-
 		List<String> variables = new ArrayList<>();
 		Matcher matcher = URI_VARIABLE_PATTERN.matcher(this.uriTemplate);
 
@@ -81,7 +75,7 @@ public class DefaultMcpUriTemplateManager implements McpUriTemplateManager {
 		Map<String, String> variableValues = new HashMap<>();
 		List<String> uriVariables = this.getVariableNames();
 
-		if (requestUri == null || uriVariables.isEmpty()) {
+		if (!Utils.hasText(requestUri) || uriVariables.isEmpty()) {
 			return variableValues;
 		}
 
