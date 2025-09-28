@@ -224,9 +224,12 @@ public class McpServerSession implements McpLoggableSession {
 			else if (message instanceof McpSchema.JSONRPCRequest request) {
 				logger.debug("Received request: {}", request);
 				return handleIncomingRequest(request, transportContext).onErrorResume(error -> {
+					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (error instanceof McpError mcpError
+							&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
+									: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+											McpError.findRootCause(error).getMessage(), null);
 					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
-							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-									error.getMessage(), null));
+							jsonRpcError);
 					// TODO: Should the error go to SSE or back as POST return?
 					return this.transport.sendMessage(errorResponse).then(Mono.empty());
 				}).flatMap(this.transport::sendMessage);
@@ -287,7 +290,7 @@ public class McpServerSession implements McpLoggableSession {
 							&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
 									// TODO: add error message through the data field
 									: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-											error.getMessage(), null);
+											McpError.findRootCause(error).getMessage(), null);
 					return Mono.just(
 							new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null, jsonRpcError));
 				});

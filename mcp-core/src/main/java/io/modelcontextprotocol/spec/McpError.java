@@ -78,4 +78,13 @@ public class McpError extends RuntimeException {
 
 	}
 
+	public static Throwable findRootCause(Throwable throwable) {
+		Assert.notNull(throwable, "throwable must not be null");
+		Throwable rootCause = throwable;
+		while (rootCause.getCause() != null && rootCause.getCause() != rootCause) {
+			rootCause = rootCause.getCause();
+		}
+		return rootCause;
+	}
+
 }
