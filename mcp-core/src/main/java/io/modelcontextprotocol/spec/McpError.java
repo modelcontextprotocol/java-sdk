@@ -38,11 +38,12 @@ public class McpError extends RuntimeException {
 
 	@Override
 	public String toString() {
-		var message = super.toString();
+		var builder = new StringBuilder(super.toString());
 		if (jsonRpcError != null) {
-			return message + jsonRpcError.toString();
+			builder.append("\n");
+			builder.append(jsonRpcError.toString());
 		}
-		return message;
+		return builder.toString();
 	}
 
 	public static Builder builder(int errorCode) {
@@ -85,6 +86,31 @@ public class McpError extends RuntimeException {
 			rootCause = rootCause.getCause();
 		}
 		return rootCause;
+	}
+
+	public static String aggregateExceptionMessages(Throwable throwable) {
+		Assert.notNull(throwable, "throwable must not be null");
+
+		StringBuilder messages = new StringBuilder();
+		Throwable current = throwable;
+
+		while (current != null) {
+			if (messages.length() > 0) {
+				messages.append("\n  Caused by: ");
+			}
+
+			messages.append(current.getClass().getSimpleName());
+			if (current.getMessage() != null) {
+				messages.append(": ").append(current.getMessage());
+			}
+
+			if (current.getCause() == current) {
+				break;
+			}
+			current = current.getCause();
+		}
+
+		return messages.toString();
 	}
 
 }

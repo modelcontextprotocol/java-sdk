@@ -150,8 +150,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 					CreateMessageResult.StopReason.STOP_SEQUENCE);
 		};
 
-		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
-				null);
+		CallToolResult callResponse = McpSchema.CallToolResult.builder()
+			.addContent(new McpSchema.TextContent("CALL RESPONSE"))
+			.build();
 
 		AtomicReference<CreateMessageResult> samplingResult = new AtomicReference<>();
 
@@ -228,8 +229,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 		// Server
 
-		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
-				null);
+		CallToolResult callResponse = McpSchema.CallToolResult.builder()
+			.addContent(new McpSchema.TextContent("CALL RESPONSE"))
+			.build();
 
 		AtomicReference<CreateMessageResult> samplingResult = new AtomicReference<>();
 
@@ -304,8 +306,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 					CreateMessageResult.StopReason.STOP_SEQUENCE);
 		};
 
-		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
-				null);
+		CallToolResult callResponse = McpSchema.CallToolResult.builder()
+			.addContent(new McpSchema.TextContent("CALL RESPONSE"))
+			.build();
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
@@ -397,8 +400,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 					Map.of("message", request.message()));
 		};
 
-		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
-				null);
+		CallToolResult callResponse = McpSchema.CallToolResult.builder()
+			.addContent(new McpSchema.TextContent("CALL RESPONSE"))
+			.build();
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
@@ -452,8 +456,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			return new ElicitResult(ElicitResult.Action.ACCEPT, Map.of("message", request.message()));
 		};
 
-		CallToolResult callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")),
-				null);
+		CallToolResult callResponse = McpSchema.CallToolResult.builder()
+			.addContent(new McpSchema.TextContent("CALL RESPONSE"))
+			.build();
 
 		AtomicReference<ElicitResult> resultRef = new AtomicReference<>();
 
@@ -524,7 +529,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			return new ElicitResult(ElicitResult.Action.ACCEPT, Map.of("message", request.message()));
 		};
 
-		CallToolResult callResponse = new CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
+		CallToolResult callResponse = CallToolResult.builder().addContent(new TextContent("CALL RESPONSE")).build();
 
 		AtomicReference<ElicitResult> resultRef = new AtomicReference<>();
 
@@ -765,7 +770,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		var clientBuilder = clientBuilders.get(clientType);
 
 		var responseBodyIsNullOrBlank = new AtomicBoolean(false);
-		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
+		var callResponse = McpSchema.CallToolResult.builder()
+			.addContent(new McpSchema.TextContent("CALL RESPONSE; ctx=importantValue"))
+			.build();
 		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
 			.callHandler((exchange, request) -> {
@@ -836,8 +843,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			assertThat(initResult).isNotNull();
 
 			// We expect the tool call to fail immediately with the exception raised by
-			// the offending tool
-			// instead of getting back a timeout.
+			// the offending tool instead of getting back a timeout.
 			assertThatExceptionOfType(McpError.class)
 				.isThrownBy(() -> mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of())))
 				.withMessageContaining("Timeout on blocking read");
@@ -857,8 +863,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		var transportContextIsEmpty = new AtomicBoolean(false);
 		var responseBodyIsNullOrBlank = new AtomicBoolean(false);
 
-		var expectedCallResponse = new McpSchema.CallToolResult(
-				List.of(new McpSchema.TextContent("CALL RESPONSE; ctx=value")), null);
+		var expectedCallResponse = McpSchema.CallToolResult.builder()
+			.addContent(new McpSchema.TextContent("CALL RESPONSE; ctx=value"))
+			.build();
 		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
 			.callHandler((exchange, request) -> {
@@ -876,8 +883,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 					e.printStackTrace();
 				}
 
-				return new McpSchema.CallToolResult(
-						List.of(new McpSchema.TextContent("CALL RESPONSE; ctx=" + ctxValue)), null);
+				return McpSchema.CallToolResult.builder()
+					.addContent(new McpSchema.TextContent("CALL RESPONSE; ctx=" + ctxValue))
+					.build();
 			})
 			.build();
 
@@ -910,7 +918,10 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
-		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
+		var callResponse = McpSchema.CallToolResult.builder()
+			.addContent(new McpSchema.TextContent("CALL RESPONSE"))
+			.build();
+
 		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
 			.callHandler((exchange, request) -> {

@@ -227,7 +227,7 @@ public class McpServerSession implements McpLoggableSession {
 					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (error instanceof McpError mcpError
 							&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
 									: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-											McpError.findRootCause(error).getMessage(), null);
+											error.getMessage(), McpError.aggregateExceptionMessages(error));
 					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
 							jsonRpcError);
 					// TODO: Should the error go to SSE or back as POST return?
@@ -290,7 +290,7 @@ public class McpServerSession implements McpLoggableSession {
 							&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
 									// TODO: add error message through the data field
 									: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-											McpError.findRootCause(error).getMessage(), null);
+											error.getMessage(), McpError.aggregateExceptionMessages(error));
 					return Mono.just(
 							new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null, jsonRpcError));
 				});

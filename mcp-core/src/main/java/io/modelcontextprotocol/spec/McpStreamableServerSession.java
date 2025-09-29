@@ -182,7 +182,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (e instanceof McpError mcpError
 							&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
 									: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-											McpError.findRootCause(e).getMessage(), null);
+											e.getMessage(), McpError.aggregateExceptionMessages(e));
 
 					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(),
 							null, jsonRpcError);
