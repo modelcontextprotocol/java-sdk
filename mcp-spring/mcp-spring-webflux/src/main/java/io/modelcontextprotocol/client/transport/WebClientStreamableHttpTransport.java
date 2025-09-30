@@ -148,7 +148,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 				: webClient.delete()
 					.uri(this.endpoint)
 					.header(HttpHeaders.MCP_SESSION_ID, sessionId)
-					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+					.header(HttpHeaders.MCP_PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 					.retrieve()
 					.toBodilessEntity()
 					.onErrorComplete(e -> {
@@ -208,7 +208,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			Disposable connection = webClient.get()
 				.uri(this.endpoint)
 				.accept(MediaType.TEXT_EVENT_STREAM)
-				.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+				.header(HttpHeaders.MCP_PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 				.headers(httpHeaders -> {
 					transportSession.sessionId().ifPresent(id -> httpHeaders.add(HttpHeaders.MCP_SESSION_ID, id));
 					if (stream != null) {
@@ -274,7 +274,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			Disposable connection = webClient.post()
 				.uri(this.endpoint)
 				.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_EVENT_STREAM)
-				.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+				.header(HttpHeaders.MCP_PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 				.headers(httpHeaders -> {
 					transportSession.sessionId().ifPresent(id -> httpHeaders.add(HttpHeaders.MCP_SESSION_ID, id));
 				})
