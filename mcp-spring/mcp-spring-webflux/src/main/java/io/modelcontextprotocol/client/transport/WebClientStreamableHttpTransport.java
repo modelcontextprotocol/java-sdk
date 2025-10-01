@@ -293,9 +293,10 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 					// 200 OK for notifications
 					if (response.statusCode().is2xxSuccessful()) {
 						Optional<MediaType> contentType = response.headers().contentType();
+						long contentLength = response.headers().contentLength().orElse(-1);
 						// Existing SDKs consume notifications with no response body nor
 						// content type
-						if (contentType.isEmpty()) {
+						if (contentType.isEmpty() || contentLength == 0) {
 							logger.trace("Message was successfully sent via POST for session {}",
 									sessionRepresentation);
 							// signal the caller that the message was successfully

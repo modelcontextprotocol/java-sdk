@@ -246,7 +246,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				}
 
 				var builder = requestBuilder.uri(uri)
-					.header("Accept", TEXT_EVENT_STREAM)
+					.header(HttpHeaders.ACCEPT, TEXT_EVENT_STREAM)
 					.header("Cache-Control", "no-cache")
 					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 					.GET();
@@ -371,7 +371,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 		BodyHandler<Void> responseBodyHandler = responseInfo -> {
 
-			String contentType = responseInfo.headers().firstValue("Content-Type").orElse("").toLowerCase();
+			String contentType = responseInfo.headers().firstValue(HttpHeaders.CONTENT_TYPE).orElse("").toLowerCase();
 
 			if (contentType.contains(TEXT_EVENT_STREAM)) {
 				// For SSE streams, use line subscriber that returns Void
@@ -420,9 +420,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				}
 
 				var builder = requestBuilder.uri(uri)
-					.header("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
-					.header("Content-Type", APPLICATION_JSON)
-					.header("Cache-Control", "no-cache")
+					.header(HttpHeaders.ACCEPT, APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
+					.header(HttpHeaders.CONTENT_TYPE, APPLICATION_JSON)
+					.header(HttpHeaders.CACHE_CONTROL, "no-cache")
 					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 					.POST(HttpRequest.BodyPublishers.ofString(jsonBody));
 				var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
@@ -459,15 +459,19 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 					String contentType = responseEvent.responseInfo()
 						.headers()
-						.firstValue("Content-Type")
+						.firstValue(HttpHeaders.CONTENT_TYPE)
 						.orElse("")
 						.toLowerCase();
 
-					if (contentType.isBlank()) {
-						logger.debug("No content type returned for POST in session {}", sessionRepresentation);
+					String contentLength = responseEvent.responseInfo()
+						.headers()
+						.firstValue(HttpHeaders.CONTENT_LENGTH)
+						.orElse(null);
+
+					if (contentType.isBlank() || "0".equals(contentLength)) {
+						logger.debug("No body returned for POST in session {}", sessionRepresentation);
 						// No content type means no response body, so we can just
-						// return
-						// an empty stream
+						// return an empty stream
 						deliveredSink.success();
 						return Flux.empty();
 					}

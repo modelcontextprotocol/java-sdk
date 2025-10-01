@@ -26,4 +26,31 @@ public interface HttpHeaders {
 	 */
 	String PROTOCOL_VERSION = "MCP-Protocol-Version";
 
+	/**
+	 * The HTTP Content-Length header.
+	 * @see <a href=
+	 * "https://httpwg.org/specs/rfc9110.html#field.content-length">RFC9110</a>
+	 */
+	String CONTENT_LENGTH = "Content-Length";
+
+	/**
+	 * The HTTP Content-Type header.
+	 * @see <a href=
+	 * "https://httpwg.org/specs/rfc9110.html#field.content-type">RFC9110</a>
+	 */
+	String CONTENT_TYPE = "Content-Type";
+
+	/**
+	 * The HTTP Accept header.
+	 * @see <a href= "https://httpwg.org/specs/rfc9110.html#field.accept">RFC9110</a>
+	 */
+	String ACCEPT = "Accept";
+
+	/**
+	 * The HTTP Cache-Control header.
+	 * @see <a href=
+	 * "https://httpwg.org/specs/rfc9111.html#field.cache-control">RFC9111</a>
+	 */
+	String CACHE_CONTROL = "Cache-Control";
+
 }
