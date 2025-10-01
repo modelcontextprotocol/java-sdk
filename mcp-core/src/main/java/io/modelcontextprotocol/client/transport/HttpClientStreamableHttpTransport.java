@@ -507,8 +507,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					else if (contentType.contains(APPLICATION_JSON)) {
 						deliveredSink.success();
 						String data = ((ResponseSubscribers.AggregateResponseEvent) responseEvent).data();
-						if (sentMessage instanceof McpSchema.JSONRPCNotification && Utils.hasText(data)) {
-							logger.warn("Notification: {} received non-compliant response: {}", sentMessage, data);
+						if (sentMessage instanceof McpSchema.JSONRPCNotification) {
+							logger.warn("Notification: {} received non-compliant response: {}", sentMessage,
+									Utils.hasText(data) ? data : "[empty]");
 							return Mono.empty();
 						}
 

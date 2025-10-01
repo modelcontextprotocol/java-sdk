@@ -423,8 +423,9 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			ClientResponse response) {
 		return response.bodyToMono(String.class).<Iterable<McpSchema.JSONRPCMessage>>handle((responseMessage, s) -> {
 			try {
-				if (sentMessage instanceof McpSchema.JSONRPCNotification && Utils.hasText(responseMessage)) {
-					logger.warn("Notification: {} received non-compliant response: {}", sentMessage, responseMessage);
+				if (sentMessage instanceof McpSchema.JSONRPCNotification) {
+					logger.warn("Notification: {} received non-compliant response: {}", sentMessage,
+							Utils.hasText(responseMessage) ? responseMessage : "[empty]");
 					s.complete();
 				}
 				else {
