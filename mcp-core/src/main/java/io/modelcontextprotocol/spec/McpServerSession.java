@@ -110,8 +110,12 @@ public class McpServerSession implements McpLoggableSession {
 		this.requestTimeout = requestTimeout;
 		this.transport = transport;
 		this.initRequestHandler = initHandler;
-		this.requestHandlers = requestHandlers;
+		this.requestHandlers = new ConcurrentHashMap<>(requestHandlers);
 		this.notificationHandlers = notificationHandlers;
+	}
+
+	public Map<String, McpRequestHandler<?>> getRequestHandlers() {
+		return requestHandlers;
 	}
 
 	/**
