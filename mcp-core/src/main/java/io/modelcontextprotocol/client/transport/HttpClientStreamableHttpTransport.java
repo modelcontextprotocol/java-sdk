@@ -443,8 +443,10 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					})).onErrorMap(CompletionException.class, t -> t.getCause()).onErrorComplete().subscribe();
 
 			})).flatMap(responseEvent -> {
-				if (transportSession.markInitialized(
-						responseEvent.responseInfo().headers().firstValue("mcp-session-id").orElseGet(() -> null))) {
+				if (transportSession.markInitialized(responseEvent.responseInfo()
+					.headers()
+					.firstValue(HttpHeaders.MCP_SESSION_ID)
+					.orElseGet(() -> null))) {
 					// Once we have a session, we try to open an async stream for
 					// the server to send notifications and requests out-of-band.
 
