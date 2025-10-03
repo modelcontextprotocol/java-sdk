@@ -14,7 +14,6 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.CompleteResult.CompleteCompletion;
 import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
@@ -129,7 +128,8 @@ public class McpStatelessAsyncServer {
 
 		this.protocolVersions = new ArrayList<>(mcpTransport.protocolVersions());
 
-		McpStatelessServerHandler handler = new DefaultMcpStatelessServerHandler(requestHandlers, Map.of());
+		McpStatelessServerHandler handler = new DefaultMcpStatelessServerHandler(requestHandlers, Map.of(),
+				this.serverCapabilities);
 		mcpTransport.setMcpHandler(handler);
 	}
 
