@@ -47,6 +47,7 @@ Please follow the [Contributing Guidelines](CONTRIBUTING.md).
 
 - Christian Tzolov
 - Dariusz Jędrzejczyk
+- Daniel Garnier-Moiroux
 
 ## Links
 
