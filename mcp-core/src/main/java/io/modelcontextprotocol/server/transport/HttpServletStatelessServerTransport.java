@@ -4,10 +4,11 @@
 
 package io.modelcontextprotocol.server.transport;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.Map;
 
+import io.modelcontextprotocol.json.TypeRef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,8 +17,6 @@ import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
 import io.modelcontextprotocol.util.Assert;
 import jakarta.servlet.ServletException;
@@ -36,6 +35,9 @@ import reactor.core.publisher.Mono;
 @WebServlet(asyncSupported = true)
 public class HttpServletStatelessServerTransport extends HttpServlet implements McpStatelessServerTransport {
 
+	private static final TypeRef<Map<String, Object>> MAP_TYPE_REF = new TypeRef<>() {
+	};
+
 	private static final Logger logger = LoggerFactory.getLogger(HttpServletStatelessServerTransport.class);
 
 	public static final String UTF_8 = "UTF-8";
@@ -52,26 +54,22 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 
 	private final String mcpEndpoint;
 
-	private McpStatelessServerHandler mcpHandler;
-
-	private McpTransportContextExtractor<HttpServletRequest> contextExtractor;
-
 	private volatile boolean isClosing = false;
 
-	private HttpServletStatelessServerTransport(McpJsonMapper jsonMapper, String mcpEndpoint,
-			McpTransportContextExtractor<HttpServletRequest> contextExtractor) {
+	private HttpServerMcpStatelessServerTransport<HttpServletRequest> delegate;
+
+	private HttpServletStatelessServerTransport(HttpServerMcpStatelessServerTransport<HttpServletRequest> delegate,
+			McpJsonMapper jsonMapper, String mcpEndpoint) {
 		Assert.notNull(jsonMapper, "jsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "mcpEndpoint must not be null");
-		Assert.notNull(contextExtractor, "contextExtractor must not be null");
-
+		this.delegate = delegate;
 		this.jsonMapper = jsonMapper;
 		this.mcpEndpoint = mcpEndpoint;
-		this.contextExtractor = contextExtractor;
 	}
 
 	@Override
 	public void setMcpHandler(McpStatelessServerHandler mcpHandler) {
-		this.mcpHandler = mcpHandler;
+		this.delegate.setMcpHandler(mcpHandler);
 	}
 
 	@Override
@@ -108,105 +106,36 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 	 * @throws IOException If an I/O error occurs
 	 */
 	@Override
-	protected void doPost(HttpServletRequest request, HttpServletResponse response)
-			throws ServletException, IOException {
-
+	protected void doPost(HttpServletRequest request, HttpServletResponse response) throws IOException {
 		String requestURI = request.getRequestURI();
 		if (!requestURI.endsWith(mcpEndpoint)) {
 			response.sendError(HttpServletResponse.SC_NOT_FOUND);
 			return;
 		}
-
-		if (isClosing) {
-			response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Server is shutting down");
-			return;
-		}
-
-		McpTransportContext transportContext = this.contextExtractor.extract(request);
-
-		String accept = request.getHeader(ACCEPT);
-		if (accept == null || !(accept.contains(APPLICATION_JSON) && accept.contains(TEXT_EVENT_STREAM))) {
-			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
-					new McpError("Both application/json and text/event-stream required in Accept header"));
-			return;
-		}
-
-		try {
-			BufferedReader reader = request.getReader();
-			StringBuilder body = new StringBuilder();
-			String line;
-			while ((line = reader.readLine()) != null) {
-				body.append(line);
-			}
-
-			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body.toString());
-
-			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
-				try {
-					McpSchema.JSONRPCResponse jsonrpcResponse = this.mcpHandler
-						.handleRequest(transportContext, jsonrpcRequest)
-						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
-						.block();
-
-					response.setContentType(APPLICATION_JSON);
-					response.setCharacterEncoding(UTF_8);
-					response.setStatus(HttpServletResponse.SC_OK);
-
-					String jsonResponseText = jsonMapper.writeValueAsString(jsonrpcResponse);
-					PrintWriter writer = response.getWriter();
-					writer.write(jsonResponseText);
-					writer.flush();
-				}
-				catch (Exception e) {
-					logger.error("Failed to handle request: {}", e.getMessage());
-					this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-							new McpError("Failed to handle request: " + e.getMessage()));
-				}
-			}
-			else if (message instanceof McpSchema.JSONRPCNotification jsonrpcNotification) {
-				try {
-					this.mcpHandler.handleNotification(transportContext, jsonrpcNotification)
-						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
-						.block();
-					response.setStatus(HttpServletResponse.SC_ACCEPTED);
-				}
-				catch (Exception e) {
-					logger.error("Failed to handle notification: {}", e.getMessage());
-					this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-							new McpError("Failed to handle notification: " + e.getMessage()));
-				}
-			}
-			else {
-				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
-						new McpError("The server accepts either requests or notifications"));
-			}
-		}
-		catch (IllegalArgumentException | IOException e) {
-			logger.error("Failed to deserialize message: {}", e.getMessage());
-			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, new McpError("Invalid message format"));
-		}
-		catch (Exception e) {
-			logger.error("Unexpected error handling message: {}", e.getMessage());
-			this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-					new McpError("Unexpected error: " + e.getMessage()));
-		}
+		Map<String, Object> body = jsonMapper.readValue(request.getInputStream().readAllBytes(), MAP_TYPE_REF);
+		HttpJsonRpcResponse jsonRpcResponse = delegate.handlePost(request, body).block();
+		respond(jsonRpcResponse, response);
 	}
 
 	/**
 	 * Sends an error response to the client.
+	 * @param jsonRpcResponse The HTTP JSON RPC response
 	 * @param response The HTTP servlet response
-	 * @param httpCode The HTTP status code
-	 * @param mcpError The MCP error to send
 	 * @throws IOException If an I/O error occurs
 	 */
-	private void responseError(HttpServletResponse response, int httpCode, McpError mcpError) throws IOException {
+	private void respond(HttpJsonRpcResponse jsonRpcResponse, HttpServletResponse response) throws IOException {
 		response.setContentType(APPLICATION_JSON);
 		response.setCharacterEncoding(UTF_8);
-		response.setStatus(httpCode);
-		String jsonError = jsonMapper.writeValueAsString(mcpError);
-		PrintWriter writer = response.getWriter();
-		writer.write(jsonError);
-		writer.flush();
+		if (jsonRpcResponse != null) {
+			response.setStatus(jsonRpcResponse.statusCode());
+			String jsonResponseText = jsonMapper.writeValueAsString(jsonRpcResponse.body());
+			PrintWriter writer = response.getWriter();
+			writer.write(jsonResponseText);
+			writer.flush();
+		}
+		else {
+			response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+		}
 	}
 
 	/**
@@ -296,8 +225,9 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		 */
 		public HttpServletStatelessServerTransport build() {
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
-			return new HttpServletStatelessServerTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
-					mcpEndpoint, contextExtractor);
+			return new HttpServletStatelessServerTransport(
+					new HttpServerMcpStatelessServerTransport<>(contextExtractor),
+					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, mcpEndpoint);
 		}
 
 	}
