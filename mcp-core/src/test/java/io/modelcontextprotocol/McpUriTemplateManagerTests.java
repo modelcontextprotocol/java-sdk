@@ -94,4 +94,12 @@ public class McpUriTemplateManagerTests {
 		assertFalse(uriTemplateManager.matches("/api/users/123/comments/456"));
 	}
 
+    @Test
+    void shouldMatchUriWithQueryParameters() {
+        String templateWithQuery = "file://name/search?={search}";
+        var uriTemplateManager = this.uriTemplateFactory.create(templateWithQuery);
+
+        assertTrue(uriTemplateManager.matches("file://name/search?=abcd"),
+                "Should correctly match a URI containing query parameters.");
+    }
 }
