@@ -25,7 +25,7 @@ import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
-import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
+import io.modelcontextprotocol.util.DefaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
 import reactor.core.publisher.Mono;
 
@@ -268,7 +268,7 @@ public interface McpServer {
 	 */
 	abstract class AsyncSpecification<S extends AsyncSpecification<S>> {
 
-		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
+		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
 
 		McpJsonMapper jsonMapper;
 
@@ -865,7 +865,7 @@ public interface McpServer {
 	 */
 	abstract class SyncSpecification<S extends SyncSpecification<S>> {
 
-		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
+		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
 
 		McpJsonMapper jsonMapper;
 
@@ -1407,7 +1407,7 @@ public interface McpServer {
 
 		private final McpStatelessServerTransport transport;
 
-		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
+		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
 
 		McpJsonMapper jsonMapper;
 
@@ -1870,7 +1870,7 @@ public interface McpServer {
 
 		boolean immediateExecution = false;
 
-		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
+		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
 
 		McpJsonMapper jsonMapper;
 
