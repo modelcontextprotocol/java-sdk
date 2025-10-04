@@ -36,7 +36,7 @@ import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpServerTransportProviderBase;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
-import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
+import io.modelcontextprotocol.util.DefaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
@@ -120,7 +120,7 @@ public class McpAsyncServer {
 
 	private List<String> protocolVersions;
 
-	private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
+	private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
 
 	/**
 	 * Create a new McpAsyncServer with the given transport provider and capabilities.
