@@ -306,7 +306,7 @@ public final class McpSchema {
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record JSONRPCError( // @formatter:off
-			@JsonProperty("code") int code,
+			@JsonProperty("code") Integer code,
 			@JsonProperty("message") String message,
 			@JsonProperty("data") Object data) { // @formatter:on
 		}
@@ -1822,14 +1822,14 @@ public final class McpSchema {
 		@JsonProperty("systemPrompt") String systemPrompt,
 		@JsonProperty("includeContext") ContextInclusionStrategy includeContext,
 		@JsonProperty("temperature") Double temperature,
-		@JsonProperty("maxTokens") int maxTokens,
+		@JsonProperty("maxTokens") Integer maxTokens,
 		@JsonProperty("stopSequences") List<String> stopSequences,
 		@JsonProperty("metadata") Map<String, Object> metadata,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
 		// backwards compatibility constructor
 		public CreateMessageRequest(List<SamplingMessage> messages, ModelPreferences modelPreferences,
-				String systemPrompt, ContextInclusionStrategy includeContext, Double temperature, int maxTokens,
+				String systemPrompt, ContextInclusionStrategy includeContext, Double temperature, Integer maxTokens,
 				List<String> stopSequences, Map<String, Object> metadata) {
 			this(messages, modelPreferences, systemPrompt, includeContext, temperature, maxTokens, stopSequences,
 					metadata, null);
@@ -1859,7 +1859,7 @@ public final class McpSchema {
 
 			private Double temperature;
 
-			private int maxTokens;
+			private Integer maxTokens;
 
 			private List<String> stopSequences;
 
