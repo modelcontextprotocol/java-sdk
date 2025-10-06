@@ -2501,6 +2501,7 @@ public final class McpSchema {
 		 * @param hasMore Indicates whether there are additional completion options beyond
 		 * those provided in the current response, even if the exact total is unknown
 		 */
+		@JsonInclude(JsonInclude.Include.ALWAYS)
 		public record CompleteCompletion( // @formatter:off
 				@JsonProperty("values") List<String> values,
 				@JsonProperty("total") Integer total,
