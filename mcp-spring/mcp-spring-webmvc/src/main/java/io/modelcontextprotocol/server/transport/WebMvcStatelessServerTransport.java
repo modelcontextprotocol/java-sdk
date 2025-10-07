@@ -175,8 +175,7 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 
 		private String mcpEndpoint = "/mcp";
 
-		private McpTransportContextExtractor<ServerRequest> contextExtractor = (
-				serverRequest) -> McpTransportContext.EMPTY;
+		private McpTransportContextExtractor<ServerRequest> contextExtractor;
 
 		private Builder() {
 			// used by a static method
@@ -232,7 +231,8 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 		public WebMvcStatelessServerTransport build() {
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 			return new WebMvcStatelessServerTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
-					mcpEndpoint, contextExtractor);
+					mcpEndpoint,
+					contextExtractor == null ? new McpTransportContextExtractorServerRequest() : contextExtractor);
 		}
 
 	}
