@@ -93,6 +93,13 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 */
 	private final HttpClient httpClient;
 
+	/**
+	 * Flag indicating whether this transport should close the HttpClient when closing
+	 * gracefully. Set to true when the HttpClient is created internally by the builder,
+	 * false when provided externally.
+	 */
+	private final boolean shouldCloseHttpClient;
+
 	/** HTTP request builder for building requests to send messages to the server */
 	private final HttpRequest.Builder requestBuilder;
 
@@ -129,7 +136,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 * @throws IllegalArgumentException if objectMapper, clientBuilder, or headers is null
 	 */
 	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
-			String sseEndpoint, McpJsonMapper jsonMapper, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer) {
+			String sseEndpoint, McpJsonMapper jsonMapper, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer,
+			boolean shouldCloseHttpClient) {
 		Assert.notNull(jsonMapper, "jsonMapper must not be null");
 		Assert.hasText(baseUri, "baseUri must not be empty");
 		Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
@@ -142,6 +150,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
 		this.httpRequestCustomizer = httpRequestCustomizer;
+		this.shouldCloseHttpClient = shouldCloseHttpClient;
 	}
 
 	@Override
@@ -168,6 +177,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
 
 		private HttpClient.Builder clientBuilder = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1);
+
+		private HttpClient externalHttpClient;
 
 		private McpJsonMapper jsonMapper;
 
@@ -227,6 +238,20 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		public Builder clientBuilder(HttpClient.Builder clientBuilder) {
 			Assert.notNull(clientBuilder, "clientBuilder must not be null");
 			this.clientBuilder = clientBuilder;
+			this.externalHttpClient = null; // Clear external client if builder is set
+			return this;
+		}
+
+		/**
+		 * Sets an external HttpClient instance to use instead of creating a new one. When
+		 * an external HttpClient is provided, the transport will not attempt to close it
+		 * during graceful shutdown, leaving resource management to the caller.
+		 * @param httpClient the HttpClient instance to use
+		 * @return this builder
+		 */
+		public Builder httpClient(HttpClient httpClient) {
+			Assert.notNull(httpClient, "httpClient must not be null");
+			this.externalHttpClient = httpClient;
 			return this;
 		}
 
@@ -325,9 +350,23 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		 * @return a new transport instance
 		 */
 		public HttpClientSseClientTransport build() {
-			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
+			HttpClient httpClient;
+			boolean shouldCloseHttpClient;
+
+			if (externalHttpClient != null) {
+				// Use external HttpClient, don't close it
+				httpClient = externalHttpClient;
+				shouldCloseHttpClient = false;
+			}
+			else {
+				// Create new HttpClient, should close it
+				httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
+				shouldCloseHttpClient = true;
+			}
+
 			return new HttpClientSseClientTransport(httpClient, requestBuilder, baseUri, sseEndpoint,
-					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, httpRequestCustomizer);
+					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, httpRequestCustomizer,
+					shouldCloseHttpClient);
 		}
 
 	}
@@ -495,7 +534,40 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			if (subscription != null && !subscription.isDisposed()) {
 				subscription.dispose();
 			}
-		});
+		}).then(shouldCloseHttpClient ? Mono.fromRunnable(this::closeHttpClientResources) : Mono.empty());
+	}
+
+	/**
+	 * Closes HttpClient resources including connection pools and selector threads. This
+	 * method uses reflection to access internal HttpClient implementation details.
+	 */
+	private void closeHttpClientResources() {
+		try {
+			// Access HttpClientImpl internal fields via reflection
+			Class<?> httpClientClass = httpClient.getClass();
+
+			// Close SelectorManager if present
+			try {
+				java.lang.reflect.Field selectorManagerField = httpClientClass.getDeclaredField("selectorManager");
+				selectorManagerField.setAccessible(true);
+				Object selectorManager = selectorManagerField.get(httpClient);
+
+				if (selectorManager != null) {
+					java.lang.reflect.Method shutdownMethod = selectorManager.getClass().getMethod("shutdown");
+					shutdownMethod.invoke(selectorManager);
+					logger.debug("HttpClient SelectorManager shutdown completed");
+				}
+			}
+			catch (NoSuchFieldException | NoSuchMethodException e) {
+				// Field/method might not exist in different JDK versions, continue with
+				// other cleanup
+				logger.debug("SelectorManager field/method not found, skipping: {}", e.getMessage());
+			}
+
+		}
+		catch (Exception e) {
+			logger.warn("Failed to close HttpClient resources cleanly: {}", e.getMessage());
+		}
 	}
 
 	/**
