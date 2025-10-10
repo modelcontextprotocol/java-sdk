@@ -599,7 +599,6 @@ public interface McpServer {
 		 * null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
-		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
 		public AsyncSpecification<S> resourceTemplates(
 				List<McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates) {
@@ -1196,7 +1195,6 @@ public interface McpServer {
 		 * null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
-		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
 		public SyncSpecification<S> resourceTemplates(
 				List<McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplates) {
@@ -1704,7 +1702,6 @@ public interface McpServer {
 		 * templates.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
-		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
 		public StatelessAsyncSpecification resourceTemplates(
 				List<McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates) {
@@ -2167,7 +2164,6 @@ public interface McpServer {
 		 * existing templates.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
-		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
 		public StatelessSyncSpecification resourceTemplates(
 				List<McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplatesSpec) {
