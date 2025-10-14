@@ -87,6 +87,13 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	 */
 	private final HttpClient httpClient;
 
+	/**
+	 * Flag indicating whether this transport should close the HttpClient when closing
+	 * gracefully. Set to true when the HttpClient is created internally by the builder,
+	 * false when provided externally.
+	 */
+	private final boolean shouldCloseHttpClient;
+
 	/** HTTP request builder for building requests to send messages to the server */
 	private final HttpRequest.Builder requestBuilder;
 
@@ -126,7 +133,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private HttpClientStreamableHttpTransport(McpJsonMapper jsonMapper, HttpClient httpClient,
 			HttpRequest.Builder requestBuilder, String baseUri, String endpoint, boolean resumableStreams,
-			boolean openConnectionOnStartup, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer) {
+			boolean openConnectionOnStartup, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer,
+			boolean shouldCloseHttpClient) {
 		this.jsonMapper = jsonMapper;
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
@@ -136,6 +144,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		this.openConnectionOnStartup = openConnectionOnStartup;
 		this.activeSession.set(createTransportSession());
 		this.httpRequestCustomizer = httpRequestCustomizer;
+		this.shouldCloseHttpClient = shouldCloseHttpClient;
 	}
 
 	@Override
@@ -211,11 +220,46 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		return Mono.defer(() -> {
 			logger.debug("Graceful close triggered");
 			DefaultMcpTransportSession currentSession = this.activeSession.getAndSet(createTransportSession());
-			if (currentSession != null) {
-				return currentSession.closeGracefully();
+			Mono<Void> sessionClose = currentSession != null ? currentSession.closeGracefully() : Mono.empty();
+
+			if (shouldCloseHttpClient) {
+				return sessionClose.then(Mono.fromRunnable(this::closeHttpClientResources));
 			}
-			return Mono.empty();
+			return sessionClose;
 		});
+	}
+
+	/**
+	 * Closes HttpClient resources including connection pools and selector threads. This
+	 * method uses reflection to access internal HttpClient implementation details.
+	 */
+	private void closeHttpClientResources() {
+		try {
+			// Access HttpClientImpl internal fields via reflection
+			Class<?> httpClientClass = httpClient.getClass();
+
+			// Close SelectorManager if present
+			try {
+				java.lang.reflect.Field selectorManagerField = httpClientClass.getDeclaredField("selectorManager");
+				selectorManagerField.setAccessible(true);
+				Object selectorManager = selectorManagerField.get(httpClient);
+
+				if (selectorManager != null) {
+					java.lang.reflect.Method shutdownMethod = selectorManager.getClass().getMethod("shutdown");
+					shutdownMethod.invoke(selectorManager);
+					logger.debug("HttpClient SelectorManager shutdown completed");
+				}
+			}
+			catch (NoSuchFieldException | NoSuchMethodException e) {
+				// Field/method might not exist in different JDK versions, continue with
+				// other cleanup
+				logger.debug("SelectorManager field/method not found, skipping: {}", e.getMessage());
+			}
+
+		}
+		catch (Exception e) {
+			logger.warn("Failed to close HttpClient resources cleanly: {}", e.getMessage());
+		}
 	}
 
 	private Mono<Disposable> reconnect(McpTransportStream<Disposable> stream) {
@@ -603,6 +647,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 		private HttpClient.Builder clientBuilder = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1);
 
+		private HttpClient externalHttpClient;
+
 		private String endpoint = DEFAULT_ENDPOINT;
 
 		private boolean resumableStreams = true;
@@ -632,6 +678,20 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		public Builder clientBuilder(HttpClient.Builder clientBuilder) {
 			Assert.notNull(clientBuilder, "clientBuilder must not be null");
 			this.clientBuilder = clientBuilder;
+			this.externalHttpClient = null; // Clear external client if builder is set
+			return this;
+		}
+
+		/**
+		 * Sets an external HttpClient instance to use instead of creating a new one. When
+		 * an external HttpClient is provided, the transport will not attempt to close it
+		 * during graceful shutdown, leaving resource management to the caller.
+		 * @param httpClient the HttpClient instance to use
+		 * @return this builder
+		 */
+		public Builder httpClient(HttpClient httpClient) {
+			Assert.notNull(httpClient, "httpClient must not be null");
+			this.externalHttpClient = httpClient;
 			return this;
 		}
 
@@ -769,10 +829,23 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 * @return a new instance of {@link HttpClientStreamableHttpTransport}
 		 */
 		public HttpClientStreamableHttpTransport build() {
-			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
+			HttpClient httpClient;
+			boolean shouldCloseHttpClient;
+
+			if (externalHttpClient != null) {
+				// Use external HttpClient, don't close it
+				httpClient = externalHttpClient;
+				shouldCloseHttpClient = false;
+			}
+			else {
+				// Create new HttpClient, should close it
+				httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
+				shouldCloseHttpClient = true;
+			}
+
 			return new HttpClientStreamableHttpTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
 					httpClient, requestBuilder, baseUri, endpoint, resumableStreams, openConnectionOnStartup,
-					httpRequestCustomizer);
+					httpRequestCustomizer, shouldCloseHttpClient);
 		}
 
 	}
