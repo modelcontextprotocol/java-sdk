@@ -70,6 +70,7 @@ import org.springframework.web.servlet.function.ServerResponse.SseBuilder;
  *
  * @author Christian Tzolov
  * @author Alexandros Pappas
+ * @author Yanming Zhou
  * @see McpServerTransportProvider
  * @see RouterFunction
  */
@@ -309,14 +310,20 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		}
 
 		if (request.param("sessionId").isEmpty()) {
-			return ServerResponse.badRequest().body(new McpError("Session ID missing in message endpoint"));
+			return ServerResponse.badRequest()
+				.body(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+					.message("Session ID missing in message endpoint")
+					.build());
 		}
 
 		String sessionId = request.param("sessionId").get();
 		McpServerSession session = sessions.get(sessionId);
 
 		if (session == null) {
-			return ServerResponse.status(HttpStatus.NOT_FOUND).body(new McpError("Session not found: " + sessionId));
+			return ServerResponse.status(HttpStatus.NOT_FOUND)
+				.body(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+					.message("Session not found: " + sessionId)
+					.build());
 		}
 
 		try {
@@ -335,11 +342,13 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		}
 		catch (IllegalArgumentException | IOException e) {
 			logger.error("Failed to deserialize message: {}", e.getMessage());
-			return ServerResponse.badRequest().body(new McpError("Invalid message format"));
+			return ServerResponse.badRequest()
+				.body(McpError.builder(McpSchema.ErrorCodes.PARSE_ERROR).message("Invalid message format").build());
 		}
 		catch (Exception e) {
 			logger.error("Error handling message: {}", e.getMessage());
-			return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new McpError(e.getMessage()));
+			return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+				.body(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message(e.getMessage()).build());
 		}
 	}
 
