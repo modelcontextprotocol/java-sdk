@@ -300,17 +300,17 @@ public class McpAsyncClient {
 				return Mono.empty();
 			}
 
-			return this.listToolsInternal(init, McpSchema.FIRST_PAGE).doOnNext(listToolsResult -> {
-				listToolsResult.tools()
-					.forEach(tool -> logger.debug("Tool {} schema: {}", tool.name(), tool.outputSchema()));
-				if (enableCallToolSchemaCaching && listToolsResult.tools() != null) {
-					// Cache tools output schema
-					listToolsResult.tools()
-						.stream()
-						.filter(tool -> tool.outputSchema() != null)
-						.forEach(tool -> this.toolsOutputSchemaCache.put(tool.name(), tool.outputSchema()));
-				}
-			}).then();
+			return this.listToolsInternal(init, McpSchema.FIRST_PAGE)
+                    .doOnNext(listToolsResult ->
+                        listToolsResult.tools()
+                                .stream()
+                                .filter(tool -> !Utils.isEmpty(tool.outputSchema()))
+                                .forEach(tool -> {
+                                    logger.debug("Tool {} schema: {}", tool.name(), tool.outputSchema());
+                                    // Put tool output schema to cache
+                                    this.toolsOutputSchemaCache.put(tool.name(), tool.outputSchema());
+                                })
+			    ).then();
 		};
 
 		this.initializer = new LifecycleInitializer(clientCapabilities, clientInfo, transport.protocolVersions(),
