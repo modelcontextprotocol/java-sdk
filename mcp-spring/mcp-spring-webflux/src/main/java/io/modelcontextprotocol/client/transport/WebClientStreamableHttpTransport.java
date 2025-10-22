@@ -98,7 +98,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	private final boolean resumableStreams;
 
-	private final AtomicReference<DefaultMcpTransportSession> activeSession = new AtomicReference<>();
+	private final AtomicReference<McpTransportSession<Disposable>> activeSession = new AtomicReference<>();
 
 	private final AtomicReference<Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>>> handler = new AtomicReference<>();
 
@@ -143,7 +143,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		});
 	}
 
-	private DefaultMcpTransportSession createTransportSession() {
+	private McpTransportSession<Disposable> createTransportSession() {
 		Function<String, Publisher<Void>> onClose = sessionId -> sessionId == null ? Mono.empty()
 				: webClient.delete()
 					.uri(this.endpoint)
@@ -182,9 +182,9 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	public Mono<Void> closeGracefully() {
 		return Mono.defer(() -> {
 			logger.debug("Graceful close triggered");
-			DefaultMcpTransportSession currentSession = this.activeSession.getAndSet(createTransportSession());
+			McpTransportSession<Disposable> currentSession = this.activeSession.getAndSet(createTransportSession());
 			if (currentSession != null) {
-				return currentSession.closeGracefully();
+				return Mono.from(currentSession.closeGracefully());
 			}
 			return Mono.empty();
 		});
