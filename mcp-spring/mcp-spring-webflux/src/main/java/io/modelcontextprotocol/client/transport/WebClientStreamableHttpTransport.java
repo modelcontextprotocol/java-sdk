@@ -25,6 +25,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.McpJsonMapper;
 
+import io.modelcontextprotocol.spec.ClosedMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
 import io.modelcontextprotocol.spec.HttpHeaders;
@@ -159,6 +160,14 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		return new DefaultMcpTransportSession(onClose);
 	}
 
+	private McpTransportSession<Disposable> createClosedSession(McpTransportSession<Disposable> existingSession) {
+		var existingSessionId = Optional.ofNullable(existingSession)
+			.filter(session -> !(session instanceof ClosedMcpTransportSession<Disposable>))
+			.flatMap(McpTransportSession::sessionId)
+			.orElse(null);
+		return new ClosedMcpTransportSession<>(existingSessionId);
+	}
+
 	@Override
 	public void setExceptionHandler(Consumer<Throwable> handler) {
 		logger.debug("Exception handler registered");
@@ -182,7 +191,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	public Mono<Void> closeGracefully() {
 		return Mono.defer(() -> {
 			logger.debug("Graceful close triggered");
-			McpTransportSession<Disposable> currentSession = this.activeSession.getAndSet(createTransportSession());
+			McpTransportSession<Disposable> currentSession = this.activeSession.getAndUpdate(this::createClosedSession);
 			if (currentSession != null) {
 				return Mono.from(currentSession.closeGracefully());
 			}

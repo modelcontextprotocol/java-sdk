@@ -29,6 +29,7 @@ import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientReq
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.spec.ClosedMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
 import io.modelcontextprotocol.spec.HttpHeaders;
@@ -169,6 +170,14 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		return new DefaultMcpTransportSession(onClose);
 	}
 
+	private McpTransportSession<Disposable> createClosedSession(McpTransportSession<Disposable> existingSession) {
+		var existingSessionId = Optional.ofNullable(existingSession)
+			.filter(session -> !(session instanceof ClosedMcpTransportSession<Disposable>))
+			.flatMap(McpTransportSession::sessionId)
+			.orElse(null);
+		return new ClosedMcpTransportSession<>(existingSessionId);
+	}
+
 	private Publisher<Void> createDelete(String sessionId) {
 
 		var uri = Utils.resolveUri(this.baseUri, this.endpoint);
@@ -210,7 +219,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	public Mono<Void> closeGracefully() {
 		return Mono.defer(() -> {
 			logger.debug("Graceful close triggered");
-			McpTransportSession<Disposable> currentSession = this.activeSession.getAndSet(createTransportSession());
+			McpTransportSession<Disposable> currentSession = this.activeSession.getAndUpdate(this::createClosedSession);
 			if (currentSession != null) {
 				return Mono.from(currentSession.closeGracefully());
 			}
