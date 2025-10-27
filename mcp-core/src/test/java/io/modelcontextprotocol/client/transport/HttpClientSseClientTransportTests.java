@@ -4,6 +4,27 @@
 
 package io.modelcontextprotocol.client.transport;
 
+import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
+import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+import org.mockito.ArgumentCaptor;
+import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.web.util.UriComponentsBuilder;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
+import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
+import reactor.test.StepVerifier;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -13,28 +34,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
-
-import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
-import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
-import io.modelcontextprotocol.common.McpTransportContext;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
-
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-import org.mockito.ArgumentCaptor;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.wait.strategy.Wait;
-import reactor.core.publisher.Mono;
-import reactor.core.publisher.Sinks;
-import reactor.test.StepVerifier;
-
-import org.springframework.http.codec.ServerSentEvent;
-import org.springframework.web.util.UriComponentsBuilder;
 
 import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -78,7 +77,8 @@ class HttpClientSseClientTransportTests {
 		public TestHttpClientSseClientTransport(final String baseUri) {
 			super(HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(),
 					HttpRequest.newBuilder().header("Content-Type", "application/json"), baseUri, "/sse", JSON_MAPPER,
-					McpAsyncHttpClientRequestCustomizer.NOOP);
+					McpAsyncHttpClientRequestCustomizer.NOOP, v -> {
+					});
 		}
 
 		public int getInboundMessageCount() {
@@ -130,7 +130,8 @@ class HttpClientSseClientTransportTests {
 
 		StepVerifier.create(transport.sendMessage(bogusMessage))
 			.verifyErrorMessage(
-					"Sending message failed with a non-OK HTTP code: 400 - Invalid message: {\"id\":\"test-id\",\"params\":{\"key\":\"value\"}}");
+					"Sending message failed with a non-OK HTTP code: 400 - Invalid message: {\"id\":\"test-id\","
+							+ "\"params\":{\"key\":\"value\"}}");
 	}
 
 	@Test
@@ -475,6 +476,16 @@ class HttpClientSseClientTransportTests {
 
 		// Clean up
 		customizedTransport.closeGracefully().block();
+	}
+
+	@Test
+	void testTransportConnectionClosedHandler() {
+		AtomicReference<Boolean> closedHandlerCalled = new AtomicReference<>(false);
+		transport.setConnectionClosedHandler(v -> closedHandlerCalled.set(true));
+		// transport close simulate the behavior of disconnection
+		transport.closeGracefully().block();
+		// Verify the closed handler was called
+		Assertions.assertTrue(closedHandlerCalled.get());
 	}
 
 }

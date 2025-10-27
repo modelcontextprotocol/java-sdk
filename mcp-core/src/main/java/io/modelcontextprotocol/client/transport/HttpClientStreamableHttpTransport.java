@@ -4,6 +4,34 @@
 
 package io.modelcontextprotocol.client.transport;
 
+import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
+import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
+import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
+import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
+import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
+import io.modelcontextprotocol.spec.HttpHeaders;
+import io.modelcontextprotocol.spec.McpClientTransport;
+import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpTransportException;
+import io.modelcontextprotocol.spec.McpTransportSession;
+import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
+import io.modelcontextprotocol.spec.McpTransportStream;
+import io.modelcontextprotocol.spec.ProtocolVersions;
+import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.Utils;
+import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.Disposable;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
+import reactor.core.publisher.Mono;
+import reactor.util.function.Tuple2;
+import reactor.util.function.Tuples;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -17,36 +45,6 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
-
-import org.reactivestreams.Publisher;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.json.McpJsonMapper;
-
-import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
-import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
-import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
-import io.modelcontextprotocol.common.McpTransportContext;
-import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
-import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
-import io.modelcontextprotocol.spec.HttpHeaders;
-import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpTransportException;
-import io.modelcontextprotocol.spec.McpTransportSession;
-import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
-import io.modelcontextprotocol.spec.McpTransportStream;
-import io.modelcontextprotocol.spec.ProtocolVersions;
-import io.modelcontextprotocol.util.Assert;
-import io.modelcontextprotocol.util.Utils;
-import reactor.core.Disposable;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.FluxSink;
-import reactor.core.publisher.Mono;
-import reactor.util.function.Tuple2;
-import reactor.util.function.Tuples;
 
 /**
  * An implementation of the Streamable HTTP protocol as defined by the
@@ -87,7 +85,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	 */
 	private final HttpClient httpClient;
 
-	/** HTTP request builder for building requests to send messages to the server */
+	/**
+	 * HTTP request builder for building requests to send messages to the server
+	 */
 	private final HttpRequest.Builder requestBuilder;
 
 	/**
@@ -124,9 +124,12 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private final AtomicReference<Consumer<Throwable>> exceptionHandler = new AtomicReference<>();
 
+	private final AtomicReference<Consumer<Void>> connectionClosedHandler = new AtomicReference<>();
+
 	private HttpClientStreamableHttpTransport(McpJsonMapper jsonMapper, HttpClient httpClient,
 			HttpRequest.Builder requestBuilder, String baseUri, String endpoint, boolean resumableStreams,
-			boolean openConnectionOnStartup, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer) {
+			boolean openConnectionOnStartup, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer,
+			Consumer<Void> connectionClosedHandler) {
 		this.jsonMapper = jsonMapper;
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
@@ -136,6 +139,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		this.openConnectionOnStartup = openConnectionOnStartup;
 		this.activeSession.set(createTransportSession());
 		this.httpRequestCustomizer = httpRequestCustomizer;
+		this.connectionClosedHandler.set(connectionClosedHandler);
 	}
 
 	@Override
@@ -193,6 +197,12 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		this.exceptionHandler.set(handler);
 	}
 
+	@Override
+	public void setConnectionClosedHandler(Consumer<Void> closedHandler) {
+		logger.debug("Connection closed handler registered");
+		this.connectionClosedHandler.set(closedHandler);
+	}
+
 	private void handleException(Throwable t) {
 		logger.debug("Handling exception for session {}", sessionIdOrPlaceholder(this.activeSession.get()), t);
 		if (t instanceof McpTransportSessionNotFoundException) {
@@ -203,6 +213,14 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		Consumer<Throwable> handler = this.exceptionHandler.get();
 		if (handler != null) {
 			handler.accept(t);
+		}
+	}
+
+	private void handleConnectionClosed() {
+		logger.debug("Handling connection closed for session {}", sessionIdOrPlaceholder(this.activeSession.get()));
+		Consumer<Void> handler = this.connectionClosedHandler.get();
+		if (handler != null) {
+			handler.accept(null);
 		}
 	}
 
@@ -356,6 +374,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 								if (ref != null) {
 									transportSession.removeConnection(ref);
 								}
+								this.handleConnectionClosed();
 							}))
 				.contextWrite(ctx)
 				.subscribe();
@@ -615,6 +634,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 		private Duration connectTimeout = Duration.ofSeconds(10);
 
+		private Consumer<Void> connectionClosedHandler = null;
+
 		/**
 		 * Creates a new builder with the specified base URI.
 		 * @param baseUri the base URI of the MCP server
@@ -764,6 +785,17 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		}
 
 		/**
+		 * Set the connection closed handler.
+		 * @param connectionClosedHandler the connection closed handler
+		 * @return this builder
+		 */
+		public Builder connectionClosedHandler(Consumer<Void> connectionClosedHandler) {
+			Assert.notNull(connectionClosedHandler, "connectionClosedHandler must not be null");
+			this.connectionClosedHandler = connectionClosedHandler;
+			return this;
+		}
+
+		/**
 		 * Construct a fresh instance of {@link HttpClientStreamableHttpTransport} using
 		 * the current builder configuration.
 		 * @return a new instance of {@link HttpClientStreamableHttpTransport}
@@ -772,7 +804,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
 			return new HttpClientStreamableHttpTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
 					httpClient, requestBuilder, baseUri, endpoint, resumableStreams, openConnectionOnStartup,
-					httpRequestCustomizer);
+					httpRequestCustomizer, connectionClosedHandler);
 		}
 
 	}
