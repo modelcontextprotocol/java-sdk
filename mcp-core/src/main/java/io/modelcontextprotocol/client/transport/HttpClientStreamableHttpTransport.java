@@ -8,6 +8,7 @@ import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEven
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.spec.ClosedMcpTransportSession;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
@@ -85,9 +86,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	 */
 	private final HttpClient httpClient;
 
-	/**
-	 * HTTP request builder for building requests to send messages to the server
-	 */
+	/** HTTP request builder for building requests to send messages to the server */
 	private final HttpRequest.Builder requestBuilder;
 
 	/**
@@ -118,7 +117,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private final McpAsyncHttpClientRequestCustomizer httpRequestCustomizer;
 
-	private final AtomicReference<DefaultMcpTransportSession> activeSession = new AtomicReference<>();
+	private final AtomicReference<McpTransportSession<Disposable>> activeSession = new AtomicReference<>();
 
 	private final AtomicReference<Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>>> handler = new AtomicReference<>();
 
@@ -167,10 +166,18 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		});
 	}
 
-	private DefaultMcpTransportSession createTransportSession() {
+	private McpTransportSession<Disposable> createTransportSession() {
 		Function<String, Publisher<Void>> onClose = sessionId -> sessionId == null ? Mono.empty()
 				: createDelete(sessionId);
 		return new DefaultMcpTransportSession(onClose);
+	}
+
+	private McpTransportSession<Disposable> createClosedSession(McpTransportSession<Disposable> existingSession) {
+		var existingSessionId = Optional.ofNullable(existingSession)
+			.filter(session -> !(session instanceof ClosedMcpTransportSession<Disposable>))
+			.flatMap(McpTransportSession::sessionId)
+			.orElse(null);
+		return new ClosedMcpTransportSession<>(existingSessionId);
 	}
 
 	private Publisher<Void> createDelete(String sessionId) {
@@ -228,9 +235,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	public Mono<Void> closeGracefully() {
 		return Mono.defer(() -> {
 			logger.debug("Graceful close triggered");
-			DefaultMcpTransportSession currentSession = this.activeSession.getAndSet(createTransportSession());
+			McpTransportSession<Disposable> currentSession = this.activeSession.getAndUpdate(this::createClosedSession);
 			if (currentSession != null) {
-				return currentSession.closeGracefully();
+				return Mono.from(currentSession.closeGracefully());
 			}
 			return Mono.empty();
 		});

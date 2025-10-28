@@ -25,6 +25,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.McpJsonMapper;
 
+import io.modelcontextprotocol.spec.ClosedMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
 import io.modelcontextprotocol.spec.HttpHeaders;
@@ -98,7 +99,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	private final boolean resumableStreams;
 
-	private final AtomicReference<DefaultMcpTransportSession> activeSession = new AtomicReference<>();
+	private final AtomicReference<McpTransportSession<Disposable>> activeSession = new AtomicReference<>();
 
 	private final AtomicReference<Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>>> handler = new AtomicReference<>();
 
@@ -143,7 +144,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		});
 	}
 
-	private DefaultMcpTransportSession createTransportSession() {
+	private McpTransportSession<Disposable> createTransportSession() {
 		Function<String, Publisher<Void>> onClose = sessionId -> sessionId == null ? Mono.empty()
 				: webClient.delete()
 					.uri(this.endpoint)
@@ -157,6 +158,14 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 					})
 					.then();
 		return new DefaultMcpTransportSession(onClose);
+	}
+
+	private McpTransportSession<Disposable> createClosedSession(McpTransportSession<Disposable> existingSession) {
+		var existingSessionId = Optional.ofNullable(existingSession)
+			.filter(session -> !(session instanceof ClosedMcpTransportSession<Disposable>))
+			.flatMap(McpTransportSession::sessionId)
+			.orElse(null);
+		return new ClosedMcpTransportSession<>(existingSessionId);
 	}
 
 	@Override
@@ -182,9 +191,9 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	public Mono<Void> closeGracefully() {
 		return Mono.defer(() -> {
 			logger.debug("Graceful close triggered");
-			DefaultMcpTransportSession currentSession = this.activeSession.getAndSet(createTransportSession());
+			McpTransportSession<Disposable> currentSession = this.activeSession.getAndUpdate(this::createClosedSession);
 			if (currentSession != null) {
-				return currentSession.closeGracefully();
+				return Mono.from(currentSession.closeGracefully());
 			}
 			return Mono.empty();
 		});
