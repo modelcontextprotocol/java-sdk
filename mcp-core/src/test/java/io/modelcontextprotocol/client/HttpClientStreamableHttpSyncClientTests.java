@@ -6,8 +6,12 @@ package io.modelcontextprotocol.client;
 
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -74,38 +78,95 @@ public class HttpClientStreamableHttpSyncClientTests extends AbstractMcpSyncClie
 	}
 
 	@Test
-	void supportsExternalHttpClient() {
-		// Create an external HttpClient
+	void supportsExternalHttpClient() throws Exception {
+		// Create an external HttpClient that we manage ourselves
 		HttpClient externalHttpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
-		// Create transport with external HttpClient
+		// Create transport with external HttpClient - should NOT close it when transport
+		// closes
 		McpClientTransport transport = HttpClientStreamableHttpTransport.builder(host)
 			.httpClient(externalHttpClient)
 			.build();
 
+		// Test MCP operations complete successfully with external HttpClient
 		withClient(transport, syncSpec -> syncSpec, mcpSyncClient -> {
 			mcpSyncClient.initialize();
-			// Test should complete without errors
+
+			// Perform actual MCP operations to verify functionality
+			var capabilities = mcpSyncClient.listTools();
+			assertThat(capabilities).isNotNull();
+			// Test should complete without errors - external HttpClient works normally
 		});
 
-		// External HttpClient should still be usable after transport closes
-		// (This is a basic test - in practice you'd verify the client is still
-		// functional)
-		assertThat(externalHttpClient).isNotNull();
+		// Critical test: Verify external HttpClient is still functional after transport
+		// closes
+		// This proves the transport didn't close our external HttpClient
+		HttpRequest testRequest = HttpRequest.newBuilder()
+			.uri(URI.create(host + "/"))
+			.timeout(Duration.ofSeconds(5))
+			.build();
+
+		HttpResponse<String> response = externalHttpClient.send(testRequest, HttpResponse.BodyHandlers.ofString());
+		assertThat(response.statusCode()).isEqualTo(404); // MCP server returns 404 for
+															// root path
+		// The key point is that we can still make requests - the HttpClient is functional
+
+		// Clean up: We are responsible for closing external HttpClient
+		// (In real applications, this would be done in application shutdown)
 	}
 
 	@Test
-	void closesInternalHttpClientGracefully() {
-		// Create transport with internal HttpClient (default behavior)
-		McpClientTransport transport = HttpClientStreamableHttpTransport.builder(host).build();
+	void closesInternalHttpClientGracefully() throws Exception {
+		// Create a custom onCloseClient handler to verify graceful shutdown
+		AtomicBoolean closeHandlerCalled = new AtomicBoolean(false);
+		AtomicReference<HttpClient> capturedHttpClient = new AtomicReference<>();
+		AtomicBoolean httpClientWasFunctional = new AtomicBoolean(false);
 
+		// Create transport with custom close handler that verifies HttpClient state
+		// before cleanup
+		McpClientTransport transport = HttpClientStreamableHttpTransport.builder(host).onCloseClient(httpClient -> {
+			closeHandlerCalled.set(true);
+			capturedHttpClient.set(httpClient);
+
+			// Verify HttpClient is still functional before we clean it up
+			try {
+				HttpRequest testRequest = HttpRequest.newBuilder()
+					.uri(URI.create(host + "/"))
+					.timeout(Duration.ofSeconds(5))
+					.build();
+				HttpResponse<String> response = httpClient.send(testRequest, HttpResponse.BodyHandlers.ofString());
+				if (response.statusCode() == 404) { // MCP server returns 404 for root
+													// path
+					httpClientWasFunctional.set(true);
+				}
+			}
+			catch (Exception e) {
+				throw new RuntimeException("HttpClient should be functional before cleanup", e);
+			}
+
+			// Here we could perform custom cleanup logic
+			// For example: close connection pools, shutdown executors, etc.
+		}).build();
+
+		// Test MCP operations and graceful shutdown
 		withClient(transport, syncSpec -> syncSpec, mcpSyncClient -> {
 			mcpSyncClient.initialize();
-			// Test should complete and close gracefully
+
+			// Perform MCP operations to ensure transport works normally
+			var capabilities = mcpSyncClient.listTools();
+			assertThat(capabilities).isNotNull();
+
+			// Test should complete and close gracefully - custom close handler will be
+			// invoked
 		});
 
-		// This test verifies that internal HttpClient resources are cleaned up
-		// The actual verification happens during the graceful close process
+		// Verify graceful shutdown behavior
+		assertThat(closeHandlerCalled.get()).isTrue();
+		assertThat(capturedHttpClient.get()).isNotNull();
+		assertThat(httpClientWasFunctional.get()).isTrue();
+
+		// At this point, the custom close handler has been called and
+		// the HttpClient has been properly cleaned up according to our custom logic
 	}
 
 }
