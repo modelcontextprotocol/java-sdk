@@ -2,7 +2,7 @@
  * Copyright 2024-2024 the original author or authors.
  */
 
-package io.modelcontextprotocol.spec;
+package io.modelcontextprotocol.json;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -57,6 +58,16 @@ class DefaultJsonSchemaValidatorTests {
 	private Map<String, Object> toMap(String json) {
 		try {
 			return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {
+			});
+		}
+		catch (Exception e) {
+			throw new RuntimeException("Failed to parse JSON: " + json, e);
+		}
+	}
+
+	private List<Map<String, Object>> toListMap(String json) {
+		try {
+			return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {
 			});
 		}
 		catch (Exception e) {
@@ -199,6 +210,74 @@ class DefaultJsonSchemaValidatorTests {
 	}
 
 	@Test
+	void testValidateWithValidArraySchemaTopLevelArray() {
+		String schemaJson = """
+				{
+					"$schema" : "https://json-schema.org/draft/2020-12/schema",
+					"type" : "array",
+					"items" : {
+						"type" : "object",
+						"properties" : {
+						"city" : {
+							"type" : "string"
+						},
+						"summary" : {
+							"type" : "string"
+						},
+						"temperatureC" : {
+							"type" : "number",
+							"format" : "float"
+						}
+						},
+						"required" : [ "city", "summary", "temperatureC" ]
+					},
+					"additionalProperties" : false
+				}
+					""";
+
+		String contentJson = """
+				[
+					{
+						"city": "London",
+						"summary": "Generally mild with frequent rainfall. Winters are cool and damp, summers are warm but rarely hot. Cloudy conditions are common throughout the year.",
+						"temperatureC": 11.3
+					},
+					{
+						"city": "New York",
+						"summary": "Four distinct seasons with hot and humid summers, cold winters with snow, and mild springs and autumns. Precipitation is fairly evenly distributed throughout the year.",
+						"temperatureC": 12.8
+					},
+					{
+						"city": "San Francisco",
+						"summary": "Mild year-round with a distinctive Mediterranean climate. Famous for summer fog, mild winters, and little temperature variation throughout the year. Very little rainfall in summer months.",
+						"temperatureC": 14.6
+					},
+					{
+						"city": "Tokyo",
+						"summary": "Humid subtropical climate with hot, wet summers and mild winters. Experiences a rainy season in early summer and occasional typhoons in late summer to early autumn.",
+						"temperatureC": 15.4
+					}
+				]
+				""";
+
+		Map<String, Object> schema = toMap(schemaJson);
+
+		// Validate as JSON string
+		ValidationResponse response = validator.validate(schema, contentJson);
+
+		assertTrue(response.valid());
+		assertNull(response.errorMessage());
+
+		List<Map<String, Object>> structuredContent = toListMap(contentJson);
+
+		// Validate as List<Map<String, Object>>
+		response = validator.validate(schema, structuredContent);
+
+		assertTrue(response.valid());
+		assertNull(response.errorMessage());
+	}
+
+	@Test
 	void testValidateWithInvalidTypeSchema() {
 		String schemaJson = """
 				{
@@ -266,7 +345,8 @@ class DefaultJsonSchemaValidatorTests {
 					"properties": {
 						"name": {"type": "string"}
 					},
-					"required": ["name"]
+					"required": ["name"],
+					"additionalProperties": false
 				}
 				""";
 
@@ -289,6 +369,35 @@ class DefaultJsonSchemaValidatorTests {
 
 	@Test
 	void testValidateWithAdditionalPropertiesExplicitlyAllowed() {
+		String schemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"name": {"type": "string"}
+					},
+					"required": ["name"],
+					"additionalProperties": true
+				}
+				""";
+
+		String contentJson = """
+				{
+					"name": "John Doe",
+					"extraField": "should be allowed"
+				}
+				""";
+
+		Map<String, Object> schema = toMap(schemaJson);
+		Map<String, Object> structuredContent = toMap(contentJson);
+
+		ValidationResponse response = validator.validate(schema, structuredContent);
+
+		assertTrue(response.valid());
+		assertNull(response.errorMessage());
+	}
+
+	@Test
+	void testValidateWithDefaultAdditionalProperties() {
 		String schemaJson = """
 				{
 					"type": "object",

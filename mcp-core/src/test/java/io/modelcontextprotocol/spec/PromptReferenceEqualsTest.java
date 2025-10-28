@@ -7,7 +7,9 @@ package io.modelcontextprotocol.spec;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Test class to verify the equals method implementation for PromptReference.

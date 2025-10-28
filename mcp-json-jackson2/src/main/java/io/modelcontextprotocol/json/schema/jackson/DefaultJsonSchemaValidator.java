@@ -7,18 +7,16 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.networknt.schema.JsonSchema;
 import com.networknt.schema.JsonSchemaFactory;
 import com.networknt.schema.SpecVersion;
 import com.networknt.schema.ValidationMessage;
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Default implementation of the {@link JsonSchemaValidator} interface. This class
@@ -60,7 +58,9 @@ public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 
 		try {
 
-			JsonNode jsonStructuredOutput = this.objectMapper.valueToTree(structuredContent);
+			JsonNode jsonStructuredOutput = (structuredContent instanceof String)
+					? this.objectMapper.readTree((String) structuredContent)
+					: this.objectMapper.valueToTree(structuredContent);
 
 			Set<ValidationMessage> validationResult = this.getOrCreateJsonSchema(schema).validate(jsonStructuredOutput);
 
@@ -123,17 +123,6 @@ public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 		if (schemaNode == null) {
 			throw new JsonProcessingException("Failed to convert schema to JsonNode") {
 			};
-		}
-
-		// Handle additionalProperties setting
-		if (schemaNode.isObject()) {
-			ObjectNode objectSchemaNode = (ObjectNode) schemaNode;
-			if (!objectSchemaNode.has("additionalProperties")) {
-				// Clone the node before modification to avoid mutating the original
-				objectSchemaNode = objectSchemaNode.deepCopy();
-				objectSchemaNode.put("additionalProperties", false);
-				schemaNode = objectSchemaNode;
-			}
 		}
 
 		return this.schemaFactory.getSchema(schemaNode);
