@@ -60,7 +60,8 @@
 		<surefireArgLine/>
 
 		<assert4j.version>3.26.3</assert4j.version>
-		<junit.version>5.10.2</junit.version>
+		<junit.version>5.13.4</junit.version>
+        <junit.platform.version>1.13.4</junit.platform.version>
 		<mockito.version>5.17.0</mockito.version>
 		<testcontainers.version>1.20.4</testcontainers.version>
 		<byte-buddy.version>1.17.5</byte-buddy.version>
@@ -73,7 +74,7 @@
 
 		<!-- plugin versions -->
 		<maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
-		<maven-surefire-plugin.version>3.1.2</maven-surefire-plugin.version>
+		<maven-surefire-plugin.version>3.5.4</maven-surefire-plugin.version>
 		<maven-failsafe-plugin.version>3.5.2</maven-failsafe-plugin.version>
 		<maven-javadoc-plugin.version>3.5.0</maven-javadoc-plugin.version>
 		<maven-source-plugin.version>3.3.0</maven-source-plugin.version>
@@ -106,6 +107,9 @@
         <module>mcp-core</module>
         <module>mcp-json-jackson2</module>
         <module>mcp-json</module>
+        <module>mcp-tck-http</module>
+        <module>mcp-tck-http-httpserver-async</module>
+        <module>mcp-tck-http-httpserver-sync</module>
 		<module>mcp-spring/mcp-spring-webflux</module>
 		<module>mcp-spring/mcp-spring-webmvc</module>
 		<module>mcp-test</module>
@@ -194,7 +198,6 @@
 
 					<!-- Output test execution times in the logs -->
 					<redirectTestOutputToFile>false</redirectTestOutputToFile>
-
 				</configuration>
 			</plugin>
 			<plugin>

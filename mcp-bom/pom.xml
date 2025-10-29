@@ -61,6 +61,13 @@
                 <version>${project.version}</version>
             </dependency>
 
+            <!-- MCP Server TCK (Technology Compatibility Kit) -->
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-tck-http</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
             <!-- MCP Transport - WebFlux SSE -->
             <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
