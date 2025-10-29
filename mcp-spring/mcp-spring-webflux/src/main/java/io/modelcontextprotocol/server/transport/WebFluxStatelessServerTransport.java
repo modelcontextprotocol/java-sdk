@@ -38,7 +38,7 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 
 	private final String mcpEndpoint;
 
-	private final RouterFunction<?> routerFunction;
+	private final RouterFunction<ServerResponse> routerFunction;
 
 	private McpStatelessServerHandler mcpHandler;
 
@@ -83,7 +83,7 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 	 * </ul>
 	 * @return The configured {@link RouterFunction} for handling HTTP requests
 	 */
-	public RouterFunction<?> getRouterFunction() {
+	public RouterFunction<ServerResponse> getRouterFunction() {
 		return this.routerFunction;
 	}
 
