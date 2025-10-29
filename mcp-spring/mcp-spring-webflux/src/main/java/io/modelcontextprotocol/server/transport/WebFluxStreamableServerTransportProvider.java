@@ -403,8 +403,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 		private String mcpEndpoint = "/mcp";
 
-		private McpTransportContextExtractor<ServerRequest> contextExtractor = (
-				serverRequest) -> McpTransportContext.EMPTY;
+		private McpTransportContextExtractor<ServerRequest> contextExtractor;
 
 		private boolean disallowDelete;
 
@@ -486,7 +485,8 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		public WebFluxStreamableServerTransportProvider build() {
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 			return new WebFluxStreamableServerTransportProvider(
-					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, mcpEndpoint, contextExtractor,
+					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, mcpEndpoint,
+					contextExtractor == null ? new McpTransportContextExtractorServerRequest() : contextExtractor,
 					disallowDelete, keepAliveInterval);
 		}
 

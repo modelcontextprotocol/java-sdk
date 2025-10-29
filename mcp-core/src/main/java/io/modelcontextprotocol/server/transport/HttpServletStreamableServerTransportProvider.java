@@ -1,7 +1,6 @@
 /*
  * Copyright 2024-2024 the original author or authors.
  */
-
 package io.modelcontextprotocol.server.transport;
 
 import java.io.BufferedReader;
@@ -13,6 +12,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
+import io.modelcontextprotocol.server.servlet.HttpServletRequestMcpTransportContextExtractor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -769,8 +769,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		private boolean disallowDelete = false;
 
-		private McpTransportContextExtractor<HttpServletRequest> contextExtractor = (
-				serverRequest) -> McpTransportContext.EMPTY;
+		private McpTransportContextExtractor<HttpServletRequest> contextExtractor;
 
 		private Duration keepAliveInterval;
 
@@ -843,7 +842,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 			return new HttpServletStreamableServerTransportProvider(
 					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, mcpEndpoint, disallowDelete,
-					contextExtractor, keepAliveInterval);
+					contextExtractor == null ? new HttpServletRequestMcpTransportContextExtractor() : contextExtractor,
+					keepAliveInterval);
 		}
 
 	}

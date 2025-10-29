@@ -604,8 +604,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 
 		private boolean disallowDelete = false;
 
-		private McpTransportContextExtractor<ServerRequest> contextExtractor = (
-				serverRequest) -> McpTransportContext.EMPTY;
+		private McpTransportContextExtractor<ServerRequest> contextExtractor;
 
 		private Duration keepAliveInterval;
 
@@ -682,7 +681,8 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 			return new WebMvcStreamableServerTransportProvider(
 					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, mcpEndpoint, disallowDelete,
-					contextExtractor, keepAliveInterval);
+					contextExtractor == null ? new McpTransportContextExtractorServerRequest() : contextExtractor,
+					keepAliveInterval);
 		}
 
 	}
