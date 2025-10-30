@@ -67,6 +67,11 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 	}
 
 	@Override
+	public McpStatelessServerHandler getMcpHandler() {
+		return mcpHandler;
+	}
+
+	@Override
 	public Mono<Void> closeGracefully() {
 		return Mono.fromRunnable(() -> this.isClosing = true);
 	}

@@ -4,14 +4,16 @@
 
 package io.modelcontextprotocol.spec;
 
-import java.util.List;
-
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
 import reactor.core.publisher.Mono;
+
+import java.util.List;
 
 public interface McpStatelessServerTransport {
 
 	void setMcpHandler(McpStatelessServerHandler mcpHandler);
+
+	McpStatelessServerHandler getMcpHandler();
 
 	/**
 	 * Immediately closes all the transports with connected clients and releases any
