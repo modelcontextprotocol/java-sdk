@@ -174,7 +174,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 				return ServerResponse.badRequest().build();
 			}
 
-			if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
+			if (request.headers().header(HttpHeaders.MCP_SESSION_ID).isEmpty()) {
 				return ServerResponse.badRequest().build(); // TODO: say we need a session
 															// id
 			}
@@ -187,7 +187,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 				return ServerResponse.notFound().build();
 			}
 
-			if (request.headers().asHttpHeaders().containsKey(HttpHeaders.LAST_EVENT_ID)) {
+			if (!request.headers().header(HttpHeaders.LAST_EVENT_ID).isEmpty()) {
 				String lastId = request.headers().asHttpHeaders().getFirst(HttpHeaders.LAST_EVENT_ID);
 				return ServerResponse.ok()
 					.contentType(MediaType.TEXT_EVENT_STREAM)
@@ -258,7 +258,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 							.bodyValue(initResult));
 				}
 
-				if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
+				if (request.headers().header(HttpHeaders.MCP_SESSION_ID).isEmpty()) {
 					return ServerResponse.badRequest().bodyValue(new McpError("Session ID missing"));
 				}
 
@@ -313,7 +313,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		return Mono.defer(() -> {
-			if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
+			if (request.headers().header(HttpHeaders.MCP_SESSION_ID).isEmpty()) {
 				return ServerResponse.badRequest().build(); // TODO: say we need a session
 															// id
 			}
