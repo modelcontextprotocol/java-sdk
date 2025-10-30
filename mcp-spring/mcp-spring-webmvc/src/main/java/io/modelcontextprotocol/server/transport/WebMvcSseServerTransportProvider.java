@@ -36,6 +36,7 @@ import org.springframework.web.servlet.function.RouterFunctions;
 import org.springframework.web.servlet.function.ServerRequest;
 import org.springframework.web.servlet.function.ServerResponse;
 import org.springframework.web.servlet.function.ServerResponse.SseBuilder;
+import org.springframework.web.util.UriComponentsBuilder;
 
 /**
  * Server-side implementation of the Model Context Protocol (MCP) transport layer using
@@ -86,6 +87,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * Event type for sending the message endpoint URI to clients.
 	 */
 	public static final String ENDPOINT_EVENT_TYPE = "endpoint";
+
+	public static final String SESSION_ID = "sessionId";
 
 	/**
 	 * Default SSE endpoint path as specified by the MCP transport specification.
@@ -275,9 +278,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				this.sessions.put(sessionId, session);
 
 				try {
-					sseBuilder.id(sessionId)
-						.event(ENDPOINT_EVENT_TYPE)
-						.data(this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId);
+					sseBuilder.id(sessionId).event(ENDPOINT_EVENT_TYPE).data(buildEndpointUrl(sessionId));
 				}
 				catch (Exception e) {
 					logger.error("Failed to send initial endpoint event: {}", e.getMessage());
@@ -290,6 +291,14 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			sessions.remove(sessionId);
 			return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
 		}
+	}
+
+	private String buildEndpointUrl(String sessionId) {
+		return UriComponentsBuilder.fromUriString(baseUrl)
+			.path(messageEndpoint)
+			.queryParam(SESSION_ID, sessionId)
+			.build()
+			.toUriString();
 	}
 
 	/**
@@ -308,11 +317,11 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
-		if (request.param("sessionId").isEmpty()) {
+		if (request.param(SESSION_ID).isEmpty()) {
 			return ServerResponse.badRequest().body(new McpError("Session ID missing in message endpoint"));
 		}
 
-		String sessionId = request.param("sessionId").get();
+		String sessionId = request.param(SESSION_ID).get();
 		McpServerSession session = sessions.get(sessionId);
 
 		if (session == null) {
