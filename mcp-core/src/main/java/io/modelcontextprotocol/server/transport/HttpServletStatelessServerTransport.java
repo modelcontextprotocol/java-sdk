@@ -4,16 +4,8 @@
 
 package io.modelcontextprotocol.server.transport;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.PrintWriter;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import io.modelcontextprotocol.json.McpJsonMapper;
-
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
@@ -25,7 +17,13 @@ import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.PrintWriter;
 
 /**
  * Implementation of an HttpServlet based {@link McpStatelessServerTransport}.
@@ -58,6 +56,9 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 
 	private volatile boolean isClosing = false;
 
+	private volatile GetHandler getHandler = (request, response) -> response
+		.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
+
 	private HttpServletStatelessServerTransport(McpJsonMapper jsonMapper, String mcpEndpoint,
 			McpTransportContextExtractor<HttpServletRequest> contextExtractor) {
 		Assert.notNull(jsonMapper, "jsonMapper must not be null");
@@ -84,6 +85,18 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		return Mono.fromRunnable(() -> this.isClosing = true);
 	}
 
+	public void setGetHandler(GetHandler getHandler) {
+		Assert.notNull(getHandler, "getHandler must not be null");
+
+		this.getHandler = getHandler;
+	}
+
+	public interface GetHandler {
+
+		void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException;
+
+	}
+
 	/**
 	 * Handles GET requests - returns 405 METHOD NOT ALLOWED as stateless transport
 	 * doesn't support GET requests.
@@ -102,7 +115,7 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 			return;
 		}
 
-		response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
+		getHandler.doGet(request, response);
 	}
 
 	/**

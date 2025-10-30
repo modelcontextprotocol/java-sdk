@@ -46,6 +46,8 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 
 	private volatile boolean isClosing = false;
 
+	private volatile GetHandler getHandler = (request) -> ServerResponse.status(HttpStatus.METHOD_NOT_ALLOWED).build();
+
 	private WebFluxStatelessServerTransport(McpJsonMapper jsonMapper, String mcpEndpoint,
 			McpTransportContextExtractor<ServerRequest> contextExtractor) {
 		Assert.notNull(jsonMapper, "jsonMapper must not be null");
@@ -92,8 +94,20 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 		return this.routerFunction;
 	}
 
+	public interface GetHandler {
+
+		Mono<ServerResponse> doGet(ServerRequest request);
+
+	}
+
+	public void setGetHandler(GetHandler getHandler) {
+		Assert.notNull(getHandler, "getHandler must not be null");
+
+		this.getHandler = getHandler;
+	}
+
 	private Mono<ServerResponse> handleGet(ServerRequest request) {
-		return ServerResponse.status(HttpStatus.METHOD_NOT_ALLOWED).build();
+		return getHandler.doGet(request);
 	}
 
 	private Mono<ServerResponse> handlePost(ServerRequest request) {

@@ -50,6 +50,8 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 
 	private volatile boolean isClosing = false;
 
+	private volatile GetHandler getHandler = (request) -> ServerResponse.status(HttpStatus.METHOD_NOT_ALLOWED).build();
+
 	private WebMvcStatelessServerTransport(McpJsonMapper jsonMapper, String mcpEndpoint,
 			McpTransportContextExtractor<ServerRequest> contextExtractor) {
 		Assert.notNull(jsonMapper, "jsonMapper must not be null");
@@ -96,8 +98,20 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 		return this.routerFunction;
 	}
 
+	public interface GetHandler {
+
+		ServerResponse doGet(ServerRequest request);
+
+	}
+
+	public void setGetHandler(GetHandler getHandler) {
+		Assert.notNull(getHandler, "getHandler must not be null");
+
+		this.getHandler = getHandler;
+	}
+
 	private ServerResponse handleGet(ServerRequest request) {
-		return ServerResponse.status(HttpStatus.METHOD_NOT_ALLOWED).build();
+		return getHandler.doGet(request);
 	}
 
 	private ServerResponse handlePost(ServerRequest request) {
