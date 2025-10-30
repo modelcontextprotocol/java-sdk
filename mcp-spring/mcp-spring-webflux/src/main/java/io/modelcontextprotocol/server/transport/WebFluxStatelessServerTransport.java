@@ -4,8 +4,8 @@
 
 package io.modelcontextprotocol.server.transport;
 
-import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
@@ -40,9 +40,9 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 
 	private final RouterFunction<?> routerFunction;
 
-	private McpStatelessServerHandler mcpHandler;
+	private volatile McpStatelessServerHandler mcpHandler;
 
-	private McpTransportContextExtractor<ServerRequest> contextExtractor;
+	private final McpTransportContextExtractor<ServerRequest> contextExtractor;
 
 	private volatile boolean isClosing = false;
 

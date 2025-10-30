@@ -44,9 +44,9 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 
 	private final RouterFunction<ServerResponse> routerFunction;
 
-	private McpStatelessServerHandler mcpHandler;
+	private volatile McpStatelessServerHandler mcpHandler;
 
-	private McpTransportContextExtractor<ServerRequest> contextExtractor;
+	private final McpTransportContextExtractor<ServerRequest> contextExtractor;
 
 	private volatile boolean isClosing = false;
 

@@ -52,9 +52,9 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 
 	private final String mcpEndpoint;
 
-	private McpStatelessServerHandler mcpHandler;
+	private volatile McpStatelessServerHandler mcpHandler;
 
-	private McpTransportContextExtractor<HttpServletRequest> contextExtractor;
+	private final McpTransportContextExtractor<HttpServletRequest> contextExtractor;
 
 	private volatile boolean isClosing = false;
 
