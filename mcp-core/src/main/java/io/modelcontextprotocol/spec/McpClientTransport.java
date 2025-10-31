@@ -38,4 +38,12 @@ public interface McpClientTransport extends McpTransport {
 	default void setExceptionHandler(Consumer<Throwable> handler) {
 	}
 
+	/**
+	 * Sets the handler for the transport closed event.
+	 * @param closedHandler Allows reacting to transport closed event by the higher layers
+	 */
+	default void setConnectionClosedHandler(Consumer<Void> closedHandler) {
+
+	}
+
 }
