@@ -308,7 +308,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 					// The spec mentions only ACCEPTED, but the existing SDKs can return
 					// 200 OK for notifications
-					if (response.statusCode().is2xxSuccessful()) {
+					if (is2xx(response)) {
 						Optional<MediaType> contentType = response.headers().contentType();
 						long contentLength = response.headers().contentLength().orElse(-1);
 						// Existing SDKs consume notifications with no response body nor
@@ -392,14 +392,15 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			}
 			catch (IOException ex) {
 				toPropagate = new McpTransportException("Sending request failed, " + e.getMessage(), e);
-				logger.debug("Received content together with {} HTTP code response: {}", response.statusCode(), body);
+				logger.debug("Received content together with {} HTTP code response: {}", response.rawStatusCode(),
+						body);
 			}
 
 			// Some implementations can return 400 when presented with a
 			// session id that it doesn't know about, so we will
 			// invalidate the session
 			// https://github.com/modelcontextprotocol/typescript-sdk/issues/389
-			if (responseException.getStatusCode().isSameCodeAs(HttpStatus.BAD_REQUEST)) {
+			if (isBadRequest(responseException)) {
 				if (!sessionRepresentation.equals(MISSING_SESSION_ID)) {
 					return Mono.error(new McpTransportSessionNotFoundException(sessionRepresentation, toPropagate));
 				}
@@ -419,16 +420,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		return Flux.from(sessionStream.consumeSseStream(idWithMessages));
 	}
 
-	private static boolean isNotFound(ClientResponse response) {
-		return response.statusCode().isSameCodeAs(HttpStatus.NOT_FOUND);
-	}
-
-	private static boolean isNotAllowed(ClientResponse response) {
-		return response.statusCode().isSameCodeAs(HttpStatus.METHOD_NOT_ALLOWED);
-	}
-
 	private static boolean isEventStream(ClientResponse response) {
-		return response.statusCode().is2xxSuccessful() && response.headers().contentType().isPresent()
+		return is2xx(response) && response.headers().contentType().isPresent()
 				&& response.headers().contentType().get().isCompatibleWith(MediaType.TEXT_EVENT_STREAM);
 	}
 
@@ -605,6 +598,34 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 					webClientBuilder, endpoint, resumableStreams, openConnectionOnStartup, supportedProtocolVersions);
 		}
 
+	}
+
+	/**
+	 * Needed for Spring 5 compatibility
+	 */
+	private static boolean isBadRequest(final WebClientResponseException responseException) {
+		return responseException.getRawStatusCode() == HttpStatus.BAD_REQUEST.value();
+	}
+
+	/**
+	 * Needed for Spring 5 compatibility
+	 */
+	private static boolean isNotFound(ClientResponse response) {
+		return response.rawStatusCode() == HttpStatus.NOT_FOUND.value();
+	}
+
+	/**
+	 * Needed for Spring 5 compatibility
+	 */
+	private static boolean isNotAllowed(ClientResponse response) {
+		return response.rawStatusCode() == HttpStatus.METHOD_NOT_ALLOWED.value();
+	}
+
+	/**
+	 * Needed for Spring 5 compatibility
+	 */
+	private static boolean is2xx(final ClientResponse response) {
+		return response.rawStatusCode() >= 200 && response.rawStatusCode() < 300;
 	}
 
 }
