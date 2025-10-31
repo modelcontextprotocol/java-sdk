@@ -47,7 +47,7 @@ class WebClientStreamableHttpTransportTest {
 
 		var initializeRequest = new McpSchema.InitializeRequest(McpSchema.LATEST_PROTOCOL_VERSION,
 				McpSchema.ClientCapabilities.builder().roots(true).build(),
-				new McpSchema.Implementation("Spring AI MCP Client", "0.3.1"));
+				new McpSchema.Implementation("MCP Client", "0.3.1"));
 		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
 				"test-id", initializeRequest);
 
@@ -62,7 +62,7 @@ class WebClientStreamableHttpTransportTest {
 
 		var initializeRequest = new McpSchema.InitializeRequest(McpSchema.LATEST_PROTOCOL_VERSION,
 				McpSchema.ClientCapabilities.builder().roots(true).build(),
-				new McpSchema.Implementation("Spring AI MCP Client", "0.3.1"));
+				new McpSchema.Implementation("MCP Client", "0.3.1"));
 		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
 				"test-id", initializeRequest);
 
