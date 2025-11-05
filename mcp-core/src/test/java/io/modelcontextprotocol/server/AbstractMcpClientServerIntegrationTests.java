@@ -851,7 +851,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@MethodSource("clientsForTesting")
-	void testToolCallSuccessWithTranportContextExtraction(String clientType) {
+	void testToolCallSuccessWithTransportContextExtraction(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
