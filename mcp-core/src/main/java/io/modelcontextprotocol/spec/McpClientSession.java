@@ -241,7 +241,7 @@ public class McpClientSession implements McpSession {
 	 * prefix with an atomic counter to ensure uniqueness.
 	 * @return A unique request ID string
 	 */
-	private String generateRequestId() {
+	protected String generateRequestId() {
 		return this.sessionPrefix + "-" + this.requestCounter.getAndIncrement();
 	}
 
