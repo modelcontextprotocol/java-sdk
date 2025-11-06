@@ -78,6 +78,8 @@ public class McpStatelessAsyncServer {
 
 	private final JsonSchemaValidator jsonSchemaValidator;
 
+	private final Duration requestTimeout;
+
 	McpStatelessAsyncServer(McpStatelessServerTransport mcpTransport, McpJsonMapper jsonMapper,
 			McpStatelessServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
@@ -93,6 +95,7 @@ public class McpStatelessAsyncServer {
 		this.completions.putAll(features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
+		this.requestTimeout = requestTimeout;
 
 		Map<String, McpStatelessRequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -129,7 +132,8 @@ public class McpStatelessAsyncServer {
 
 		this.protocolVersions = new ArrayList<>(mcpTransport.protocolVersions());
 
-		McpStatelessServerHandler handler = new DefaultMcpStatelessServerHandler(requestHandlers, Map.of());
+		McpStatelessServerHandler handler = new DefaultMcpStatelessServerHandler(requestHandlers, Map.of(),
+				this.requestTimeout);
 		mcpTransport.setMcpHandler(handler);
 	}
 

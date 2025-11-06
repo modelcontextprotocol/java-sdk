@@ -647,4 +647,101 @@ class HttpServletStatelessIntegrationTests {
 		};
 	}
 
+	// ---------------------------------------
+	// Timeout Tests
+	// ---------------------------------------
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient" })
+	void testRequestTimeoutWithSlowTool(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Create a tool that takes longer than the timeout
+		McpStatelessServerFeatures.SyncToolSpecification slowTool = new McpStatelessServerFeatures.SyncToolSpecification(
+				Tool.builder()
+					.name("slow-tool")
+					.description("A tool that takes too long")
+					.inputSchema(EMPTY_JSON_SCHEMA)
+					.build(),
+				(transportContext, request) -> {
+					try {
+						// Sleep for 3 seconds, which is longer than our timeout
+						Thread.sleep(3000);
+					}
+					catch (InterruptedException e) {
+						Thread.currentThread().interrupt();
+						throw new RuntimeException("Interrupted", e);
+					}
+					return new CallToolResult(List.of(new TextContent("This should not be reached")), null);
+				});
+
+		// Create server with a 1-second request timeout
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.requestTimeout(Duration.ofSeconds(1))
+			.tools(slowTool)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Call the slow tool - should timeout and throw an exception
+			org.assertj.core.api.Assertions
+				.assertThatThrownBy(() -> mcpClient.callTool(new McpSchema.CallToolRequest("slow-tool", Map.of())))
+				.isInstanceOf(io.modelcontextprotocol.spec.McpError.class)
+				.satisfies(error -> {
+					String message = error.getMessage().toLowerCase();
+					assertThat(message).containsAnyOf("timeout", "timed out", "did not observe");
+				});
+		}
+		finally {
+			mcpServer.close();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient" })
+	void testRequestTimeoutWithFastTool(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Create a tool that completes quickly
+		McpStatelessServerFeatures.SyncToolSpecification fastTool = new McpStatelessServerFeatures.SyncToolSpecification(
+				Tool.builder()
+					.name("fast-tool")
+					.description("A tool that completes quickly")
+					.inputSchema(EMPTY_JSON_SCHEMA)
+					.build(),
+				(transportContext, request) -> {
+					return new CallToolResult(List.of(new TextContent("Fast response")), null);
+				});
+
+		// Create server with a 5-second request timeout (plenty of time)
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.requestTimeout(Duration.ofSeconds(5))
+			.tools(fastTool)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Call the fast tool - should succeed
+			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("fast-tool", Map.of()));
+
+			// Verify that we got a successful response
+			assertThat(response).isNotNull();
+			assertThat(response.isError()).isNotEqualTo(Boolean.TRUE);
+			assertThat(response.content()).isNotEmpty();
+
+			String message = ((TextContent) response.content().get(0)).text();
+			assertThat(message).isEqualTo("Fast response");
+		}
+		finally {
+			mcpServer.close();
+		}
+	}
+
 }

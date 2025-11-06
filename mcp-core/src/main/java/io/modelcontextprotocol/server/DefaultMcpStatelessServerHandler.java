@@ -10,7 +10,9 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
+import java.time.Duration;
 import java.util.Map;
 
 class DefaultMcpStatelessServerHandler implements McpStatelessServerHandler {
@@ -21,10 +23,13 @@ class DefaultMcpStatelessServerHandler implements McpStatelessServerHandler {
 
 	Map<String, McpStatelessNotificationHandler> notificationHandlers;
 
+	Duration requestTimeout;
+
 	public DefaultMcpStatelessServerHandler(Map<String, McpStatelessRequestHandler<?>> requestHandlers,
-			Map<String, McpStatelessNotificationHandler> notificationHandlers) {
+			Map<String, McpStatelessNotificationHandler> notificationHandlers, Duration requestTimeout) {
 		this.requestHandlers = requestHandlers;
 		this.notificationHandlers = notificationHandlers;
+		this.requestTimeout = requestTimeout;
 	}
 
 	@Override
@@ -35,6 +40,8 @@ class DefaultMcpStatelessServerHandler implements McpStatelessServerHandler {
 			return Mono.error(new McpError("Missing handler for request type: " + request.method()));
 		}
 		return requestHandler.handle(transportContext, request.params())
+			.subscribeOn(Schedulers.boundedElastic())
+			.timeout(this.requestTimeout)
 			.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
 			.onErrorResume(t -> {
 				McpSchema.JSONRPCResponse.JSONRPCError error;
