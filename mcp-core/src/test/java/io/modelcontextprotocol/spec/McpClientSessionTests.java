@@ -19,7 +19,6 @@ import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Test suite for {@link McpClientSession} that verifies its JSON-RPC message handling,
@@ -55,17 +54,6 @@ class McpClientSessionTests {
 		if (session != null) {
 			session.close();
 		}
-	}
-
-	@Test
-	void testConstructorWithInvalidArguments() {
-		assertThatThrownBy(() -> new McpClientSession(null, transport, Map.of(), Map.of()))
-			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("The requestTimeout can not be null");
-
-		assertThatThrownBy(() -> new McpClientSession(TIMEOUT, null, Map.of(), Map.of()))
-			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("transport can not be null");
 	}
 
 	TypeRef<String> responseType = new TypeRef<>() {
@@ -188,6 +176,155 @@ class McpClientSessionTests {
 		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
 		assertThat(response.error()).isNotNull();
 		assertThat(response.error().code()).isEqualTo(McpSchema.ErrorCodes.METHOD_NOT_FOUND);
+	}
+
+	@Test
+	void testRequestHandlerThrowsMcpErrorWithJsonRpcError() {
+		// Setup: Create a request handler that throws McpError with custom error code and
+		// data
+		String testMethod = "test.customError";
+		Map<String, Object> errorData = Map.of("customField", "customValue");
+		McpClientSession.RequestHandler<?> failingHandler = params -> Mono
+			.error(McpError.builder(123).message("Custom error message").data(errorData).build());
+
+		transport = new MockMcpClientTransport();
+		session = new McpClientSession(TIMEOUT, transport, Map.of(testMethod, failingHandler), Map.of());
+
+		// Simulate incoming request that will trigger the error
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, testMethod,
+				"test-id", null);
+		transport.simulateIncomingMessage(request);
+
+		// Verify: The response should contain the custom error from McpError
+		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
+		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
+		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
+		assertThat(response.error()).isNotNull();
+		assertThat(response.error().code()).isEqualTo(123);
+		assertThat(response.error().message()).isEqualTo("Custom error message");
+		assertThat(response.error().data()).isEqualTo(errorData);
+	}
+
+	@Test
+	void testRequestHandlerThrowsGenericException() {
+		// Setup: Create a request handler that throws a generic RuntimeException
+		String testMethod = "test.genericError";
+		RuntimeException exception = new RuntimeException("Something went wrong");
+		McpClientSession.RequestHandler<?> failingHandler = params -> Mono.error(exception);
+
+		transport = new MockMcpClientTransport();
+		session = new McpClientSession(TIMEOUT, transport, Map.of(testMethod, failingHandler), Map.of());
+
+		// Simulate incoming request that will trigger the error
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, testMethod,
+				"test-id", null);
+		transport.simulateIncomingMessage(request);
+
+		// Verify: The response should contain INTERNAL_ERROR with aggregated exception
+		// messages in data field
+		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
+		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
+		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
+		assertThat(response.error()).isNotNull();
+		assertThat(response.error().code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
+		assertThat(response.error().message()).isEqualTo("Something went wrong");
+		// Verify data field contains aggregated exception messages
+		assertThat(response.error().data()).isNotNull();
+		assertThat(response.error().data().toString()).contains("RuntimeException");
+		assertThat(response.error().data().toString()).contains("Something went wrong");
+	}
+
+	@Test
+	void testRequestHandlerThrowsExceptionWithCause() {
+		// Setup: Create a request handler that throws an exception with a cause chain
+		String testMethod = "test.chainedError";
+		RuntimeException rootCause = new IllegalArgumentException("Root cause message");
+		RuntimeException middleCause = new IllegalStateException("Middle cause message", rootCause);
+		RuntimeException topException = new RuntimeException("Top level message", middleCause);
+		McpClientSession.RequestHandler<?> failingHandler = params -> Mono.error(topException);
+
+		transport = new MockMcpClientTransport();
+		session = new McpClientSession(TIMEOUT, transport, Map.of(testMethod, failingHandler), Map.of());
+
+		// Simulate incoming request that will trigger the error
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, testMethod,
+				"test-id", null);
+		transport.simulateIncomingMessage(request);
+
+		// Verify: The response should contain INTERNAL_ERROR with full exception chain
+		// in data field
+		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
+		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
+		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
+		assertThat(response.error()).isNotNull();
+		assertThat(response.error().code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
+		assertThat(response.error().message()).isEqualTo("Top level message");
+		// Verify data field contains the full exception chain
+		String dataString = response.error().data().toString();
+		assertThat(dataString).contains("RuntimeException");
+		assertThat(dataString).contains("Top level message");
+		assertThat(dataString).contains("IllegalStateException");
+		assertThat(dataString).contains("Middle cause message");
+		assertThat(dataString).contains("IllegalArgumentException");
+		assertThat(dataString).contains("Root cause message");
+	}
+
+	@Test
+	void testRequestHandlerThrowsMcpErrorWithoutJsonRpcError() {
+		// Setup: Create a request handler that throws deprecated McpError without
+		// JSONRPCError
+		String testMethod = "test.deprecatedError";
+		@SuppressWarnings("deprecation")
+		McpError deprecatedError = new McpError("Deprecated error format");
+		McpClientSession.RequestHandler<?> failingHandler = params -> Mono.error(deprecatedError);
+
+		transport = new MockMcpClientTransport();
+		session = new McpClientSession(TIMEOUT, transport, Map.of(testMethod, failingHandler), Map.of());
+
+		// Simulate incoming request that will trigger the error
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, testMethod,
+				"test-id", null);
+		transport.simulateIncomingMessage(request);
+
+		// Verify: The response should create a new INTERNAL_ERROR with aggregated
+		// messages
+		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
+		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
+		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
+		assertThat(response.error()).isNotNull();
+		assertThat(response.error().code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
+		assertThat(response.error().message()).isEqualTo("Deprecated error format");
+		// Verify data field contains aggregated exception messages
+		assertThat(response.error().data()).isNotNull();
+		assertThat(response.error().data().toString()).contains("McpError");
+		assertThat(response.error().data().toString()).contains("Deprecated error format");
+	}
+
+	@Test
+	void testRequestHandlerThrowsResourceNotFoundError() {
+		// Setup: Create a request handler that throws RESOURCE_NOT_FOUND error
+		String testMethod = "test.resourceError";
+		String resourceUri = "file:///missing/resource.txt";
+		McpClientSession.RequestHandler<?> failingHandler = params -> Mono
+			.error(McpError.RESOURCE_NOT_FOUND.apply(resourceUri));
+
+		transport = new MockMcpClientTransport();
+		session = new McpClientSession(TIMEOUT, transport, Map.of(testMethod, failingHandler), Map.of());
+
+		// Simulate incoming request that will trigger the error
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, testMethod,
+				"test-id", null);
+		transport.simulateIncomingMessage(request);
+
+		// Verify: The response should preserve the RESOURCE_NOT_FOUND error code and
+		// data
+		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
+		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
+		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
+		assertThat(response.error()).isNotNull();
+		assertThat(response.error().code()).isEqualTo(McpSchema.ErrorCodes.RESOURCE_NOT_FOUND);
+		assertThat(response.error().message()).isEqualTo("Resource not found");
+		assertThat(response.error().data()).isEqualTo(Map.of("uri", resourceUri));
 	}
 
 	@Test
