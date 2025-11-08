@@ -277,12 +277,12 @@ public final class McpSchema {
 	}
 
 	/**
-	 * A successful (non-error) response to a request.
+	 * A response to a request (successful, or error).
 	 *
 	 * @param jsonrpc The JSON-RPC version (must be "2.0")
 	 * @param id The request identifier that this response corresponds to
-	 * @param result The result of the successful request
-	 * @param error Error information if the request failed
+	 * @param result The result of the successful request; null if error
+	 * @param error Error information if the request failed; null if has result
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
