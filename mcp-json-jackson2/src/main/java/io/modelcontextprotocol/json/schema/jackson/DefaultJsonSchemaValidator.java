@@ -3,17 +3,17 @@
  */
 package io.modelcontextprotocol.json.schema.jackson;
 
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.networknt.schema.JsonSchema;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
-import com.networknt.schema.ValidationMessage;
+import com.networknt.schema.Schema;
+import com.networknt.schema.SchemaRegistry;
+import com.networknt.schema.Error;
+import com.networknt.schema.dialect.Dialects;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,10 +31,10 @@ public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 
 	private final ObjectMapper objectMapper;
 
-	private final JsonSchemaFactory schemaFactory;
+	private final SchemaRegistry schemaFactory;
 
 	// TODO: Implement a strategy to purge the cache (TTL, size limit, etc.)
-	private final ConcurrentHashMap<String, JsonSchema> schemaCache;
+	private final ConcurrentHashMap<String, Schema> schemaCache;
 
 	public DefaultJsonSchemaValidator() {
 		this(new ObjectMapper());
@@ -42,7 +42,7 @@ public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 
 	public DefaultJsonSchemaValidator(ObjectMapper objectMapper) {
 		this.objectMapper = objectMapper;
-		this.schemaFactory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
+		this.schemaFactory = SchemaRegistry.withDialect(Dialects.getDraft202012());
 		this.schemaCache = new ConcurrentHashMap<>();
 	}
 
@@ -62,7 +62,7 @@ public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 					? this.objectMapper.readTree((String) structuredContent)
 					: this.objectMapper.valueToTree(structuredContent);
 
-			Set<ValidationMessage> validationResult = this.getOrCreateJsonSchema(schema).validate(jsonStructuredOutput);
+			List<Error> validationResult = this.getOrCreateJsonSchema(schema).validate(jsonStructuredOutput);
 
 			// Check if validation passed
 			if (!validationResult.isEmpty()) {
@@ -85,36 +85,36 @@ public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 	}
 
 	/**
-	 * Gets a cached JsonSchema or creates and caches a new one.
+	 * Gets a cached Schema or creates and caches a new one.
 	 * @param schema the schema map to convert
-	 * @return the compiled JsonSchema
+	 * @return the compiled Schema
 	 * @throws JsonProcessingException if schema processing fails
 	 */
-	private JsonSchema getOrCreateJsonSchema(Map<String, Object> schema) throws JsonProcessingException {
+	private Schema getOrCreateJsonSchema(Map<String, Object> schema) throws JsonProcessingException {
 		// Generate cache key based on schema content
 		String cacheKey = this.generateCacheKey(schema);
 
 		// Try to get from cache first
-		JsonSchema cachedSchema = this.schemaCache.get(cacheKey);
+		Schema cachedSchema = this.schemaCache.get(cacheKey);
 		if (cachedSchema != null) {
 			return cachedSchema;
 		}
 
 		// Create new schema if not in cache
-		JsonSchema newSchema = this.createJsonSchema(schema);
+		Schema newSchema = this.createJsonSchema(schema);
 
 		// Cache the schema
-		JsonSchema existingSchema = this.schemaCache.putIfAbsent(cacheKey, newSchema);
+		Schema existingSchema = this.schemaCache.putIfAbsent(cacheKey, newSchema);
 		return existingSchema != null ? existingSchema : newSchema;
 	}
 
 	/**
-	 * Creates a new JsonSchema from the given schema map.
+	 * Creates a new Schema from the given schema map.
 	 * @param schema the schema map
-	 * @return the compiled JsonSchema
+	 * @return the compiled Schema
 	 * @throws JsonProcessingException if schema processing fails
 	 */
-	private JsonSchema createJsonSchema(Map<String, Object> schema) throws JsonProcessingException {
+	private Schema createJsonSchema(Map<String, Object> schema) throws JsonProcessingException {
 		// Convert schema map directly to JsonNode (more efficient than string
 		// serialization)
 		JsonNode schemaNode = this.objectMapper.valueToTree(schema);
