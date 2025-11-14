@@ -29,6 +29,7 @@ import java.util.List;
  * Implementation of a WebFlux based {@link McpStatelessServerTransport}.
  *
  * @author Dariusz Jędrzejczyk
+ * @author Yanming Zhou
  */
 public class WebFluxStatelessServerTransport implements McpStatelessServerTransport {
 
@@ -101,7 +102,10 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 		List<MediaType> acceptHeaders = request.headers().asHttpHeaders().getAccept();
 		if (!(acceptHeaders.contains(MediaType.APPLICATION_JSON)
 				&& acceptHeaders.contains(MediaType.TEXT_EVENT_STREAM))) {
-			return ServerResponse.badRequest().build();
+			return ServerResponse.badRequest()
+				.bodyValue(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+					.message("Invalid Accept headers. Expected application/json and text/event-stream")
+					.build());
 		}
 
 		return request.bodyToMono(String.class).<ServerResponse>flatMap(body -> {
@@ -127,12 +131,17 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 				}
 				else {
 					return ServerResponse.badRequest()
-						.bodyValue(new McpError("The server accepts either requests or notifications"));
+						.bodyValue(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+							.message("The server accepts either requests or notifications")
+							.build());
 				}
 			}
 			catch (IllegalArgumentException | IOException e) {
 				logger.error("Failed to deserialize message: {}", e.getMessage());
-				return ServerResponse.badRequest().bodyValue(new McpError("Invalid message format"));
+				return ServerResponse.badRequest()
+					.bodyValue(McpError.builder(McpSchema.ErrorCodes.PARSE_ERROR)
+						.message("Invalid message format")
+						.build());
 			}
 		}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext));
 	}
