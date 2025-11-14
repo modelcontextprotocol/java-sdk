@@ -337,8 +337,10 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 						}
 					}
 					else {
-						if (isNotFound(response) && !sessionRepresentation.equals(MISSING_SESSION_ID)) {
-							return mcpSessionNotFoundError(sessionRepresentation);
+						if (isNotFound(response)) {
+							if (transportSession.sessionId().isPresent()) {
+								return mcpSessionNotFoundError(sessionRepresentation);
+							}
 						}
 						return this.extractError(response, sessionRepresentation);
 					}
