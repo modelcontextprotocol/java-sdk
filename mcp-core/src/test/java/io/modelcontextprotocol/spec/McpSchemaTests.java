@@ -879,8 +879,10 @@ public class McpSchemaTests {
 					"required": ["name"]
 				}
 				""";
-		McpSchema.ToolAnnotations annotations = new McpSchema.ToolAnnotations("A test tool", false, false, false, false,
-				false);
+		McpSchema.ToolAnnotations annotations = McpSchema.ToolAnnotations.builder()
+			.title("A test tool")
+			.taskHint(McpSchema.TaskHint.OPTIONAL)
+			.build();
 
 		McpSchema.Tool tool = McpSchema.Tool.builder()
 			.name("test-tool")
@@ -911,7 +913,8 @@ public class McpSchemaTests {
 							"destructiveHint":false,
 							"idempotentHint":false,
 							"openWorldHint":false,
-							"returnDirect":false
+							"returnDirect":false,
+							"taskHint":"optional"
 						}
 					}
 					"""));
@@ -1014,8 +1017,13 @@ public class McpSchemaTests {
 				}
 				""";
 
-		McpSchema.ToolAnnotations annotations = new McpSchema.ToolAnnotations("A test tool with output", true, false,
-				true, false, true);
+		McpSchema.ToolAnnotations annotations = McpSchema.ToolAnnotations.builder()
+			.title("A test tool with output")
+			.readOnlyHint(true)
+			.idempotentHint(true)
+			.returnDirect(true)
+			.taskHint(McpSchema.TaskHint.OPTIONAL)
+			.build();
 
 		McpSchema.Tool tool = McpSchema.Tool.builder()
 			.name("test-tool")
@@ -1053,7 +1061,8 @@ public class McpSchemaTests {
 							"destructiveHint":false,
 							"idempotentHint":true,
 							"openWorldHint":false,
-							"returnDirect":true
+							"returnDirect":true,
+							"taskHint":"optional"
 						}
 					}"""));
 	}
