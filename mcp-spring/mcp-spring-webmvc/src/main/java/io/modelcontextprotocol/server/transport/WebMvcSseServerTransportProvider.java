@@ -255,6 +255,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
+		McpTransportContext mcpTransportContext = this.contextExtractor.extract(request);
 		String sessionId = UUID.randomUUID().toString();
 		logger.debug("Creating new SSE connection for session: {}", sessionId);
 
@@ -271,7 +272,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				});
 
 				WebMvcMcpSessionTransport sessionTransport = new WebMvcMcpSessionTransport(sessionId, sseBuilder);
-				McpServerSession session = sessionFactory.create(sessionTransport);
+				McpServerSession session = sessionFactory.create(mcpTransportContext, sessionTransport);
 				this.sessions.put(sessionId, session);
 
 				try {

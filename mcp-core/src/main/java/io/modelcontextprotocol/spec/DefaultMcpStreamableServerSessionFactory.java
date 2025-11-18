@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.spec;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpNotificationHandler;
 import io.modelcontextprotocol.server.McpRequestHandler;
 
@@ -45,11 +46,33 @@ public class DefaultMcpStreamableServerSessionFactory implements McpStreamableSe
 
 	@Override
 	public McpStreamableServerSession.McpStreamableServerSessionInit startSession(
-			McpSchema.InitializeRequest initializeRequest) {
+			final McpSchema.InitializeRequest initializeRequest) {
+		final String sessionId = generateSessionId(null, initializeRequest);
 		return new McpStreamableServerSession.McpStreamableServerSessionInit(
-				new McpStreamableServerSession(UUID.randomUUID().toString(), initializeRequest.capabilities(),
+				new McpStreamableServerSession(sessionId, initializeRequest.capabilities(),
 						initializeRequest.clientInfo(), requestTimeout, requestHandlers, notificationHandlers),
 				this.initRequestHandler.handle(initializeRequest));
+	}
+
+	@Override
+	public McpStreamableServerSession.McpStreamableServerSessionInit startSession(
+			final McpTransportContext mcpTransportContext, final McpSchema.InitializeRequest initializeRequest) {
+		final String sessionId = generateSessionId(mcpTransportContext, initializeRequest);
+		return new McpStreamableServerSession.McpStreamableServerSessionInit(
+				new McpStreamableServerSession(sessionId, initializeRequest.capabilities(),
+						initializeRequest.clientInfo(), requestTimeout, requestHandlers, notificationHandlers),
+				this.initRequestHandler.handle(initializeRequest));
+	}
+
+	/**
+	 * An extensibility point to generate session IDs differently.
+	 * @param mcpTransportContext transport context
+	 * @param initializeRequest initialization request
+	 * @return generated session ID
+	 */
+	protected String generateSessionId(McpTransportContext mcpTransportContext,
+			McpSchema.InitializeRequest initializeRequest) {
+		return UUID.randomUUID().toString();
 	}
 
 }

@@ -335,7 +335,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 						new TypeRef<McpSchema.InitializeRequest>() {
 						});
 				McpStreamableServerSession.McpStreamableServerSessionInit init = this.sessionFactory
-					.startSession(initializeRequest);
+					.startSession(transportContext, initializeRequest);
 				this.sessions.put(init.session().getId(), init.session());
 
 				try {
