@@ -29,6 +29,11 @@
             <!-- Core MCP -->
             <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-spec-schema</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-core</artifactId>
                 <version>${project.version}</version>
             </dependency>

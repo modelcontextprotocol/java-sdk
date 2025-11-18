@@ -104,6 +104,7 @@
 		<module>mcp-bom</module>
 		<module>mcp</module>
         <module>mcp-core</module>
+        <module>mcp-spec-schema</module>
         <module>mcp-json-jackson2</module>
         <module>mcp-json</module>
 		<module>mcp-spring/mcp-spring-webflux</module>
