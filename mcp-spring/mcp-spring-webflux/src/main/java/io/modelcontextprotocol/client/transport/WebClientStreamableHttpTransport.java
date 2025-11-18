@@ -603,6 +603,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	/**
 	 * Needed for Spring 5 compatibility
 	 */
+	@SuppressWarnings("deprecation")
 	private static boolean isBadRequest(final WebClientResponseException responseException) {
 		return responseException.getRawStatusCode() == HttpStatus.BAD_REQUEST.value();
 	}
@@ -610,6 +611,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	/**
 	 * Needed for Spring 5 compatibility
 	 */
+	@SuppressWarnings("deprecation")
 	private static boolean isNotFound(ClientResponse response) {
 		return response.rawStatusCode() == HttpStatus.NOT_FOUND.value();
 	}
@@ -617,6 +619,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	/**
 	 * Needed for Spring 5 compatibility
 	 */
+	@SuppressWarnings("deprecation")
 	private static boolean isNotAllowed(ClientResponse response) {
 		return response.rawStatusCode() == HttpStatus.METHOD_NOT_ALLOWED.value();
 	}
@@ -624,6 +627,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	/**
 	 * Needed for Spring 5 compatibility
 	 */
+	@SuppressWarnings("deprecation")
 	private static boolean is2xx(final ClientResponse response) {
 		return response.rawStatusCode() >= 200 && response.rawStatusCode() < 300;
 	}
