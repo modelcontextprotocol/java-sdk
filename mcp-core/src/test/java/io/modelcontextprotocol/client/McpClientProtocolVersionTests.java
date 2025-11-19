@@ -68,7 +68,7 @@ class McpClientProtocolVersionTests {
 			.requestTimeout(REQUEST_TIMEOUT)
 			.build();
 
-		client.setProtocolVersions(List.of(oldVersion, McpSchema.LATEST_PROTOCOL_VERSION));
+        ((DefaultMcpAsyncClient)client).setProtocolVersions(List.of(oldVersion, McpSchema.LATEST_PROTOCOL_VERSION));
 
 		try {
 			Mono<InitializeResult> initializeResultMono = client.initialize();
@@ -131,7 +131,7 @@ class McpClientProtocolVersionTests {
 			.requestTimeout(REQUEST_TIMEOUT)
 			.build();
 
-		client.setProtocolVersions(List.of(oldVersion, middleVersion, latestVersion));
+        ((DefaultMcpAsyncClient)client).setProtocolVersions(List.of(oldVersion, middleVersion, latestVersion));
 
 		try {
 			Mono<InitializeResult> initializeResultMono = client.initialize();

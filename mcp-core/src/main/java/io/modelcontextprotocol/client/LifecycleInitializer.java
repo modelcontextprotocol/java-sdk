@@ -304,7 +304,7 @@ class LifecycleInitializer {
 				this.clientCapabilities, this.clientInfo);
 
 		Mono<McpSchema.InitializeResult> result = mcpClientSession.sendRequest(McpSchema.METHOD_INITIALIZE,
-				initializeRequest, McpAsyncClient.INITIALIZE_RESULT_TYPE_REF);
+				initializeRequest, DefaultMcpAsyncClient.INITIALIZE_RESULT_TYPE_REF);
 
 		return result.flatMap(initializeResult -> {
 			logger.info("Server response with Protocol: {}, Capabilities: {}, Info: {} and Instructions {}",
