@@ -55,9 +55,9 @@ import reactor.core.publisher.Mono;
  * @see McpAsyncClient
  * @see McpSchema
  */
-public class McpSyncClient implements AutoCloseable {
+public class DefaultMcpSyncClient implements AutoCloseable {
 
-	private static final Logger logger = LoggerFactory.getLogger(McpSyncClient.class);
+	private static final Logger logger = LoggerFactory.getLogger(DefaultMcpSyncClient.class);
 
 	// TODO: Consider providing a client config to set this properly
 	// this is currently a concern only because AutoCloseable is used - perhaps it
@@ -75,7 +75,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * @param contextProvider the supplier of context before calling any non-blocking
 	 * operation on underlying delegate
 	 */
-	McpSyncClient(McpAsyncClient delegate, Supplier<McpTransportContext> contextProvider) {
+    DefaultMcpSyncClient(McpAsyncClient delegate, Supplier<McpTransportContext> contextProvider) {
 		Assert.notNull(delegate, "The delegate can not be null");
 		Assert.notNull(contextProvider, "The contextProvider can not be null");
 		this.delegate = delegate;
