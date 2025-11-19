@@ -7,7 +7,6 @@ package io.modelcontextprotocol.server.transport;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -256,39 +255,31 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
-		String sessionId = UUID.randomUUID().toString();
-		logger.debug("Creating new SSE connection for session: {}", sessionId);
-
 		// Send initial endpoint event
-		try {
-			return ServerResponse.sse(sseBuilder -> {
-				sseBuilder.onComplete(() -> {
-					logger.debug("SSE connection completed for session: {}", sessionId);
-					sessions.remove(sessionId);
-				});
-				sseBuilder.onTimeout(() -> {
-					logger.debug("SSE connection timed out for session: {}", sessionId);
-					sessions.remove(sessionId);
-				});
+		return ServerResponse.sse(sseBuilder -> {
+			WebMvcMcpSessionTransport sessionTransport = new WebMvcMcpSessionTransport(sseBuilder);
+			McpServerSession session = sessionFactory.create(sessionTransport);
+			String sessionId = session.getId();
+			logger.debug("Creating new SSE connection for session: {}", sessionId);
+			sseBuilder.onComplete(() -> {
+				logger.debug("SSE connection completed for session: {}", sessionId);
+				sessions.remove(sessionId);
+			});
+			sseBuilder.onTimeout(() -> {
+				logger.debug("SSE connection timed out for session: {}", sessionId);
+				sessions.remove(sessionId);
+			});
+			this.sessions.put(sessionId, session);
 
-				WebMvcMcpSessionTransport sessionTransport = new WebMvcMcpSessionTransport(sessionId, sseBuilder);
-				McpServerSession session = sessionFactory.create(sessionTransport);
-				this.sessions.put(sessionId, session);
-
-				try {
-					sseBuilder.id(sessionId).event(ENDPOINT_EVENT_TYPE).data(buildEndpointUrl(sessionId));
-				}
-				catch (Exception e) {
-					logger.error("Failed to send initial endpoint event: {}", e.getMessage());
-					sseBuilder.error(e);
-				}
-			}, Duration.ZERO);
-		}
-		catch (Exception e) {
-			logger.error("Failed to send initial endpoint event to session {}: {}", sessionId, e.getMessage());
-			sessions.remove(sessionId);
-			return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-		}
+			try {
+				sseBuilder.event(ENDPOINT_EVENT_TYPE).data(buildEndpointUrl(sessionId));
+			}
+			catch (Exception e) {
+				logger.error("Failed to send initial endpoint event: {}", e.getMessage());
+				this.sessions.remove(sessionId);
+				sseBuilder.error(e);
+			}
+		}, Duration.ZERO);
 	}
 
 	/**
@@ -363,8 +354,6 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 */
 	private class WebMvcMcpSessionTransport implements McpServerTransport {
 
-		private final String sessionId;
-
 		private final SseBuilder sseBuilder;
 
 		/**
@@ -374,14 +363,11 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		private final ReentrantLock sseBuilderLock = new ReentrantLock();
 
 		/**
-		 * Creates a new session transport with the specified ID and SSE builder.
-		 * @param sessionId The unique identifier for this session
+		 * Creates a new session transport with the specified SSE builder.
 		 * @param sseBuilder The SSE builder for sending server events to the client
 		 */
-		WebMvcMcpSessionTransport(String sessionId, SseBuilder sseBuilder) {
-			this.sessionId = sessionId;
+		WebMvcMcpSessionTransport(SseBuilder sseBuilder) {
 			this.sseBuilder = sseBuilder;
-			logger.debug("Session transport {} initialized with SSE builder", sessionId);
 		}
 
 		/**
@@ -395,11 +381,10 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				sseBuilderLock.lock();
 				try {
 					String jsonText = jsonMapper.writeValueAsString(message);
-					sseBuilder.id(sessionId).event(MESSAGE_EVENT_TYPE).data(jsonText);
-					logger.debug("Message sent to session {}", sessionId);
+					sseBuilder.event(MESSAGE_EVENT_TYPE).data(jsonText);
 				}
 				catch (Exception e) {
-					logger.error("Failed to send message to session {}: {}", sessionId, e.getMessage());
+					logger.error("Failed to send message: {}", e.getMessage());
 					sseBuilder.error(e);
 				}
 				finally {
@@ -427,14 +412,12 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		@Override
 		public Mono<Void> closeGracefully() {
 			return Mono.fromRunnable(() -> {
-				logger.debug("Closing session transport: {}", sessionId);
 				sseBuilderLock.lock();
 				try {
 					sseBuilder.complete();
-					logger.debug("Successfully completed SSE builder for session {}", sessionId);
 				}
 				catch (Exception e) {
-					logger.warn("Failed to complete SSE builder for session {}: {}", sessionId, e.getMessage());
+					logger.warn("Failed to complete SSE builder: {}", e.getMessage());
 				}
 				finally {
 					sseBuilderLock.unlock();
@@ -450,10 +433,9 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			sseBuilderLock.lock();
 			try {
 				sseBuilder.complete();
-				logger.debug("Successfully completed SSE builder for session {}", sessionId);
 			}
 			catch (Exception e) {
-				logger.warn("Failed to complete SSE builder for session {}: {}", sessionId, e.getMessage());
+				logger.warn("Failed to complete SSE builder: {}", e.getMessage());
 			}
 			finally {
 				sseBuilderLock.unlock();
