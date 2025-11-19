@@ -55,7 +55,7 @@ import reactor.core.publisher.Mono;
  * @see McpAsyncClient
  * @see McpSchema
  */
-public class DefaultMcpSyncClient implements AutoCloseable {
+public class DefaultMcpSyncClient implements McpSyncClient {
 
 	private static final Logger logger = LoggerFactory.getLogger(DefaultMcpSyncClient.class);
 
@@ -75,66 +75,44 @@ public class DefaultMcpSyncClient implements AutoCloseable {
 	 * @param contextProvider the supplier of context before calling any non-blocking
 	 * operation on underlying delegate
 	 */
-    DefaultMcpSyncClient(McpAsyncClient delegate, Supplier<McpTransportContext> contextProvider) {
+	DefaultMcpSyncClient(McpAsyncClient delegate, Supplier<McpTransportContext> contextProvider) {
 		Assert.notNull(delegate, "The delegate can not be null");
 		Assert.notNull(contextProvider, "The contextProvider can not be null");
 		this.delegate = delegate;
 		this.contextProvider = contextProvider;
 	}
 
-	/**
-	 * Get the current initialization result.
-	 * @return the initialization result.
-	 */
+	@Override
 	public McpSchema.InitializeResult getCurrentInitializationResult() {
 		return this.delegate.getCurrentInitializationResult();
 	}
 
-	/**
-	 * Get the server capabilities that define the supported features and functionality.
-	 * @return The server capabilities
-	 */
+	@Override
 	public McpSchema.ServerCapabilities getServerCapabilities() {
 		return this.delegate.getServerCapabilities();
 	}
 
-	/**
-	 * Get the server instructions that provide guidance to the client on how to interact
-	 * with this server.
-	 * @return The instructions
-	 */
+	@Override
 	public String getServerInstructions() {
 		return this.delegate.getServerInstructions();
 	}
 
-	/**
-	 * Get the server implementation information.
-	 * @return The server implementation details
-	 */
+	@Override
 	public McpSchema.Implementation getServerInfo() {
 		return this.delegate.getServerInfo();
 	}
 
-	/**
-	 * Check if the client-server connection is initialized.
-	 * @return true if the client-server connection is initialized
-	 */
+	@Override
 	public boolean isInitialized() {
 		return this.delegate.isInitialized();
 	}
 
-	/**
-	 * Get the client capabilities that define the supported features and functionality.
-	 * @return The client capabilities
-	 */
+	@Override
 	public ClientCapabilities getClientCapabilities() {
 		return this.delegate.getClientCapabilities();
 	}
 
-	/**
-	 * Get the client implementation information.
-	 * @return The client implementation details
-	 */
+	@Override
 	public McpSchema.Implementation getClientInfo() {
 		return this.delegate.getClientInfo();
 	}
@@ -144,6 +122,7 @@ public class DefaultMcpSyncClient implements AutoCloseable {
 		this.delegate.close();
 	}
 
+	@Override
 	public boolean closeGracefully() {
 		try {
 			this.delegate.closeGracefully().block(Duration.ofMillis(DEFAULT_CLOSE_TIMEOUT_MS));
@@ -155,65 +134,29 @@ public class DefaultMcpSyncClient implements AutoCloseable {
 		return true;
 	}
 
-	/**
-	 * The initialization phase MUST be the first interaction between client and server.
-	 * During this phase, the client and server:
-	 * <ul>
-	 * <li>Establish protocol version compatibility</li>
-	 * <li>Exchange and negotiate capabilities</li>
-	 * <li>Share implementation details</li>
-	 * </ul>
-	 * <br/>
-	 * The client MUST initiate this phase by sending an initialize request containing:
-	 * <ul>
-	 * <li>The protocol version the client supports</li>
-	 * <li>The client's capabilities</li>
-	 * <li>Client implementation information</li>
-	 * </ul>
-	 *
-	 * The server MUST respond with its own capabilities and information:
-	 * {@link McpSchema.ServerCapabilities}. <br/>
-	 * After successful initialization, the client MUST send an initialized notification
-	 * to indicate it is ready to begin normal operations.
-	 *
-	 * <br/>
-	 *
-	 * <a href=
-	 * "https://github.com/modelcontextprotocol/specification/blob/main/docs/specification/basic/lifecycle.md#initialization">Initialization
-	 * Spec</a>
-	 * @return the initialize result.
-	 */
+	@Override
 	public McpSchema.InitializeResult initialize() {
 		// TODO: block takes no argument here as we assume the async client is
 		// configured with a requestTimeout at all times
 		return withProvidedContext(this.delegate.initialize()).block();
 	}
 
-	/**
-	 * Send a roots/list_changed notification.
-	 */
+	@Override
 	public void rootsListChangedNotification() {
 		withProvidedContext(this.delegate.rootsListChangedNotification()).block();
 	}
 
-	/**
-	 * Add a roots dynamically.
-	 */
+	@Override
 	public void addRoot(McpSchema.Root root) {
 		this.delegate.addRoot(root).block();
 	}
 
-	/**
-	 * Remove a root dynamically.
-	 */
+	@Override
 	public void removeRoot(String rootUri) {
 		this.delegate.removeRoot(rootUri).block();
 	}
 
-	/**
-	 * Send a synchronous ping request.
-	 * @return
-	 */
+	@Override
 	public Object ping() {
 		return withProvidedContext(this.delegate.ping()).block();
 	}
@@ -221,39 +164,18 @@ public class DefaultMcpSyncClient implements AutoCloseable {
 	// --------------------------
 	// Tools
 	// --------------------------
-	/**
-	 * Calls a tool provided by the server. Tools enable servers to expose executable
-	 * functionality that can interact with external systems, perform computations, and
-	 * take actions in the real world.
-	 * @param callToolRequest The request containing: - name: The name of the tool to call
-	 * (must match a tool name from tools/list) - arguments: Arguments that conform to the
-	 * tool's input schema
-	 * @return The tool execution result containing: - content: List of content items
-	 * (text, images, or embedded resources) representing the tool's output - isError:
-	 * Boolean indicating if the execution failed (true) or succeeded (false/absent)
-	 */
+	@Override
 	public McpSchema.CallToolResult callTool(McpSchema.CallToolRequest callToolRequest) {
 		return withProvidedContext(this.delegate.callTool(callToolRequest)).block();
 
 	}
 
-	/**
-	 * Retrieves the list of all tools provided by the server.
-	 * @return The list of all tools result containing: - tools: List of available tools,
-	 * each with a name, description, and input schema - nextCursor: Optional cursor for
-	 * pagination if more tools are available
-	 */
+	@Override
 	public McpSchema.ListToolsResult listTools() {
 		return withProvidedContext(this.delegate.listTools()).block();
 	}
 
-	/**
-	 * Retrieves a paginated list of tools provided by the server.
-	 * @param cursor Optional pagination cursor from a previous list request
-	 * @return The list of tools result containing: - tools: List of available tools, each
-	 * with a name, description, and input schema - nextCursor: Optional cursor for
-	 * pagination if more tools are available
-	 */
+	@Override
 	public McpSchema.ListToolsResult listTools(String cursor) {
 		return withProvidedContext(this.delegate.listTools(cursor)).block();
 
@@ -263,86 +185,49 @@ public class DefaultMcpSyncClient implements AutoCloseable {
 	// Resources
 	// --------------------------
 
-	/**
-	 * Retrieves the list of all resources provided by the server.
-	 * @return The list of all resources result
-	 */
+	@Override
 	public McpSchema.ListResourcesResult listResources() {
 		return withProvidedContext(this.delegate.listResources()).block();
 
 	}
 
-	/**
-	 * Retrieves a paginated list of resources provided by the server.
-	 * @param cursor Optional pagination cursor from a previous list request
-	 * @return The list of resources result
-	 */
+	@Override
 	public McpSchema.ListResourcesResult listResources(String cursor) {
 		return withProvidedContext(this.delegate.listResources(cursor)).block();
 
 	}
 
-	/**
-	 * Send a resources/read request.
-	 * @param resource the resource to read
-	 * @return the resource content.
-	 */
+	@Override
 	public McpSchema.ReadResourceResult readResource(McpSchema.Resource resource) {
 		return withProvidedContext(this.delegate.readResource(resource)).block();
 
 	}
 
-	/**
-	 * Send a resources/read request.
-	 * @param readResourceRequest the read resource request.
-	 * @return the resource content.
-	 */
+	@Override
 	public McpSchema.ReadResourceResult readResource(McpSchema.ReadResourceRequest readResourceRequest) {
 		return withProvidedContext(this.delegate.readResource(readResourceRequest)).block();
 
 	}
 
-	/**
-	 * Retrieves the list of all resource templates provided by the server.
-	 * @return The list of all resource templates result.
-	 */
+	@Override
 	public McpSchema.ListResourceTemplatesResult listResourceTemplates() {
 		return withProvidedContext(this.delegate.listResourceTemplates()).block();
 
 	}
 
-	/**
-	 * Resource templates allow servers to expose parameterized resources using URI
-	 * templates. Arguments may be auto-completed through the completion API.
-	 *
-	 * Retrieves a paginated list of resource templates provided by the server.
-	 * @param cursor Optional pagination cursor from a previous list request
-	 * @return The list of resource templates result.
-	 */
+	@Override
 	public McpSchema.ListResourceTemplatesResult listResourceTemplates(String cursor) {
 		return withProvidedContext(this.delegate.listResourceTemplates(cursor)).block();
 
 	}
 
-	/**
-	 * Subscriptions. The protocol supports optional subscriptions to resource changes.
-	 * Clients can subscribe to specific resources and receive notifications when they
-	 * change.
-	 *
-	 * Send a resources/subscribe request.
-	 * @param subscribeRequest the subscribe request contains the uri of the resource to
-	 * subscribe to.
-	 */
+	@Override
 	public void subscribeResource(McpSchema.SubscribeRequest subscribeRequest) {
 		withProvidedContext(this.delegate.subscribeResource(subscribeRequest)).block();
 
 	}
 
-	/**
-	 * Send a resources/unsubscribe request.
-	 * @param unsubscribeRequest the unsubscribe request contains the uri of the resource
-	 * to unsubscribe from.
-	 */
+	@Override
 	public void unsubscribeResource(McpSchema.UnsubscribeRequest unsubscribeRequest) {
 		withProvidedContext(this.delegate.unsubscribeResource(unsubscribeRequest)).block();
 
@@ -352,43 +237,29 @@ public class DefaultMcpSyncClient implements AutoCloseable {
 	// Prompts
 	// --------------------------
 
-	/**
-	 * Retrieves the list of all prompts provided by the server.
-	 * @return The list of all prompts result.
-	 */
+	@Override
 	public ListPromptsResult listPrompts() {
 		return withProvidedContext(this.delegate.listPrompts()).block();
 	}
 
-	/**
-	 * Retrieves a paginated list of prompts provided by the server.
-	 * @param cursor Optional pagination cursor from a previous list request
-	 * @return The list of prompts result.
-	 */
+	@Override
 	public ListPromptsResult listPrompts(String cursor) {
 		return withProvidedContext(this.delegate.listPrompts(cursor)).block();
 
 	}
 
+	@Override
 	public GetPromptResult getPrompt(GetPromptRequest getPromptRequest) {
 		return withProvidedContext(this.delegate.getPrompt(getPromptRequest)).block();
 	}
 
-	/**
-	 * Client can set the minimum logging level it wants to receive from the server.
-	 * @param loggingLevel the min logging level
-	 */
+	@Override
 	public void setLoggingLevel(McpSchema.LoggingLevel loggingLevel) {
 		withProvidedContext(this.delegate.setLoggingLevel(loggingLevel)).block();
 
 	}
 
-	/**
-	 * Send a completion/complete request.
-	 * @param completeRequest the completion request contains the prompt or resource
-	 * reference and arguments for generating suggestions.
-	 * @return the completion result containing suggested values.
-	 */
+	@Override
 	public McpSchema.CompleteResult completeCompletion(McpSchema.CompleteRequest completeRequest) {
 		return withProvidedContext(this.delegate.completeCompletion(completeRequest)).block();
 

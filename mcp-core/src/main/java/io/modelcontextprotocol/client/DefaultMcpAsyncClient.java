@@ -178,7 +178,7 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 	 * @param features the MCP Client supported features. responses against output
 	 * schemas.
 	 */
-    DefaultMcpAsyncClient(McpClientTransport transport, Duration requestTimeout, Duration initializationTimeout,
+	DefaultMcpAsyncClient(McpClientTransport transport, Duration requestTimeout, Duration initializationTimeout,
 			JsonSchemaValidator jsonSchemaValidator, McpClientFeatures.Async features) {
 
 		Assert.notNull(transport, "Transport must not be null");
@@ -321,52 +321,52 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 		this.transport.setExceptionHandler(this.initializer::handleException);
 	}
 
-    @Override
+	@Override
 	public McpSchema.InitializeResult getCurrentInitializationResult() {
 		return this.initializer.currentInitializationResult();
 	}
 
-    @Override
+	@Override
 	public McpSchema.ServerCapabilities getServerCapabilities() {
 		McpSchema.InitializeResult initializeResult = this.initializer.currentInitializationResult();
 		return initializeResult != null ? initializeResult.capabilities() : null;
 	}
 
-    @Override
+	@Override
 	public String getServerInstructions() {
 		McpSchema.InitializeResult initializeResult = this.initializer.currentInitializationResult();
 		return initializeResult != null ? initializeResult.instructions() : null;
 	}
 
-    @Override
+	@Override
 	public McpSchema.Implementation getServerInfo() {
 		McpSchema.InitializeResult initializeResult = this.initializer.currentInitializationResult();
 		return initializeResult != null ? initializeResult.serverInfo() : null;
 	}
 
-    @Override
+	@Override
 	public boolean isInitialized() {
 		return this.initializer.isInitialized();
 	}
 
-    @Override
+	@Override
 	public ClientCapabilities getClientCapabilities() {
 		return this.clientCapabilities;
 	}
 
-    @Override
+	@Override
 	public McpSchema.Implementation getClientInfo() {
 		return this.clientInfo;
 	}
 
-    @Override
+	@Override
 	public void close() {
 		this.initializer.close();
 		this.transport.close();
 	}
 
-    @Override
-    public Mono<Void> closeGracefully() {
+	@Override
+	public Mono<Void> closeGracefully() {
 		return Mono.defer(() -> {
 			return this.initializer.closeGracefully().then(transport.closeGracefully());
 		});
@@ -376,8 +376,8 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 	// Initialization
 	// --------------------------
 
-    @Override
-    public Mono<McpSchema.InitializeResult> initialize() {
+	@Override
+	public Mono<McpSchema.InitializeResult> initialize() {
 		return this.initializer.withInitialization("by explicit API call", init -> Mono.just(init.initializeResult()));
 	}
 
@@ -385,7 +385,7 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 	// Basic Utilities
 	// --------------------------
 
-    @Override
+	@Override
 	public Mono<Object> ping() {
 		return this.initializer.withInitialization("pinging the server",
 				init -> init.mcpSession().sendRequest(McpSchema.METHOD_PING, null, OBJECT_TYPE_REF));
@@ -395,7 +395,7 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 	// Roots
 	// --------------------------
 
-    @Override
+	@Override
 	public Mono<Void> addRoot(Root root) {
 
 		if (root == null) {
@@ -425,7 +425,7 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 		return Mono.empty();
 	}
 
-    @Override
+	@Override
 	public Mono<Void> removeRoot(String rootUri) {
 
 		if (rootUri == null) {
@@ -454,7 +454,7 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 		return Mono.error(new IllegalStateException("Root with uri '" + rootUri + "' not found"));
 	}
 
-    @Override
+	@Override
 	public Mono<Void> rootsListChangedNotification() {
 		return this.initializer.withInitialization("sending roots list changed notification",
 				init -> init.mcpSession().sendNotification(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED));
@@ -503,7 +503,7 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 	private static final TypeRef<McpSchema.ListToolsResult> LIST_TOOLS_RESULT_TYPE_REF = new TypeRef<>() {
 	};
 
-    @Override
+	@Override
 	public Mono<McpSchema.CallToolResult> callTool(McpSchema.CallToolRequest callToolRequest) {
 		return this.initializer.withInitialization("calling tool", init -> {
 			if (init.initializeResult().capabilities().tools() == null) {
@@ -544,7 +544,7 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 		return result;
 	}
 
-    @Override
+	@Override
 	public Mono<McpSchema.ListToolsResult> listTools() {
 		return this.listTools(McpSchema.FIRST_PAGE).expand(result -> {
 			String next = result.nextCursor();
@@ -555,7 +555,7 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 		}).map(result -> new McpSchema.ListToolsResult(Collections.unmodifiableList(result.tools()), null));
 	}
 
-    @Override
+	@Override
 	public Mono<McpSchema.ListToolsResult> listTools(String cursor) {
 		return this.initializer.withInitialization("listing tools", init -> this.listToolsInternal(init, cursor));
 	}
@@ -605,7 +605,7 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 	private static final TypeRef<McpSchema.ListResourceTemplatesResult> LIST_RESOURCE_TEMPLATES_RESULT_TYPE_REF = new TypeRef<>() {
 	};
 
-    @Override
+	@Override
 	public Mono<McpSchema.ListResourcesResult> listResources() {
 		return this.listResources(McpSchema.FIRST_PAGE)
 			.expand(result -> (result.nextCursor() != null) ? this.listResources(result.nextCursor()) : Mono.empty())
@@ -616,7 +616,7 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 			.map(result -> new McpSchema.ListResourcesResult(Collections.unmodifiableList(result.resources()), null));
 	}
 
-    @Override
+	@Override
 	public Mono<McpSchema.ListResourcesResult> listResources(String cursor) {
 		return this.initializer.withInitialization("listing resources", init -> {
 			if (init.initializeResult().capabilities().resources() == null) {
@@ -628,12 +628,12 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 		});
 	}
 
-    @Override
+	@Override
 	public Mono<McpSchema.ReadResourceResult> readResource(McpSchema.Resource resource) {
 		return this.readResource(new McpSchema.ReadResourceRequest(resource.uri()));
 	}
 
-    @Override
+	@Override
 	public Mono<McpSchema.ReadResourceResult> readResource(McpSchema.ReadResourceRequest readResourceRequest) {
 		return this.initializer.withInitialization("reading resources", init -> {
 			if (init.initializeResult().capabilities().resources() == null) {
@@ -644,7 +644,7 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 		});
 	}
 
-    @Override
+	@Override
 	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates() {
 		return this.listResourceTemplates(McpSchema.FIRST_PAGE)
 			.expand(result -> (result.nextCursor() != null) ? this.listResourceTemplates(result.nextCursor())
@@ -658,7 +658,7 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 					Collections.unmodifiableList(result.resourceTemplates()), null));
 	}
 
-    @Override
+	@Override
 	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates(String cursor) {
 		return this.initializer.withInitialization("listing resource templates", init -> {
 			if (init.initializeResult().capabilities().resources() == null) {
@@ -670,13 +670,13 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 		});
 	}
 
-    @Override
+	@Override
 	public Mono<Void> subscribeResource(McpSchema.SubscribeRequest subscribeRequest) {
 		return this.initializer.withInitialization("subscribing to resources", init -> init.mcpSession()
 			.sendRequest(McpSchema.METHOD_RESOURCES_SUBSCRIBE, subscribeRequest, VOID_TYPE_REFERENCE));
 	}
 
-    @Override
+	@Override
 	public Mono<Void> unsubscribeResource(McpSchema.UnsubscribeRequest unsubscribeRequest) {
 		return this.initializer.withInitialization("unsubscribing from resources", init -> init.mcpSession()
 			.sendRequest(McpSchema.METHOD_RESOURCES_UNSUBSCRIBE, unsubscribeRequest, VOID_TYPE_REFERENCE));
@@ -720,7 +720,7 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 	private static final TypeRef<McpSchema.GetPromptResult> GET_PROMPT_RESULT_TYPE_REF = new TypeRef<>() {
 	};
 
-    @Override
+	@Override
 	public Mono<ListPromptsResult> listPrompts() {
 		return this.listPrompts(McpSchema.FIRST_PAGE)
 			.expand(result -> (result.nextCursor() != null) ? this.listPrompts(result.nextCursor()) : Mono.empty())
@@ -731,13 +731,13 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 			.map(result -> new McpSchema.ListPromptsResult(Collections.unmodifiableList(result.prompts()), null));
 	}
 
-    @Override
+	@Override
 	public Mono<ListPromptsResult> listPrompts(String cursor) {
 		return this.initializer.withInitialization("listing prompts", init -> init.mcpSession()
 			.sendRequest(McpSchema.METHOD_PROMPT_LIST, new PaginatedRequest(cursor), LIST_PROMPTS_RESULT_TYPE_REF));
 	}
 
-    @Override
+	@Override
 	public Mono<GetPromptResult> getPrompt(GetPromptRequest getPromptRequest) {
 		return this.initializer.withInitialization("getting prompts", init -> init.mcpSession()
 			.sendRequest(McpSchema.METHOD_PROMPT_GET, getPromptRequest, GET_PROMPT_RESULT_TYPE_REF));
@@ -770,7 +770,7 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 		};
 	}
 
-    @Override
+	@Override
 	public Mono<Void> setLoggingLevel(LoggingLevel loggingLevel) {
 		if (loggingLevel == null) {
 			return Mono.error(new IllegalArgumentException("Logging level must not be null"));
@@ -813,7 +813,7 @@ public class DefaultMcpAsyncClient implements McpAsyncClient {
 	private static final TypeRef<McpSchema.CompleteResult> COMPLETION_COMPLETE_RESULT_TYPE_REF = new TypeRef<>() {
 	};
 
-    @Override
+	@Override
 	public Mono<McpSchema.CompleteResult> completeCompletion(McpSchema.CompleteRequest completeRequest) {
 		return this.initializer.withInitialization("complete completions", init -> init.mcpSession()
 			.sendRequest(McpSchema.METHOD_COMPLETION_COMPLETE, completeRequest, COMPLETION_COMPLETE_RESULT_TYPE_REF));

@@ -474,9 +474,11 @@ public interface McpClient {
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
-			return new McpSyncClient(new DefaultMcpAsyncClient(transport, this.requestTimeout, this.initializationTimeout,
-					jsonSchemaValidator != null ? jsonSchemaValidator : JsonSchemaValidator.getDefault(),
-					asyncFeatures), this.contextProvider);
+			return new DefaultMcpSyncClient(
+					new DefaultMcpAsyncClient(transport, this.requestTimeout, this.initializationTimeout,
+							jsonSchemaValidator != null ? jsonSchemaValidator : JsonSchemaValidator.getDefault(),
+							asyncFeatures),
+					this.contextProvider);
 		}
 
 	}
