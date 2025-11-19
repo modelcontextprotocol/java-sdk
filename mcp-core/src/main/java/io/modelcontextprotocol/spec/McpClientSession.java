@@ -145,7 +145,11 @@ public class McpClientSession implements McpSession {
 		this.pendingResponses.clear();
 	}
 
-	private void handle(McpSchema.JSONRPCMessage message) {
+	/**
+	 * An extension point for handling incoming JSON-RPC messages.
+	 * @param message The incoming JSON-RPC message
+	 */
+	protected void handle(McpSchema.JSONRPCMessage message) {
 		if (message instanceof McpSchema.JSONRPCResponse response) {
 			logger.debug("Received response: {}", response);
 			if (response.id() != null) {
