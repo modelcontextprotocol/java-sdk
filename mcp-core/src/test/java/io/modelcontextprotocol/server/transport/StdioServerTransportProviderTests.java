@@ -14,6 +14,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
@@ -67,7 +68,8 @@ class StdioServerTransportProviderTests {
 		sessionFactory = mock(McpServerSession.Factory.class);
 
 		// Configure mock behavior
-		when(sessionFactory.create(any(McpServerTransport.class))).thenReturn(mockSession);
+		when(sessionFactory.create(any(McpTransportContext.class), any(McpServerTransport.class)))
+			.thenReturn(mockSession);
 		when(mockSession.closeGracefully()).thenReturn(Mono.empty());
 		when(mockSession.sendNotification(any(), any())).thenReturn(Mono.empty());
 

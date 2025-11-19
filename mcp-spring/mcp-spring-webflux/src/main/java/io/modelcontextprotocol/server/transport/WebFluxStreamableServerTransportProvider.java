@@ -239,7 +239,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 					McpSchema.InitializeRequest initializeRequest = jsonMapper.convertValue(jsonrpcRequest.params(),
 							typeReference);
 					McpStreamableServerSession.McpStreamableServerSessionInit init = this.sessionFactory
-						.startSession(initializeRequest);
+						.startSession(transportContext, initializeRequest);
 					sessions.put(init.session().getId(), init.session());
 					return init.initResult().map(initializeResult -> {
 						McpSchema.JSONRPCResponse jsonrpcResponse = new McpSchema.JSONRPCResponse(

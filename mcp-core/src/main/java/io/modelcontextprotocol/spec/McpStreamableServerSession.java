@@ -298,7 +298,19 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		 * @param initializeRequest the initialization request from the client
 		 * @return a composite allowing the session to start
 		 */
+		@Deprecated
 		McpStreamableServerSessionInit startSession(McpSchema.InitializeRequest initializeRequest);
+
+		/**
+		 * Given an initialize request, create a composite for the session initialization
+		 * @param mcpTransportContext the transport context for the initialization request
+		 * @param initializeRequest the initialization request from the client
+		 * @return a composite allowing the session to start
+		 */
+		default McpStreamableServerSessionInit startSession(McpTransportContext mcpTransportContext,
+				McpSchema.InitializeRequest initializeRequest) {
+			return startSession(initializeRequest);
+		}
 
 	}
 

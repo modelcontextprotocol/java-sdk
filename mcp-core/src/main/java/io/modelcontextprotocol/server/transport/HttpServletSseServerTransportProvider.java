@@ -234,6 +234,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	@Override
 	protected void doGet(HttpServletRequest request, HttpServletResponse response)
 			throws ServletException, IOException {
+		final McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		String requestURI = request.getRequestURI();
 		if (!requestURI.endsWith(sseEndpoint)) {
@@ -263,7 +264,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 				writer);
 
 		// Create a new session using the session factory
-		McpServerSession session = sessionFactory.create(sessionTransport);
+		McpServerSession session = sessionFactory.create(transportContext, sessionTransport);
 		this.sessions.put(sessionId, session);
 
 		// Send initial endpoint event

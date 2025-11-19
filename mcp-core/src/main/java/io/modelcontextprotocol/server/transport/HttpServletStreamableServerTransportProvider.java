@@ -408,7 +408,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 						new TypeRef<McpSchema.InitializeRequest>() {
 						});
 				McpStreamableServerSession.McpStreamableServerSessionInit init = this.sessionFactory
-					.startSession(initializeRequest);
+					.startSession(transportContext, initializeRequest);
 				this.sessions.put(init.session().getId(), init.session());
 
 				try {

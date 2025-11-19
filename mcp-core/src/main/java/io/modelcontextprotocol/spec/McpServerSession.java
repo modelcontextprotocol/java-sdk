@@ -439,6 +439,16 @@ public class McpServerSession implements McpLoggableSession {
 		 */
 		McpServerSession create(McpServerTransport sessionTransport);
 
+		/**
+		 * Creates a new 1:1 representation of the client-server interaction.
+		 * @param mcpTransportContext the transport context associated with the client.
+		 * @param sessionTransport the transport to use for communication with the client.
+		 * @return a new server session.
+		 */
+		default McpServerSession create(McpTransportContext mcpTransportContext, McpServerTransport sessionTransport) {
+			return create(sessionTransport);
+		}
+
 	}
 
 }
