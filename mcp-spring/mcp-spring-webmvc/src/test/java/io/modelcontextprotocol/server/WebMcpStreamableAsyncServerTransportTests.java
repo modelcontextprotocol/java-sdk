@@ -8,6 +8,7 @@ import org.apache.catalina.Context;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.startup.Tomcat;
 import org.junit.jupiter.api.Timeout;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.context.support.AnnotationConfigWebApplicationContext;
@@ -16,14 +17,12 @@ import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.modelcontextprotocol.server.transport.WebMvcStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import reactor.netty.DisposableServer;
 
 /**
- * Tests for {@link McpAsyncServer} using {@link WebFluxSseServerTransportProvider}.
+ * Tests for {@link McpAsyncServer} using {@link WebMvcSseServerTransportProvider}.
  *
  * @author Christian Tzolov
  */
@@ -48,10 +47,7 @@ class WebMcpStreamableAsyncServerTransportTests extends AbstractMcpAsyncServerTe
 
 		@Bean
 		public WebMvcStreamableServerTransportProvider webMvcSseServerTransportProvider() {
-			return WebMvcStreamableServerTransportProvider.builder()
-				.objectMapper(new ObjectMapper())
-				.mcpEndpoint(MCP_ENDPOINT)
-				.build();
+			return WebMvcStreamableServerTransportProvider.builder().mcpEndpoint(MCP_ENDPOINT).build();
 		}
 
 		@Bean

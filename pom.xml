@@ -6,7 +6,7 @@
 
 	<groupId>io.modelcontextprotocol.sdk</groupId>
 	<artifactId>mcp-parent</artifactId>
-	<version>0.12.0-SNAPSHOT</version>
+	<version>0.17.0-SNAPSHOT</version>
 
 	<packaging>pom</packaging>
 	<url>https://github.com/modelcontextprotocol/java-sdk</url>
@@ -59,16 +59,16 @@
 		<maven.compiler.target>17</maven.compiler.target>
 		<surefireArgLine/>
 
-		<assert4j.version>3.26.3</assert4j.version>
+		<assert4j.version>3.27.6</assert4j.version>
 		<junit.version>5.10.2</junit.version>
-		<mockito.version>5.2.0</mockito.version>
+		<mockito.version>5.20.0</mockito.version>
 		<testcontainers.version>1.20.4</testcontainers.version>
-		<byte-buddy.version>1.17.5</byte-buddy.version>
+		<byte-buddy.version>1.17.8</byte-buddy.version>
 		<toxiproxy.version>1.21.0</toxiproxy.version>
 
 		<slf4j-api.version>2.0.16</slf4j-api.version>
 		<logback.version>1.5.15</logback.version>
-		<jackson.version>2.17.0</jackson.version>
+		<jackson.version>2.19.2</jackson.version>
 		<springframework.version>6.2.1</springframework.version>
 
 		<!-- plugin versions -->
@@ -96,7 +96,7 @@
 		<awaitility.version>4.2.0</awaitility.version>
 		<bnd-maven-plugin.version>7.1.0</bnd-maven-plugin.version>
 		<json-unit-assertj.version>4.1.0</json-unit-assertj.version>
-		<json-schema-validator.version>1.5.7</json-schema-validator.version>
+		<json-schema-validator.version>2.0.0</json-schema-validator.version>
 
 	</properties>
 
@@ -104,6 +104,9 @@
 		<module>mcp-bom</module>
 		<module>mcp</module>
 		<module>mcp-inmemory-transport</module>
+        <module>mcp-core</module>
+        <module>mcp-json-jackson2</module>
+        <module>mcp-json</module>
 		<module>mcp-spring/mcp-spring-webflux</module>
 		<module>mcp-spring/mcp-spring-webmvc</module>
 		<module>mcp-test</module>

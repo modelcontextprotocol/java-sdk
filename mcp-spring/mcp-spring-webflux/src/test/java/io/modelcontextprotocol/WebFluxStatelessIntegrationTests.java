@@ -5,17 +5,17 @@
 package io.modelcontextprotocol;
 
 import java.time.Duration;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.provider.Arguments;
+
 import org.springframework.http.server.reactive.HttpHandler;
 import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.server.RouterFunctions;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.client.transport.WebClientStreamableHttpTransport;
@@ -37,6 +37,10 @@ class WebFluxStatelessIntegrationTests extends AbstractStatelessIntegrationTests
 	private DisposableServer httpServer;
 
 	private WebFluxStatelessServerTransport mcpStreamableServerTransport;
+
+	static Stream<Arguments> clientsForTesting() {
+		return Stream.of(Arguments.of("httpclient"), Arguments.of("webflux"));
+	}
 
 	@Override
 	protected void prepareClients(int port, String mcpEndpoint) {
@@ -67,7 +71,6 @@ class WebFluxStatelessIntegrationTests extends AbstractStatelessIntegrationTests
 	@BeforeEach
 	public void before() {
 		this.mcpStreamableServerTransport = WebFluxStatelessServerTransport.builder()
-			.objectMapper(new ObjectMapper())
 			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
 			.build();
 

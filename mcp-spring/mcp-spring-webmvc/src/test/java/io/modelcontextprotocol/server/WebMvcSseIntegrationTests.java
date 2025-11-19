@@ -6,25 +6,29 @@ package io.modelcontextprotocol.server;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
+import java.util.Map;
+import java.util.stream.Stream;
 
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.provider.Arguments;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import org.springframework.web.servlet.function.RouterFunction;
+import org.springframework.web.servlet.function.ServerRequest;
 import org.springframework.web.servlet.function.ServerResponse;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.modelcontextprotocol.AbstractMcpClientServerIntegrationTests;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpServer.AsyncSpecification;
 import io.modelcontextprotocol.server.McpServer.SingleSessionSyncSpecification;
 import io.modelcontextprotocol.server.transport.WebMvcSseServerTransportProvider;
@@ -38,6 +42,13 @@ class WebMvcSseIntegrationTests extends AbstractMcpClientServerIntegrationTests 
 	private static final String MESSAGE_ENDPOINT = "/mcp/message";
 
 	private WebMvcSseServerTransportProvider mcpServerTransportProvider;
+
+	static McpTransportContextExtractor<ServerRequest> TEST_CONTEXT_EXTRACTOR = r -> McpTransportContext
+		.create(Map.of("important", "value"));
+
+	static Stream<Arguments> clientsForTesting() {
+		return Stream.of(Arguments.of("httpclient"), Arguments.of("webflux"));
+	}
 
 	@Override
 	protected void prepareClients(int port, String mcpEndpoint) {
@@ -58,8 +69,8 @@ class WebMvcSseIntegrationTests extends AbstractMcpClientServerIntegrationTests 
 		@Bean
 		public WebMvcSseServerTransportProvider webMvcSseServerTransportProvider() {
 			return WebMvcSseServerTransportProvider.builder()
-				.objectMapper(new ObjectMapper())
 				.messageEndpoint(MESSAGE_ENDPOINT)
+				.contextExtractor(TEST_CONTEXT_EXTRACTOR)
 				.build();
 		}
 

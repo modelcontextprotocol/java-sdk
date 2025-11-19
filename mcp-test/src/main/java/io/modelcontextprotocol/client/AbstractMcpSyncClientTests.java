@@ -22,8 +22,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -66,12 +64,6 @@ public abstract class AbstractMcpSyncClientTests {
 
 	abstract protected McpClientTransport createMcpTransport();
 
-	protected void onStart() {
-	}
-
-	protected void onClose() {
-	}
-
 	protected Duration getRequestTimeout() {
 		return Duration.ofSeconds(14);
 	}
@@ -112,17 +104,6 @@ public abstract class AbstractMcpSyncClientTests {
 		finally {
 			assertThat(client.closeGracefully()).isTrue();
 		}
-	}
-
-	@BeforeEach
-	void setUp() {
-		onStart();
-
-	}
-
-	@AfterEach
-	void tearDown() {
-		onClose();
 	}
 
 	static final Object DUMMY_RETURN_VALUE = new Object();

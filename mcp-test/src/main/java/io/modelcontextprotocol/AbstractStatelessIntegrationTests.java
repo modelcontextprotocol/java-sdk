@@ -4,12 +4,6 @@
 
 package io.modelcontextprotocol;
 
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
-import static org.awaitility.Awaitility.await;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -19,9 +13,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
-
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.server.McpServer.StatelessAsyncSpecification;
@@ -33,9 +24,20 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
+import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import net.javacrumbs.jsonunit.core.Option;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
+
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.awaitility.Awaitility.await;
 
 public abstract class AbstractStatelessIntegrationTests {
 
@@ -48,7 +50,7 @@ public abstract class AbstractStatelessIntegrationTests {
 	abstract protected StatelessSyncSpecification prepareSyncServerBuilder();
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("clientsForTesting")
 	void simple(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -66,23 +68,16 @@ public abstract class AbstractStatelessIntegrationTests {
 			assertThat(client.initialize()).isNotNull();
 
 		}
-		server.closeGracefully();
+		finally {
+			server.closeGracefully().block();
+		}
 	}
 
 	// ---------------------------------------
 	// Tools Tests
 	// ---------------------------------------
-
-	String emptyJsonSchema = """
-			{
-				"$schema": "http://json-schema.org/draft-07/schema#",
-				"type": "object",
-				"properties": {}
-			}
-			""";
-
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("clientsForTesting")
 	void testToolCallSuccess(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -90,7 +85,7 @@ public abstract class AbstractStatelessIntegrationTests {
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpStatelessServerFeatures.SyncToolSpecification tool1 = McpStatelessServerFeatures.SyncToolSpecification
 			.builder()
-			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(emptyJsonSchema).build())
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
 			.callHandler((ctx, request) -> {
 
 				try {
@@ -126,12 +121,13 @@ public abstract class AbstractStatelessIntegrationTests {
 
 			assertThat(response).isNotNull().isEqualTo(callResponse);
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully().block();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("clientsForTesting")
 	void testThrowingToolCallIsCaughtBeforeTimeout(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -142,7 +138,7 @@ public abstract class AbstractStatelessIntegrationTests {
 				.tool(Tool.builder()
 					.name("tool1")
 					.description("tool1 description")
-					.inputSchema(emptyJsonSchema)
+					.inputSchema(EMPTY_JSON_SCHEMA)
 					.build())
 				.callHandler((context, request) -> {
 					// We trigger a timeout on blocking read, raising an exception
@@ -163,12 +159,13 @@ public abstract class AbstractStatelessIntegrationTests {
 				.isThrownBy(() -> mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of())))
 				.withMessageContaining("Timeout on blocking read");
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("clientsForTesting")
 	void testToolListChangeHandlingSuccess(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -176,7 +173,7 @@ public abstract class AbstractStatelessIntegrationTests {
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpStatelessServerFeatures.SyncToolSpecification tool1 = McpStatelessServerFeatures.SyncToolSpecification
 			.builder()
-			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(emptyJsonSchema).build())
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
 			.callHandler((ctx, request) -> {
 				// perform a blocking call to a remote service
 				try {
@@ -237,19 +234,20 @@ public abstract class AbstractStatelessIntegrationTests {
 				.tool(Tool.builder()
 					.name("tool2")
 					.description("tool2 description")
-					.inputSchema(emptyJsonSchema)
+					.inputSchema(EMPTY_JSON_SCHEMA)
 					.build())
 				.callHandler((exchange, request) -> callResponse)
 				.build();
 
 			mcpServer.addTool(tool2);
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("clientsForTesting")
 	void testInitialize(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -261,16 +259,16 @@ public abstract class AbstractStatelessIntegrationTests {
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	// ---------------------------------------
 	// Tool Structured Output Schema Tests
 	// ---------------------------------------
-
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("clientsForTesting")
 	void testStructuredOutputValidationSuccess(String clientType) {
 		var clientBuilder = clientBuilders.get(clientType);
 
@@ -323,7 +321,7 @@ public abstract class AbstractStatelessIntegrationTests {
 
 			// In WebMVC, structured content is returned properly
 			if (response.structuredContent() != null) {
-				assertThat(response.structuredContent()).containsEntry("result", 5.0)
+				assertThat((Map<String, Object>) response.structuredContent()).containsEntry("result", 5.0)
 					.containsEntry("operation", "2 + 3")
 					.containsEntry("timestamp", "2024-01-01T10:00:00Z");
 			}
@@ -339,12 +337,131 @@ public abstract class AbstractStatelessIntegrationTests {
 				.isEqualTo(json("""
 						{"result":5.0,"operation":"2 + 3","timestamp":"2024-01-01T10:00:00Z"}"""));
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("clientsForTesting")
+	void testStructuredOutputOfObjectArrayValidationSuccess(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Create a tool with output schema that returns an array of objects
+		Map<String, Object> outputSchema = Map
+			.of( // @formatter:off
+			"type", "array",
+			"items", Map.of(
+				"type", "object",
+				"properties", Map.of(
+					"name", Map.of("type", "string"),
+					"age", Map.of("type", "number")),					
+				"required", List.of("name", "age"))); // @formatter:on
+
+		Tool calculatorTool = Tool.builder()
+			.name("getMembers")
+			.description("Returns a list of members")
+			.outputSchema(outputSchema)
+			.build();
+
+		McpStatelessServerFeatures.SyncToolSpecification tool = McpStatelessServerFeatures.SyncToolSpecification
+			.builder()
+			.tool(calculatorTool)
+			.callHandler((exchange, request) -> {
+				return CallToolResult.builder()
+					.structuredContent(List.of(Map.of("name", "John", "age", 30), Map.of("name", "Peter", "age", 25)))
+					.build();
+			})
+			.build();
+
+		var mcpServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			assertThat(mcpClient.initialize()).isNotNull();
+
+			// Call tool with valid structured output of type array
+			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("getMembers", Map.of()));
+
+			assertThat(response).isNotNull();
+			assertThat(response.isError()).isFalse();
+
+			assertThat(response.structuredContent()).isNotNull();
+			assertThatJson(response.structuredContent()).when(Option.IGNORING_ARRAY_ORDER)
+				.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+				.isArray()
+				.hasSize(2)
+				.containsExactlyInAnyOrder(json("""
+						{"name":"John","age":30}"""), json("""
+						{"name":"Peter","age":25}"""));
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testStructuredOutputWithInHandlerError(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Create a tool with output schema
+		Map<String, Object> outputSchema = Map.of(
+				"type", "object", "properties", Map.of("result", Map.of("type", "number"), "operation",
+						Map.of("type", "string"), "timestamp", Map.of("type", "string")),
+				"required", List.of("result", "operation"));
+
+		Tool calculatorTool = Tool.builder()
+			.name("calculator")
+			.description("Performs mathematical calculations")
+			.outputSchema(outputSchema)
+			.build();
+
+		// Handler that throws an exception to simulate an error
+		McpStatelessServerFeatures.SyncToolSpecification tool = McpStatelessServerFeatures.SyncToolSpecification
+			.builder()
+			.tool(calculatorTool)
+			.callHandler((exchange, request) -> CallToolResult.builder()
+				.isError(true)
+				.content(List.of(new TextContent("Error calling tool: Simulated in-handler error")))
+				.build())
+			.build();
+
+		var mcpServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Verify tool is listed with output schema
+			var toolsList = mcpClient.listTools();
+			assertThat(toolsList.tools()).hasSize(1);
+			assertThat(toolsList.tools().get(0).name()).isEqualTo("calculator");
+			// Note: outputSchema might be null in sync server, but validation still works
+
+			// Call tool with valid structured output
+			CallToolResult response = mcpClient
+				.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3")));
+
+			assertThat(response).isNotNull();
+			assertThat(response.isError()).isTrue();
+			assertThat(response.content()).isNotEmpty();
+			assertThat(response.content())
+				.containsExactly(new McpSchema.TextContent("Error calling tool: Simulated in-handler error"));
+			assertThat(response.structuredContent()).isNull();
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
 	void testStructuredOutputValidationFailure(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -394,12 +511,13 @@ public abstract class AbstractStatelessIntegrationTests {
 			String errorMessage = ((McpSchema.TextContent) response.content().get(0)).text();
 			assertThat(errorMessage).contains("Validation failed");
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("clientsForTesting")
 	void testStructuredOutputMissingStructuredContent(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -444,12 +562,13 @@ public abstract class AbstractStatelessIntegrationTests {
 			assertThat(errorMessage).isEqualTo(
 					"Response missing structured content which is expected when calling tool with non-empty outputSchema");
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient", "webflux" })
+	@MethodSource("clientsForTesting")
 	void testStructuredOutputRuntimeToolAddition(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -521,8 +640,9 @@ public abstract class AbstractStatelessIntegrationTests {
 				.isEqualTo(json("""
 						{"count":3,"message":"Dynamic execution"}"""));
 		}
-
-		mcpServer.close();
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	private double evaluateExpression(String expression) {
