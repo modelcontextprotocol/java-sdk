@@ -106,6 +106,8 @@ public class McpAsyncClient {
 	public static final TypeRef<McpSchema.ProgressNotification> PROGRESS_NOTIFICATION_TYPE_REF = new TypeRef<>() {
 	};
 
+	public static final String NEGOTIATED_PROTOCOL_VERSION = "io.modelcontextprotocol.client.negotiated-protocol-version";
+
 	/**
 	 * Client capabilities.
 	 */
