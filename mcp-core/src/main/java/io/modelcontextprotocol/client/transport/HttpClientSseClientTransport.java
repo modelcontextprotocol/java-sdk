@@ -24,6 +24,7 @@ import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequ
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.json.internal.DefaultMcpJsonMapperSupplier;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -327,7 +328,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		public HttpClientSseClientTransport build() {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
 			return new HttpClientSseClientTransport(httpClient, requestBuilder, baseUri, sseEndpoint,
-					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, httpRequestCustomizer);
+					jsonMapper == null ? DefaultMcpJsonMapperSupplier.getDefaultMcpJsonMapper() : jsonMapper,
+					httpRequestCustomizer);
 		}
 
 	}

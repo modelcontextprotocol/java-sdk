@@ -25,6 +25,7 @@ import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientReq
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.internal.DefaultMcpJsonMapperSupplier;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.ClosedMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
@@ -813,7 +814,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 */
 		public HttpClientStreamableHttpTransport build() {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
-			return new HttpClientStreamableHttpTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+			return new HttpClientStreamableHttpTransport(
+					jsonMapper == null ? DefaultMcpJsonMapperSupplier.getDefaultMcpJsonMapper() : jsonMapper,
 					httpClient, requestBuilder, baseUri, endpoint, resumableStreams, openConnectionOnStartup,
 					httpRequestCustomizer, supportedProtocolVersions);
 		}

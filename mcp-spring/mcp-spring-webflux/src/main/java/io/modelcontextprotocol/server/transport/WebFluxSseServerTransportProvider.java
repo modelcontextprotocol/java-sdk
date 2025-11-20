@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.json.internal.DefaultMcpJsonMapperSupplier;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -521,8 +522,9 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		 */
 		public WebFluxSseServerTransportProvider build() {
 			Assert.notNull(messageEndpoint, "Message endpoint must be set");
-			return new WebFluxSseServerTransportProvider(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
-					baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval, contextExtractor);
+			return new WebFluxSseServerTransportProvider(
+					jsonMapper == null ? DefaultMcpJsonMapperSupplier.getDefaultMcpJsonMapper() : jsonMapper, baseUrl,
+					messageEndpoint, sseEndpoint, keepAliveInterval, contextExtractor);
 		}
 
 	}

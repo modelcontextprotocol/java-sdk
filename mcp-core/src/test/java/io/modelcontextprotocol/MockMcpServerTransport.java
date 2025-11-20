@@ -10,6 +10,7 @@ import java.util.function.BiConsumer;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.json.internal.DefaultMcpJsonMapperSupplier;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCNotification;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
@@ -68,7 +69,7 @@ public class MockMcpServerTransport implements McpServerTransport {
 
 	@Override
 	public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
-		return McpJsonMapper.getDefault().convertValue(data, typeRef);
+		return DefaultMcpJsonMapperSupplier.getDefaultMcpJsonMapper().convertValue(data, typeRef);
 	}
 
 }
