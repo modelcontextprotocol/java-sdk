@@ -333,8 +333,13 @@ public abstract class AbstractMcpAsyncServerTests {
 			.capabilities(ServerCapabilities.builder().resources(true, false).build())
 			.build();
 
-		Resource resource = new Resource(TEST_RESOURCE_URI, "Test Resource", "text/plain", "Test resource description",
-				null);
+		Resource resource = Resource.builder()
+			.uri(TEST_RESOURCE_URI)
+			.name("Test Resource")
+			.title("Test Resource")
+			.mimeType("text/plain")
+			.description("Test resource description")
+			.build();
 		McpServerFeatures.AsyncResourceSpecification specification = new McpServerFeatures.AsyncResourceSpecification(
 				resource, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
 
@@ -362,8 +367,13 @@ public abstract class AbstractMcpAsyncServerTests {
 		// Create a server without resource capabilities
 		McpAsyncServer serverWithoutResources = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
 
-		Resource resource = new Resource(TEST_RESOURCE_URI, "Test Resource", "text/plain", "Test resource description",
-				null);
+		Resource resource = Resource.builder()
+			.uri(TEST_RESOURCE_URI)
+			.name("Test Resource")
+			.title("Test Resource")
+			.mimeType("text/plain")
+			.description("Test resource description")
+			.build();
 		McpServerFeatures.AsyncResourceSpecification specification = new McpServerFeatures.AsyncResourceSpecification(
 				resource, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
 
@@ -390,8 +400,13 @@ public abstract class AbstractMcpAsyncServerTests {
 			.capabilities(ServerCapabilities.builder().resources(true, false).build())
 			.build();
 
-		Resource resource = new Resource(TEST_RESOURCE_URI, "Test Resource", "text/plain", "Test resource description",
-				null);
+		Resource resource = Resource.builder()
+			.uri(TEST_RESOURCE_URI)
+			.name("Test Resource")
+			.title("Test Resource")
+			.mimeType("text/plain")
+			.description("Test resource description")
+			.build();
 		McpServerFeatures.AsyncResourceSpecification specification = new McpServerFeatures.AsyncResourceSpecification(
 				resource, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
 
@@ -409,8 +424,13 @@ public abstract class AbstractMcpAsyncServerTests {
 			.capabilities(ServerCapabilities.builder().resources(true, false).build())
 			.build();
 
-		Resource resource = new Resource(TEST_RESOURCE_URI, "Test Resource", "text/plain", "Test resource description",
-				null);
+		Resource resource = Resource.builder()
+			.uri(TEST_RESOURCE_URI)
+			.name("Test Resource")
+			.title("Test Resource")
+			.mimeType("text/plain")
+			.description("Test resource description")
+			.build();
 		McpServerFeatures.AsyncResourceSpecification specification = new McpServerFeatures.AsyncResourceSpecification(
 				resource, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
 
