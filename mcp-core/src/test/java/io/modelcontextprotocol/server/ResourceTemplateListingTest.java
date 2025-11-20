@@ -4,13 +4,14 @@
 
 package io.modelcontextprotocol.server;
 
-import io.modelcontextprotocol.spec.McpSchema;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+
+import io.modelcontextprotocol.spec.McpSchema;
 
 /**
  * Test to verify the separation of regular resources and resource templates. Regular

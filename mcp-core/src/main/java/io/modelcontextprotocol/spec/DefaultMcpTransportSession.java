@@ -4,17 +4,18 @@
 
 package io.modelcontextprotocol.spec;
 
-import org.reactivestreams.Publisher;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import reactor.core.Disposable;
-import reactor.core.Disposables;
-import reactor.core.publisher.Mono;
-
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+
+import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import reactor.core.Disposable;
+import reactor.core.Disposables;
+import reactor.core.publisher.Mono;
 
 /**
  * Default implementation of {@link McpTransportSession} which manages the open

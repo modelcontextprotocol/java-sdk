@@ -4,15 +4,15 @@
 
 package io.modelcontextprotocol.client;
 
-import java.time.Duration;
-
-import io.modelcontextprotocol.client.transport.ServerParameters;
-import io.modelcontextprotocol.client.transport.StdioClientTransport;
-import io.modelcontextprotocol.spec.McpClientTransport;
-import org.junit.jupiter.api.Timeout;
-
 import static io.modelcontextprotocol.client.ServerParameterUtils.createServerParameters;
 import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
+
+import java.time.Duration;
+
+import org.junit.jupiter.api.Timeout;
+
+import io.modelcontextprotocol.client.transport.StdioClientTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 
 /**
  * Tests for the {@link McpAsyncClient} with {@link StdioClientTransport}.

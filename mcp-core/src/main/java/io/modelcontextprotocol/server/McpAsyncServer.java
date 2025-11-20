@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol.server;
 
+import static io.modelcontextprotocol.spec.McpError.RESOURCE_NOT_FOUND;
+
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
@@ -13,6 +15,9 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
@@ -24,7 +29,6 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.CompleteResult.CompleteCompletion;
 import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
@@ -39,12 +43,8 @@ import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DefaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
-import static io.modelcontextprotocol.spec.McpError.RESOURCE_NOT_FOUND;
 
 /**
  * The Model Context Protocol (MCP) server implementation that provides asynchronous

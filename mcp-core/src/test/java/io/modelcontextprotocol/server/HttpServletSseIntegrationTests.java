@@ -4,9 +4,19 @@
 
 package io.modelcontextprotocol.server;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import java.time.Duration;
 import java.util.Map;
 import java.util.stream.Stream;
+
+import org.apache.catalina.LifecycleException;
+import org.apache.catalina.LifecycleState;
+import org.apache.catalina.startup.Tomcat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.provider.Arguments;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
@@ -16,15 +26,6 @@ import io.modelcontextprotocol.server.McpServer.SyncSpecification;
 import io.modelcontextprotocol.server.transport.HttpServletSseServerTransportProvider;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import jakarta.servlet.http.HttpServletRequest;
-import org.apache.catalina.LifecycleException;
-import org.apache.catalina.LifecycleState;
-import org.apache.catalina.startup.Tomcat;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.params.provider.Arguments;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 @Timeout(15)
 class HttpServletSseIntegrationTests extends AbstractMcpClientServerIntegrationTests {

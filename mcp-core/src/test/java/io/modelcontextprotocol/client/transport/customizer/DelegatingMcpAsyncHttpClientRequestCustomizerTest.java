@@ -4,20 +4,21 @@
 
 package io.modelcontextprotocol.client.transport.customizer;
 
-import java.net.URI;
-import java.net.http.HttpRequest;
-import java.util.List;
-import org.junit.jupiter.api.Test;
-import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
-
-import io.modelcontextprotocol.common.McpTransportContext;
-
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.net.URI;
+import java.net.http.HttpRequest;
+import java.util.List;
+
+import org.junit.jupiter.api.Test;
+
+import io.modelcontextprotocol.common.McpTransportContext;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 /**
  * Tests for {@link DelegatingMcpAsyncHttpClientRequestCustomizer}.

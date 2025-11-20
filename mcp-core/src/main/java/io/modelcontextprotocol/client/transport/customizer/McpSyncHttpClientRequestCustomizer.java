@@ -7,10 +7,9 @@ package io.modelcontextprotocol.client.transport.customizer;
 import java.net.URI;
 import java.net.http.HttpRequest;
 
-import reactor.util.annotation.Nullable;
-
 import io.modelcontextprotocol.client.McpClient.SyncSpec;
 import io.modelcontextprotocol.common.McpTransportContext;
+import reactor.util.annotation.Nullable;
 
 /**
  * Customize {@link HttpRequest.Builder} before executing the request, either in SSE or

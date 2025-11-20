@@ -4,7 +4,6 @@
 
 package io.modelcontextprotocol.server;
 
-import io.modelcontextprotocol.common.McpTransportContext;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -14,13 +13,13 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.internal.DefaultMcpJsonMapperSupplier;
 import io.modelcontextprotocol.json.internal.DefaultMcpJsonSchemaValidatorSupplier;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
-import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
