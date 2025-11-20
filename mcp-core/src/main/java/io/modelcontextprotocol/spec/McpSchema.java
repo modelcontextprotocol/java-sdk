@@ -1702,6 +1702,51 @@ public final class McpSchema {
 	}
 
 	/**
+	 * Task information interface.
+	 */
+	public interface TaskInfo {
+
+		/**
+		 * The task identifier.
+		 */
+		String taskId();
+
+		/**
+		 * Current task state.
+		 */
+		TaskStatus status();
+
+		/**
+		 * Optional human-readable message describing the current task state. This can
+		 * provide context for any status, including:
+		 * <p>
+		 * - Reasons for "cancelled" status
+		 * <p>
+		 * - Summaries for "completed" status
+		 * <p>
+		 * - Diagnostic information for "failed" status (e.g., error details, what went
+		 * wrong)
+		 */
+		String statusMessage();
+
+		/**
+		 * ISO 8601 timestamp when the task was created.
+		 */
+		String createdAt();
+
+		/**
+		 * Actual retention duration from creation in milliseconds, null for unlimited.
+		 */
+		Long ttl();
+
+		/**
+		 * Suggested polling interval in milliseconds, null if no suggestion.
+		 */
+		Long pollInterval();
+
+	}
+
+	/**
 	 * The server's response to a tools/call request from the client when invoked as a
 	 * task.
 	 */
@@ -1713,7 +1758,7 @@ public final class McpSchema {
         @JsonProperty("statusMessage") String statusMessage,
         @JsonProperty("createdAt") String createdAt,
         @JsonProperty("ttl") Long ttl,
-        @JsonProperty("pollInterval") Long pollInterval) { // @formatter:on
+        @JsonProperty("pollInterval") Long pollInterval) implements TaskInfo { // @formatter:on
 
 		public Task(String taskId, TaskStatus status, String statusMessage, String createdAt) {
 			this(taskId, status, statusMessage, createdAt, null, null);
@@ -1820,7 +1865,7 @@ public final class McpSchema {
         @JsonProperty("createdAt") String createdAt,
         @JsonProperty("ttl") Long ttl,
         @JsonProperty("pollInterval") Long pollInterval,
-        @JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+        @JsonProperty("_meta") Map<String, Object> meta) implements TaskInfo, Result { // @formatter:on
 	}
 
 	/**
@@ -1867,7 +1912,7 @@ public final class McpSchema {
         @JsonProperty("createdAt") String createdAt,
         @JsonProperty("ttl") Long ttl,
         @JsonProperty("pollInterval") Long pollInterval,
-        @JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+        @JsonProperty("_meta") Map<String, Object> meta) implements TaskInfo, Result { // @formatter:on
 	}
 
 	/**
@@ -1905,7 +1950,7 @@ public final class McpSchema {
         @JsonProperty("createdAt") String createdAt,
         @JsonProperty("ttl") Long ttl,
         @JsonProperty("pollInterval") Long pollInterval,
-        @JsonProperty("_meta") Map<String, Object> meta) implements Notification { // @formatter:on
+        @JsonProperty("_meta") Map<String, Object> meta) implements TaskInfo, Notification { // @formatter:on
 	}
 
 	/**
