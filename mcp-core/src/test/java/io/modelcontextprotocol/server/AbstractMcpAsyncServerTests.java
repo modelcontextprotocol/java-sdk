@@ -7,7 +7,6 @@ package io.modelcontextprotocol.server;
 import java.time.Duration;
 import java.util.List;
 
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
@@ -86,7 +85,7 @@ public abstract class AbstractMcpAsyncServerTests {
 	void testImmediateClose() {
 		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
 
-		assertThatCode(() -> mcpAsyncServer.close()).doesNotThrowAnyException();
+		assertThatCode(mcpAsyncServer::close).doesNotThrowAnyException();
 	}
 
 	// ---------------------------------------
@@ -104,8 +103,9 @@ public abstract class AbstractMcpAsyncServerTests {
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.build();
 
-		StepVerifier.create(mcpAsyncServer.addTool(new McpServerFeatures.AsyncToolSpecification(newTool,
-				(exchange, args) -> Mono.just(new CallToolResult(List.of(), false)))))
+		StepVerifier
+			.create(mcpAsyncServer.addTool(new McpServerFeatures.AsyncToolSpecification(newTool,
+					(exchange, args) -> Mono.just(CallToolResult.builder().content(List.of()).isError(false).build()))))
 			.verifyComplete();
 
 		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
@@ -125,7 +125,8 @@ public abstract class AbstractMcpAsyncServerTests {
 
 		StepVerifier.create(mcpAsyncServer.addTool(McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(newTool)
-			.callHandler((exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+			.callHandler((exchange, request) -> Mono
+				.just(CallToolResult.builder().content(List.of()).isError(false).build()))
 			.build())).verifyComplete();
 
 		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
@@ -142,11 +143,13 @@ public abstract class AbstractMcpAsyncServerTests {
 
 		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
-			.tool(duplicateTool, (exchange, args) -> Mono.just(new CallToolResult(List.of(), false)))
+			.tool(duplicateTool,
+					(exchange, args) -> Mono.just(CallToolResult.builder().content(List.of()).isError(false).build()))
 			.build();
 
-		StepVerifier.create(mcpAsyncServer.addTool(new McpServerFeatures.AsyncToolSpecification(duplicateTool,
-				(exchange, args) -> Mono.just(new CallToolResult(List.of(), false)))))
+		StepVerifier
+			.create(mcpAsyncServer.addTool(new McpServerFeatures.AsyncToolSpecification(duplicateTool,
+					(exchange, args) -> Mono.just(CallToolResult.builder().content(List.of()).isError(false).build()))))
 			.verifyComplete();
 
 		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
@@ -162,12 +165,15 @@ public abstract class AbstractMcpAsyncServerTests {
 
 		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
-			.toolCall(duplicateTool, (exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+			.toolCall(duplicateTool,
+					(exchange, request) -> Mono
+						.just(CallToolResult.builder().content(List.of()).isError(false).build()))
 			.build();
 
 		StepVerifier.create(mcpAsyncServer.addTool(McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(duplicateTool)
-			.callHandler((exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+			.callHandler((exchange, request) -> Mono
+				.just(CallToolResult.builder().content(List.of()).isError(false).build()))
 			.build())).verifyComplete();
 
 		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
@@ -183,8 +189,12 @@ public abstract class AbstractMcpAsyncServerTests {
 
 		assertThatThrownBy(() -> prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
-			.toolCall(duplicateTool, (exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
-			.toolCall(duplicateTool, (exchange, request) -> Mono.just(new CallToolResult(List.of(), false))) // Duplicate!
+			.toolCall(duplicateTool,
+					(exchange, request) -> Mono
+						.just(CallToolResult.builder().content(List.of()).isError(false).build()))
+			.toolCall(duplicateTool,
+					(exchange, request) -> Mono
+						.just(CallToolResult.builder().content(List.of()).isError(false).build())) // Duplicate!
 			.build()).isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Tool with name 'duplicate-build-toolcall' is already registered.");
 	}
@@ -200,11 +210,13 @@ public abstract class AbstractMcpAsyncServerTests {
 		List<McpServerFeatures.AsyncToolSpecification> specs = List.of(
 				McpServerFeatures.AsyncToolSpecification.builder()
 					.tool(duplicateTool)
-					.callHandler((exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+					.callHandler((exchange, request) -> Mono
+						.just(CallToolResult.builder().content(List.of()).isError(false).build()))
 					.build(),
 				McpServerFeatures.AsyncToolSpecification.builder()
 					.tool(duplicateTool)
-					.callHandler((exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+					.callHandler((exchange, request) -> Mono
+						.just(CallToolResult.builder().content(List.of()).isError(false).build()))
 					.build() // Duplicate!
 		);
 
@@ -227,11 +239,13 @@ public abstract class AbstractMcpAsyncServerTests {
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(McpServerFeatures.AsyncToolSpecification.builder()
 				.tool(duplicateTool)
-				.callHandler((exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+				.callHandler((exchange, request) -> Mono
+					.just(CallToolResult.builder().content(List.of()).isError(false).build()))
 				.build(),
 					McpServerFeatures.AsyncToolSpecification.builder()
 						.tool(duplicateTool)
-						.callHandler((exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+						.callHandler((exchange, request) -> Mono
+							.just(CallToolResult.builder().content(List.of()).isError(false).build()))
 						.build() // Duplicate!
 			)
 			.build()).isInstanceOf(IllegalArgumentException.class)
@@ -248,7 +262,9 @@ public abstract class AbstractMcpAsyncServerTests {
 
 		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
-			.toolCall(too, (exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+			.toolCall(too,
+					(exchange, request) -> Mono
+						.just(CallToolResult.builder().content(List.of()).isError(false).build()))
 			.build();
 
 		StepVerifier.create(mcpAsyncServer.removeTool(TEST_TOOL_NAME)).verifyComplete();
@@ -277,7 +293,8 @@ public abstract class AbstractMcpAsyncServerTests {
 
 		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
-			.toolCall(too, (exchange, args) -> Mono.just(new CallToolResult(List.of(), false)))
+			.toolCall(too,
+					(exchange, args) -> Mono.just(CallToolResult.builder().content(List.of()).isError(false).build()))
 			.build();
 
 		StepVerifier.create(mcpAsyncServer.notifyToolsListChanged()).verifyComplete();

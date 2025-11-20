@@ -6,7 +6,6 @@ package io.modelcontextprotocol.server;
 
 import java.util.List;
 
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
@@ -114,7 +113,7 @@ public abstract class AbstractMcpSyncServerTests {
 			.inputSchema(EMPTY_JSON_SCHEMA)
 			.build();
 		assertThatCode(() -> mcpSyncServer.addTool(new McpServerFeatures.SyncToolSpecification(newTool,
-				(exchange, args) -> new CallToolResult(List.of(), false))))
+				(exchange, args) -> CallToolResult.builder().content(List.of()).isError(false).build())))
 			.doesNotThrowAnyException();
 
 		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
@@ -151,11 +150,11 @@ public abstract class AbstractMcpSyncServerTests {
 
 		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
-			.tool(duplicateTool, (exchange, args) -> new CallToolResult(List.of(), false))
+			.tool(duplicateTool, (exchange, args) -> CallToolResult.builder().content(List.of()).isError(false).build())
 			.build();
 
 		assertThatCode(() -> mcpSyncServer.addTool(new McpServerFeatures.SyncToolSpecification(duplicateTool,
-				(exchange, args) -> new CallToolResult(List.of(), false))))
+				(exchange, args) -> CallToolResult.builder().content(List.of()).isError(false).build())))
 			.doesNotThrowAnyException();
 
 		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();

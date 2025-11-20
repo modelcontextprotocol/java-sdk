@@ -1077,7 +1077,10 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 								.logger("test-logger")
 								.data("Another error message")
 								.build()))
-					.thenReturn(new CallToolResult("Logging test completed", false));
+					.thenReturn(CallToolResult.builder()
+							.content(List.of(new McpSchema.TextContent("Logging test completed")))
+							.isError(false)
+							.build());
 					//@formatter:on
 			})
 			.build();
@@ -1172,7 +1175,10 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 									0.0, 1.0, "Another processing started")))
 					.then(exchange.progressNotification(
 							new McpSchema.ProgressNotification(progressToken, 1.0, 1.0, "Processing completed")))
-					.thenReturn(new CallToolResult(("Progress test completed"), false));
+					.thenReturn(CallToolResult.builder()
+						.content(List.of(new McpSchema.TextContent("Progress test completed")))
+						.isError(false)
+						.build());
 			})
 			.build();
 
@@ -1326,7 +1332,10 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 					assertThat(result).isNotNull();
 				}).then(Mono.fromCallable(() -> {
 					executionOrder.set(executionOrder.get() + "3");
-					return new CallToolResult("Async ping test completed", false);
+					return CallToolResult.builder()
+						.content(List.of(new McpSchema.TextContent("Async ping test completed")))
+						.isError(false)
+						.build();
 				}));
 			})
 			.build();

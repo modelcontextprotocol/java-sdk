@@ -508,7 +508,10 @@ public class McpServerFeatures {
 	 * 				.build()
 	 * 		.toolHandler((exchange, req) -> {
 	 * 			String expr = (String) req.arguments().get("expression");
-	 * 			return new CallToolResult("Result: " + evaluate(expr));
+	 * 			return CallToolResult.builder()
+	 *                   .content(List.of(new McpSchema.TextContent("Result: " + evaluate(expr))))
+	 *                   .isError(false)
+	 *                   .build();
 	 * 		}))
 	 *      .build();
 	 * }</pre>

@@ -1562,6 +1562,7 @@ public final class McpSchema {
 		 * content contains error information. If false or absent, indicates successful
 		 * execution.
 		 */
+		@Deprecated
 		public CallToolResult(String content, Boolean isError) {
 			this(List.of(new TextContent(content)), isError, null);
 		}
@@ -1676,7 +1677,7 @@ public final class McpSchema {
 			 * @return a new CallToolResult instance
 			 */
 			public CallToolResult build() {
-				return new CallToolResult(content, isError, (Object) structuredContent, meta);
+				return new CallToolResult(content, isError, structuredContent, meta);
 			}
 
 		}

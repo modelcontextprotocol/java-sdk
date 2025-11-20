@@ -32,7 +32,10 @@ class SyncToolSpecificationBuilderTest {
 
 		McpServerFeatures.SyncToolSpecification specification = McpServerFeatures.SyncToolSpecification.builder()
 			.tool(tool)
-			.callHandler((exchange, request) -> new CallToolResult(List.of(new TextContent("Test result")), false))
+			.callHandler((exchange, request) -> CallToolResult.builder()
+				.content(List.of(new TextContent("Test result")))
+				.isError(false)
+				.build())
 			.build();
 
 		assertThat(specification).isNotNull();
@@ -44,7 +47,7 @@ class SyncToolSpecificationBuilderTest {
 	@Test
 	void builderShouldThrowExceptionWhenToolIsNull() {
 		assertThatThrownBy(() -> McpServerFeatures.SyncToolSpecification.builder()
-			.callHandler((exchange, request) -> new CallToolResult(List.of(), false))
+			.callHandler((exchange, request) -> CallToolResult.builder().content(List.of()).isError(false).build())
 			.build()).isInstanceOf(IllegalArgumentException.class).hasMessage("Tool must not be null");
 	}
 
@@ -64,7 +67,9 @@ class SyncToolSpecificationBuilderTest {
 
 		// Then - verify method chaining returns the same builder instance
 		assertThat(builder.tool(tool)).isSameAs(builder);
-		assertThat(builder.callHandler((exchange, request) -> new CallToolResult(List.of(), false))).isSameAs(builder);
+		assertThat(builder
+			.callHandler((exchange, request) -> CallToolResult.builder().content(List.of()).isError(false).build()))
+			.isSameAs(builder);
 	}
 
 	@Test
@@ -80,7 +85,10 @@ class SyncToolSpecificationBuilderTest {
 			.tool(tool)
 			.callHandler((exchange, request) -> {
 				// Simple test implementation
-				return new CallToolResult(List.of(new TextContent(expectedResult)), false);
+				return CallToolResult.builder()
+					.content(List.of(new TextContent(expectedResult)))
+					.isError(false)
+					.build();
 			})
 			.build();
 
