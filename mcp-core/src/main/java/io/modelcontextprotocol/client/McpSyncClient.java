@@ -1,31 +1,14 @@
-/*
- * Copyright 2024-2024 the original author or authors.
- */
-
 package io.modelcontextprotocol.client;
 
-import java.time.Duration;
-import java.util.function.Supplier;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
-import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
-import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
-import io.modelcontextprotocol.util.Assert;
-import reactor.core.publisher.Mono;
 
 /**
- * A synchronous client implementation for the Model Context Protocol (MCP) that wraps an
+ * A synchronous client interface for the Model Context Protocol (MCP) that wraps an
  * {@link McpAsyncClient} to provide blocking operations.
  *
  * <p>
- * This client implements the MCP specification by delegating to an asynchronous client
- * and blocking on the results. Key features include:
+ * This client interface the MCP specification by delegating to an asynchronous client and
+ * blocking on the results. Key features include:
  * <ul>
  * <li>Synchronous, blocking API for simpler integration in non-reactive applications
  * <li>Tool discovery and invocation for server-provided functionality
@@ -44,116 +27,71 @@ import reactor.core.publisher.Mono;
  * </ol>
  *
  * <p>
- * This implementation implements {@link AutoCloseable} for resource cleanup and provides
+ * This implementation interface {@link AutoCloseable} for resource cleanup and provides
  * both immediate and graceful shutdown options. All operations block until completion or
  * timeout, making it suitable for traditional synchronous programming models.
  *
  * @author Dariusz Jędrzejczyk
  * @author Christian Tzolov
  * @author Jihoon Kim
+ * @author Pin He
  * @see McpClient
  * @see McpAsyncClient
  * @see McpSchema
  */
-public class McpSyncClient implements AutoCloseable {
-
-	private static final Logger logger = LoggerFactory.getLogger(McpSyncClient.class);
-
-	// TODO: Consider providing a client config to set this properly
-	// this is currently a concern only because AutoCloseable is used - perhaps it
-	// is not a requirement?
-	private static final long DEFAULT_CLOSE_TIMEOUT_MS = 10_000L;
-
-	private final McpAsyncClient delegate;
-
-	private final Supplier<McpTransportContext> contextProvider;
-
-	/**
-	 * Create a new McpSyncClient with the given delegate.
-	 * @param delegate the asynchronous kernel on top of which this synchronous client
-	 * provides a blocking API.
-	 * @param contextProvider the supplier of context before calling any non-blocking
-	 * operation on underlying delegate
-	 */
-	McpSyncClient(McpAsyncClient delegate, Supplier<McpTransportContext> contextProvider) {
-		Assert.notNull(delegate, "The delegate can not be null");
-		Assert.notNull(contextProvider, "The contextProvider can not be null");
-		this.delegate = delegate;
-		this.contextProvider = contextProvider;
-	}
+public interface McpSyncClient extends AutoCloseable {
 
 	/**
 	 * Get the current initialization result.
 	 * @return the initialization result.
 	 */
-	public McpSchema.InitializeResult getCurrentInitializationResult() {
-		return this.delegate.getCurrentInitializationResult();
-	}
+	McpSchema.InitializeResult getCurrentInitializationResult();
 
 	/**
 	 * Get the server capabilities that define the supported features and functionality.
 	 * @return The server capabilities
 	 */
-	public McpSchema.ServerCapabilities getServerCapabilities() {
-		return this.delegate.getServerCapabilities();
-	}
+	McpSchema.ServerCapabilities getServerCapabilities();
 
 	/**
 	 * Get the server instructions that provide guidance to the client on how to interact
 	 * with this server.
 	 * @return The instructions
 	 */
-	public String getServerInstructions() {
-		return this.delegate.getServerInstructions();
-	}
+	String getServerInstructions();
 
 	/**
 	 * Get the server implementation information.
 	 * @return The server implementation details
 	 */
-	public McpSchema.Implementation getServerInfo() {
-		return this.delegate.getServerInfo();
-	}
+	McpSchema.Implementation getServerInfo();
 
 	/**
 	 * Check if the client-server connection is initialized.
 	 * @return true if the client-server connection is initialized
 	 */
-	public boolean isInitialized() {
-		return this.delegate.isInitialized();
-	}
+	boolean isInitialized();
 
 	/**
 	 * Get the client capabilities that define the supported features and functionality.
 	 * @return The client capabilities
 	 */
-	public ClientCapabilities getClientCapabilities() {
-		return this.delegate.getClientCapabilities();
-	}
+	McpSchema.ClientCapabilities getClientCapabilities();
 
 	/**
 	 * Get the client implementation information.
 	 * @return The client implementation details
 	 */
-	public McpSchema.Implementation getClientInfo() {
-		return this.delegate.getClientInfo();
-	}
+	McpSchema.Implementation getClientInfo();
 
 	@Override
-	public void close() {
-		this.delegate.close();
-	}
+	void close();
 
-	public boolean closeGracefully() {
-		try {
-			this.delegate.closeGracefully().block(Duration.ofMillis(DEFAULT_CLOSE_TIMEOUT_MS));
-		}
-		catch (RuntimeException e) {
-			logger.warn("Client didn't close within timeout of {} ms.", DEFAULT_CLOSE_TIMEOUT_MS, e);
-			return false;
-		}
-		return true;
-	}
+	/**
+	 * Gracefully closes the client connection.
+	 * @return true if closed gracefully, false otherwise.
+	 */
+	boolean closeGracefully();
 
 	/**
 	 * The initialization phase MUST be the first interaction between client and server.
@@ -183,40 +121,28 @@ public class McpSyncClient implements AutoCloseable {
 	 * Spec</a>
 	 * @return the initialize result.
 	 */
-	public McpSchema.InitializeResult initialize() {
-		// TODO: block takes no argument here as we assume the async client is
-		// configured with a requestTimeout at all times
-		return withProvidedContext(this.delegate.initialize()).block();
-	}
+	McpSchema.InitializeResult initialize();
 
 	/**
 	 * Send a roots/list_changed notification.
 	 */
-	public void rootsListChangedNotification() {
-		withProvidedContext(this.delegate.rootsListChangedNotification()).block();
-	}
+	void rootsListChangedNotification();
 
 	/**
 	 * Add a roots dynamically.
 	 */
-	public void addRoot(McpSchema.Root root) {
-		this.delegate.addRoot(root).block();
-	}
+	void addRoot(McpSchema.Root root);
 
 	/**
 	 * Remove a root dynamically.
 	 */
-	public void removeRoot(String rootUri) {
-		this.delegate.removeRoot(rootUri).block();
-	}
+	void removeRoot(String rootUri);
 
 	/**
 	 * Send a synchronous ping request.
 	 * @return
 	 */
-	public Object ping() {
-		return withProvidedContext(this.delegate.ping()).block();
-	}
+	Object ping();
 
 	// --------------------------
 	// Tools
@@ -232,10 +158,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * (text, images, or embedded resources) representing the tool's output - isError:
 	 * Boolean indicating if the execution failed (true) or succeeded (false/absent)
 	 */
-	public McpSchema.CallToolResult callTool(McpSchema.CallToolRequest callToolRequest) {
-		return withProvidedContext(this.delegate.callTool(callToolRequest)).block();
-
-	}
+	McpSchema.CallToolResult callTool(McpSchema.CallToolRequest callToolRequest);
 
 	/**
 	 * Retrieves the list of all tools provided by the server.
@@ -243,9 +166,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * each with a name, description, and input schema - nextCursor: Optional cursor for
 	 * pagination if more tools are available
 	 */
-	public McpSchema.ListToolsResult listTools() {
-		return withProvidedContext(this.delegate.listTools()).block();
-	}
+	McpSchema.ListToolsResult listTools();
 
 	/**
 	 * Retrieves a paginated list of tools provided by the server.
@@ -254,10 +175,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * with a name, description, and input schema - nextCursor: Optional cursor for
 	 * pagination if more tools are available
 	 */
-	public McpSchema.ListToolsResult listTools(String cursor) {
-		return withProvidedContext(this.delegate.listTools(cursor)).block();
-
-	}
+	McpSchema.ListToolsResult listTools(String cursor);
 
 	// --------------------------
 	// Resources
@@ -267,49 +185,34 @@ public class McpSyncClient implements AutoCloseable {
 	 * Retrieves the list of all resources provided by the server.
 	 * @return The list of all resources result
 	 */
-	public McpSchema.ListResourcesResult listResources() {
-		return withProvidedContext(this.delegate.listResources()).block();
-
-	}
+	McpSchema.ListResourcesResult listResources();
 
 	/**
 	 * Retrieves a paginated list of resources provided by the server.
 	 * @param cursor Optional pagination cursor from a previous list request
 	 * @return The list of resources result
 	 */
-	public McpSchema.ListResourcesResult listResources(String cursor) {
-		return withProvidedContext(this.delegate.listResources(cursor)).block();
-
-	}
+	McpSchema.ListResourcesResult listResources(String cursor);
 
 	/**
 	 * Send a resources/read request.
 	 * @param resource the resource to read
 	 * @return the resource content.
 	 */
-	public McpSchema.ReadResourceResult readResource(McpSchema.Resource resource) {
-		return withProvidedContext(this.delegate.readResource(resource)).block();
-
-	}
+	McpSchema.ReadResourceResult readResource(McpSchema.Resource resource);
 
 	/**
 	 * Send a resources/read request.
 	 * @param readResourceRequest the read resource request.
 	 * @return the resource content.
 	 */
-	public McpSchema.ReadResourceResult readResource(McpSchema.ReadResourceRequest readResourceRequest) {
-		return withProvidedContext(this.delegate.readResource(readResourceRequest)).block();
-
-	}
+	McpSchema.ReadResourceResult readResource(McpSchema.ReadResourceRequest readResourceRequest);
 
 	/**
 	 * Retrieves the list of all resource templates provided by the server.
 	 * @return The list of all resource templates result.
 	 */
-	public McpSchema.ListResourceTemplatesResult listResourceTemplates() {
-		return withProvidedContext(this.delegate.listResourceTemplates()).block();
-
-	}
+	McpSchema.ListResourceTemplatesResult listResourceTemplates();
 
 	/**
 	 * Resource templates allow servers to expose parameterized resources using URI
@@ -319,10 +222,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * @param cursor Optional pagination cursor from a previous list request
 	 * @return The list of resource templates result.
 	 */
-	public McpSchema.ListResourceTemplatesResult listResourceTemplates(String cursor) {
-		return withProvidedContext(this.delegate.listResourceTemplates(cursor)).block();
-
-	}
+	McpSchema.ListResourceTemplatesResult listResourceTemplates(String cursor);
 
 	/**
 	 * Subscriptions. The protocol supports optional subscriptions to resource changes.
@@ -333,20 +233,14 @@ public class McpSyncClient implements AutoCloseable {
 	 * @param subscribeRequest the subscribe request contains the uri of the resource to
 	 * subscribe to.
 	 */
-	public void subscribeResource(McpSchema.SubscribeRequest subscribeRequest) {
-		withProvidedContext(this.delegate.subscribeResource(subscribeRequest)).block();
-
-	}
+	void subscribeResource(McpSchema.SubscribeRequest subscribeRequest);
 
 	/**
 	 * Send a resources/unsubscribe request.
 	 * @param unsubscribeRequest the unsubscribe request contains the uri of the resource
 	 * to unsubscribe from.
 	 */
-	public void unsubscribeResource(McpSchema.UnsubscribeRequest unsubscribeRequest) {
-		withProvidedContext(this.delegate.unsubscribeResource(unsubscribeRequest)).block();
-
-	}
+	void unsubscribeResource(McpSchema.UnsubscribeRequest unsubscribeRequest);
 
 	// --------------------------
 	// Prompts
@@ -356,32 +250,22 @@ public class McpSyncClient implements AutoCloseable {
 	 * Retrieves the list of all prompts provided by the server.
 	 * @return The list of all prompts result.
 	 */
-	public ListPromptsResult listPrompts() {
-		return withProvidedContext(this.delegate.listPrompts()).block();
-	}
+	McpSchema.ListPromptsResult listPrompts();
 
 	/**
 	 * Retrieves a paginated list of prompts provided by the server.
 	 * @param cursor Optional pagination cursor from a previous list request
 	 * @return The list of prompts result.
 	 */
-	public ListPromptsResult listPrompts(String cursor) {
-		return withProvidedContext(this.delegate.listPrompts(cursor)).block();
+	McpSchema.ListPromptsResult listPrompts(String cursor);
 
-	}
-
-	public GetPromptResult getPrompt(GetPromptRequest getPromptRequest) {
-		return withProvidedContext(this.delegate.getPrompt(getPromptRequest)).block();
-	}
+	McpSchema.GetPromptResult getPrompt(McpSchema.GetPromptRequest getPromptRequest);
 
 	/**
 	 * Client can set the minimum logging level it wants to receive from the server.
 	 * @param loggingLevel the min logging level
 	 */
-	public void setLoggingLevel(McpSchema.LoggingLevel loggingLevel) {
-		withProvidedContext(this.delegate.setLoggingLevel(loggingLevel)).block();
-
-	}
+	void setLoggingLevel(McpSchema.LoggingLevel loggingLevel);
 
 	/**
 	 * Send a completion/complete request.
@@ -389,19 +273,6 @@ public class McpSyncClient implements AutoCloseable {
 	 * reference and arguments for generating suggestions.
 	 * @return the completion result containing suggested values.
 	 */
-	public McpSchema.CompleteResult completeCompletion(McpSchema.CompleteRequest completeRequest) {
-		return withProvidedContext(this.delegate.completeCompletion(completeRequest)).block();
-
-	}
-
-	/**
-	 * For a given action, on assembly, capture the "context" via the
-	 * {@link #contextProvider} and store it in the Reactor context.
-	 * @param action the action to perform
-	 * @return the result of the action
-	 */
-	private <T> Mono<T> withProvidedContext(Mono<T> action) {
-		return action.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, this.contextProvider.get()));
-	}
+	McpSchema.CompleteResult completeCompletion(McpSchema.CompleteRequest completeRequest);
 
 }
