@@ -1438,20 +1438,28 @@ public final class McpSchema {
 	}
 
 	/**
-	 * The task hint.
+	 * Execution behavior for a tool.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ToolExecution(TaskSupport task) {
+	}
+
+	/**
+	 * The task augmented support mode for a tool.
 	 * <p>
-	 * If taskHint is {@code always}, clients SHOULD invoke the tool as a task. Servers
-	 * MAY return a -32601 (Method not found) error if a client does not attempt to do so.
+	 * If mode is {@code always}, clients SHOULD invoke the tool as a task. Servers MAY
+	 * return a -32601 (Method not found) error if a client does not attempt to do so.
 	 * <p>
-	 * If taskHint is {@code optional}, clients MAY invoke the tool as a task or as a
-	 * normal request.
+	 * If mode is {@code optional}, clients MAY invoke the tool as a task or as a normal
+	 * request.
 	 * <p>
-	 * If taskHint is not present or {@code never}, clients MUST NOT attempt to invoke the
+	 * If mode is not present or {@code never}, clients MUST NOT attempt to invoke the
 	 * tool as a task. Servers SHOULD return a -32601 (Method not found) error if a client
 	 * attempts to do so. This is the default behavior.
 	 *
 	 */
-	public enum TaskHint {
+	public enum TaskSupport {
 
 		// @formatter:off
         @JsonProperty("always") ALWAYS("always"),
@@ -1461,7 +1469,7 @@ public final class McpSchema {
 
 		private final String value;
 
-		TaskHint(final String value) {
+		TaskSupport(final String value) {
 			this.value = value;
 		}
 
@@ -1469,13 +1477,13 @@ public final class McpSchema {
 			return value;
 		}
 
-		public static TaskHint fromValue(String value) {
-			for (TaskHint hint : TaskHint.values()) {
+		public static TaskSupport fromValue(String value) {
+			for (TaskSupport hint : TaskSupport.values()) {
 				if (hint.value.equalsIgnoreCase(value)) {
 					return hint;
 				}
 			}
-			throw new IllegalArgumentException("Unknown TaskHint value: " + value);
+			throw new IllegalArgumentException("Unknown task support value: " + value);
 		}
 
 	}
@@ -1498,8 +1506,7 @@ public final class McpSchema {
 		@JsonProperty("destructiveHint") Boolean destructiveHint,
 		@JsonProperty("idempotentHint") Boolean idempotentHint,
 		@JsonProperty("openWorldHint") Boolean openWorldHint,
-		@JsonProperty("returnDirect") Boolean returnDirect,
-        @JsonProperty("taskHint") TaskHint taskHint) { // @formatter:on
+		@JsonProperty("returnDirect") Boolean returnDirect) { // @formatter:on
 
 		public static Builder builder() {
 			return new Builder();
@@ -1518,8 +1525,6 @@ public final class McpSchema {
 			private boolean openWorldHint;
 
 			private boolean returnDirect;
-
-			private TaskHint taskHint;
 
 			public Builder title(String title) {
 				this.title = title;
@@ -1551,14 +1556,9 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder taskHint(TaskHint taskHint) {
-				this.taskHint = taskHint;
-				return this;
-			}
-
 			public ToolAnnotations build() {
 				return new ToolAnnotations(title, readOnlyHint, destructiveHint, idempotentHint, openWorldHint,
-						returnDirect, taskHint);
+						returnDirect);
 			}
 
 		}
@@ -1576,6 +1576,7 @@ public final class McpSchema {
 	 * used by clients to improve the LLM's understanding of available tools.
 	 * @param inputSchema A JSON Schema object that describes the expected structure of
 	 * the arguments when calling this tool. This allows clients to validate tool
+	 * @param execution The execution behavior for the tool.
 	 * @param outputSchema An optional JSON Schema object defining the structure of the
 	 * tool's output returned in the structuredContent field of a CallToolResult.
 	 * @param annotations Optional additional tool information.
@@ -1589,8 +1590,23 @@ public final class McpSchema {
 		@JsonProperty("description") String description,
 		@JsonProperty("inputSchema") JsonSchema inputSchema,
 		@JsonProperty("outputSchema") Map<String, Object> outputSchema,
+        @JsonProperty("execution") ToolExecution execution,
 		@JsonProperty("annotations") ToolAnnotations annotations,
 		@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
+
+		/**
+		 * @deprecated keep for backwards compatibility
+		 */
+		public Tool( // @formatter:off
+            String name,
+            String title,
+            String description,
+            JsonSchema inputSchema,
+            Map<String, Object> outputSchema,
+            ToolAnnotations annotations,
+            Map<String, Object> meta) { // @formatter:on
+			this(name, title, description, inputSchema, outputSchema, null, annotations, meta);
+		}
 
 		public static Builder builder() {
 			return new Builder();
@@ -1607,6 +1623,8 @@ public final class McpSchema {
 			private JsonSchema inputSchema;
 
 			private Map<String, Object> outputSchema;
+
+			private ToolExecution execution;
 
 			private ToolAnnotations annotations;
 
@@ -1647,6 +1665,11 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder execution(ToolExecution execution) {
+				this.execution = execution;
+				return this;
+			}
+
 			public Builder annotations(ToolAnnotations annotations) {
 				this.annotations = annotations;
 				return this;
@@ -1659,7 +1682,7 @@ public final class McpSchema {
 
 			public Tool build() {
 				Assert.hasText(name, "name must not be empty");
-				return new Tool(name, title, description, inputSchema, outputSchema, annotations, meta);
+				return new Tool(name, title, description, inputSchema, outputSchema, execution, annotations, meta);
 			}
 
 		}
