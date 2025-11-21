@@ -6,8 +6,8 @@ package io.modelcontextprotocol.spec;
 
 import java.util.List;
 
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import reactor.core.publisher.Mono;
 
 /**

@@ -6,6 +6,7 @@ package io.modelcontextprotocol.server.transport;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.internal.DefaultMcpJsonMapperSupplier;
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
@@ -231,7 +232,8 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 		 */
 		public WebMvcStatelessServerTransport build() {
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
-			return new WebMvcStatelessServerTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+			return new WebMvcStatelessServerTransport(
+					jsonMapper == null ? DefaultMcpJsonMapperSupplier.getDefaultMcpJsonMapper() : jsonMapper,
 					mcpEndpoint, contextExtractor);
 		}
 

@@ -6,6 +6,7 @@ package io.modelcontextprotocol.server.transport;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.json.internal.DefaultMcpJsonMapperSupplier;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.HttpHeaders;
@@ -486,8 +487,8 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		public WebFluxStreamableServerTransportProvider build() {
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 			return new WebFluxStreamableServerTransportProvider(
-					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, mcpEndpoint, contextExtractor,
-					disallowDelete, keepAliveInterval);
+					jsonMapper == null ? DefaultMcpJsonMapperSupplier.getDefaultMcpJsonMapper() : jsonMapper,
+					mcpEndpoint, contextExtractor, disallowDelete, keepAliveInterval);
 		}
 
 	}

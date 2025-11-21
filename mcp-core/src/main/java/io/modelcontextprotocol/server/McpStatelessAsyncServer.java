@@ -4,29 +4,7 @@
 
 package io.modelcontextprotocol.server;
 
-import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.json.McpJsonMapper;
-import io.modelcontextprotocol.common.McpTransportContext;
-import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
-import io.modelcontextprotocol.server.McpStatelessServerFeatures.AsyncResourceTemplateSpecification;
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
-import io.modelcontextprotocol.spec.McpSchema.CompleteResult.CompleteCompletion;
-import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse;
-import io.modelcontextprotocol.spec.McpSchema.PromptReference;
-import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
-import io.modelcontextprotocol.spec.McpStatelessServerTransport;
-import io.modelcontextprotocol.util.Assert;
-import io.modelcontextprotocol.util.DefaultMcpUriTemplateManagerFactory;
-import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
-import io.modelcontextprotocol.util.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
+import static io.modelcontextprotocol.spec.McpError.RESOURCE_NOT_FOUND;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -38,7 +16,29 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
 
-import static io.modelcontextprotocol.spec.McpError.RESOURCE_NOT_FOUND;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
+import io.modelcontextprotocol.server.McpStatelessServerFeatures.AsyncResourceTemplateSpecification;
+import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import io.modelcontextprotocol.spec.McpSchema.CompleteResult.CompleteCompletion;
+import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
+import io.modelcontextprotocol.spec.McpSchema.PromptReference;
+import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
+import io.modelcontextprotocol.spec.McpSchema.Tool;
+import io.modelcontextprotocol.spec.McpStatelessServerTransport;
+import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.DefaultMcpUriTemplateManagerFactory;
+import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
+import io.modelcontextprotocol.util.Utils;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 /**
  * A stateless MCP server implementation for use with Streamable HTTP transport types. It

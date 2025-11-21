@@ -4,10 +4,11 @@
 
 package io.modelcontextprotocol.spec;
 
-import org.reactivestreams.Publisher;
-import reactor.util.function.Tuple2;
-
 import java.util.Optional;
+
+import org.reactivestreams.Publisher;
+
+import reactor.util.function.Tuple2;
 
 /**
  * A representation of a stream at the transport layer of the MCP protocol. In particular,

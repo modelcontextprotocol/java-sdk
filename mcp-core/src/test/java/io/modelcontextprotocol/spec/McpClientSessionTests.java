@@ -4,20 +4,21 @@
 
 package io.modelcontextprotocol.spec;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import java.time.Duration;
 import java.util.Map;
 import java.util.function.Function;
 
-import io.modelcontextprotocol.MockMcpClientTransport;
-import io.modelcontextprotocol.json.TypeRef;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.modelcontextprotocol.MockMcpClientTransport;
+import io.modelcontextprotocol.json.TypeRef;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Test suite for {@link McpClientSession} that verifies its JSON-RPC message handling,

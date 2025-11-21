@@ -20,12 +20,17 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.json.internal.DefaultMcpJsonMapperSupplier;
 import io.modelcontextprotocol.spec.ClosedMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
@@ -39,9 +44,6 @@ import io.modelcontextprotocol.spec.McpTransportStream;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
-import org.reactivestreams.Publisher;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
@@ -813,7 +815,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 */
 		public HttpClientStreamableHttpTransport build() {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
-			return new HttpClientStreamableHttpTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+			return new HttpClientStreamableHttpTransport(
+					jsonMapper == null ? DefaultMcpJsonMapperSupplier.getDefaultMcpJsonMapper() : jsonMapper,
 					httpClient, requestBuilder, baseUri, endpoint, resumableStreams, openConnectionOnStartup,
 					httpRequestCustomizer, supportedProtocolVersions);
 		}

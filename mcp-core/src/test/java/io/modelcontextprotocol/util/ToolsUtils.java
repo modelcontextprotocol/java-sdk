@@ -1,8 +1,8 @@
 package io.modelcontextprotocol.util;
 
-import io.modelcontextprotocol.spec.McpSchema;
-
 import java.util.Collections;
+
+import io.modelcontextprotocol.spec.McpSchema;
 
 public final class ToolsUtils {
 
