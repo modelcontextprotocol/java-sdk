@@ -21,13 +21,41 @@
 	<build>
 		<plugins>
 			<plugin>
+				<groupId>biz.aQute.bnd</groupId>
+				<artifactId>bnd-maven-plugin</artifactId>
+				<version>${bnd-maven-plugin.version}</version>
+				<executions>
+					<execution>
+						<id>bnd-process</id>
+						<goals>
+							<goal>bnd-process</goal>
+						</goals>
+						<configuration>
+							<bnd><![CDATA[
+								Bundle-Name:            Bundle ${project.groupId} : ${project.artifactId}
+								version:                ${versionmask;===;${version_cleanup;${project.version}}}
+								Bundle-SymbolicName:    ${project.groupId}.${project.artifactId}
+								Bundle-Version:         ${version}
+								Automatic-Module-Name:  ${project.groupId}.${project.artifactId}
+								Import-Package:         io.modelcontextprotocol.json,io.modelcontextprotocol.json.schema, \
+								                        *;
+								Service-Component: 		OSGI-INF/io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapperSupplier.xml,OSGI-INF/io.modelcontextprotocol.json.schema.jackson.JacksonJsonSchemaValidatorSupplier.xml
+								-noimportjava:          true;
+								-nouses:                true;
+								-removeheaders:         Private-Package
+								]]>
+							</bnd>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-jar-plugin</artifactId>
 				<configuration>
 					<archive>
-                        <manifest>
-                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
-                        </manifest>
+						<manifestFile>${project.build.outputDirectory}/META-INF/MANIFEST.MF</manifestFile>
 					</archive>
 				</configuration>
 			</plugin>

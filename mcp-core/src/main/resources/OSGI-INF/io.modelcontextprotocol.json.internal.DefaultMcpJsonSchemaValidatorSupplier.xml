@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scr:component xmlns:scr="http://www.osgi.org/xmlns/scr/v1.3.0" name="io.modelcontextprotocol.json.internal.DefaultMcpJsonSchemaValidatorSupplier">
+  <reference name="JsonSchemaValidatorSupplier" interface="io.modelcontextprotocol.json.schema.JsonSchemaValidatorSupplier" bind="setJsonSchemaValidatorSupplier" unbind="unsetJsonSchemaValidatorSupplier"/>
+  <implementation class="io.modelcontextprotocol.json.internal.DefaultMcpJsonSchemaValidatorSupplier"/>
+</scr:component>
