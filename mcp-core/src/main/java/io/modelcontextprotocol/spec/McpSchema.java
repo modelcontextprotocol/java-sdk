@@ -1442,29 +1442,27 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record ToolExecution(TaskSupport task) {
+	public record ToolExecution(TaskSupport taskSupport) {
 	}
 
 	/**
-	 * The task augmented support mode for a tool.
+	 * Indicates whether this tool supports task-augmented execution. This allows clients
+	 * to handle long-running operations through polling the task system.
 	 * <p>
-	 * If mode is {@code always}, clients SHOULD invoke the tool as a task. Servers MAY
-	 * return a -32601 (Method not found) error if a client does not attempt to do so.
+	 * - "forbidden": Tool does not support task-augmented execution (default when absent)
 	 * <p>
-	 * If mode is {@code optional}, clients MAY invoke the tool as a task or as a normal
-	 * request.
+	 * - "optional": Tool may support task-augmented execution
 	 * <p>
-	 * If mode is not present or {@code never}, clients MUST NOT attempt to invoke the
-	 * tool as a task. Servers SHOULD return a -32601 (Method not found) error if a client
-	 * attempts to do so. This is the default behavior.
-	 *
+	 * - "required": Tool requires task-augmented execution
+	 * <p>
+	 * Default: "forbidden"
 	 */
 	public enum TaskSupport {
 
 		// @formatter:off
-        @JsonProperty("always") ALWAYS("always"),
+        @JsonProperty("forbidden") FORBIDDEN("forbidden"),
         @JsonProperty("optional") OPTIONAL("optional"),
-        @JsonProperty("never") NEVER("never");
+        @JsonProperty("required") REQUIRED("required");
         // @formatter:on
 
 		private final String value;
