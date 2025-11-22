@@ -1756,6 +1756,11 @@ public final class McpSchema {
 		String createdAt();
 
 		/**
+		 * ISO 8601 timestamp when the task status was last updated
+		 */
+		String lastUpdatedAt();
+
+		/**
 		 * Actual retention duration from creation in milliseconds, null for unlimited.
 		 */
 		Long ttl();
@@ -1778,11 +1783,15 @@ public final class McpSchema {
         @JsonProperty("status") TaskStatus status,
         @JsonProperty("statusMessage") String statusMessage,
         @JsonProperty("createdAt") String createdAt,
+        @JsonProperty("lastUpdatedAt") String lastUpdatedAt,
         @JsonProperty("ttl") Long ttl,
         @JsonProperty("pollInterval") Long pollInterval) implements TaskInfo { // @formatter:on
 
+		/**
+		 * Binary compatibility constructor
+		 */
 		public Task(String taskId, TaskStatus status, String statusMessage, String createdAt) {
-			this(taskId, status, statusMessage, createdAt, null, null);
+			this(taskId, status, statusMessage, createdAt, null, null, null);
 		}
 
 		public static Builder builder() {
@@ -1798,6 +1807,8 @@ public final class McpSchema {
 			private String statusMessage;
 
 			private String createdAt;
+
+			private String lastUpdatedAt;
 
 			private long ttl;
 
@@ -1823,6 +1834,11 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder lastUpdatedAt(String lastUpdatedAt) {
+				this.lastUpdatedAt = lastUpdatedAt;
+				return this;
+			}
+
 			public Builder ttl(long ttl) {
 				this.ttl = ttl;
 				return this;
@@ -1834,7 +1850,7 @@ public final class McpSchema {
 			}
 
 			public Task build() {
-				return new Task(taskId, status, statusMessage, createdAt, ttl, pollInterval);
+				return new Task(taskId, status, statusMessage, createdAt, lastUpdatedAt, ttl, pollInterval);
 			}
 
 		}
@@ -1873,6 +1889,7 @@ public final class McpSchema {
 	 * @param status task status
 	 * @param statusMessage task status message
 	 * @param createdAt task creation time
+	 * @param lastUpdatedAt task last updated time
 	 * @param ttl optional task time to live
 	 * @param pollInterval optional recommended poll interval
 	 * @param meta Optional metadata about the request.
@@ -1884,6 +1901,7 @@ public final class McpSchema {
         @JsonProperty("status") TaskStatus status,
         @JsonProperty("statusMessage") String statusMessage,
         @JsonProperty("createdAt") String createdAt,
+        @JsonProperty("lastUpdatedAt") String lastUpdatedAt,
         @JsonProperty("ttl") Long ttl,
         @JsonProperty("pollInterval") Long pollInterval,
         @JsonProperty("_meta") Map<String, Object> meta) implements TaskInfo, Result { // @formatter:on
@@ -1920,6 +1938,7 @@ public final class McpSchema {
 	 * @param status task status
 	 * @param statusMessage task status message
 	 * @param createdAt task creation time
+	 * @param lastUpdatedAt task last updated time
 	 * @param ttl optional task time to live
 	 * @param pollInterval optional recommended poll interval
 	 * @param meta Optional metadata about the request.
@@ -1931,6 +1950,7 @@ public final class McpSchema {
         @JsonProperty("status") TaskStatus status,
         @JsonProperty("statusMessage") String statusMessage,
         @JsonProperty("createdAt") String createdAt,
+        @JsonProperty("lastUpdatedAt") String lastUpdatedAt,
         @JsonProperty("ttl") Long ttl,
         @JsonProperty("pollInterval") Long pollInterval,
         @JsonProperty("_meta") Map<String, Object> meta) implements TaskInfo, Result { // @formatter:on
@@ -1960,6 +1980,7 @@ public final class McpSchema {
 	 * @param status task status
 	 * @param statusMessage task status message
 	 * @param createdAt task creation time
+	 * @param lastUpdatedAt task last updated time
 	 * @param ttl optional task time to live
 	 * @param pollInterval optional recommended poll interval
 	 * @param meta Optional metadata about the request.
@@ -1969,6 +1990,7 @@ public final class McpSchema {
         @JsonProperty("status") TaskStatus status,
         @JsonProperty("statusMessage") String statusMessage,
         @JsonProperty("createdAt") String createdAt,
+        @JsonProperty("lastUpdatedAt") String lastUpdatedAt,
         @JsonProperty("ttl") Long ttl,
         @JsonProperty("pollInterval") Long pollInterval,
         @JsonProperty("_meta") Map<String, Object> meta) implements TaskInfo, Notification { // @formatter:on
@@ -2126,7 +2148,17 @@ public final class McpSchema {
 		@JsonProperty("isError") Boolean isError,
 		@JsonProperty("structuredContent") Object structuredContent,
 		@JsonProperty("task") Task task,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result {} // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements Result {
+
+        public CreateTaskResult toCreateTaskResult() {
+            return new CreateTaskResult(task, meta);
+        }
+
+        public CallToolResult toCallToolResult() {
+            return new CallToolResult(content, isError, structuredContent, meta);
+        }
+
+    } // @formatter:on
 
 	/**
 	 * The server's response to a tools/call request from the client.
