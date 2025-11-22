@@ -2123,7 +2123,6 @@ public final class McpSchema {
 		@JsonProperty("content") List<Content> content,
 		@JsonProperty("isError") Boolean isError,
 		@JsonProperty("structuredContent") Object structuredContent,
-        @JsonProperty("task") Task task,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
 
 		/**
@@ -2131,7 +2130,7 @@ public final class McpSchema {
 		 */
 		@Deprecated
 		public CallToolResult(List<Content> content, Boolean isError) {
-			this(content, isError, (Object) null, null, null);
+			this(content, isError, (Object) null, null);
 		}
 
 		/**
@@ -2139,7 +2138,7 @@ public final class McpSchema {
 		 */
 		@Deprecated
 		public CallToolResult(List<Content> content, Boolean isError, Map<String, Object> structuredContent) {
-			this(content, isError, structuredContent, null, null);
+			this(content, isError, structuredContent, null);
 		}
 
 		/**
@@ -2154,23 +2153,6 @@ public final class McpSchema {
 		@Deprecated
 		public CallToolResult(String content, Boolean isError) {
 			this(List.of(new TextContent(content)), isError, null);
-		}
-
-		/**
-		 * Create a new instance of {@link CallToolResult} with a task.
-		 * @param task The task metadata.
-		 */
-		public CallToolResult(Task task) {
-			this(null, false, null, task, null);
-		}
-
-		/**
-		 * Create a new instance of {@link CallToolResult} with a task.
-		 * @param task The task metadata.
-		 * @param meta Optional metadata about the result.
-		 */
-		public CallToolResult(Task task, Map<String, Object> meta) {
-			this(null, false, null, task, meta);
 		}
 
 		/**
@@ -2191,8 +2173,6 @@ public final class McpSchema {
 			private Boolean isError = false;
 
 			private Object structuredContent;
-
-			private Task task;
 
 			private Map<String, Object> meta;
 
@@ -2280,17 +2260,12 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder task(Task task) {
-				this.task = task;
-				return this;
-			}
-
 			/**
 			 * Builds a new {@link CallToolResult} instance.
 			 * @return a new CallToolResult instance
 			 */
 			public CallToolResult build() {
-				return new CallToolResult(content, isError, structuredContent, task, meta);
+				return new CallToolResult(content, isError, structuredContent, meta);
 			}
 
 		}
