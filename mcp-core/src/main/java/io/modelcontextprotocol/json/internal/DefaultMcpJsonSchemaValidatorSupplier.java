@@ -1,42 +1,27 @@
 package io.modelcontextprotocol.json.internal;
 
-import java.util.Optional;
-import java.util.ServiceConfigurationError;
-import java.util.ServiceLoader;
-
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidatorSupplier;
+import io.modelcontextprotocol.util.McpServiceLoader;
 
 public class DefaultMcpJsonSchemaValidatorSupplier {
 
-	private static JsonSchemaValidatorSupplier jsonSchemaValidatorSupplier;
+	private static McpServiceLoader<JsonSchemaValidatorSupplier, JsonSchemaValidator> mcpServiceLoader;
 
-	private static JsonSchemaValidator defaultJsonSchemaValidator;
+	public DefaultMcpJsonSchemaValidatorSupplier() {
+		mcpServiceLoader = new McpServiceLoader<JsonSchemaValidatorSupplier, JsonSchemaValidator>();
+	}
 
 	void setJsonSchemaValidatorSupplier(JsonSchemaValidatorSupplier supplier) {
-		jsonSchemaValidatorSupplier = supplier;
+		mcpServiceLoader.setSupplier(supplier);
 	}
 
 	void unsetJsonSchemaValidatorSupplier(JsonSchemaValidatorSupplier supplier) {
-		jsonSchemaValidatorSupplier = null;
-		defaultJsonSchemaValidator = null;
+		mcpServiceLoader.unsetSupplier(supplier);
 	}
 
 	public synchronized static JsonSchemaValidator getDefaultJsonSchemaValidator() {
-		if (defaultJsonSchemaValidator == null) {
-			if (jsonSchemaValidatorSupplier == null) {
-				// Use serviceloader
-				Optional<JsonSchemaValidatorSupplier> sl = ServiceLoader.load(JsonSchemaValidatorSupplier.class)
-					.findFirst();
-				if (sl.isEmpty()) {
-					throw new ServiceConfigurationError(
-							"No JsonSchemaValidatorSupplier available for creating JsonSchemaValidator");
-				}
-				jsonSchemaValidatorSupplier = sl.get();
-			}
-			defaultJsonSchemaValidator = jsonSchemaValidatorSupplier.get();
-		}
-		return defaultJsonSchemaValidator;
+		return mcpServiceLoader.getDefault();
 	}
 
 }

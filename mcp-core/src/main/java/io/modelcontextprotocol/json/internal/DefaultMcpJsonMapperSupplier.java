@@ -1,40 +1,27 @@
 package io.modelcontextprotocol.json.internal;
 
-import java.util.Optional;
-import java.util.ServiceConfigurationError;
-import java.util.ServiceLoader;
-
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.McpJsonMapperSupplier;
+import io.modelcontextprotocol.util.McpServiceLoader;
 
 public class DefaultMcpJsonMapperSupplier {
 
-	private static McpJsonMapperSupplier jsonMapperSupplier;
+	private static McpServiceLoader<McpJsonMapperSupplier, McpJsonMapper> mcpServiceLoader;
 
-	private static McpJsonMapper defaultJsonMapper;
+	public DefaultMcpJsonMapperSupplier() {
+		mcpServiceLoader = new McpServiceLoader<McpJsonMapperSupplier, McpJsonMapper>();
+	}
 
 	void setMcpJsonMapperSupplier(McpJsonMapperSupplier supplier) {
-		jsonMapperSupplier = supplier;
+		mcpServiceLoader.setSupplier(supplier);
 	}
 
 	void unsetMcpJsonMapperSupplier(McpJsonMapperSupplier supplier) {
-		jsonMapperSupplier = null;
-		defaultJsonMapper = null;
+		mcpServiceLoader.unsetSupplier(supplier);
 	}
 
 	public synchronized static McpJsonMapper getDefaultMcpJsonMapper() {
-		if (defaultJsonMapper == null) {
-			if (jsonMapperSupplier == null) {
-				// Use serviceloader
-				Optional<McpJsonMapperSupplier> sl = ServiceLoader.load(McpJsonMapperSupplier.class).findFirst();
-				if (sl.isEmpty()) {
-					throw new ServiceConfigurationError("No JsonMapperSupplier available for creating McpJsonMapper");
-				}
-				jsonMapperSupplier = sl.get();
-			}
-			defaultJsonMapper = jsonMapperSupplier.get();
-		}
-		return defaultJsonMapper;
+		return mcpServiceLoader.getDefault();
 	}
 
 }
