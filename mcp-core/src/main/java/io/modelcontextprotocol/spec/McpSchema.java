@@ -206,10 +206,10 @@ public final class McpSchema {
 
 	}
 
-	public sealed interface Result extends Meta permits CallToolResult, CancelTaskResult, CompleteResult,
-			CreateMessageResult, CreateTaskResult, ElicitResult, GetPromptResult, GetTaskResult, InitializeResult,
-			ListPromptsResult, ListResourceTemplatesResult, ListResourcesResult, ListRootsResult, ListTasksResult,
-			ListToolsResult, ReadResourceResult {
+	public sealed interface Result extends Meta permits CallToolAuxResult, CallToolResult, CancelTaskResult,
+			CompleteResult, CreateMessageResult, CreateTaskResult, ElicitResult, GetPromptResult, GetTaskResult,
+			InitializeResult, ListPromptsResult, ListResourceTemplatesResult, ListResourcesResult, ListRootsResult,
+			ListTasksResult, ListToolsResult, ReadResourceResult {
 
 	}
 
@@ -2105,6 +2105,28 @@ public final class McpSchema {
 		}
 
 	}
+
+	/**
+	 * The server's response to a tools/call request from the client, which can be
+	 * `CallToolResult` or `CreateTaskResult`.
+	 *
+	 * @param content A list of content items representing the tool's output. Each item
+	 * can be text, an image, or an embedded resource.
+	 * @param isError If true, indicates that the tool execution failed and the content
+	 * contains error information. If false or absent, indicates successful execution.
+	 * @param structuredContent An optional JSON object that represents the structured
+	 * result of the tool call.
+	 * @param task Task information when the tool is invoked as a task.
+	 * @param meta See specification for notes on _meta usage
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record CallToolAuxResult( // @formatter:off
+		@JsonProperty("content") List<Content> content,
+		@JsonProperty("isError") Boolean isError,
+		@JsonProperty("structuredContent") Object structuredContent,
+		@JsonProperty("task") Task task,
+		@JsonProperty("_meta") Map<String, Object> meta) implements Result {} // @formatter:on
 
 	/**
 	 * The server's response to a tools/call request from the client.
