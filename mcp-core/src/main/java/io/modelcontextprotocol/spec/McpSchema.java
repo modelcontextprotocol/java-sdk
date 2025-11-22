@@ -2126,7 +2126,17 @@ public final class McpSchema {
 		@JsonProperty("isError") Boolean isError,
 		@JsonProperty("structuredContent") Object structuredContent,
 		@JsonProperty("task") Task task,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result {} // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements Result {
+
+        public CreateTaskResult toCreateTaskResult() {
+            return new CreateTaskResult(task, meta);
+        }
+
+        public CallToolResult toCallToolResult() {
+            return new CallToolResult(content, isError, structuredContent, meta);
+        }
+
+    } // @formatter:on
 
 	/**
 	 * The server's response to a tools/call request from the client.
