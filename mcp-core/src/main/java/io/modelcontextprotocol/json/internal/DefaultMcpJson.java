@@ -26,6 +26,9 @@ public class DefaultMcpJson {
 	}
 
 	public synchronized static McpJsonMapper getDefaultMcpJsonMapper() {
+		if (mcpMapperServiceLoader == null) {
+			new DefaultMcpJson();
+		}
 		return mcpMapperServiceLoader.getDefault();
 	}
 
@@ -38,6 +41,9 @@ public class DefaultMcpJson {
 	}
 
 	public synchronized static JsonSchemaValidator getDefaultJsonSchemaValidator() {
+		if (mcpValidatorServiceLoader == null) {
+			new DefaultMcpJson();
+		}
 		return mcpValidatorServiceLoader.getDefault();
 	}
 
