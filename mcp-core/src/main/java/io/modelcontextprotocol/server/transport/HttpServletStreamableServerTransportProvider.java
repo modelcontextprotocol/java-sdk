@@ -19,7 +19,7 @@ import org.slf4j.LoggerFactory;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.json.internal.DefaultMcpJsonMapperSupplier;
+import io.modelcontextprotocol.json.internal.DefaultMcpJson;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpError;
@@ -842,8 +842,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		public HttpServletStreamableServerTransportProvider build() {
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 			return new HttpServletStreamableServerTransportProvider(
-					jsonMapper == null ? DefaultMcpJsonMapperSupplier.getDefaultMcpJsonMapper() : jsonMapper,
-					mcpEndpoint, disallowDelete, contextExtractor, keepAliveInterval);
+					jsonMapper == null ? DefaultMcpJson.getDefaultMcpJsonMapper() : jsonMapper, mcpEndpoint,
+					disallowDelete, contextExtractor, keepAliveInterval);
 		}
 
 	}

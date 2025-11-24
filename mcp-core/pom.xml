@@ -39,10 +39,11 @@
 								Bundle-SymbolicName:    ${project.groupId}.${project.artifactId}
 								Bundle-Version:         ${version}
 								Automatic-Module-Name:  ${project.groupId}.${project.artifactId}
+								Bundle-ActivationPolicy: lazy
 								Import-Package:         jakarta.*;resolution:=optional, \
 								                        *;
 								Export-Package:         io.modelcontextprotocol.*;version="${version}";-noimport:=true
-								Service-Component: 		OSGI-INF/io.modelcontextprotocol.json.internal.DefaultMcpJsonMapperSupplier.xml,OSGI-INF/io.modelcontextprotocol.json.internal.DefaultMcpJsonSchemaValidatorSupplier.xml
+								Service-Component: 		OSGI-INF/io.modelcontextprotocol.json.internal.DefaultMcpJson.xml
 								-noimportjava:          true;
 								-nouses:                true;
 								-removeheaders:         Private-Package

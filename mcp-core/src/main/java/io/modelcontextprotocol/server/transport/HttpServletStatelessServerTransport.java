@@ -13,7 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonMapper;
-import io.modelcontextprotocol.json.internal.DefaultMcpJsonMapperSupplier;
+import io.modelcontextprotocol.json.internal.DefaultMcpJson;
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
@@ -297,8 +297,8 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		public HttpServletStatelessServerTransport build() {
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 			return new HttpServletStatelessServerTransport(
-					jsonMapper == null ? DefaultMcpJsonMapperSupplier.getDefaultMcpJsonMapper() : jsonMapper,
-					mcpEndpoint, contextExtractor);
+					jsonMapper == null ? DefaultMcpJson.getDefaultMcpJsonMapper() : jsonMapper, mcpEndpoint,
+					contextExtractor);
 		}
 
 	}

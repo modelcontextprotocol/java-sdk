@@ -14,7 +14,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.json.internal.DefaultMcpJsonMapperSupplier;
+import io.modelcontextprotocol.json.internal.DefaultMcpJson;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -579,7 +579,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				throw new IllegalStateException("MessageEndpoint must be set");
 			}
 			return new WebMvcSseServerTransportProvider(
-					jsonMapper == null ? DefaultMcpJsonMapperSupplier.getDefaultMcpJsonMapper() : jsonMapper, baseUrl,
+					jsonMapper == null ? DefaultMcpJson.getDefaultMcpJsonMapper() : jsonMapper, baseUrl,
 					messageEndpoint, sseEndpoint, keepAliveInterval, contextExtractor);
 		}
 

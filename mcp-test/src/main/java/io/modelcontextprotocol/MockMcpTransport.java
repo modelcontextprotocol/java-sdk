@@ -11,7 +11,7 @@ import java.util.function.Function;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.json.internal.DefaultMcpJsonMapperSupplier;
+import io.modelcontextprotocol.json.internal.DefaultMcpJson;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCNotification;
@@ -95,7 +95,7 @@ public class MockMcpTransport implements McpClientTransport, McpServerTransport 
 
 	@Override
 	public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
-		return DefaultMcpJsonMapperSupplier.getDefaultMcpJsonMapper().convertValue(data, typeRef);
+		return DefaultMcpJson.getDefaultMcpJsonMapper().convertValue(data, typeRef);
 	}
 
 }

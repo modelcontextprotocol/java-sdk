@@ -37,6 +37,7 @@
 								Bundle-SymbolicName:    ${project.groupId}.${project.artifactId}
 								Bundle-Version:         ${version}
 								Automatic-Module-Name:  ${project.groupId}.${project.artifactId}
+								Bundle-ActivationPolicy: lazy
 								Import-Package:         io.modelcontextprotocol.json,io.modelcontextprotocol.json.schema, \
 								                        *;
 								Service-Component: 		OSGI-INF/io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapperSupplier.xml,OSGI-INF/io.modelcontextprotocol.json.schema.jackson.JacksonJsonSchemaValidatorSupplier.xml
