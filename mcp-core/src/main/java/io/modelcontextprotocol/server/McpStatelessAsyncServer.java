@@ -277,11 +277,12 @@ public class McpStatelessAsyncServer {
 				// results that conform to this schema.
 				// https://modelcontextprotocol.io/specification/2025-06-18/server/tools#output-schema
 				if (result.structuredContent() == null) {
-					logger.warn(
-							"Response missing structured content which is expected when calling tool with non-empty outputSchema");
-					return new CallToolResult(
-							"Response missing structured content which is expected when calling tool with non-empty outputSchema",
-							true);
+					String content = "Response missing structured content which is expected when calling tool with non-empty outputSchema";
+					logger.warn(content);
+					return CallToolResult.builder()
+						.content(List.of(new McpSchema.TextContent(content)))
+						.isError(true)
+						.build();
 				}
 
 				// Validate the result against the output schema
@@ -289,7 +290,10 @@ public class McpStatelessAsyncServer {
 
 				if (!validation.valid()) {
 					logger.warn("Tool call result validation failed: {}", validation.errorMessage());
-					return new CallToolResult(validation.errorMessage(), true);
+					return CallToolResult.builder()
+						.content(List.of(new McpSchema.TextContent(validation.errorMessage())))
+						.isError(true)
+						.build();
 				}
 
 				if (Utils.isEmpty(result.content())) {

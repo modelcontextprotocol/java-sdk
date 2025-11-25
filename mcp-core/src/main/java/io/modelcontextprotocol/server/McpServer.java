@@ -66,7 +66,10 @@ import reactor.core.publisher.Mono;
  * McpServer.sync(transportProvider)
  *     .serverInfo("my-server", "1.0.0")
  *     .tool(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
- *           (exchange, args) -> new CallToolResult("Result: " + calculate(args)))
+ *           (exchange, args) -> CallToolResult.builder()
+ *                   .content(List.of(new McpSchema.TextContent("Result: " + calculate(args))))
+ *                   .isError(false)
+ *                   .build())
  *     .build();
  * }</pre>
  *
@@ -75,7 +78,10 @@ import reactor.core.publisher.Mono;
  *     .serverInfo("my-server", "1.0.0")
  *     .tool(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
  *           (exchange, args) -> Mono.fromSupplier(() -> calculate(args))
- *               .map(result -> new CallToolResult("Result: " + result)))
+ *               .map(result -> CallToolResult.builder()
+ *                   .content(List.of(new McpSchema.TextContent("Result: " + result)))
+ *                   .isError(false)
+ *                   .build()))
  *     .build();
  * }</pre>
  *
@@ -89,12 +95,18 @@ import reactor.core.publisher.Mono;
  *         McpServerFeatures.AsyncToolSpecification.builder()
  * 			.tool(calculatorTool)
  *   	    .callTool((exchange, args) -> Mono.fromSupplier(() -> calculate(args.arguments()))
- *                 .map(result -> new CallToolResult("Result: " + result))))
+ *                 .map(result -> CallToolResult.builder()
+ *                   .content(List.of(new McpSchema.TextContent("Result: " + result)))
+ *                   .isError(false)
+ *                   .build()))
  *.         .build(),
  *         McpServerFeatures.AsyncToolSpecification.builder()
  * 	        .tool((weatherTool)
  *          .callTool((exchange, args) -> Mono.fromSupplier(() -> getWeather(args.arguments()))
- *                 .map(result -> new CallToolResult("Weather: " + result))))
+ *                 .map(result -> CallToolResult.builder()
+ *                   .content(List.of(new McpSchema.TextContent("Weather: " + result)))
+ *                   .isError(false)
+ *                   .build()))
  *          .build()
  *     )
  *     // Register resources
@@ -426,7 +438,10 @@ public interface McpServer {
 		 * .tool(
 		 *     Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
 		 *     (exchange, args) -> Mono.fromSupplier(() -> calculate(args))
-		 *         .map(result -> new CallToolResult("Result: " + result))
+		 *         .map(result -> CallToolResult.builder()
+		 *                   .content(List.of(new McpSchema.TextContent("Result: " + result)))
+		 *                   .isError(false)
+		 *                   .build()))
 		 * )
 		 * }</pre>
 		 * @param tool The tool definition including name, description, and schema. Must
@@ -1023,7 +1038,10 @@ public interface McpServer {
 		 * Example usage: <pre>{@code
 		 * .tool(
 		 *     Tool.builder().name("calculator").title("Performs calculations".inputSchema(schema).build(),
-		 *     (exchange, args) -> new CallToolResult("Result: " + calculate(args))
+		 *     (exchange, args) -> CallToolResult.builder()
+		 *                   .content(List.of(new McpSchema.TextContent("Result: " + calculate(args))))
+		 *                   .isError(false)
+		 *                   .build())
 		 * )
 		 * }</pre>
 		 * @param tool The tool definition including name, description, and schema. Must

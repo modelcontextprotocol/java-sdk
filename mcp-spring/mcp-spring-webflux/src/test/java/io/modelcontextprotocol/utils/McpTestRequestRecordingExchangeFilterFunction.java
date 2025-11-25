@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 
 import reactor.core.publisher.Mono;
 
+import org.springframework.http.HttpMethod;
 import org.springframework.web.reactive.function.server.HandlerFilterFunction;
 import org.springframework.web.reactive.function.server.HandlerFunction;
 import org.springframework.web.reactive.function.server.ServerRequest;
@@ -34,7 +35,7 @@ public class McpTestRequestRecordingExchangeFilterFunction implements HandlerFil
 			.collect(Collectors.toMap(String::toLowerCase, k -> String.join(",", request.headers().header(k))));
 
 		var cr = request.bodyToMono(String.class).defaultIfEmpty("").map(body -> {
-			this.calls.add(new Call(headers, body));
+			this.calls.add(new Call(request.method(), headers, body));
 			return ServerRequest.from(request).body(body).build();
 		});
 
@@ -46,7 +47,7 @@ public class McpTestRequestRecordingExchangeFilterFunction implements HandlerFil
 		return List.copyOf(calls);
 	}
 
-	public record Call(Map<String, String> headers, String body) {
+	public record Call(HttpMethod method, Map<String, String> headers, String body) {
 
 	}
 
