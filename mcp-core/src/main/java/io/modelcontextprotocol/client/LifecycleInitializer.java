@@ -11,14 +11,13 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.util.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.util.context.ContextView;
@@ -288,9 +287,7 @@ class LifecycleInitializer {
 					this.initializationRef.compareAndSet(newInit, null);
 					return Mono.error(new RuntimeException("Client failed to initialize " + actionName, ex));
 				})
-				.flatMap(res -> operation.apply(res)
-					.contextWrite(c -> c.put(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
-							res.initializeResult().protocolVersion())));
+				.flatMap(operation);
 		});
 	}
 
@@ -322,8 +319,6 @@ class LifecycleInitializer {
 			}
 
 			return mcpClientSession.sendNotification(McpSchema.METHOD_NOTIFICATION_INITIALIZED, null)
-				.contextWrite(
-						c -> c.put(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION, initializeResult.protocolVersion()))
 				.thenReturn(initializeResult);
 		}).flatMap(initializeResult -> {
 			initialization.cacheResult(initializeResult);

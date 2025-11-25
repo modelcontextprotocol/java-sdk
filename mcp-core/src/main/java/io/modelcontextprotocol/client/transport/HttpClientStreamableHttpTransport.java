@@ -20,7 +20,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import io.modelcontextprotocol.client.McpAsyncClient;
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
@@ -41,6 +40,9 @@ import io.modelcontextprotocol.spec.McpTransportStream;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
+import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
@@ -192,9 +194,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				.uri(uri)
 				.header("Cache-Control", "no-cache")
 				.header(HttpHeaders.MCP_SESSION_ID, sessionId)
-				.header(HttpHeaders.PROTOCOL_VERSION,
-						ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
-								this.latestSupportedProtocolVersion))
+				.header(HttpHeaders.PROTOCOL_VERSION, this.latestSupportedProtocolVersion)
 				.DELETE();
 			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "DELETE", uri, null, transportContext));
@@ -265,9 +265,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				var builder = requestBuilder.uri(uri)
 					.header(HttpHeaders.ACCEPT, TEXT_EVENT_STREAM)
 					.header("Cache-Control", "no-cache")
-					.header(HttpHeaders.PROTOCOL_VERSION,
-							connectionCtx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
-									this.latestSupportedProtocolVersion))
+					.header(HttpHeaders.PROTOCOL_VERSION, this.latestSupportedProtocolVersion)
 					.GET();
 				var transportContext = connectionCtx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 				return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
@@ -442,9 +440,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					.header(HttpHeaders.ACCEPT, APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
 					.header(HttpHeaders.CONTENT_TYPE, APPLICATION_JSON)
 					.header(HttpHeaders.CACHE_CONTROL, "no-cache")
-					.header(HttpHeaders.PROTOCOL_VERSION,
-							ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
-									this.latestSupportedProtocolVersion))
+					.header(HttpHeaders.PROTOCOL_VERSION, this.latestSupportedProtocolVersion)
 					.POST(HttpRequest.BodyPublishers.ofString(jsonBody));
 				var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 				return Mono
@@ -818,10 +814,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 */
 		public HttpClientStreamableHttpTransport build() {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
-			return new HttpClientStreamableHttpTransport(
-					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, httpClient,
-					requestBuilder, baseUri, endpoint, resumableStreams, openConnectionOnStartup, httpRequestCustomizer,
-					supportedProtocolVersions);
+			return new HttpClientStreamableHttpTransport(jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper,
+					httpClient, requestBuilder, baseUri, endpoint, resumableStreams, openConnectionOnStartup,
+					httpRequestCustomizer, supportedProtocolVersions);
 		}
 
 	}
