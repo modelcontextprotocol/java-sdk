@@ -4,13 +4,12 @@
 
 package io.modelcontextprotocol.server;
 
-import java.util.List;
-
+import io.modelcontextprotocol.spec.McpSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import io.modelcontextprotocol.spec.McpSchema;
 import reactor.core.publisher.Mono;
+
+import java.util.List;
 
 /**
  * A stateless MCP server implementation for use with Streamable HTTP transport types. It

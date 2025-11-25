@@ -4,8 +4,10 @@
 
 package io.modelcontextprotocol.server.transport;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
+import io.modelcontextprotocol.client.McpClient;
+import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
+import io.modelcontextprotocol.server.McpServer;
+import io.modelcontextprotocol.spec.McpSchema;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
@@ -13,10 +15,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import io.modelcontextprotocol.client.McpClient;
-import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
-import io.modelcontextprotocol.server.McpServer;
-import io.modelcontextprotocol.spec.McpSchema;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class HttpServletSseServerCustomContextPathTests {
 

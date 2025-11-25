@@ -1,18 +1,17 @@
 package io.modelcontextprotocol.spec.json.gson;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.json.TypeRef;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-import org.junit.jupiter.api.Test;
-
-import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.spec.McpSchema;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 class GsonMcpJsonMapperTests {
 

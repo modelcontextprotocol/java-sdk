@@ -4,10 +4,10 @@
 
 package io.modelcontextprotocol.server;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import java.util.ArrayList;
 import java.util.Collections;
 
-import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpLoggableSession;

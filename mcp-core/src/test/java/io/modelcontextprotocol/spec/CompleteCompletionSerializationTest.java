@@ -1,14 +1,11 @@
 package io.modelcontextprotocol.spec;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-
-import java.io.IOException;
-import java.util.Collections;
-
-import org.junit.jupiter.api.Test;
-
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
+import org.junit.jupiter.api.Test;
+import java.io.IOException;
+import java.util.Collections;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class CompleteCompletionSerializationTest {
 

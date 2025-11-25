@@ -6,7 +6,6 @@ package io.modelcontextprotocol.spec;
 import java.util.Optional;
 
 import org.reactivestreams.Publisher;
-
 import reactor.core.publisher.Mono;
 import reactor.util.annotation.Nullable;
 

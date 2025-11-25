@@ -4,12 +4,11 @@
 
 package io.modelcontextprotocol.server;
 
-import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
-
-import org.junit.jupiter.api.Timeout;
-
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import org.junit.jupiter.api.Timeout;
+
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 
 /**
  * Tests for {@link McpSyncServer} using {@link StdioServerTransportProvider}.

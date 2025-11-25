@@ -4,7 +4,21 @@
 
 package io.modelcontextprotocol.client;
 
-import static org.assertj.core.api.Assertions.assertThatCode;
+import eu.rekawek.toxiproxy.Proxy;
+import eu.rekawek.toxiproxy.ToxiproxyClient;
+import eu.rekawek.toxiproxy.model.ToxicDirection;
+import io.modelcontextprotocol.spec.McpClientTransport;
+import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpTransport;
+import io.modelcontextprotocol.spec.McpTransportSessionClosedException;
+import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
+import org.testcontainers.containers.ToxiproxyContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
+import reactor.test.StepVerifier;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -14,22 +28,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import org.junit.jupiter.api.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.Network;
-import org.testcontainers.containers.ToxiproxyContainer;
-import org.testcontainers.containers.wait.strategy.Wait;
-
-import eu.rekawek.toxiproxy.Proxy;
-import eu.rekawek.toxiproxy.ToxiproxyClient;
-import eu.rekawek.toxiproxy.model.ToxicDirection;
-import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpTransport;
-import io.modelcontextprotocol.spec.McpTransportSessionClosedException;
-import reactor.test.StepVerifier;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
  * Resiliency test suite for the {@link McpAsyncClient} that can be used with different

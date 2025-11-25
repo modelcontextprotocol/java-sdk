@@ -1,14 +1,13 @@
 package io.modelcontextprotocol.spec.json.gson;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.ToNumberPolicy;
-
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Test-only Gson-based implementation of McpJsonMapper. This lives under src/test/java so

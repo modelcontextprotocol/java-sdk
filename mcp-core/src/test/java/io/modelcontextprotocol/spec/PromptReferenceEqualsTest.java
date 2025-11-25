@@ -4,13 +4,12 @@
 
 package io.modelcontextprotocol.spec;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
+import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import org.junit.jupiter.api.Test;
 
-import io.modelcontextprotocol.spec.McpSchema.PromptReference;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Test class to verify the equals method implementation for PromptReference.

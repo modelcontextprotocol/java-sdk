@@ -4,23 +4,22 @@
 
 package io.modelcontextprotocol.client;
 
-import static io.modelcontextprotocol.client.ServerParameterUtils.createServerParameters;
-import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
-import static org.assertj.core.api.Assertions.assertThat;
-
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
-
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.spec.McpClientTransport;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
+
+import static io.modelcontextprotocol.client.ServerParameterUtils.createServerParameters;
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests for the {@link McpSyncClient} with {@link StdioClientTransport}.

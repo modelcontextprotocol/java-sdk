@@ -4,11 +4,11 @@
 
 package io.modelcontextprotocol.spec;
 
-import java.util.Map;
-import java.util.function.Function;
-
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse.JSONRPCError;
 import io.modelcontextprotocol.util.Assert;
+
+import java.util.Map;
+import java.util.function.Function;
 
 public class McpError extends RuntimeException {
 

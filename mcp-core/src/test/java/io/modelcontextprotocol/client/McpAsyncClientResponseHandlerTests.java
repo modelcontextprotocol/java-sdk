@@ -4,29 +4,28 @@
 
 package io.modelcontextprotocol.client;
 
-import static io.modelcontextprotocol.spec.McpSchema.METHOD_INITIALIZE;
-import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
-
-import io.modelcontextprotocol.MockMcpClientTransport;
 import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.MockMcpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.PaginatedRequest;
 import io.modelcontextprotocol.spec.McpSchema.Root;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import reactor.core.publisher.Mono;
+
+import static io.modelcontextprotocol.spec.McpSchema.METHOD_INITIALIZE;
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class McpAsyncClientResponseHandlerTests {
 

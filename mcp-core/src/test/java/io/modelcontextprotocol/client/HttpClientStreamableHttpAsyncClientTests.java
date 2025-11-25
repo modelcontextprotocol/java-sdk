@@ -4,14 +4,13 @@
 
 package io.modelcontextprotocol.client;
 
+import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Timeout;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
-
-import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
-import io.modelcontextprotocol.spec.McpClientTransport;
 
 @Timeout(15)
 public class HttpClientStreamableHttpAsyncClientTests extends AbstractMcpAsyncClientTests {
