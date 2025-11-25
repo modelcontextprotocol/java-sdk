@@ -206,10 +206,9 @@ public final class McpSchema {
 
 	}
 
-	public sealed interface Result extends Meta permits CallToolAuxResult, CallToolResult, CancelTaskResult,
-			CompleteResult, CreateMessageResult, CreateTaskResult, ElicitResult, GetPromptResult, GetTaskResult,
-			InitializeResult, ListPromptsResult, ListResourceTemplatesResult, ListResourcesResult, ListRootsResult,
-			ListTasksResult, ListToolsResult, ReadResourceResult {
+	public sealed interface Result extends Meta permits CallToolResult, CancelTaskResult, CompleteResult,
+			CreateMessageResult, CreateTaskResult, ElicitResult, GetPromptResult, GetTaskPayloadResult, GetTaskResult,
+			InitializeResult, PaginatedResult, ReadResourceResult {
 
 	}
 
@@ -1102,7 +1101,7 @@ public final class McpSchema {
 	public record ListResourcesResult( // @formatter:off
 		@JsonProperty("resources") List<Resource> resources,
 		@JsonProperty("nextCursor") String nextCursor,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements PaginatedResult { // @formatter:on
 
 		public ListResourcesResult(List<Resource> resources, String nextCursor) {
 			this(resources, nextCursor, null);
@@ -1122,7 +1121,7 @@ public final class McpSchema {
 	public record ListResourceTemplatesResult( // @formatter:off
 		@JsonProperty("resourceTemplates") List<ResourceTemplate> resourceTemplates,
 		@JsonProperty("nextCursor") String nextCursor,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements PaginatedResult { // @formatter:on
 
 		public ListResourceTemplatesResult(List<ResourceTemplate> resourceTemplates, String nextCursor) {
 			this(resourceTemplates, nextCursor, null);
@@ -1348,7 +1347,7 @@ public final class McpSchema {
 	public record ListPromptsResult( // @formatter:off
 		@JsonProperty("prompts") List<Prompt> prompts,
 		@JsonProperty("nextCursor") String nextCursor,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result  { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements PaginatedResult  { // @formatter:on
 
 		public ListPromptsResult(List<Prompt> prompts, String nextCursor) {
 			this(prompts, nextCursor, null);
@@ -1409,7 +1408,7 @@ public final class McpSchema {
 	public record ListToolsResult( // @formatter:off
 		@JsonProperty("tools") List<Tool> tools,
 		@JsonProperty("nextCursor") String nextCursor,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements PaginatedResult { // @formatter:on
 
 		public ListToolsResult(List<Tool> tools, String nextCursor) {
 			this(tools, nextCursor, null);
@@ -1438,7 +1437,7 @@ public final class McpSchema {
 	}
 
 	/**
-	 * Execution behavior for a tool.
+	 * Execution-related properties for a tool.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1705,9 +1704,10 @@ public final class McpSchema {
 	}
 
 	/**
-	 * Metadata about a task.
+	 * Metadata for augmenting a request with task execution. Include this in the
+	 * {@code task} field of the request parameters.
 	 *
-	 * @param ttl Optional time to live for the task, in milliseconds.
+	 * @param ttl Optional duration in milliseconds to retain task from creation.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1715,7 +1715,10 @@ public final class McpSchema {
 	}
 
 	/**
-	 * Related task metadata.
+	 * Metadata for associating messages with a task. Include this in the {@code _meta}
+	 * field under the key {@code io.modelcontextprotocol/related-task}.
+	 *
+	 * @param taskId The task identifier this message is associated with.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1723,7 +1726,7 @@ public final class McpSchema {
 	}
 
 	/**
-	 * Task information interface.
+	 * Data associated with a task.
 	 */
 	public interface TaskInfo {
 
@@ -1870,9 +1873,9 @@ public final class McpSchema {
 	}
 
 	/**
-	 * A request to get task status.
+	 * A request to retrieve the state of a task.
 	 *
-	 * @param taskId The ID of the task to retrieve.
+	 * @param taskId The task identifier to retrieve.
 	 * @param meta Optional metadata about the request.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -1908,9 +1911,11 @@ public final class McpSchema {
 	}
 
 	/**
-	 * A request to get task payload.
+	 * The response to a tasks/result request. The structure matches the result type of
+	 * the original request. For example, a tools/call task would return the
+	 * CallToolResult structure.
 	 *
-	 * @param taskId task ID
+	 * @param taskId The task identifier to retrieve results for.
 	 * @param meta Optional metadata about the request.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -1918,6 +1923,15 @@ public final class McpSchema {
 	public record getTaskPayloadRequest( // @formatter:off
         @JsonProperty("taskId") String taskId,
         @JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
+	}
+
+	/**
+	 * The response to a tasks/result request. The structure matches the result type of
+	 * the original request. For example, a tools/call task would return the
+	 * CallToolResult structure.
+	 */
+	sealed interface GetTaskPayloadResult extends Result {
+
 	}
 
 	/**
@@ -1932,7 +1946,7 @@ public final class McpSchema {
 	}
 
 	/**
-	 * The response to a cancel task request.
+	 * The response to a tasks/cancel request.
 	 *
 	 * @param taskId task ID
 	 * @param status task status
@@ -1970,7 +1984,7 @@ public final class McpSchema {
 	public record ListTasksResult( // @formatter:off
         @JsonProperty("tasks") List<Task> tasks,
         @JsonProperty("nextCursor") String nextCursor,
-        @JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+        @JsonProperty("_meta") Map<String, Object> meta) implements PaginatedResult { // @formatter:on
 	}
 
 	/**
@@ -2129,8 +2143,7 @@ public final class McpSchema {
 	}
 
 	/**
-	 * The server's response to a tools/call request from the client, which can be
-	 * `CallToolResult` or `CreateTaskResult`.
+	 * The server's response to a tools/call request from the client.
 	 *
 	 * @param content A list of content items representing the tool's output. Each item
 	 * can be text, an image, or an embedded resource.
@@ -2143,48 +2156,19 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record CallToolAuxResult( // @formatter:off
-		@JsonProperty("content") List<Content> content,
-		@JsonProperty("isError") Boolean isError,
-		@JsonProperty("structuredContent") Object structuredContent,
-		@JsonProperty("task") Task task,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result {
-
-        public CreateTaskResult toCreateTaskResult() {
-            return new CreateTaskResult(task, meta);
-        }
-
-        public CallToolResult toCallToolResult() {
-            return new CallToolResult(content, isError, structuredContent, meta);
-        }
-
-    } // @formatter:on
-
-	/**
-	 * The server's response to a tools/call request from the client.
-	 *
-	 * @param content A list of content items representing the tool's output. Each item
-	 * can be text, an image, or an embedded resource.
-	 * @param isError If true, indicates that the tool execution failed and the content
-	 * contains error information. If false or absent, indicates successful execution.
-	 * @param structuredContent An optional JSON object that represents the structured
-	 * result of the tool call.
-	 * @param meta See specification for notes on _meta usage
-	 */
-	@JsonInclude(JsonInclude.Include.NON_ABSENT)
-	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record CallToolResult( // @formatter:off
 		@JsonProperty("content") List<Content> content,
 		@JsonProperty("isError") Boolean isError,
 		@JsonProperty("structuredContent") Object structuredContent,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+		@JsonProperty("task") Task task,
+		@JsonProperty("_meta") Map<String, Object> meta) implements Result, GetTaskPayloadResult { // @formatter:on
 
 		/**
 		 * @deprecated use the builder instead.
 		 */
 		@Deprecated
 		public CallToolResult(List<Content> content, Boolean isError) {
-			this(content, isError, (Object) null, null);
+			this(content, isError, (Object) null, null, null);
 		}
 
 		/**
@@ -2192,7 +2176,15 @@ public final class McpSchema {
 		 */
 		@Deprecated
 		public CallToolResult(List<Content> content, Boolean isError, Map<String, Object> structuredContent) {
-			this(content, isError, structuredContent, null);
+			this(content, isError, structuredContent, null, null);
+		}
+
+		/**
+		 * Binary compatibility constructor
+		 */
+		public CallToolResult(List<Content> content, Boolean isError, Map<String, Object> structuredContent,
+				Map<String, Object> meta) {
+			this(content, isError, structuredContent, null, meta);
 		}
 
 		/**
@@ -2227,6 +2219,8 @@ public final class McpSchema {
 			private Boolean isError = false;
 
 			private Object structuredContent;
+
+			private Task task;
 
 			private Map<String, Object> meta;
 
@@ -2315,11 +2309,21 @@ public final class McpSchema {
 			}
 
 			/**
+			 * Sets the task information for the tool result.
+			 * @param task task information
+			 * @return this builder
+			 */
+			public Builder task(Task task) {
+				this.task = task;
+				return this;
+			}
+
+			/**
 			 * Builds a new {@link CallToolResult} instance.
 			 * @return a new CallToolResult instance
 			 */
 			public CallToolResult build() {
-				return new CallToolResult(content, isError, structuredContent, meta);
+				return new CallToolResult(content, isError, structuredContent, task, meta);
 			}
 
 		}
@@ -2861,15 +2865,17 @@ public final class McpSchema {
 	}
 
 	/**
-	 * An opaque token representing the pagination position after the last returned
-	 * result. If present, there may be more results available.
-	 *
-	 * @param nextCursor An opaque token representing the pagination position after the
-	 * last returned result. If present, there may be more results available
+	 * Pagination result interface.
 	 */
-	@JsonInclude(JsonInclude.Include.NON_ABSENT)
-	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record PaginatedResult(@JsonProperty("nextCursor") String nextCursor) {
+	sealed interface PaginatedResult extends Result permits ListResourceTemplatesResult, ListResourcesResult,
+			ListRootsResult, ListPromptsResult, ListToolsResult, ListTasksResult {
+
+		/**
+		 * An opaque token representing the pagination position after the ast returned
+		 * result. If present, there may be more results available
+		 */
+		String nextCursor();
+
 	}
 
 	// ---------------------------
@@ -3534,7 +3540,7 @@ public final class McpSchema {
 	public record ListRootsResult( // @formatter:off
 		@JsonProperty("roots") List<Root> roots,
 		@JsonProperty("nextCursor") String nextCursor,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements PaginatedResult { // @formatter:on
 
 		public ListRootsResult(List<Root> roots) {
 			this(roots, null);
