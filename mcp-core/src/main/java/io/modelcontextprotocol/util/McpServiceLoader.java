@@ -1,7 +1,5 @@
 package io.modelcontextprotocol.util;
 
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
 import java.util.Optional;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
@@ -9,30 +7,11 @@ import java.util.function.Supplier;
 
 public class McpServiceLoader<S extends Supplier<R>, R> {
 
-	private Type supplierType;
+	private Class<S> supplierType;
 
 	private S supplier;
 
 	private R supplierResult;
-
-	protected abstract class TypeToken<T> {
-
-		private Type type;
-
-		protected TypeToken() {
-			Type superClass = getClass().getGenericSuperclass();
-			this.type = ((ParameterizedType) superClass).getActualTypeArguments()[0];
-		}
-
-		public Type getType() {
-			return type;
-		}
-
-	}
-
-	protected class SupplierTypeToken extends TypeToken<S> {
-
-	};
 
 	public void setSupplier(S supplier) {
 		this.supplier = supplier;
@@ -44,8 +23,8 @@ public class McpServiceLoader<S extends Supplier<R>, R> {
 		this.supplierResult = null;
 	}
 
-	public McpServiceLoader() {
-		this.supplierType = new SupplierTypeToken().getType();
+	public McpServiceLoader(Class<S> supplierType) {
+		this.supplierType = supplierType;
 	}
 
 	protected Optional<S> serviceLoad(Class<S> type) {
@@ -57,17 +36,9 @@ public class McpServiceLoader<S extends Supplier<R>, R> {
 		if (this.supplierResult == null) {
 			if (this.supplier == null) {
 				// Use serviceloader
-				Optional<?> sl;
-				try {
-					sl = serviceLoad((Class<S>) Class.forName(this.supplierType.getTypeName()));
-					if (sl.isEmpty()) {
-						throw new ServiceConfigurationError(
-								"No JsonMapperSupplier available for creating McpJsonMapper");
-					}
-				}
-				catch (ClassNotFoundException e) {
-					throw new ServiceConfigurationError(
-							"ClassNotFoundException for Type=" + this.supplierType.getTypeName());
+				Optional<?> sl = serviceLoad(this.supplierType);
+				if (sl.isEmpty()) {
+					throw new ServiceConfigurationError("No JsonMapperSupplier available for creating McpJsonMapper");
 				}
 				this.supplier = (S) sl.get();
 			}

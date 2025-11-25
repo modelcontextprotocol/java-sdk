@@ -9,7 +9,6 @@ import org.junit.jupiter.api.Test;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
-import io.modelcontextprotocol.json.internal.DefaultMcpJsonMapperSupplier;
 
 class CompleteCompletionSerializationTest {
 

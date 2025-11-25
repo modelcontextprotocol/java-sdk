@@ -11,7 +11,6 @@ import java.util.function.Function;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.json.internal.DefaultMcpJsonMapperSupplier;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCNotification;

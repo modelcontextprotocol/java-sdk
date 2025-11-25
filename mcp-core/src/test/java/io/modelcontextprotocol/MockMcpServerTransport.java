@@ -10,7 +10,6 @@ import java.util.function.BiConsumer;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.json.internal.DefaultMcpJsonMapperSupplier;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCNotification;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;

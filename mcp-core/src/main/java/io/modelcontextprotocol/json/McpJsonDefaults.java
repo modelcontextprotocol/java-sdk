@@ -11,8 +11,10 @@ public class McpJsonDefaults {
 	protected static McpServiceLoader<JsonSchemaValidatorSupplier, JsonSchemaValidator> mcpValidatorServiceLoader;
 
 	public McpJsonDefaults() {
-		mcpMapperServiceLoader = new McpServiceLoader<McpJsonMapperSupplier, McpJsonMapper>();
-		mcpValidatorServiceLoader = new McpServiceLoader<JsonSchemaValidatorSupplier, JsonSchemaValidator>();
+		mcpMapperServiceLoader = new McpServiceLoader<McpJsonMapperSupplier, McpJsonMapper>(
+				McpJsonMapperSupplier.class);
+		mcpValidatorServiceLoader = new McpServiceLoader<JsonSchemaValidatorSupplier, JsonSchemaValidator>(
+				JsonSchemaValidatorSupplier.class);
 	}
 
 	void setMcpJsonMapperSupplier(McpJsonMapperSupplier supplier) {

@@ -2,7 +2,6 @@ package io.modelcontextprotocol.util;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
-import io.modelcontextprotocol.json.internal.DefaultMcpJsonMapperSupplier;
 
 public final class McpJsonMapperUtils {
 
