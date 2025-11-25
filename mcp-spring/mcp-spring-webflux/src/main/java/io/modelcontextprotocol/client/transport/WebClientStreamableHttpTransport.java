@@ -24,9 +24,9 @@ import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.json.internal.DefaultMcpJson;
 import io.modelcontextprotocol.spec.ClosedMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
@@ -596,7 +596,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		 */
 		public WebClientStreamableHttpTransport build() {
 			return new WebClientStreamableHttpTransport(
-					jsonMapper == null ? DefaultMcpJson.getDefaultMcpJsonMapper() : jsonMapper, webClientBuilder,
+					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, webClientBuilder,
 					endpoint, resumableStreams, openConnectionOnStartup, supportedProtocolVersions);
 		}
 

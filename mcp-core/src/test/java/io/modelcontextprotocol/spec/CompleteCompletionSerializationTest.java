@@ -7,15 +7,15 @@ import java.util.Collections;
 
 import org.junit.jupiter.api.Test;
 
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
-import io.modelcontextprotocol.json.internal.DefaultMcpJson;
 import io.modelcontextprotocol.json.internal.DefaultMcpJsonMapperSupplier;
 
 class CompleteCompletionSerializationTest {
 
 	@Test
 	void codeCompletionSerialization() throws IOException {
-		McpJsonMapper jsonMapper = DefaultMcpJson.getDefaultMcpJsonMapper();
+		McpJsonMapper jsonMapper = McpJsonDefaults.getDefaultMcpJsonMapper();
 		McpSchema.CompleteResult.CompleteCompletion codeComplete = new McpSchema.CompleteResult.CompleteCompletion(
 				Collections.emptyList(), 0, false);
 		String json = jsonMapper.writeValueAsString(codeComplete);

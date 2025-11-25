@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scr:component xmlns:scr="http://www.osgi.org/xmlns/scr/v1.3.0" name="io.modelcontextprotocol.json.McpJsonDefaults" immediate="true">
+  <service>
+    <provide interface="io.modelcontextprotocol.json.McpJsonDefaults"/>
+  </service>
+  <reference name="McpJsonMapperSupplier" interface="io.modelcontextprotocol.json.McpJsonMapperSupplier" bind="setMcpJsonMapperSupplier" unbind="unsetMcpJsonMapperSupplier"/>
+  <reference name="JsonSchemaValidatorSupplier" interface="io.modelcontextprotocol.json.schema.JsonSchemaValidatorSupplier" bind="setJsonSchemaValidatorSupplier" unbind="unsetJsonSchemaValidatorSupplier"/>
+  <implementation class="io.modelcontextprotocol.json.McpJsonDefaults"/>
+</scr:component>

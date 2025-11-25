@@ -1,18 +1,16 @@
-package io.modelcontextprotocol.json.internal;
+package io.modelcontextprotocol.json;
 
-import io.modelcontextprotocol.json.McpJsonMapper;
-import io.modelcontextprotocol.json.McpJsonMapperSupplier;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidatorSupplier;
 import io.modelcontextprotocol.util.McpServiceLoader;
 
-public class DefaultMcpJson {
+public class McpJsonDefaults {
 
 	protected static McpServiceLoader<McpJsonMapperSupplier, McpJsonMapper> mcpMapperServiceLoader;
 
 	protected static McpServiceLoader<JsonSchemaValidatorSupplier, JsonSchemaValidator> mcpValidatorServiceLoader;
 
-	public DefaultMcpJson() {
+	public McpJsonDefaults() {
 		mcpMapperServiceLoader = new McpServiceLoader<McpJsonMapperSupplier, McpJsonMapper>();
 		mcpValidatorServiceLoader = new McpServiceLoader<JsonSchemaValidatorSupplier, JsonSchemaValidator>();
 	}
@@ -27,7 +25,7 @@ public class DefaultMcpJson {
 
 	public synchronized static McpJsonMapper getDefaultMcpJsonMapper() {
 		if (mcpMapperServiceLoader == null) {
-			new DefaultMcpJson();
+			new McpJsonDefaults();
 		}
 		return mcpMapperServiceLoader.getDefault();
 	}
@@ -42,7 +40,7 @@ public class DefaultMcpJson {
 
 	public synchronized static JsonSchemaValidator getDefaultJsonSchemaValidator() {
 		if (mcpValidatorServiceLoader == null) {
-			new DefaultMcpJson();
+			new McpJsonDefaults();
 		}
 		return mcpValidatorServiceLoader.getDefault();
 	}

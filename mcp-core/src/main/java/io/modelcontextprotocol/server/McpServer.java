@@ -14,8 +14,8 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
-import io.modelcontextprotocol.json.internal.DefaultMcpJson;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -227,10 +227,10 @@ public interface McpServer {
 					this.instructions);
 
 			var jsonSchemaValidator = (this.jsonSchemaValidator != null) ? this.jsonSchemaValidator
-					: DefaultMcpJson.getDefaultJsonSchemaValidator();
+					: McpJsonDefaults.getDefaultJsonSchemaValidator();
 
 			return new McpAsyncServer(transportProvider,
-					jsonMapper == null ? DefaultMcpJson.getDefaultMcpJsonMapper() : jsonMapper, features,
+					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, features,
 					requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator);
 		}
 
@@ -255,9 +255,9 @@ public interface McpServer {
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
 					this.instructions);
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
-					: DefaultMcpJson.getDefaultJsonSchemaValidator();
+					: McpJsonDefaults.getDefaultJsonSchemaValidator();
 			return new McpAsyncServer(transportProvider,
-					jsonMapper == null ? DefaultMcpJson.getDefaultMcpJsonMapper() : jsonMapper, features,
+					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, features,
 					requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator);
 		}
 
@@ -820,9 +820,9 @@ public interface McpServer {
 					this.immediateExecution);
 
 			var asyncServer = new McpAsyncServer(transportProvider,
-					jsonMapper == null ? DefaultMcpJson.getDefaultMcpJsonMapper() : jsonMapper, asyncFeatures,
-					requestTimeout, uriTemplateManagerFactory,
-					jsonSchemaValidator != null ? jsonSchemaValidator : DefaultMcpJson.getDefaultJsonSchemaValidator());
+					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, asyncFeatures,
+					requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator != null ? jsonSchemaValidator
+							: McpJsonDefaults.getDefaultJsonSchemaValidator());
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -850,9 +850,9 @@ public interface McpServer {
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures,
 					this.immediateExecution);
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
-					: DefaultMcpJson.getDefaultJsonSchemaValidator();
+					: McpJsonDefaults.getDefaultJsonSchemaValidator();
 			var asyncServer = new McpAsyncServer(transportProvider,
-					jsonMapper == null ? DefaultMcpJson.getDefaultMcpJsonMapper() : jsonMapper, asyncFeatures,
+					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, asyncFeatures,
 					this.requestTimeout, this.uriTemplateManagerFactory, jsonSchemaValidator);
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
@@ -1855,9 +1855,9 @@ public interface McpServer {
 			var features = new McpStatelessServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions);
 			return new McpStatelessAsyncServer(transport,
-					jsonMapper == null ? DefaultMcpJson.getDefaultMcpJsonMapper() : jsonMapper, features,
-					requestTimeout, uriTemplateManagerFactory,
-					jsonSchemaValidator != null ? jsonSchemaValidator : DefaultMcpJson.getDefaultJsonSchemaValidator());
+					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, features,
+					requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator != null ? jsonSchemaValidator
+							: McpJsonDefaults.getDefaultJsonSchemaValidator());
 		}
 
 	}
@@ -2335,9 +2335,9 @@ public interface McpServer {
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions);
 			var asyncFeatures = McpStatelessServerFeatures.Async.fromSync(syncFeatures, this.immediateExecution);
 			var asyncServer = new McpStatelessAsyncServer(transport,
-					jsonMapper == null ? DefaultMcpJson.getDefaultMcpJsonMapper() : jsonMapper, asyncFeatures,
+					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, asyncFeatures,
 					requestTimeout, uriTemplateManagerFactory, this.jsonSchemaValidator != null
-							? this.jsonSchemaValidator : DefaultMcpJson.getDefaultJsonSchemaValidator());
+							? this.jsonSchemaValidator : McpJsonDefaults.getDefaultJsonSchemaValidator());
 			return new McpStatelessSyncServer(asyncServer, this.immediateExecution);
 		}
 

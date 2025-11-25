@@ -14,7 +14,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 import io.modelcontextprotocol.common.McpTransportContext;
-import io.modelcontextprotocol.json.internal.DefaultMcpJson;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -478,7 +478,7 @@ public interface McpClient {
 			return new McpSyncClient(
 					new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout,
 							jsonSchemaValidator != null ? jsonSchemaValidator
-									: DefaultMcpJson.getDefaultJsonSchemaValidator(),
+									: McpJsonDefaults.getDefaultJsonSchemaValidator(),
 							asyncFeatures),
 					this.contextProvider);
 		}
@@ -813,7 +813,7 @@ public interface McpClient {
 		 */
 		public McpAsyncClient build() {
 			var jsonSchemaValidator = (this.jsonSchemaValidator != null) ? this.jsonSchemaValidator
-					: DefaultMcpJson.getDefaultJsonSchemaValidator();
+					: McpJsonDefaults.getDefaultJsonSchemaValidator();
 			return new McpAsyncClient(this.transport, this.requestTimeout, this.initializationTimeout,
 					jsonSchemaValidator,
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,

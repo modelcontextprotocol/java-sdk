@@ -43,7 +43,7 @@
 								Import-Package:         jakarta.*;resolution:=optional, \
 								                        *;
 								Export-Package:         io.modelcontextprotocol.*;version="${version}";-noimport:=true
-								Service-Component: 		OSGI-INF/io.modelcontextprotocol.json.internal.DefaultMcpJson.xml
+								Service-Component: 		OSGI-INF/io.modelcontextprotocol.json.McpJsonDefaults.xml
 								-noimportjava:          true;
 								-nouses:                true;
 								-removeheaders:         Private-Package
