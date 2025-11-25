@@ -288,7 +288,9 @@ class LifecycleInitializer {
 					this.initializationRef.compareAndSet(newInit, null);
 					return Mono.error(new RuntimeException("Client failed to initialize " + actionName, ex));
 				})
-				.flatMap(operation);
+				.flatMap(res -> operation.apply(res)
+					.contextWrite(c -> c.put(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
+							res.initializeResult().protocolVersion())));
 		});
 	}
 
@@ -320,6 +322,8 @@ class LifecycleInitializer {
 			}
 
 			return mcpClientSession.sendNotification(McpSchema.METHOD_NOTIFICATION_INITIALIZED, null)
+				.contextWrite(
+						c -> c.put(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION, initializeResult.protocolVersion()))
 				.thenReturn(initializeResult);
 		}).flatMap(initializeResult -> {
 			initialization.cacheResult(initializeResult);

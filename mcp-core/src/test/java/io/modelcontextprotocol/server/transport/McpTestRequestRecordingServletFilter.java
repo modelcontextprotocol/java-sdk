@@ -46,7 +46,7 @@ public class McpTestRequestRecordingServletFilter implements Filter {
 				.collect(Collectors.toUnmodifiableMap(Function.identity(),
 						name -> String.join(",", Collections.list(req.getHeaders(name)))));
 			var request = new CachedBodyHttpServletRequest(req);
-			calls.add(new Call(headers, request.getBodyAsString()));
+			calls.add(new Call(req.getMethod(), headers, request.getBodyAsString()));
 			filterChain.doFilter(request, servletResponse);
 		}
 		else {
@@ -60,7 +60,7 @@ public class McpTestRequestRecordingServletFilter implements Filter {
 		return List.copyOf(calls);
 	}
 
-	public record Call(Map<String, String> headers, String body) {
+	public record Call(String method, Map<String, String> headers, String body) {
 
 	}
 
