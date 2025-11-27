@@ -420,6 +420,17 @@ public final class McpSchema {
         @JsonProperty("tasks") ClientCapabilities.TaskCapabilities tasks) { // @formatter:on
 
 		/**
+		 * Keep for backward compatibility
+		 */
+		public ClientCapabilities( // @formatter:off
+            Map<String, Object> experimental,
+            RootCapabilities roots,
+            Sampling sampling,
+            Elicitation elicitation)  { // @formatter:on
+			this(experimental, roots, sampling, elicitation, null);
+		}
+
+		/**
 		 * Present if the client supports listing roots.
 		 *
 		 * @param listChanged Whether the client supports notifications for changes to the
@@ -577,6 +588,19 @@ public final class McpSchema {
 		@JsonProperty("resources") ResourceCapabilities resources,
 		@JsonProperty("tools") ToolCapabilities tools,
         @JsonProperty("tasks") ServerCapabilities.TaskCapabilities tasks) { // @formatter:on
+
+		/**
+		 * Keep for backward compatibility
+		 */
+		public ServerCapabilities( // @formatter:off
+            CompletionCapabilities completions,
+            Map<String, Object> experimental,
+            LoggingCapabilities logging,
+            PromptCapabilities prompts,
+            ResourceCapabilities resources,
+            ToolCapabilities tools) { // @formatter:on
+			this(completions, experimental, logging, prompts, resources, tools, null);
+		}
 
 		/**
 		 * Present if the server supports argument autocompletion suggestions.
