@@ -397,7 +397,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			}
 			catch (IOException ex) {
 				toPropagate = new McpTransportException("Sending request failed, " + e.getMessage(), e);
-				logger.debug("Received content together with {} HTTP code response: {}", response.rawStatusCode(),
+				logger.debug("Received content together with {} HTTP code response: {}", response.statusCode().value(),
 						body);
 			}
 
@@ -608,33 +608,29 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	/**
 	 * Needed for Spring 5 compatibility
 	 */
-	@SuppressWarnings("deprecation")
 	private static boolean isBadRequest(final WebClientResponseException responseException) {
-		return responseException.getRawStatusCode() == HttpStatus.BAD_REQUEST.value();
+		return responseException.getStatusCode().value() == HttpStatus.BAD_REQUEST.value();
 	}
 
 	/**
 	 * Needed for Spring 5 compatibility
 	 */
-	@SuppressWarnings("deprecation")
 	private static boolean isNotFound(ClientResponse response) {
-		return response.rawStatusCode() == HttpStatus.NOT_FOUND.value();
+		return response.statusCode().value() == HttpStatus.NOT_FOUND.value();
 	}
 
 	/**
 	 * Needed for Spring 5 compatibility
 	 */
-	@SuppressWarnings("deprecation")
 	private static boolean isNotAllowed(ClientResponse response) {
-		return response.rawStatusCode() == HttpStatus.METHOD_NOT_ALLOWED.value();
+		return response.statusCode().value() == HttpStatus.METHOD_NOT_ALLOWED.value();
 	}
 
 	/**
 	 * Needed for Spring 5 compatibility
 	 */
-	@SuppressWarnings("deprecation")
 	private static boolean is2xx(final ClientResponse response) {
-		return response.rawStatusCode() >= 200 && response.rawStatusCode() < 300;
+		return response.statusCode().value() >= 200 && response.statusCode().value() < 300;
 	}
 
 }
