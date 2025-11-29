@@ -20,4 +20,9 @@ public interface ProtocolVersions {
 	 */
 	String MCP_2025_06_18 = "2025-06-18";
 
+	/**
+	 * TODO update to the reference link
+	 */
+	String MCP_2025_11_25 = "2025-11-25";
+
 }
