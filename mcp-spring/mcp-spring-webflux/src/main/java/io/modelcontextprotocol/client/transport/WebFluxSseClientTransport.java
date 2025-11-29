@@ -9,9 +9,9 @@ import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
-
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -404,7 +404,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 		 */
 		public WebFluxSseClientTransport build() {
 			return new WebFluxSseClientTransport(webClientBuilder,
-					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, sseEndpoint);
+					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, sseEndpoint);
 		}
 
 	}
