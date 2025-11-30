@@ -11,6 +11,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandler;
 import java.time.Duration;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
@@ -21,17 +23,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import org.reactivestreams.Publisher;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.json.McpJsonMapper;
-
+import io.modelcontextprotocol.client.McpAsyncClient;
+import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
-import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.ClosedMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
@@ -45,6 +43,9 @@ import io.modelcontextprotocol.spec.McpTransportStream;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
+import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
@@ -80,8 +81,6 @@ import reactor.util.function.Tuples;
 public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(HttpClientStreamableHttpTransport.class);
-
-	private static final String MCP_PROTOCOL_VERSION = ProtocolVersions.MCP_2025_06_18;
 
 	private static final String DEFAULT_ENDPOINT = "/mcp";
 
@@ -128,6 +127,10 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private final AtomicReference<Consumer<Throwable>> exceptionHandler = new AtomicReference<>();
 
+	private final List<String> supportedProtocolVersions;
+
+	private final String latestSupportedProtocolVersion;
+
 	/**
 	 * Consumer to handle HttpClient closure. If null, no cleanup is performed (external
 	 * HttpClient).
@@ -137,7 +140,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	private HttpClientStreamableHttpTransport(McpJsonMapper jsonMapper, HttpClient httpClient,
 			HttpRequest.Builder requestBuilder, String baseUri, String endpoint, boolean resumableStreams,
 			boolean openConnectionOnStartup, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer,
-			Consumer<HttpClient> onCloseClient) {
+			List<String> supportedProtocolVersions, Consumer<HttpClient> onCloseClient) {
 		Assert.notNull(onCloseClient, "onCloseClient must not be null");
 		this.jsonMapper = jsonMapper;
 		this.httpClient = httpClient;
@@ -149,12 +152,16 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		this.activeSession.set(createTransportSession());
 		this.httpRequestCustomizer = httpRequestCustomizer;
 		this.onCloseClient = onCloseClient;
+		this.supportedProtocolVersions = Collections.unmodifiableList(supportedProtocolVersions);
+		this.latestSupportedProtocolVersion = this.supportedProtocolVersions.stream()
+			.sorted(Comparator.reverseOrder())
+			.findFirst()
+			.get();
 	}
 
 	@Override
 	public List<String> protocolVersions() {
-		return List.of(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26,
-				ProtocolVersions.MCP_2025_06_18);
+		return supportedProtocolVersions;
 	}
 
 	public static Builder builder(String baseUri) {
@@ -198,7 +205,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				.uri(uri)
 				.header("Cache-Control", "no-cache")
 				.header(HttpHeaders.MCP_SESSION_ID, sessionId)
-				.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+				.header(HttpHeaders.PROTOCOL_VERSION,
+						ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
+								this.latestSupportedProtocolVersion))
 				.DELETE();
 			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "DELETE", uri, null, transportContext));
@@ -314,7 +323,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				var builder = requestBuilder.uri(uri)
 					.header(HttpHeaders.ACCEPT, TEXT_EVENT_STREAM)
 					.header("Cache-Control", "no-cache")
-					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+					.header(HttpHeaders.PROTOCOL_VERSION,
+							connectionCtx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
+									this.latestSupportedProtocolVersion))
 					.GET();
 				var transportContext = connectionCtx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 				return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
@@ -489,7 +500,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					.header(HttpHeaders.ACCEPT, APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
 					.header(HttpHeaders.CONTENT_TYPE, APPLICATION_JSON)
 					.header(HttpHeaders.CACHE_CONTROL, "no-cache")
-					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+					.header(HttpHeaders.PROTOCOL_VERSION,
+							ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
+									this.latestSupportedProtocolVersion))
 					.POST(HttpRequest.BodyPublishers.ofString(jsonBody));
 				var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 				return Mono
@@ -684,6 +697,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		private Consumer<HttpClient> onCloseClient = (HttpClient client) -> {
 		};
 
+		private List<String> supportedProtocolVersions = List.of(ProtocolVersions.MCP_2024_11_05,
+				ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18);
+
 		/**
 		 * Creates a new builder with the specified base URI.
 		 * @param baseUri the base URI of the MCP server
@@ -832,6 +848,30 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		}
 
 		/**
+		 * Sets the list of supported protocol versions used in version negotiation. By
+		 * default, the client will send the latest of those versions in the
+		 * {@code MCP-Protocol-Version} header.
+		 * <p>
+		 * Setting this value only updates the values used in version negotiation, and
+		 * does NOT impact the actual capabilities of the transport. It should only be
+		 * used for compatibility with servers having strict requirements around the
+		 * {@code MCP-Protocol-Version} header.
+		 * @param supportedProtocolVersions protocol versions supported by this transport
+		 * @return this builder
+		 * @see <a href=
+		 * "https://modelcontextprotocol.io/specification/2024-11-05/basic/lifecycle#version-negotiation">version
+		 * negotiation specification</a>
+		 * @see <a href=
+		 * "https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#protocol-version-header">Protocol
+		 * Version Header</a>
+		 */
+		public Builder supportedProtocolVersions(List<String> supportedProtocolVersions) {
+			Assert.notEmpty(supportedProtocolVersions, "supportedProtocolVersions must not be empty");
+			this.supportedProtocolVersions = Collections.unmodifiableList(supportedProtocolVersions);
+			return this;
+		}
+
+		/**
 		 * Construct a fresh instance of {@link HttpClientStreamableHttpTransport} using
 		 * the current builder configuration.
 		 * @return a new instance of {@link HttpClientStreamableHttpTransport}
@@ -869,7 +909,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 			return new HttpClientStreamableHttpTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
 					httpClient, requestBuilder, baseUri, endpoint, resumableStreams, openConnectionOnStartup,
-					httpRequestCustomizer, closeHandler);
+					httpRequestCustomizer, supportedProtocolVersions, closeHandler);
 		}
 
 	}

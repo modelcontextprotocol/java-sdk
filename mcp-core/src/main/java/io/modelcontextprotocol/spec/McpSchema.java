@@ -167,9 +167,9 @@ public final class McpSchema {
 			permits InitializeRequest, CallToolRequest, CreateMessageRequest, ElicitRequest, CompleteRequest,
 			GetPromptRequest, ReadResourceRequest, SubscribeRequest, UnsubscribeRequest, PaginatedRequest {
 
-		default String progressToken() {
+		default Object progressToken() {
 			if (meta() != null && meta().containsKey("progressToken")) {
-				return meta().get("progressToken").toString();
+				return meta().get("progressToken");
 			}
 			return null;
 		}
@@ -277,12 +277,12 @@ public final class McpSchema {
 	}
 
 	/**
-	 * A successful (non-error) response to a request.
+	 * A response to a request (successful, or error).
 	 *
 	 * @param jsonrpc The JSON-RPC version (must be "2.0")
 	 * @param id The request identifier that this response corresponds to
-	 * @param result The result of the successful request
-	 * @param error Error information if the request failed
+	 * @param result The result of the successful request; null if error
+	 * @param error Error information if the request failed; null if has result
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1502,7 +1502,7 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder progressToken(String progressToken) {
+			public Builder progressToken(Object progressToken) {
 				if (this.meta == null) {
 					this.meta = new HashMap<>();
 				}
@@ -1562,6 +1562,7 @@ public final class McpSchema {
 		 * content contains error information. If false or absent, indicates successful
 		 * execution.
 		 */
+		@Deprecated
 		public CallToolResult(String content, Boolean isError) {
 			this(List.of(new TextContent(content)), isError, null);
 		}
@@ -1676,7 +1677,7 @@ public final class McpSchema {
 			 * @return a new CallToolResult instance
 			 */
 			public CallToolResult build() {
-				return new CallToolResult(content, isError, (Object) structuredContent, meta);
+				return new CallToolResult(content, isError, structuredContent, meta);
 			}
 
 		}
@@ -1912,7 +1913,7 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder progressToken(String progressToken) {
+			public Builder progressToken(Object progressToken) {
 				if (this.meta == null) {
 					this.meta = new HashMap<>();
 				}
@@ -2080,7 +2081,7 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder progressToken(String progressToken) {
+			public Builder progressToken(Object progressToken) {
 				if (this.meta == null) {
 					this.meta = new HashMap<>();
 				}
@@ -2217,13 +2218,13 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ProgressNotification( // @formatter:off
-		@JsonProperty("progressToken") String progressToken,
+		@JsonProperty("progressToken") Object progressToken,
 		@JsonProperty("progress") Double progress,
 		@JsonProperty("total") Double total,
 		@JsonProperty("message") String message,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Notification { // @formatter:on
 
-		public ProgressNotification(String progressToken, double progress, Double total, String message) {
+		public ProgressNotification(Object progressToken, double progress, Double total, String message) {
 			this(progressToken, progress, total, message, null);
 		}
 	}

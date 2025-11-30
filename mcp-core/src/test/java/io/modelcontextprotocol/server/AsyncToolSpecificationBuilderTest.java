@@ -40,7 +40,7 @@ class AsyncToolSpecificationBuilderTest {
 		McpServerFeatures.AsyncToolSpecification specification = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(tool)
 			.callHandler((exchange, request) -> Mono
-				.just(new CallToolResult(List.of(new TextContent("Test result")), false)))
+				.just(CallToolResult.builder().content(List.of(new TextContent("Test result"))).isError(false).build()))
 			.build();
 
 		assertThat(specification).isNotNull();
@@ -52,7 +52,8 @@ class AsyncToolSpecificationBuilderTest {
 	@Test
 	void builderShouldThrowExceptionWhenToolIsNull() {
 		assertThatThrownBy(() -> McpServerFeatures.AsyncToolSpecification.builder()
-			.callHandler((exchange, request) -> Mono.just(new CallToolResult(List.of(), false)))
+			.callHandler((exchange, request) -> Mono
+				.just(CallToolResult.builder().content(List.of()).isError(false).build()))
 			.build()).isInstanceOf(IllegalArgumentException.class).hasMessage("Tool must not be null");
 	}
 
@@ -80,7 +81,8 @@ class AsyncToolSpecificationBuilderTest {
 
 		// Then - verify method chaining returns the same builder instance
 		assertThat(builder.tool(tool)).isSameAs(builder);
-		assertThat(builder.callHandler((exchange, request) -> Mono.just(new CallToolResult(List.of(), false))))
+		assertThat(builder.callHandler(
+				(exchange, request) -> Mono.just(CallToolResult.builder().content(List.of()).isError(false).build())))
 			.isSameAs(builder);
 	}
 
@@ -96,7 +98,10 @@ class AsyncToolSpecificationBuilderTest {
 		McpServerFeatures.AsyncToolSpecification specification = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(tool)
 			.callHandler((exchange, request) -> {
-				return Mono.just(new CallToolResult(List.of(new TextContent(expectedResult)), false));
+				return Mono.just(CallToolResult.builder()
+					.content(List.of(new TextContent(expectedResult)))
+					.isError(false)
+					.build());
 			})
 			.build();
 
@@ -124,8 +129,11 @@ class AsyncToolSpecificationBuilderTest {
 
 		// Test the deprecated constructor that takes a 'call' function
 		McpServerFeatures.AsyncToolSpecification specification = new McpServerFeatures.AsyncToolSpecification(tool,
-				(exchange, arguments) -> Mono
-					.just(new CallToolResult(List.of(new TextContent(expectedResult)), false)));
+				(exchange,
+						arguments) -> Mono.just(CallToolResult.builder()
+							.content(List.of(new TextContent(expectedResult)))
+							.isError(false)
+							.build()));
 
 		assertThat(specification).isNotNull();
 		assertThat(specification.tool()).isEqualTo(tool);
@@ -169,7 +177,10 @@ class AsyncToolSpecificationBuilderTest {
 		// Create a sync tool specification
 		McpServerFeatures.SyncToolSpecification syncSpec = McpServerFeatures.SyncToolSpecification.builder()
 			.tool(tool)
-			.callHandler((exchange, request) -> new CallToolResult(List.of(new TextContent(expectedResult)), false))
+			.callHandler((exchange, request) -> CallToolResult.builder()
+				.content(List.of(new TextContent(expectedResult)))
+				.isError(false)
+				.build())
 			.build();
 
 		// Convert to async using fromSync
@@ -209,7 +220,10 @@ class AsyncToolSpecificationBuilderTest {
 
 		// Create a sync tool specification using the deprecated constructor
 		McpServerFeatures.SyncToolSpecification syncSpec = new McpServerFeatures.SyncToolSpecification(tool,
-				(exchange, arguments) -> new CallToolResult(List.of(new TextContent(expectedResult)), false));
+				(exchange, arguments) -> CallToolResult.builder()
+					.content(List.of(new TextContent(expectedResult)))
+					.isError(false)
+					.build());
 
 		// Convert to async using fromSync
 		McpServerFeatures.AsyncToolSpecification asyncSpec = McpServerFeatures.AsyncToolSpecification

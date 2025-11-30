@@ -673,7 +673,7 @@ public abstract class AbstractMcpAsyncClientTests {
 	@Test
 	void testInitializeWithAllCapabilities() {
 		var capabilities = ClientCapabilities.builder()
-			.experimental(Map.of("feature", "test"))
+			.experimental(Map.of("feature", Map.of("featureFlag", true)))
 			.roots(true)
 			.sampling()
 			.build();

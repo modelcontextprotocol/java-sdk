@@ -4,23 +4,21 @@
 
 package io.modelcontextprotocol.client;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.ProtocolVersions;
-
 import org.junit.jupiter.api.Test;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
-
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
 
 import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,8 +38,7 @@ class McpAsyncClientTests {
 
 	private static final String CONTEXT_KEY = "context.key";
 
-	private McpClientTransport createMockTransportForToolValidation(boolean hasOutputSchema, boolean invalidOutput)
-			throws JsonProcessingException {
+	private McpClientTransport createMockTransportForToolValidation(boolean hasOutputSchema, boolean invalidOutput) {
 
 		// Create tool with or without output schema
 		Map<String, Object> inputSchemaMap = Map.of("type", "object", "properties",
@@ -182,7 +179,7 @@ class McpAsyncClientTests {
 	}
 
 	@Test
-	void testCallToolWithOutputSchemaValidationSuccess() throws JsonProcessingException {
+	void testCallToolWithOutputSchemaValidationSuccess() {
 		McpClientTransport transport = createMockTransportForToolValidation(true, false);
 
 		McpAsyncClient client = McpClient.async(transport).enableCallToolSchemaCaching(true).build();
@@ -204,7 +201,7 @@ class McpAsyncClientTests {
 	}
 
 	@Test
-	void testCallToolWithNoOutputSchemaSuccess() throws JsonProcessingException {
+	void testCallToolWithNoOutputSchemaSuccess() {
 		McpClientTransport transport = createMockTransportForToolValidation(false, false);
 
 		McpAsyncClient client = McpClient.async(transport).enableCallToolSchemaCaching(true).build();
@@ -226,7 +223,7 @@ class McpAsyncClientTests {
 	}
 
 	@Test
-	void testCallToolWithOutputSchemaValidationFailure() throws JsonProcessingException {
+	void testCallToolWithOutputSchemaValidationFailure() {
 		McpClientTransport transport = createMockTransportForToolValidation(true, true);
 
 		McpAsyncClient client = McpClient.async(transport).enableCallToolSchemaCaching(true).build();
@@ -239,6 +236,75 @@ class McpAsyncClientTests {
 			.verify();
 
 		StepVerifier.create(client.closeGracefully()).verifyComplete();
+	}
+
+	@Test
+	void testListToolsWithEmptyCursor() {
+		McpSchema.Tool addTool = McpSchema.Tool.builder().name("add").description("calculate add").build();
+		McpSchema.Tool subtractTool = McpSchema.Tool.builder()
+			.name("subtract")
+			.description("calculate subtract")
+			.build();
+		McpSchema.ListToolsResult mockToolsResult = new McpSchema.ListToolsResult(List.of(addTool, subtractTool), "");
+
+		McpClientTransport transport = new McpClientTransport() {
+			Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler;
+
+			@Override
+			public Mono<Void> connect(
+					Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
+				return Mono.deferContextual(ctx -> {
+					this.handler = handler;
+					return Mono.empty();
+				});
+			}
+
+			@Override
+			public Mono<Void> closeGracefully() {
+				return Mono.empty();
+			}
+
+			@Override
+			public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+				if (!(message instanceof McpSchema.JSONRPCRequest request)) {
+					return Mono.empty();
+				}
+
+				McpSchema.JSONRPCResponse response;
+				if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
+					response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), MOCK_INIT_RESULT,
+							null);
+				}
+				else if (McpSchema.METHOD_TOOLS_LIST.equals(request.method())) {
+					response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), mockToolsResult,
+							null);
+				}
+				else {
+					return Mono.empty();
+				}
+
+				return handler.apply(Mono.just(response)).then();
+			}
+
+			@Override
+			public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+				return JSON_MAPPER.convertValue(data, new TypeRef<>() {
+					@Override
+					public java.lang.reflect.Type getType() {
+						return typeRef.getType();
+					}
+				});
+			}
+		};
+
+		McpAsyncClient client = McpClient.async(transport).enableCallToolSchemaCaching(true).build();
+
+		Mono<McpSchema.ListToolsResult> mono = client.listTools();
+		McpSchema.ListToolsResult toolsResult = mono.block();
+		assertThat(toolsResult).isNotNull();
+
+		Set<String> names = toolsResult.tools().stream().map(McpSchema.Tool::name).collect(Collectors.toSet());
+		assertThat(names).containsExactlyInAnyOrder("subtract", "add");
 	}
 
 }

@@ -78,7 +78,7 @@ public class HttpClientStreamableHttpTransportEmptyJsonResponseTest {
 
 		var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_03_26,
 				McpSchema.ClientCapabilities.builder().roots(true).build(),
-				new McpSchema.Implementation("Spring AI MCP Client", "0.3.1"));
+				new McpSchema.Implementation("MCP Client", "0.3.1"));
 		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
 				"test-id", initializeRequest);
 
@@ -86,7 +86,7 @@ public class HttpClientStreamableHttpTransportEmptyJsonResponseTest {
 
 		// Verify the customizer was called
 		verify(mockRequestCustomizer, atLeastOnce()).customize(any(), eq("POST"), eq(uri), eq(
-				"{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":\"test-id\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{\"roots\":{\"listChanged\":true}},\"clientInfo\":{\"name\":\"Spring AI MCP Client\",\"version\":\"0.3.1\"}}}"),
+				"{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":\"test-id\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{\"roots\":{\"listChanged\":true}},\"clientInfo\":{\"name\":\"MCP Client\",\"version\":\"0.3.1\"}}}"),
 				any());
 
 	}

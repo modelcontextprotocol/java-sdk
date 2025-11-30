@@ -9,10 +9,9 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
-
-import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -22,7 +21,6 @@ import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.KeepAliveScheduler;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
@@ -37,6 +35,7 @@ import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
+import org.springframework.web.util.UriComponentsBuilder;
 
 /**
  * Server-side implementation of the MCP (Model Context Protocol) HTTP transport using
@@ -94,6 +93,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 * Default SSE endpoint path as specified by the MCP transport specification.
 	 */
 	public static final String DEFAULT_SSE_ENDPOINT = "/sse";
+
+	public static final String SESSION_ID = "sessionId";
 
 	public static final String DEFAULT_BASE_URL = "";
 
@@ -224,6 +225,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	// FIXME: This javadoc makes claims about using isClosing flag but it's not
 	// actually
 	// doing that.
+
 	/**
 	 * Initiates a graceful shutdown of all the sessions. This method ensures all active
 	 * sessions are properly closed and cleaned up.
@@ -286,15 +288,28 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 				// Send initial endpoint event
 				logger.debug("Sending initial endpoint event to session: {}", sessionId);
-				sink.next(ServerSentEvent.builder()
-					.event(ENDPOINT_EVENT_TYPE)
-					.data(this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId)
-					.build());
+				sink.next(
+						ServerSentEvent.builder().event(ENDPOINT_EVENT_TYPE).data(buildEndpointUrl(sessionId)).build());
 				sink.onCancel(() -> {
 					logger.debug("Session {} cancelled", sessionId);
 					sessions.remove(sessionId);
 				});
 			}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext)), ServerSentEvent.class);
+	}
+
+	/**
+	 * Constructs the full message endpoint URL by combining the base URL, message path,
+	 * and the required session_id query parameter.
+	 * @param sessionId the unique session identifier
+	 * @return the fully qualified endpoint URL as a string
+	 */
+	private String buildEndpointUrl(String sessionId) {
+		// for WebMVC compatibility
+		return UriComponentsBuilder.fromUriString(this.baseUrl)
+			.path(this.messageEndpoint)
+			.queryParam(SESSION_ID, sessionId)
+			.build()
+			.toUriString();
 	}
 
 	/**
