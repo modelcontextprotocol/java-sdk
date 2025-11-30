@@ -78,7 +78,8 @@ class HttpClientSseClientTransportTests {
 		public TestHttpClientSseClientTransport(final String baseUri) {
 			super(HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(),
 					HttpRequest.newBuilder().header("Content-Type", "application/json"), baseUri, "/sse", JSON_MAPPER,
-					McpAsyncHttpClientRequestCustomizer.NOOP, null);
+					McpAsyncHttpClientRequestCustomizer.NOOP, client -> {
+					});
 		}
 
 		public int getInboundMessageCount() {
