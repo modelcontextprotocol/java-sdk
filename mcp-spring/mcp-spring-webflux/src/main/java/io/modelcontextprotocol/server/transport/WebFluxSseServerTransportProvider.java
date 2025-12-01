@@ -433,8 +433,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 		private Duration keepAliveInterval;
 
-		private McpTransportContextExtractor<ServerRequest> contextExtractor = (
-				serverRequest) -> McpTransportContext.EMPTY;
+		private McpTransportContextExtractor<ServerRequest> contextExtractor;
 
 		/**
 		 * Sets the McpJsonMapper to use for JSON serialization/deserialization of MCP
@@ -522,7 +521,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		public WebFluxSseServerTransportProvider build() {
 			Assert.notNull(messageEndpoint, "Message endpoint must be set");
 			return new WebFluxSseServerTransportProvider(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
-					baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval, contextExtractor);
+					baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval,
+					contextExtractor == null ? new McpTransportContextExtractorServerRequest() : contextExtractor);
 		}
 
 	}
