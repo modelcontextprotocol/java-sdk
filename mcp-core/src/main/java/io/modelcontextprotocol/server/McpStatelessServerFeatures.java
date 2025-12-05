@@ -74,7 +74,9 @@ public class McpStatelessServerFeatures {
 							!Utils.isEmpty(prompts) ? new McpSchema.ServerCapabilities.PromptCapabilities(false) : null,
 							!Utils.isEmpty(resources)
 									? new McpSchema.ServerCapabilities.ResourceCapabilities(false, false) : null,
-							!Utils.isEmpty(tools) ? new McpSchema.ServerCapabilities.ToolCapabilities(false) : null);
+							!Utils.isEmpty(tools) ? new McpSchema.ServerCapabilities.ToolCapabilities(false) : null,
+							null // TODO task management
+					);
 
 			this.tools = (tools != null) ? tools : List.of();
 			this.resources = (resources != null) ? resources : Map.of();
@@ -175,7 +177,9 @@ public class McpStatelessServerFeatures {
 							!Utils.isEmpty(prompts) ? new McpSchema.ServerCapabilities.PromptCapabilities(false) : null,
 							!Utils.isEmpty(resources)
 									? new McpSchema.ServerCapabilities.ResourceCapabilities(false, false) : null,
-							!Utils.isEmpty(tools) ? new McpSchema.ServerCapabilities.ToolCapabilities(false) : null);
+							!Utils.isEmpty(tools) ? new McpSchema.ServerCapabilities.ToolCapabilities(false) : null,
+							null // TODO task management
+					);
 
 			this.tools = (tools != null) ? tools : new ArrayList<>();
 			this.resources = (resources != null) ? resources : new HashMap<>();
