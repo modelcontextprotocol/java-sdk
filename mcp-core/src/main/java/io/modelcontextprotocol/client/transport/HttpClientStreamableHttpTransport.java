@@ -252,7 +252,6 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	}
 
 	private void handleConnectionClosed() {
-		logger.debug("Handling connection closed for session {}", sessionIdOrPlaceholder(this.activeSession.get()));
 		Consumer<Void> handler = this.connectionClosedHandler.get();
 		if (handler != null) {
 			handler.accept(null);

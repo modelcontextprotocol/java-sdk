@@ -101,6 +101,7 @@ public class HttpClientStreamableHttpTransportConnectionClosedHandlingTest {
 	void testTransportConnectionClosedHandler() throws URISyntaxException {
 		AtomicReference<Boolean> closedHandlerCalled = new AtomicReference<>(false);
 		var transport = HttpClientStreamableHttpTransport.builder(HOST)
+			.openConnectionOnStartup(true)
 			.connectionClosedHandler(v -> closedHandlerCalled.set(true))
 			.build();
 
