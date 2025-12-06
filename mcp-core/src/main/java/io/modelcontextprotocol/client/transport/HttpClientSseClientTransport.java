@@ -16,7 +16,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport.Builder;
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.SseResponseEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -122,7 +122,7 @@ public class HttpSseMcpAsyncClientLostConnectionTests {
 	}
 
 	@Test
-	void testPingWithEaxctExceptionType() {
+	void testPingWithExactExceptionType() {
 		withClient(HttpClientSseClientTransport.builder(host).build(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.initialize()).expectNextCount(1).verifyComplete();
 
