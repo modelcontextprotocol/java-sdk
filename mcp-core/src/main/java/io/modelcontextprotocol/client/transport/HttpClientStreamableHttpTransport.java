@@ -12,7 +12,6 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandler;
 import java.time.Duration;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
@@ -142,10 +141,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		this.activeSession.set(createTransportSession());
 		this.httpRequestCustomizer = httpRequestCustomizer;
 		this.supportedProtocolVersions = Collections.unmodifiableList(supportedProtocolVersions);
-		this.latestSupportedProtocolVersion = this.supportedProtocolVersions.stream()
-			.sorted(Comparator.reverseOrder())
-			.findFirst()
-			.get();
+		this.latestSupportedProtocolVersion = Collections.max(this.supportedProtocolVersions);
 	}
 
 	@Override
@@ -367,7 +363,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 							}).<McpSchema
 									.JSONRPCMessage>flatMap(
 											jsonrpcMessage -> this.handler.get().apply(Mono.just(jsonrpcMessage)))
-							.onErrorMap(CompletionException.class, t -> t.getCause())
+							.onErrorMap(CompletionException.class, Throwable::getCause)
 							.onErrorComplete(t -> {
 								this.handleException(t);
 								return true;
@@ -463,11 +459,11 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						else {
 							logger.debug("SSE connection established successfully");
 						}
-					})).onErrorMap(CompletionException.class, t -> t.getCause()).onErrorComplete().subscribe();
+					})).onErrorMap(CompletionException.class, Throwable::getCause).onErrorComplete().subscribe();
 
 			})).flatMap(responseEvent -> {
 				if (transportSession.markInitialized(
-						responseEvent.responseInfo().headers().firstValue("mcp-session-id").orElseGet(() -> null))) {
+						responseEvent.responseInfo().headers().firstValue("mcp-session-id").orElse(null))) {
 					// Once we have a session, we try to open an async stream for
 					// the server to send notifications and requests out-of-band.
 
@@ -583,7 +579,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						new RuntimeException("Failed to send message: " + responseEvent));
 			})
 				.flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage)))
-				.onErrorMap(CompletionException.class, t -> t.getCause())
+				.onErrorMap(CompletionException.class, Throwable::getCause)
 				.onErrorComplete(t -> {
 					// handle the error first
 					this.handleException(t);
