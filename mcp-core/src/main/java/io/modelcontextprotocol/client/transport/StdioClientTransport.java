@@ -48,16 +48,16 @@ public class StdioClientTransport implements McpClientTransport {
 	/** The server process being communicated with */
 	private Process process;
 
-	private McpJsonMapper jsonMapper;
+	private final McpJsonMapper jsonMapper;
 
 	/** Scheduler for handling inbound messages from the server process */
-	private Scheduler inboundScheduler;
+	private final Scheduler inboundScheduler;
 
 	/** Scheduler for handling outbound messages to the server process */
-	private Scheduler outboundScheduler;
+	private final Scheduler outboundScheduler;
 
 	/** Scheduler for handling error messages from the server process */
-	private Scheduler errorScheduler;
+	private final Scheduler errorScheduler;
 
 	/** Parameters for configuring and starting the server process */
 	private final ServerParameters params;
@@ -180,7 +180,7 @@ public class StdioClientTransport implements McpClientTransport {
 	private void startErrorProcessing() {
 		this.errorScheduler.schedule(() -> {
 			try (BufferedReader processErrorReader = new BufferedReader(
-					new InputStreamReader(process.getErrorStream()))) {
+					new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
 				String line;
 				while (!isClosing && (line = processErrorReader.readLine()) != null) {
 					try {
@@ -246,7 +246,8 @@ public class StdioClientTransport implements McpClientTransport {
 	 */
 	private void startInboundProcessing() {
 		this.inboundScheduler.schedule(() -> {
-			try (BufferedReader processReader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+			try (BufferedReader processReader = new BufferedReader(
+					new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
 				String line;
 				while (!isClosing && (line = processReader.readLine()) != null) {
 					try {
