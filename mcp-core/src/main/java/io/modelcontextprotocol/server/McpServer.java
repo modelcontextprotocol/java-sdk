@@ -237,7 +237,7 @@ public interface McpServer {
 		public McpAsyncServer build() {
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
-					this.instructions);
+					this.instructions, this.callGetToolCallbacksEverytime, this.toolCallbackProviders);
 
 			var jsonSchemaValidator = (this.jsonSchemaValidator != null) ? this.jsonSchemaValidator
 					: JsonSchemaValidator.getDefault();
@@ -265,7 +265,7 @@ public interface McpServer {
 		public McpAsyncServer build() {
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
-					this.instructions);
+					this.instructions, this.callGetToolCallbacksEverytime, this.toolCallbackProviders);
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
 					: JsonSchemaValidator.getDefault();
 			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
@@ -330,6 +330,10 @@ public interface McpServer {
 		final Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions = new HashMap<>();
 
 		final List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeHandlers = new ArrayList<>();
+
+		boolean callGetToolCallbacksEverytime = false;
+
+		final List<ToolCallbackProvider> toolCallbackProviders = new ArrayList<>();
 
 		Duration requestTimeout = Duration.ofHours(10); // Default timeout
 
@@ -404,6 +408,42 @@ public interface McpServer {
 		 */
 		public AsyncSpecification<S> instructions(String instructions) {
 			this.instructions = instructions;
+			return this;
+		}
+
+		/**
+		 * Sets whether to call getToolCallbacks on every tools/list request.
+		 * When true, registered ToolCallbackProviders will be called on every tools/list request,
+		 * allowing for dynamic tool generation. When false, getToolCallbacks is only called during startup.
+		 * @param callGetToolCallbacksEverytime true to call on every request, false for startup only
+		 * @return This builder instance for method chaining
+		 */
+		public AsyncSpecification<S> callGetToolCallbacksEverytime(boolean callGetToolCallbacksEverytime) {
+			this.callGetToolCallbacksEverytime = callGetToolCallbacksEverytime;
+			return this;
+		}
+
+		/**
+		 * Registers a ToolCallbackProvider that can dynamically generate tool definitions.
+		 * @param provider The tool callback provider. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if provider is null
+		 */
+		public AsyncSpecification<S> toolCallbackProvider(ToolCallbackProvider provider) {
+			Assert.notNull(provider, "Tool callback provider must not be null");
+			this.toolCallbackProviders.add(provider);
+			return this;
+		}
+
+		/**
+		 * Registers multiple ToolCallbackProviders.
+		 * @param providers The tool callback providers. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if providers is null
+		 */
+		public AsyncSpecification<S> toolCallbackProviders(List<ToolCallbackProvider> providers) {
+			Assert.notNull(providers, "Tool callback providers must not be null");
+			this.toolCallbackProviders.addAll(providers);
 			return this;
 		}
 
@@ -829,7 +869,8 @@ public interface McpServer {
 		public McpSyncServer build() {
 			McpServerFeatures.Sync syncFeatures = new McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,
 					this.tools, this.resources, this.resourceTemplates, this.prompts, this.completions,
-					this.rootsChangeHandlers, this.instructions);
+					this.rootsChangeHandlers, this.instructions, this.callGetToolCallbacksEverytime,
+					this.toolCallbackProviders);
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures,
 					this.immediateExecution);
 
@@ -860,7 +901,8 @@ public interface McpServer {
 		public McpSyncServer build() {
 			McpServerFeatures.Sync syncFeatures = new McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,
 					this.tools, this.resources, this.resourceTemplates, this.prompts, this.completions,
-					this.rootsChangeHandlers, this.instructions);
+					this.rootsChangeHandlers, this.instructions, this.callGetToolCallbacksEverytime,
+					this.toolCallbackProviders);
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures,
 					this.immediateExecution);
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
@@ -929,6 +971,10 @@ public interface McpServer {
 		final Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions = new HashMap<>();
 
 		final List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeHandlers = new ArrayList<>();
+
+		boolean callGetToolCallbacksEverytime = false;
+
+		final List<ToolCallbackProvider> toolCallbackProviders = new ArrayList<>();
 
 		Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
 
@@ -1005,6 +1051,42 @@ public interface McpServer {
 		 */
 		public SyncSpecification<S> instructions(String instructions) {
 			this.instructions = instructions;
+			return this;
+		}
+
+		/**
+		 * Sets whether to call getToolCallbacks on every tools/list request.
+		 * When true, registered ToolCallbackProviders will be called on every tools/list request,
+		 * allowing for dynamic tool generation. When false, getToolCallbacks is only called during startup.
+		 * @param callGetToolCallbacksEverytime true to call on every request, false for startup only
+		 * @return This builder instance for method chaining
+		 */
+		public SyncSpecification<S> callGetToolCallbacksEverytime(boolean callGetToolCallbacksEverytime) {
+			this.callGetToolCallbacksEverytime = callGetToolCallbacksEverytime;
+			return this;
+		}
+
+		/**
+		 * Registers a ToolCallbackProvider that can dynamically generate tool definitions.
+		 * @param provider The tool callback provider. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if provider is null
+		 */
+		public SyncSpecification<S> toolCallbackProvider(ToolCallbackProvider provider) {
+			Assert.notNull(provider, "Tool callback provider must not be null");
+			this.toolCallbackProviders.add(provider);
+			return this;
+		}
+
+		/**
+		 * Registers multiple ToolCallbackProviders.
+		 * @param providers The tool callback providers. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if providers is null
+		 */
+		public SyncSpecification<S> toolCallbackProviders(List<ToolCallbackProvider> providers) {
+			Assert.notNull(providers, "Tool callback providers must not be null");
+			this.toolCallbackProviders.addAll(providers);
 			return this;
 		}
 
@@ -1472,6 +1554,10 @@ public interface McpServer {
 
 		final Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions = new HashMap<>();
 
+		boolean callGetToolCallbacksEverytime = false;
+
+		final List<ToolCallbackProvider> toolCallbackProviders = new ArrayList<>();
+
 		Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
 
 		public StatelessAsyncSpecification(McpStatelessServerTransport transport) {
@@ -1548,6 +1634,42 @@ public interface McpServer {
 		 */
 		public StatelessAsyncSpecification instructions(String instructions) {
 			this.instructions = instructions;
+			return this;
+		}
+
+		/**
+		 * Sets whether to call getToolCallbacks on every tools/list request.
+		 * When true, registered ToolCallbackProviders will be called on every tools/list request,
+		 * allowing for dynamic tool generation. When false, getToolCallbacks is only called during startup.
+		 * @param callGetToolCallbacksEverytime true to call on every request, false for startup only
+		 * @return This builder instance for method chaining
+		 */
+		public StatelessAsyncSpecification callGetToolCallbacksEverytime(boolean callGetToolCallbacksEverytime) {
+			this.callGetToolCallbacksEverytime = callGetToolCallbacksEverytime;
+			return this;
+		}
+
+		/**
+		 * Registers a ToolCallbackProvider that can dynamically generate tool definitions.
+		 * @param provider The tool callback provider. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if provider is null
+		 */
+		public StatelessAsyncSpecification toolCallbackProvider(ToolCallbackProvider provider) {
+			Assert.notNull(provider, "Tool callback provider must not be null");
+			this.toolCallbackProviders.add(provider);
+			return this;
+		}
+
+		/**
+		 * Registers multiple ToolCallbackProviders.
+		 * @param providers The tool callback providers. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if providers is null
+		 */
+		public StatelessAsyncSpecification toolCallbackProviders(List<ToolCallbackProvider> providers) {
+			Assert.notNull(providers, "Tool callback providers must not be null");
+			this.toolCallbackProviders.addAll(providers);
 			return this;
 		}
 
@@ -1870,7 +1992,8 @@ public interface McpServer {
 
 		public McpStatelessAsyncServer build() {
 			var features = new McpStatelessServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
-					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions);
+					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions,
+					this.callGetToolCallbacksEverytime, this.toolCallbackProviders);
 			return new McpStatelessAsyncServer(transport, jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
 					features, requestTimeout, uriTemplateManagerFactory,
 					jsonSchemaValidator != null ? jsonSchemaValidator : JsonSchemaValidator.getDefault());
@@ -1933,6 +2056,10 @@ public interface McpServer {
 		final Map<String, McpStatelessServerFeatures.SyncPromptSpecification> prompts = new HashMap<>();
 
 		final Map<McpSchema.CompleteReference, McpStatelessServerFeatures.SyncCompletionSpecification> completions = new HashMap<>();
+
+		boolean callGetToolCallbacksEverytime = false;
+
+		final List<ToolCallbackProvider> toolCallbackProviders = new ArrayList<>();
 
 		Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
 
@@ -2010,6 +2137,42 @@ public interface McpServer {
 		 */
 		public StatelessSyncSpecification instructions(String instructions) {
 			this.instructions = instructions;
+			return this;
+		}
+
+		/**
+		 * Sets whether to call getToolCallbacks on every tools/list request.
+		 * When true, registered ToolCallbackProviders will be called on every tools/list request,
+		 * allowing for dynamic tool generation. When false, getToolCallbacks is only called during startup.
+		 * @param callGetToolCallbacksEverytime true to call on every request, false for startup only
+		 * @return This builder instance for method chaining
+		 */
+		public StatelessSyncSpecification callGetToolCallbacksEverytime(boolean callGetToolCallbacksEverytime) {
+			this.callGetToolCallbacksEverytime = callGetToolCallbacksEverytime;
+			return this;
+		}
+
+		/**
+		 * Registers a ToolCallbackProvider that can dynamically generate tool definitions.
+		 * @param provider The tool callback provider. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if provider is null
+		 */
+		public StatelessSyncSpecification toolCallbackProvider(ToolCallbackProvider provider) {
+			Assert.notNull(provider, "Tool callback provider must not be null");
+			this.toolCallbackProviders.add(provider);
+			return this;
+		}
+
+		/**
+		 * Registers multiple ToolCallbackProviders.
+		 * @param providers The tool callback providers. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if providers is null
+		 */
+		public StatelessSyncSpecification toolCallbackProviders(List<ToolCallbackProvider> providers) {
+			Assert.notNull(providers, "Tool callback providers must not be null");
+			this.toolCallbackProviders.addAll(providers);
 			return this;
 		}
 
@@ -2348,7 +2511,8 @@ public interface McpServer {
 
 		public McpStatelessSyncServer build() {
 			var syncFeatures = new McpStatelessServerFeatures.Sync(this.serverInfo, this.serverCapabilities, this.tools,
-					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions);
+					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions,
+					this.callGetToolCallbacksEverytime, this.toolCallbackProviders);
 			var asyncFeatures = McpStatelessServerFeatures.Async.fromSync(syncFeatures, this.immediateExecution);
 			var asyncServer = new McpStatelessAsyncServer(transport,
 					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, asyncFeatures, requestTimeout,
