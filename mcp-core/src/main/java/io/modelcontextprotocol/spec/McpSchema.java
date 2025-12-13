@@ -418,6 +418,7 @@ public final class McpSchema {
 		 * data from users with optional JSON schemas to validate responses.
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record Elicitation() {
 		}
 
