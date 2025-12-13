@@ -363,9 +363,7 @@ public class McpSchemaTests {
 
 		McpSchema.InitializeRequest deserialized = JSON_MAPPER.readValue(serialized, McpSchema.InitializeRequest.class);
 
-		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder()
-				.elicitation()
-				.build();
+		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder().elicitation().build();
 		McpSchema.Implementation clientInfo = new McpSchema.Implementation("test-client", "1.0.0");
 		Map<String, Object> meta = Map.of("metaKey", "metaValue");
 		McpSchema.InitializeRequest expected = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2024_11_05,
