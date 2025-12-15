@@ -44,7 +44,9 @@ public class McpStatelessServerFeatures {
 			Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions,
-			String instructions) {
+			String instructions,
+			boolean callGetToolCallbacksEverytime,
+			List<ToolCallbackProvider> toolCallbackProviders) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -55,6 +57,8 @@ public class McpStatelessServerFeatures {
 		 * @param resourceTemplates The map of resource templates
 		 * @param prompts The map of prompt specifications
 		 * @param instructions The server instructions text
+		 * @param callGetToolCallbacksEverytime If true, call getToolCallbacks on every tools/list request
+		 * @param toolCallbackProviders The list of tool callback providers
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpStatelessServerFeatures.AsyncToolSpecification> tools,
@@ -62,7 +66,9 @@ public class McpStatelessServerFeatures {
 				Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
 				Map<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions,
-				String instructions) {
+				String instructions,
+				boolean callGetToolCallbacksEverytime,
+				List<ToolCallbackProvider> toolCallbackProviders) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -82,6 +88,8 @@ public class McpStatelessServerFeatures {
 			this.prompts = (prompts != null) ? prompts : Map.of();
 			this.completions = (completions != null) ? completions : Map.of();
 			this.instructions = instructions;
+			this.callGetToolCallbacksEverytime = callGetToolCallbacksEverytime;
+			this.toolCallbackProviders = (toolCallbackProviders != null) ? toolCallbackProviders : List.of();
 		}
 
 		/**
@@ -121,7 +129,8 @@ public class McpStatelessServerFeatures {
 			});
 
 			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources, resourceTemplates,
-					prompts, completions, syncSpec.instructions());
+					prompts, completions, syncSpec.instructions(),
+					syncSpec.callGetToolCallbacksEverytime(), syncSpec.toolCallbackProviders());
 		}
 	}
 
@@ -142,7 +151,9 @@ public class McpStatelessServerFeatures {
 			Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpStatelessServerFeatures.SyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpStatelessServerFeatures.SyncCompletionSpecification> completions,
-			String instructions) {
+			String instructions,
+			boolean callGetToolCallbacksEverytime,
+			List<ToolCallbackProvider> toolCallbackProviders) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -153,6 +164,8 @@ public class McpStatelessServerFeatures {
 		 * @param resourceTemplates The map of resource templates
 		 * @param prompts The map of prompt specifications
 		 * @param instructions The server instructions text
+		 * @param callGetToolCallbacksEverytime If true, call getToolCallbacks on every tools/list request
+		 * @param toolCallbackProviders The list of tool callback providers
 		 */
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpStatelessServerFeatures.SyncToolSpecification> tools,
@@ -160,7 +173,9 @@ public class McpStatelessServerFeatures {
 				Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
 				Map<String, McpStatelessServerFeatures.SyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpStatelessServerFeatures.SyncCompletionSpecification> completions,
-				String instructions) {
+				String instructions,
+				boolean callGetToolCallbacksEverytime,
+				List<ToolCallbackProvider> toolCallbackProviders) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -183,6 +198,8 @@ public class McpStatelessServerFeatures {
 			this.prompts = (prompts != null) ? prompts : new HashMap<>();
 			this.completions = (completions != null) ? completions : new HashMap<>();
 			this.instructions = instructions;
+			this.callGetToolCallbacksEverytime = callGetToolCallbacksEverytime;
+			this.toolCallbackProviders = (toolCallbackProviders != null) ? toolCallbackProviders : new ArrayList<>();
 		}
 
 	}
