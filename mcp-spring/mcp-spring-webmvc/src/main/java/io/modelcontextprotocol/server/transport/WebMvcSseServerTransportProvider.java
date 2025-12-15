@@ -386,6 +386,12 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 					String jsonText = jsonMapper.writeValueAsString(message);
 					sseBuilder.event(MESSAGE_EVENT_TYPE).data(jsonText);
 				}
+				catch (IOException e) {
+					if (logger.isDebugEnabled()) {
+						logger.debug("Failed to send message: {}", e.getMessage());
+					}
+					sseBuilder.error(e);
+				}
 				catch (Exception e) {
 					logger.error("Failed to send message: {}", e.getMessage());
 					sseBuilder.error(e);
