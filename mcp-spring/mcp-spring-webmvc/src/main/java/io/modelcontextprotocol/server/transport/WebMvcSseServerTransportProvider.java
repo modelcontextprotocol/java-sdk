@@ -264,11 +264,13 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			sseBuilder.onComplete(() -> {
 				logger.debug("SSE connection completed for session: {}", sessionId);
 				// explicitly close the session when the SSE connection is completed
-				session.closeGracefully().doOnSuccess(v -> sessions.remove(sessionId)).subscribe();
+				session.close();
+				sessions.remove(sessionId);
 			});
 			sseBuilder.onTimeout(() -> {
 				logger.debug("SSE connection timed out for session: {}", sessionId);
-				session.closeGracefully().doOnSuccess(v -> sessions.remove(sessionId)).subscribe();
+				session.close();
+				sessions.remove(sessionId);
 			});
 			this.sessions.put(sessionId, session);
 
