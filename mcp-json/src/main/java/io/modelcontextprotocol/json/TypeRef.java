@@ -9,7 +9,7 @@ import java.lang.reflect.Type;
 
 /**
  * Captures generic type information at runtime for parameterized JSON (de)serialization.
- * Usage: TypeRef<List<Foo>> ref = new TypeRef<>(){};
+ * Usage: TypeRef&lt;List&lt;Foo&gt;&gt; ref = new TypeRef&lt;&gt;(){};
  */
 public abstract class TypeRef<T> {
 
