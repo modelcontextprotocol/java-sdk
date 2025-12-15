@@ -75,7 +75,7 @@
 		<maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
 		<maven-surefire-plugin.version>3.1.2</maven-surefire-plugin.version>
 		<maven-failsafe-plugin.version>3.5.2</maven-failsafe-plugin.version>
-		<maven-javadoc-plugin.version>3.5.0</maven-javadoc-plugin.version>
+		<maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
 		<maven-source-plugin.version>3.3.0</maven-source-plugin.version>
 		<jacoco-maven-plugin.version>0.8.10</jacoco-maven-plugin.version>
 		<flatten-maven-plugin.version>1.5.0</flatten-maven-plugin.version>
@@ -279,6 +279,7 @@
 						<version>${maven-javadoc-plugin.version}</version>
 						<configuration>
 							<detectJavaApiLink>false</detectJavaApiLink>
+							<legacyMode>true</legacyMode>
 							<failOnError>false</failOnError>
 							<doclint>none</doclint>
 							<additionalOptions>
