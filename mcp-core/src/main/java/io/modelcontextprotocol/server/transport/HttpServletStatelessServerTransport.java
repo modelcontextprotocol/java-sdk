@@ -8,6 +8,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 
+import io.modelcontextprotocol.server.servlet.HttpServletRequestMcpTransportContextExtractor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -240,8 +241,7 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 
 		private String mcpEndpoint = "/mcp";
 
-		private McpTransportContextExtractor<HttpServletRequest> contextExtractor = (
-				serverRequest) -> McpTransportContext.EMPTY;
+		private McpTransportContextExtractor<HttpServletRequest> contextExtractor;
 
 		private Builder() {
 			// used by a static method
@@ -297,7 +297,8 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		public HttpServletStatelessServerTransport build() {
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 			return new HttpServletStatelessServerTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
-					mcpEndpoint, contextExtractor);
+					mcpEndpoint,
+					contextExtractor == null ? new HttpServletRequestMcpTransportContextExtractor() : contextExtractor);
 		}
 
 	}
