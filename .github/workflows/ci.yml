@@ -12,10 +12,10 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 23 for Javadoc toolchain
+      - name: Set up JDK 25 for Javadoc toolchain
         uses: actions/setup-java@v4
         with:
-          java-version: '23'
+          java-version: '25'
           distribution: 'temurin'
 
       - name: Set up JDK 17

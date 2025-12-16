@@ -16,8 +16,9 @@ Example: `mcp-core/src/main/javadoc/io/modelcontextprotocol/doc-files/getting-st
 
 ## Requirements
 
-- **JDK 23+** is required to generate javadocs with markdown support (JEP 467)
+- **JDK 25+** is required to generate javadocs with markdown and syntax highlighting support
 - Files use CommonMark syntax with GitHub-flavored tables
+- Code blocks with language hints (e.g., ` ```java `) get automatic syntax highlighting
 - Generate docs locally: `mvn -Pjavadoc javadoc:aggregate`
 
 ## Linking to Documentation
@@ -43,7 +44,9 @@ See [Getting Started](io/modelcontextprotocol/doc-files/getting-started.html)
 The javadoc tool supports CommonMark with these extensions:
 
 - GitHub-flavored tables
-- Fenced code blocks with syntax highlighting
+- Fenced code blocks with syntax highlighting (via `--syntax-highlight` option using highlight.js)
 - Links to Java elements: `[text][java.util.List]`
+
+Supported languages for syntax highlighting include Java, JSON, XML, HTML, and Properties.
 
 For full details, see [JEP 467: Markdown Documentation Comments](https://openjdk.org/jeps/467).
