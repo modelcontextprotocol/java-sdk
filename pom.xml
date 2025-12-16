@@ -76,6 +76,7 @@
 		<maven-surefire-plugin.version>3.1.2</maven-surefire-plugin.version>
 		<maven-failsafe-plugin.version>3.5.2</maven-failsafe-plugin.version>
 		<maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
+		<javadoc.jdk.version>23</javadoc.jdk.version>
 		<maven-source-plugin.version>3.3.0</maven-source-plugin.version>
 		<jacoco-maven-plugin.version>0.8.10</jacoco-maven-plugin.version>
 		<flatten-maven-plugin.version>1.5.0</flatten-maven-plugin.version>
@@ -266,6 +267,7 @@
 	</build>
 
 	<profiles>
+		<!-- Base javadoc profile - uses current JDK -->
 		<profile>
 			<id>javadoc</id>
 			<activation>
@@ -287,6 +289,9 @@
 							</additionalOptions>
 							<source>${java.version}</source>
 							<quiet>true</quiet>
+							<docfilessubdirs>true</docfilessubdirs>
+							<javadocDirectory>${project.basedir}/src/main/javadoc</javadocDirectory>
+							<overview>${project.basedir}/src/main/javadoc/overview.md</overview>
 						</configuration>
 						<executions>
 							<execution>
@@ -304,6 +309,26 @@
 								</goals>
 							</execution>
 						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+		<!-- CI profile - requires JDK 23 toolchain for markdown support -->
+		<profile>
+			<id>javadoc-toolchain</id>
+			<activation>
+				<activeByDefault>false</activeByDefault>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-javadoc-plugin</artifactId>
+						<configuration>
+							<jdkToolchain>
+								<version>${javadoc.jdk.version}</version>
+							</jdkToolchain>
+						</configuration>
 					</plugin>
 				</plugins>
 			</build>

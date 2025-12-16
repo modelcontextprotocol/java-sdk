@@ -12,6 +12,12 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
+      - name: Set up JDK 23 for Javadoc toolchain
+        uses: actions/setup-java@v4
+        with:
+          java-version: '23'
+          distribution: 'temurin'
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -29,16 +35,14 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Generate Java docs
-        run: mvn -Pjavadoc -B javadoc:aggregate
-
       - name: Build with Maven and deploy to Sonatype snapshot repository
         env:
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+          JAVA_HOME: ${{ env.JAVA_HOME_17_X64 }}
         run: |
-          mvn -Pjavadoc -Prelease --batch-mode --update-snapshots deploy
+          mvn -Pjavadoc,javadoc-toolchain -Prelease --batch-mode --update-snapshots deploy
 
       - name: Capture project version
         run: echo PROJECT_VERSION=$(mvn help:evaluate -Dexpression=project.version --quiet -DforceStdout) >> $GITHUB_ENV
