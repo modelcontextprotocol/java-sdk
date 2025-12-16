@@ -25,6 +25,12 @@ Add the MCP SDK to your project:
 </dependency>
 ```
 
+## SDK Documentation
+
+- [Java SDK Overview](io/modelcontextprotocol/doc-files/sdk-overview.html) - Features, architecture, and dependencies
+- [MCP Client](io/modelcontextprotocol/doc-files/client.html) - Client implementation and transport options
+- [MCP Server](io/modelcontextprotocol/doc-files/server.html) - Server implementation and transport providers
+
 ## Additional Documentation
 
 - [MCP documentation](https://modelcontextprotocol.io)
