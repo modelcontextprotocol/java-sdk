@@ -7,6 +7,7 @@ package io.modelcontextprotocol.spec;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -64,6 +65,8 @@ public class McpServerSession implements McpLoggableSession {
 	private final AtomicInteger state = new AtomicInteger(STATE_UNINITIALIZED);
 
 	private volatile McpSchema.LoggingLevel minLoggingLevel = McpSchema.LoggingLevel.INFO;
+
+	private volatile AtomicBoolean closed = new AtomicBoolean(false);
 
 	/**
 	 * Creates a new server session with the given parameters and the transport to use.
@@ -346,13 +349,20 @@ public class McpServerSession implements McpLoggableSession {
 	@Override
 	public Mono<Void> closeGracefully() {
 		// TODO: clear pendingResponses and emit errors?
-		return this.transport.closeGracefully();
+		if (this.closed.compareAndSet(false, true)) {
+			return this.transport.closeGracefully();
+		}
+		else {
+			return Mono.empty();
+		}
 	}
 
 	@Override
 	public void close() {
 		// TODO: clear pendingResponses and emit errors?
-		this.transport.close();
+		if (this.closed.compareAndSet(false, true)) {
+			this.transport.close();
+		}
 	}
 
 	/**
