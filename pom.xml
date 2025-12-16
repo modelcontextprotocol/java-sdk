@@ -76,7 +76,7 @@
 		<maven-surefire-plugin.version>3.1.2</maven-surefire-plugin.version>
 		<maven-failsafe-plugin.version>3.5.2</maven-failsafe-plugin.version>
 		<maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
-		<javadoc.jdk.version>23</javadoc.jdk.version>
+		<javadoc.jdk.version>25</javadoc.jdk.version>
 		<maven-source-plugin.version>3.3.0</maven-source-plugin.version>
 		<jacoco-maven-plugin.version>0.8.10</jacoco-maven-plugin.version>
 		<flatten-maven-plugin.version>1.5.0</flatten-maven-plugin.version>
@@ -286,6 +286,7 @@
 							<doclint>none</doclint>
 							<additionalOptions>
 								<additionalOption>-Xdoclint:none</additionalOption>
+								<additionalOption>--syntax-highlight</additionalOption>
 							</additionalOptions>
 							<source>${java.version}</source>
 							<quiet>true</quiet>
@@ -313,7 +314,7 @@
 				</plugins>
 			</build>
 		</profile>
-		<!-- CI profile - requires JDK 23 toolchain for markdown support -->
+		<!-- CI profile - requires JDK 25 toolchain for markdown support -->
 		<profile>
 			<id>javadoc-toolchain</id>
 			<activation>
