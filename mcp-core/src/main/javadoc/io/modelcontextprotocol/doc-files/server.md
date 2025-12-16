@@ -110,7 +110,7 @@ Key features:
 
 ### WebFlux Transport
 
-WebFlux-based SSE and Streamable-HTTP server transport. Requires the `mcp-spring-webflux` dependency (see [Dependencies](sdk-overview.html#dependencies)).
+WebFlux-based SSE and Streamable-HTTP server transport. Requires the `mcp-spring-webflux` dependency (see [Getting Started](getting-started.html)).
 
 #### Streamable-HTTP (WebFlux)
 
