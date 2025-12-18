@@ -283,7 +283,15 @@ public class McpClientSession implements McpSession {
 					deliveredResponseSink.complete();
 				}
 				else {
-					deliveredResponseSink.next(this.transport.unmarshalFrom(jsonRpcResponse.result(), typeRef));
+					var result = jsonRpcResponse.result();
+					var unmarshalled = this.transport.unmarshalFrom(result, typeRef);
+					// https://github.com/modelcontextprotocol/java-sdk/issues/605
+					if (unmarshalled != null)
+						deliveredResponseSink.next(unmarshalled);
+					else
+						// NB: next() cannot be called with null
+						deliveredResponseSink
+							.error(new IllegalStateException("Failed to unmarshal response: " + jsonRpcResponse));
 				}
 			}
 		});
