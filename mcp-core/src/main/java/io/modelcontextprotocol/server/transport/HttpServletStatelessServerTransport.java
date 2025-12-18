@@ -58,7 +58,7 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 
 	private volatile boolean isClosing = false;
 
-	private HttpServletStatelessServerTransport(McpJsonMapper jsonMapper, String mcpEndpoint,
+	protected HttpServletStatelessServerTransport(McpJsonMapper jsonMapper, String mcpEndpoint,
 			McpTransportContextExtractor<HttpServletRequest> contextExtractor) {
 		Assert.notNull(jsonMapper, "jsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "mcpEndpoint must not be null");
