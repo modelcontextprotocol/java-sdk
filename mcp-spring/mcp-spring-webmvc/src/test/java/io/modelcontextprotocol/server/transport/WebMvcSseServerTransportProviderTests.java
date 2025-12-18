@@ -24,6 +24,9 @@ import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
 
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -66,7 +69,7 @@ class WebMvcSseServerTransportProviderTests {
 	}
 
 	@Test
-	void validBaseUrl() {
+	void validBaseUrl() throws InterruptedException {
 		McpServer.async(mcpServerTransportProvider).serverInfo("test-server", "1.0.0").build();
 		try (var client = clientBuilder.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
 			.build()) {
@@ -106,6 +109,7 @@ class WebMvcSseServerTransportProviderTests {
 				.sseEndpoint(WebMvcSseServerTransportProvider.DEFAULT_SSE_ENDPOINT)
 				.jsonMapper(McpJsonMapper.getDefault())
 				.contextExtractor(req -> McpTransportContext.EMPTY)
+				.sessionTimeout(Duration.ofSeconds(1))
 				.build();
 		}
 

@@ -119,6 +119,11 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	private KeepAliveScheduler keepAliveScheduler;
 
 	/**
+	 * sse session timeout
+	 */
+	private final Duration sessionTimeout;
+
+	/**
 	 * Constructs a new WebMvcSseServerTransportProvider instance.
 	 * @param jsonMapper The McpJsonMapper to use for JSON serialization/deserialization
 	 * of messages.
@@ -135,18 +140,20 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 */
 	private WebMvcSseServerTransportProvider(McpJsonMapper jsonMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval,
-			McpTransportContextExtractor<ServerRequest> contextExtractor) {
+			McpTransportContextExtractor<ServerRequest> contextExtractor, Duration sessionTimeout) {
 		Assert.notNull(jsonMapper, "McpJsonMapper must not be null");
 		Assert.notNull(baseUrl, "Message base URL must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
+		Assert.notNull(sessionTimeout, "Session timeout must not be null");
 
 		this.jsonMapper = jsonMapper;
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
 		this.contextExtractor = contextExtractor;
+		this.sessionTimeout = sessionTimeout;
 		this.routerFunction = RouterFunctions.route()
 			.GET(this.sseEndpoint, this::handleSseConnection)
 			.POST(this.messageEndpoint, this::handleMessage)
@@ -279,7 +286,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				this.sessions.remove(sessionId);
 				sseBuilder.error(e);
 			}
-		}, Duration.ZERO);
+		}, this.sessionTimeout);
 	}
 
 	/**
@@ -471,6 +478,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 
 		private Duration keepAliveInterval;
 
+		private Duration sessionTimeout = Duration.ZERO;
+
 		private McpTransportContextExtractor<ServerRequest> contextExtractor = (
 				serverRequest) -> McpTransportContext.EMPTY;
 
@@ -549,6 +558,11 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			return this;
 		}
 
+		public Builder sessionTimeout(Duration sessionTimeout) {
+			this.sessionTimeout = sessionTimeout;
+			return this;
+		}
+
 		/**
 		 * Builds a new instance of WebMvcSseServerTransportProvider with the configured
 		 * settings.
@@ -560,7 +574,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				throw new IllegalStateException("MessageEndpoint must be set");
 			}
 			return new WebMvcSseServerTransportProvider(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
-					baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval, contextExtractor);
+					baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval, contextExtractor, sessionTimeout);
 		}
 
 	}
