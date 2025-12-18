@@ -195,7 +195,7 @@ public final class McpSchema {
 
 	public sealed interface Request extends Meta permits CancelTaskRequest, CompleteRequest, GetPromptRequest,
 			GetTaskRequest, InitializeRequest, PaginatedRequest, ReadResourceRequest, SubscribeRequest,
-			TaskAugmentedRequest, UnsubscribeRequest, getTaskPayloadRequest {
+			TaskAugmentedRequest, UnsubscribeRequest, GetTaskPayloadRequest {
 
 		default Object progressToken() {
 			if (meta() != null && meta().containsKey("progressToken")) {
@@ -1944,7 +1944,7 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record getTaskPayloadRequest( // @formatter:off
+	public record GetTaskPayloadRequest( // @formatter:off
         @JsonProperty("taskId") String taskId,
         @JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 	}
