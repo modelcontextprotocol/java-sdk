@@ -129,7 +129,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * @param contextExtractor The extractor for transport context from the request.
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
-	private HttpServletStreamableServerTransportProvider(McpJsonMapper jsonMapper, String mcpEndpoint,
+	protected HttpServletStreamableServerTransportProvider(McpJsonMapper jsonMapper, String mcpEndpoint,
 			boolean disallowDelete, McpTransportContextExtractor<HttpServletRequest> contextExtractor,
 			Duration keepAliveInterval) {
 		Assert.notNull(jsonMapper, "JsonMapper must not be null");
