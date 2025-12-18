@@ -358,12 +358,15 @@ public class McpSchemaTests {
 	// see https://github.com/modelcontextprotocol/java-sdk/issues/724
 	void testParseInitializeRequest() throws IOException {
 		String serialized = """
-				{"protocolVersion":"2024-11-05","capabilities":{"elicitation":{"form":{}}},"clientInfo":{"name":"test-client","version":"1.0.0"},"_meta":{"metaKey":"metaValue"}}
+				{"protocolVersion":"2024-11-05","capabilities":{"elicitation":{"form":{}},"sampling":{"tools": {}}},"clientInfo":{"name":"test-client","version":"1.0.0"},"_meta":{"metaKey":"metaValue"}}
 				""";
 
 		McpSchema.InitializeRequest deserialized = JSON_MAPPER.readValue(serialized, McpSchema.InitializeRequest.class);
 
-		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder().elicitation().build();
+		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder()
+			.elicitation()
+			.sampling()
+			.build();
 		McpSchema.Implementation clientInfo = new McpSchema.Implementation("test-client", "1.0.0");
 		Map<String, Object> meta = Map.of("metaKey", "metaValue");
 		McpSchema.InitializeRequest expected = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2024_11_05,
