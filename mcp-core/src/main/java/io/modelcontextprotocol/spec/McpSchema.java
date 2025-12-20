@@ -416,9 +416,47 @@ public final class McpSchema {
 		 * maintain control over user interactions and data sharing while enabling servers
 		 * to gather necessary information dynamically. Servers can request structured
 		 * data from users with optional JSON schemas to validate responses.
+		 *
+		 * <p>
+		 * Per the 2025-11-25 spec, clients can declare support for specific elicitation
+		 * modes:
+		 * <ul>
+		 * <li>{@code form} - In-band structured data collection with optional schema
+		 * validation</li>
+		 * <li>{@code url} - Out-of-band interaction via URL navigation</li>
+		 * </ul>
+		 *
+		 * <p>
+		 * For backward compatibility, an empty elicitation object {@code {}} is
+		 * equivalent to declaring support for form mode only.
+		 *
+		 * @param form support for in-band form-based elicitation
+		 * @param url support for out-of-band URL-based elicitation
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
-		public record Elicitation() {
+		public record Elicitation(@JsonProperty("form") Form form, @JsonProperty("url") Url url) {
+
+			/**
+			 * Marker record indicating support for form-based elicitation mode.
+			 */
+			@JsonInclude(JsonInclude.Include.NON_ABSENT)
+			public record Form() {
+			}
+
+			/**
+			 * Marker record indicating support for URL-based elicitation mode.
+			 */
+			@JsonInclude(JsonInclude.Include.NON_ABSENT)
+			public record Url() {
+			}
+
+			/**
+			 * Creates an Elicitation with default settings (backward compatible, produces
+			 * empty JSON object).
+			 */
+			public Elicitation() {
+				this(null, null);
+			}
 		}
 
 		public static Builder builder() {
@@ -450,8 +488,25 @@ public final class McpSchema {
 				return this;
 			}
 
+			/**
+			 * Enables elicitation capability with default settings (backward compatible,
+			 * produces empty JSON object).
+			 * @return this builder
+			 */
 			public Builder elicitation() {
 				this.elicitation = new Elicitation();
+				return this;
+			}
+
+			/**
+			 * Enables elicitation capability with explicit form and/or url mode support.
+			 * @param form whether to support form-based elicitation
+			 * @param url whether to support URL-based elicitation
+			 * @return this builder
+			 */
+			public Builder elicitation(boolean form, boolean url) {
+				this.elicitation = new Elicitation(form ? new Elicitation.Form() : null,
+						url ? new Elicitation.Url() : null);
 				return this;
 			}
 
