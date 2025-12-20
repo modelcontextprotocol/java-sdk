@@ -17,6 +17,7 @@ import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.RequestIdGenerator;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
@@ -192,6 +193,8 @@ public interface McpClient {
 		private JsonSchemaValidator jsonSchemaValidator;
 
 		private boolean enableCallToolSchemaCaching = false; // Default to false
+
+		private RequestIdGenerator requestIdGenerator;
 
 		private SyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
@@ -462,6 +465,31 @@ public interface McpClient {
 		}
 
 		/**
+		 * Sets a custom request ID generator for creating unique request IDs. This is
+		 * useful for MCP servers that require specific ID formats, such as numeric-only
+		 * IDs.
+		 *
+		 * <p>
+		 * Example usage with a numeric ID generator:
+		 *
+		 * <pre>{@code
+		 * AtomicLong counter = new AtomicLong(0);
+		 * McpClient.sync(transport)
+		 *     .requestIdGenerator(() -> String.valueOf(counter.incrementAndGet()))
+		 *     .build();
+		 * }</pre>
+		 * @param requestIdGenerator The generator for creating unique request IDs. If
+		 * null, a default UUID-prefixed generator will be used.
+		 * @return This builder instance for method chaining
+		 * @see RequestIdGenerator#ofIncremental()
+		 * @see RequestIdGenerator#ofDefault()
+		 */
+		public SyncSpec requestIdGenerator(RequestIdGenerator requestIdGenerator) {
+			this.requestIdGenerator = requestIdGenerator;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpSyncClient} with the provided configurations or
 		 * sensible defaults.
 		 * @return a new instance of {@link McpSyncClient}.
@@ -475,8 +503,8 @@ public interface McpClient {
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
 			return new McpSyncClient(new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout,
-					jsonSchemaValidator != null ? jsonSchemaValidator : JsonSchemaValidator.getDefault(),
-					asyncFeatures), this.contextProvider);
+					jsonSchemaValidator != null ? jsonSchemaValidator : JsonSchemaValidator.getDefault(), asyncFeatures,
+					this.requestIdGenerator), this.contextProvider);
 		}
 
 	}
@@ -530,6 +558,8 @@ public interface McpClient {
 		private JsonSchemaValidator jsonSchemaValidator;
 
 		private boolean enableCallToolSchemaCaching = false; // Default to false
+
+		private RequestIdGenerator requestIdGenerator;
 
 		private AsyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
@@ -803,6 +833,31 @@ public interface McpClient {
 		}
 
 		/**
+		 * Sets a custom request ID generator for creating unique request IDs. This is
+		 * useful for MCP servers that require specific ID formats, such as numeric-only
+		 * IDs.
+		 *
+		 * <p>
+		 * Example usage with a numeric ID generator:
+		 *
+		 * <pre>{@code
+		 * AtomicLong counter = new AtomicLong(0);
+		 * McpClient.async(transport)
+		 *     .requestIdGenerator(() -> String.valueOf(counter.incrementAndGet()))
+		 *     .build();
+		 * }</pre>
+		 * @param requestIdGenerator The generator for creating unique request IDs. If
+		 * null, a default UUID-prefixed generator will be used.
+		 * @return This builder instance for method chaining
+		 * @see RequestIdGenerator#ofIncremental()
+		 * @see RequestIdGenerator#ofDefault()
+		 */
+		public AsyncSpec requestIdGenerator(RequestIdGenerator requestIdGenerator) {
+			this.requestIdGenerator = requestIdGenerator;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpAsyncClient} with the provided configurations
 		 * or sensible defaults.
 		 * @return a new instance of {@link McpAsyncClient}.
@@ -815,7 +870,8 @@ public interface McpClient {
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
 							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 							this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
-							this.samplingHandler, this.elicitationHandler, this.enableCallToolSchemaCaching));
+							this.samplingHandler, this.elicitationHandler, this.enableCallToolSchemaCaching),
+					this.requestIdGenerator);
 		}
 
 	}

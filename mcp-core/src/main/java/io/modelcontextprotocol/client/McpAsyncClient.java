@@ -23,6 +23,7 @@ import io.modelcontextprotocol.spec.McpClientSession.NotificationHandler;
 import io.modelcontextprotocol.spec.McpClientSession.RequestHandler;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.RequestIdGenerator;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
@@ -182,6 +183,24 @@ public class McpAsyncClient {
 	 */
 	McpAsyncClient(McpClientTransport transport, Duration requestTimeout, Duration initializationTimeout,
 			JsonSchemaValidator jsonSchemaValidator, McpClientFeatures.Async features) {
+		this(transport, requestTimeout, initializationTimeout, jsonSchemaValidator, features, null);
+	}
+
+	/**
+	 * Create a new McpAsyncClient with the given transport and session request-response
+	 * timeout.
+	 * @param transport the transport to use.
+	 * @param requestTimeout the session request-response timeout.
+	 * @param initializationTimeout the max timeout to await for the client-server
+	 * @param jsonSchemaValidator the JSON schema validator to use for validating tool
+	 * @param features the MCP Client supported features. responses against output
+	 * schemas.
+	 * @param requestIdGenerator the generator for creating unique request IDs. If null, a
+	 * default generator will be used.
+	 */
+	McpAsyncClient(McpClientTransport transport, Duration requestTimeout, Duration initializationTimeout,
+			JsonSchemaValidator jsonSchemaValidator, McpClientFeatures.Async features,
+			RequestIdGenerator requestIdGenerator) {
 
 		Assert.notNull(transport, "Transport must not be null");
 		Assert.notNull(requestTimeout, "Request timeout must not be null");
@@ -315,9 +334,11 @@ public class McpAsyncClient {
 			}).then();
 		};
 
+		RequestIdGenerator effectiveIdGenerator = requestIdGenerator != null ? requestIdGenerator
+				: RequestIdGenerator.ofDefault();
 		this.initializer = new LifecycleInitializer(clientCapabilities, clientInfo, transport.protocolVersions(),
 				initializationTimeout, ctx -> new McpClientSession(requestTimeout, transport, requestHandlers,
-						notificationHandlers, con -> con.contextWrite(ctx)),
+						notificationHandlers, con -> con.contextWrite(ctx), effectiveIdGenerator),
 				postInitializationHook);
 
 		this.transport.setExceptionHandler(this.initializer::handleException);
