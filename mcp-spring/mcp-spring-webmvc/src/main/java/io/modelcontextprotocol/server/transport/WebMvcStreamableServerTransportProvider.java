@@ -295,6 +295,13 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 					sseBuilder.onComplete(() -> {
 						logger.debug("SSE connection completed for session: {}", sessionId);
 						listeningStream.close();
+						// If the sse connection is closed,it means that the client
+						// connection has been disconnected
+						// due to network issues, etc.,
+						// and the session needs to be removed
+						if (sessionId != null) {
+							sessions.remove(sessionId);
+						}
 					});
 				}
 			}, Duration.ZERO);
