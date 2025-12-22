@@ -505,7 +505,7 @@ public final class McpSchema {
 				 * Client supports task-augmented elicitation requests
 				 */
 				@JsonInclude(JsonInclude.Include.NON_ABSENT)
-				public record Elicitation(@JsonProperty("elicitation") Elicitation.Create create) {
+				public record Elicitation(@JsonProperty("create") Elicitation.Create create) {
 					/**
 					 * Client supports task-augmented elicitation/create requests
 					 */
