@@ -4,25 +4,26 @@
 
 package io.modelcontextprotocol.spec;
 
-import java.time.Duration;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
-
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpInitRequestHandler;
 import io.modelcontextprotocol.server.McpNotificationHandler;
 import io.modelcontextprotocol.server.McpRequestHandler;
-import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Sinks;
+
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Represents a Model Context Protocol (MCP) session on the server side. It manages
@@ -36,7 +37,9 @@ public class McpServerSession implements McpLoggableSession {
 
 	private final String id;
 
-	/** Duration to wait for request responses before timing out */
+	/**
+	 * Duration to wait for request responses before timing out
+	 */
 	private final Duration requestTimeout;
 
 	private final AtomicLong requestCounter = new AtomicLong(0);
@@ -64,6 +67,8 @@ public class McpServerSession implements McpLoggableSession {
 	private final AtomicInteger state = new AtomicInteger(STATE_UNINITIALIZED);
 
 	private volatile McpSchema.LoggingLevel minLoggingLevel = McpSchema.LoggingLevel.INFO;
+
+	private volatile AtomicBoolean closed = new AtomicBoolean(false);
 
 	/**
 	 * Creates a new server session with the given parameters and the transport to use.
@@ -345,14 +350,23 @@ public class McpServerSession implements McpLoggableSession {
 
 	@Override
 	public Mono<Void> closeGracefully() {
-		// TODO: clear pendingResponses and emit errors?
-		return this.transport.closeGracefully();
+		if (this.closed.compareAndSet(false, true)) {
+			this.pendingResponses.forEach((id, response) -> response.error(new RuntimeException("Session closed")));
+			this.pendingResponses.clear();
+			return this.transport.closeGracefully();
+		}
+		else {
+			return Mono.empty();
+		}
 	}
 
 	@Override
 	public void close() {
-		// TODO: clear pendingResponses and emit errors?
-		this.transport.close();
+		if (this.closed.compareAndSet(false, true)) {
+			this.pendingResponses.forEach((id, response) -> response.error(new RuntimeException("Session closed")));
+			this.pendingResponses.clear();
+			this.transport.close();
+		}
 	}
 
 	/**
