@@ -535,11 +535,13 @@ public abstract class AbstractMcpSyncClientTests {
 		AtomicBoolean toolsNotificationReceived = new AtomicBoolean(false);
 		AtomicBoolean resourcesNotificationReceived = new AtomicBoolean(false);
 		AtomicBoolean promptsNotificationReceived = new AtomicBoolean(false);
+		AtomicBoolean resourcesUpdatedNotificationReceived = new AtomicBoolean(false);
 
 		withClient(createMcpTransport(),
 				builder -> builder.toolsChangeConsumer(tools -> toolsNotificationReceived.set(true))
 					.resourcesChangeConsumer(resources -> resourcesNotificationReceived.set(true))
-					.promptsChangeConsumer(prompts -> promptsNotificationReceived.set(true)),
+					.promptsChangeConsumer(prompts -> promptsNotificationReceived.set(true))
+					.resourcesUpdateConsumer(resources -> resourcesUpdatedNotificationReceived.set(true)),
 				client -> {
 
 					assertThatCode(() -> {
