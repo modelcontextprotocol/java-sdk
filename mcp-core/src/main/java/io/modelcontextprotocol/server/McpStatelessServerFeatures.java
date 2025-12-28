@@ -4,6 +4,12 @@
 
 package io.modelcontextprotocol.server;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.BiFunction;
+
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
@@ -11,12 +17,6 @@ import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.BiFunction;
 
 /**
  * MCP stateless server features specification that a particular server can choose to
@@ -34,13 +34,14 @@ public class McpStatelessServerFeatures {
 	 * @param serverCapabilities The server capabilities
 	 * @param tools The list of tool specifications
 	 * @param resources The map of resource specifications
-	 * @param resourceTemplates The list of resource templates
+	 * @param resourceTemplates The map of resource templates
 	 * @param prompts The map of prompt specifications
 	 * @param instructions The server instructions text
 	 */
 	record Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 			List<McpStatelessServerFeatures.AsyncToolSpecification> tools,
-			Map<String, AsyncResourceSpecification> resources, List<McpSchema.ResourceTemplate> resourceTemplates,
+			Map<String, AsyncResourceSpecification> resources,
+			Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions,
 			String instructions) {
@@ -51,13 +52,14 @@ public class McpStatelessServerFeatures {
 		 * @param serverCapabilities The server capabilities
 		 * @param tools The list of tool specifications
 		 * @param resources The map of resource specifications
-		 * @param resourceTemplates The list of resource templates
+		 * @param resourceTemplates The map of resource templates
 		 * @param prompts The map of prompt specifications
 		 * @param instructions The server instructions text
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpStatelessServerFeatures.AsyncToolSpecification> tools,
-				Map<String, AsyncResourceSpecification> resources, List<McpSchema.ResourceTemplate> resourceTemplates,
+				Map<String, AsyncResourceSpecification> resources,
+				Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
 				Map<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions,
 				String instructions) {
@@ -76,7 +78,7 @@ public class McpStatelessServerFeatures {
 
 			this.tools = (tools != null) ? tools : List.of();
 			this.resources = (resources != null) ? resources : Map.of();
-			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : List.of();
+			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : Map.of();
 			this.prompts = (prompts != null) ? prompts : Map.of();
 			this.completions = (completions != null) ? completions : Map.of();
 			this.instructions = instructions;
@@ -103,6 +105,11 @@ public class McpStatelessServerFeatures {
 				resources.put(key, AsyncResourceSpecification.fromSync(resource, immediateExecution));
 			});
 
+			Map<String, AsyncResourceTemplateSpecification> resourceTemplates = new HashMap<>();
+			syncSpec.resourceTemplates().forEach((key, resource) -> {
+				resourceTemplates.put(key, AsyncResourceTemplateSpecification.fromSync(resource, immediateExecution));
+			});
+
 			Map<String, AsyncPromptSpecification> prompts = new HashMap<>();
 			syncSpec.prompts().forEach((key, prompt) -> {
 				prompts.put(key, AsyncPromptSpecification.fromSync(prompt, immediateExecution));
@@ -113,8 +120,8 @@ public class McpStatelessServerFeatures {
 				completions.put(key, AsyncCompletionSpecification.fromSync(completion, immediateExecution));
 			});
 
-			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources,
-					syncSpec.resourceTemplates(), prompts, completions, syncSpec.instructions());
+			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources, resourceTemplates,
+					prompts, completions, syncSpec.instructions());
 		}
 	}
 
@@ -125,14 +132,14 @@ public class McpStatelessServerFeatures {
 	 * @param serverCapabilities The server capabilities
 	 * @param tools The list of tool specifications
 	 * @param resources The map of resource specifications
-	 * @param resourceTemplates The list of resource templates
+	 * @param resourceTemplates The map of resource templates
 	 * @param prompts The map of prompt specifications
 	 * @param instructions The server instructions text
 	 */
 	record Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 			List<McpStatelessServerFeatures.SyncToolSpecification> tools,
 			Map<String, McpStatelessServerFeatures.SyncResourceSpecification> resources,
-			List<McpSchema.ResourceTemplate> resourceTemplates,
+			Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpStatelessServerFeatures.SyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpStatelessServerFeatures.SyncCompletionSpecification> completions,
 			String instructions) {
@@ -143,14 +150,14 @@ public class McpStatelessServerFeatures {
 		 * @param serverCapabilities The server capabilities
 		 * @param tools The list of tool specifications
 		 * @param resources The map of resource specifications
-		 * @param resourceTemplates The list of resource templates
+		 * @param resourceTemplates The map of resource templates
 		 * @param prompts The map of prompt specifications
 		 * @param instructions The server instructions text
 		 */
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpStatelessServerFeatures.SyncToolSpecification> tools,
 				Map<String, McpStatelessServerFeatures.SyncResourceSpecification> resources,
-				List<McpSchema.ResourceTemplate> resourceTemplates,
+				Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
 				Map<String, McpStatelessServerFeatures.SyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpStatelessServerFeatures.SyncCompletionSpecification> completions,
 				String instructions) {
@@ -172,7 +179,7 @@ public class McpStatelessServerFeatures {
 
 			this.tools = (tools != null) ? tools : new ArrayList<>();
 			this.resources = (resources != null) ? resources : new HashMap<>();
-			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : new ArrayList<>();
+			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : Map.of();
 			this.prompts = (prompts != null) ? prompts : new HashMap<>();
 			this.completions = (completions != null) ? completions : new HashMap<>();
 			this.instructions = instructions;
@@ -290,6 +297,46 @@ public class McpStatelessServerFeatures {
 				return null;
 			}
 			return new AsyncResourceSpecification(resource.resource(), (ctx, req) -> {
+				var resourceResult = Mono.fromCallable(() -> resource.readHandler().apply(ctx, req));
+				return immediateExecution ? resourceResult : resourceResult.subscribeOn(Schedulers.boundedElastic());
+			});
+		}
+	}
+
+	/**
+	 * Specification of a resource template with its synchronous handler function.
+	 * Resource templates allow servers to expose parameterized resources using URI
+	 * templates: <a href=https://datatracker.ietf.org/doc/html/rfc6570> URI
+	 * templates.</a>. Arguments may be auto-completed through <a href=
+	 * "https://modelcontextprotocol.io/specification/2025-06-18/server/utilities/completion">the
+	 * completion API</a>.
+	 *
+	 * Templates support:
+	 * <ul>
+	 * <li>Parameterized resource definitions
+	 * <li>Dynamic content generation
+	 * <li>Consistent resource formatting
+	 * <li>Contextual data injection
+	 * </ul>
+	 *
+	 * @param resourceTemplate The resource template definition including name,
+	 * description, and parameter schema
+	 * @param readHandler The function that handles resource read requests. The function's
+	 * first argument is an {@link McpTransportContext} upon which the server can interact
+	 * with the connected client. The second arguments is a
+	 * {@link McpSchema.ReadResourceRequest}. {@link McpSchema.ResourceTemplate}
+	 * {@link McpSchema.ReadResourceResult}
+	 */
+	public record AsyncResourceTemplateSpecification(McpSchema.ResourceTemplate resourceTemplate,
+			BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
+
+		static AsyncResourceTemplateSpecification fromSync(SyncResourceTemplateSpecification resource,
+				boolean immediateExecution) {
+			// FIXME: This is temporary, proper validation should be implemented
+			if (resource == null) {
+				return null;
+			}
+			return new AsyncResourceTemplateSpecification(resource.resourceTemplate(), (ctx, req) -> {
 				var resourceResult = Mono.fromCallable(() -> resource.readHandler().apply(ctx, req));
 				return immediateExecution ? resourceResult : resourceResult.subscribeOn(Schedulers.boundedElastic());
 			});
@@ -443,6 +490,34 @@ public class McpStatelessServerFeatures {
 	 * argument is a {@link McpSchema.ReadResourceRequest}.
 	 */
 	public record SyncResourceSpecification(McpSchema.Resource resource,
+			BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
+	}
+
+	/**
+	 * Specification of a resource template with its synchronous handler function.
+	 * Resource templates allow servers to expose parameterized resources using URI
+	 * templates: <a href=https://datatracker.ietf.org/doc/html/rfc6570> URI
+	 * templates.</a>. Arguments may be auto-completed through <a href=
+	 * "https://modelcontextprotocol.io/specification/2025-06-18/server/utilities/completion">the
+	 * completion API</a>.
+	 *
+	 * Templates support:
+	 * <ul>
+	 * <li>Parameterized resource definitions
+	 * <li>Dynamic content generation
+	 * <li>Consistent resource formatting
+	 * <li>Contextual data injection
+	 * </ul>
+	 *
+	 * @param resourceTemplate The resource template definition including name,
+	 * description, and parameter schema
+	 * @param readHandler The function that handles resource read requests. The function's
+	 * first argument is an {@link McpTransportContext} upon which the server can interact
+	 * with the connected client. The second arguments is a
+	 * {@link McpSchema.ReadResourceRequest}. {@link McpSchema.ResourceTemplate}
+	 * {@link McpSchema.ReadResourceResult}
+	 */
+	public record SyncResourceTemplateSpecification(McpSchema.ResourceTemplate resourceTemplate,
 			BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
 	}
 

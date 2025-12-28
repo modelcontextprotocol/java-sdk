@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 import java.util.Map;
 
-import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
+import io.modelcontextprotocol.util.DefaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManager;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,7 +29,7 @@ public class McpUriTemplateManagerTests {
 
 	@BeforeEach
 	void setUp() {
-		this.uriTemplateFactory = new DeafaultMcpUriTemplateManagerFactory();
+		this.uriTemplateFactory = new DefaultMcpUriTemplateManagerFactory();
 	}
 
 	@Test
@@ -92,6 +92,15 @@ public class McpUriTemplateManagerTests {
 
 		assertTrue(uriTemplateManager.matches("/api/users/123/posts/456"));
 		assertFalse(uriTemplateManager.matches("/api/users/123/comments/456"));
+	}
+
+	@Test
+	void shouldMatchUriWithQueryParameters() {
+		String templateWithQuery = "file://name/search?={search}";
+		var uriTemplateManager = this.uriTemplateFactory.create(templateWithQuery);
+
+		assertTrue(uriTemplateManager.matches("file://name/search?=abcd"),
+				"Should correctly match a URI containing query parameters.");
 	}
 
 }

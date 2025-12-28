@@ -11,7 +11,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
@@ -25,7 +24,7 @@ import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
-import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
+import io.modelcontextprotocol.util.DefaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
 import reactor.core.publisher.Mono;
 
@@ -68,7 +67,10 @@ import reactor.core.publisher.Mono;
  * McpServer.sync(transportProvider)
  *     .serverInfo("my-server", "1.0.0")
  *     .tool(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
- *           (exchange, args) -> new CallToolResult("Result: " + calculate(args)))
+ *           (exchange, args) -> CallToolResult.builder()
+ *                   .content(List.of(new McpSchema.TextContent("Result: " + calculate(args))))
+ *                   .isError(false)
+ *                   .build())
  *     .build();
  * }</pre>
  *
@@ -77,7 +79,10 @@ import reactor.core.publisher.Mono;
  *     .serverInfo("my-server", "1.0.0")
  *     .tool(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
  *           (exchange, args) -> Mono.fromSupplier(() -> calculate(args))
- *               .map(result -> new CallToolResult("Result: " + result)))
+ *               .map(result -> CallToolResult.builder()
+ *                   .content(List.of(new McpSchema.TextContent("Result: " + result)))
+ *                   .isError(false)
+ *                   .build()))
  *     .build();
  * }</pre>
  *
@@ -91,12 +96,18 @@ import reactor.core.publisher.Mono;
  *         McpServerFeatures.AsyncToolSpecification.builder()
  * 			.tool(calculatorTool)
  *   	    .callTool((exchange, args) -> Mono.fromSupplier(() -> calculate(args.arguments()))
- *                 .map(result -> new CallToolResult("Result: " + result))))
+ *                 .map(result -> CallToolResult.builder()
+ *                   .content(List.of(new McpSchema.TextContent("Result: " + result)))
+ *                   .isError(false)
+ *                   .build()))
  *.         .build(),
  *         McpServerFeatures.AsyncToolSpecification.builder()
  * 	        .tool((weatherTool)
  *          .callTool((exchange, args) -> Mono.fromSupplier(() -> getWeather(args.arguments()))
- *                 .map(result -> new CallToolResult("Weather: " + result))))
+ *                 .map(result -> CallToolResult.builder()
+ *                   .content(List.of(new McpSchema.TextContent("Weather: " + result)))
+ *                   .isError(false)
+ *                   .build()))
  *          .build()
  *     )
  *     // Register resources
@@ -134,7 +145,7 @@ import reactor.core.publisher.Mono;
  */
 public interface McpServer {
 
-	McpSchema.Implementation DEFAULT_SERVER_INFO = new McpSchema.Implementation("mcp-server", "1.0.0");
+	McpSchema.Implementation DEFAULT_SERVER_INFO = new McpSchema.Implementation("Java SDK MCP Server", "0.15.0");
 
 	/**
 	 * Starts building a synchronous MCP server that provides blocking operations.
@@ -268,7 +279,7 @@ public interface McpServer {
 	 */
 	abstract class AsyncSpecification<S extends AsyncSpecification<S>> {
 
-		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
+		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
 
 		McpJsonMapper jsonMapper;
 
@@ -298,7 +309,14 @@ public interface McpServer {
 		 */
 		final Map<String, McpServerFeatures.AsyncResourceSpecification> resources = new HashMap<>();
 
-		final List<ResourceTemplate> resourceTemplates = new ArrayList<>();
+		/**
+		 * The Model Context Protocol (MCP) provides a standardized way for servers to
+		 * expose resource templates to clients. Resource templates allow servers to
+		 * define parameterized URIs that clients can use to access dynamic resources.
+		 * Each resource template includes variables that clients can fill in to form
+		 * concrete resource URIs.
+		 */
+		final Map<String, McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates = new HashMap<>();
 
 		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
@@ -419,7 +437,10 @@ public interface McpServer {
 		 * .tool(
 		 *     Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
 		 *     (exchange, args) -> Mono.fromSupplier(() -> calculate(args))
-		 *         .map(result -> new CallToolResult("Result: " + result))
+		 *         .map(result -> CallToolResult.builder()
+		 *                   .content(List.of(new McpSchema.TextContent("Result: " + result)))
+		 *                   .isError(false)
+		 *                   .build()))
 		 * )
 		 * }</pre>
 		 * @param tool The tool definition including name, description, and schema. Must
@@ -585,40 +606,38 @@ public interface McpServer {
 		}
 
 		/**
-		 * Sets the resource templates that define patterns for dynamic resource access.
-		 * Templates use URI patterns with placeholders that can be filled at runtime.
-		 *
-		 * <p>
-		 * Example usage: <pre>{@code
-		 * .resourceTemplates(
-		 *     new ResourceTemplate("file://{path}", "Access files by path"),
-		 *     new ResourceTemplate("db://{table}/{id}", "Access database records")
-		 * )
-		 * }</pre>
-		 * @param resourceTemplates List of resource templates. If null, clears existing
-		 * templates.
+		 * Registers multiple resource templates with their specifications using a List.
+		 * This method is useful when resource templates need to be added in bulk from a
+		 * collection.
+		 * @param resourceTemplates Map of template URI to specification. Must not be
+		 * null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
-		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
-		public AsyncSpecification<S> resourceTemplates(List<ResourceTemplate> resourceTemplates) {
+		public AsyncSpecification<S> resourceTemplates(
+				List<McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			this.resourceTemplates.addAll(resourceTemplates);
+			for (var resourceTemplate : resourceTemplates) {
+				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
+			}
 			return this;
 		}
 
 		/**
-		 * Sets the resource templates using varargs for convenience. This is an
-		 * alternative to {@link #resourceTemplates(List)}.
-		 * @param resourceTemplates The resource templates to set.
+		 * Registers multiple resource templates with their specifications using a List.
+		 * This method is useful when resource templates need to be added in bulk from a
+		 * collection.
+		 * @param resourceTemplates List of template URI to specification. Must not be
+		 * null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(List)
 		 */
-		public AsyncSpecification<S> resourceTemplates(ResourceTemplate... resourceTemplates) {
+		public AsyncSpecification<S> resourceTemplates(
+				McpServerFeatures.AsyncResourceTemplateSpecification... resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			for (ResourceTemplate resourceTemplate : resourceTemplates) {
-				this.resourceTemplates.add(resourceTemplate);
+			for (McpServerFeatures.AsyncResourceTemplateSpecification resource : resourceTemplates) {
+				this.resourceTemplates.put(resource.resourceTemplate().uriTemplate(), resource);
 			}
 			return this;
 		}
@@ -859,7 +878,7 @@ public interface McpServer {
 	 */
 	abstract class SyncSpecification<S extends SyncSpecification<S>> {
 
-		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
+		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
 
 		McpJsonMapper jsonMapper;
 
@@ -887,7 +906,14 @@ public interface McpServer {
 		 */
 		final Map<String, McpServerFeatures.SyncResourceSpecification> resources = new HashMap<>();
 
-		final List<ResourceTemplate> resourceTemplates = new ArrayList<>();
+		/**
+		 * The Model Context Protocol (MCP) provides a standardized way for servers to
+		 * expose resource templates to clients. Resource templates allow servers to
+		 * define parameterized URIs that clients can use to access dynamic resources.
+		 * Each resource template includes variables that clients can fill in to form
+		 * concrete resource URIs.
+		 */
+		final Map<String, McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplates = new HashMap<>();
 
 		JsonSchemaValidator jsonSchemaValidator;
 
@@ -1011,7 +1037,10 @@ public interface McpServer {
 		 * Example usage: <pre>{@code
 		 * .tool(
 		 *     Tool.builder().name("calculator").title("Performs calculations".inputSchema(schema).build(),
-		 *     (exchange, args) -> new CallToolResult("Result: " + calculate(args))
+		 *     (exchange, args) -> CallToolResult.builder()
+		 *                   .content(List.of(new McpSchema.TextContent("Result: " + calculate(args))))
+		 *                   .isError(false)
+		 *                   .build())
 		 * )
 		 * }</pre>
 		 * @param tool The tool definition including name, description, and schema. Must
@@ -1179,23 +1208,17 @@ public interface McpServer {
 		/**
 		 * Sets the resource templates that define patterns for dynamic resource access.
 		 * Templates use URI patterns with placeholders that can be filled at runtime.
-		 *
-		 * <p>
-		 * Example usage: <pre>{@code
-		 * .resourceTemplates(
-		 *     new ResourceTemplate("file://{path}", "Access files by path"),
-		 *     new ResourceTemplate("db://{table}/{id}", "Access database records")
-		 * )
-		 * }</pre>
-		 * @param resourceTemplates List of resource templates. If null, clears existing
-		 * templates.
+		 * @param resourceTemplates List of resource template specifications. Must not be
+		 * null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
-		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
-		public SyncSpecification<S> resourceTemplates(List<ResourceTemplate> resourceTemplates) {
+		public SyncSpecification<S> resourceTemplates(
+				List<McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			this.resourceTemplates.addAll(resourceTemplates);
+			for (McpServerFeatures.SyncResourceTemplateSpecification resource : resourceTemplates) {
+				this.resourceTemplates.put(resource.resourceTemplate().uriTemplate(), resource);
+			}
 			return this;
 		}
 
@@ -1207,10 +1230,11 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if resourceTemplates is null
 		 * @see #resourceTemplates(List)
 		 */
-		public SyncSpecification<S> resourceTemplates(ResourceTemplate... resourceTemplates) {
+		public SyncSpecification<S> resourceTemplates(
+				McpServerFeatures.SyncResourceTemplateSpecification... resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			for (ResourceTemplate resourceTemplate : resourceTemplates) {
-				this.resourceTemplates.add(resourceTemplate);
+			for (McpServerFeatures.SyncResourceTemplateSpecification resourceTemplate : resourceTemplates) {
+				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
 			}
 			return this;
 		}
@@ -1398,7 +1422,7 @@ public interface McpServer {
 
 		private final McpStatelessServerTransport transport;
 
-		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
+		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
 
 		McpJsonMapper jsonMapper;
 
@@ -1428,7 +1452,14 @@ public interface McpServer {
 		 */
 		final Map<String, McpStatelessServerFeatures.AsyncResourceSpecification> resources = new HashMap<>();
 
-		final List<ResourceTemplate> resourceTemplates = new ArrayList<>();
+		/**
+		 * The Model Context Protocol (MCP) provides a standardized way for servers to
+		 * expose resource templates to clients. Resource templates allow servers to
+		 * define parameterized URIs that clients can use to access dynamic resources.
+		 * Each resource template includes variables that clients can fill in to form
+		 * concrete resource URIs.
+		 */
+		final Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates = new HashMap<>();
 
 		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
@@ -1684,23 +1715,17 @@ public interface McpServer {
 		/**
 		 * Sets the resource templates that define patterns for dynamic resource access.
 		 * Templates use URI patterns with placeholders that can be filled at runtime.
-		 *
-		 * <p>
-		 * Example usage: <pre>{@code
-		 * .resourceTemplates(
-		 *     new ResourceTemplate("file://{path}", "Access files by path"),
-		 *     new ResourceTemplate("db://{table}/{id}", "Access database records")
-		 * )
-		 * }</pre>
 		 * @param resourceTemplates List of resource templates. If null, clears existing
 		 * templates.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
-		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
-		public StatelessAsyncSpecification resourceTemplates(List<ResourceTemplate> resourceTemplates) {
+		public StatelessAsyncSpecification resourceTemplates(
+				List<McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			this.resourceTemplates.addAll(resourceTemplates);
+			for (var resourceTemplate : resourceTemplates) {
+				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
+			}
 			return this;
 		}
 
@@ -1712,10 +1737,11 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(List)
 		 */
-		public StatelessAsyncSpecification resourceTemplates(ResourceTemplate... resourceTemplates) {
+		public StatelessAsyncSpecification resourceTemplates(
+				McpStatelessServerFeatures.AsyncResourceTemplateSpecification... resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			for (ResourceTemplate resourceTemplate : resourceTemplates) {
-				this.resourceTemplates.add(resourceTemplate);
+			for (McpStatelessServerFeatures.AsyncResourceTemplateSpecification resourceTemplate : resourceTemplates) {
+				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
 			}
 			return this;
 		}
@@ -1858,7 +1884,7 @@ public interface McpServer {
 
 		boolean immediateExecution = false;
 
-		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
+		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
 
 		McpJsonMapper jsonMapper;
 
@@ -1888,7 +1914,14 @@ public interface McpServer {
 		 */
 		final Map<String, McpStatelessServerFeatures.SyncResourceSpecification> resources = new HashMap<>();
 
-		final List<ResourceTemplate> resourceTemplates = new ArrayList<>();
+		/**
+		 * The Model Context Protocol (MCP) provides a standardized way for servers to
+		 * expose resource templates to clients. Resource templates allow servers to
+		 * define parameterized URIs that clients can use to access dynamic resources.
+		 * Each resource template includes variables that clients can fill in to form
+		 * concrete resource URIs.
+		 */
+		final Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplates = new HashMap<>();
 
 		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
@@ -2144,23 +2177,17 @@ public interface McpServer {
 		/**
 		 * Sets the resource templates that define patterns for dynamic resource access.
 		 * Templates use URI patterns with placeholders that can be filled at runtime.
-		 *
-		 * <p>
-		 * Example usage: <pre>{@code
-		 * .resourceTemplates(
-		 *     new ResourceTemplate("file://{path}", "Access files by path"),
-		 *     new ResourceTemplate("db://{table}/{id}", "Access database records")
-		 * )
-		 * }</pre>
-		 * @param resourceTemplates List of resource templates. If null, clears existing
-		 * templates.
+		 * @param resourceTemplatesSpec List of resource templates. If null, clears
+		 * existing templates.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
-		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
-		public StatelessSyncSpecification resourceTemplates(List<ResourceTemplate> resourceTemplates) {
-			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			this.resourceTemplates.addAll(resourceTemplates);
+		public StatelessSyncSpecification resourceTemplates(
+				List<McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplatesSpec) {
+			Assert.notNull(resourceTemplatesSpec, "Resource templates must not be null");
+			for (var resourceTemplate : resourceTemplatesSpec) {
+				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
+			}
 			return this;
 		}
 
@@ -2172,10 +2199,11 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(List)
 		 */
-		public StatelessSyncSpecification resourceTemplates(ResourceTemplate... resourceTemplates) {
+		public StatelessSyncSpecification resourceTemplates(
+				McpStatelessServerFeatures.SyncResourceTemplateSpecification... resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			for (ResourceTemplate resourceTemplate : resourceTemplates) {
-				this.resourceTemplates.add(resourceTemplate);
+			for (McpStatelessServerFeatures.SyncResourceTemplateSpecification resourceTemplate : resourceTemplates) {
+				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
 			}
 			return this;
 		}

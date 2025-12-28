@@ -5,6 +5,8 @@
 package io.modelcontextprotocol.client.transport;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -22,9 +24,10 @@ import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
-import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.client.McpAsyncClient;
 import io.modelcontextprotocol.json.McpJsonMapper;
-
+import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.spec.ClosedMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
 import io.modelcontextprotocol.spec.HttpHeaders;
@@ -75,8 +78,6 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebClientStreamableHttpTransport.class);
 
-	private static final String MCP_PROTOCOL_VERSION = ProtocolVersions.MCP_2025_06_18;
-
 	private static final String DEFAULT_ENDPOINT = "/mcp";
 
 	/**
@@ -98,26 +99,35 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	private final boolean resumableStreams;
 
-	private final AtomicReference<DefaultMcpTransportSession> activeSession = new AtomicReference<>();
+	private final AtomicReference<McpTransportSession<Disposable>> activeSession = new AtomicReference<>();
 
 	private final AtomicReference<Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>>> handler = new AtomicReference<>();
 
 	private final AtomicReference<Consumer<Throwable>> exceptionHandler = new AtomicReference<>();
 
+	private final List<String> supportedProtocolVersions;
+
+	private final String latestSupportedProtocolVersion;
+
 	private WebClientStreamableHttpTransport(McpJsonMapper jsonMapper, WebClient.Builder webClientBuilder,
-			String endpoint, boolean resumableStreams, boolean openConnectionOnStartup) {
+			String endpoint, boolean resumableStreams, boolean openConnectionOnStartup,
+			List<String> supportedProtocolVersions) {
 		this.jsonMapper = jsonMapper;
 		this.webClient = webClientBuilder.build();
 		this.endpoint = endpoint;
 		this.resumableStreams = resumableStreams;
 		this.openConnectionOnStartup = openConnectionOnStartup;
 		this.activeSession.set(createTransportSession());
+		this.supportedProtocolVersions = List.copyOf(supportedProtocolVersions);
+		this.latestSupportedProtocolVersion = this.supportedProtocolVersions.stream()
+			.sorted(Comparator.reverseOrder())
+			.findFirst()
+			.get();
 	}
 
 	@Override
 	public List<String> protocolVersions() {
-		return List.of(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26,
-				ProtocolVersions.MCP_2025_06_18);
+		return supportedProtocolVersions;
 	}
 
 	/**
@@ -143,12 +153,12 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		});
 	}
 
-	private DefaultMcpTransportSession createTransportSession() {
+	private McpTransportSession<Disposable> createTransportSession() {
 		Function<String, Publisher<Void>> onClose = sessionId -> sessionId == null ? Mono.empty()
 				: webClient.delete()
 					.uri(this.endpoint)
 					.header(HttpHeaders.MCP_SESSION_ID, sessionId)
-					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+					.header(HttpHeaders.PROTOCOL_VERSION, this.latestSupportedProtocolVersion)
 					.retrieve()
 					.toBodilessEntity()
 					.onErrorComplete(e -> {
@@ -157,6 +167,14 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 					})
 					.then();
 		return new DefaultMcpTransportSession(onClose);
+	}
+
+	private McpTransportSession<Disposable> createClosedSession(McpTransportSession<Disposable> existingSession) {
+		var existingSessionId = Optional.ofNullable(existingSession)
+			.filter(session -> !(session instanceof ClosedMcpTransportSession<Disposable>))
+			.flatMap(McpTransportSession::sessionId)
+			.orElse(null);
+		return new ClosedMcpTransportSession<>(existingSessionId);
 	}
 
 	@Override
@@ -182,9 +200,9 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 	public Mono<Void> closeGracefully() {
 		return Mono.defer(() -> {
 			logger.debug("Graceful close triggered");
-			DefaultMcpTransportSession currentSession = this.activeSession.getAndSet(createTransportSession());
+			McpTransportSession<Disposable> currentSession = this.activeSession.getAndUpdate(this::createClosedSession);
 			if (currentSession != null) {
-				return currentSession.closeGracefully();
+				return Mono.from(currentSession.closeGracefully());
 			}
 			return Mono.empty();
 		});
@@ -208,7 +226,9 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			Disposable connection = webClient.get()
 				.uri(this.endpoint)
 				.accept(MediaType.TEXT_EVENT_STREAM)
-				.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+				.header(HttpHeaders.PROTOCOL_VERSION,
+						ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
+								this.latestSupportedProtocolVersion))
 				.headers(httpHeaders -> {
 					transportSession.sessionId().ifPresent(id -> httpHeaders.add(HttpHeaders.MCP_SESSION_ID, id));
 					if (stream != null) {
@@ -271,10 +291,12 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
 			final McpTransportSession<Disposable> transportSession = this.activeSession.get();
 
-			Disposable connection = webClient.post()
+			Disposable connection = Flux.deferContextual(ctx -> webClient.post()
 				.uri(this.endpoint)
 				.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_EVENT_STREAM)
-				.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+				.header(HttpHeaders.PROTOCOL_VERSION,
+						ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
+								this.latestSupportedProtocolVersion))
 				.headers(httpHeaders -> {
 					transportSession.sessionId().ifPresent(id -> httpHeaders.add(HttpHeaders.MCP_SESSION_ID, id));
 				})
@@ -293,9 +315,10 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 					// 200 OK for notifications
 					if (response.statusCode().is2xxSuccessful()) {
 						Optional<MediaType> contentType = response.headers().contentType();
+						long contentLength = response.headers().contentLength().orElse(-1);
 						// Existing SDKs consume notifications with no response body nor
 						// content type
-						if (contentType.isEmpty()) {
+						if (contentType.isEmpty() || contentLength == 0) {
 							logger.trace("Message was successfully sent via POST for session {}",
 									sessionRepresentation);
 							// signal the caller that the message was successfully
@@ -332,7 +355,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 						}
 						return this.extractError(response, sessionRepresentation);
 					}
-				})
+				}))
 				.flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage)))
 				.onErrorComplete(t -> {
 					// handle the error first
@@ -422,8 +445,9 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			ClientResponse response) {
 		return response.bodyToMono(String.class).<Iterable<McpSchema.JSONRPCMessage>>handle((responseMessage, s) -> {
 			try {
-				if (sentMessage instanceof McpSchema.JSONRPCNotification && Utils.hasText(responseMessage)) {
-					logger.warn("Notification: {} received non-compliant response: {}", sentMessage, responseMessage);
+				if (sentMessage instanceof McpSchema.JSONRPCNotification) {
+					logger.warn("Notification: {} received non-compliant response: {}", sentMessage,
+							Utils.hasText(responseMessage) ? responseMessage : "[empty]");
 					s.complete();
 				}
 				else {
@@ -483,6 +507,9 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		private boolean resumableStreams = true;
 
 		private boolean openConnectionOnStartup = false;
+
+		private List<String> supportedProtocolVersions = List.of(ProtocolVersions.MCP_2024_11_05,
+				ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18);
 
 		private Builder(WebClient.Builder webClientBuilder) {
 			Assert.notNull(webClientBuilder, "WebClient.Builder must not be null");
@@ -550,13 +577,37 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		}
 
 		/**
+		 * Sets the list of supported protocol versions used in version negotiation. By
+		 * default, the client will send the latest of those versions in the
+		 * {@code MCP-Protocol-Version} header.
+		 * <p>
+		 * Setting this value only updates the values used in version negotiation, and
+		 * does NOT impact the actual capabilities of the transport. It should only be
+		 * used for compatibility with servers having strict requirements around the
+		 * {@code MCP-Protocol-Version} header.
+		 * @param supportedProtocolVersions protocol versions supported by this transport
+		 * @return this builder
+		 * @see <a href=
+		 * "https://modelcontextprotocol.io/specification/2024-11-05/basic/lifecycle#version-negotiation">version
+		 * negotiation specification</a>
+		 * @see <a href=
+		 * "https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#protocol-version-header">Protocol
+		 * Version Header</a>
+		 */
+		public Builder supportedProtocolVersions(List<String> supportedProtocolVersions) {
+			Assert.notEmpty(supportedProtocolVersions, "supportedProtocolVersions must not be empty");
+			this.supportedProtocolVersions = Collections.unmodifiableList(supportedProtocolVersions);
+			return this;
+		}
+
+		/**
 		 * Construct a fresh instance of {@link WebClientStreamableHttpTransport} using
 		 * the current builder configuration.
 		 * @return a new instance of {@link WebClientStreamableHttpTransport}
 		 */
 		public WebClientStreamableHttpTransport build() {
 			return new WebClientStreamableHttpTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
-					webClientBuilder, endpoint, resumableStreams, openConnectionOnStartup);
+					webClientBuilder, endpoint, resumableStreams, openConnectionOnStartup, supportedProtocolVersions);
 		}
 
 	}

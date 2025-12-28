@@ -33,9 +33,7 @@ public class DefaultMcpUriTemplateManager implements McpUriTemplateManager {
 	 * @param uriTemplate The URI template to be used for variable extraction
 	 */
 	public DefaultMcpUriTemplateManager(String uriTemplate) {
-		if (uriTemplate == null || uriTemplate.isEmpty()) {
-			throw new IllegalArgumentException("URI template must not be null or empty");
-		}
+		Assert.hasText(uriTemplate, "URI template must not be null or empty");
 		this.uriTemplate = uriTemplate;
 	}
 
@@ -48,10 +46,6 @@ public class DefaultMcpUriTemplateManager implements McpUriTemplateManager {
 	 */
 	@Override
 	public List<String> getVariableNames() {
-		if (uriTemplate == null || uriTemplate.isEmpty()) {
-			return List.of();
-		}
-
 		List<String> variables = new ArrayList<>();
 		Matcher matcher = URI_VARIABLE_PATTERN.matcher(this.uriTemplate);
 
@@ -81,7 +75,7 @@ public class DefaultMcpUriTemplateManager implements McpUriTemplateManager {
 		Map<String, String> variableValues = new HashMap<>();
 		List<String> uriVariables = this.getVariableNames();
 
-		if (requestUri == null || uriVariables.isEmpty()) {
+		if (!Utils.hasText(requestUri) || uriVariables.isEmpty()) {
 			return variableValues;
 		}
 
@@ -147,12 +141,30 @@ public class DefaultMcpUriTemplateManager implements McpUriTemplateManager {
 			return uri.equals(this.uriTemplate);
 		}
 
-		// Convert the pattern to a regex
-		String regex = this.uriTemplate.replaceAll("\\{[^/]+?\\}", "([^/]+?)");
-		regex = regex.replace("/", "\\/");
+		// Convert the URI template into a robust regex pattern that escapes special
+		// characters like '?'.
+		StringBuilder patternBuilder = new StringBuilder("^");
+		Matcher variableMatcher = URI_VARIABLE_PATTERN.matcher(this.uriTemplate);
+		int lastEnd = 0;
+
+		while (variableMatcher.find()) {
+			// Append the literal part of the template, safely quoted
+			String textBefore = this.uriTemplate.substring(lastEnd, variableMatcher.start());
+			patternBuilder.append(Pattern.quote(textBefore));
+			// Append a capturing group for the variable itself
+			patternBuilder.append("([^/]+?)");
+			lastEnd = variableMatcher.end();
+		}
+
+		// Append any remaining literal text after the last variable
+		if (lastEnd < this.uriTemplate.length()) {
+			patternBuilder.append(Pattern.quote(this.uriTemplate.substring(lastEnd)));
+		}
+
+		patternBuilder.append("$");
 
 		// Check if the URI matches the regex
-		return Pattern.compile(regex).matcher(uri).matches();
+		return Pattern.compile(patternBuilder.toString()).matcher(uri).matches();
 	}
 
 	@Override

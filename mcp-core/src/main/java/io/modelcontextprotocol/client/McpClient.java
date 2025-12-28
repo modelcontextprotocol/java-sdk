@@ -13,6 +13,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -99,6 +100,7 @@ import reactor.core.publisher.Mono;
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @author Anurag Pant
  * @see McpAsyncClient
  * @see McpSyncClient
  * @see McpTransport
@@ -165,7 +167,7 @@ public interface McpClient {
 
 		private ClientCapabilities capabilities;
 
-		private Implementation clientInfo = new Implementation("Java SDK MCP Client", "1.0.0");
+		private Implementation clientInfo = new Implementation("Java SDK MCP Client", "0.15.0");
 
 		private final Map<String, Root> roots = new HashMap<>();
 
@@ -186,6 +188,10 @@ public interface McpClient {
 		private Function<ElicitRequest, ElicitResult> elicitationHandler;
 
 		private Supplier<McpTransportContext> contextProvider = () -> McpTransportContext.EMPTY;
+
+		private JsonSchemaValidator jsonSchemaValidator;
+
+		private boolean enableCallToolSchemaCaching = false; // Default to false
 
 		private SyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
@@ -430,6 +436,32 @@ public interface McpClient {
 		}
 
 		/**
+		 * Add a {@link JsonSchemaValidator} to validate the JSON structure of the
+		 * structured output.
+		 * @param jsonSchemaValidator A validator to validate the JSON structure of the
+		 * structured output. Must not be null.
+		 * @return This builder for method chaining
+		 * @throws IllegalArgumentException if jsonSchemaValidator is null
+		 */
+		public SyncSpec jsonSchemaValidator(JsonSchemaValidator jsonSchemaValidator) {
+			Assert.notNull(jsonSchemaValidator, "JsonSchemaValidator must not be null");
+			this.jsonSchemaValidator = jsonSchemaValidator;
+			return this;
+		}
+
+		/**
+		 * Enables automatic schema caching during callTool operations. When a tool's
+		 * output schema is not found in the cache, callTool will automatically fetch and
+		 * cache all tool schemas via listTools.
+		 * @param enableCallToolSchemaCaching true to enable, false to disable
+		 * @return This builder instance for method chaining
+		 */
+		public SyncSpec enableCallToolSchemaCaching(boolean enableCallToolSchemaCaching) {
+			this.enableCallToolSchemaCaching = enableCallToolSchemaCaching;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpSyncClient} with the provided configurations or
 		 * sensible defaults.
 		 * @return a new instance of {@link McpSyncClient}.
@@ -438,13 +470,13 @@ public interface McpClient {
 			McpClientFeatures.Sync syncFeatures = new McpClientFeatures.Sync(this.clientInfo, this.capabilities,
 					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 					this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers, this.samplingHandler,
-					this.elicitationHandler);
+					this.elicitationHandler, this.enableCallToolSchemaCaching);
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
-			return new McpSyncClient(
-					new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout, asyncFeatures),
-					this.contextProvider);
+			return new McpSyncClient(new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout,
+					jsonSchemaValidator != null ? jsonSchemaValidator : JsonSchemaValidator.getDefault(),
+					asyncFeatures), this.contextProvider);
 		}
 
 	}
@@ -475,7 +507,7 @@ public interface McpClient {
 
 		private ClientCapabilities capabilities;
 
-		private Implementation clientInfo = new Implementation("Spring AI MCP Client", "0.3.1");
+		private Implementation clientInfo = new Implementation("Java SDK MCP Client", "0.15.0");
 
 		private final Map<String, Root> roots = new HashMap<>();
 
@@ -494,6 +526,10 @@ public interface McpClient {
 		private Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler;
 
 		private Function<ElicitRequest, Mono<ElicitResult>> elicitationHandler;
+
+		private JsonSchemaValidator jsonSchemaValidator;
+
+		private boolean enableCallToolSchemaCaching = false; // Default to false
 
 		private AsyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
@@ -742,16 +778,44 @@ public interface McpClient {
 		}
 
 		/**
+		 * Sets the JSON schema validator to use for validating tool responses against
+		 * output schemas.
+		 * @param jsonSchemaValidator The validator to use. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if jsonSchemaValidator is null
+		 */
+		public AsyncSpec jsonSchemaValidator(JsonSchemaValidator jsonSchemaValidator) {
+			Assert.notNull(jsonSchemaValidator, "JsonSchemaValidator must not be null");
+			this.jsonSchemaValidator = jsonSchemaValidator;
+			return this;
+		}
+
+		/**
+		 * Enables automatic schema caching during callTool operations. When a tool's
+		 * output schema is not found in the cache, callTool will automatically fetch and
+		 * cache all tool schemas via listTools.
+		 * @param enableCallToolSchemaCaching true to enable, false to disable
+		 * @return This builder instance for method chaining
+		 */
+		public AsyncSpec enableCallToolSchemaCaching(boolean enableCallToolSchemaCaching) {
+			this.enableCallToolSchemaCaching = enableCallToolSchemaCaching;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpAsyncClient} with the provided configurations
 		 * or sensible defaults.
 		 * @return a new instance of {@link McpAsyncClient}.
 		 */
 		public McpAsyncClient build() {
+			var jsonSchemaValidator = (this.jsonSchemaValidator != null) ? this.jsonSchemaValidator
+					: JsonSchemaValidator.getDefault();
 			return new McpAsyncClient(this.transport, this.requestTimeout, this.initializationTimeout,
+					jsonSchemaValidator,
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
 							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 							this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
-							this.samplingHandler, this.elicitationHandler));
+							this.samplingHandler, this.elicitationHandler, this.enableCallToolSchemaCaching));
 		}
 
 	}

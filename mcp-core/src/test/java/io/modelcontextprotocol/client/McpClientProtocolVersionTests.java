@@ -8,9 +8,9 @@ import java.time.Duration;
 import java.util.List;
 
 import io.modelcontextprotocol.MockMcpClientTransport;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
+import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class McpClientProtocolVersionTests {
 
-	private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
+	private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(300);
 
 	private static final McpSchema.Implementation CLIENT_INFO = new McpSchema.Implementation("test-client", "1.0.0");
 
@@ -46,13 +46,12 @@ class McpClientProtocolVersionTests {
 				assertThat(initRequest.protocolVersion()).isEqualTo(transport.protocolVersions().get(0));
 
 				transport.simulateIncomingMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-						new McpSchema.InitializeResult(protocolVersion, null,
+						new McpSchema.InitializeResult(protocolVersion, ServerCapabilities.builder().build(),
 								new McpSchema.Implementation("test-server", "1.0.0"), null),
 						null));
 			}).assertNext(result -> {
 				assertThat(result.protocolVersion()).isEqualTo(protocolVersion);
 			}).verifyComplete();
-
 		}
 		finally {
 			// Ensure cleanup happens even if test fails
@@ -81,7 +80,7 @@ class McpClientProtocolVersionTests {
 				assertThat(initRequest.protocolVersion()).isIn(List.of(oldVersion, McpSchema.LATEST_PROTOCOL_VERSION));
 
 				transport.simulateIncomingMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-						new McpSchema.InitializeResult(oldVersion, null,
+						new McpSchema.InitializeResult(oldVersion, ServerCapabilities.builder().build(),
 								new McpSchema.Implementation("test-server", "1.0.0"), null),
 						null));
 			}).assertNext(result -> {
@@ -110,7 +109,7 @@ class McpClientProtocolVersionTests {
 				assertThat(request.params()).isInstanceOf(McpSchema.InitializeRequest.class);
 
 				transport.simulateIncomingMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-						new McpSchema.InitializeResult(unsupportedVersion, null,
+						new McpSchema.InitializeResult(unsupportedVersion, ServerCapabilities.builder().build(),
 								new McpSchema.Implementation("test-server", "1.0.0"), null),
 						null));
 			}).expectError(RuntimeException.class).verify();
@@ -143,7 +142,7 @@ class McpClientProtocolVersionTests {
 				assertThat(initRequest.protocolVersion()).isEqualTo(latestVersion);
 
 				transport.simulateIncomingMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-						new McpSchema.InitializeResult(latestVersion, null,
+						new McpSchema.InitializeResult(latestVersion, ServerCapabilities.builder().build(),
 								new McpSchema.Implementation("test-server", "1.0.0"), null),
 						null));
 			}).assertNext(result -> {

@@ -11,14 +11,13 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.util.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.util.context.ContextView;
@@ -99,21 +98,30 @@ class LifecycleInitializer {
 	 */
 	private final Duration initializationTimeout;
 
+	/**
+	 * Post-initialization hook to perform additional operations after every successful
+	 * initialization.
+	 */
+	private final Function<Initialization, Mono<Void>> postInitializationHook;
+
 	public LifecycleInitializer(McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
 			List<String> protocolVersions, Duration initializationTimeout,
-			Function<ContextView, McpClientSession> sessionSupplier) {
+			Function<ContextView, McpClientSession> sessionSupplier,
+			Function<Initialization, Mono<Void>> postInitializationHook) {
 
 		Assert.notNull(sessionSupplier, "Session supplier must not be null");
 		Assert.notNull(clientCapabilities, "Client capabilities must not be null");
 		Assert.notNull(clientInfo, "Client info must not be null");
 		Assert.notEmpty(protocolVersions, "Protocol versions must not be empty");
 		Assert.notNull(initializationTimeout, "Initialization timeout must not be null");
+		Assert.notNull(postInitializationHook, "Post-initialization hook must not be null");
 
 		this.sessionSupplier = sessionSupplier;
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
 		this.protocolVersions = Collections.unmodifiableList(new ArrayList<>(protocolVersions));
 		this.initializationTimeout = initializationTimeout;
+		this.postInitializationHook = postInitializationHook;
 	}
 
 	/**
@@ -148,10 +156,6 @@ class LifecycleInitializer {
 
 	}
 
-	/**
-	 * Default implementation of the {@link Initialization} interface that manages the MCP
-	 * client initialization process.
-	 */
 	private static class DefaultInitialization implements Initialization {
 
 		/**
@@ -199,27 +203,18 @@ class LifecycleInitializer {
 			this.mcpClientSession.set(mcpClientSession);
 		}
 
-		/**
-		 * Returns a Mono that completes when the MCP client initialization is complete.
-		 * This allows subscribers to wait for the initialization to finish before
-		 * proceeding with further operations.
-		 * @return A Mono that emits the result of the MCP initialization process
-		 */
 		private Mono<McpSchema.InitializeResult> await() {
 			return this.initSink.asMono();
 		}
 
-		/**
-		 * Completes the initialization process with the given result. It caches the
-		 * result and emits it to all subscribers waiting for the initialization to
-		 * complete.
-		 * @param initializeResult The result of the MCP initialization process
-		 */
 		private void complete(McpSchema.InitializeResult initializeResult) {
-			// first ensure the result is cached
-			this.result.set(initializeResult);
 			// inform all the subscribers waiting for the initialization
 			this.initSink.emitValue(initializeResult, Sinks.EmitFailureHandler.FAIL_FAST);
+		}
+
+		private void cacheResult(McpSchema.InitializeResult initializeResult) {
+			// first ensure the result is cached
+			this.result.set(initializeResult);
 		}
 
 		private void error(Throwable t) {
@@ -263,7 +258,7 @@ class LifecycleInitializer {
 			}
 			// Providing an empty operation since we are only interested in triggering
 			// the implicit initialization step.
-			withIntitialization("re-initializing", result -> Mono.empty()).subscribe();
+			this.withInitialization("re-initializing", result -> Mono.empty()).subscribe();
 		}
 	}
 
@@ -275,7 +270,7 @@ class LifecycleInitializer {
 	 * @param operation The operation to execute when the client is initialized
 	 * @return A Mono that completes with the result of the operation
 	 */
-	public <T> Mono<T> withIntitialization(String actionName, Function<Initialization, Mono<T>> operation) {
+	public <T> Mono<T> withInitialization(String actionName, Function<Initialization, Mono<T>> operation) {
 		return Mono.deferContextual(ctx -> {
 			DefaultInitialization newInit = new DefaultInitialization();
 			DefaultInitialization previous = this.initializationRef.compareAndExchange(null, newInit);
@@ -283,8 +278,8 @@ class LifecycleInitializer {
 			boolean needsToInitialize = previous == null;
 			logger.debug(needsToInitialize ? "Initialization process started" : "Joining previous initialization");
 
-			Mono<McpSchema.InitializeResult> initializationJob = needsToInitialize ? doInitialize(newInit, ctx)
-					: previous.await();
+			Mono<McpSchema.InitializeResult> initializationJob = needsToInitialize
+					? this.doInitialize(newInit, this.postInitializationHook, ctx) : previous.await();
 
 			return initializationJob.map(initializeResult -> this.initializationRef.get())
 				.timeout(this.initializationTimeout)
@@ -292,11 +287,15 @@ class LifecycleInitializer {
 					this.initializationRef.compareAndSet(newInit, null);
 					return Mono.error(new RuntimeException("Client failed to initialize " + actionName, ex));
 				})
-				.flatMap(operation);
+				.flatMap(res -> operation.apply(res)
+					.contextWrite(c -> c.put(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
+							res.initializeResult().protocolVersion())));
 		});
 	}
 
-	private Mono<McpSchema.InitializeResult> doInitialize(DefaultInitialization initialization, ContextView ctx) {
+	private Mono<McpSchema.InitializeResult> doInitialize(DefaultInitialization initialization,
+			Function<Initialization, Mono<Void>> postInitOperation, ContextView ctx) {
+
 		initialization.setMcpClientSession(this.sessionSupplier.apply(ctx));
 
 		McpClientSession mcpClientSession = initialization.mcpSession();
@@ -322,7 +321,12 @@ class LifecycleInitializer {
 			}
 
 			return mcpClientSession.sendNotification(McpSchema.METHOD_NOTIFICATION_INITIALIZED, null)
+				.contextWrite(
+						c -> c.put(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION, initializeResult.protocolVersion()))
 				.thenReturn(initializeResult);
+		}).flatMap(initializeResult -> {
+			initialization.cacheResult(initializeResult);
+			return postInitOperation.apply(initialization).thenReturn(initializeResult);
 		}).doOnNext(initialization::complete).onErrorResume(ex -> {
 			initialization.error(ex);
 			return Mono.error(ex);

@@ -75,6 +75,14 @@ public class McpStatelessSyncServer {
 	}
 
 	/**
+	 * List all registered tools.
+	 * @return A list of all registered tools
+	 */
+	public List<McpSchema.Tool> listTools() {
+		return this.asyncServer.listTools().collectList().block();
+	}
+
+	/**
 	 * Remove a tool handler at runtime.
 	 * @param toolName The name of the tool handler to remove
 	 */
@@ -94,11 +102,47 @@ public class McpStatelessSyncServer {
 	}
 
 	/**
+	 * List all registered resources.
+	 * @return A list of all registered resources
+	 */
+	public List<McpSchema.Resource> listResources() {
+		return this.asyncServer.listResources().collectList().block();
+	}
+
+	/**
 	 * Remove a resource handler at runtime.
 	 * @param resourceUri The URI of the resource handler to remove
 	 */
 	public void removeResource(String resourceUri) {
 		this.asyncServer.removeResource(resourceUri).block();
+	}
+
+	/**
+	 * Add a new resource template.
+	 * @param resourceTemplateSpecification The resource template specification to add
+	 */
+	public void addResourceTemplate(
+			McpStatelessServerFeatures.SyncResourceTemplateSpecification resourceTemplateSpecification) {
+		this.asyncServer
+			.addResourceTemplate(McpStatelessServerFeatures.AsyncResourceTemplateSpecification
+				.fromSync(resourceTemplateSpecification, this.immediateExecution))
+			.block();
+	}
+
+	/**
+	 * List all registered resource templates.
+	 * @return A list of all registered resource templates
+	 */
+	public List<McpSchema.ResourceTemplate> listResourceTemplates() {
+		return this.asyncServer.listResourceTemplates().collectList().block();
+	}
+
+	/**
+	 * Remove a resource template.
+	 * @param uriTemplate The URI template of the resource template to remove
+	 */
+	public void removeResourceTemplate(String uriTemplate) {
+		this.asyncServer.removeResourceTemplate(uriTemplate).block();
 	}
 
 	/**
@@ -110,6 +154,14 @@ public class McpStatelessSyncServer {
 			.addPrompt(McpStatelessServerFeatures.AsyncPromptSpecification.fromSync(promptSpecification,
 					this.immediateExecution))
 			.block();
+	}
+
+	/**
+	 * List all registered prompts.
+	 * @return A list of all registered prompts
+	 */
+	public List<McpSchema.Prompt> listPrompts() {
+		return this.asyncServer.listPrompts().collectList().block();
 	}
 
 	/**

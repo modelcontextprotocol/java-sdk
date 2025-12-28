@@ -80,7 +80,7 @@ class HttpClientStreamableHttpTransportTest {
 			// Send test message
 			var initializeRequest = new McpSchema.InitializeRequest(McpSchema.LATEST_PROTOCOL_VERSION,
 					McpSchema.ClientCapabilities.builder().roots(true).build(),
-					new McpSchema.Implementation("Spring AI MCP Client", "0.3.1"));
+					new McpSchema.Implementation("MCP Client", "0.3.1"));
 			var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
 					"test-id", initializeRequest);
 
@@ -90,7 +90,7 @@ class HttpClientStreamableHttpTransportTest {
 
 			// Verify the customizer was called
 			verify(mockRequestCustomizer, atLeastOnce()).customize(any(), eq("POST"), eq(uri), eq(
-					"{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":\"test-id\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"roots\":{\"listChanged\":true}},\"clientInfo\":{\"name\":\"Spring AI MCP Client\",\"version\":\"0.3.1\"}}}"),
+					"{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":\"test-id\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"roots\":{\"listChanged\":true}},\"clientInfo\":{\"name\":\"MCP Client\",\"version\":\"0.3.1\"}}}"),
 					eq(context));
 		});
 	}
@@ -110,7 +110,7 @@ class HttpClientStreamableHttpTransportTest {
 			// Send test message
 			var initializeRequest = new McpSchema.InitializeRequest(McpSchema.LATEST_PROTOCOL_VERSION,
 					McpSchema.ClientCapabilities.builder().roots(true).build(),
-					new McpSchema.Implementation("Spring AI MCP Client", "0.3.1"));
+					new McpSchema.Implementation("MCP Client", "0.3.1"));
 			var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
 					"test-id", initializeRequest);
 
@@ -120,9 +120,44 @@ class HttpClientStreamableHttpTransportTest {
 
 			// Verify the customizer was called
 			verify(mockRequestCustomizer, atLeastOnce()).customize(any(), eq("POST"), eq(uri), eq(
-					"{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":\"test-id\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"roots\":{\"listChanged\":true}},\"clientInfo\":{\"name\":\"Spring AI MCP Client\",\"version\":\"0.3.1\"}}}"),
+					"{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":\"test-id\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"roots\":{\"listChanged\":true}},\"clientInfo\":{\"name\":\"MCP Client\",\"version\":\"0.3.1\"}}}"),
 					eq(context));
 		});
+	}
+
+	@Test
+	void testCloseUninitialized() {
+		var transport = HttpClientStreamableHttpTransport.builder(host).build();
+
+		StepVerifier.create(transport.closeGracefully()).verifyComplete();
+
+		var initializeRequest = new McpSchema.InitializeRequest(McpSchema.LATEST_PROTOCOL_VERSION,
+				McpSchema.ClientCapabilities.builder().roots(true).build(),
+				new McpSchema.Implementation("MCP Client", "0.3.1"));
+		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
+				"test-id", initializeRequest);
+
+		StepVerifier.create(transport.sendMessage(testMessage))
+			.expectErrorMessage("MCP session has been closed")
+			.verify();
+	}
+
+	@Test
+	void testCloseInitialized() {
+		var transport = HttpClientStreamableHttpTransport.builder(host).build();
+
+		var initializeRequest = new McpSchema.InitializeRequest(McpSchema.LATEST_PROTOCOL_VERSION,
+				McpSchema.ClientCapabilities.builder().roots(true).build(),
+				new McpSchema.Implementation("MCP Client", "0.3.1"));
+		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
+				"test-id", initializeRequest);
+
+		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
+		StepVerifier.create(transport.closeGracefully()).verifyComplete();
+
+		StepVerifier.create(transport.sendMessage(testMessage))
+			.expectErrorMatches(err -> err.getMessage().matches("MCP session with ID [a-zA-Z0-9-]* has been closed"))
+			.verify();
 	}
 
 }

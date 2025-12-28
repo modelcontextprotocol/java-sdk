@@ -17,10 +17,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
-
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -143,35 +141,49 @@ public final class McpSchema {
 		 */
 		public static final int INTERNAL_ERROR = -32603;
 
+		/**
+		 * Resource not found.
+		 */
+		public static final int RESOURCE_NOT_FOUND = -32002;
+
 	}
 
-	public sealed interface Request
+	/**
+	 * Base interface for MCP objects that include optional metadata in the `_meta` field.
+	 */
+	public interface Meta {
+
+		/**
+		 * @see <a href=
+		 * "https://modelcontextprotocol.io/specification/2025-06-18/basic/index#meta">Specification</a>
+		 * for notes on _meta usage
+		 * @return additional metadata related to this resource.
+		 */
+		Map<String, Object> meta();
+
+	}
+
+	public sealed interface Request extends Meta
 			permits InitializeRequest, CallToolRequest, CreateMessageRequest, ElicitRequest, CompleteRequest,
 			GetPromptRequest, ReadResourceRequest, SubscribeRequest, UnsubscribeRequest, PaginatedRequest {
 
-		Map<String, Object> meta();
-
-		default String progressToken() {
+		default Object progressToken() {
 			if (meta() != null && meta().containsKey("progressToken")) {
-				return meta().get("progressToken").toString();
+				return meta().get("progressToken");
 			}
 			return null;
 		}
 
 	}
 
-	public sealed interface Result permits InitializeResult, ListResourcesResult, ListResourceTemplatesResult,
-			ReadResourceResult, ListPromptsResult, GetPromptResult, ListToolsResult, CallToolResult,
-			CreateMessageResult, ElicitResult, CompleteResult, ListRootsResult {
-
-		Map<String, Object> meta();
+	public sealed interface Result extends Meta permits InitializeResult, ListResourcesResult,
+			ListResourceTemplatesResult, ReadResourceResult, ListPromptsResult, GetPromptResult, ListToolsResult,
+			CallToolResult, CreateMessageResult, ElicitResult, CompleteResult, ListRootsResult {
 
 	}
 
-	public sealed interface Notification
+	public sealed interface Notification extends Meta
 			permits ProgressNotification, LoggingMessageNotification, ResourcesUpdatedNotification {
-
-		Map<String, Object> meta();
 
 	}
 
@@ -265,12 +277,12 @@ public final class McpSchema {
 	}
 
 	/**
-	 * A successful (non-error) response to a request.
+	 * A response to a request (successful, or error).
 	 *
 	 * @param jsonrpc The JSON-RPC version (must be "2.0")
 	 * @param id The request identifier that this response corresponds to
-	 * @param result The result of the successful request
-	 * @param error Error information if the request failed
+	 * @param result The result of the successful request; null if error
+	 * @param error Error information if the request failed; null if has result
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -294,7 +306,7 @@ public final class McpSchema {
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record JSONRPCError( // @formatter:off
-			@JsonProperty("code") int code,
+			@JsonProperty("code") Integer code,
 			@JsonProperty("message") String message,
 			@JsonProperty("data") Object data) { // @formatter:on
 		}
@@ -604,7 +616,7 @@ public final class McpSchema {
 	public record Implementation( // @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("title") String title,
-		@JsonProperty("version") String version) implements BaseMetadata { // @formatter:on			
+		@JsonProperty("version") String version) implements Identifier { // @formatter:on			
 
 		public Implementation(String name, String version) {
 			this(name, null, version);
@@ -648,7 +660,13 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Annotations( // @formatter:off
 		@JsonProperty("audience") List<Role> audience,
-		@JsonProperty("priority") Double priority) { // @formatter:on
+		@JsonProperty("priority") Double priority,
+		@JsonProperty("lastModified") String lastModified
+		) { // @formatter:on
+
+		public Annotations(List<Role> audience, Double priority) {
+			this(audience, priority, null);
+		}
 	}
 
 	/**
@@ -657,7 +675,9 @@ public final class McpSchema {
 	 * interface is implemented by both {@link Resource} and {@link ResourceLink} to
 	 * provide a consistent way to access resource metadata.
 	 */
-	public interface ResourceContent extends BaseMetadata {
+	public interface ResourceContent extends Identifier, Annotated, Meta {
+
+		// name & title from Identifier
 
 		String uri();
 
@@ -667,15 +687,15 @@ public final class McpSchema {
 
 		Long size();
 
-		Annotations annotations();
+		// annotations from Annotated
+		// meta from Meta
 
 	}
 
 	/**
-	 * Base interface for metadata with name (identifier) and title (display name)
-	 * properties.
+	 * Base interface with name (identifier) and title (display name) properties.
 	 */
-	public interface BaseMetadata {
+	public interface Identifier {
 
 		/**
 		 * Intended for programmatic or logical use, but used as a display name in past
@@ -721,7 +741,7 @@ public final class McpSchema {
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("size") Long size,
 		@JsonProperty("annotations") Annotations annotations,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, ResourceContent { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements ResourceContent { // @formatter:on
 
 		/**
 		 * @deprecated Only exists for backwards-compatibility purposes. Use
@@ -851,7 +871,7 @@ public final class McpSchema {
 		@JsonProperty("description") String description,
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("annotations") Annotations annotations,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, BaseMetadata { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Identifier, Meta { // @formatter:on
 
 		public ResourceTemplate(String uriTemplate, String name, String title, String description, String mimeType,
 				Annotations annotations) {
@@ -861,6 +881,70 @@ public final class McpSchema {
 		public ResourceTemplate(String uriTemplate, String name, String description, String mimeType,
 				Annotations annotations) {
 			this(uriTemplate, name, null, description, mimeType, annotations);
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+
+			private String uriTemplate;
+
+			private String name;
+
+			private String title;
+
+			private String description;
+
+			private String mimeType;
+
+			private Annotations annotations;
+
+			private Map<String, Object> meta;
+
+			public Builder uriTemplate(String uri) {
+				this.uriTemplate = uri;
+				return this;
+			}
+
+			public Builder name(String name) {
+				this.name = name;
+				return this;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder mimeType(String mimeType) {
+				this.mimeType = mimeType;
+				return this;
+			}
+
+			public Builder annotations(Annotations annotations) {
+				this.annotations = annotations;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public ResourceTemplate build() {
+				Assert.hasText(uriTemplate, "uri must not be empty");
+				Assert.hasText(name, "name must not be empty");
+
+				return new ResourceTemplate(uriTemplate, name, title, description, mimeType, annotations, meta);
+			}
+
 		}
 	}
 
@@ -979,10 +1063,10 @@ public final class McpSchema {
 	/**
 	 * The contents of a specific resource or sub-resource.
 	 */
-	@JsonTypeInfo(use = JsonTypeInfo.Id.DEDUCTION, include = As.PROPERTY)
-	@JsonSubTypes({ @JsonSubTypes.Type(value = TextResourceContents.class, name = "text"),
-			@JsonSubTypes.Type(value = BlobResourceContents.class, name = "blob") })
-	public sealed interface ResourceContents permits TextResourceContents, BlobResourceContents {
+	@JsonTypeInfo(use = JsonTypeInfo.Id.DEDUCTION)
+	@JsonSubTypes({ @JsonSubTypes.Type(value = TextResourceContents.class),
+			@JsonSubTypes.Type(value = BlobResourceContents.class) })
+	public sealed interface ResourceContents extends Meta permits TextResourceContents, BlobResourceContents {
 
 		/**
 		 * The URI of this resource.
@@ -995,14 +1079,6 @@ public final class McpSchema {
 		 * @return the MIME type of this resource.
 		 */
 		String mimeType();
-
-		/**
-		 * @see <a href=
-		 * "https://modelcontextprotocol.io/specification/2025-06-18/basic/index#meta">Specification</a>
-		 * for notes on _meta usage
-		 * @return additional metadata related to this resource.
-		 */
-		Map<String, Object> meta();
 
 	}
 
@@ -1070,7 +1146,7 @@ public final class McpSchema {
 		@JsonProperty("title") String title,
 		@JsonProperty("description") String description,
 		@JsonProperty("arguments") List<PromptArgument> arguments,
-		@JsonProperty("_meta") Map<String, Object> meta) implements BaseMetadata { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements Identifier { // @formatter:on
 
 		public Prompt(String name, String description, List<PromptArgument> arguments) {
 			this(name, null, description, arguments != null ? arguments : new ArrayList<>());
@@ -1095,7 +1171,7 @@ public final class McpSchema {
 		@JsonProperty("name") String name,
 		@JsonProperty("title") String title,
 		@JsonProperty("description") String description,
-		@JsonProperty("required") Boolean required) implements BaseMetadata { // @formatter:on
+		@JsonProperty("required") Boolean required) implements Identifier { // @formatter:on
 
 		public PromptArgument(String name, String description, Boolean required) {
 			this(name, null, description, required);
@@ -1426,7 +1502,7 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder progressToken(String progressToken) {
+			public Builder progressToken(Object progressToken) {
 				if (this.meta == null) {
 					this.meta = new HashMap<>();
 				}
@@ -1486,6 +1562,7 @@ public final class McpSchema {
 		 * content contains error information. If false or absent, indicates successful
 		 * execution.
 		 */
+		@Deprecated
 		public CallToolResult(String content, Boolean isError) {
 			this(List.of(new TextContent(content)), isError, null);
 		}
@@ -1600,7 +1677,7 @@ public final class McpSchema {
 			 * @return a new CallToolResult instance
 			 */
 			public CallToolResult build() {
-				return new CallToolResult(content, isError, (Object) structuredContent, meta);
+				return new CallToolResult(content, isError, structuredContent, meta);
 			}
 
 		}
@@ -1746,14 +1823,14 @@ public final class McpSchema {
 		@JsonProperty("systemPrompt") String systemPrompt,
 		@JsonProperty("includeContext") ContextInclusionStrategy includeContext,
 		@JsonProperty("temperature") Double temperature,
-		@JsonProperty("maxTokens") int maxTokens,
+		@JsonProperty("maxTokens") Integer maxTokens,
 		@JsonProperty("stopSequences") List<String> stopSequences,
 		@JsonProperty("metadata") Map<String, Object> metadata,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
 		// backwards compatibility constructor
 		public CreateMessageRequest(List<SamplingMessage> messages, ModelPreferences modelPreferences,
-				String systemPrompt, ContextInclusionStrategy includeContext, Double temperature, int maxTokens,
+				String systemPrompt, ContextInclusionStrategy includeContext, Double temperature, Integer maxTokens,
 				List<String> stopSequences, Map<String, Object> metadata) {
 			this(messages, modelPreferences, systemPrompt, includeContext, temperature, maxTokens, stopSequences,
 					metadata, null);
@@ -1783,7 +1860,7 @@ public final class McpSchema {
 
 			private Double temperature;
 
-			private int maxTokens;
+			private Integer maxTokens;
 
 			private List<String> stopSequences;
 
@@ -1836,7 +1913,7 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder progressToken(String progressToken) {
+			public Builder progressToken(Object progressToken) {
 				if (this.meta == null) {
 					this.meta = new HashMap<>();
 				}
@@ -2004,7 +2081,7 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder progressToken(String progressToken) {
+			public Builder progressToken(Object progressToken) {
 				if (this.meta == null) {
 					this.meta = new HashMap<>();
 				}
@@ -2141,13 +2218,13 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ProgressNotification( // @formatter:off
-		@JsonProperty("progressToken") String progressToken,
+		@JsonProperty("progressToken") Object progressToken,
 		@JsonProperty("progress") Double progress,
 		@JsonProperty("total") Double total,
 		@JsonProperty("message") String message,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Notification { // @formatter:on
 
-		public ProgressNotification(String progressToken, double progress, Double total, String message) {
+		public ProgressNotification(Object progressToken, double progress, Double total, String message) {
 			this(progressToken, progress, total, message, null);
 		}
 	}
@@ -2295,14 +2372,16 @@ public final class McpSchema {
 	public record PromptReference( // @formatter:off
 		@JsonProperty("type") String type,
 		@JsonProperty("name") String name,
-		@JsonProperty("title") String title ) implements McpSchema.CompleteReference, BaseMetadata { // @formatter:on
+		@JsonProperty("title") String title ) implements McpSchema.CompleteReference, Identifier { // @formatter:on
+
+		public static final String TYPE = "ref/prompt";
 
 		public PromptReference(String type, String name) {
 			this(type, name, null);
 		}
 
 		public PromptReference(String name) {
-			this("ref/prompt", name, null);
+			this(TYPE, name, null);
 		}
 
 		@Override
@@ -2339,8 +2418,10 @@ public final class McpSchema {
 		@JsonProperty("type") String type,
 		@JsonProperty("uri") String uri) implements McpSchema.CompleteReference { // @formatter:on
 
+		public static final String TYPE = "ref/resource";
+
 		public ResourceReference(String uri) {
-			this("ref/resource", uri);
+			this(TYPE, uri);
 		}
 
 		@Override
@@ -2403,8 +2484,9 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record CompleteResult(@JsonProperty("completion") CompleteCompletion completion,
-			@JsonProperty("_meta") Map<String, Object> meta) implements Result {
+	public record CompleteResult(// @formatter:off
+			@JsonProperty("completion") CompleteCompletion completion,
+			@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
 
 		// backwards compatibility constructor
 		public CompleteResult(CompleteCompletion completion) {
@@ -2420,6 +2502,7 @@ public final class McpSchema {
 		 * @param hasMore Indicates whether there are additional completion options beyond
 		 * those provided in the current response, even if the exact total is unknown
 		 */
+		@JsonInclude(JsonInclude.Include.ALWAYS)
 		public record CompleteCompletion( // @formatter:off
 				@JsonProperty("values") List<String> values,
 				@JsonProperty("total") Integer total,
@@ -2436,9 +2519,8 @@ public final class McpSchema {
 			@JsonSubTypes.Type(value = AudioContent.class, name = "audio"),
 			@JsonSubTypes.Type(value = EmbeddedResource.class, name = "resource"),
 			@JsonSubTypes.Type(value = ResourceLink.class, name = "resource_link") })
-	public sealed interface Content permits TextContent, ImageContent, AudioContent, EmbeddedResource, ResourceLink {
-
-		Map<String, Object> meta();
+	public sealed interface Content extends Meta
+			permits TextContent, ImageContent, AudioContent, EmbeddedResource, ResourceLink {
 
 		default String type() {
 			if (this instanceof TextContent) {
@@ -2663,29 +2745,7 @@ public final class McpSchema {
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("size") Long size,
 		@JsonProperty("annotations") Annotations annotations,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Content, ResourceContent { // @formatter:on
-
-		/**
-		 * @deprecated Only exists for backwards-compatibility purposes. Use
-		 * {@link ResourceLink#ResourceLink(String, String, String, String, String, Long, Annotations)}
-		 * instead.
-		 */
-		@Deprecated
-		public ResourceLink(String name, String title, String uri, String description, String mimeType, Long size,
-				Annotations annotations) {
-			this(name, title, uri, description, mimeType, size, annotations, null);
-		}
-
-		/**
-		 * @deprecated Only exists for backwards-compatibility purposes. Use
-		 * {@link ResourceLink#ResourceLink(String, String, String, String, String, Long, Annotations)}
-		 * instead.
-		 */
-		@Deprecated
-		public ResourceLink(String name, String uri, String description, String mimeType, Long size,
-				Annotations annotations) {
-			this(name, null, uri, description, mimeType, size, annotations);
-		}
+		@JsonProperty("_meta") Map<String, Object> meta) implements Content, ResourceContent { // @formatter:on
 
 		public static Builder builder() {
 			return new Builder();

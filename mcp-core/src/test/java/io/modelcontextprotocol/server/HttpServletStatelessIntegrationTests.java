@@ -114,7 +114,10 @@ class HttpServletStatelessIntegrationTests {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
-		var callResponse = new CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
+		var callResponse = CallToolResult.builder()
+			.content(List.of(new McpSchema.TextContent("CALL RESPONSE")))
+			.isError(false)
+			.build();
 		McpStatelessServerFeatures.SyncToolSpecification tool1 = new McpStatelessServerFeatures.SyncToolSpecification(
 				Tool.builder().name("tool1").title("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build(),
 				(transportContext, request) -> {
@@ -194,7 +197,7 @@ class HttpServletStatelessIntegrationTests {
 							List.of(new PromptArgument("language", "Language", "string", false))),
 					(transportContext, getPromptRequest) -> null))
 			.completions(new McpStatelessServerFeatures.SyncCompletionSpecification(
-					new PromptReference("ref/prompt", "code_review", "Code review"), completionHandler))
+					new PromptReference(PromptReference.TYPE, "code_review", "Code review"), completionHandler))
 			.build();
 
 		try (var mcpClient = clientBuilder.build()) {
@@ -203,7 +206,7 @@ class HttpServletStatelessIntegrationTests {
 			assertThat(initResult).isNotNull();
 
 			CompleteRequest request = new CompleteRequest(
-					new PromptReference("ref/prompt", "code_review", "Code review"),
+					new PromptReference(PromptReference.TYPE, "code_review", "Code review"),
 					new CompleteRequest.CompleteArgument("language", "py"));
 
 			CompleteResult result = mcpClient.completeCompletion(request);
@@ -212,7 +215,7 @@ class HttpServletStatelessIntegrationTests {
 
 			assertThat(samplingRequest.get().argument().name()).isEqualTo("language");
 			assertThat(samplingRequest.get().argument().value()).isEqualTo("py");
-			assertThat(samplingRequest.get().ref().type()).isEqualTo("ref/prompt");
+			assertThat(samplingRequest.get().ref().type()).isEqualTo(PromptReference.TYPE);
 		}
 		finally {
 			mcpServer.close();

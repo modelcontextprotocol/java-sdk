@@ -10,7 +10,7 @@ import eu.rekawek.toxiproxy.model.ToxicDirection;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransport;
-import org.junit.jupiter.api.Disabled;
+import io.modelcontextprotocol.spec.McpTransportSessionClosedException;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -222,9 +222,10 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 			// In case of Streamable HTTP this call should issue a HTTP DELETE request
 			// invalidating the session
 			StepVerifier.create(mcpAsyncClient.closeGracefully()).expectComplete().verify();
-			// The next use should immediately re-initialize with no issue and send the
-			// request without any broken connections.
-			StepVerifier.create(mcpAsyncClient.ping()).expectNextCount(1).verifyComplete();
+			// The next tries to use the closed session and fails
+			StepVerifier.create(mcpAsyncClient.ping())
+				.expectErrorMatches(err -> err.getCause() instanceof McpTransportSessionClosedException)
+				.verify();
 		});
 	}
 
