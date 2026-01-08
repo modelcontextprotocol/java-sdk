@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
  * @author Luca Chang
  * @author Surbhi Bansal
  * @author Anurag Pant
+ * @author Pin He
  */
 public final class McpSchema {
 
@@ -67,6 +68,17 @@ public final class McpSchema {
 	public static final String METHOD_TOOLS_CALL = "tools/call";
 
 	public static final String METHOD_NOTIFICATION_TOOLS_LIST_CHANGED = "notifications/tools/list_changed";
+
+	// Task Methods
+	public static final String METHOD_TASKS_GET = "tasks/get";
+
+	public static final String METHOD_TASKS_LIST = "tasks/list";
+
+	public static final String METHOD_TASKS_RESULT = "tasks/result";
+
+	public static final String METHOD_TASKS_CANCEL = "tasks/cancel";
+
+	public static final String METHOD_NOTIFICATION_TASKS_STATUS = "notifications/tasks/status";
 
 	// Resources Methods
 	public static final String METHOD_RESOURCES_LIST = "resources/list";
@@ -111,6 +123,7 @@ public final class McpSchema {
 	// ---------------------------
 	// JSON-RPC Error Codes
 	// ---------------------------
+
 	/**
 	 * Standard error codes used in MCP JSON-RPC responses.
 	 */
@@ -163,9 +176,26 @@ public final class McpSchema {
 
 	}
 
-	public sealed interface Request extends Meta
-			permits InitializeRequest, CallToolRequest, CreateMessageRequest, ElicitRequest, CompleteRequest,
-			GetPromptRequest, ReadResourceRequest, SubscribeRequest, UnsubscribeRequest, PaginatedRequest {
+	public sealed interface TaskAugmentedRequest extends Request
+			permits CallToolRequest, CreateMessageRequest, ElicitRequest {
+
+		/**
+		 * If specified, the caller is requesting task-augmented execution for this
+		 * request. The request will return a CreateTaskResult immediately, and the actual
+		 * result can be retrieved later via tasks/result.
+		 * <p>
+		 * Task augmentation is subject to capability negotiation - receivers MUST declare
+		 * support for task augmentation of specific request types in their capabilities.
+		 */
+		default TaskMetaData task() {
+			return null;
+		}
+
+	}
+
+	public sealed interface Request extends Meta permits CancelTaskRequest, CompleteRequest, GetPromptRequest,
+			GetTaskRequest, InitializeRequest, PaginatedRequest, ReadResourceRequest, SubscribeRequest,
+			TaskAugmentedRequest, UnsubscribeRequest, GetTaskPayloadRequest {
 
 		default Object progressToken() {
 			if (meta() != null && meta().containsKey("progressToken")) {
@@ -176,14 +206,14 @@ public final class McpSchema {
 
 	}
 
-	public sealed interface Result extends Meta permits InitializeResult, ListResourcesResult,
-			ListResourceTemplatesResult, ReadResourceResult, ListPromptsResult, GetPromptResult, ListToolsResult,
-			CallToolResult, CreateMessageResult, ElicitResult, CompleteResult, ListRootsResult {
+	public sealed interface Result extends Meta permits CallToolResult, CancelTaskResult, CompleteResult,
+			CreateMessageResult, CreateTaskResult, ElicitResult, GetPromptResult, GetTaskPayloadResult, GetTaskResult,
+			InitializeResult, PaginatedResult, ReadResourceResult {
 
 	}
 
-	public sealed interface Notification extends Meta
-			permits ProgressNotification, LoggingMessageNotification, ResourcesUpdatedNotification {
+	public sealed interface Notification extends Meta permits LoggingMessageNotification, ProgressNotification,
+			ResourcesUpdatedNotification, TaskStatusNotification {
 
 	}
 
@@ -328,7 +358,7 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record InitializeRequest( // @formatter:off
-		@JsonProperty("protocolVersion") String protocolVersion,
+	    @JsonProperty("protocolVersion") String protocolVersion,
 		@JsonProperty("capabilities") ClientCapabilities capabilities,
 		@JsonProperty("clientInfo") Implementation clientInfo,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
@@ -378,6 +408,7 @@ public final class McpSchema {
 	 * @param roots Present if the client supports listing roots
 	 * @param sampling Present if the client supports sampling from an LLM
 	 * @param elicitation Present if the client supports elicitation from the server
+	 * @param tasks Present if the client supports tasks operations
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -385,7 +416,19 @@ public final class McpSchema {
 		@JsonProperty("experimental") Map<String, Object> experimental,
 		@JsonProperty("roots") RootCapabilities roots,
 		@JsonProperty("sampling") Sampling sampling,
-		@JsonProperty("elicitation") Elicitation elicitation) { // @formatter:on
+		@JsonProperty("elicitation") Elicitation elicitation,
+        @JsonProperty("tasks") ClientCapabilities.TaskCapabilities tasks) { // @formatter:on
+
+		/**
+		 * Keep for backward compatibility
+		 */
+		public ClientCapabilities( // @formatter:off
+            Map<String, Object> experimental,
+            RootCapabilities roots,
+            Sampling sampling,
+            Elicitation elicitation)  { // @formatter:on
+			this(experimental, roots, sampling, elicitation, null);
+		}
 
 		/**
 		 * Present if the client supports listing roots.
@@ -421,6 +464,57 @@ public final class McpSchema {
 		public record Elicitation() {
 		}
 
+		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		public record TaskCapabilities( // @formatter:off
+            @JsonProperty("list") TaskCapabilities.List  list,
+            @JsonProperty("cancel") TaskCapabilities.Cancel cancel,
+            @JsonProperty("requests") TaskCapabilities.Requests requests) {// @formatter:on
+
+			/**
+			 * Client supports the tasks/list operation
+			 */
+			public record List() {
+			}
+
+			/**
+			 * Client supports the tasks/cancel operation
+			 */
+			public record Cancel() {
+			}
+
+			/**
+			 * Client supports task-augmented requests
+			 */
+			public record Requests( // @formatter:off
+                @JsonProperty("sampling") Requests.Sampling sampling,
+                @JsonProperty("elicitation") Requests.Elicitation elicitation) { // @formatter:on
+
+				/**
+				 * Client supports task-augmented sampling requests
+				 */
+				@JsonInclude(JsonInclude.Include.NON_ABSENT)
+				public record Sampling(@JsonProperty("createMessage") Sampling.CreateMessage createMessage) {
+					/**
+					 * Client supports task-augmented sampling/createMessage requests
+					 */
+					public record CreateMessage() {
+					}
+				}
+
+				/**
+				 * Client supports task-augmented elicitation requests
+				 */
+				@JsonInclude(JsonInclude.Include.NON_ABSENT)
+				public record Elicitation(@JsonProperty("create") Elicitation.Create create) {
+					/**
+					 * Client supports task-augmented elicitation/create requests
+					 */
+					public record Create() {
+					}
+				}
+			}
+		}
+
 		public static Builder builder() {
 			return new Builder();
 		}
@@ -434,6 +528,8 @@ public final class McpSchema {
 			private Sampling sampling;
 
 			private Elicitation elicitation;
+
+			private ClientCapabilities.TaskCapabilities tasks;
 
 			public Builder experimental(Map<String, Object> experimental) {
 				this.experimental = experimental;
@@ -455,8 +551,13 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder tasks(ClientCapabilities.TaskCapabilities tasks) {
+				this.tasks = tasks;
+				return this;
+			}
+
 			public ClientCapabilities build() {
-				return new ClientCapabilities(experimental, roots, sampling, elicitation);
+				return new ClientCapabilities(experimental, roots, sampling, elicitation, tasks);
 			}
 
 		}
@@ -475,6 +576,7 @@ public final class McpSchema {
 	 * @param prompts Present if the server offers any prompt templates
 	 * @param resources Present if the server offers any resources to read
 	 * @param tools Present if the server offers any tools to call
+	 * @param tasks Present if the server supports tasks operations
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -484,7 +586,21 @@ public final class McpSchema {
 		@JsonProperty("logging") LoggingCapabilities logging,
 		@JsonProperty("prompts") PromptCapabilities prompts,
 		@JsonProperty("resources") ResourceCapabilities resources,
-		@JsonProperty("tools") ToolCapabilities tools) { // @formatter:on
+		@JsonProperty("tools") ToolCapabilities tools,
+        @JsonProperty("tasks") ServerCapabilities.TaskCapabilities tasks) { // @formatter:on
+
+		/**
+		 * Keep for backward compatibility
+		 */
+		public ServerCapabilities( // @formatter:off
+            CompletionCapabilities completions,
+            Map<String, Object> experimental,
+            LoggingCapabilities logging,
+            PromptCapabilities prompts,
+            ResourceCapabilities resources,
+            ToolCapabilities tools) { // @formatter:on
+			this(completions, experimental, logging, prompts, resources, tools, null);
+		}
 
 		/**
 		 * Present if the server supports argument autocompletion suggestions.
@@ -533,6 +649,47 @@ public final class McpSchema {
 		}
 
 		/**
+		 * Present if the server supports task management operations.
+		 *
+		 * @param list Server supports the tasks/list operation
+		 * @param cancel Server supports the tasks/cancel operation
+		 * @param requests supports task-augmented tools/call requests
+		 */
+		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		public record TaskCapabilities( // @formatter:off
+            @JsonProperty("list") TaskCapabilities.List list,
+            @JsonProperty("cancel") TaskCapabilities.Cancel cancel,
+            @JsonProperty("requests") TaskCapabilities.Requests requests) { // @formatter:on
+
+			/**
+			 * Server supports the tasks/list operation
+			 **/
+			public record List() {
+			}
+
+			/**
+			 * Server supports the tasks/cancel operation
+			 */
+			public record Cancel() {
+			}
+
+			/**
+			 * Server supports task-augmented requests
+			 */
+			@JsonInclude(JsonInclude.Include.NON_ABSENT)
+			public record Requests(@JsonProperty("tools") TaskCapabilities.Requests.Tools tools) {
+				/**
+				 * Present if the server supports task-augmented tools/call requests
+				 */
+				@JsonInclude(JsonInclude.Include.NON_ABSENT)
+				public record Tools(@JsonProperty("call") Tools.Call call) {
+					public record Call() {
+					}
+				}
+			}
+		}
+
+		/**
 		 * Create a mutated copy of this object with the specified changes.
 		 * @return A new Builder instance with the same values as this object.
 		 */
@@ -565,6 +722,8 @@ public final class McpSchema {
 
 			private ToolCapabilities tools;
 
+			private TaskCapabilities tasks;
+
 			public Builder completions() {
 				this.completions = new CompletionCapabilities();
 				return this;
@@ -595,8 +754,13 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder tasks(ServerCapabilities.TaskCapabilities tasks) {
+				this.tasks = tasks;
+				return this;
+			}
+
 			public ServerCapabilities build() {
-				return new ServerCapabilities(completions, experimental, logging, prompts, resources, tools);
+				return new ServerCapabilities(completions, experimental, logging, prompts, resources, tools, tasks);
 			}
 
 		}
@@ -616,7 +780,7 @@ public final class McpSchema {
 	public record Implementation( // @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("title") String title,
-		@JsonProperty("version") String version) implements Identifier { // @formatter:on			
+		@JsonProperty("version") String version) implements Identifier { // @formatter:on
 
 		public Implementation(String name, String version) {
 			this(name, null, version);
@@ -961,7 +1125,7 @@ public final class McpSchema {
 	public record ListResourcesResult( // @formatter:off
 		@JsonProperty("resources") List<Resource> resources,
 		@JsonProperty("nextCursor") String nextCursor,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements PaginatedResult { // @formatter:on
 
 		public ListResourcesResult(List<Resource> resources, String nextCursor) {
 			this(resources, nextCursor, null);
@@ -981,7 +1145,7 @@ public final class McpSchema {
 	public record ListResourceTemplatesResult( // @formatter:off
 		@JsonProperty("resourceTemplates") List<ResourceTemplate> resourceTemplates,
 		@JsonProperty("nextCursor") String nextCursor,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements PaginatedResult { // @formatter:on
 
 		public ListResourceTemplatesResult(List<ResourceTemplate> resourceTemplates, String nextCursor) {
 			this(resourceTemplates, nextCursor, null);
@@ -1207,7 +1371,7 @@ public final class McpSchema {
 	public record ListPromptsResult( // @formatter:off
 		@JsonProperty("prompts") List<Prompt> prompts,
 		@JsonProperty("nextCursor") String nextCursor,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result  { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements PaginatedResult  { // @formatter:on
 
 		public ListPromptsResult(List<Prompt> prompts, String nextCursor) {
 			this(prompts, nextCursor, null);
@@ -1268,7 +1432,7 @@ public final class McpSchema {
 	public record ListToolsResult( // @formatter:off
 		@JsonProperty("tools") List<Tool> tools,
 		@JsonProperty("nextCursor") String nextCursor,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements PaginatedResult { // @formatter:on
 
 		public ListToolsResult(List<Tool> tools, String nextCursor) {
 			this(tools, nextCursor, null);
@@ -1297,12 +1461,61 @@ public final class McpSchema {
 	}
 
 	/**
+	 * Execution-related properties for a tool.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ToolExecution(TaskSupport taskSupport) {
+	}
+
+	/**
+	 * Indicates whether this tool supports task-augmented execution. This allows clients
+	 * to handle long-running operations through polling the task system.
+	 * <p>
+	 * - "forbidden": Tool does not support task-augmented execution (default when absent)
+	 * <p>
+	 * - "optional": Tool may support task-augmented execution
+	 * <p>
+	 * - "required": Tool requires task-augmented execution
+	 * <p>
+	 * Default: "forbidden"
+	 */
+	public enum TaskSupport {
+
+		// @formatter:off
+        @JsonProperty("forbidden") FORBIDDEN("forbidden"),
+        @JsonProperty("optional") OPTIONAL("optional"),
+        @JsonProperty("required") REQUIRED("required");
+        // @formatter:on
+
+		private final String value;
+
+		TaskSupport(final String value) {
+			this.value = value;
+		}
+
+		public String getValue() {
+			return value;
+		}
+
+		public static TaskSupport fromValue(String value) {
+			for (TaskSupport hint : TaskSupport.values()) {
+				if (hint.value.equalsIgnoreCase(value)) {
+					return hint;
+				}
+			}
+			throw new IllegalArgumentException("Unknown task support value: " + value);
+		}
+
+	}
+
+	/**
 	 * Additional properties describing a Tool to clients.
-	 *
+	 * <p>
 	 * NOTE: all properties in ToolAnnotations are **hints**. They are not guaranteed to
 	 * provide a faithful description of tool behavior (including descriptive properties
 	 * like `title`).
-	 *
+	 * <p>
 	 * Clients should never make tool use decisions based on ToolAnnotations received from
 	 * untrusted servers.
 	 */
@@ -1315,6 +1528,61 @@ public final class McpSchema {
 		@JsonProperty("idempotentHint") Boolean idempotentHint,
 		@JsonProperty("openWorldHint") Boolean openWorldHint,
 		@JsonProperty("returnDirect") Boolean returnDirect) { // @formatter:on
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+
+			private String title;
+
+			private boolean readOnlyHint;
+
+			private boolean destructiveHint;
+
+			private boolean idempotentHint;
+
+			private boolean openWorldHint;
+
+			private boolean returnDirect;
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder readOnlyHint(boolean readOnlyHint) {
+				this.readOnlyHint = readOnlyHint;
+				return this;
+			}
+
+			public Builder destructiveHint(boolean destructiveHint) {
+				this.destructiveHint = destructiveHint;
+				return this;
+			}
+
+			public Builder idempotentHint(boolean idempotentHint) {
+				this.idempotentHint = idempotentHint;
+				return this;
+			}
+
+			public Builder openWorldHint(boolean openWorldHint) {
+				this.openWorldHint = openWorldHint;
+				return this;
+			}
+
+			public Builder returnDirect(boolean returnDirect) {
+				this.returnDirect = returnDirect;
+				return this;
+			}
+
+			public ToolAnnotations build() {
+				return new ToolAnnotations(title, readOnlyHint, destructiveHint, idempotentHint, openWorldHint,
+						returnDirect);
+			}
+
+		}
 	}
 
 	/**
@@ -1329,6 +1597,7 @@ public final class McpSchema {
 	 * used by clients to improve the LLM's understanding of available tools.
 	 * @param inputSchema A JSON Schema object that describes the expected structure of
 	 * the arguments when calling this tool. This allows clients to validate tool
+	 * @param execution The execution behavior for the tool.
 	 * @param outputSchema An optional JSON Schema object defining the structure of the
 	 * tool's output returned in the structuredContent field of a CallToolResult.
 	 * @param annotations Optional additional tool information.
@@ -1342,8 +1611,23 @@ public final class McpSchema {
 		@JsonProperty("description") String description,
 		@JsonProperty("inputSchema") JsonSchema inputSchema,
 		@JsonProperty("outputSchema") Map<String, Object> outputSchema,
+        @JsonProperty("execution") ToolExecution execution,
 		@JsonProperty("annotations") ToolAnnotations annotations,
 		@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
+
+		/**
+		 * @deprecated keep for backwards compatibility
+		 */
+		public Tool( // @formatter:off
+            String name,
+            String title,
+            String description,
+            JsonSchema inputSchema,
+            Map<String, Object> outputSchema,
+            ToolAnnotations annotations,
+            Map<String, Object> meta) { // @formatter:on
+			this(name, title, description, inputSchema, outputSchema, null, annotations, meta);
+		}
 
 		public static Builder builder() {
 			return new Builder();
@@ -1360,6 +1644,8 @@ public final class McpSchema {
 			private JsonSchema inputSchema;
 
 			private Map<String, Object> outputSchema;
+
+			private ToolExecution execution;
 
 			private ToolAnnotations annotations;
 
@@ -1400,6 +1686,11 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder execution(ToolExecution execution) {
+				this.execution = execution;
+				return this;
+			}
+
 			public Builder annotations(ToolAnnotations annotations) {
 				this.annotations = annotations;
 				return this;
@@ -1412,7 +1703,7 @@ public final class McpSchema {
 
 			public Tool build() {
 				Assert.hasText(name, "name must not be empty");
-				return new Tool(name, title, description, inputSchema, outputSchema, annotations, meta);
+				return new Tool(name, title, description, inputSchema, outputSchema, execution, annotations, meta);
 			}
 
 		}
@@ -1437,6 +1728,313 @@ public final class McpSchema {
 	}
 
 	/**
+	 * Metadata for augmenting a request with task execution. Include this in the
+	 * {@code task} field of the request parameters.
+	 *
+	 * @param ttl Optional duration in milliseconds to retain task from creation.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record TaskMetaData(@JsonProperty("ttl") Long ttl) {
+	}
+
+	/**
+	 * Metadata for associating messages with a task. Include this in the {@code _meta}
+	 * field under the key {@code io.modelcontextprotocol/related-task}.
+	 *
+	 * @param taskId The task identifier this message is associated with.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record RelatedTaskMetaData(@JsonProperty("taskId") String taskId) {
+	}
+
+	/**
+	 * Data associated with a task.
+	 */
+	public interface TaskInfo {
+
+		/**
+		 * The task identifier.
+		 */
+		String taskId();
+
+		/**
+		 * Current task state.
+		 */
+		TaskStatus status();
+
+		/**
+		 * Optional human-readable message describing the current task state. This can
+		 * provide context for any status, including:
+		 * <p>
+		 * - Reasons for "cancelled" status
+		 * <p>
+		 * - Summaries for "completed" status
+		 * <p>
+		 * - Diagnostic information for "failed" status (e.g., error details, what went
+		 * wrong)
+		 */
+		String statusMessage();
+
+		/**
+		 * ISO 8601 timestamp when the task was created.
+		 */
+		String createdAt();
+
+		/**
+		 * ISO 8601 timestamp when the task status was last updated
+		 */
+		String lastUpdatedAt();
+
+		/**
+		 * Actual retention duration from creation in milliseconds, null for unlimited.
+		 */
+		Long ttl();
+
+		/**
+		 * Suggested polling interval in milliseconds, null if no suggestion.
+		 */
+		Long pollInterval();
+
+	}
+
+	/**
+	 * The server's response to a tools/call request from the client when invoked as a
+	 * task.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record Task( //@formatter:off
+        @JsonProperty("taskId") String taskId,
+        @JsonProperty("status") TaskStatus status,
+        @JsonProperty("statusMessage") String statusMessage,
+        @JsonProperty("createdAt") String createdAt,
+        @JsonProperty("lastUpdatedAt") String lastUpdatedAt,
+        @JsonProperty("ttl") Long ttl,
+        @JsonProperty("pollInterval") Long pollInterval) implements TaskInfo { // @formatter:on
+
+		/**
+		 * Binary compatibility constructor
+		 */
+		public Task(String taskId, TaskStatus status, String statusMessage, String createdAt) {
+			this(taskId, status, statusMessage, createdAt, null, null, null);
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+
+			private String taskId;
+
+			private TaskStatus status;
+
+			private String statusMessage;
+
+			private String createdAt;
+
+			private String lastUpdatedAt;
+
+			private long ttl;
+
+			private long pollInterval;
+
+			public Builder taskId(String taskId) {
+				this.taskId = taskId;
+				return this;
+			}
+
+			public Builder status(TaskStatus status) {
+				this.status = status;
+				return this;
+			}
+
+			public Builder statusMessage(String statusMessage) {
+				this.statusMessage = statusMessage;
+				return this;
+			}
+
+			public Builder createdAt(String createdAt) {
+				this.createdAt = createdAt;
+				return this;
+			}
+
+			public Builder lastUpdatedAt(String lastUpdatedAt) {
+				this.lastUpdatedAt = lastUpdatedAt;
+				return this;
+			}
+
+			public Builder ttl(long ttl) {
+				this.ttl = ttl;
+				return this;
+			}
+
+			public Builder pollInterval(long pollInterval) {
+				this.pollInterval = pollInterval;
+				return this;
+			}
+
+			public Task build() {
+				return new Task(taskId, status, statusMessage, createdAt, lastUpdatedAt, ttl, pollInterval);
+			}
+
+		}
+	}
+
+	/**
+	 * A response to a task-augmented request.
+	 *
+	 * @param task task info
+	 * @param meta Optional metadata about the request.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record CreateTaskResult( // @formatter:off
+                                    @JsonProperty("task") Task task,
+                                    @JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+	}
+
+	/**
+	 * A request to retrieve the state of a task.
+	 *
+	 * @param taskId The task identifier to retrieve.
+	 * @param meta Optional metadata about the request.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record GetTaskRequest( // @formatter:off
+                                  @JsonProperty("taskId") String taskId,
+                                  @JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
+	}
+
+	/**
+	 * The response to a get task status request.
+	 *
+	 * @param taskId task ID
+	 * @param status task status
+	 * @param statusMessage task status message
+	 * @param createdAt task creation time
+	 * @param lastUpdatedAt task last updated time
+	 * @param ttl optional task time to live
+	 * @param pollInterval optional recommended poll interval
+	 * @param meta Optional metadata about the request.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record GetTaskResult( // @formatter:off
+        @JsonProperty("taskId") String taskId,
+        @JsonProperty("status") TaskStatus status,
+        @JsonProperty("statusMessage") String statusMessage,
+        @JsonProperty("createdAt") String createdAt,
+        @JsonProperty("lastUpdatedAt") String lastUpdatedAt,
+        @JsonProperty("ttl") Long ttl,
+        @JsonProperty("pollInterval") Long pollInterval,
+        @JsonProperty("_meta") Map<String, Object> meta) implements TaskInfo, Result { // @formatter:on
+	}
+
+	/**
+	 * The response to a tasks/result request. The structure matches the result type of
+	 * the original request. For example, a tools/call task would return the
+	 * CallToolResult structure.
+	 *
+	 * @param taskId The task identifier to retrieve results for.
+	 * @param meta Optional metadata about the request.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record GetTaskPayloadRequest( // @formatter:off
+        @JsonProperty("taskId") String taskId,
+        @JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
+	}
+
+	/**
+	 * The response to a tasks/result request. The structure matches the result type of
+	 * the original request. For example, a tools/call task would return the
+	 * CallToolResult structure.
+	 */
+	sealed interface GetTaskPayloadResult extends Result {
+
+	}
+
+	/**
+	 * A request to cancel a task.
+	 *
+	 * @param taskId task ID
+	 * @param meta Optional metadata about the request.
+	 */
+	public record CancelTaskRequest( // @formatter:off
+        @JsonProperty("taskId") String taskId,
+        @JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
+	}
+
+	/**
+	 * The response to a tasks/cancel request.
+	 *
+	 * @param taskId task ID
+	 * @param status task status
+	 * @param statusMessage task status message
+	 * @param createdAt task creation time
+	 * @param lastUpdatedAt task last updated time
+	 * @param ttl optional task time to live
+	 * @param pollInterval optional recommended poll interval
+	 * @param meta Optional metadata about the request.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record CancelTaskResult( // @formatter:off
+        @JsonProperty("taskId") String taskId,
+        @JsonProperty("status") TaskStatus status,
+        @JsonProperty("statusMessage") String statusMessage,
+        @JsonProperty("createdAt") String createdAt,
+        @JsonProperty("lastUpdatedAt") String lastUpdatedAt,
+        @JsonProperty("ttl") Long ttl,
+        @JsonProperty("pollInterval") Long pollInterval,
+        @JsonProperty("_meta") Map<String, Object> meta) implements TaskInfo, Result { // @formatter:on
+	}
+
+	/**
+	 * An opaque token representing the pagination position after the last returned
+	 * result. If present, there may be more results available.
+	 *
+	 * @param nextCursor An opaque token representing the pagination position after the
+	 * last returned result. If present, there may be more results available
+	 * @param tasks A list of tasks.
+	 * @param meta Optional metadata about the request.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ListTasksResult( // @formatter:off
+        @JsonProperty("tasks") List<Task> tasks,
+        @JsonProperty("nextCursor") String nextCursor,
+        @JsonProperty("_meta") Map<String, Object> meta) implements PaginatedResult { // @formatter:on
+	}
+
+	/**
+	 * The notification for task status updates.
+	 *
+	 * @param taskId task ID
+	 * @param status task status
+	 * @param statusMessage task status message
+	 * @param createdAt task creation time
+	 * @param lastUpdatedAt task last updated time
+	 * @param ttl optional task time to live
+	 * @param pollInterval optional recommended poll interval
+	 * @param meta Optional metadata about the request.
+	 */
+	public record TaskStatusNotification( // @formatter:off
+        @JsonProperty("taskId") String taskId,
+        @JsonProperty("status") TaskStatus status,
+        @JsonProperty("statusMessage") String statusMessage,
+        @JsonProperty("createdAt") String createdAt,
+        @JsonProperty("lastUpdatedAt") String lastUpdatedAt,
+        @JsonProperty("ttl") Long ttl,
+        @JsonProperty("pollInterval") Long pollInterval,
+        @JsonProperty("_meta") Map<String, Object> meta) implements TaskInfo, Notification { // @formatter:on
+	}
+
+	/**
 	 * Used by the client to call a tool provided by the server.
 	 *
 	 * @param name The name of the tool to call. This must match a tool name from
@@ -1451,14 +2049,23 @@ public final class McpSchema {
 	public record CallToolRequest( // @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("arguments") Map<String, Object> arguments,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
+        @JsonProperty("task") TaskMetaData task,
+		@JsonProperty("_meta") Map<String, Object> meta) implements TaskAugmentedRequest { // @formatter:on
 
 		public CallToolRequest(McpJsonMapper jsonMapper, String name, String jsonArguments) {
-			this(name, parseJsonArguments(jsonMapper, jsonArguments), null);
+			this(name, parseJsonArguments(jsonMapper, jsonArguments), null, null);
+		}
+
+		public CallToolRequest(McpJsonMapper jsonMapper, String name, String jsonArguments, Map<String, Object> meta) {
+			this(name, parseJsonArguments(jsonMapper, jsonArguments), null, meta);
 		}
 
 		public CallToolRequest(String name, Map<String, Object> arguments) {
-			this(name, arguments, null);
+			this(name, arguments, null, null);
+		}
+
+		public CallToolRequest(String name, Map<String, Object> arguments, Map<String, Object> meta) {
+			this(name, arguments, null, meta);
 		}
 
 		private static Map<String, Object> parseJsonArguments(McpJsonMapper jsonMapper, String jsonArguments) {
@@ -1479,6 +2086,8 @@ public final class McpSchema {
 			private String name;
 
 			private Map<String, Object> arguments;
+
+			private TaskMetaData task;
 
 			private Map<String, Object> meta;
 
@@ -1510,12 +2119,51 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder task(TaskMetaData task) {
+				this.task = task;
+				return this;
+			}
+
 			public CallToolRequest build() {
 				Assert.hasText(name, "name must not be empty");
-				return new CallToolRequest(name, arguments, meta);
+				return new CallToolRequest(name, arguments, task, meta);
 			}
 
 		}
+	}
+
+	/**
+	 * Task status.
+	 */
+	public enum TaskStatus {
+
+		// @formatter:off
+        @JsonProperty("working") WORKING("working"),
+        @JsonProperty("input_required") INPUT_REQUIRED("input_required"),
+        @JsonProperty("completed") COMPLETED("completed"),
+        @JsonProperty("failed") FAILED("failed"),
+        @JsonProperty("cancelled") CANCELLED("cancelled");
+        // @formatter:on
+
+		private final String value;
+
+		TaskStatus(final String value) {
+			this.value = value;
+		}
+
+		public String getValue() {
+			return value;
+		}
+
+		public static TaskStatus fromValue(String value) {
+			for (TaskStatus status : TaskStatus.values()) {
+				if (status.value.equalsIgnoreCase(value)) {
+					return status;
+				}
+			}
+			throw new IllegalArgumentException("Unknown TaskStatus value: " + value);
+		}
+
 	}
 
 	/**
@@ -1527,6 +2175,7 @@ public final class McpSchema {
 	 * contains error information. If false or absent, indicates successful execution.
 	 * @param structuredContent An optional JSON object that represents the structured
 	 * result of the tool call.
+	 * @param task Task information when the tool is invoked as a task.
 	 * @param meta See specification for notes on _meta usage
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -1535,14 +2184,15 @@ public final class McpSchema {
 		@JsonProperty("content") List<Content> content,
 		@JsonProperty("isError") Boolean isError,
 		@JsonProperty("structuredContent") Object structuredContent,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+		@JsonProperty("task") Task task,
+		@JsonProperty("_meta") Map<String, Object> meta) implements Result, GetTaskPayloadResult { // @formatter:on
 
 		/**
 		 * @deprecated use the builder instead.
 		 */
 		@Deprecated
 		public CallToolResult(List<Content> content, Boolean isError) {
-			this(content, isError, (Object) null, null);
+			this(content, isError, (Object) null, null, null);
 		}
 
 		/**
@@ -1550,7 +2200,15 @@ public final class McpSchema {
 		 */
 		@Deprecated
 		public CallToolResult(List<Content> content, Boolean isError, Map<String, Object> structuredContent) {
-			this(content, isError, structuredContent, null);
+			this(content, isError, structuredContent, null, null);
+		}
+
+		/**
+		 * Binary compatibility constructor
+		 */
+		public CallToolResult(List<Content> content, Boolean isError, Map<String, Object> structuredContent,
+				Map<String, Object> meta) {
+			this(content, isError, structuredContent, null, meta);
 		}
 
 		/**
@@ -1585,6 +2243,8 @@ public final class McpSchema {
 			private Boolean isError = false;
 
 			private Object structuredContent;
+
+			private Task task;
 
 			private Map<String, Object> meta;
 
@@ -1673,11 +2333,21 @@ public final class McpSchema {
 			}
 
 			/**
+			 * Sets the task information for the tool result.
+			 * @param task task information
+			 * @return this builder
+			 */
+			public Builder task(Task task) {
+				this.task = task;
+				return this;
+			}
+
+			/**
 			 * Builds a new {@link CallToolResult} instance.
 			 * @return a new CallToolResult instance
 			 */
 			public CallToolResult build() {
-				return new CallToolResult(content, isError, structuredContent, meta);
+				return new CallToolResult(content, isError, structuredContent, task, meta);
 			}
 
 		}
@@ -1811,6 +2481,7 @@ public final class McpSchema {
 	 * @param maxTokens The maximum number of tokens to sample, as requested by the
 	 * server. The client MAY choose to sample fewer tokens than requested
 	 * @param stopSequences Optional stop sequences for sampling
+	 * @param task Optional task metadata
 	 * @param metadata Optional metadata to pass through to the LLM provider. The format
 	 * of this metadata is provider-specific
 	 * @param meta See specification for notes on _meta usage
@@ -1825,15 +2496,24 @@ public final class McpSchema {
 		@JsonProperty("temperature") Double temperature,
 		@JsonProperty("maxTokens") Integer maxTokens,
 		@JsonProperty("stopSequences") List<String> stopSequences,
+        @JsonProperty("task") TaskMetaData task,
 		@JsonProperty("metadata") Map<String, Object> metadata,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements TaskAugmentedRequest { // @formatter:on
 
 		// backwards compatibility constructor
 		public CreateMessageRequest(List<SamplingMessage> messages, ModelPreferences modelPreferences,
 				String systemPrompt, ContextInclusionStrategy includeContext, Double temperature, Integer maxTokens,
 				List<String> stopSequences, Map<String, Object> metadata) {
-			this(messages, modelPreferences, systemPrompt, includeContext, temperature, maxTokens, stopSequences,
+			this(messages, modelPreferences, systemPrompt, includeContext, temperature, maxTokens, stopSequences, null,
 					metadata, null);
+		}
+
+		// backwards compatibility constructor
+		public CreateMessageRequest(List<SamplingMessage> messages, ModelPreferences modelPreferences,
+				String systemPrompt, ContextInclusionStrategy includeContext, Double temperature, Integer maxTokens,
+				List<String> stopSequences, Map<String, Object> metadata, Map<String, Object> meta) {
+			this(messages, modelPreferences, systemPrompt, includeContext, temperature, maxTokens, stopSequences, null,
+					metadata, meta);
 		}
 
 		public enum ContextInclusionStrategy {
@@ -1863,6 +2543,8 @@ public final class McpSchema {
 			private Integer maxTokens;
 
 			private List<String> stopSequences;
+
+			private TaskMetaData task;
 
 			private Map<String, Object> metadata;
 
@@ -1903,6 +2585,11 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder task(TaskMetaData task) {
+				this.task = task;
+				return this;
+			}
+
 			public Builder metadata(Map<String, Object> metadata) {
 				this.metadata = metadata;
 				return this;
@@ -1923,7 +2610,7 @@ public final class McpSchema {
 
 			public CreateMessageRequest build() {
 				return new CreateMessageRequest(messages, modelPreferences, systemPrompt, includeContext, temperature,
-						maxTokens, stopSequences, metadata, meta);
+						maxTokens, stopSequences, task, metadata, meta);
 			}
 
 		}
@@ -2047,11 +2734,17 @@ public final class McpSchema {
 	public record ElicitRequest( // @formatter:off
 		@JsonProperty("message") String message,
 		@JsonProperty("requestedSchema") Map<String, Object> requestedSchema,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
+        @JsonProperty("task") TaskMetaData task,
+		@JsonProperty("_meta") Map<String, Object> meta) implements TaskAugmentedRequest { // @formatter:on
 
 		// backwards compatibility constructor
 		public ElicitRequest(String message, Map<String, Object> requestedSchema) {
 			this(message, requestedSchema, null);
+		}
+
+		// backwards compatibility constructor
+		public ElicitRequest(String message, Map<String, Object> requestedSchema, Map<String, Object> meta) {
+			this(message, requestedSchema, null, meta);
 		}
 
 		public static Builder builder() {
@@ -2064,6 +2757,8 @@ public final class McpSchema {
 
 			private Map<String, Object> requestedSchema;
 
+			private TaskMetaData task;
+
 			private Map<String, Object> meta;
 
 			public Builder message(String message) {
@@ -2073,6 +2768,11 @@ public final class McpSchema {
 
 			public Builder requestedSchema(Map<String, Object> requestedSchema) {
 				this.requestedSchema = requestedSchema;
+				return this;
+			}
+
+			public Builder task(TaskMetaData task) {
+				this.task = task;
 				return this;
 			}
 
@@ -2090,7 +2790,7 @@ public final class McpSchema {
 			}
 
 			public ElicitRequest build() {
-				return new ElicitRequest(message, requestedSchema, meta);
+				return new ElicitRequest(message, requestedSchema, task, meta);
 			}
 
 		}
@@ -2189,15 +2889,17 @@ public final class McpSchema {
 	}
 
 	/**
-	 * An opaque token representing the pagination position after the last returned
-	 * result. If present, there may be more results available.
-	 *
-	 * @param nextCursor An opaque token representing the pagination position after the
-	 * last returned result. If present, there may be more results available
+	 * Pagination result interface.
 	 */
-	@JsonInclude(JsonInclude.Include.NON_ABSENT)
-	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record PaginatedResult(@JsonProperty("nextCursor") String nextCursor) {
+	sealed interface PaginatedResult extends Result permits ListResourceTemplatesResult, ListResourcesResult,
+			ListRootsResult, ListPromptsResult, ListToolsResult, ListTasksResult {
+
+		/**
+		 * An opaque token representing the pagination position after the ast returned
+		 * result. If present, there may be more results available
+		 */
+		String nextCursor();
+
 	}
 
 	// ---------------------------
@@ -2862,7 +3564,7 @@ public final class McpSchema {
 	public record ListRootsResult( // @formatter:off
 		@JsonProperty("roots") List<Root> roots,
 		@JsonProperty("nextCursor") String nextCursor,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements PaginatedResult { // @formatter:on
 
 		public ListRootsResult(List<Root> roots) {
 			this(roots, null);
