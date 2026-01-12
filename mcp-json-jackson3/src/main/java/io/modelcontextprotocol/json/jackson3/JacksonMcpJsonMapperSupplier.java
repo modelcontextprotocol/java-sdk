@@ -1,0 +1,34 @@
+/*
+ * Copyright 2026 - 2026 the original author or authors.
+ */
+
+package io.modelcontextprotocol.json.jackson3;
+
+import tools.jackson.databind.json.JsonMapper;
+
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.McpJsonMapperSupplier;
+
+/**
+ * A supplier of {@link McpJsonMapper} instances that uses the Jackson library for JSON
+ * serialization and deserialization.
+ * <p>
+ * This implementation provides a {@link McpJsonMapper} backed by
+ * {@link JsonMapper#shared() JsonMapper shared instance}.
+ */
+public class JacksonMcpJsonMapperSupplier implements McpJsonMapperSupplier {
+
+	/**
+	 * Returns a new instance of {@link McpJsonMapper} that uses the Jackson library for
+	 * JSON serialization and deserialization.
+	 * <p>
+	 * The returned {@link McpJsonMapper} is backed by {@link JsonMapper#shared()
+	 * JsonMapper shared instance}.
+	 * @return a new {@link McpJsonMapper} instance
+	 */
+	@Override
+	public McpJsonMapper get() {
+		return new JacksonMcpJsonMapper(JsonMapper.shared());
+	}
+
+}

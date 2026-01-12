@@ -10,6 +10,7 @@ import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -18,7 +19,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
+import tools.jackson.databind.exc.InvalidTypeIdException;
 
 import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
 import net.javacrumbs.jsonunit.core.Option;
@@ -58,7 +59,9 @@ public class McpSchemaTests {
 	void testContentDeserializationWrongType() throws Exception {
 
 		assertThatThrownBy(() -> JSON_MAPPER.readValue("""
-				{"type":"WRONG","text":"XXX"}""", McpSchema.TextContent.class))
+				{"type":"WRONG","text":"XXX"}""", McpSchema.TextContent.class)).isInstanceOf(IOException.class)
+			.hasMessage("Failed to read value")
+			.cause()
 			.isInstanceOf(InvalidTypeIdException.class)
 			.hasMessageContaining(
 					"Could not resolve type id 'WRONG' as a subtype of `io.modelcontextprotocol.spec.McpSchema$TextContent`: known type ids = [audio, image, resource, resource_link, text]");

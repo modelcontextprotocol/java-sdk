@@ -8,10 +8,10 @@
 		<artifactId>mcp-parent</artifactId>
 		<version>0.18.0-SNAPSHOT</version>
 	</parent>
-	<artifactId>mcp-json-jackson2</artifactId>
+	<artifactId>mcp-json-jackson3</artifactId>
 	<packaging>jar</packaging>
 	<name>Java MCP SDK JSON Jackson</name>
-	<description>Java MCP SDK JSON implementation based on Jackson 2</description>
+	<description>Java MCP SDK JSON implementation based on Jackson 3</description>
 	<url>https://github.com/modelcontextprotocol/java-sdk</url>
 	<scm>
 		<url>https://github.com/modelcontextprotocol/java-sdk</url>
@@ -40,14 +40,14 @@
             <version>0.18.0-SNAPSHOT</version>
         </dependency>
         <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
+            <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>${jackson2.version}</version>
+            <version>${jackson3.version}</version>
         </dependency>
         <dependency>
             <groupId>com.networknt</groupId>
             <artifactId>json-schema-validator</artifactId>
-            <version>${json-schema-validator-jackson2.version}</version>
+            <version>${json-schema-validator-jackson3.version}</version>
         </dependency>
 
 		<dependency>
