@@ -44,11 +44,10 @@ class McpAsyncClientTests {
 		Map<String, Object> inputSchemaMap = Map.of("type", "object", "properties",
 				Map.of("expression", Map.of("type", "string")), "required", List.of("expression"));
 
-		McpSchema.JsonSchema inputSchema = new McpSchema.JsonSchema("object", inputSchemaMap, null, null, null, null);
 		McpSchema.Tool.Builder toolBuilder = McpSchema.Tool.builder()
 			.name("calculator")
 			.description("Performs mathematical calculations")
-			.inputSchema(inputSchema);
+			.inputSchema(inputSchemaMap);
 
 		if (hasOutputSchema) {
 			Map<String, Object> outputSchema = Map.of("type", "object", "properties",

@@ -1331,27 +1331,6 @@ public final class McpSchema {
 	}
 
 	/**
-	 * A JSON Schema object that describes the expected structure of arguments or output.
-	 *
-	 * @param type The type of the schema (e.g., "object")
-	 * @param properties The properties of the schema object
-	 * @param required List of required property names
-	 * @param additionalProperties Whether additional properties are allowed
-	 * @param defs Schema definitions using the newer $defs keyword
-	 * @param definitions Schema definitions using the legacy definitions keyword
-	 */
-	@JsonInclude(JsonInclude.Include.NON_ABSENT)
-	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record JsonSchema( // @formatter:off
-		@JsonProperty("type") String type,
-		@JsonProperty("properties") Map<String, Object> properties,
-		@JsonProperty("required") List<String> required,
-		@JsonProperty("additionalProperties") Boolean additionalProperties,
-		@JsonProperty("$defs") Map<String, Object> defs,
-		@JsonProperty("definitions") Map<String, Object> definitions) { // @formatter:on
-	}
-
-	/**
 	 * Additional properties describing a Tool to clients.
 	 *
 	 * NOTE: all properties in ToolAnnotations are **hints**. They are not guaranteed to
@@ -1395,7 +1374,7 @@ public final class McpSchema {
 		@JsonProperty("name") String name,
 		@JsonProperty("title") String title,
 		@JsonProperty("description") String description,
-		@JsonProperty("inputSchema") JsonSchema inputSchema,
+		@JsonProperty("inputSchema") Map<String, Object> inputSchema,
 		@JsonProperty("outputSchema") Map<String, Object> outputSchema,
 		@JsonProperty("annotations") ToolAnnotations annotations,
 		@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
@@ -1412,7 +1391,7 @@ public final class McpSchema {
 
 			private String description;
 
-			private JsonSchema inputSchema;
+			private Map<String, Object> inputSchema;
 
 			private Map<String, Object> outputSchema;
 
@@ -1435,13 +1414,13 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder inputSchema(JsonSchema inputSchema) {
+			public Builder inputSchema(Map<String, Object> inputSchema) {
 				this.inputSchema = inputSchema;
 				return this;
 			}
 
 			public Builder inputSchema(McpJsonMapper jsonMapper, String inputSchema) {
-				this.inputSchema = parseSchema(jsonMapper, inputSchema);
+				this.inputSchema = schemaToMap(jsonMapper, inputSchema);
 				return this;
 			}
 
@@ -1476,15 +1455,6 @@ public final class McpSchema {
 	private static Map<String, Object> schemaToMap(McpJsonMapper jsonMapper, String schema) {
 		try {
 			return jsonMapper.readValue(schema, MAP_TYPE_REF);
-		}
-		catch (IOException e) {
-			throw new IllegalArgumentException("Invalid schema: " + schema, e);
-		}
-	}
-
-	private static JsonSchema parseSchema(McpJsonMapper jsonMapper, String schema) {
-		try {
-			return jsonMapper.readValue(schema, JsonSchema.class);
 		}
 		catch (IOException e) {
 			throw new IllegalArgumentException("Invalid schema: " + schema, e);

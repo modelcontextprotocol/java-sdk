@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.server;
 
 import java.util.List;
+import java.util.Map;
 
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -20,7 +21,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -106,11 +106,7 @@ public abstract class AbstractMcpSyncServerTests {
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.build();
 
-		Tool newTool = McpSchema.Tool.builder()
-			.name("new-tool")
-			.title("New test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool newTool = McpSchema.Tool.builder().name("new-tool").title("New test tool").inputSchema(Map.of()).build();
 		assertThatCode(() -> mcpSyncServer.addTool(new McpServerFeatures.SyncToolSpecification(newTool,
 				(exchange, args) -> CallToolResult.builder().content(List.of()).isError(false).build())))
 			.doesNotThrowAnyException();
@@ -124,11 +120,7 @@ public abstract class AbstractMcpSyncServerTests {
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.build();
 
-		Tool newTool = McpSchema.Tool.builder()
-			.name("new-tool")
-			.title("New test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool newTool = McpSchema.Tool.builder().name("new-tool").title("New test tool").inputSchema(Map.of()).build();
 
 		assertThatCode(() -> mcpSyncServer.addTool(McpServerFeatures.SyncToolSpecification.builder()
 			.tool(newTool)
@@ -144,7 +136,7 @@ public abstract class AbstractMcpSyncServerTests {
 		Tool duplicateTool = McpSchema.Tool.builder()
 			.name(TEST_TOOL_NAME)
 			.title("Duplicate tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
+			.inputSchema(Map.of())
 			.build();
 
 		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
@@ -164,7 +156,7 @@ public abstract class AbstractMcpSyncServerTests {
 		Tool duplicateTool = McpSchema.Tool.builder()
 			.name(TEST_TOOL_NAME)
 			.title("Duplicate tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
+			.inputSchema(Map.of())
 			.build();
 
 		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
@@ -186,7 +178,7 @@ public abstract class AbstractMcpSyncServerTests {
 		Tool duplicateTool = McpSchema.Tool.builder()
 			.name("duplicate-build-toolcall")
 			.title("Duplicate toolcall during building")
-			.inputSchema(EMPTY_JSON_SCHEMA)
+			.inputSchema(Map.of())
 			.build();
 
 		assertThatThrownBy(() -> prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
@@ -204,7 +196,7 @@ public abstract class AbstractMcpSyncServerTests {
 		Tool duplicateTool = McpSchema.Tool.builder()
 			.name("batch-list-tool")
 			.title("Duplicate tool in batch list")
-			.inputSchema(EMPTY_JSON_SCHEMA)
+			.inputSchema(Map.of())
 			.build();
 		List<McpServerFeatures.SyncToolSpecification> specs = List.of(
 				McpServerFeatures.SyncToolSpecification.builder()
@@ -231,7 +223,7 @@ public abstract class AbstractMcpSyncServerTests {
 		Tool duplicateTool = McpSchema.Tool.builder()
 			.name("batch-varargs-tool")
 			.title("Duplicate tool in batch varargs")
-			.inputSchema(EMPTY_JSON_SCHEMA)
+			.inputSchema(Map.of())
 			.build();
 
 		assertThatThrownBy(() -> prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
@@ -252,11 +244,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testRemoveTool() {
-		Tool tool = McpSchema.Tool.builder()
-			.name(TEST_TOOL_NAME)
-			.title("Test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool tool = McpSchema.Tool.builder().name(TEST_TOOL_NAME).title("Test tool").inputSchema(Map.of()).build();
 
 		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
