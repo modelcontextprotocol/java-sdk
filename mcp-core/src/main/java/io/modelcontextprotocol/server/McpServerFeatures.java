@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server;
@@ -40,7 +40,8 @@ public class McpServerFeatures {
 	 * @param instructions The server instructions text
 	 */
 	record Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-			List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
+			List<McpServerFeatures.AsyncToolSpecification> tools, ToolsRepository toolsRepository,
+			Map<String, AsyncResourceSpecification> resources,
 			Map<String, McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
@@ -52,6 +53,8 @@ public class McpServerFeatures {
 		 * @param serverInfo The server implementation details
 		 * @param serverCapabilities The server capabilities
 		 * @param tools The list of tool specifications
+		 * @param toolsRepository The tools repository (optional, defaults to
+		 * InMemoryToolsRepository if tools list is provided)
 		 * @param resources The map of resource specifications
 		 * @param resourceTemplates The map of resource templates
 		 * @param prompts The map of prompt specifications
@@ -60,7 +63,8 @@ public class McpServerFeatures {
 		 * @param instructions The server instructions text
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-				List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
+				List<McpServerFeatures.AsyncToolSpecification> tools, ToolsRepository toolsRepository,
+				Map<String, AsyncResourceSpecification> resources,
 				Map<String, McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
 				Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
@@ -80,9 +84,13 @@ public class McpServerFeatures {
 							!Utils.isEmpty(prompts) ? new McpSchema.ServerCapabilities.PromptCapabilities(false) : null,
 							!Utils.isEmpty(resources)
 									? new McpSchema.ServerCapabilities.ResourceCapabilities(false, false) : null,
-							!Utils.isEmpty(tools) ? new McpSchema.ServerCapabilities.ToolCapabilities(false) : null);
+							(!Utils.isEmpty(tools) || toolsRepository != null)
+									? new McpSchema.ServerCapabilities.ToolCapabilities(false) : null);
 
 			this.tools = (tools != null) ? tools : List.of();
+			// toolsRepository is initialized in McpAsyncServer.initializeToolsRepository
+			// to ensure structured output handling is always applied
+			this.toolsRepository = toolsRepository;
 			this.resources = (resources != null) ? resources : Map.of();
 			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : Map.of();
 			this.prompts = (prompts != null) ? prompts : Map.of();
@@ -135,8 +143,8 @@ public class McpServerFeatures {
 					.subscribeOn(Schedulers.boundedElastic()));
 			}
 
-			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources, resourceTemplates,
-					prompts, completions, rootChangeConsumers, syncSpec.instructions());
+			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, null, resources,
+					resourceTemplates, prompts, completions, rootChangeConsumers, syncSpec.instructions());
 		}
 	}
 
@@ -613,13 +621,13 @@ public class McpServerFeatures {
 	 *
 	 * <pre>{@code
 	 * new McpServerFeatures.SyncResourceSpecification(
-	 *     Resource.builder()
-	 *         .uri("docs")
-	 *         .name("Documentation files")
-	 * 		   .title("Documentation files")
-	 * 		   .mimeType("text/markdown")
-	 * 		   .description("Markdown documentation files")
-	 * 		   .build(),
+	 * 		Resource.builder()
+	 * 				.uri("docs")
+	 * 				.name("Documentation files")
+	 * 				.title("Documentation files")
+	 * 				.mimeType("text/markdown")
+	 * 				.description("Markdown documentation files")
+	 * 				.build(),
 	 * 		(exchange, request) -> {
 	 * 			String content = readFile(request.getPath());
 	 * 			return new ReadResourceResult(content);

@@ -1,11 +1,13 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -302,6 +304,109 @@ public abstract class AbstractMcpAsyncServerTests {
 			.build();
 
 		StepVerifier.create(mcpAsyncServer.notifyToolsListChanged()).verifyComplete();
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testListToolsDelegatesToCustomRepository() {
+		// Create a spy repository to verify wiring
+		var listToolsCalled = new boolean[1];
+		var addToolCalled = new boolean[1];
+
+		Tool testTool = McpSchema.Tool.builder()
+			.name("custom-repo-tool")
+			.title("Custom Repository Tool")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
+
+		ToolsRepository spyRepository = new ToolsRepository() {
+			private final ConcurrentHashMap<String, McpServerFeatures.AsyncToolSpecification> tools = new ConcurrentHashMap<>();
+
+			@Override
+			public Mono<ToolsListResult> listTools(McpAsyncServerExchange exchange, String cursor) {
+				listToolsCalled[0] = true;
+				return Mono.just(new ToolsListResult(
+						tools.values().stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList(), null));
+			}
+
+			@Override
+			public Mono<McpServerFeatures.AsyncToolSpecification> resolveToolForCall(String name,
+					McpAsyncServerExchange exchange) {
+				return Mono.justOrEmpty(tools.get(name));
+			}
+
+			@Override
+			public void addTool(McpServerFeatures.AsyncToolSpecification tool) {
+				addToolCalled[0] = true;
+				tools.put(tool.tool().name(), tool);
+			}
+
+			@Override
+			public void removeTool(String name) {
+				tools.remove(name);
+			}
+		};
+
+		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.toolsRepository(spyRepository)
+			.build();
+
+		// Add a tool
+		StepVerifier.create(mcpAsyncServer.addTool(McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(testTool)
+			.callHandler((exchange, request) -> Mono
+				.just(CallToolResult.builder().content(List.of()).isError(false).build()))
+			.build())).verifyComplete();
+
+		assertThat(addToolCalled[0]).isTrue();
+
+		// List tools should call the repository and contain the added tool
+		StepVerifier.create(mcpAsyncServer.listTools().collectList()).assertNext(tools -> {
+			assertThat(listToolsCalled[0]).isTrue();
+			assertThat(tools).anyMatch(t -> "custom-repo-tool".equals(t.name()));
+		}).verifyComplete();
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testListToolsPassesNullCursorOnFirstCall() {
+		// Verify first page request passes null cursor
+		var receivedCursors = new ArrayList<String>();
+
+		ToolsRepository cursorTrackingRepository = new ToolsRepository() {
+			@Override
+			public Mono<ToolsListResult> listTools(McpAsyncServerExchange exchange, String cursor) {
+				receivedCursors.add(cursor);
+				return Mono.just(new ToolsListResult(List.of(), null));
+			}
+
+			@Override
+			public Mono<McpServerFeatures.AsyncToolSpecification> resolveToolForCall(String name,
+					McpAsyncServerExchange exchange) {
+				return Mono.empty();
+			}
+
+			@Override
+			public void addTool(McpServerFeatures.AsyncToolSpecification tool) {
+			}
+
+			@Override
+			public void removeTool(String name) {
+			}
+		};
+
+		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.toolsRepository(cursorTrackingRepository)
+			.build();
+
+		// First call should have null cursor (first page)
+		StepVerifier.create(mcpAsyncServer.listTools().collectList()).assertNext(tools -> {
+			assertThat(receivedCursors).containsExactly(null);
+		}).verifyComplete();
 
 		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
 	}
