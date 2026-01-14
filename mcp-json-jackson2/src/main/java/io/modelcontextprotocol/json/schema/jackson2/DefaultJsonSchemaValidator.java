@@ -1,22 +1,24 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2026-2026 the original author or authors.
  */
-package io.modelcontextprotocol.json.schema.jackson;
+package io.modelcontextprotocol.json.schema.jackson2;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.networknt.schema.Error;
 import com.networknt.schema.Schema;
 import com.networknt.schema.SchemaRegistry;
-import com.networknt.schema.Error;
 import com.networknt.schema.dialect.Dialects;
+
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Default implementation of the {@link JsonSchemaValidator} interface. This class
@@ -24,11 +26,7 @@ import org.slf4j.LoggerFactory;
  * NetworkNT JSON Schema Validator library for validation.
  *
  * @author Christian Tzolov
- * @deprecated since 18.0.0, use
- * {@link io.modelcontextprotocol.json.schema.jackson2.DefaultJsonSchemaValidator}
- * instead. Will be removed in 19.0.0.
  */
-@Deprecated(forRemoval = true, since = "18.0.0")
 public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 
 	private static final Logger logger = LoggerFactory.getLogger(DefaultJsonSchemaValidator.class);

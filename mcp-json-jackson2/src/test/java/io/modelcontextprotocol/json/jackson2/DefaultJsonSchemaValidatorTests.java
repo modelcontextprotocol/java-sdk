@@ -1,8 +1,8 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2026-2026 the original author or authors.
  */
 
-package io.modelcontextprotocol.json;
+package io.modelcontextprotocol.json.jackson2;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
-import io.modelcontextprotocol.json.schema.jackson.DefaultJsonSchemaValidator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -30,6 +29,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator.ValidationResponse;
+import io.modelcontextprotocol.json.schema.jackson2.DefaultJsonSchemaValidator;
 
 /**
  * Tests for {@link DefaultJsonSchemaValidator}.

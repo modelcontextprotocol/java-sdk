@@ -1,25 +1,21 @@
 /*
- * Copyright 2025 - 2025 the original author or authors.
+ * Copyright 2026 - 2026 the original author or authors.
  */
 
-package io.modelcontextprotocol.json.jackson;
+package io.modelcontextprotocol.json.jackson2;
+
+import java.io.IOException;
 
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
-
-import java.io.IOException;
 
 /**
  * Jackson-based implementation of JsonMapper. Wraps a Jackson ObjectMapper but keeps the
  * SDK decoupled from Jackson at the API level.
- *
- * @deprecated since 18.0.0, use
- * {@link io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper} instead. Will be
- * removed in 19.0.0
  */
-@Deprecated(forRemoval = true, since = "18.0.0")
 public final class JacksonMcpJsonMapper implements McpJsonMapper {
 
 	private final ObjectMapper objectMapper;

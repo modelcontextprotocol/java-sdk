@@ -1,8 +1,8 @@
 /*
- * Copyright 2025 - 2025 the original author or authors.
+ * Copyright 2026 - 2026 the original author or authors.
  */
 
-package io.modelcontextprotocol.json.schema.jackson;
+package io.modelcontextprotocol.json.schema.jackson2;
 
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidatorSupplier;
@@ -13,9 +13,6 @@ import io.modelcontextprotocol.json.schema.JsonSchemaValidatorSupplier;
  *
  * @see JsonSchemaValidatorSupplier
  * @see JsonSchemaValidator
- * @deprecated since 18.0.0, use
- * {@link io.modelcontextprotocol.json.schema.jackson2.JacksonJsonSchemaValidatorSupplier}
- * instead. Will be removed in 19.0.0.
  */
 public class JacksonJsonSchemaValidatorSupplier implements JsonSchemaValidatorSupplier {
 
