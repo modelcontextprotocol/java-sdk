@@ -831,8 +831,60 @@ public class McpSchemaTests {
 		assertThatJson(serializedAgain).when(Option.IGNORING_ARRAY_ORDER).isEqualTo(json(serialized));
 
 		// Just verify the basic structure was preserved
-		assertThat(deserializedTool.inputSchema().containsKey("defs"));
-		// assertThat(deserializedTool.inputSchema().defs()).containsKey("Address");
+		Map<String, Object> defs = ((Map<String, Object>) deserializedTool.inputSchema().get("$defs"));
+		Map<String, Object> address = ((Map<String, Object>) defs.get("Address"));
+
+		assertThat(deserializedTool.inputSchema().containsKey("$defs")).isTrue();
+		assertThat(address.get("type")).isEqualTo("object");
+	}
+
+	@Test
+	void testToolWithSchemaThatDoesNotHavePropertiesAtTopLevel() throws Exception {
+		String schemaJson = """
+				{
+					"type": "object",
+					"oneOf": [
+					{
+						"properties": {
+							"name": {"type": "string"}
+						},
+						"required":["name"]
+					},
+					{
+						"properties": {
+							"id": {"type": "integer"}
+						},
+						"required":["id"]
+					}
+					]
+				}
+				""";
+
+		McpSchema.Tool tool = McpSchema.Tool.builder()
+			.name("addressTool")
+			.title("Handles addresses")
+			.inputSchema(JSON_MAPPER, schemaJson)
+			.build();
+
+		// Serialize the tool to a string
+		String serialized = JSON_MAPPER.writeValueAsString(tool);
+
+		// Deserialize back to a Tool object
+		McpSchema.Tool deserializedTool = JSON_MAPPER.readValue(serialized, McpSchema.Tool.class);
+
+		// Serialize again and compare with first serialization
+		String serializedAgain = JSON_MAPPER.writeValueAsString(deserializedTool);
+
+		// The two serialized strings should be the same
+		assertThatJson(serializedAgain).when(Option.IGNORING_ARRAY_ORDER).isEqualTo(json(serialized));
+
+		Map<String, Object> nameInput = Map.of("properties", Map.of("name", Map.of("type", "string")), "required",
+				List.of("name"));
+		Map<String, Object> idInput = Map.of("properties", Map.of("id", Map.of("type", "integer")), "required",
+				List.of("id"));
+
+		List<Object> oneOf = (List<Object>) deserializedTool.inputSchema().get("oneOf");
+		assertThat(oneOf).isEqualTo(List.of(nameInput, idInput));
 	}
 
 	@Test
