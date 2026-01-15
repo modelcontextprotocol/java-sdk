@@ -92,7 +92,6 @@
 		<org.maven.antora-version>1.0.0-alpha.4</org.maven.antora-version>
 		<io.spring.maven.antora-version>0.0.4</io.spring.maven.antora-version>
 		<asciidoctorj-pdf.version>1.6.2</asciidoctorj-pdf.version>
-		<junit-jupiter.version>5.10.5</junit-jupiter.version>
 		<tomcat.version>11.0.2</tomcat.version>
 		<jakarta.servlet.version>6.1.0</jakarta.servlet.version>
 		<awaitility.version>4.2.0</awaitility.version>
