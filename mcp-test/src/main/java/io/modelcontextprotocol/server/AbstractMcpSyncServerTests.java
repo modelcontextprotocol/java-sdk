@@ -1,11 +1,15 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server;
 
 import java.util.List;
 
+import io.modelcontextprotocol.experimental.tasks.CreateTaskOptions;
+import io.modelcontextprotocol.experimental.tasks.InMemoryTaskStore;
+import io.modelcontextprotocol.experimental.tasks.TaskStore;
+import io.modelcontextprotocol.experimental.tasks.TaskTestUtils;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
@@ -14,6 +18,8 @@ import io.modelcontextprotocol.spec.McpSchema.PromptMessage;
 import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
 import io.modelcontextprotocol.spec.McpSchema.Resource;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
+import io.modelcontextprotocol.spec.McpSchema.TaskStatus;
+import io.modelcontextprotocol.spec.McpSchema.TaskSupportMode;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.junit.jupiter.api.AfterEach;
@@ -31,6 +37,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * @author Christian Tzolov
  */
+// KEEP IN SYNC with the class in mcp-test module
 public abstract class AbstractMcpSyncServerTests {
 
 	private static final String TEST_TOOL_NAME = "test-tool";
@@ -38,6 +45,8 @@ public abstract class AbstractMcpSyncServerTests {
 	private static final String TEST_RESOURCE_URI = "test://resource";
 
 	private static final String TEST_PROMPT_NAME = "test-prompt";
+
+	private static final String TEST_TASK_TOOL_NAME = "task-tool";
 
 	abstract protected McpServer.SyncSpecification<?> prepareSyncServerBuilder();
 
@@ -321,7 +330,6 @@ public abstract class AbstractMcpSyncServerTests {
 		Resource resource = Resource.builder()
 			.uri(TEST_RESOURCE_URI)
 			.name("Test Resource")
-			.title("Test Resource")
 			.mimeType("text/plain")
 			.description("Test resource description")
 			.build();
@@ -353,7 +361,6 @@ public abstract class AbstractMcpSyncServerTests {
 		Resource resource = Resource.builder()
 			.uri(TEST_RESOURCE_URI)
 			.name("Test Resource")
-			.title("Test Resource")
 			.mimeType("text/plain")
 			.description("Test resource description")
 			.build();
@@ -383,7 +390,6 @@ public abstract class AbstractMcpSyncServerTests {
 		Resource resource = Resource.builder()
 			.uri(TEST_RESOURCE_URI)
 			.name("Test Resource")
-			.title("Test Resource")
 			.mimeType("text/plain")
 			.description("Test resource description")
 			.build();
@@ -408,7 +414,6 @@ public abstract class AbstractMcpSyncServerTests {
 		Resource resource = Resource.builder()
 			.uri(TEST_RESOURCE_URI)
 			.name("Test Resource")
-			.title("Test Resource")
 			.mimeType("text/plain")
 			.description("Test resource description")
 			.build();
@@ -676,6 +681,264 @@ public abstract class AbstractMcpSyncServerTests {
 
 		assertThat(noConsumersServer).isNotNull();
 		assertThatCode(noConsumersServer::closeGracefully).doesNotThrowAnyException();
+	}
+
+	// ---------------------------------------
+	// Tasks Tests
+	// ---------------------------------------
+
+	/** Creates a server with task capabilities and the given task store. */
+	protected McpSyncServer createTaskServer(TaskStore<McpSchema.ServerTaskPayloadResult> taskStore) {
+		return prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(TaskTestUtils.DEFAULT_TASK_CAPABILITIES)
+			.taskStore(taskStore)
+			.build();
+	}
+
+	@Test
+	void testServerWithTaskStore() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		var server = createTaskServer(taskStore);
+
+		assertThat(server.getAsyncServer().getTaskStore()).isSameAs(taskStore);
+		assertThatCode(server::closeGracefully).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testTaskStoreCreateAndGet() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		var server = createTaskServer(taskStore);
+
+		// Create a task (blocking)
+		var task = taskStore.createTask(
+				CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).requestedTtl(60000L).build())
+			.block();
+
+		assertThat(task).isNotNull();
+		assertThat(task.taskId()).isNotNull().isNotEmpty();
+		assertThat(task.status()).isEqualTo(TaskStatus.WORKING);
+
+		// Get the task (blocking)
+		var storeResult = taskStore.getTask(task.taskId(), null).block();
+		var retrievedTask = storeResult.task();
+
+		assertThat(retrievedTask).isNotNull();
+		assertThat(retrievedTask.taskId()).isEqualTo(task.taskId());
+		assertThat(retrievedTask.status()).isEqualTo(TaskStatus.WORKING);
+
+		assertThatCode(server::closeGracefully).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testTaskStoreUpdateStatus() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		var server = createTaskServer(taskStore);
+
+		// Create a task
+		var task = taskStore.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).build())
+			.block();
+		assertThat(task).isNotNull();
+
+		// Update status
+		taskStore.updateTaskStatus(task.taskId(), null, TaskStatus.WORKING, "Processing...").block();
+
+		// Verify status updated
+		var updatedTask = taskStore.getTask(task.taskId(), null).block().task();
+		assertThat(updatedTask).isNotNull();
+		assertThat(updatedTask.status()).isEqualTo(TaskStatus.WORKING);
+		assertThat(updatedTask.statusMessage()).isEqualTo("Processing...");
+
+		assertThatCode(server::closeGracefully).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testTaskStoreStoreResult() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		var server = createTaskServer(taskStore);
+
+		// Create a task
+		var task = taskStore.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).build())
+			.block();
+		assertThat(task).isNotNull();
+
+		// Store result
+		CallToolResult result = CallToolResult.builder()
+			.content(List.of(new McpSchema.TextContent("Done!")))
+			.isError(false)
+			.build();
+
+		taskStore.storeTaskResult(task.taskId(), null, TaskStatus.COMPLETED, result).block();
+
+		// Verify task is completed
+		var completedTask = taskStore.getTask(task.taskId(), null).block().task();
+		assertThat(completedTask).isNotNull();
+		assertThat(completedTask.status()).isEqualTo(TaskStatus.COMPLETED);
+
+		// Verify result can be retrieved
+		var retrievedResult = taskStore.getTaskResult(task.taskId(), null).block();
+		assertThat(retrievedResult).isNotNull();
+		assertThat(retrievedResult).isInstanceOf(CallToolResult.class);
+
+		assertThatCode(server::closeGracefully).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testTaskStoreListTasks() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		var server = createTaskServer(taskStore);
+
+		// Create a few tasks
+		taskStore.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).build()).block();
+		taskStore.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).build()).block();
+
+		// List tasks
+		var listResult = taskStore.listTasks(null, null).block();
+		assertThat(listResult).isNotNull();
+		assertThat(listResult.tasks()).isNotNull();
+		assertThat(listResult.tasks()).hasSizeGreaterThanOrEqualTo(2);
+
+		assertThatCode(server::closeGracefully).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testTaskStoreRequestCancellation() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		var server = createTaskServer(taskStore);
+
+		// Create a task
+		var task = taskStore.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).build())
+			.block();
+		assertThat(task).isNotNull();
+
+		// Request cancellation
+		var cancelledTask = taskStore.requestCancellation(task.taskId(), null).block();
+		assertThat(cancelledTask).isNotNull();
+		assertThat(cancelledTask.taskId()).isEqualTo(task.taskId());
+
+		// Verify cancellation was requested
+		var isCancelled = taskStore.isCancellationRequested(task.taskId(), null).block();
+		assertThat(isCancelled).isTrue();
+
+		assertThatCode(server::closeGracefully).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testToolWithTaskSupportRequired() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		Tool taskTool = TaskTestUtils.createTaskTool(TEST_TASK_TOOL_NAME, "Task-based tool", TaskSupportMode.REQUIRED);
+
+		var server = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(TaskTestUtils.DEFAULT_TASK_CAPABILITIES)
+			.taskStore(taskStore)
+			.tool(taskTool,
+					(exchange, args) -> CallToolResult.builder()
+						.content(List.of(new McpSchema.TextContent("Task completed!")))
+						.isError(false)
+						.build())
+			.build();
+
+		assertThat(server.getAsyncServer().getTaskStore()).isSameAs(taskStore);
+		assertThatCode(server::closeGracefully).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testToolWithTaskSupportOptional() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		Tool taskTool = TaskTestUtils.createTaskTool(TEST_TASK_TOOL_NAME, "Optional task tool",
+				TaskSupportMode.OPTIONAL);
+
+		var server = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(TaskTestUtils.DEFAULT_TASK_CAPABILITIES)
+			.taskStore(taskStore)
+			.tool(taskTool, (exchange, args) -> CallToolResult.builder().content(List.of()).isError(false).build())
+			.build();
+
+		assertThatCode(server::closeGracefully).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testTerminalStateCannotTransition() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		var server = createTaskServer(taskStore);
+
+		// Create and complete a task
+		var task = taskStore.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).build())
+			.block();
+		assertThat(task).isNotNull();
+
+		// Complete the task
+		CallToolResult result = CallToolResult.builder().content(List.of()).isError(false).build();
+		taskStore.storeTaskResult(task.taskId(), null, TaskStatus.COMPLETED, result).block();
+
+		// Trying to update status should fail or be ignored (implementation-dependent)
+		// The InMemoryTaskStore silently ignores invalid transitions
+		taskStore.updateTaskStatus(task.taskId(), null, TaskStatus.WORKING, "Should not work").block();
+
+		// Status should still be COMPLETED
+		var finalTask = taskStore.getTask(task.taskId(), null).block().task();
+		assertThat(finalTask).isNotNull();
+		assertThat(finalTask.status()).isEqualTo(TaskStatus.COMPLETED);
+
+		assertThatCode(server::closeGracefully).doesNotThrowAnyException();
+	}
+
+	/**
+	 * Example: Using sync tool specification for external API pattern.
+	 *
+	 * <p>
+	 * This test demonstrates the sync equivalent of the external API pattern shown in
+	 * integration tests. The key differences from the async version are:
+	 * <ol>
+	 * <li>Use {@code TaskAwareSyncToolSpecification} instead of async variant</li>
+	 * <li>Handlers return values directly instead of {@code Mono}</li>
+	 * <li>Task store calls use {@code .block()} for synchronous execution</li>
+	 * </ol>
+	 *
+	 * <p>
+	 * This example shows how to create a task-aware sync tool that wraps an external
+	 * async API, demonstrating that the pattern works the same way regardless of whether
+	 * you're using the sync or async server API.
+	 */
+	@Test
+	void testSyncExternalApiPatternExample() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+
+		// For this example, we simulate an external API call and manually create a
+		// task
+		// This demonstrates the sync tool pattern equivalent to the async
+		// testExternalAsyncApiPattern
+
+		var server = createTaskServer(taskStore);
+
+		// Step 1: Create a task (simulating what a sync createTask handler would do)
+		var task = taskStore
+			.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("external-job"))
+				.taskId("external-job-123")
+				.requestedTtl(60000L)
+				.build())
+			.block();
+
+		assertThat(task).isNotNull();
+		assertThat(task.taskId()).isEqualTo("external-job-123");
+		assertThat(task.status()).isEqualTo(TaskStatus.WORKING);
+
+		// Step 2: Simulate external API completing the job and storing result
+		// storeTaskResult atomically sets the terminal status AND stores the result
+		CallToolResult result = CallToolResult.builder()
+			.content(List.of(new McpSchema.TextContent("Processed: test-data")))
+			.isError(false)
+			.build();
+		taskStore.storeTaskResult(task.taskId(), null, TaskStatus.COMPLETED, result).block();
+
+		// Verify final state
+		var finalTask = taskStore.getTask(task.taskId(), null).block().task();
+		assertThat(finalTask).isNotNull();
+		assertThat(finalTask.status()).isEqualTo(TaskStatus.COMPLETED);
+
+		var finalResult = taskStore.getTaskResult(task.taskId(), null).block();
+		assertThat(finalResult).isNotNull();
+
+		assertThatCode(server::closeGracefully).doesNotThrowAnyException();
 	}
 
 }

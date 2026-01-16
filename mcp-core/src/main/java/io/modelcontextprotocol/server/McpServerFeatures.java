@@ -11,6 +11,10 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
+import io.modelcontextprotocol.experimental.tasks.TaskAwareAsyncToolSpecification;
+import io.modelcontextprotocol.experimental.tasks.TaskAwareSyncToolSpecification;
+import io.modelcontextprotocol.experimental.tasks.TaskMessageQueue;
+import io.modelcontextprotocol.experimental.tasks.TaskStore;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.util.Assert;
@@ -32,40 +36,50 @@ public class McpServerFeatures {
 	 * @param serverInfo The server implementation details
 	 * @param serverCapabilities The server capabilities
 	 * @param tools The list of tool specifications
+	 * @param taskTools The list of task-aware tool specifications (experimental)
 	 * @param resources The map of resource specifications
 	 * @param resourceTemplates The list of resource templates
 	 * @param prompts The map of prompt specifications
 	 * @param rootsChangeConsumers The list of consumers that will be notified when the
 	 * roots list changes
 	 * @param instructions The server instructions text
+	 * @param taskStore The task store for managing long-running tasks (experimental)
+	 * @param taskMessageQueue The message queue for task communication (experimental)
 	 */
 	record Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-			List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
+			List<McpServerFeatures.AsyncToolSpecification> tools, List<TaskAwareAsyncToolSpecification> taskTools,
+			Map<String, AsyncResourceSpecification> resources,
 			Map<String, McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
 			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
-			String instructions) {
+			String instructions, TaskStore<McpSchema.ServerTaskPayloadResult> taskStore,
+			TaskMessageQueue taskMessageQueue) {
 
 		/**
 		 * Create an instance and validate the arguments.
 		 * @param serverInfo The server implementation details
 		 * @param serverCapabilities The server capabilities
 		 * @param tools The list of tool specifications
+		 * @param taskTools The list of task-aware tool specifications (experimental)
 		 * @param resources The map of resource specifications
 		 * @param resourceTemplates The map of resource templates
 		 * @param prompts The map of prompt specifications
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
 		 * @param instructions The server instructions text
+		 * @param taskStore The task store for managing long-running tasks (experimental)
+		 * @param taskMessageQueue The message queue for task communication (experimental)
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-				List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
+				List<McpServerFeatures.AsyncToolSpecification> tools, List<TaskAwareAsyncToolSpecification> taskTools,
+				Map<String, AsyncResourceSpecification> resources,
 				Map<String, McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
 				Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
 				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
-				String instructions) {
+				String instructions, TaskStore<McpSchema.ServerTaskPayloadResult> taskStore,
+				TaskMessageQueue taskMessageQueue) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -80,15 +94,24 @@ public class McpServerFeatures {
 							!Utils.isEmpty(prompts) ? new McpSchema.ServerCapabilities.PromptCapabilities(false) : null,
 							!Utils.isEmpty(resources)
 									? new McpSchema.ServerCapabilities.ResourceCapabilities(false, false) : null,
-							!Utils.isEmpty(tools) ? new McpSchema.ServerCapabilities.ToolCapabilities(false) : null);
+							(!Utils.isEmpty(tools) || !Utils.isEmpty(taskTools))
+									? new McpSchema.ServerCapabilities.ToolCapabilities(false) : null,
+							taskStore != null ? McpSchema.ServerCapabilities.ServerTaskCapabilities.builder()
+								.list()
+								.cancel()
+								.toolsCall()
+								.build() : null);
 
 			this.tools = (tools != null) ? tools : List.of();
+			this.taskTools = (taskTools != null) ? taskTools : List.of();
 			this.resources = (resources != null) ? resources : Map.of();
 			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : Map.of();
 			this.prompts = (prompts != null) ? prompts : Map.of();
 			this.completions = (completions != null) ? completions : Map.of();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : List.of();
 			this.instructions = instructions;
+			this.taskStore = taskStore;
+			this.taskMessageQueue = taskMessageQueue;
 		}
 
 		/**
@@ -105,6 +128,13 @@ public class McpServerFeatures {
 			List<McpServerFeatures.AsyncToolSpecification> tools = new ArrayList<>();
 			for (var tool : syncSpec.tools()) {
 				tools.add(AsyncToolSpecification.fromSync(tool, immediateExecution));
+			}
+
+			// Convert sync task tools to async
+			List<TaskAwareAsyncToolSpecification> taskTools = new ArrayList<>();
+			for (var taskTool : syncSpec.taskTools()) {
+				taskTools.add(TaskAwareAsyncToolSpecification.fromSync(taskTool,
+						immediateExecution ? Runnable::run : Schedulers.boundedElastic()::schedule));
 			}
 
 			Map<String, AsyncResourceSpecification> resources = new HashMap<>();
@@ -135,8 +165,9 @@ public class McpServerFeatures {
 					.subscribeOn(Schedulers.boundedElastic()));
 			}
 
-			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources, resourceTemplates,
-					prompts, completions, rootChangeConsumers, syncSpec.instructions());
+			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, taskTools, resources,
+					resourceTemplates, prompts, completions, rootChangeConsumers, syncSpec.instructions(),
+					syncSpec.taskStore(), syncSpec.taskMessageQueue());
 		}
 	}
 
@@ -146,41 +177,48 @@ public class McpServerFeatures {
 	 * @param serverInfo The server implementation details
 	 * @param serverCapabilities The server capabilities
 	 * @param tools The list of tool specifications
+	 * @param taskTools The list of task-aware tool specifications (experimental)
 	 * @param resources The map of resource specifications
 	 * @param resourceTemplates The list of resource templates
 	 * @param prompts The map of prompt specifications
 	 * @param rootsChangeConsumers The list of consumers that will be notified when the
 	 * roots list changes
 	 * @param instructions The server instructions text
+	 * @param taskStore The task store for managing long-running tasks (experimental)
+	 * @param taskMessageQueue The message queue for task communication (experimental)
 	 */
 	record Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-			List<McpServerFeatures.SyncToolSpecification> tools,
+			List<McpServerFeatures.SyncToolSpecification> tools, List<TaskAwareSyncToolSpecification> taskTools,
 			Map<String, McpServerFeatures.SyncResourceSpecification> resources,
 			Map<String, McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions,
-			List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers, String instructions) {
+			List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers, String instructions,
+			TaskStore<McpSchema.ServerTaskPayloadResult> taskStore, TaskMessageQueue taskMessageQueue) {
 
 		/**
 		 * Create an instance and validate the arguments.
 		 * @param serverInfo The server implementation details
 		 * @param serverCapabilities The server capabilities
 		 * @param tools The list of tool specifications
+		 * @param taskTools The list of task-aware tool specifications (experimental)
 		 * @param resources The map of resource specifications
 		 * @param resourceTemplates The list of resource templates
 		 * @param prompts The map of prompt specifications
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
 		 * @param instructions The server instructions text
+		 * @param taskStore The task store for managing long-running tasks (experimental)
+		 * @param taskMessageQueue The message queue for task communication (experimental)
 		 */
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-				List<McpServerFeatures.SyncToolSpecification> tools,
+				List<McpServerFeatures.SyncToolSpecification> tools, List<TaskAwareSyncToolSpecification> taskTools,
 				Map<String, McpServerFeatures.SyncResourceSpecification> resources,
 				Map<String, McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
 				Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions,
-				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers,
-				String instructions) {
+				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers, String instructions,
+				TaskStore<McpSchema.ServerTaskPayloadResult> taskStore, TaskMessageQueue taskMessageQueue) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -195,15 +233,24 @@ public class McpServerFeatures {
 							!Utils.isEmpty(prompts) ? new McpSchema.ServerCapabilities.PromptCapabilities(false) : null,
 							!Utils.isEmpty(resources)
 									? new McpSchema.ServerCapabilities.ResourceCapabilities(false, false) : null,
-							!Utils.isEmpty(tools) ? new McpSchema.ServerCapabilities.ToolCapabilities(false) : null);
+							(!Utils.isEmpty(tools) || !Utils.isEmpty(taskTools))
+									? new McpSchema.ServerCapabilities.ToolCapabilities(false) : null,
+							taskStore != null ? McpSchema.ServerCapabilities.ServerTaskCapabilities.builder()
+								.list()
+								.cancel()
+								.toolsCall()
+								.build() : null);
 
 			this.tools = (tools != null) ? tools : new ArrayList<>();
+			this.taskTools = (taskTools != null) ? taskTools : new ArrayList<>();
 			this.resources = (resources != null) ? resources : new HashMap<>();
 			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : Map.of();
 			this.prompts = (prompts != null) ? prompts : new HashMap<>();
 			this.completions = (completions != null) ? completions : new HashMap<>();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : new ArrayList<>();
 			this.instructions = instructions;
+			this.taskStore = taskStore;
+			this.taskMessageQueue = taskMessageQueue;
 		}
 
 	}
@@ -212,6 +259,10 @@ public class McpServerFeatures {
 	 * Specification of a tool with its asynchronous handler function. Tools are the
 	 * primary way for MCP servers to expose functionality to AI models. Each tool
 	 * represents a specific capability.
+	 *
+	 * <p>
+	 * For task-aware tools that support long-running operations, see
+	 * {@link io.modelcontextprotocol.experimental.tasks.TaskAwareAsyncToolSpecification}.
 	 *
 	 * @param tool The tool definition including name, description, and parameter schema
 	 * @param call Deprecated. Use the {@link AsyncToolSpecification#callHandler} instead.
@@ -499,6 +550,10 @@ public class McpServerFeatures {
 	/**
 	 * Specification of a tool with its synchronous handler function. Tools are the
 	 * primary way for MCP servers to expose functionality to AI models.
+	 *
+	 * <p>
+	 * For task-aware tools that support long-running operations, see
+	 * {@link io.modelcontextprotocol.experimental.tasks.TaskAwareSyncToolSpecification}.
 	 *
 	 * <p>
 	 * Example tool specification:

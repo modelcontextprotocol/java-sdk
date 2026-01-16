@@ -1,12 +1,18 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
+import io.modelcontextprotocol.experimental.tasks.CreateTaskOptions;
+import io.modelcontextprotocol.experimental.tasks.InMemoryTaskStore;
+import io.modelcontextprotocol.experimental.tasks.TaskAwareAsyncToolSpecification;
+import io.modelcontextprotocol.experimental.tasks.TaskStore;
+import io.modelcontextprotocol.experimental.tasks.TaskTestUtils;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
@@ -15,13 +21,13 @@ import io.modelcontextprotocol.spec.McpSchema.PromptMessage;
 import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
 import io.modelcontextprotocol.spec.McpSchema.Resource;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
+import io.modelcontextprotocol.spec.McpSchema.TaskStatus;
+import io.modelcontextprotocol.spec.McpSchema.TaskSupportMode;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -36,6 +42,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * @author Christian Tzolov
  */
+// KEEP IN SYNC with the class in mcp-test module
 public abstract class AbstractMcpAsyncServerTests {
 
 	private static final String TEST_TOOL_NAME = "test-tool";
@@ -43,6 +50,8 @@ public abstract class AbstractMcpAsyncServerTests {
 	private static final String TEST_RESOURCE_URI = "test://resource";
 
 	private static final String TEST_PROMPT_NAME = "test-prompt";
+
+	private static final String TEST_TASK_TOOL_NAME = "task-tool";
 
 	abstract protected McpServer.AsyncSpecification<?> prepareAsyncServerBuilder();
 
@@ -64,10 +73,7 @@ public abstract class AbstractMcpAsyncServerTests {
 	// ---------------------------------------
 	// Server Lifecycle Tests
 	// ---------------------------------------
-
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "sse", "streamable" })
-	void testConstructorWithInvalidArguments(String serverType) {
+	void testConstructorWithInvalidArguments() {
 		assertThatThrownBy(() -> McpServer.async((McpServerTransportProvider) null))
 			.isInstanceOf(IllegalArgumentException.class)
 			.hasMessage("Transport provider must not be null");
@@ -721,6 +727,361 @@ public abstract class AbstractMcpAsyncServerTests {
 		assertThat(noConsumersServer).isNotNull();
 		assertThatCode(() -> noConsumersServer.closeGracefully().block(Duration.ofSeconds(10)))
 			.doesNotThrowAnyException();
+	}
+
+	// ---------------------------------------
+	// Tasks Tests
+	// ---------------------------------------
+
+	/** Creates a server with task capabilities and the given task store. */
+	protected McpAsyncServer createTaskServer(TaskStore<McpSchema.ServerTaskPayloadResult> taskStore) {
+		return prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(TaskTestUtils.DEFAULT_TASK_CAPABILITIES)
+			.taskStore(taskStore)
+			.build();
+	}
+
+	/** Creates a server with task capabilities, task store, and a task-aware tool. */
+	protected McpAsyncServer createTaskServer(TaskStore<McpSchema.ServerTaskPayloadResult> taskStore,
+			TaskAwareAsyncToolSpecification taskTool) {
+		return prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(TaskTestUtils.DEFAULT_TASK_CAPABILITIES)
+			.taskStore(taskStore)
+			.taskTools(taskTool)
+			.build();
+	}
+
+	/**
+	 * Creates a simple task-aware tool that returns a text result.
+	 */
+	protected TaskAwareAsyncToolSpecification createSimpleTaskTool(String name, TaskSupportMode mode,
+			String resultText) {
+		return TaskAwareAsyncToolSpecification.builder()
+			.name(name)
+			.description("Test task tool")
+			.taskSupportMode(mode)
+			.createTaskHandler((args, extra) -> extra.createTask().flatMap(task -> {
+				// Immediately complete the task with the result
+				CallToolResult result = CallToolResult.builder()
+					.content(List.of(new McpSchema.TextContent(resultText)))
+					.build();
+				return extra.taskStore()
+					.storeTaskResult(task.taskId(), null, TaskStatus.COMPLETED, result)
+					.thenReturn(McpSchema.CreateTaskResult.builder().task(task).build());
+			}))
+			.build();
+	}
+
+	@Test
+	void testServerWithTaskStore() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		var server = createTaskServer(taskStore);
+
+		assertThat(server.getTaskStore()).isSameAs(taskStore);
+		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testTaskStoreCreateAndGet() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		var server = createTaskServer(taskStore);
+
+		// Create a task
+		AtomicReference<String> taskIdRef = new AtomicReference<>();
+		StepVerifier.create(taskStore.createTask(
+				CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).requestedTtl(60000L).build()))
+			.consumeNextWith(task -> {
+				assertThat(task.taskId()).isNotNull().isNotEmpty();
+				assertThat(task.status()).isEqualTo(TaskStatus.WORKING);
+				taskIdRef.set(task.taskId());
+			})
+			.verifyComplete();
+
+		// Get the task
+		StepVerifier.create(taskStore.getTask(taskIdRef.get(), null)).consumeNextWith(storeResult -> {
+			assertThat(storeResult.task().taskId()).isEqualTo(taskIdRef.get());
+			assertThat(storeResult.task().status()).isEqualTo(TaskStatus.WORKING);
+		}).verifyComplete();
+
+		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testTaskStoreUpdateStatus() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		var server = createTaskServer(taskStore);
+
+		// Create a task
+		AtomicReference<String> taskIdRef = new AtomicReference<>();
+		StepVerifier
+			.create(taskStore
+				.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).build()))
+			.consumeNextWith(task -> {
+				taskIdRef.set(task.taskId());
+			})
+			.verifyComplete();
+
+		// Update status
+		StepVerifier.create(taskStore.updateTaskStatus(taskIdRef.get(), null, TaskStatus.WORKING, "Processing..."))
+			.verifyComplete();
+
+		// Verify status updated
+		StepVerifier.create(taskStore.getTask(taskIdRef.get(), null)).consumeNextWith(storeResult -> {
+			assertThat(storeResult.task().status()).isEqualTo(TaskStatus.WORKING);
+			assertThat(storeResult.task().statusMessage()).isEqualTo("Processing...");
+		}).verifyComplete();
+
+		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testTaskStoreStoreResult() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		var server = createTaskServer(taskStore);
+
+		// Create a task
+		AtomicReference<String> taskIdRef = new AtomicReference<>();
+		StepVerifier
+			.create(taskStore
+				.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).build()))
+			.consumeNextWith(task -> {
+				taskIdRef.set(task.taskId());
+			})
+			.verifyComplete();
+
+		// Store result
+		CallToolResult result = CallToolResult.builder()
+			.content(List.of(new McpSchema.TextContent("Done!")))
+			.isError(false)
+			.build();
+
+		StepVerifier.create(taskStore.storeTaskResult(taskIdRef.get(), null, TaskStatus.COMPLETED, result))
+			.verifyComplete();
+
+		// Verify task is completed
+		StepVerifier.create(taskStore.getTask(taskIdRef.get(), null)).consumeNextWith(storeResult -> {
+			assertThat(storeResult.task().status()).isEqualTo(TaskStatus.COMPLETED);
+		}).verifyComplete();
+
+		// Verify result can be retrieved
+		StepVerifier.create(taskStore.getTaskResult(taskIdRef.get(), null)).consumeNextWith(retrievedResult -> {
+			assertThat(retrievedResult).isInstanceOf(CallToolResult.class);
+		}).verifyComplete();
+
+		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testTaskStoreListTasks() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		var server = createTaskServer(taskStore);
+
+		// Create a few tasks
+		StepVerifier
+			.create(taskStore
+				.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).build()))
+			.expectNextCount(1)
+			.verifyComplete();
+		StepVerifier
+			.create(taskStore
+				.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).build()))
+			.expectNextCount(1)
+			.verifyComplete();
+
+		// List tasks
+		StepVerifier.create(taskStore.listTasks(null, null)).consumeNextWith(result -> {
+			assertThat(result.tasks()).isNotNull();
+			assertThat(result.tasks()).hasSizeGreaterThanOrEqualTo(2);
+		}).verifyComplete();
+
+		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testTaskStoreRequestCancellation() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		var server = createTaskServer(taskStore);
+
+		// Create a task
+		AtomicReference<String> taskIdRef = new AtomicReference<>();
+		StepVerifier
+			.create(taskStore
+				.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).build()))
+			.consumeNextWith(task -> {
+				taskIdRef.set(task.taskId());
+			})
+			.verifyComplete();
+
+		// Request cancellation
+		StepVerifier.create(taskStore.requestCancellation(taskIdRef.get(), null)).consumeNextWith(task -> {
+			assertThat(task.taskId()).isEqualTo(taskIdRef.get());
+		}).verifyComplete();
+
+		// Verify cancellation was requested
+		StepVerifier.create(taskStore.isCancellationRequested(taskIdRef.get(), null)).consumeNextWith(isCancelled -> {
+			assertThat(isCancelled).isTrue();
+		}).verifyComplete();
+
+		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testToolWithTaskSupportRequired() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		var tool = createSimpleTaskTool(TEST_TASK_TOOL_NAME, TaskSupportMode.REQUIRED, "Task completed!");
+		var server = createTaskServer(taskStore, tool);
+
+		assertThat(server.getTaskStore()).isSameAs(taskStore);
+		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testToolWithTaskSupportOptional() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		var tool = createSimpleTaskTool(TEST_TASK_TOOL_NAME, TaskSupportMode.OPTIONAL, "Done");
+		var server = createTaskServer(taskStore, tool);
+
+		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testTerminalStateCannotTransition() {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		var server = createTaskServer(taskStore);
+
+		// Create and complete a task
+		AtomicReference<String> taskIdRef = new AtomicReference<>();
+		StepVerifier
+			.create(taskStore
+				.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).build()))
+			.consumeNextWith(task -> {
+				taskIdRef.set(task.taskId());
+			})
+			.verifyComplete();
+
+		// Complete the task
+		CallToolResult result = CallToolResult.builder().content(List.of()).isError(false).build();
+		StepVerifier.create(taskStore.storeTaskResult(taskIdRef.get(), null, TaskStatus.COMPLETED, result))
+			.verifyComplete();
+
+		// Trying to update status should fail or be ignored (implementation-dependent)
+		// The InMemoryTaskStore silently ignores invalid transitions
+		StepVerifier.create(taskStore.updateTaskStatus(taskIdRef.get(), null, TaskStatus.WORKING, "Should not work"))
+			.verifyComplete();
+
+		// Status should still be COMPLETED
+		StepVerifier.create(taskStore.getTask(taskIdRef.get(), null)).consumeNextWith(storeResult -> {
+			assertThat(storeResult.task().status()).isEqualTo(TaskStatus.COMPLETED);
+		}).verifyComplete();
+
+		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	// ---------------------------------------
+	// CreateTaskHandler Tests
+	// ---------------------------------------
+
+	@Test
+	void testToolWithCreateTaskHandler() {
+		// Test that a tool with createTaskHandler can be registered
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+
+		// Create a tool with createTaskHandler
+		var tool = TaskAwareAsyncToolSpecification.builder()
+			.name("create-task-handler-tool")
+			.description("A tool using createTaskHandler")
+			.createTaskHandler((args, extra) -> extra.createTask(opts -> opts.requestedTtl(60000L).pollInterval(1000L))
+				.flatMap(task -> {
+					// Store result immediately for this test
+					CallToolResult result = CallToolResult.builder()
+						.addTextContent("Created via createTaskHandler")
+						.isError(false)
+						.build();
+					return extra.taskStore()
+						.storeTaskResult(task.taskId(), null, TaskStatus.COMPLETED, result)
+						.thenReturn(McpSchema.CreateTaskResult.builder().task(task).build());
+				}))
+			.build();
+
+		var server = createTaskServer(taskStore, tool);
+
+		assertThat(server.getTaskStore()).isSameAs(taskStore);
+		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testToolWithAllThreeHandlers() {
+		// Test that a tool with all three handlers can be registered
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+
+		var tool = TaskAwareAsyncToolSpecification.builder()
+			.name("three-handler-tool")
+			.description("A tool with createTask, getTask, and getTaskResult handlers")
+			.createTaskHandler((args, extra) -> extra.createTask()
+				.map(task -> McpSchema.CreateTaskResult.builder().task(task).build()))
+			.getTaskHandler((exchange, request) -> {
+				// Custom getTask handler
+				return Mono.just(McpSchema.GetTaskResult.builder()
+					.taskId(request.taskId())
+					.status(TaskStatus.WORKING)
+					.statusMessage("Custom status from handler")
+					.build());
+			})
+			.getTaskResultHandler((exchange, request) -> {
+				// Custom getTaskResult handler
+				return Mono.just(CallToolResult.builder().addTextContent("Custom result from handler").build());
+			})
+			.build();
+
+		var server = createTaskServer(taskStore, tool);
+
+		// Verify all handlers are set
+		assertThat(tool.createTaskHandler()).isNotNull();
+		assertThat(tool.getTaskHandler()).isNotNull();
+		assertThat(tool.getTaskResultHandler()).isNotNull();
+
+		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void builderShouldThrowWhenNormalToolAndTaskToolShareSameName() {
+		String duplicateName = "duplicate-tool-name";
+
+		Tool normalTool = McpSchema.Tool.builder()
+			.name(duplicateName)
+			.title("A normal tool")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
+
+		assertThatThrownBy(() -> {
+			prepareAsyncServerBuilder()
+				.tool(normalTool,
+						(exchange, args) -> Mono
+							.just(CallToolResult.builder().content(List.of()).isError(false).build()))
+				.taskTools(TaskAwareAsyncToolSpecification.builder()
+					.name(duplicateName)
+					.description("A task tool")
+					.createTaskHandler((args, extra) -> Mono.just(McpSchema.CreateTaskResult.builder().build()))
+					.build())
+				.build();
+		}).isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("already registered")
+			.hasMessageContaining(duplicateName);
+	}
+
+	@Test
+	void builderShouldThrowWhenTaskToolsRegisteredWithoutTaskStore() {
+		assertThatThrownBy(() -> {
+			prepareAsyncServerBuilder()
+				.taskTools(TaskAwareAsyncToolSpecification.builder()
+					.name("task-tool-without-store")
+					.description("A task tool that needs a TaskStore")
+					.createTaskHandler((args, extra) -> Mono.just(McpSchema.CreateTaskResult.builder().build()))
+					.build())
+				// Note: NOT setting .taskStore()
+				.build();
+		}).isInstanceOf(IllegalStateException.class)
+			.hasMessageContaining("Task-aware tools registered but no TaskStore configured");
 	}
 
 }

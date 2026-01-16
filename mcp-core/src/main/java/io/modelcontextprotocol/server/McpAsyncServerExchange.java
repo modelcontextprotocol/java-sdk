@@ -5,8 +5,15 @@
 package io.modelcontextprotocol.server;
 
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.experimental.tasks.QueuedMessage;
+import io.modelcontextprotocol.experimental.tasks.TaskDefaults;
+import io.modelcontextprotocol.experimental.tasks.TaskMessageQueue;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Map;
+import java.util.UUID;
 
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpError;
@@ -16,6 +23,9 @@ import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSession;
 import io.modelcontextprotocol.util.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
@@ -27,6 +37,8 @@ import reactor.core.publisher.Mono;
  */
 public class McpAsyncServerExchange {
 
+	private static final Logger logger = LoggerFactory.getLogger(McpAsyncServerExchange.class);
+
 	private final String sessionId;
 
 	private final McpLoggableSession session;
@@ -36,6 +48,18 @@ public class McpAsyncServerExchange {
 	private final McpSchema.Implementation clientInfo;
 
 	private final McpTransportContext transportContext;
+
+	/**
+	 * The current task ID if this exchange is executing within a task context. This is
+	 * set when handling task-augmented tool calls and allows the tool handler to access
+	 * the task ID for operations like elicitation-during-task.
+	 */
+	private final String currentTaskId;
+
+	/**
+	 * Optional message queue for enqueuing messages during task execution.
+	 */
+	private final TaskMessageQueue taskMessageQueue;
 
 	private static final TypeRef<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeRef<>() {
 	};
@@ -48,6 +72,50 @@ public class McpAsyncServerExchange {
 
 	public static final TypeRef<Object> OBJECT_TYPE_REF = new TypeRef<>() {
 	};
+
+	private static final TypeRef<McpSchema.GetTaskResult> GET_TASK_RESULT_TYPE_REF = new TypeRef<>() {
+	};
+
+	private static final TypeRef<McpSchema.CreateTaskResult> CREATE_TASK_RESULT_TYPE_REF = new TypeRef<>() {
+	};
+
+	private static final TypeRef<McpSchema.ListTasksResult> LIST_TASKS_RESULT_TYPE_REF = new TypeRef<>() {
+	};
+
+	private static final TypeRef<McpSchema.CancelTaskResult> CANCEL_TASK_RESULT_TYPE_REF = new TypeRef<>() {
+	};
+
+	/**
+	 * The default poll interval in milliseconds for task status polling when the client
+	 * does not specify one.
+	 */
+	private static final long DEFAULT_TASK_POLL_INTERVAL_MS = TaskDefaults.DEFAULT_POLL_INTERVAL_MS;
+
+	/**
+	 * Default number of maximum poll attempts before timing out. Used with poll interval
+	 * to calculate dynamic timeouts.
+	 */
+	private static final int DEFAULT_MAX_POLL_ATTEMPTS = 60;
+
+	/**
+	 * Maximum timeout in milliseconds (1 hour). This prevents unbounded timeouts when
+	 * tasks specify very large poll intervals.
+	 */
+	private static final long MAX_TIMEOUT_MS = 3600000L;
+
+	/**
+	 * Calculates timeout based on poll interval. This provides reasonable timeouts that
+	 * scale with the polling frequency: 500ms poll interval = 30s timeout, 5000ms = 5 min
+	 * timeout. The result is capped at {@link #MAX_TIMEOUT_MS} to prevent unbounded
+	 * timeouts.
+	 * @param pollInterval the poll interval in milliseconds
+	 * @return the calculated timeout duration, capped at 1 hour
+	 */
+	private static Duration calculateTimeout(Long pollInterval) {
+		long interval = pollInterval != null ? pollInterval : DEFAULT_TASK_POLL_INTERVAL_MS;
+		long calculatedMs = interval * DEFAULT_MAX_POLL_ATTEMPTS;
+		return Duration.ofMillis(Math.min(calculatedMs, MAX_TIMEOUT_MS));
+	}
 
 	/**
 	 * Create a new asynchronous exchange with the client.
@@ -69,6 +137,8 @@ public class McpAsyncServerExchange {
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
 		this.transportContext = McpTransportContext.EMPTY;
+		this.currentTaskId = null;
+		this.taskMessageQueue = null;
 	}
 
 	/**
@@ -83,11 +153,76 @@ public class McpAsyncServerExchange {
 	public McpAsyncServerExchange(String sessionId, McpLoggableSession session,
 			McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
 			McpTransportContext transportContext) {
+		this(sessionId, session, clientCapabilities, clientInfo, transportContext, null, null);
+	}
+
+	/**
+	 * Create a new asynchronous exchange with the client and a task message queue.
+	 * @param sessionId The session ID.
+	 * @param session The server session representing a 1-1 interaction.
+	 * @param clientCapabilities The client capabilities that define the supported
+	 * features and functionality.
+	 * @param clientInfo The client implementation information.
+	 * @param transportContext context associated with the client as extracted from the
+	 * transport
+	 * @param taskMessageQueue Optional message queue for task message enqueuing
+	 */
+	public McpAsyncServerExchange(String sessionId, McpLoggableSession session,
+			McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
+			McpTransportContext transportContext, TaskMessageQueue taskMessageQueue) {
+		this(sessionId, session, clientCapabilities, clientInfo, transportContext, null, taskMessageQueue);
+	}
+
+	/**
+	 * Create a new asynchronous exchange with the client, optionally within a task
+	 * context.
+	 * @param sessionId The session ID.
+	 * @param session The server session representing a 1-1 interaction.
+	 * @param clientCapabilities The client capabilities that define the supported
+	 * features and functionality.
+	 * @param clientInfo The client implementation information.
+	 * @param transportContext context associated with the client as extracted from the
+	 * transport
+	 * @param currentTaskId The current task ID if executing within a task context, null
+	 * otherwise
+	 * @param taskMessageQueue Optional message queue for task message enqueuing
+	 */
+	private McpAsyncServerExchange(String sessionId, McpLoggableSession session,
+			McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
+			McpTransportContext transportContext, String currentTaskId, TaskMessageQueue taskMessageQueue) {
 		this.sessionId = sessionId;
 		this.session = session;
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
 		this.transportContext = transportContext;
+		this.currentTaskId = currentTaskId;
+		this.taskMessageQueue = taskMessageQueue;
+	}
+
+	/**
+	 * Create a new exchange that is scoped to a specific task. This is used when
+	 * executing tool handlers in a task context, allowing them to access the task ID for
+	 * operations like elicitation-during-task.
+	 * @param taskId The task ID to scope this exchange to
+	 * @return A new exchange instance with the task context set
+	 */
+	public McpAsyncServerExchange withTaskContext(String taskId) {
+		Assert.notNull(taskId, "Task ID must not be null");
+		return new McpAsyncServerExchange(this.sessionId, this.session, this.clientCapabilities, this.clientInfo,
+				this.transportContext, taskId, this.taskMessageQueue);
+	}
+
+	/**
+	 * Create a new exchange that is scoped to a specific task with an explicit message
+	 * queue.
+	 * @param taskId The task ID to scope this exchange to
+	 * @param queue The task message queue for enqueuing messages
+	 * @return A new exchange instance with the task context and queue set
+	 */
+	public McpAsyncServerExchange withTaskContext(String taskId, TaskMessageQueue queue) {
+		Assert.notNull(taskId, "Task ID must not be null");
+		return new McpAsyncServerExchange(this.sessionId, this.session, this.clientCapabilities, this.clientInfo,
+				this.transportContext, taskId, queue);
 	}
 
 	/**
@@ -125,9 +260,18 @@ public class McpAsyncServerExchange {
 	}
 
 	/**
+	 * Get the current task ID if this exchange is executing within a task context. This
+	 * is set when handling task-augmented tool calls.
+	 * @return the current task ID, or null if not executing within a task context
+	 */
+	public String getCurrentTaskId() {
+		return this.currentTaskId;
+	}
+
+	/**
 	 * Create a new message using the sampling capabilities of the client. The Model
 	 * Context Protocol (MCP) provides a standardized way for servers to request LLM
-	 * sampling (“completions” or “generations”) from language models via clients. This
+	 * sampling ("completions" or "generations") from language models via clients. This
 	 * flow allows clients to maintain control over model access, selection, and
 	 * permissions while enabling servers to leverage AI capabilities—with no server API
 	 * keys necessary. Servers can request text or image-based interactions and optionally
@@ -147,8 +291,60 @@ public class McpAsyncServerExchange {
 		if (this.clientCapabilities.sampling() == null) {
 			return Mono.error(new McpError("Client must be configured with sampling capabilities"));
 		}
-		return this.session.sendRequest(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, createMessageRequest,
-				CREATE_MESSAGE_RESULT_TYPE_REF);
+
+		// Generate a request ID for tracking
+		String requestId = UUID.randomUUID().toString();
+
+		// Add related task metadata to request if within task context
+		McpSchema.CreateMessageRequest requestWithMeta = createMessageRequest;
+		if (this.currentTaskId != null) {
+			Map<String, Object> meta = new java.util.HashMap<>();
+			if (createMessageRequest.meta() != null) {
+				meta.putAll(createMessageRequest.meta());
+			}
+			meta.put(McpSchema.RELATED_TASK_META_KEY,
+					McpSchema.RelatedTaskMetadata.builder().taskId(this.currentTaskId).build());
+			requestWithMeta = new McpSchema.CreateMessageRequest(createMessageRequest.messages(),
+					createMessageRequest.modelPreferences(), createMessageRequest.systemPrompt(),
+					createMessageRequest.includeContext(), createMessageRequest.temperature(),
+					createMessageRequest.maxTokens(), createMessageRequest.stopSequences(),
+					createMessageRequest.metadata(), createMessageRequest.task(), meta);
+		}
+
+		// Enqueue request if within task context
+		Mono<Void> enqueueRequest = Mono.empty();
+		final McpSchema.CreateMessageRequest finalRequest = requestWithMeta;
+		if (this.currentTaskId != null && this.taskMessageQueue != null) {
+			QueuedMessage.Request queuedRequest = new QueuedMessage.Request(requestId,
+					McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, finalRequest);
+			enqueueRequest = this.taskMessageQueue.enqueue(this.currentTaskId, queuedRequest, null)
+				.doOnError(e -> logger.error("Failed to enqueue sampling request for task {}: {}", this.currentTaskId,
+						e.getMessage()))
+				// Message queue failures should not fail the main sampling operation.
+				// Errors are logged above; swallowing ensures the primary request
+				// succeeds.
+				.onErrorResume(e -> Mono.empty());
+		}
+
+		return enqueueRequest
+			.then(this.session.sendRequest(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, finalRequest,
+					CREATE_MESSAGE_RESULT_TYPE_REF))
+			.flatMap(result -> {
+				// Enqueue response if within task context
+				if (this.currentTaskId != null && this.taskMessageQueue != null) {
+					QueuedMessage.Response queuedResponse = new QueuedMessage.Response(requestId, result);
+					return this.taskMessageQueue.enqueue(this.currentTaskId, queuedResponse, null)
+						.doOnError(e -> logger.error("Failed to enqueue sampling response for task {}: {}",
+								this.currentTaskId, e.getMessage()))
+						// Message queue failures should not fail the main sampling
+						// operation.
+						// Errors are logged above; swallowing ensures the primary request
+						// succeeds.
+						.onErrorResume(e -> Mono.empty())
+						.thenReturn(result);
+				}
+				return Mono.just(result);
+			});
 	}
 
 	/**
@@ -172,8 +368,57 @@ public class McpAsyncServerExchange {
 		if (this.clientCapabilities.elicitation() == null) {
 			return Mono.error(new McpError("Client must be configured with elicitation capabilities"));
 		}
-		return this.session.sendRequest(McpSchema.METHOD_ELICITATION_CREATE, elicitRequest,
-				ELICITATION_RESULT_TYPE_REF);
+
+		// Generate a request ID for tracking
+		String requestId = UUID.randomUUID().toString();
+
+		// Add related task metadata to request if within task context
+		McpSchema.ElicitRequest requestWithMeta = elicitRequest;
+		if (this.currentTaskId != null) {
+			Map<String, Object> meta = new java.util.HashMap<>();
+			if (elicitRequest.meta() != null) {
+				meta.putAll(elicitRequest.meta());
+			}
+			meta.put(McpSchema.RELATED_TASK_META_KEY,
+					McpSchema.RelatedTaskMetadata.builder().taskId(this.currentTaskId).build());
+			requestWithMeta = new McpSchema.ElicitRequest(elicitRequest.message(), elicitRequest.requestedSchema(),
+					elicitRequest.task(), meta);
+		}
+
+		// Enqueue request if within task context
+		Mono<Void> enqueueRequest = Mono.empty();
+		final McpSchema.ElicitRequest finalRequest = requestWithMeta;
+		if (this.currentTaskId != null && this.taskMessageQueue != null) {
+			QueuedMessage.Request queuedRequest = new QueuedMessage.Request(requestId,
+					McpSchema.METHOD_ELICITATION_CREATE, finalRequest);
+			enqueueRequest = this.taskMessageQueue.enqueue(this.currentTaskId, queuedRequest, null)
+				.doOnError(e -> logger.error("Failed to enqueue elicitation request for task {}: {}",
+						this.currentTaskId, e.getMessage()))
+				// Message queue failures should not fail the main elicitation operation.
+				// Errors are logged above; swallowing ensures the primary request
+				// succeeds.
+				.onErrorResume(e -> Mono.empty());
+		}
+
+		return enqueueRequest
+			.then(this.session.sendRequest(McpSchema.METHOD_ELICITATION_CREATE, finalRequest,
+					ELICITATION_RESULT_TYPE_REF))
+			.flatMap(result -> {
+				// Enqueue response if within task context
+				if (this.currentTaskId != null && this.taskMessageQueue != null) {
+					QueuedMessage.Response queuedResponse = new QueuedMessage.Response(requestId, result);
+					return this.taskMessageQueue.enqueue(this.currentTaskId, queuedResponse, null)
+						.doOnError(e -> logger.error("Failed to enqueue elicitation response for task {}: {}",
+								this.currentTaskId, e.getMessage()))
+						// Message queue failures should not fail the main elicitation
+						// operation.
+						// Errors are logged above; swallowing ensures the primary request
+						// succeeds.
+						.onErrorResume(e -> Mono.empty())
+						.thenReturn(result);
+				}
+				return Mono.just(result);
+			});
 	}
 
 	/**
@@ -240,8 +485,31 @@ public class McpAsyncServerExchange {
 	}
 
 	/**
+	 * Sends a task status notification to THIS client only.
+	 *
+	 * <p>
+	 * This method sends a notification to the specific client associated with this
+	 * exchange. Use this for targeted notifications when a tool handler needs to update a
+	 * specific client about task progress.
+	 *
+	 * <p>
+	 * For broadcasting task status to ALL connected clients, use
+	 * {@link McpAsyncServer#notifyTaskStatus(McpSchema.TaskStatusNotification)} instead.
+	 * @param notification The task status notification to send
+	 * @return A Mono that completes when the notification has been sent
+	 * @see McpAsyncServer#notifyTaskStatus(McpSchema.TaskStatusNotification) for
+	 * broadcasting to all clients
+	 */
+	public Mono<Void> notifyTaskStatus(McpSchema.TaskStatusNotification notification) {
+		if (notification == null) {
+			return Mono.error(new IllegalStateException("Task status notification must not be null"));
+		}
+		return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_TASKS_STATUS, notification);
+	}
+
+	/**
 	 * Sends a ping request to the client.
-	 * @return A Mono that completes with clients's ping response
+	 * @return A Mono that completes with the client's ping response
 	 */
 	public Mono<Object> ping() {
 		return this.session.sendRequest(McpSchema.METHOD_PING, null, OBJECT_TYPE_REF);
@@ -255,6 +523,475 @@ public class McpAsyncServerExchange {
 	void setMinLoggingLevel(LoggingLevel minLoggingLevel) {
 		Assert.notNull(minLoggingLevel, "minLoggingLevel must not be null");
 		this.session.setMinLoggingLevel(minLoggingLevel);
+	}
+
+	// --------------------------
+	// Client Task Operations
+	// --------------------------
+
+	/**
+	 * Get the status of a task hosted by the client. This is used when the server has
+	 * sent a task-augmented request to the client and needs to poll for status updates.
+	 * @param getTaskRequest The request containing the task ID
+	 * @return A Mono that emits the task status
+	 */
+	public Mono<McpSchema.GetTaskResult> getTask(McpSchema.GetTaskRequest getTaskRequest) {
+		if (this.clientCapabilities == null) {
+			return Mono
+				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
+		}
+		if (this.clientCapabilities.tasks() == null) {
+			return Mono.error(new IllegalStateException("Client must be configured with tasks capabilities"));
+		}
+		return this.session.sendRequest(McpSchema.METHOD_TASKS_GET, getTaskRequest, GET_TASK_RESULT_TYPE_REF);
+	}
+
+	/**
+	 * Get the result of a completed task hosted by the client.
+	 * @param <T> The expected result type
+	 * @param getTaskPayloadRequest The request containing the task ID
+	 * @param resultTypeRef Type reference for deserializing the result
+	 * @return A Mono that emits the task result
+	 */
+	public <T extends McpSchema.ClientTaskPayloadResult> Mono<T> getTaskResult(
+			McpSchema.GetTaskPayloadRequest getTaskPayloadRequest, TypeRef<T> resultTypeRef) {
+		if (this.clientCapabilities == null) {
+			return Mono
+				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
+		}
+		if (this.clientCapabilities.tasks() == null) {
+			return Mono.error(new IllegalStateException("Client must be configured with tasks capabilities"));
+		}
+		return this.session.sendRequest(McpSchema.METHOD_TASKS_RESULT, getTaskPayloadRequest, resultTypeRef);
+	}
+
+	/**
+	 * List all tasks hosted by the client.
+	 *
+	 * <p>
+	 * This method automatically handles pagination, fetching all pages and combining them
+	 * into a single result with an unmodifiable list.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @return A Mono that emits the list of all client tasks
+	 */
+	public Mono<McpSchema.ListTasksResult> listTasks() {
+		return this.listTasks(McpSchema.FIRST_PAGE).expand(result -> {
+			String next = result.nextCursor();
+			return (next != null && !next.isEmpty()) ? this.listTasks(next) : Mono.empty();
+		}).reduce(McpSchema.ListTasksResult.builder().tasks(new ArrayList<>()).build(), (allTasksResult, result) -> {
+			allTasksResult.tasks().addAll(result.tasks());
+			return allTasksResult;
+		})
+			.map(result -> McpSchema.ListTasksResult.builder()
+				.tasks(Collections.unmodifiableList(result.tasks()))
+				.build());
+	}
+
+	/**
+	 * List tasks hosted by the client with pagination support.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param cursor Pagination cursor from a previous list request
+	 * @return A Mono that emits a page of client tasks
+	 */
+	public Mono<McpSchema.ListTasksResult> listTasks(String cursor) {
+		if (this.clientCapabilities == null) {
+			return Mono
+				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
+		}
+		if (this.clientCapabilities.tasks() == null) {
+			return Mono.error(new IllegalStateException("Client must be configured with tasks capabilities"));
+		}
+		if (this.clientCapabilities.tasks().list() == null) {
+			return Mono.error(new IllegalStateException("Client must be configured with tasks.list capability"));
+		}
+		return this.session.sendRequest(McpSchema.METHOD_TASKS_LIST, new McpSchema.PaginatedRequest(cursor),
+				LIST_TASKS_RESULT_TYPE_REF);
+	}
+
+	/**
+	 * Request cancellation of a task hosted by the client.
+	 *
+	 * <p>
+	 * Note that cancellation is cooperative - the client may not honor the cancellation
+	 * request, or may take some time to cancel the task.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param cancelTaskRequest The request containing the task ID
+	 * @return A Mono that emits the updated task status
+	 */
+	public Mono<McpSchema.CancelTaskResult> cancelTask(McpSchema.CancelTaskRequest cancelTaskRequest) {
+		if (this.clientCapabilities == null) {
+			return Mono
+				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
+		}
+		if (this.clientCapabilities.tasks() == null) {
+			return Mono.error(new IllegalStateException("Client must be configured with tasks capabilities"));
+		}
+		if (this.clientCapabilities.tasks().cancel() == null) {
+			return Mono.error(new IllegalStateException("Client must be configured with tasks.cancel capability"));
+		}
+		return this.session.sendRequest(McpSchema.METHOD_TASKS_CANCEL, cancelTaskRequest, CANCEL_TASK_RESULT_TYPE_REF);
+	}
+
+	/**
+	 * Request cancellation of a task hosted by the client by task ID.
+	 *
+	 * <p>
+	 * This is a convenience overload that creates a {@link McpSchema.CancelTaskRequest}
+	 * with the given task ID.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param taskId The task identifier to cancel
+	 * @return A Mono that emits the updated task status
+	 */
+	public Mono<McpSchema.CancelTaskResult> cancelTask(String taskId) {
+		Assert.hasText(taskId, "Task ID must not be null or empty");
+		return cancelTask(McpSchema.CancelTaskRequest.builder().taskId(taskId).build());
+	}
+
+	// --------------------------
+	// Task-Augmented Sampling
+	// --------------------------
+
+	/**
+	 * Low-level method to create a new message using task-augmented sampling. The client
+	 * will process the request as a long-running task, allowing the server to poll for
+	 * status updates.
+	 *
+	 * <p>
+	 * <strong>Recommendation:</strong> For most use cases, prefer
+	 * {@link #createMessageStream} which provides a unified streaming interface that
+	 * handles both regular and task-augmented sampling automatically, including polling
+	 * and result retrieval.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param createMessageRequest The request to create a new message (must have task
+	 * metadata)
+	 * @return A Mono that emits the task creation result
+	 * @see #createMessageStream
+	 */
+	public Mono<McpSchema.CreateTaskResult> createMessageTask(McpSchema.CreateMessageRequest createMessageRequest) {
+		if (createMessageRequest.task() == null) {
+			return Mono.error(new IllegalArgumentException(
+					"Task metadata is required for task-augmented sampling. Use createMessage() for regular requests."));
+		}
+		if (this.clientCapabilities == null) {
+			return Mono
+				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
+		}
+		if (this.clientCapabilities.sampling() == null) {
+			return Mono.error(new IllegalStateException("Client must be configured with sampling capabilities"));
+		}
+		if (this.clientCapabilities.tasks() == null) {
+			return Mono.error(new IllegalStateException("Client must be configured with tasks capabilities"));
+		}
+		return this.session.sendRequest(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, createMessageRequest,
+				CREATE_TASK_RESULT_TYPE_REF);
+	}
+
+	/**
+	 * Create a message and return a stream of response messages, handling both regular
+	 * and task-augmented requests automatically.
+	 *
+	 * <p>
+	 * This method provides a unified streaming interface for sampling:
+	 * <ul>
+	 * <li>For <strong>non-task</strong> requests (when {@code task} field is null):
+	 * yields a single {@link McpSchema.ResultMessage} or {@link McpSchema.ErrorMessage}
+	 * <li>For <strong>task-augmented</strong> requests: yields
+	 * {@link McpSchema.TaskCreatedMessage} → zero or more
+	 * {@link McpSchema.TaskStatusMessage} → {@link McpSchema.ResultMessage} or
+	 * {@link McpSchema.ErrorMessage}
+	 * </ul>
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param createMessageRequest The request containing the sampling parameters. If the
+	 * {@code task} field is set, the call will be task-augmented.
+	 * @return A Flux that emits {@link McpSchema.ResponseMessage} instances
+	 */
+	public Flux<McpSchema.ResponseMessage<McpSchema.CreateMessageResult>> createMessageStream(
+			McpSchema.CreateMessageRequest createMessageRequest) {
+		// For non-task requests, just wrap the result in a single message
+		if (createMessageRequest.task() == null) {
+			return this
+				.createMessage(createMessageRequest).<McpSchema.ResponseMessage<McpSchema
+						.CreateMessageResult>>map(McpSchema.ResultMessage::of)
+				.onErrorResume(error -> {
+					McpError mcpError = (error instanceof McpError) ? (McpError) error
+							: McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message(error.getMessage()).build();
+					return Mono.just(McpSchema.ErrorMessage.of(mcpError));
+				})
+				.flux();
+		}
+
+		// For task-augmented requests, handle the full lifecycle
+		return Flux.create(sink -> {
+			this.createMessageTask(createMessageRequest).subscribe(createResult -> {
+				McpSchema.Task task = createResult.task();
+				if (task == null) {
+					sink.error(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+						.message("Task creation did not return a task")
+						.build());
+					return;
+				}
+
+				// Emit taskCreated message
+				sink.next(McpSchema.TaskCreatedMessage.of(task));
+
+				// Start polling for task status
+				pollTaskUntilTerminal(task.taskId(), sink, Instant.now(), CREATE_MESSAGE_RESULT_TYPE_REF);
+			}, error -> {
+				McpError mcpError = (error instanceof McpError) ? (McpError) error
+						: McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message(error.getMessage()).build();
+				sink.next(McpSchema.ErrorMessage.of(mcpError));
+				sink.complete();
+			});
+		});
+	}
+
+	// --------------------------
+	// Task-Augmented Elicitation
+	// --------------------------
+
+	/**
+	 * Low-level method to create a new elicitation using task-augmented processing. The
+	 * client will process the request as a long-running task, allowing the server to poll
+	 * for status updates.
+	 *
+	 * <p>
+	 * <strong>Recommendation:</strong> For most use cases, prefer
+	 * {@link #createElicitationStream} which provides a unified streaming interface that
+	 * handles both regular and task-augmented elicitation automatically, including
+	 * polling and result retrieval.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param elicitRequest The elicitation request (must have task metadata)
+	 * @return A Mono that emits the task creation result
+	 * @see #createElicitationStream
+	 */
+	public Mono<McpSchema.CreateTaskResult> createElicitationTask(McpSchema.ElicitRequest elicitRequest) {
+		if (elicitRequest.task() == null) {
+			return Mono.error(new IllegalArgumentException(
+					"Task metadata is required for task-augmented elicitation. Use createElicitation() for regular requests."));
+		}
+		if (this.clientCapabilities == null) {
+			return Mono
+				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
+		}
+		if (this.clientCapabilities.elicitation() == null) {
+			return Mono.error(new IllegalStateException("Client must be configured with elicitation capabilities"));
+		}
+		if (this.clientCapabilities.tasks() == null) {
+			return Mono.error(new IllegalStateException("Client must be configured with tasks capabilities"));
+		}
+		return this.session.sendRequest(McpSchema.METHOD_ELICITATION_CREATE, elicitRequest,
+				CREATE_TASK_RESULT_TYPE_REF);
+	}
+
+	/**
+	 * Create an elicitation and return a stream of response messages, handling both
+	 * regular and task-augmented requests automatically.
+	 *
+	 * <p>
+	 * This method provides a unified streaming interface for elicitation:
+	 * <ul>
+	 * <li>For <strong>non-task</strong> requests (when {@code task} field is null):
+	 * yields a single {@link McpSchema.ResultMessage} or {@link McpSchema.ErrorMessage}
+	 * <li>For <strong>task-augmented</strong> requests: yields
+	 * {@link McpSchema.TaskCreatedMessage} → zero or more
+	 * {@link McpSchema.TaskStatusMessage} → {@link McpSchema.ResultMessage} or
+	 * {@link McpSchema.ErrorMessage}
+	 * </ul>
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param elicitRequest The request containing the elicitation parameters. If the
+	 * {@code task} field is set, the call will be task-augmented.
+	 * @return A Flux that emits {@link McpSchema.ResponseMessage} instances
+	 */
+	public Flux<McpSchema.ResponseMessage<McpSchema.ElicitResult>> createElicitationStream(
+			McpSchema.ElicitRequest elicitRequest) {
+		// For non-task requests, just wrap the result in a single message
+		if (elicitRequest.task() == null) {
+			return this
+				.createElicitation(elicitRequest).<McpSchema.ResponseMessage<McpSchema
+						.ElicitResult>>map(McpSchema.ResultMessage::of)
+				.onErrorResume(error -> {
+					McpError mcpError = (error instanceof McpError) ? (McpError) error
+							: McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message(error.getMessage()).build();
+					return Mono.just(McpSchema.ErrorMessage.of(mcpError));
+				})
+				.flux();
+		}
+
+		// For task-augmented requests, handle the full lifecycle
+		return Flux.create(sink -> {
+			this.createElicitationTask(elicitRequest).subscribe(createResult -> {
+				McpSchema.Task task = createResult.task();
+				if (task == null) {
+					sink.error(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+						.message("Task creation did not return a task")
+						.build());
+					return;
+				}
+
+				// Emit taskCreated message
+				sink.next(McpSchema.TaskCreatedMessage.of(task));
+
+				// Start polling for task status
+				pollTaskUntilTerminal(task.taskId(), sink, Instant.now(), ELICITATION_RESULT_TYPE_REF);
+			}, error -> {
+				McpError mcpError = (error instanceof McpError) ? (McpError) error
+						: McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message(error.getMessage()).build();
+				sink.next(McpSchema.ErrorMessage.of(mcpError));
+				sink.complete();
+			});
+		});
+	}
+
+	// --------------------------
+	// Task Polling Helpers
+	// --------------------------
+
+	/**
+	 * Polls client task status until it reaches a terminal state, emitting status updates
+	 * and final result.
+	 *
+	 * <p>
+	 * Uses proper reactive composition with {@link Flux#interval} and
+	 * {@link Flux#takeUntil} to avoid unbounded subscription chains from recursive
+	 * subscribe patterns. The timeout is dynamically calculated based on the task's poll
+	 * interval.
+	 */
+	private <T extends McpSchema.ClientTaskPayloadResult> void pollTaskUntilTerminal(String taskId,
+			reactor.core.publisher.FluxSink<McpSchema.ResponseMessage<T>> sink, Instant startTime,
+			TypeRef<T> resultTypeRef) {
+
+		// First fetch to get initial state and poll interval
+		this.getTask(McpSchema.GetTaskRequest.builder().taskId(taskId).build()).subscribe(initialResult -> {
+			McpSchema.Task initialTask = initialResult.toTask();
+
+			// Emit initial status
+			sink.next(McpSchema.TaskStatusMessage.of(initialTask));
+
+			// Handle already terminal task
+			if (initialTask.isTerminal()) {
+				handleTerminalTask(taskId, initialTask, sink, resultTypeRef);
+				return;
+			}
+
+			// Handle INPUT_REQUIRED - fetch result which blocks until terminal
+			if (initialTask.status() == McpSchema.TaskStatus.INPUT_REQUIRED) {
+				fetchTaskResultAndComplete(taskId, sink, resultTypeRef);
+				return;
+			}
+
+			// Set up polling using proper reactive composition
+			long pollInterval = initialTask.pollInterval() != null ? initialTask.pollInterval()
+					: DEFAULT_TASK_POLL_INTERVAL_MS;
+			Duration timeout = calculateTimeout(pollInterval);
+
+			// Use Flux.interval + takeUntil instead of recursive subscribe
+			reactor.core.Disposable pollSubscription = Flux.interval(Duration.ofMillis(pollInterval))
+				.flatMap(tick -> getTask(McpSchema.GetTaskRequest.builder().taskId(taskId).build()))
+				.takeUntil(taskResult -> {
+					McpSchema.Task task = taskResult.toTask();
+					// Emit status update for each poll
+					sink.next(McpSchema.TaskStatusMessage.of(task));
+					// Stop when terminal or input_required
+					return task.isTerminal() || task.status() == McpSchema.TaskStatus.INPUT_REQUIRED;
+				})
+				.timeout(timeout)
+				.last()
+				.subscribe(finalResult -> {
+					McpSchema.Task task = finalResult.toTask();
+					if (task.isTerminal()) {
+						handleTerminalTask(taskId, task, sink, resultTypeRef);
+					}
+					else if (task.status() == McpSchema.TaskStatus.INPUT_REQUIRED) {
+						fetchTaskResultAndComplete(taskId, sink, resultTypeRef);
+					}
+				}, error -> {
+					String errorMsg = error.getMessage() != null ? error.getMessage()
+							: "Task polling failed: " + error.getClass().getSimpleName();
+					if (error instanceof java.util.concurrent.TimeoutException) {
+						errorMsg = "Task polling timed out after " + timeout;
+					}
+					sink.next(McpSchema.ErrorMessage
+						.of(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message(errorMsg).build()));
+					sink.complete();
+				});
+
+			// Register disposal handler for proper cleanup when sink is cancelled
+			sink.onDispose(pollSubscription);
+
+		}, error -> {
+			String errorMsg = error.getMessage() != null ? error.getMessage()
+					: "Failed to get task: " + error.getClass().getSimpleName();
+			McpError mcpError = (error instanceof McpError) ? (McpError) error
+					: McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message(errorMsg).build();
+			sink.next(McpSchema.ErrorMessage.of(mcpError));
+			sink.complete();
+		});
+	}
+
+	/**
+	 * Handles a client task that has reached a terminal state.
+	 */
+	private <T extends McpSchema.ClientTaskPayloadResult> void handleTerminalTask(String taskId, McpSchema.Task task,
+			reactor.core.publisher.FluxSink<McpSchema.ResponseMessage<T>> sink, TypeRef<T> resultTypeRef) {
+		if (task.status() == McpSchema.TaskStatus.COMPLETED) {
+			fetchTaskResultAndComplete(taskId, sink, resultTypeRef);
+		}
+		else if (task.status() == McpSchema.TaskStatus.FAILED) {
+			String message = task.statusMessage() != null ? task.statusMessage() : "Task " + taskId + " failed";
+			sink.next(McpSchema.ErrorMessage
+				.of(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message(message).build()));
+			sink.complete();
+		}
+		else if (task.status() == McpSchema.TaskStatus.CANCELLED) {
+			sink.next(McpSchema.ErrorMessage.of(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+				.message("Task " + taskId + " was cancelled")
+				.build()));
+			sink.complete();
+		}
+		else {
+			sink.complete();
+		}
+	}
+
+	/**
+	 * Fetches the client task result and completes the stream.
+	 */
+	private <T extends McpSchema.ClientTaskPayloadResult> void fetchTaskResultAndComplete(String taskId,
+			reactor.core.publisher.FluxSink<McpSchema.ResponseMessage<T>> sink, TypeRef<T> resultTypeRef) {
+		this.getTaskResult(McpSchema.GetTaskPayloadRequest.builder().taskId(taskId).build(), resultTypeRef)
+			.subscribe(result -> {
+				sink.next(McpSchema.ResultMessage.of(result));
+				sink.complete();
+			}, error -> {
+				McpError mcpError = (error instanceof McpError) ? (McpError) error
+						: McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message(error.getMessage()).build();
+				sink.next(McpSchema.ErrorMessage.of(mcpError));
+				sink.complete();
+			});
 	}
 
 }

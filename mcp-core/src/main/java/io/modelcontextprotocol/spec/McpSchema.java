@@ -5,13 +5,16 @@
 package io.modelcontextprotocol.spec;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -21,6 +24,7 @@ import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
+import reactor.util.annotation.Nullable;
 import org.slf4j.LoggerFactory;
 
 /**
@@ -108,6 +112,17 @@ public final class McpSchema {
 	// Elicitation Methods
 	public static final String METHOD_ELICITATION_CREATE = "elicitation/create";
 
+	// Tasks Methods
+	public static final String METHOD_TASKS_GET = "tasks/get";
+
+	public static final String METHOD_TASKS_RESULT = "tasks/result";
+
+	public static final String METHOD_TASKS_CANCEL = "tasks/cancel";
+
+	public static final String METHOD_TASKS_LIST = "tasks/list";
+
+	public static final String METHOD_NOTIFICATION_TASKS_STATUS = "notifications/tasks/status";
+
 	// ---------------------------
 	// JSON-RPC Error Codes
 	// ---------------------------
@@ -163,9 +178,9 @@ public final class McpSchema {
 
 	}
 
-	public sealed interface Request extends Meta
-			permits InitializeRequest, CallToolRequest, CreateMessageRequest, ElicitRequest, CompleteRequest,
-			GetPromptRequest, ReadResourceRequest, SubscribeRequest, UnsubscribeRequest, PaginatedRequest {
+	public sealed interface Request extends Meta permits InitializeRequest, CallToolRequest, CreateMessageRequest,
+			ElicitRequest, CompleteRequest, GetPromptRequest, ReadResourceRequest, SubscribeRequest, UnsubscribeRequest,
+			PaginatedRequest, GetTaskRequest, GetTaskPayloadRequest, CancelTaskRequest {
 
 		default Object progressToken() {
 			if (meta() != null && meta().containsKey("progressToken")) {
@@ -176,14 +191,39 @@ public final class McpSchema {
 
 	}
 
-	public sealed interface Result extends Meta permits InitializeResult, ListResourcesResult,
-			ListResourceTemplatesResult, ReadResourceResult, ListPromptsResult, GetPromptResult, ListToolsResult,
-			CallToolResult, CreateMessageResult, ElicitResult, CompleteResult, ListRootsResult {
+	public sealed interface Result extends Meta
+			permits InitializeResult, ListResourcesResult, ListResourceTemplatesResult, ReadResourceResult,
+			ListPromptsResult, GetPromptResult, ListToolsResult, CompleteResult, ListRootsResult, GetTaskResult,
+			CancelTaskResult, ListTasksResult, CreateTaskResult, ServerTaskPayloadResult, ClientTaskPayloadResult {
 
 	}
 
-	public sealed interface Notification extends Meta
-			permits ProgressNotification, LoggingMessageNotification, ResourcesUpdatedNotification {
+	/**
+	 * Sealed interface for results that servers produce from task-augmented operations.
+	 * When a client calls a server's tool in task mode, the server produces a
+	 * {@link CallToolResult}.
+	 *
+	 * <p>
+	 * This interface provides type safety for server-side task result handling.
+	 */
+	public sealed interface ServerTaskPayloadResult extends Result permits CallToolResult {
+
+	}
+
+	/**
+	 * Sealed interface for results that clients produce from task-augmented operations.
+	 * When a server requests sampling or elicitation from a client in task mode, the
+	 * client produces either a {@link CreateMessageResult} or {@link ElicitResult}.
+	 *
+	 * <p>
+	 * This interface provides type safety for client-side task result handling.
+	 */
+	public sealed interface ClientTaskPayloadResult extends Result permits CreateMessageResult, ElicitResult {
+
+	}
+
+	public sealed interface Notification extends Meta permits ProgressNotification, LoggingMessageNotification,
+			ResourcesUpdatedNotification, TaskStatusNotification {
 
 	}
 
@@ -385,7 +425,8 @@ public final class McpSchema {
 		@JsonProperty("experimental") Map<String, Object> experimental,
 		@JsonProperty("roots") RootCapabilities roots,
 		@JsonProperty("sampling") Sampling sampling,
-		@JsonProperty("elicitation") Elicitation elicitation) { // @formatter:on
+		@JsonProperty("elicitation") Elicitation elicitation,
+		@JsonProperty("tasks") ClientTaskCapabilities tasks) { // @formatter:on
 
 		/**
 		 * Present if the client supports listing roots.
@@ -459,6 +500,242 @@ public final class McpSchema {
 			}
 		}
 
+		/**
+		 * Present if the client supports task-augmented requests.
+		 */
+		@JsonIgnoreProperties(ignoreUnknown = true)
+		public static final class ClientTaskCapabilities {
+
+			private final ListTaskCapability list;
+
+			private final CancelTaskCapability cancel;
+
+			private final ClientTaskRequestCapabilities requests;
+
+			@JsonCreator
+			private ClientTaskCapabilities(@JsonProperty("list") ListTaskCapability list,
+					@JsonProperty("cancel") CancelTaskCapability cancel,
+					@JsonProperty("requests") ClientTaskRequestCapabilities requests) {
+				this.list = list;
+				this.cancel = cancel;
+				this.requests = requests;
+			}
+
+			/**
+			 * Returns whether the client supports tasks/list requests.
+			 * @return the list capability, or null
+			 */
+			@JsonProperty("list")
+			public ListTaskCapability list() {
+				return this.list;
+			}
+
+			/**
+			 * Returns whether the client supports tasks/cancel requests.
+			 * @return the cancel capability, or null
+			 */
+			@JsonProperty("cancel")
+			public CancelTaskCapability cancel() {
+				return this.cancel;
+			}
+
+			/**
+			 * Returns which request types can be augmented with tasks.
+			 * @return the request capabilities, or null
+			 */
+			@JsonProperty("requests")
+			public ClientTaskRequestCapabilities requests() {
+				return this.requests;
+			}
+
+			/**
+			 * Marker class indicating support for tasks/list.
+			 */
+			@JsonIgnoreProperties(ignoreUnknown = true)
+			public static final class ListTaskCapability {
+
+				@JsonCreator
+				ListTaskCapability() {
+				}
+
+			}
+
+			/**
+			 * Marker class indicating support for tasks/cancel.
+			 */
+			@JsonIgnoreProperties(ignoreUnknown = true)
+			public static final class CancelTaskCapability {
+
+				@JsonCreator
+				CancelTaskCapability() {
+				}
+
+			}
+
+			/**
+			 * Specifies which request types can be augmented with tasks.
+			 */
+			@JsonIgnoreProperties(ignoreUnknown = true)
+			public static final class ClientTaskRequestCapabilities {
+
+				private final SamplingTaskCapabilities sampling;
+
+				private final ElicitationTaskCapabilities elicitation;
+
+				@JsonCreator
+				ClientTaskRequestCapabilities(@JsonProperty("sampling") SamplingTaskCapabilities sampling,
+						@JsonProperty("elicitation") ElicitationTaskCapabilities elicitation) {
+					this.sampling = sampling;
+					this.elicitation = elicitation;
+				}
+
+				/**
+				 * Returns the task support for sampling-related requests.
+				 * @return the sampling capabilities, or null
+				 */
+				@JsonProperty("sampling")
+				public SamplingTaskCapabilities sampling() {
+					return this.sampling;
+				}
+
+				/**
+				 * Returns the task support for elicitation-related requests.
+				 * @return the elicitation capabilities, or null
+				 */
+				@JsonProperty("elicitation")
+				public ElicitationTaskCapabilities elicitation() {
+					return this.elicitation;
+				}
+
+				/**
+				 * Task support for sampling-related requests.
+				 */
+				@JsonIgnoreProperties(ignoreUnknown = true)
+				public static final class SamplingTaskCapabilities {
+
+					private final CreateMessageTaskCapability createMessage;
+
+					@JsonCreator
+					SamplingTaskCapabilities(@JsonProperty("createMessage") CreateMessageTaskCapability createMessage) {
+						this.createMessage = createMessage;
+					}
+
+					/**
+					 * Returns whether the client supports task-augmented
+					 * sampling/createMessage requests.
+					 * @return the createMessage capability, or null
+					 */
+					@JsonProperty("createMessage")
+					public CreateMessageTaskCapability createMessage() {
+						return this.createMessage;
+					}
+
+					/**
+					 * Marker class indicating support for task-augmented
+					 * sampling/createMessage.
+					 */
+					@JsonIgnoreProperties(ignoreUnknown = true)
+					public static final class CreateMessageTaskCapability {
+
+						@JsonCreator
+						CreateMessageTaskCapability() {
+						}
+
+					}
+
+				}
+
+				/**
+				 * Task support for elicitation-related requests.
+				 */
+				@JsonIgnoreProperties(ignoreUnknown = true)
+				public static final class ElicitationTaskCapabilities {
+
+					private final CreateTaskCapability create;
+
+					@JsonCreator
+					ElicitationTaskCapabilities(@JsonProperty("create") CreateTaskCapability create) {
+						this.create = create;
+					}
+
+					/**
+					 * Returns whether the client supports task-augmented
+					 * elicitation/create requests.
+					 * @return the create capability, or null
+					 */
+					@JsonProperty("create")
+					public CreateTaskCapability create() {
+						return this.create;
+					}
+
+					/**
+					 * Marker class indicating support for task-augmented
+					 * elicitation/create.
+					 */
+					@JsonIgnoreProperties(ignoreUnknown = true)
+					public static final class CreateTaskCapability {
+
+						@JsonCreator
+						CreateTaskCapability() {
+						}
+
+					}
+
+				}
+
+			}
+
+			public static Builder builder() {
+				return new Builder();
+			}
+
+			public static class Builder {
+
+				private ListTaskCapability list;
+
+				private CancelTaskCapability cancel;
+
+				private ClientTaskRequestCapabilities requests;
+
+				public Builder list() {
+					this.list = new ListTaskCapability();
+					return this;
+				}
+
+				public Builder cancel() {
+					this.cancel = new CancelTaskCapability();
+					return this;
+				}
+
+				public Builder samplingCreateMessage() {
+					if (this.requests == null) {
+						this.requests = new ClientTaskRequestCapabilities(null, null);
+					}
+					this.requests = new ClientTaskRequestCapabilities(
+							new ClientTaskRequestCapabilities.SamplingTaskCapabilities(
+									new ClientTaskRequestCapabilities.SamplingTaskCapabilities.CreateMessageTaskCapability()),
+							this.requests.elicitation());
+					return this;
+				}
+
+				public Builder elicitationCreate() {
+					if (this.requests == null) {
+						this.requests = new ClientTaskRequestCapabilities(null, null);
+					}
+					this.requests = new ClientTaskRequestCapabilities(this.requests.sampling(),
+							new ClientTaskRequestCapabilities.ElicitationTaskCapabilities(
+									new ClientTaskRequestCapabilities.ElicitationTaskCapabilities.CreateTaskCapability()));
+					return this;
+				}
+
+				public ClientTaskCapabilities build() {
+					return new ClientTaskCapabilities(list, cancel, requests);
+				}
+
+			}
+
+		}
+
 		public static Builder builder() {
 			return new Builder();
 		}
@@ -472,6 +749,8 @@ public final class McpSchema {
 			private Sampling sampling;
 
 			private Elicitation elicitation;
+
+			private ClientTaskCapabilities tasks;
 
 			public Builder experimental(Map<String, Object> experimental) {
 				this.experimental = experimental;
@@ -510,8 +789,18 @@ public final class McpSchema {
 				return this;
 			}
 
+			/**
+			 * Enables task capabilities with the provided configuration.
+			 * @param tasks the task capabilities
+			 * @return this builder
+			 */
+			public Builder tasks(ClientTaskCapabilities tasks) {
+				this.tasks = tasks;
+				return this;
+			}
+
 			public ClientCapabilities build() {
-				return new ClientCapabilities(experimental, roots, sampling, elicitation);
+				return new ClientCapabilities(experimental, roots, sampling, elicitation, tasks);
 			}
 
 		}
@@ -539,7 +828,8 @@ public final class McpSchema {
 		@JsonProperty("logging") LoggingCapabilities logging,
 		@JsonProperty("prompts") PromptCapabilities prompts,
 		@JsonProperty("resources") ResourceCapabilities resources,
-		@JsonProperty("tools") ToolCapabilities tools) { // @formatter:on
+		@JsonProperty("tools") ToolCapabilities tools,
+		@JsonProperty("tasks") ServerTaskCapabilities tasks) { // @formatter:on
 
 		/**
 		 * Present if the server supports argument autocompletion suggestions.
@@ -588,6 +878,176 @@ public final class McpSchema {
 		}
 
 		/**
+		 * Present if the server supports task-augmented requests.
+		 */
+		@JsonIgnoreProperties(ignoreUnknown = true)
+		public static final class ServerTaskCapabilities {
+
+			private final ListTaskCapability list;
+
+			private final CancelTaskCapability cancel;
+
+			private final ServerTaskRequestCapabilities requests;
+
+			@JsonCreator
+			private ServerTaskCapabilities(@JsonProperty("list") ListTaskCapability list,
+					@JsonProperty("cancel") CancelTaskCapability cancel,
+					@JsonProperty("requests") ServerTaskRequestCapabilities requests) {
+				this.list = list;
+				this.cancel = cancel;
+				this.requests = requests;
+			}
+
+			/**
+			 * Returns whether the server supports tasks/list requests.
+			 * @return the list capability, or null
+			 */
+			@JsonProperty("list")
+			public ListTaskCapability list() {
+				return this.list;
+			}
+
+			/**
+			 * Returns whether the server supports tasks/cancel requests.
+			 * @return the cancel capability, or null
+			 */
+			@JsonProperty("cancel")
+			public CancelTaskCapability cancel() {
+				return this.cancel;
+			}
+
+			/**
+			 * Returns which request types can be augmented with tasks.
+			 * @return the request capabilities, or null
+			 */
+			@JsonProperty("requests")
+			public ServerTaskRequestCapabilities requests() {
+				return this.requests;
+			}
+
+			/**
+			 * Marker class indicating support for tasks/list.
+			 */
+			@JsonIgnoreProperties(ignoreUnknown = true)
+			public static final class ListTaskCapability {
+
+				@JsonCreator
+				ListTaskCapability() {
+				}
+
+			}
+
+			/**
+			 * Marker class indicating support for tasks/cancel.
+			 */
+			@JsonIgnoreProperties(ignoreUnknown = true)
+			public static final class CancelTaskCapability {
+
+				@JsonCreator
+				CancelTaskCapability() {
+				}
+
+			}
+
+			/**
+			 * Specifies which request types can be augmented with tasks.
+			 */
+			@JsonIgnoreProperties(ignoreUnknown = true)
+			public static final class ServerTaskRequestCapabilities {
+
+				private final ToolsTaskCapabilities tools;
+
+				@JsonCreator
+				ServerTaskRequestCapabilities(@JsonProperty("tools") ToolsTaskCapabilities tools) {
+					this.tools = tools;
+				}
+
+				/**
+				 * Returns the task support for tool-related requests.
+				 * @return the tools capabilities, or null
+				 */
+				@JsonProperty("tools")
+				public ToolsTaskCapabilities tools() {
+					return this.tools;
+				}
+
+				/**
+				 * Task support for tool-related requests.
+				 */
+				@JsonIgnoreProperties(ignoreUnknown = true)
+				public static final class ToolsTaskCapabilities {
+
+					private final CallTaskCapability call;
+
+					@JsonCreator
+					ToolsTaskCapabilities(@JsonProperty("call") CallTaskCapability call) {
+						this.call = call;
+					}
+
+					/**
+					 * Returns whether the server supports task-augmented tools/call
+					 * requests.
+					 * @return the call capability, or null
+					 */
+					@JsonProperty("call")
+					public CallTaskCapability call() {
+						return this.call;
+					}
+
+					/**
+					 * Marker class indicating support for task-augmented tools/call.
+					 */
+					@JsonIgnoreProperties(ignoreUnknown = true)
+					public static final class CallTaskCapability {
+
+						@JsonCreator
+						CallTaskCapability() {
+						}
+
+					}
+
+				}
+
+			}
+
+			public static Builder builder() {
+				return new Builder();
+			}
+
+			public static class Builder {
+
+				private ListTaskCapability list;
+
+				private CancelTaskCapability cancel;
+
+				private ServerTaskRequestCapabilities requests;
+
+				public Builder list() {
+					this.list = new ListTaskCapability();
+					return this;
+				}
+
+				public Builder cancel() {
+					this.cancel = new CancelTaskCapability();
+					return this;
+				}
+
+				public Builder toolsCall() {
+					this.requests = new ServerTaskRequestCapabilities(
+							new ServerTaskRequestCapabilities.ToolsTaskCapabilities(
+									new ServerTaskRequestCapabilities.ToolsTaskCapabilities.CallTaskCapability()));
+					return this;
+				}
+
+				public ServerTaskCapabilities build() {
+					return new ServerTaskCapabilities(list, cancel, requests);
+				}
+
+			}
+
+		}
+
+		/**
 		 * Create a mutated copy of this object with the specified changes.
 		 * @return A new Builder instance with the same values as this object.
 		 */
@@ -599,6 +1059,7 @@ public final class McpSchema {
 			builder.prompts = this.prompts;
 			builder.resources = this.resources;
 			builder.tools = this.tools;
+			builder.tasks = this.tasks;
 			return builder;
 		}
 
@@ -619,6 +1080,8 @@ public final class McpSchema {
 			private ResourceCapabilities resources;
 
 			private ToolCapabilities tools;
+
+			private ServerTaskCapabilities tasks;
 
 			public Builder completions() {
 				this.completions = new CompletionCapabilities();
@@ -650,8 +1113,18 @@ public final class McpSchema {
 				return this;
 			}
 
+			/**
+			 * Enables task capabilities with the provided configuration.
+			 * @param tasks the task capabilities
+			 * @return this builder
+			 */
+			public Builder tasks(ServerTaskCapabilities tasks) {
+				this.tasks = tasks;
+				return this;
+			}
+
 			public ServerCapabilities build() {
-				return new ServerCapabilities(completions, experimental, logging, prompts, resources, tools);
+				return new ServerCapabilities(completions, experimental, logging, prompts, resources, tools, tasks);
 			}
 
 		}
@@ -685,6 +1158,469 @@ public final class McpSchema {
 		@JsonProperty("user") USER,
 		@JsonProperty("assistant") ASSISTANT
 	} // @formatter:on
+
+	/**
+	 * The status of a task.
+	 */
+	public enum TaskStatus {
+
+	// @formatter:off
+		/**
+		 * The request is currently being processed.
+		 */
+		@JsonProperty("working") WORKING,
+		/**
+		 * The task is waiting for input (e.g., elicitation or sampling).
+		 */
+		@JsonProperty("input_required") INPUT_REQUIRED,
+		/**
+		 * The request completed successfully and results are available.
+		 */
+		@JsonProperty("completed") COMPLETED,
+		/**
+		 * The associated request did not complete successfully. For tool calls specifically,
+		 * this includes cases where the tool call result has isError set to true.
+		 */
+		@JsonProperty("failed") FAILED,
+		/**
+		 * The request was cancelled before completion.
+		 */
+		@JsonProperty("cancelled") CANCELLED;
+		// @formatter:on
+
+		/**
+		 * Checks if this status represents a terminal state.
+		 * <p>
+		 * Terminal states are those where the task has finished processing and will not
+		 * change further: COMPLETED, FAILED, or CANCELLED.
+		 * @return true if this status is a terminal state
+		 */
+		public boolean isTerminal() {
+			return this == COMPLETED || this == FAILED || this == CANCELLED;
+		}
+
+	}
+
+	/**
+	 * Represents the state and metadata of an asynchronous operation tracked by the MCP
+	 * task system. Tasks are created when a client requests task-augmented execution of a
+	 * tool, sampling, or elicitation operation.
+	 *
+	 * <p>
+	 * A task progresses through various states ({@link TaskStatus}) and can include
+	 * optional metadata such as TTL, poll interval, and status messages.
+	 *
+	 * <p>
+	 * Use {@link #builder()} to create instances.
+	 *
+	 * @see TaskStatus
+	 * @see Builder
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public static final class Task {
+
+		private final String taskId;
+
+		private final TaskStatus status;
+
+		private final String statusMessage;
+
+		private final String createdAt;
+
+		private final String lastUpdatedAt;
+
+		private final Long ttl;
+
+		private final Long pollInterval;
+
+		@JsonCreator
+		private Task( // @formatter:off
+				@JsonProperty("taskId") String taskId,
+				@JsonProperty("status") TaskStatus status,
+				@JsonProperty("statusMessage") @Nullable String statusMessage,
+				@JsonProperty("createdAt") String createdAt,
+				@JsonProperty("lastUpdatedAt") String lastUpdatedAt,
+				@JsonProperty("ttl") @Nullable Long ttl,
+				@JsonProperty("pollInterval") @Nullable Long pollInterval) { // @formatter:on
+			Assert.hasText(taskId, "taskId must not be empty");
+			Assert.notNull(status, "status must not be null");
+			Assert.hasText(createdAt, "createdAt must not be empty");
+			Assert.hasText(lastUpdatedAt, "lastUpdatedAt must not be empty");
+			// ttl and pollInterval can be null (unlimited/default)
+			this.taskId = taskId;
+			this.status = status;
+			this.statusMessage = statusMessage;
+			this.createdAt = createdAt;
+			this.lastUpdatedAt = lastUpdatedAt;
+			this.ttl = ttl;
+			this.pollInterval = pollInterval;
+		}
+
+		/**
+		 * Returns the task identifier.
+		 * @return the task identifier
+		 */
+		@JsonProperty("taskId")
+		public String taskId() {
+			return this.taskId;
+		}
+
+		/**
+		 * Returns the task status.
+		 * @return the task status
+		 */
+		@JsonProperty("status")
+		public TaskStatus status() {
+			return this.status;
+		}
+
+		/**
+		 * Returns the optional status message.
+		 * @return the status message, or null
+		 */
+		@JsonProperty("statusMessage")
+		@Nullable
+		public String statusMessage() {
+			return this.statusMessage;
+		}
+
+		/**
+		 * Returns the creation timestamp.
+		 * @return the ISO 8601 creation timestamp
+		 */
+		@JsonProperty("createdAt")
+		public String createdAt() {
+			return this.createdAt;
+		}
+
+		/**
+		 * Returns the last updated timestamp.
+		 * @return the ISO 8601 last updated timestamp
+		 */
+		@JsonProperty("lastUpdatedAt")
+		public String lastUpdatedAt() {
+			return this.lastUpdatedAt;
+		}
+
+		/**
+		 * Returns the TTL (time-to-live) in milliseconds.
+		 * @return the TTL, or null for unlimited
+		 */
+		@JsonProperty("ttl")
+		@Nullable
+		public Long ttl() {
+			return this.ttl;
+		}
+
+		/**
+		 * Returns the suggested polling interval in milliseconds.
+		 * @return the polling interval, or null
+		 */
+		@JsonProperty("pollInterval")
+		@Nullable
+		public Long pollInterval() {
+			return this.pollInterval;
+		}
+
+		/**
+		 * Checks if the task is in a terminal state (completed, failed, or cancelled).
+		 * @return true if the task is in a terminal state
+		 */
+		public boolean isTerminal() {
+			return status.isTerminal();
+		}
+
+		/**
+		 * Creates a new builder for Task.
+		 * @return a new Builder instance
+		 */
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		/**
+		 * Builder for {@link Task}.
+		 */
+		public static class Builder {
+
+			private String taskId;
+
+			private TaskStatus status;
+
+			private String statusMessage;
+
+			private String createdAt;
+
+			private String lastUpdatedAt;
+
+			private Long ttl;
+
+			private Long pollInterval;
+
+			/**
+			 * Sets the task identifier.
+			 * @param taskId the task identifier
+			 * @return this builder
+			 */
+			public Builder taskId(String taskId) {
+				this.taskId = taskId;
+				return this;
+			}
+
+			/**
+			 * Sets the task status.
+			 * @param status the task status
+			 * @return this builder
+			 */
+			public Builder status(TaskStatus status) {
+				this.status = status;
+				return this;
+			}
+
+			/**
+			 * Sets the optional status message.
+			 * @param statusMessage human-readable status message
+			 * @return this builder
+			 */
+			public Builder statusMessage(String statusMessage) {
+				this.statusMessage = statusMessage;
+				return this;
+			}
+
+			/**
+			 * Sets the creation timestamp.
+			 * @param createdAt ISO 8601 timestamp when the task was created
+			 * @return this builder
+			 */
+			public Builder createdAt(String createdAt) {
+				this.createdAt = createdAt;
+				return this;
+			}
+
+			/**
+			 * Sets the last updated timestamp.
+			 * @param lastUpdatedAt ISO 8601 timestamp when the task was last updated
+			 * @return this builder
+			 */
+			public Builder lastUpdatedAt(String lastUpdatedAt) {
+				this.lastUpdatedAt = lastUpdatedAt;
+				return this;
+			}
+
+			/**
+			 * Sets both createdAt and lastUpdatedAt to the current time in ISO 8601
+			 * format.
+			 *
+			 * <p>
+			 * <strong>Note:</strong> Timestamps must be valid ISO 8601 format strings.
+			 * This method uses {@code Instant.now().toString()} which produces compliant
+			 * output.
+			 * @return this builder
+			 */
+			public Builder timestamps() {
+				String now = java.time.Instant.now().toString();
+				this.createdAt = now;
+				this.lastUpdatedAt = now;
+				return this;
+			}
+
+			/**
+			 * Sets the TTL (time-to-live) in milliseconds.
+			 * @param ttl retention duration from creation in milliseconds, null for
+			 * unlimited
+			 * @return this builder
+			 */
+			public Builder ttl(Long ttl) {
+				this.ttl = ttl;
+				return this;
+			}
+
+			/**
+			 * Sets the suggested polling interval in milliseconds.
+			 * @param pollInterval polling interval in milliseconds
+			 * @return this builder
+			 */
+			public Builder pollInterval(Long pollInterval) {
+				this.pollInterval = pollInterval;
+				return this;
+			}
+
+			/**
+			 * Builds a new {@link Task} instance.
+			 * @return a new Task instance
+			 */
+			public Task build() {
+				return new Task(taskId, status, statusMessage, createdAt, lastUpdatedAt, ttl, pollInterval);
+			}
+
+		}
+
+	}
+
+	/**
+	 * Metadata for augmenting a request with task execution. Include this in the
+	 * {@code task} field of the request parameters to indicate that the operation should
+	 * be executed as a background task rather than synchronously.
+	 *
+	 * <p>
+	 * When present, the server creates a task and returns immediately with task
+	 * information, allowing the client to poll for status and retrieve results later.
+	 *
+	 * <p>
+	 * Use {@link #builder()} to create instances.
+	 *
+	 * @see Task
+	 * @see Builder
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public static final class TaskMetadata {
+
+		private final Long ttl;
+
+		@JsonCreator
+		private TaskMetadata(@JsonProperty("ttl") Long ttl) {
+			if (ttl != null && ttl < 0) {
+				throw new IllegalArgumentException("ttl must not be negative");
+			}
+			this.ttl = ttl;
+		}
+
+		/**
+		 * Returns the TTL (time-to-live) in milliseconds.
+		 * @return the TTL, or null for no specific retention
+		 */
+		@JsonProperty("ttl")
+		public Long ttl() {
+			return this.ttl;
+		}
+
+		/**
+		 * Returns the TTL as a Duration, or null if not set.
+		 * @return the TTL duration, or null
+		 */
+		@JsonIgnore
+		public Duration ttlAsDuration() {
+			return ttl != null ? Duration.ofMillis(ttl) : null;
+		}
+
+		/**
+		 * Creates a new builder for TaskMetadata.
+		 * @return a new Builder instance
+		 */
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		/**
+		 * Builder for creating TaskMetadata instances with Duration-based TTL.
+		 */
+		public static class Builder {
+
+			private Duration ttl;
+
+			/**
+			 * Sets the TTL (time-to-live) for the task.
+			 * @param ttl the duration to retain the task, converted to milliseconds
+			 * @return this builder
+			 */
+			public Builder ttl(Duration ttl) {
+				this.ttl = ttl;
+				return this;
+			}
+
+			/**
+			 * Builds the TaskMetadata instance.
+			 * @return a new TaskMetadata
+			 * @throws IllegalArgumentException if TTL is negative
+			 */
+			public TaskMetadata build() {
+				Long ttlMs = this.ttl != null ? this.ttl.toMillis() : null;
+				return new TaskMetadata(ttlMs);
+			}
+
+		}
+
+	}
+
+	/**
+	 * The well-known key for related task metadata in the _meta field.
+	 */
+	public static final String RELATED_TASK_META_KEY = "io.modelcontextprotocol/related-task";
+
+	/**
+	 * Metadata for associating messages with a task. Include this in the {@code _meta}
+	 * field under the key {@link #RELATED_TASK_META_KEY} to indicate that a notification
+	 * or other message is related to a specific task.
+	 *
+	 * <p>
+	 * This enables correlation of progress notifications, logging messages, and other
+	 * communications with their originating task context.
+	 *
+	 * <p>
+	 * Use {@link #builder()} to create instances.
+	 *
+	 * @see Task
+	 * @see Builder
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public static final class RelatedTaskMetadata {
+
+		private final String taskId;
+
+		@JsonCreator
+		private RelatedTaskMetadata(@JsonProperty("taskId") String taskId) {
+			Assert.hasText(taskId, "taskId must not be empty");
+			this.taskId = taskId;
+		}
+
+		/**
+		 * Returns the task identifier.
+		 * @return the task identifier
+		 */
+		@JsonProperty("taskId")
+		public String taskId() {
+			return this.taskId;
+		}
+
+		/**
+		 * Creates a new builder for RelatedTaskMetadata.
+		 * @return a new Builder instance
+		 */
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		/**
+		 * Builder for {@link RelatedTaskMetadata}.
+		 */
+		public static class Builder {
+
+			private String taskId;
+
+			/**
+			 * Sets the task identifier.
+			 * @param taskId the task identifier
+			 * @return this builder
+			 */
+			public Builder taskId(String taskId) {
+				this.taskId = taskId;
+				return this;
+			}
+
+			/**
+			 * Builds a new {@link RelatedTaskMetadata} instance.
+			 * @return a new RelatedTaskMetadata instance
+			 */
+			public RelatedTaskMetadata build() {
+				return new RelatedTaskMetadata(taskId);
+			}
+
+		}
+
+	}
 
 	// ---------------------------
 	// Resource Interfaces
@@ -1373,6 +2309,95 @@ public final class McpSchema {
 	}
 
 	/**
+	 * Indicates whether a tool supports task-augmented execution.
+	 */
+	public enum TaskSupportMode {
+
+		// @formatter:off
+		/**
+		 * Tool does not support task-augmented execution. This is the default when absent.
+		 */
+		@JsonProperty("forbidden") FORBIDDEN,
+		/**
+		 * Tool may support task-augmented execution.
+		 */
+		@JsonProperty("optional") OPTIONAL,
+		/**
+		 * Tool requires task-augmented execution.
+		 */
+		@JsonProperty("required") REQUIRED
+		// @formatter:on
+
+	}
+
+	/**
+	 * Execution-related properties for a tool.
+	 *
+	 * <p>
+	 * Use {@link #builder()} to create instances.
+	 *
+	 * @see Builder
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public static final class ToolExecution {
+
+		private final TaskSupportMode taskSupport;
+
+		@JsonCreator
+		private ToolExecution(@JsonProperty("taskSupport") TaskSupportMode taskSupport) {
+			this.taskSupport = taskSupport;
+		}
+
+		/**
+		 * Returns the task support mode for this tool.
+		 * @return the task support mode
+		 */
+		public TaskSupportMode taskSupport() {
+			return this.taskSupport;
+		}
+
+		/**
+		 * Creates a new builder for ToolExecution.
+		 * @return a new Builder instance
+		 */
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		/**
+		 * Builder for {@link ToolExecution}.
+		 */
+		public static class Builder {
+
+			private TaskSupportMode taskSupport;
+
+			/**
+			 * Sets the task support mode. Indicates whether this tool supports
+			 * task-augmented execution. This allows clients to handle long-running
+			 * operations through polling the task system. Default is
+			 * {@link TaskSupportMode#FORBIDDEN} when absent.
+			 * @param taskSupport the task support mode
+			 * @return this builder
+			 */
+			public Builder taskSupport(TaskSupportMode taskSupport) {
+				this.taskSupport = taskSupport;
+				return this;
+			}
+
+			/**
+			 * Builds a new {@link ToolExecution} instance.
+			 * @return a new ToolExecution instance
+			 */
+			public ToolExecution build() {
+				return new ToolExecution(taskSupport);
+			}
+
+		}
+
+	}
+
+	/**
 	 * Represents a tool that the server provides. Tools enable servers to expose
 	 * executable functionality to the system. Through these tools, you can interact with
 	 * external systems, perform computations, and take actions in the real world.
@@ -1384,8 +2409,11 @@ public final class McpSchema {
 	 * used by clients to improve the LLM's understanding of available tools.
 	 * @param inputSchema A JSON Schema object that describes the expected structure of
 	 * the arguments when calling this tool. This allows clients to validate tool
+	 * arguments before sending them to the server.
 	 * @param outputSchema An optional JSON Schema object defining the structure of the
 	 * tool's output returned in the structuredContent field of a CallToolResult.
+	 * @param execution Execution-related properties for the tool, including task support
+	 * mode which indicates whether this tool supports task-augmented execution.
 	 * @param annotations Optional additional tool information.
 	 * @param meta See specification for notes on _meta usage
 	 */
@@ -1397,6 +2425,7 @@ public final class McpSchema {
 		@JsonProperty("description") String description,
 		@JsonProperty("inputSchema") JsonSchema inputSchema,
 		@JsonProperty("outputSchema") Map<String, Object> outputSchema,
+		@JsonProperty("execution") ToolExecution execution,
 		@JsonProperty("annotations") ToolAnnotations annotations,
 		@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
 
@@ -1415,6 +2444,8 @@ public final class McpSchema {
 			private JsonSchema inputSchema;
 
 			private Map<String, Object> outputSchema;
+
+			private ToolExecution execution;
 
 			private ToolAnnotations annotations;
 
@@ -1455,6 +2486,11 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder execution(ToolExecution execution) {
+				this.execution = execution;
+				return this;
+			}
+
 			public Builder annotations(ToolAnnotations annotations) {
 				this.annotations = annotations;
 				return this;
@@ -1467,7 +2503,7 @@ public final class McpSchema {
 
 			public Tool build() {
 				Assert.hasText(name, "name must not be empty");
-				return new Tool(name, title, description, inputSchema, outputSchema, annotations, meta);
+				return new Tool(name, title, description, inputSchema, outputSchema, execution, annotations, meta);
 			}
 
 		}
@@ -1498,6 +2534,9 @@ public final class McpSchema {
 	 * tools/list.
 	 * @param arguments Arguments to pass to the tool. These must conform to the tool's
 	 * input schema.
+	 * @param task If specified, the caller is requesting task-augmented execution for
+	 * this request. The request will return a CreateTaskResult immediately, and the
+	 * actual result can be retrieved later via tasks/result.
 	 * @param meta Optional metadata about the request. This can include additional
 	 * information like `progressToken`
 	 */
@@ -1506,14 +2545,19 @@ public final class McpSchema {
 	public record CallToolRequest( // @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("arguments") Map<String, Object> arguments,
+		@JsonProperty("task") TaskMetadata task,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
 		public CallToolRequest(McpJsonMapper jsonMapper, String name, String jsonArguments) {
-			this(name, parseJsonArguments(jsonMapper, jsonArguments), null);
+			this(name, parseJsonArguments(jsonMapper, jsonArguments), null, null);
 		}
 
 		public CallToolRequest(String name, Map<String, Object> arguments) {
-			this(name, arguments, null);
+			this(name, arguments, null, null);
+		}
+
+		public CallToolRequest(String name, Map<String, Object> arguments, Map<String, Object> meta) {
+			this(name, arguments, null, meta);
 		}
 
 		private static Map<String, Object> parseJsonArguments(McpJsonMapper jsonMapper, String jsonArguments) {
@@ -1535,6 +2579,8 @@ public final class McpSchema {
 
 			private Map<String, Object> arguments;
 
+			private TaskMetadata task;
+
 			private Map<String, Object> meta;
 
 			public Builder name(String name) {
@@ -1549,6 +2595,26 @@ public final class McpSchema {
 
 			public Builder arguments(McpJsonMapper jsonMapper, String jsonArguments) {
 				this.arguments = parseJsonArguments(jsonMapper, jsonArguments);
+				return this;
+			}
+
+			/**
+			 * Sets task metadata for task-augmented execution.
+			 * @param task the task metadata
+			 * @return this builder
+			 */
+			public Builder task(TaskMetadata task) {
+				this.task = task;
+				return this;
+			}
+
+			/**
+			 * Sets task metadata for task-augmented execution with the specified TTL.
+			 * @param ttl requested duration in milliseconds to retain task from creation
+			 * @return this builder
+			 */
+			public Builder task(Long ttl) {
+				this.task = new TaskMetadata(ttl);
 				return this;
 			}
 
@@ -1567,7 +2633,7 @@ public final class McpSchema {
 
 			public CallToolRequest build() {
 				Assert.hasText(name, "name must not be empty");
-				return new CallToolRequest(name, arguments, meta);
+				return new CallToolRequest(name, arguments, task, meta);
 			}
 
 		}
@@ -1590,7 +2656,7 @@ public final class McpSchema {
 		@JsonProperty("content") List<Content> content,
 		@JsonProperty("isError") Boolean isError,
 		@JsonProperty("structuredContent") Object structuredContent,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements ServerTaskPayloadResult { // @formatter:on
 
 		/**
 		 * @deprecated use the builder instead.
@@ -1830,9 +2896,6 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ModelHint(@JsonProperty("name") String name) {
-		public static ModelHint of(String name) {
-			return new ModelHint(name);
-		}
 	}
 
 	/**
@@ -1868,6 +2931,9 @@ public final class McpSchema {
 	 * @param stopSequences Optional stop sequences for sampling
 	 * @param metadata Optional metadata to pass through to the LLM provider. The format
 	 * of this metadata is provider-specific
+	 * @param task If specified, the caller is requesting task-augmented execution for
+	 * this request. The request will return a CreateTaskResult immediately, and the
+	 * actual result can be retrieved later via tasks/result.
 	 * @param meta See specification for notes on _meta usage
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -1881,6 +2947,7 @@ public final class McpSchema {
 		@JsonProperty("maxTokens") Integer maxTokens,
 		@JsonProperty("stopSequences") List<String> stopSequences,
 		@JsonProperty("metadata") Map<String, Object> metadata,
+		@JsonProperty("task") TaskMetadata task,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
 		// backwards compatibility constructor
@@ -1888,7 +2955,15 @@ public final class McpSchema {
 				String systemPrompt, ContextInclusionStrategy includeContext, Double temperature, Integer maxTokens,
 				List<String> stopSequences, Map<String, Object> metadata) {
 			this(messages, modelPreferences, systemPrompt, includeContext, temperature, maxTokens, stopSequences,
-					metadata, null);
+					metadata, null, null);
+		}
+
+		// backwards compatibility constructor with _meta
+		public CreateMessageRequest(List<SamplingMessage> messages, ModelPreferences modelPreferences,
+				String systemPrompt, ContextInclusionStrategy includeContext, Double temperature, Integer maxTokens,
+				List<String> stopSequences, Map<String, Object> metadata, Map<String, Object> meta) {
+			this(messages, modelPreferences, systemPrompt, includeContext, temperature, maxTokens, stopSequences,
+					metadata, null, meta);
 		}
 
 		public enum ContextInclusionStrategy {
@@ -1920,6 +2995,8 @@ public final class McpSchema {
 			private List<String> stopSequences;
 
 			private Map<String, Object> metadata;
+
+			private TaskMetadata task;
 
 			private Map<String, Object> meta;
 
@@ -1963,6 +3040,26 @@ public final class McpSchema {
 				return this;
 			}
 
+			/**
+			 * Sets task metadata for task-augmented execution.
+			 * @param task the task metadata
+			 * @return this builder
+			 */
+			public Builder task(TaskMetadata task) {
+				this.task = task;
+				return this;
+			}
+
+			/**
+			 * Sets task metadata for task-augmented execution with the specified TTL.
+			 * @param ttl requested duration in milliseconds to retain task from creation
+			 * @return this builder
+			 */
+			public Builder task(Long ttl) {
+				this.task = new TaskMetadata(ttl);
+				return this;
+			}
+
 			public Builder meta(Map<String, Object> meta) {
 				this.meta = meta;
 				return this;
@@ -1978,7 +3075,7 @@ public final class McpSchema {
 
 			public CreateMessageRequest build() {
 				return new CreateMessageRequest(messages, modelPreferences, systemPrompt, includeContext, temperature,
-						maxTokens, stopSequences, metadata, meta);
+						maxTokens, stopSequences, metadata, task, meta);
 			}
 
 		}
@@ -2003,7 +3100,7 @@ public final class McpSchema {
 		@JsonProperty("content") Content content,
 		@JsonProperty("model") String model,
 		@JsonProperty("stopReason") StopReason stopReason,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements ClientTaskPayloadResult { // @formatter:on
 
 		public enum StopReason {
 
@@ -2095,6 +3192,9 @@ public final class McpSchema {
 	 * @param message The message to present to the user
 	 * @param requestedSchema A restricted subset of JSON Schema. Only top-level
 	 * properties are allowed, without nesting
+	 * @param task If specified, the caller is requesting task-augmented execution for
+	 * this request. The request will return a CreateTaskResult immediately, and the
+	 * actual result can be retrieved later via tasks/result.
 	 * @param meta See specification for notes on _meta usage
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -2102,11 +3202,17 @@ public final class McpSchema {
 	public record ElicitRequest( // @formatter:off
 		@JsonProperty("message") String message,
 		@JsonProperty("requestedSchema") Map<String, Object> requestedSchema,
+		@JsonProperty("task") TaskMetadata task,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
 		// backwards compatibility constructor
 		public ElicitRequest(String message, Map<String, Object> requestedSchema) {
-			this(message, requestedSchema, null);
+			this(message, requestedSchema, null, null);
+		}
+
+		// backwards compatibility constructor with _meta
+		public ElicitRequest(String message, Map<String, Object> requestedSchema, Map<String, Object> meta) {
+			this(message, requestedSchema, null, meta);
 		}
 
 		public static Builder builder() {
@@ -2119,6 +3225,8 @@ public final class McpSchema {
 
 			private Map<String, Object> requestedSchema;
 
+			private TaskMetadata task;
+
 			private Map<String, Object> meta;
 
 			public Builder message(String message) {
@@ -2128,6 +3236,26 @@ public final class McpSchema {
 
 			public Builder requestedSchema(Map<String, Object> requestedSchema) {
 				this.requestedSchema = requestedSchema;
+				return this;
+			}
+
+			/**
+			 * Sets task metadata for task-augmented execution.
+			 * @param task the task metadata
+			 * @return this builder
+			 */
+			public Builder task(TaskMetadata task) {
+				this.task = task;
+				return this;
+			}
+
+			/**
+			 * Sets task metadata for task-augmented execution with the specified TTL.
+			 * @param ttl requested duration in milliseconds to retain task from creation
+			 * @return this builder
+			 */
+			public Builder task(Long ttl) {
+				this.task = new TaskMetadata(ttl);
 				return this;
 			}
 
@@ -2145,7 +3273,7 @@ public final class McpSchema {
 			}
 
 			public ElicitRequest build() {
-				return new ElicitRequest(message, requestedSchema, meta);
+				return new ElicitRequest(message, requestedSchema, task, meta);
 			}
 
 		}
@@ -2166,7 +3294,7 @@ public final class McpSchema {
 	public record ElicitResult( // @formatter:off
 		@JsonProperty("action") Action action,
 		@JsonProperty("content") Map<String, Object> content,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements ClientTaskPayloadResult { // @formatter:on
 
 		public enum Action {
 
@@ -2926,6 +4054,1425 @@ public final class McpSchema {
 		public ListRootsResult(List<Root> roots, String nextCursor) {
 			this(roots, nextCursor, null);
 		}
+	}
+
+	// ---------------------------
+	// Tasks
+	// ---------------------------
+
+	/*
+	 * Note on meta fields in task types:
+	 *
+	 * All task-related types (GetTaskRequest, GetTaskResult, CancelTaskRequest,
+	 * CancelTaskResult, CreateTaskResult, etc.) include optional "_meta" fields that may
+	 * be null. This is intentional - the MCP specification defines these as optional
+	 * extension points for protocol-level metadata. Callers should always check for null
+	 * before accessing meta fields. When not using metadata extensions, simply pass null.
+	 */
+
+	/**
+	 * A request to retrieve the state of a task.
+	 *
+	 * <p>
+	 * Use {@link #builder()} to create instances.
+	 *
+	 * @see Builder
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public static final class GetTaskRequest implements Request {
+
+		private final String taskId;
+
+		private final Map<String, Object> meta;
+
+		@JsonCreator
+		private GetTaskRequest( // @formatter:off
+				@JsonProperty("taskId") String taskId,
+				@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
+			Assert.hasText(taskId, "taskId must not be empty");
+			this.taskId = taskId;
+			this.meta = meta;
+		}
+
+		/**
+		 * Returns the task identifier.
+		 * @return the task identifier
+		 */
+		@JsonProperty("taskId")
+		public String taskId() {
+			return this.taskId;
+		}
+
+		/**
+		 * Returns the metadata.
+		 * @return the metadata map, or null
+		 */
+		@JsonProperty("_meta")
+		public Map<String, Object> meta() {
+			return this.meta;
+		}
+
+		/**
+		 * Creates a new builder for GetTaskRequest.
+		 * @return a new Builder instance
+		 */
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		/**
+		 * Builder for {@link GetTaskRequest}.
+		 */
+		public static class Builder {
+
+			private String taskId;
+
+			private Map<String, Object> meta;
+
+			/**
+			 * Sets the task identifier.
+			 * @param taskId the task identifier
+			 * @return this builder
+			 */
+			public Builder taskId(String taskId) {
+				this.taskId = taskId;
+				return this;
+			}
+
+			/**
+			 * Sets the metadata.
+			 * @param meta the metadata map
+			 * @return this builder
+			 */
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			/**
+			 * Builds a new {@link GetTaskRequest} instance.
+			 * @return a new GetTaskRequest instance
+			 */
+			public GetTaskRequest build() {
+				return new GetTaskRequest(taskId, meta);
+			}
+
+		}
+
+	}
+
+	/**
+	 * The response to a tasks/get request. Contains all Task fields plus Result metadata.
+	 *
+	 * <p>
+	 * <strong>Design Note:</strong> This type is structurally identical to
+	 * {@link CancelTaskResult} but kept as a separate type for compile-time type safety.
+	 * This ensures that code expecting a {@code GetTaskResult} cannot accidentally
+	 * receive a {@code CancelTaskResult} and vice versa, making API boundaries explicit
+	 * in method signatures.
+	 *
+	 * <p>
+	 * Use {@link #builder()} to create instances.
+	 *
+	 * @see Builder
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public static final class GetTaskResult implements Result {
+
+		private final String taskId;
+
+		private final TaskStatus status;
+
+		private final String statusMessage;
+
+		private final String createdAt;
+
+		private final String lastUpdatedAt;
+
+		private final Long ttl;
+
+		private final Long pollInterval;
+
+		private final Map<String, Object> meta;
+
+		@JsonCreator
+		private GetTaskResult( // @formatter:off
+				@JsonProperty("taskId") String taskId,
+				@JsonProperty("status") TaskStatus status,
+				@JsonProperty("statusMessage") @Nullable String statusMessage,
+				@JsonProperty("createdAt") String createdAt,
+				@JsonProperty("lastUpdatedAt") String lastUpdatedAt,
+				@JsonProperty("ttl") @Nullable Long ttl,
+				@JsonProperty("pollInterval") @Nullable Long pollInterval,
+				@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
+			Assert.hasText(taskId, "taskId must not be empty");
+			Assert.notNull(status, "status must not be null");
+			Assert.hasText(createdAt, "createdAt must not be empty");
+			Assert.hasText(lastUpdatedAt, "lastUpdatedAt must not be empty");
+			this.taskId = taskId;
+			this.status = status;
+			this.statusMessage = statusMessage;
+			this.createdAt = createdAt;
+			this.lastUpdatedAt = lastUpdatedAt;
+			this.ttl = ttl;
+			this.pollInterval = pollInterval;
+			this.meta = meta;
+		}
+
+		/**
+		 * Returns the task identifier.
+		 * @return the task identifier
+		 */
+		@JsonProperty("taskId")
+		public String taskId() {
+			return this.taskId;
+		}
+
+		/**
+		 * Returns the task status.
+		 * @return the task status
+		 */
+		@JsonProperty("status")
+		public TaskStatus status() {
+			return this.status;
+		}
+
+		/**
+		 * Returns the optional status message.
+		 * @return the status message, or null
+		 */
+		@JsonProperty("statusMessage")
+		@Nullable
+		public String statusMessage() {
+			return this.statusMessage;
+		}
+
+		/**
+		 * Returns the creation timestamp.
+		 * @return the ISO 8601 creation timestamp
+		 */
+		@JsonProperty("createdAt")
+		public String createdAt() {
+			return this.createdAt;
+		}
+
+		/**
+		 * Returns the last updated timestamp.
+		 * @return the ISO 8601 last updated timestamp
+		 */
+		@JsonProperty("lastUpdatedAt")
+		public String lastUpdatedAt() {
+			return this.lastUpdatedAt;
+		}
+
+		/**
+		 * Returns the TTL (time-to-live) in milliseconds.
+		 * @return the TTL, or null for unlimited
+		 */
+		@JsonProperty("ttl")
+		@Nullable
+		public Long ttl() {
+			return this.ttl;
+		}
+
+		/**
+		 * Returns the suggested polling interval in milliseconds.
+		 * @return the polling interval, or null
+		 */
+		@JsonProperty("pollInterval")
+		@Nullable
+		public Long pollInterval() {
+			return this.pollInterval;
+		}
+
+		/**
+		 * Returns the metadata.
+		 * @return the metadata map, or null
+		 */
+		@JsonProperty("_meta")
+		public Map<String, Object> meta() {
+			return this.meta;
+		}
+
+		/**
+		 * Creates a GetTaskResult from a Task.
+		 * @param task the task to convert
+		 * @return a new GetTaskResult
+		 */
+		public static GetTaskResult fromTask(Task task) {
+			return new GetTaskResult(task.taskId(), task.status(), task.statusMessage(), task.createdAt(),
+					task.lastUpdatedAt(), task.ttl(), task.pollInterval(), null);
+		}
+
+		/**
+		 * Converts this result to a Task.
+		 * @return a Task with the same field values
+		 */
+		public Task toTask() {
+			return Task.builder()
+				.taskId(taskId)
+				.status(status)
+				.statusMessage(statusMessage)
+				.createdAt(createdAt)
+				.lastUpdatedAt(lastUpdatedAt)
+				.ttl(ttl)
+				.pollInterval(pollInterval)
+				.build();
+		}
+
+		/**
+		 * Checks if the task is in a terminal state (completed, failed, or cancelled).
+		 * @return true if the task is in a terminal state
+		 */
+		public boolean isTerminal() {
+			return status.isTerminal();
+		}
+
+		/**
+		 * Creates a new builder for GetTaskResult.
+		 * @return a new Builder instance
+		 */
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		/**
+		 * Builder for {@link GetTaskResult}.
+		 */
+		public static class Builder {
+
+			private String taskId;
+
+			private TaskStatus status;
+
+			private String statusMessage;
+
+			private String createdAt;
+
+			private String lastUpdatedAt;
+
+			private Long ttl;
+
+			private Long pollInterval;
+
+			private Map<String, Object> meta;
+
+			public Builder taskId(String taskId) {
+				this.taskId = taskId;
+				return this;
+			}
+
+			public Builder status(TaskStatus status) {
+				this.status = status;
+				return this;
+			}
+
+			public Builder statusMessage(String statusMessage) {
+				this.statusMessage = statusMessage;
+				return this;
+			}
+
+			public Builder createdAt(String createdAt) {
+				this.createdAt = createdAt;
+				return this;
+			}
+
+			public Builder lastUpdatedAt(String lastUpdatedAt) {
+				this.lastUpdatedAt = lastUpdatedAt;
+				return this;
+			}
+
+			public Builder ttl(Long ttl) {
+				this.ttl = ttl;
+				return this;
+			}
+
+			public Builder pollInterval(Long pollInterval) {
+				this.pollInterval = pollInterval;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public GetTaskResult build() {
+				return new GetTaskResult(taskId, status, statusMessage, createdAt, lastUpdatedAt, ttl, pollInterval,
+						meta);
+			}
+
+		}
+
+	}
+
+	/**
+	 * A request to retrieve the result payload of a completed task.
+	 *
+	 * <p>
+	 * This corresponds to the {@code tasks/result} method in the MCP protocol. The name
+	 * "Payload" distinguishes the actual result data (e.g., {@link CallToolResult},
+	 * {@link CreateMessageResult}) from the task status information returned by
+	 * {@link GetTaskResult}.
+	 *
+	 * <p>
+	 * The response type depends on what created the task:
+	 * <ul>
+	 * <li>Tool calls: {@link CallToolResult}</li>
+	 * <li>Sampling requests: {@link CreateMessageResult}</li>
+	 * <li>Elicitation requests: {@link ElicitResult}</li>
+	 * </ul>
+	 *
+	 * <p>
+	 * Use {@link #builder()} to create instances.
+	 *
+	 * @see Builder
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public static final class GetTaskPayloadRequest implements Request {
+
+		private final String taskId;
+
+		private final Map<String, Object> meta;
+
+		@JsonCreator
+		private GetTaskPayloadRequest( // @formatter:off
+				@JsonProperty("taskId") String taskId,
+				@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
+			Assert.hasText(taskId, "taskId must not be empty");
+			this.taskId = taskId;
+			this.meta = meta;
+		}
+
+		/**
+		 * Returns the task identifier.
+		 * @return the task identifier
+		 */
+		@JsonProperty("taskId")
+		public String taskId() {
+			return this.taskId;
+		}
+
+		/**
+		 * Returns the metadata.
+		 * @return the metadata map, or null
+		 */
+		@JsonProperty("_meta")
+		public Map<String, Object> meta() {
+			return this.meta;
+		}
+
+		/**
+		 * Creates a new builder for GetTaskPayloadRequest.
+		 * @return a new Builder instance
+		 */
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		/**
+		 * Builder for {@link GetTaskPayloadRequest}.
+		 */
+		public static class Builder {
+
+			private String taskId;
+
+			private Map<String, Object> meta;
+
+			/**
+			 * Sets the task identifier.
+			 * @param taskId the task identifier
+			 * @return this builder
+			 */
+			public Builder taskId(String taskId) {
+				this.taskId = taskId;
+				return this;
+			}
+
+			/**
+			 * Sets the metadata.
+			 * @param meta the metadata map
+			 * @return this builder
+			 */
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			/**
+			 * Builds a new {@link GetTaskPayloadRequest} instance.
+			 * @return a new GetTaskPayloadRequest instance
+			 */
+			public GetTaskPayloadRequest build() {
+				return new GetTaskPayloadRequest(taskId, meta);
+			}
+
+		}
+
+	}
+
+	/**
+	 * A request to cancel a task.
+	 *
+	 * <p>
+	 * Use {@link #builder()} to create instances.
+	 *
+	 * @see Builder
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public static final class CancelTaskRequest implements Request {
+
+		private final String taskId;
+
+		private final Map<String, Object> meta;
+
+		@JsonCreator
+		private CancelTaskRequest( // @formatter:off
+				@JsonProperty("taskId") String taskId,
+				@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
+			Assert.hasText(taskId, "taskId must not be empty");
+			this.taskId = taskId;
+			this.meta = meta;
+		}
+
+		/**
+		 * Returns the task identifier.
+		 * @return the task identifier
+		 */
+		@JsonProperty("taskId")
+		public String taskId() {
+			return this.taskId;
+		}
+
+		/**
+		 * Returns the metadata.
+		 * @return the metadata map, or null
+		 */
+		@JsonProperty("_meta")
+		public Map<String, Object> meta() {
+			return this.meta;
+		}
+
+		/**
+		 * Creates a new builder for CancelTaskRequest.
+		 * @return a new Builder instance
+		 */
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		/**
+		 * Builder for {@link CancelTaskRequest}.
+		 */
+		public static class Builder {
+
+			private String taskId;
+
+			private Map<String, Object> meta;
+
+			/**
+			 * Sets the task identifier.
+			 * @param taskId the task identifier
+			 * @return this builder
+			 */
+			public Builder taskId(String taskId) {
+				this.taskId = taskId;
+				return this;
+			}
+
+			/**
+			 * Sets the metadata.
+			 * @param meta the metadata map
+			 * @return this builder
+			 */
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			/**
+			 * Builds a new {@link CancelTaskRequest} instance.
+			 * @return a new CancelTaskRequest instance
+			 */
+			public CancelTaskRequest build() {
+				return new CancelTaskRequest(taskId, meta);
+			}
+
+		}
+
+	}
+
+	/**
+	 * The response to a tasks/cancel request. Contains all Task fields plus Result
+	 * metadata.
+	 *
+	 * <p>
+	 * <strong>Design Note:</strong> This type is structurally identical to
+	 * {@link GetTaskResult} but kept as a separate type for compile-time type safety.
+	 * This ensures that code expecting a {@code CancelTaskResult} cannot accidentally
+	 * receive a {@code GetTaskResult} and vice versa, making API boundaries explicit in
+	 * method signatures.
+	 *
+	 * <p>
+	 * Use {@link #builder()} to create instances.
+	 *
+	 * @see Builder
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public static final class CancelTaskResult implements Result {
+
+		private final String taskId;
+
+		private final TaskStatus status;
+
+		private final String statusMessage;
+
+		private final String createdAt;
+
+		private final String lastUpdatedAt;
+
+		private final Long ttl;
+
+		private final Long pollInterval;
+
+		private final Map<String, Object> meta;
+
+		@JsonCreator
+		private CancelTaskResult( // @formatter:off
+				@JsonProperty("taskId") String taskId,
+				@JsonProperty("status") TaskStatus status,
+				@JsonProperty("statusMessage") @Nullable String statusMessage,
+				@JsonProperty("createdAt") String createdAt,
+				@JsonProperty("lastUpdatedAt") String lastUpdatedAt,
+				@JsonProperty("ttl") @Nullable Long ttl,
+				@JsonProperty("pollInterval") @Nullable Long pollInterval,
+				@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
+			Assert.hasText(taskId, "taskId must not be empty");
+			Assert.notNull(status, "status must not be null");
+			Assert.hasText(createdAt, "createdAt must not be empty");
+			Assert.hasText(lastUpdatedAt, "lastUpdatedAt must not be empty");
+			this.taskId = taskId;
+			this.status = status;
+			this.statusMessage = statusMessage;
+			this.createdAt = createdAt;
+			this.lastUpdatedAt = lastUpdatedAt;
+			this.ttl = ttl;
+			this.pollInterval = pollInterval;
+			this.meta = meta;
+		}
+
+		/**
+		 * Returns the task identifier.
+		 * @return the task identifier
+		 */
+		@JsonProperty("taskId")
+		public String taskId() {
+			return this.taskId;
+		}
+
+		/**
+		 * Returns the task status.
+		 * @return the task status
+		 */
+		@JsonProperty("status")
+		public TaskStatus status() {
+			return this.status;
+		}
+
+		/**
+		 * Returns the optional status message.
+		 * @return the status message, or null
+		 */
+		@JsonProperty("statusMessage")
+		@Nullable
+		public String statusMessage() {
+			return this.statusMessage;
+		}
+
+		/**
+		 * Returns the creation timestamp.
+		 * @return the ISO 8601 creation timestamp
+		 */
+		@JsonProperty("createdAt")
+		public String createdAt() {
+			return this.createdAt;
+		}
+
+		/**
+		 * Returns the last updated timestamp.
+		 * @return the ISO 8601 last updated timestamp
+		 */
+		@JsonProperty("lastUpdatedAt")
+		public String lastUpdatedAt() {
+			return this.lastUpdatedAt;
+		}
+
+		/**
+		 * Returns the TTL (time-to-live) in milliseconds.
+		 * @return the TTL, or null for unlimited
+		 */
+		@JsonProperty("ttl")
+		@Nullable
+		public Long ttl() {
+			return this.ttl;
+		}
+
+		/**
+		 * Returns the suggested polling interval in milliseconds.
+		 * @return the polling interval, or null
+		 */
+		@JsonProperty("pollInterval")
+		@Nullable
+		public Long pollInterval() {
+			return this.pollInterval;
+		}
+
+		/**
+		 * Returns the metadata.
+		 * @return the metadata map, or null
+		 */
+		@JsonProperty("_meta")
+		public Map<String, Object> meta() {
+			return this.meta;
+		}
+
+		/**
+		 * Creates a CancelTaskResult from a Task.
+		 * @param task the task to convert
+		 * @return a new CancelTaskResult
+		 */
+		public static CancelTaskResult fromTask(Task task) {
+			return new CancelTaskResult(task.taskId(), task.status(), task.statusMessage(), task.createdAt(),
+					task.lastUpdatedAt(), task.ttl(), task.pollInterval(), null);
+		}
+
+		/**
+		 * Checks if the task is in a terminal state (completed, failed, or cancelled).
+		 * @return true if the task is in a terminal state
+		 */
+		public boolean isTerminal() {
+			return status.isTerminal();
+		}
+
+		/**
+		 * Creates a new builder for CancelTaskResult.
+		 * @return a new Builder instance
+		 */
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		/**
+		 * Builder for {@link CancelTaskResult}.
+		 */
+		public static class Builder {
+
+			private String taskId;
+
+			private TaskStatus status;
+
+			private String statusMessage;
+
+			private String createdAt;
+
+			private String lastUpdatedAt;
+
+			private Long ttl;
+
+			private Long pollInterval;
+
+			private Map<String, Object> meta;
+
+			public Builder taskId(String taskId) {
+				this.taskId = taskId;
+				return this;
+			}
+
+			public Builder status(TaskStatus status) {
+				this.status = status;
+				return this;
+			}
+
+			public Builder statusMessage(String statusMessage) {
+				this.statusMessage = statusMessage;
+				return this;
+			}
+
+			public Builder createdAt(String createdAt) {
+				this.createdAt = createdAt;
+				return this;
+			}
+
+			public Builder lastUpdatedAt(String lastUpdatedAt) {
+				this.lastUpdatedAt = lastUpdatedAt;
+				return this;
+			}
+
+			public Builder ttl(Long ttl) {
+				this.ttl = ttl;
+				return this;
+			}
+
+			public Builder pollInterval(Long pollInterval) {
+				this.pollInterval = pollInterval;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public CancelTaskResult build() {
+				return new CancelTaskResult(taskId, status, statusMessage, createdAt, lastUpdatedAt, ttl, pollInterval,
+						meta);
+			}
+
+		}
+
+	}
+
+	/**
+	 * The response to a tasks/list request.
+	 *
+	 * <p>
+	 * Use {@link #builder()} to create instances.
+	 *
+	 * @see Builder
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public static final class ListTasksResult implements Result {
+
+		private final List<Task> tasks;
+
+		private final String nextCursor;
+
+		private final Map<String, Object> meta;
+
+		@JsonCreator
+		private ListTasksResult( // @formatter:off
+				@JsonProperty("tasks") List<Task> tasks,
+				@JsonProperty("nextCursor") @Nullable String nextCursor,
+				@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
+			this.tasks = tasks != null ? tasks : List.of();
+			this.nextCursor = nextCursor;
+			this.meta = meta;
+		}
+
+		/**
+		 * Returns the list of tasks.
+		 * @return the tasks list, never null
+		 */
+		@JsonProperty("tasks")
+		public List<Task> tasks() {
+			return this.tasks;
+		}
+
+		/**
+		 * Returns the next cursor for pagination.
+		 * @return the next cursor, or null if no more results
+		 */
+		@JsonProperty("nextCursor")
+		@Nullable
+		public String nextCursor() {
+			return this.nextCursor;
+		}
+
+		/**
+		 * Returns the metadata.
+		 * @return the metadata map, or null
+		 */
+		@JsonProperty("_meta")
+		public Map<String, Object> meta() {
+			return this.meta;
+		}
+
+		/**
+		 * Creates a new builder for ListTasksResult.
+		 * @return a new Builder instance
+		 */
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		/**
+		 * Builder for {@link ListTasksResult}.
+		 */
+		public static class Builder {
+
+			private List<Task> tasks;
+
+			private String nextCursor;
+
+			private Map<String, Object> meta;
+
+			/**
+			 * Sets the list of tasks.
+			 * @param tasks the tasks list
+			 * @return this builder
+			 */
+			public Builder tasks(List<Task> tasks) {
+				this.tasks = tasks;
+				return this;
+			}
+
+			/**
+			 * Sets the next cursor for pagination.
+			 * @param nextCursor the next cursor
+			 * @return this builder
+			 */
+			public Builder nextCursor(String nextCursor) {
+				this.nextCursor = nextCursor;
+				return this;
+			}
+
+			/**
+			 * Sets the metadata.
+			 * @param meta the metadata map
+			 * @return this builder
+			 */
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			/**
+			 * Builds a new {@link ListTasksResult} instance.
+			 * @return a new ListTasksResult instance
+			 */
+			public ListTasksResult build() {
+				return new ListTasksResult(tasks, nextCursor, meta);
+			}
+
+		}
+
+	}
+
+	/**
+	 * A response to a task-augmented request, indicating that a task has been created.
+	 *
+	 * <p>
+	 * Use {@link #builder()} to create instances.
+	 *
+	 * @see Builder
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public static final class CreateTaskResult implements Result {
+
+		private final Task task;
+
+		private final Map<String, Object> meta;
+
+		@JsonCreator
+		private CreateTaskResult( // @formatter:off
+				@JsonProperty("task") Task task,
+				@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
+			this.task = task;
+			this.meta = meta;
+		}
+
+		/**
+		 * Returns the created task.
+		 * @return the task
+		 */
+		@JsonProperty("task")
+		public Task task() {
+			return this.task;
+		}
+
+		/**
+		 * Returns the metadata.
+		 * @return the metadata map, or null
+		 */
+		@JsonProperty("_meta")
+		public Map<String, Object> meta() {
+			return this.meta;
+		}
+
+		/**
+		 * Creates a new builder for CreateTaskResult.
+		 * @return a new Builder instance
+		 */
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		/**
+		 * Builder for {@link CreateTaskResult}.
+		 */
+		public static class Builder {
+
+			private Task task;
+
+			private Map<String, Object> meta;
+
+			/**
+			 * Sets the task.
+			 * @param task the task
+			 * @return this builder
+			 */
+			public Builder task(Task task) {
+				this.task = task;
+				return this;
+			}
+
+			/**
+			 * Sets the metadata.
+			 * @param meta the metadata map
+			 * @return this builder
+			 */
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			/**
+			 * Builds a new {@link CreateTaskResult} instance.
+			 * @return a new CreateTaskResult instance
+			 */
+			public CreateTaskResult build() {
+				return new CreateTaskResult(task, meta);
+			}
+
+		}
+
+	}
+
+	/**
+	 * An optional notification from the receiver to the requestor, informing them that a
+	 * task's status has changed. Receivers are not required to send these notifications.
+	 *
+	 * <p>
+	 * Use {@link #builder()} to create instances.
+	 *
+	 * @see Builder
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public static final class TaskStatusNotification implements Notification {
+
+		private final String taskId;
+
+		private final TaskStatus status;
+
+		private final String statusMessage;
+
+		private final String createdAt;
+
+		private final String lastUpdatedAt;
+
+		private final Long ttl;
+
+		private final Long pollInterval;
+
+		private final Map<String, Object> meta;
+
+		@JsonCreator
+		private TaskStatusNotification( // @formatter:off
+				@JsonProperty("taskId") String taskId,
+				@JsonProperty("status") TaskStatus status,
+				@JsonProperty("statusMessage") @Nullable String statusMessage,
+				@JsonProperty("createdAt") String createdAt,
+				@JsonProperty("lastUpdatedAt") String lastUpdatedAt,
+				@JsonProperty("ttl") @Nullable Long ttl,
+				@JsonProperty("pollInterval") @Nullable Long pollInterval,
+				@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
+			Assert.hasText(taskId, "taskId must not be empty");
+			Assert.notNull(status, "status must not be null");
+			Assert.hasText(createdAt, "createdAt must not be empty");
+			Assert.hasText(lastUpdatedAt, "lastUpdatedAt must not be empty");
+			this.taskId = taskId;
+			this.status = status;
+			this.statusMessage = statusMessage;
+			this.createdAt = createdAt;
+			this.lastUpdatedAt = lastUpdatedAt;
+			this.ttl = ttl;
+			this.pollInterval = pollInterval;
+			this.meta = meta;
+		}
+
+		/**
+		 * Returns the task identifier.
+		 * @return the task identifier
+		 */
+		@JsonProperty("taskId")
+		public String taskId() {
+			return this.taskId;
+		}
+
+		/**
+		 * Returns the task status.
+		 * @return the task status
+		 */
+		@JsonProperty("status")
+		public TaskStatus status() {
+			return this.status;
+		}
+
+		/**
+		 * Returns the optional status message.
+		 * @return the status message, or null
+		 */
+		@JsonProperty("statusMessage")
+		@Nullable
+		public String statusMessage() {
+			return this.statusMessage;
+		}
+
+		/**
+		 * Returns the creation timestamp.
+		 * @return the ISO 8601 creation timestamp
+		 */
+		@JsonProperty("createdAt")
+		public String createdAt() {
+			return this.createdAt;
+		}
+
+		/**
+		 * Returns the last updated timestamp.
+		 * @return the ISO 8601 last updated timestamp
+		 */
+		@JsonProperty("lastUpdatedAt")
+		public String lastUpdatedAt() {
+			return this.lastUpdatedAt;
+		}
+
+		/**
+		 * Returns the TTL (time-to-live) in milliseconds.
+		 * @return the TTL, or null for unlimited
+		 */
+		@JsonProperty("ttl")
+		@Nullable
+		public Long ttl() {
+			return this.ttl;
+		}
+
+		/**
+		 * Returns the suggested polling interval in milliseconds.
+		 * @return the polling interval, or null
+		 */
+		@JsonProperty("pollInterval")
+		@Nullable
+		public Long pollInterval() {
+			return this.pollInterval;
+		}
+
+		/**
+		 * Returns the metadata.
+		 * @return the metadata map, or null
+		 */
+		@JsonProperty("_meta")
+		public Map<String, Object> meta() {
+			return this.meta;
+		}
+
+		/**
+		 * Creates a TaskStatusNotification from a Task.
+		 * @param task the task to convert
+		 * @return a new TaskStatusNotification
+		 */
+		public static TaskStatusNotification fromTask(Task task) {
+			return new TaskStatusNotification(task.taskId(), task.status(), task.statusMessage(), task.createdAt(),
+					task.lastUpdatedAt(), task.ttl(), task.pollInterval(), null);
+		}
+
+		/**
+		 * Checks if the task is in a terminal state (completed, failed, or cancelled).
+		 * @return true if the task is in a terminal state
+		 */
+		public boolean isTerminal() {
+			return status.isTerminal();
+		}
+
+		/**
+		 * Creates a new builder for TaskStatusNotification.
+		 * @return a new Builder instance
+		 */
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		/**
+		 * Builder for {@link TaskStatusNotification}.
+		 */
+		public static class Builder {
+
+			private String taskId;
+
+			private TaskStatus status;
+
+			private String statusMessage;
+
+			private String createdAt;
+
+			private String lastUpdatedAt;
+
+			private Long ttl;
+
+			private Long pollInterval;
+
+			private Map<String, Object> meta;
+
+			public Builder taskId(String taskId) {
+				this.taskId = taskId;
+				return this;
+			}
+
+			public Builder status(TaskStatus status) {
+				this.status = status;
+				return this;
+			}
+
+			public Builder statusMessage(String statusMessage) {
+				this.statusMessage = statusMessage;
+				return this;
+			}
+
+			public Builder createdAt(String createdAt) {
+				this.createdAt = createdAt;
+				return this;
+			}
+
+			public Builder lastUpdatedAt(String lastUpdatedAt) {
+				this.lastUpdatedAt = lastUpdatedAt;
+				return this;
+			}
+
+			public Builder ttl(Long ttl) {
+				this.ttl = ttl;
+				return this;
+			}
+
+			public Builder pollInterval(Long pollInterval) {
+				this.pollInterval = pollInterval;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public TaskStatusNotification build() {
+				return new TaskStatusNotification(taskId, status, statusMessage, createdAt, lastUpdatedAt, ttl,
+						pollInterval, meta);
+			}
+
+		}
+
+	}
+
+	// --------------------------
+	// Streaming Response Messages
+	// --------------------------
+
+	/**
+	 * Sealed interface representing messages yielded during streaming request processing.
+	 * Used by {@code callToolStream()} and other streaming APIs to provide real-time
+	 * updates about task execution progress.
+	 *
+	 * <p>
+	 * The message types are:
+	 * <ul>
+	 * <li>{@link TaskCreatedMessage} - First message for task-augmented requests,
+	 * contains the created task
+	 * <li>{@link TaskStatusMessage} - Status update during task polling
+	 * <li>{@link ResultMessage} - Final successful result (terminal)
+	 * <li>{@link ErrorMessage} - Error occurred (terminal)
+	 * </ul>
+	 *
+	 * <h2>Streaming Order for Task-Augmented Requests</h2>
+	 * <p>
+	 * For task-augmented requests (those with {@code TaskMetadata}), messages are yielded
+	 * in this order:
+	 * <ol>
+	 * <li>One {@link TaskCreatedMessage} - immediately after task creation</li>
+	 * <li>Zero or more {@link TaskStatusMessage} - during polling while task is
+	 * running</li>
+	 * <li>One terminal message: either {@link ResultMessage} (success) or
+	 * {@link ErrorMessage} (failure)</li>
+	 * </ol>
+	 *
+	 * <p>
+	 * For non-task requests, the stream yields only a single {@link ResultMessage} or
+	 * {@link ErrorMessage}.
+	 *
+	 * @param <T> The type of result expected from the request
+	 */
+	public sealed interface ResponseMessage<T extends Result>
+			permits TaskCreatedMessage, TaskStatusMessage, ResultMessage, ErrorMessage {
+
+		/**
+		 * Returns the message type identifier.
+		 * @return the type string ("taskCreated", "taskStatus", "result", or "error")
+		 */
+		String type();
+
+	}
+
+	/**
+	 * Message indicating a task has been created for a task-augmented request. This is
+	 * the first message yielded for task-augmented requests.
+	 *
+	 * @param <T> The type of result expected from the request
+	 */
+	public static final class TaskCreatedMessage<T extends Result> implements ResponseMessage<T> {
+
+		private final Task task;
+
+		private TaskCreatedMessage(Task task) {
+			this.task = task;
+		}
+
+		/**
+		 * Returns the created task.
+		 * @return the task
+		 */
+		public Task task() {
+			return this.task;
+		}
+
+		@Override
+		public String type() {
+			return "taskCreated";
+		}
+
+		/**
+		 * Creates a new TaskCreatedMessage with the given task.
+		 * @param <T> the result type
+		 * @param task the task
+		 * @return a new TaskCreatedMessage
+		 */
+		public static <T extends Result> TaskCreatedMessage<T> of(Task task) {
+			return new TaskCreatedMessage<>(task);
+		}
+
+	}
+
+	/**
+	 * Message indicating a task status update during polling. Yielded periodically while
+	 * waiting for a task to reach a terminal state.
+	 *
+	 * @param <T> The type of result expected from the request
+	 */
+	public static final class TaskStatusMessage<T extends Result> implements ResponseMessage<T> {
+
+		private final Task task;
+
+		private TaskStatusMessage(Task task) {
+			this.task = task;
+		}
+
+		/**
+		 * Returns the task with updated status.
+		 * @return the task
+		 */
+		public Task task() {
+			return this.task;
+		}
+
+		@Override
+		public String type() {
+			return "taskStatus";
+		}
+
+		/**
+		 * Creates a new TaskStatusMessage with the given task.
+		 * @param <T> the result type
+		 * @param task the task
+		 * @return a new TaskStatusMessage
+		 */
+		public static <T extends Result> TaskStatusMessage<T> of(Task task) {
+			return new TaskStatusMessage<>(task);
+		}
+
+	}
+
+	/**
+	 * Message containing the final successful result. This is a terminal message - no
+	 * more messages will be yielded after this.
+	 *
+	 * @param <T> The type of result
+	 * @param result The final result
+	 */
+	public static final class ResultMessage<T extends Result> implements ResponseMessage<T> {
+
+		private final T result;
+
+		private ResultMessage(T result) {
+			this.result = result;
+		}
+
+		/**
+		 * Returns the final result.
+		 * @return the result
+		 */
+		public T result() {
+			return this.result;
+		}
+
+		@Override
+		public String type() {
+			return "result";
+		}
+
+		/**
+		 * Creates a new ResultMessage with the given result.
+		 * @param <T> the result type
+		 * @param result the result
+		 * @return a new ResultMessage
+		 */
+		public static <T extends Result> ResultMessage<T> of(T result) {
+			return new ResultMessage<>(result);
+		}
+
+	}
+
+	/**
+	 * Message indicating an error occurred. This is a terminal message - no more messages
+	 * will be yielded after this.
+	 *
+	 * @param <T> The type of result expected from the request
+	 * @param error The error that occurred
+	 */
+	public static final class ErrorMessage<T extends Result> implements ResponseMessage<T> {
+
+		private final McpError error;
+
+		private ErrorMessage(McpError error) {
+			this.error = error;
+		}
+
+		/**
+		 * Returns the error that occurred.
+		 * @return the error
+		 */
+		public McpError error() {
+			return this.error;
+		}
+
+		@Override
+		public String type() {
+			return "error";
+		}
+
+		/**
+		 * Creates a new ErrorMessage with the given error.
+		 * @param <T> the result type
+		 * @param error the error
+		 * @return a new ErrorMessage
+		 */
+		public static <T extends Result> ErrorMessage<T> of(McpError error) {
+			return new ErrorMessage<>(error);
+		}
+
 	}
 
 }

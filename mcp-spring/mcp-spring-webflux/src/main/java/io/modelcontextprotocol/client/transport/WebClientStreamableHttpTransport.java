@@ -326,9 +326,11 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 						Optional<MediaType> contentType = response.headers().contentType();
 						long contentLength = response.headers().contentLength().orElse(-1);
 						// Existing SDKs consume notifications with no response body nor
-						// content type
-						if (contentType.isEmpty() || contentLength == 0
-								|| response.statusCode().equals(HttpStatus.ACCEPTED)) {
+						// content type. Per the MCP spec, 202 Accepted is used to
+						// acknowledge
+						// notifications/responses where no reply is expected.
+						boolean isAccepted = response.statusCode() == HttpStatus.ACCEPTED;
+						if (contentType.isEmpty() || contentLength == 0 || isAccepted) {
 							logger.trace("Message was successfully sent via POST for session {}",
 									sessionRepresentation);
 							// signal the caller that the message was successfully
