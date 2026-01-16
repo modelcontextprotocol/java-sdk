@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 - 2024 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol;
@@ -9,8 +9,10 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -22,7 +24,16 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import io.modelcontextprotocol.client.McpClient;
+import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.experimental.tasks.InMemoryTaskMessageQueue;
+import io.modelcontextprotocol.experimental.tasks.InMemoryTaskStore;
+import io.modelcontextprotocol.experimental.tasks.TaskAwareAsyncToolSpecification;
+import io.modelcontextprotocol.experimental.tasks.TaskMessageQueue;
+import io.modelcontextprotocol.experimental.tasks.TaskStore;
+import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.server.McpAsyncServer;
+import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
@@ -44,7 +55,15 @@ import io.modelcontextprotocol.spec.McpSchema.PromptArgument;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.Role;
 import io.modelcontextprotocol.spec.McpSchema.Root;
+import io.modelcontextprotocol.spec.McpSchema.ResponseMessage;
+import io.modelcontextprotocol.spec.McpSchema.ResultMessage;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
+import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities.ServerTaskCapabilities;
+import io.modelcontextprotocol.spec.McpSchema.TaskCreatedMessage;
+import io.modelcontextprotocol.spec.McpSchema.TaskMetadata;
+import io.modelcontextprotocol.spec.McpSchema.TaskStatus;
+import io.modelcontextprotocol.spec.McpSchema.TaskStatusMessage;
+import io.modelcontextprotocol.spec.McpSchema.TaskSupportMode;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.util.Utils;
@@ -64,6 +83,7 @@ import static org.assertj.core.api.Assertions.assertWith;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 
+// KEEP IN SYNC with the class in mcp-core module
 public abstract class AbstractMcpClientServerIntegrationTests {
 
 	protected ConcurrentHashMap<String, McpClient.SyncSpec> clientBuilders = new ConcurrentHashMap<>();
@@ -1755,6 +1775,671 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			case "5 + 3" -> 8.0;
 			default -> 0.0;
 		};
+	}
+
+	// ===================================================================
+	// Task Lifecycle Integration Tests
+	// ===================================================================
+
+	/** Default server capabilities with tasks enabled for task lifecycle tests. */
+	protected static final ServerCapabilities TASK_SERVER_CAPABILITIES = ServerCapabilities.builder()
+		.tasks(ServerTaskCapabilities.builder().list().cancel().toolsCall().build())
+		.tools(true)
+		.build();
+
+	/** Default client capabilities with tasks enabled for task lifecycle tests. */
+	protected static final ClientCapabilities TASK_CLIENT_CAPABILITIES = ClientCapabilities.builder()
+		.tasks(ClientCapabilities.ClientTaskCapabilities.builder().list().cancel().build())
+		.build();
+
+	/** Default task metadata for test calls. */
+	protected static final TaskMetadata DEFAULT_TASK_METADATA = TaskMetadata.builder()
+		.ttl(Duration.ofMillis(60000L))
+		.build();
+
+	/** Default request timeout for task test clients. */
+	protected static final Duration TASK_REQUEST_TIMEOUT = Duration.ofSeconds(30);
+
+	/** Creates a server with task capabilities and the given tools. */
+	protected McpAsyncServer createTaskServer(TaskStore<McpSchema.ServerTaskPayloadResult> taskStore,
+			TaskAwareAsyncToolSpecification... taskTools) {
+		return createTaskServer(taskStore, null, taskTools);
+	}
+
+	/** Creates a server with task capabilities, message queue, and task-aware tools. */
+	protected McpAsyncServer createTaskServer(TaskStore<McpSchema.ServerTaskPayloadResult> taskStore,
+			TaskMessageQueue messageQueue, TaskAwareAsyncToolSpecification... taskTools) {
+		var builder = prepareAsyncServerBuilder().serverInfo("task-test-server", "1.0.0")
+			.capabilities(TASK_SERVER_CAPABILITIES)
+			.taskStore(taskStore);
+
+		if (messageQueue != null) {
+			builder.taskMessageQueue(messageQueue);
+		}
+
+		if (taskTools != null && taskTools.length > 0) {
+			builder.taskTools(taskTools);
+		}
+
+		return builder.build();
+	}
+
+	/** Creates a client with task capabilities. */
+	protected McpSyncClient createTaskClient(String clientType, String name) {
+		return createTaskClient(clientType, name, TASK_CLIENT_CAPABILITIES, null);
+	}
+
+	/** Creates a client with custom capabilities and optional elicitation handler. */
+	protected McpSyncClient createTaskClient(String clientType, String name, ClientCapabilities capabilities,
+			Function<ElicitRequest, ElicitResult> elicitationHandler) {
+		var builder = clientBuilders.get(clientType)
+			.clientInfo(new McpSchema.Implementation(name, "0.0.0"))
+			.capabilities(capabilities)
+			.requestTimeout(TASK_REQUEST_TIMEOUT);
+
+		if (elicitationHandler != null) {
+			builder.elicitation(elicitationHandler);
+		}
+
+		return builder.build();
+	}
+
+	/** Extracts the task ID from a list of response messages. */
+	protected String extractTaskId(List<ResponseMessage<CallToolResult>> messages) {
+		for (var msg : messages) {
+			if (msg instanceof TaskCreatedMessage<CallToolResult> tcm) {
+				return tcm.task().taskId();
+			}
+		}
+		return null;
+	}
+
+	/** Extracts all task statuses from a list of response messages. */
+	protected List<TaskStatus> extractTaskStatuses(List<ResponseMessage<CallToolResult>> messages) {
+		List<TaskStatus> statuses = new ArrayList<>();
+		for (var msg : messages) {
+			if (msg instanceof TaskCreatedMessage<CallToolResult> tcm) {
+				statuses.add(tcm.task().status());
+			}
+			else if (msg instanceof TaskStatusMessage<CallToolResult> tsm) {
+				statuses.add(tsm.task().status());
+			}
+		}
+		return statuses;
+	}
+
+	/**
+	 * Asserts that task status transitions are valid (no transitions from terminal
+	 * states).
+	 */
+	protected void assertValidStateTransitions(List<TaskStatus> statuses) {
+		TaskStatus previousState = null;
+		for (TaskStatus state : statuses) {
+			if (previousState != null) {
+				assertThat(previousState).as("Terminal states cannot transition to other states")
+					.isNotIn(TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED);
+			}
+			previousState = state;
+		}
+	}
+
+	// ===== Task-Augmented Tool Call Tests =====
+
+	/**
+	 * Demonstrates wrapping an external async API with tasks.
+	 *
+	 * <p>
+	 * Tasks are designed for external services that process jobs asynchronously. Status
+	 * checks happen lazily when the client polls - no background threads needed.
+	 */
+	@ParameterizedTest(name = "{0} : {displayName}")
+	@MethodSource("clientsForTesting")
+	void testExternalAsyncApiPattern(String clientType) throws InterruptedException {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+
+		// Simulates an external async API (e.g., a batch processing service)
+		var externalApi = new SimulatedExternalAsyncApi();
+
+		var tool = TaskAwareAsyncToolSpecification.builder()
+			.name("external-job")
+			.description("Submits work to an external async API")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.taskSupportMode(TaskSupportMode.OPTIONAL)
+			.createTaskHandler((args, extra) -> {
+				// Submit job to external API and use its ID as the MCP task ID
+				String externalJobId = externalApi.submitJob((String) args.get("input"));
+				return extra.createTask(opts -> opts.taskId(externalJobId))
+					.map(task -> McpSchema.CreateTaskResult.builder().task(task).build());
+			})
+			.getTaskHandler((exchange, request) -> {
+				// request.taskId() IS the external job ID - no mapping needed!
+				SimulatedExternalAsyncApi.JobStatus status = externalApi.checkStatus(request.taskId());
+				TaskStatus mcpStatus = switch (status) {
+					case PENDING, RUNNING -> TaskStatus.WORKING;
+					case COMPLETED -> TaskStatus.COMPLETED;
+					case FAILED -> TaskStatus.FAILED;
+				};
+
+				// Get timestamps from the TaskStore
+				return taskStore.getTask(request.taskId(), null)
+					.map(storeResult -> McpSchema.GetTaskResult.builder()
+						.taskId(request.taskId())
+						.status(mcpStatus)
+						.statusMessage(status.toString())
+						.createdAt(storeResult.task().createdAt())
+						.lastUpdatedAt(storeResult.task().lastUpdatedAt())
+						.ttl(storeResult.task().ttl())
+						.pollInterval(storeResult.task().pollInterval())
+						.build());
+			})
+			.getTaskResultHandler((exchange, request) -> {
+				// request.taskId() IS the external job ID
+				String result = externalApi.getResult(request.taskId());
+				return Mono.just(CallToolResult.builder().addTextContent(result).build());
+			})
+			.build();
+
+		var server = createTaskServer(taskStore, tool);
+
+		try (var client = createTaskClient(clientType, "External API Client")) {
+			client.initialize();
+
+			// Submit job via tool call
+			var request = new McpSchema.CallToolRequest("external-job", Map.of("input", "test-data"),
+					DEFAULT_TASK_METADATA, null);
+			var createResult = client.callToolTask(request);
+
+			assertThat(createResult.task()).isNotNull();
+			String taskId = createResult.task().taskId();
+
+			// Poll until external job completes
+			await().atMost(Duration.ofSeconds(10)).pollInterval(Duration.ofMillis(100)).untilAsserted(() -> {
+				var task = client.getTask(taskId);
+				assertThat(task.status()).isEqualTo(TaskStatus.COMPLETED);
+			});
+
+			// Fetch result
+			var result = client.getTaskResult(taskId, new TypeRef<CallToolResult>() {
+			});
+
+			assertThat(result.content()).hasSize(1);
+			assertThat(((TextContent) result.content().get(0)).text()).contains("Processed: test-data");
+		}
+		finally {
+			server.closeGracefully().block();
+		}
+	}
+
+	/**
+	 * Simulates an external async API (e.g., batch processing, ML inference).
+	 */
+	static class SimulatedExternalAsyncApi {
+
+		enum JobStatus {
+
+			PENDING, RUNNING, COMPLETED, FAILED
+
+		}
+
+		private final ConcurrentHashMap<String, JobState> jobs = new ConcurrentHashMap<>();
+
+		private record JobState(String input, long completionTime) {
+		}
+
+		String submitJob(String input) {
+			String jobId = "job-" + UUID.randomUUID().toString().substring(0, 8);
+			jobs.put(jobId, new JobState(input, System.currentTimeMillis() + 300));
+			return jobId;
+		}
+
+		JobStatus checkStatus(String jobId) {
+			JobState state = jobs.get(jobId);
+			if (state == null) {
+				return JobStatus.FAILED;
+			}
+			return System.currentTimeMillis() >= state.completionTime ? JobStatus.COMPLETED : JobStatus.RUNNING;
+		}
+
+		String getResult(String jobId) {
+			JobState state = jobs.get(jobId);
+			return state != null ? "Processed: " + state.input : "Error: job not found";
+		}
+
+	}
+
+	// ===== List Tasks Tests =====
+
+	@ParameterizedTest(name = "{0} : {displayName}")
+	@MethodSource("clientsForTesting")
+	void testListTasks(String clientType) {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		var server = createTaskServer(taskStore);
+
+		try (var client = createTaskClient(clientType, "Task Test Client")) {
+			client.initialize();
+
+			var result = client.listTasks();
+			assertThat(result).isNotNull();
+			assertThat(result.tasks()).isNotNull();
+		}
+		finally {
+			server.closeGracefully().block();
+		}
+	}
+
+	// ===== INPUT_REQUIRED and Elicitation Flow Tests =====
+
+	/**
+	 * Test: Elicitation during task execution.
+	 *
+	 * <p>
+	 * This test demonstrates the elicitation flow during task execution:
+	 * <ol>
+	 * <li>Client calls task-augmented tool
+	 * <li>Tool creates task in WORKING state
+	 * <li>Tool needs user input → sends elicitation request
+	 * <li>Client responds to elicitation
+	 * <li>Task continues → COMPLETED
+	 * </ol>
+	 */
+	@ParameterizedTest(name = "{0} : {displayName}")
+	@MethodSource("clientsForTesting")
+	void testElicitationDuringTaskExecution(String clientType) throws InterruptedException {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		TaskMessageQueue messageQueue = new InMemoryTaskMessageQueue();
+
+		AtomicReference<String> taskIdRef = new AtomicReference<>();
+		AtomicReference<String> elicitationResponse = new AtomicReference<>();
+		CountDownLatch elicitationReceivedLatch = new CountDownLatch(1);
+
+		// Tool that needs user input during execution
+		BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<CallToolResult>> handler = (exchange,
+				request) -> {
+			String taskId = exchange.getCurrentTaskId();
+			if (taskId == null) {
+				return Mono.error(new RuntimeException("Task ID not available"));
+			}
+			taskIdRef.set(taskId);
+
+			return exchange.createElicitation(new ElicitRequest("Please provide a number:", null, null, null))
+				.doOnNext(result -> {
+					elicitationResponse.set(result.content() != null && !result.content().isEmpty()
+							? result.content().get("value").toString() : "no-response");
+					elicitationReceivedLatch.countDown();
+				})
+				.then(Mono.defer(() -> Mono.just(CallToolResult.builder()
+					.content(List.of(new TextContent("Got user input: " + elicitationResponse.get())))
+					.isError(false)
+					.build())));
+		};
+
+		var tool = TaskAwareAsyncToolSpecification.builder()
+			.name("needs-input-tool")
+			.description("Test tool")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.taskSupportMode(TaskSupportMode.REQUIRED)
+			.createTaskHandler((args, extra) -> extra.createTask().flatMap(task -> {
+				McpSchema.CallToolRequest syntheticRequest = new McpSchema.CallToolRequest("needs-input-tool", args,
+						null, null);
+				return handler.apply(extra.exchange().withTaskContext(task.taskId()), syntheticRequest)
+					.flatMap(result -> extra.taskStore()
+						.storeTaskResult(task.taskId(), extra.sessionId(), TaskStatus.COMPLETED, result)
+						.thenReturn(task))
+					.onErrorResume(error -> extra.taskStore()
+						.updateTaskStatus(task.taskId(), extra.sessionId(), TaskStatus.FAILED, error.getMessage())
+						.thenReturn(task));
+			}).map(task -> McpSchema.CreateTaskResult.builder().task(task).build()))
+			.build();
+
+		var server = createTaskServer(taskStore, messageQueue, tool);
+
+		ClientCapabilities elicitationCapabilities = ClientCapabilities.builder()
+			.elicitation()
+			.tasks(ClientCapabilities.ClientTaskCapabilities.builder().list().cancel().build())
+			.build();
+
+		try (var client = createTaskClient(clientType, "Elicitation Test Client", elicitationCapabilities,
+				(elicitRequest) -> new ElicitResult(ElicitResult.Action.ACCEPT, Map.of("value", "42"), null))) {
+			client.initialize();
+
+			var request = new McpSchema.CallToolRequest("needs-input-tool", Map.of(), DEFAULT_TASK_METADATA, null);
+			var messages = client.callToolStream(request);
+			var observedStates = extractTaskStatuses(messages);
+
+			if (taskIdRef.get() != null) {
+				boolean elicitationCompleted = elicitationReceivedLatch.await(10, TimeUnit.SECONDS);
+				assertThat(elicitationCompleted).as("Elicitation should be received and processed").isTrue();
+
+				await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
+					var task = client.getTask(McpSchema.GetTaskRequest.builder().taskId(taskIdRef.get()).build());
+					assertThat(task.status()).isIn(TaskStatus.COMPLETED, TaskStatus.FAILED);
+				});
+
+				assertThat(elicitationResponse.get()).isEqualTo("42");
+				assertValidStateTransitions(observedStates);
+			}
+		}
+		finally {
+			server.closeGracefully().block();
+		}
+	}
+
+	// ===== Task Capability Negotiation Tests =====
+
+	@ParameterizedTest(name = "{0} : {displayName}")
+	@MethodSource("clientsForTesting")
+	void testServerReportsTaskCapabilities(String clientType) {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		var server = createTaskServer(taskStore);
+
+		try (var client = createTaskClient(clientType, "Task Test Client")) {
+			var initResult = client.initialize();
+			assertThat(initResult).isNotNull();
+			assertThat(initResult.capabilities()).isNotNull();
+			assertThat(initResult.capabilities().tasks()).isNotNull();
+		}
+		finally {
+			server.closeGracefully().block();
+		}
+	}
+
+	// ===== Automatic Polling Shim Tests =====
+
+	/**
+	 * Tests the automatic polling shim: when a tool with createTaskHandler is called
+	 * WITHOUT task metadata, the server should automatically create a task, poll until
+	 * completion, and return the final result directly.
+	 */
+	@ParameterizedTest(name = "{0} : {displayName}")
+	@MethodSource("clientsForTesting")
+	void testAutomaticPollingShimWithCreateTaskHandler(String clientType) {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+
+		// The tool creates a task, stores result immediately, and returns
+		var tool = TaskAwareAsyncToolSpecification.builder()
+			.name("auto-polling-tool")
+			.description("A tool that uses createTaskHandler")
+			.taskSupportMode(TaskSupportMode.OPTIONAL)
+			.createTaskHandler((args, extra) -> extra.createTask(opts -> opts.requestedTtl(60000L).pollInterval(100L))
+				.flatMap(task -> {
+					// Immediately store result (simulating fast completion)
+					CallToolResult result = CallToolResult.builder()
+						.addTextContent("Result from createTaskHandler: " + args.getOrDefault("input", "default"))
+						.isError(false)
+						.build();
+					return extra.taskStore()
+						.storeTaskResult(task.taskId(), extra.sessionId(), TaskStatus.COMPLETED, result)
+						.thenReturn(McpSchema.CreateTaskResult.builder().task(task).build());
+				}))
+			.build();
+
+		var server = createTaskServer(taskStore, tool);
+
+		try (var client = createTaskClient(clientType, "Auto Polling Test Client", ClientCapabilities.builder().build(),
+				null)) {
+			client.initialize();
+
+			// Call tool WITHOUT task metadata - should trigger automatic polling shim
+			var request = new McpSchema.CallToolRequest("auto-polling-tool", Map.of("input", "test-value"), null, null);
+			var messages = client.callToolStream(request);
+
+			// The automatic polling shim should poll and return the final result
+			assertThat(messages).as("Should have response messages").isNotEmpty();
+
+			// The last message should be a ResultMessage with the final CallToolResult
+			ResponseMessage<CallToolResult> lastMsg = messages.get(messages.size() - 1);
+			assertThat(lastMsg).as("Last message should be ResultMessage").isInstanceOf(ResultMessage.class);
+
+			ResultMessage<CallToolResult> resultMsg = (ResultMessage<CallToolResult>) lastMsg;
+			assertThat(resultMsg.result()).isNotNull();
+			assertThat(resultMsg.result().content()).isNotEmpty();
+
+			// Verify the content came from our createTaskHandler
+			TextContent textContent = (TextContent) resultMsg.result().content().get(0);
+			assertThat(textContent.text()).contains("Result from createTaskHandler").contains("test-value");
+		}
+		finally {
+			server.closeGracefully().block();
+		}
+	}
+
+	/**
+	 * Tests that a tool with createTaskHandler still works correctly when called WITH
+	 * task metadata (the normal task-augmented flow).
+	 */
+	@ParameterizedTest(name = "{0} : {displayName}")
+	@MethodSource("clientsForTesting")
+	void testCreateTaskHandlerWithTaskMetadata(String clientType) {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+
+		// Track if createTaskHandler was invoked
+		AtomicBoolean createTaskHandlerInvoked = new AtomicBoolean(false);
+
+		var tool = TaskAwareAsyncToolSpecification.builder()
+			.name("create-task-tool")
+			.description("A tool that uses createTaskHandler")
+			.taskSupportMode(TaskSupportMode.OPTIONAL)
+			.createTaskHandler((args, extra) -> {
+				createTaskHandlerInvoked.set(true);
+
+				return extra.createTask(opts -> opts.pollInterval(500L)).flatMap(task -> {
+					// Store result immediately
+					CallToolResult result = CallToolResult.builder()
+						.addTextContent("Task created via createTaskHandler!")
+						.isError(false)
+						.build();
+					return extra.taskStore()
+						.storeTaskResult(task.taskId(), extra.sessionId(), TaskStatus.COMPLETED, result)
+						.thenReturn(McpSchema.CreateTaskResult.builder().task(task).build());
+				});
+			})
+			.build();
+
+		var server = createTaskServer(taskStore, tool);
+
+		try (var client = createTaskClient(clientType, "CreateTask Test Client")) {
+			client.initialize();
+
+			// Call with task metadata - should use createTaskHandler directly
+			var request = new McpSchema.CallToolRequest("create-task-tool", Map.of(), DEFAULT_TASK_METADATA, null);
+			var messages = client.callToolStream(request);
+
+			assertThat(createTaskHandlerInvoked.get()).as("createTaskHandler should have been invoked").isTrue();
+			assertThat(messages).as("Should have response messages").isNotEmpty();
+
+			// Should have task creation and result messages
+			String taskId = extractTaskId(messages);
+			assertThat(taskId).as("Should have created a task").isNotNull();
+		}
+		finally {
+			server.closeGracefully().block();
+		}
+	}
+
+	// ===== Client-Side Task Hosting Tests =====
+
+	/**
+	 * Test: Client-side task hosting for sampling requests.
+	 *
+	 * <p>
+	 * This test verifies that when a server sends a task-augmented sampling request to a
+	 * client that has a taskStore configured, the client correctly:
+	 * <ol>
+	 * <li>Creates a task in its local taskStore
+	 * <li>Returns CreateTaskResult immediately
+	 * <li>Executes the sampling handler in the background
+	 * <li>Stores the result when complete
+	 * </ol>
+	 */
+	@ParameterizedTest(name = "{0} : {displayName}")
+	@MethodSource("clientsForTesting")
+	void testClientSideTaskHostingForSampling(String clientType) throws InterruptedException {
+		CountDownLatch samplingHandlerInvoked = new CountDownLatch(1);
+		AtomicReference<String> receivedPrompt = new AtomicReference<>();
+
+		// Create a server with a tool that sends task-augmented sampling to client
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(Tool.builder()
+				.name("trigger-sampling")
+				.description("Triggers a task-augmented sampling request to client")
+				.inputSchema(EMPTY_JSON_SCHEMA)
+				.build())
+			.callHandler((exchange, request) -> {
+				// Send task-augmented sampling request to client
+				CreateMessageRequest samplingRequest = McpSchema.CreateMessageRequest.builder()
+					.messages(List.of(new McpSchema.SamplingMessage(Role.USER, new TextContent("Test prompt"))))
+					.systemPrompt("system-prompt")
+					.maxTokens(100)
+					.task(TaskMetadata.builder().ttl(Duration.ofMillis(30000L)).build())
+					.build();
+
+				return exchange.createMessageTask(samplingRequest).flatMap(createTaskResult -> {
+					// Poll for task completion
+					String taskId = createTaskResult.task().taskId();
+					return pollForTaskCompletion(exchange, taskId, new TypeRef<CreateMessageResult>() {
+					}).map(result -> CallToolResult.builder()
+						.content(List.of(new TextContent("Sampling task completed: " + taskId)))
+						.build());
+				});
+			})
+			.build();
+
+		var server = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool)
+			.build();
+
+		// Create client with taskStore for hosting tasks
+		TaskStore<McpSchema.ClientTaskPayloadResult> clientTaskStore = new InMemoryTaskStore<>();
+		var clientBuilder = clientBuilders.get(clientType)
+			.clientInfo(new McpSchema.Implementation("Task-Hosting Client", "1.0.0"))
+			.capabilities(ClientCapabilities.builder()
+				.sampling()
+				.tasks(ClientCapabilities.ClientTaskCapabilities.builder()
+					.list()
+					.cancel()
+					.samplingCreateMessage()
+					.build())
+				.build())
+			.taskStore(clientTaskStore)
+			.sampling(request -> {
+				receivedPrompt.set(request.systemPrompt());
+				samplingHandlerInvoked.countDown();
+				return new CreateMessageResult(Role.ASSISTANT, new TextContent("Test response"), "model-id",
+						CreateMessageResult.StopReason.END_TURN);
+			});
+
+		try (var client = clientBuilder.build()) {
+			client.initialize();
+
+			// Trigger the tool which will send task-augmented sampling to client
+			var result = client.callTool(new McpSchema.CallToolRequest("trigger-sampling", Map.of()));
+
+			// Verify sampling handler was invoked
+			boolean handlerInvoked = samplingHandlerInvoked.await(10, TimeUnit.SECONDS);
+			assertThat(handlerInvoked).as("Sampling handler should have been invoked").isTrue();
+			assertThat(receivedPrompt.get()).isEqualTo("system-prompt");
+
+			// Verify the tool completed successfully
+			assertThat(result.content()).isNotEmpty();
+		}
+		finally {
+			server.closeGracefully().block();
+		}
+	}
+
+	/**
+	 * Test: Client-side task hosting for elicitation requests.
+	 *
+	 * <p>
+	 * Similar to sampling, verifies task-augmented elicitation works correctly when the
+	 * client has a taskStore configured.
+	 */
+	@ParameterizedTest(name = "{0} : {displayName}")
+	@MethodSource("clientsForTesting")
+	void testClientSideTaskHostingForElicitation(String clientType) throws InterruptedException {
+		CountDownLatch elicitationHandlerInvoked = new CountDownLatch(1);
+		AtomicReference<String> receivedMessage = new AtomicReference<>();
+
+		// Create a server with a tool that sends task-augmented elicitation to client
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(Tool.builder()
+				.name("trigger-elicitation")
+				.description("Triggers a task-augmented elicitation request to client")
+				.inputSchema(EMPTY_JSON_SCHEMA)
+				.build())
+			.callHandler((exchange, request) -> {
+				// Send task-augmented elicitation request to client
+				ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
+					.message("Please enter your name:")
+					.task(TaskMetadata.builder().ttl(Duration.ofMillis(30000L)).build())
+					.build();
+
+				return exchange.createElicitationTask(elicitRequest).flatMap(createTaskResult -> {
+					// Poll for task completion
+					String taskId = createTaskResult.task().taskId();
+					return pollForTaskCompletion(exchange, taskId, new TypeRef<ElicitResult>() {
+					}).map(result -> CallToolResult.builder()
+						.content(List.of(new TextContent("Elicitation task completed: " + taskId)))
+						.build());
+				});
+			})
+			.build();
+
+		var server = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tool)
+			.build();
+
+		// Create client with taskStore for hosting tasks
+		TaskStore<McpSchema.ClientTaskPayloadResult> clientTaskStore = new InMemoryTaskStore<>();
+		var clientBuilder = clientBuilders.get(clientType)
+			.clientInfo(new McpSchema.Implementation("Task-Hosting Client", "1.0.0"))
+			.capabilities(ClientCapabilities.builder()
+				.elicitation()
+				.tasks(ClientCapabilities.ClientTaskCapabilities.builder().list().cancel().elicitationCreate().build())
+				.build())
+			.taskStore(clientTaskStore)
+			.elicitation(request -> {
+				receivedMessage.set(request.message());
+				elicitationHandlerInvoked.countDown();
+				return new ElicitResult(ElicitResult.Action.ACCEPT, Map.of("name", "Test User"), null);
+			});
+
+		try (var client = clientBuilder.build()) {
+			client.initialize();
+
+			// Trigger the tool which will send task-augmented elicitation to client
+			var result = client.callTool(new McpSchema.CallToolRequest("trigger-elicitation", Map.of()));
+
+			// Verify elicitation handler was invoked
+			boolean handlerInvoked = elicitationHandlerInvoked.await(10, TimeUnit.SECONDS);
+			assertThat(handlerInvoked).as("Elicitation handler should have been invoked").isTrue();
+			assertThat(receivedMessage.get()).isEqualTo("Please enter your name:");
+
+			// Verify the tool completed successfully
+			assertThat(result.content()).isNotEmpty();
+		}
+		finally {
+			server.closeGracefully().block();
+		}
+	}
+
+	/**
+	 * Helper to poll for task completion on client-hosted tasks.
+	 * @param <T> The expected result type (e.g., CreateMessageResult, ElicitResult)
+	 */
+	private <T extends McpSchema.ClientTaskPayloadResult> Mono<T> pollForTaskCompletion(McpAsyncServerExchange exchange,
+			String taskId, TypeRef<T> resultTypeRef) {
+		return Mono.defer(() -> exchange.getTask(McpSchema.GetTaskRequest.builder().taskId(taskId).build()))
+			.flatMap(task -> {
+				if (task.status().isTerminal()) {
+					return exchange.getTaskResult(McpSchema.GetTaskPayloadRequest.builder().taskId(taskId).build(),
+							resultTypeRef);
+				}
+				return Mono.delay(Duration.ofMillis(100)).then(pollForTaskCompletion(exchange, taskId, resultTypeRef));
+			})
+			.timeout(Duration.ofSeconds(30));
 	}
 
 }
