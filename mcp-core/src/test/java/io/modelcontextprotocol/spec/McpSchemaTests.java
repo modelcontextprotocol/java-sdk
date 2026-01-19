@@ -1618,6 +1618,107 @@ public class McpSchemaTests {
 
 	}
 
+	// Elicitation Capability Tests (Issue #724)
+
+	@Test
+	void testElicitationCapabilityWithFormField() throws Exception {
+		// Test that elicitation with "form" field can be deserialized (2025-11-25 spec)
+		String json = """
+				{"protocolVersion":"2024-11-05","capabilities":{"elicitation":{"form":{}}},"clientInfo":{"name":"test-client","version":"1.0.0"}}
+				""";
+
+		McpSchema.InitializeRequest request = JSON_MAPPER.readValue(json, McpSchema.InitializeRequest.class);
+
+		assertThat(request).isNotNull();
+		assertThat(request.capabilities()).isNotNull();
+		assertThat(request.capabilities().elicitation()).isNotNull();
+	}
+
+	@Test
+	void testElicitationCapabilityWithFormAndUrlFields() throws Exception {
+		// Test that elicitation with both "form" and "url" fields can be deserialized
+		String json = """
+				{"protocolVersion":"2024-11-05","capabilities":{"elicitation":{"form":{},"url":{}}},"clientInfo":{"name":"test-client","version":"1.0.0"}}
+				""";
+
+		McpSchema.InitializeRequest request = JSON_MAPPER.readValue(json, McpSchema.InitializeRequest.class);
+
+		assertThat(request).isNotNull();
+		assertThat(request.capabilities()).isNotNull();
+		assertThat(request.capabilities().elicitation()).isNotNull();
+	}
+
+	@Test
+	void testElicitationCapabilityBackwardCompatibilityEmptyObject() throws Exception {
+		// Test backward compatibility: empty elicitation {} should still work
+		String json = """
+				{"protocolVersion":"2024-11-05","capabilities":{"elicitation":{}},"clientInfo":{"name":"test-client","version":"1.0.0"}}
+				""";
+
+		McpSchema.InitializeRequest request = JSON_MAPPER.readValue(json, McpSchema.InitializeRequest.class);
+
+		assertThat(request).isNotNull();
+		assertThat(request.capabilities()).isNotNull();
+		assertThat(request.capabilities().elicitation()).isNotNull();
+	}
+
+	@Test
+	void testElicitationCapabilityBuilderBackwardCompatibility() throws Exception {
+		// Test that the existing builder API still works and produces valid JSON
+		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder().elicitation().build();
+
+		assertThat(capabilities.elicitation()).isNotNull();
+
+		// Serialize and verify it produces valid JSON (should be {} for backward compat)
+		String json = JSON_MAPPER.writeValueAsString(capabilities);
+		assertThat(json).contains("\"elicitation\"");
+	}
+
+	@Test
+	void testElicitationCapabilitySerializationRoundTrip() throws Exception {
+		// Test that serialization and deserialization round-trip works
+		McpSchema.ClientCapabilities original = McpSchema.ClientCapabilities.builder().elicitation().build();
+
+		String json = JSON_MAPPER.writeValueAsString(original);
+		McpSchema.ClientCapabilities deserialized = JSON_MAPPER.readValue(json, McpSchema.ClientCapabilities.class);
+
+		assertThat(deserialized.elicitation()).isNotNull();
+	}
+
+	@Test
+	void testElicitationCapabilityBuilderWithFormAndUrl() throws Exception {
+		// Test the new builder method that explicitly sets form and url support
+		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder()
+			.elicitation(true, true)
+			.build();
+
+		assertThat(capabilities.elicitation()).isNotNull();
+		assertThat(capabilities.elicitation().form()).isNotNull();
+		assertThat(capabilities.elicitation().url()).isNotNull();
+
+		// Verify serialization produces the expected JSON
+		String json = JSON_MAPPER.writeValueAsString(capabilities);
+		assertThatJson(json).when(Option.IGNORING_ARRAY_ORDER).isObject().containsKey("elicitation");
+		assertThat(json).contains("\"form\"");
+		assertThat(json).contains("\"url\"");
+	}
+
+	@Test
+	void testElicitationCapabilityBuilderFormOnly() throws Exception {
+		// Test builder with form only
+		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder()
+			.elicitation(true, false)
+			.build();
+
+		assertThat(capabilities.elicitation()).isNotNull();
+		assertThat(capabilities.elicitation().form()).isNotNull();
+		assertThat(capabilities.elicitation().url()).isNull();
+
+		String json = JSON_MAPPER.writeValueAsString(capabilities);
+		assertThat(json).contains("\"form\"");
+		assertThat(json).doesNotContain("\"url\"");
+	}
+
 	// Progress Notification Tests
 
 	@Test
