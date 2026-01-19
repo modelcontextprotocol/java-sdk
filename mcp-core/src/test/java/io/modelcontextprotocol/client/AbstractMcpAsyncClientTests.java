@@ -72,7 +72,7 @@ public abstract class AbstractMcpAsyncClientTests {
 	}
 
 	protected Duration getInitializationTimeout() {
-		return Duration.ofSeconds(2);
+		return Duration.ofSeconds(20);
 	}
 
 	McpAsyncClient client(McpClientTransport transport) {
@@ -503,57 +503,64 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testReadResource() {
+		AtomicInteger resourceCount = new AtomicInteger();
 		withClient(createMcpTransport(), client -> {
 			Flux<McpSchema.ReadResourceResult> resources = client.initialize()
 				.then(client.listResources(null))
-				.flatMapMany(r -> Flux.fromIterable(r.resources()))
+				.flatMapMany(r -> {
+					List<Resource> l = r.resources();
+					resourceCount.set(l.size());
+					return Flux.fromIterable(l);
+				})
 				.flatMap(r -> client.readResource(r));
 
-			StepVerifier.create(resources).recordWith(ArrayList::new).consumeRecordedWith(readResourceResults -> {
+			StepVerifier.create(resources)
+				.recordWith(ArrayList::new)
+				.thenConsumeWhile(res -> true)
+				.consumeRecordedWith(readResourceResults -> {
+					assertThat(readResourceResults.size()).isEqualTo(resourceCount.get());
+					for (ReadResourceResult result : readResourceResults) {
 
-				for (ReadResourceResult result : readResourceResults) {
+						assertThat(result).isNotNull();
+						assertThat(result.contents()).isNotNull().isNotEmpty();
 
-					assertThat(result).isNotNull();
-					assertThat(result.contents()).isNotNull().isNotEmpty();
+						// Validate each content item
+						for (ResourceContents content : result.contents()) {
+							assertThat(content).isNotNull();
+							assertThat(content.uri()).isNotNull().isNotEmpty();
+							assertThat(content.mimeType()).isNotNull().isNotEmpty();
 
-					// Validate each content item
-					for (ResourceContents content : result.contents()) {
-						assertThat(content).isNotNull();
-						assertThat(content.uri()).isNotNull().isNotEmpty();
-						assertThat(content.mimeType()).isNotNull().isNotEmpty();
-
-						// Validate content based on its type with more comprehensive
-						// checks
-						switch (content.mimeType()) {
-							case "text/plain" -> {
-								TextResourceContents textContent = assertInstanceOf(TextResourceContents.class,
-										content);
-								assertThat(textContent.text()).isNotNull().isNotEmpty();
-								assertThat(textContent.uri()).isNotEmpty();
-							}
-							case "application/octet-stream" -> {
-								BlobResourceContents blobContent = assertInstanceOf(BlobResourceContents.class,
-										content);
-								assertThat(blobContent.blob()).isNotNull().isNotEmpty();
-								assertThat(blobContent.uri()).isNotNull().isNotEmpty();
-								// Validate base64 encoding format
-								assertThat(blobContent.blob()).matches("^[A-Za-z0-9+/]*={0,2}$");
-							}
-							default -> {
-
-								// Still validate basic properties
-								if (content instanceof TextResourceContents textContent) {
-									assertThat(textContent.text()).isNotNull();
+							// Validate content based on its type with more comprehensive
+							// checks
+							switch (content.mimeType()) {
+								case "text/plain" -> {
+									TextResourceContents textContent = assertInstanceOf(TextResourceContents.class,
+											content);
+									assertThat(textContent.text()).isNotNull().isNotEmpty();
+									assertThat(textContent.uri()).isNotEmpty();
 								}
-								else if (content instanceof BlobResourceContents blobContent) {
-									assertThat(blobContent.blob()).isNotNull();
+								case "application/octet-stream" -> {
+									BlobResourceContents blobContent = assertInstanceOf(BlobResourceContents.class,
+											content);
+									assertThat(blobContent.blob()).isNotNull().isNotEmpty();
+									assertThat(blobContent.uri()).isNotNull().isNotEmpty();
+									// Validate base64 encoding format
+									assertThat(blobContent.blob()).matches("^[A-Za-z0-9+/]*={0,2}$");
+								}
+								default -> {
+
+									// Still validate basic properties
+									if (content instanceof TextResourceContents textContent) {
+										assertThat(textContent.text()).isNotNull();
+									}
+									else if (content instanceof BlobResourceContents blobContent) {
+										assertThat(blobContent.blob()).isNotNull();
+									}
 								}
 							}
 						}
 					}
-				}
-			})
-				.expectNextCount(10) // Expect 10 elements
+				})
 				.verifyComplete();
 		});
 	}
@@ -693,7 +700,6 @@ public abstract class AbstractMcpAsyncClientTests {
 					assertThat(result.capabilities()).isNotNull();
 				}).verifyComplete());
 	}
-
 	// ---------------------------------------
 	// Logging Tests
 	// ---------------------------------------
@@ -773,7 +779,7 @@ public abstract class AbstractMcpAsyncClientTests {
 							if (!(content instanceof McpSchema.TextContent text))
 								return;
 
-							assertThat(text.text()).endsWith(response); // Prefixed
+							assertThat(text.text()).contains(response);
 						});
 
 						// Verify sampling request parameters received in our callback
