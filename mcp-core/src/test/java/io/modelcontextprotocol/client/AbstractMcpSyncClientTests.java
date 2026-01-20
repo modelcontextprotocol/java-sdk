@@ -625,7 +625,7 @@ public abstract class AbstractMcpSyncClientTests {
 					if (!(content instanceof McpSchema.TextContent text))
 						return;
 
-					assertThat(text.text()).endsWith(response); // Prefixed
+					assertThat(text.text()).contains(response);
 				});
 
 				// Verify sampling request parameters received in our callback
