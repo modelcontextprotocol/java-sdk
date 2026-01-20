@@ -491,7 +491,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						.firstValue(HttpHeaders.CONTENT_LENGTH)
 						.orElse(null);
 
-					if (contentType.isBlank() || "0".equals(contentLength)) {
+					// For empty content or HTTP code 202 (ACCEPTED), assume success
+					if (contentType.isBlank() || "0".equals(contentLength) || statusCode == 202) {
+						// if (contentType.isBlank() || "0".equals(contentLength)) {
 						logger.debug("No body returned for POST in session {}", sessionRepresentation);
 						// No content type means no response body, so we can just
 						// return an empty stream
