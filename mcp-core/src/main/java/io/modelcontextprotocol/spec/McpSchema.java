@@ -665,16 +665,38 @@ public final class McpSchema {
 	 * past specs or fallback (if title isn't present).
 	 * @param title Intended for UI and end-user contexts
 	 * @param version The version of the implementation.
+	 * @param icons Optional list of icons that can be used to visually represent this
+	 * implementation in client UIs. Multiple icons can be provided for different sizes
+	 * and formats.
+	 * @param websiteUrl Optional URL to the website or documentation for this
+	 * implementation.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Implementation( // @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("title") String title,
-		@JsonProperty("version") String version) implements Identifier { // @formatter:on			
+		@JsonProperty("version") String version,
+		@JsonProperty("icons") List<Icon> icons,
+		@JsonProperty("websiteUrl") String websiteUrl) implements Identifier { // @formatter:on
 
+		/**
+		 * Creates an Implementation with just name and version.
+		 * @param name The implementation name
+		 * @param version The implementation version
+		 */
 		public Implementation(String name, String version) {
-			this(name, null, version);
+			this(name, null, version, null, null);
+		}
+
+		/**
+		 * Creates an Implementation with name, title, and version.
+		 * @param name The implementation name
+		 * @param title The display title
+		 * @param version The implementation version
+		 */
+		public Implementation(String name, String title, String version) {
+			this(name, title, version, null, null);
 		}
 	}
 
@@ -769,6 +791,50 @@ public final class McpSchema {
 	}
 
 	/**
+	 * Represents an icon that can be used to visually identify servers, tools, resources,
+	 * or prompts in client UIs.
+	 *
+	 * <p>
+	 * Icons can be provided as HTTP/HTTPS URLs or as data URIs containing base64-encoded
+	 * image data. Clients should display icons at appropriate sizes based on their UI
+	 * context.
+	 *
+	 * @param src The URI of the icon. Can be an HTTP/HTTPS URL or a data URI (e.g.,
+	 * "data:image/png;base64,...").
+	 * @param mimeType Optional MIME type of the icon (e.g., "image/png",
+	 * "image/svg+xml"). If not provided, clients should infer the type from the URI or
+	 * content.
+	 * @param sizes Optional size specification following Web Manifest format. Can be a
+	 * single size (e.g., "48x48"), multiple sizes separated by spaces (e.g., "48x48
+	 * 96x96"), or "any" for scalable formats like SVG.
+	 * @see <a href=
+	 * "https://spec.modelcontextprotocol.io/specification/2025-06-18/base-protocol/#icons">MCP
+	 * Icons Specification</a>
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record Icon( // @formatter:off
+		@JsonProperty("src") String src,
+		@JsonProperty("mimeType") String mimeType,
+		@JsonProperty("sizes") String sizes) { // @formatter:on
+
+		/**
+		 * Creates an Icon with just a source URL.
+		 * @param src The URI of the icon
+		 */
+		public Icon(String src) {
+			this(src, null, null);
+		}
+
+		/**
+		 * Canonical constructor with validation.
+		 */
+		public Icon {
+			Assert.hasText(src, "Icon src must not be null or empty");
+		}
+	}
+
+	/**
 	 * A known resource that the server is capable of reading.
 	 *
 	 * @param uri the URI of the resource.
@@ -784,6 +850,8 @@ public final class McpSchema {
 	 * sizes and estimate context window usage.
 	 * @param annotations Optional annotations for the client. The client can use
 	 * annotations to inform how objects are used or displayed.
+	 * @param icons Optional list of icons that can be used to visually represent this
+	 * resource in client UIs.
 	 * @param meta See specification for notes on _meta usage
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -796,6 +864,7 @@ public final class McpSchema {
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("size") Long size,
 		@JsonProperty("annotations") Annotations annotations,
+		@JsonProperty("icons") List<Icon> icons,
 		@JsonProperty("_meta") Map<String, Object> meta) implements ResourceContent { // @formatter:on
 
 		/**
@@ -805,7 +874,7 @@ public final class McpSchema {
 		@Deprecated
 		public Resource(String uri, String name, String title, String description, String mimeType, Long size,
 				Annotations annotations) {
-			this(uri, name, title, description, mimeType, size, annotations, null);
+			this(uri, name, title, description, mimeType, size, annotations, null, null);
 		}
 
 		/**
@@ -815,7 +884,7 @@ public final class McpSchema {
 		@Deprecated
 		public Resource(String uri, String name, String description, String mimeType, Long size,
 				Annotations annotations) {
-			this(uri, name, null, description, mimeType, size, annotations, null);
+			this(uri, name, null, description, mimeType, size, annotations, null, null);
 		}
 
 		/**
@@ -824,7 +893,7 @@ public final class McpSchema {
 		 */
 		@Deprecated
 		public Resource(String uri, String name, String description, String mimeType, Annotations annotations) {
-			this(uri, name, null, description, mimeType, null, annotations, null);
+			this(uri, name, null, description, mimeType, null, annotations, null, null);
 		}
 
 		public static Builder builder() {
@@ -846,6 +915,8 @@ public final class McpSchema {
 			private Long size;
 
 			private Annotations annotations;
+
+			private List<Icon> icons;
 
 			private Map<String, Object> meta;
 
@@ -884,6 +955,11 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder icons(List<Icon> icons) {
+				this.icons = icons;
+				return this;
+			}
+
 			public Builder meta(Map<String, Object> meta) {
 				this.meta = meta;
 				return this;
@@ -893,7 +969,7 @@ public final class McpSchema {
 				Assert.hasText(uri, "uri must not be empty");
 				Assert.hasText(name, "name must not be empty");
 
-				return new Resource(uri, name, title, description, mimeType, size, annotations, meta);
+				return new Resource(uri, name, title, description, mimeType, size, annotations, icons, meta);
 			}
 
 		}
@@ -1192,6 +1268,8 @@ public final class McpSchema {
 	 * @param title An optional title for the prompt.
 	 * @param description An optional description of what this prompt provides.
 	 * @param arguments A list of arguments to use for templating the prompt.
+	 * @param icons Optional list of icons that can be used to visually represent this
+	 * prompt in client UIs.
 	 * @param meta See specification for notes on _meta usage
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -1201,14 +1279,15 @@ public final class McpSchema {
 		@JsonProperty("title") String title,
 		@JsonProperty("description") String description,
 		@JsonProperty("arguments") List<PromptArgument> arguments,
+		@JsonProperty("icons") List<Icon> icons,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Identifier { // @formatter:on
 
 		public Prompt(String name, String description, List<PromptArgument> arguments) {
-			this(name, null, description, arguments != null ? arguments : new ArrayList<>());
+			this(name, null, description, arguments != null ? arguments : new ArrayList<>(), null, null);
 		}
 
 		public Prompt(String name, String title, String description, List<PromptArgument> arguments) {
-			this(name, title, description, arguments != null ? arguments : new ArrayList<>(), null);
+			this(name, title, description, arguments != null ? arguments : new ArrayList<>(), null, null);
 		}
 	}
 
@@ -1387,6 +1466,8 @@ public final class McpSchema {
 	 * @param outputSchema An optional JSON Schema object defining the structure of the
 	 * tool's output returned in the structuredContent field of a CallToolResult.
 	 * @param annotations Optional additional tool information.
+	 * @param icons Optional list of icons that can be used to visually represent this
+	 * tool in client UIs.
 	 * @param meta See specification for notes on _meta usage
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -1398,6 +1479,7 @@ public final class McpSchema {
 		@JsonProperty("inputSchema") JsonSchema inputSchema,
 		@JsonProperty("outputSchema") Map<String, Object> outputSchema,
 		@JsonProperty("annotations") ToolAnnotations annotations,
+		@JsonProperty("icons") List<Icon> icons,
 		@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
 
 		public static Builder builder() {
@@ -1417,6 +1499,8 @@ public final class McpSchema {
 			private Map<String, Object> outputSchema;
 
 			private ToolAnnotations annotations;
+
+			private List<Icon> icons;
 
 			private Map<String, Object> meta;
 
@@ -1460,6 +1544,11 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder icons(List<Icon> icons) {
+				this.icons = icons;
+				return this;
+			}
+
 			public Builder meta(Map<String, Object> meta) {
 				this.meta = meta;
 				return this;
@@ -1467,7 +1556,7 @@ public final class McpSchema {
 
 			public Tool build() {
 				Assert.hasText(name, "name must not be empty");
-				return new Tool(name, title, description, inputSchema, outputSchema, annotations, meta);
+				return new Tool(name, title, description, inputSchema, outputSchema, annotations, icons, meta);
 			}
 
 		}
