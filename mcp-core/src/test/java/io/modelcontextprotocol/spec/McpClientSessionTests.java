@@ -6,6 +6,7 @@ package io.modelcontextprotocol.spec;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 import io.modelcontextprotocol.MockMcpClientTransport;
@@ -308,6 +309,88 @@ class McpClientSessionTests {
 				Function.identity());
 
 		StepVerifier.create(session.closeGracefully()).verifyComplete();
+	}
+
+	@Test
+	void testCustomRequestIdGeneratorWithNumericIds() {
+		AtomicLong counter = new AtomicLong(0);
+		RequestIdGenerator numericIdGenerator = () -> String.valueOf(counter.incrementAndGet());
+
+		var transport = new MockMcpClientTransport();
+		var session = new McpClientSession(TIMEOUT, transport, Map.of(), Map.of(), Function.identity(),
+				numericIdGenerator);
+
+		// Send first request
+		Mono<String> responseMono1 = session.sendRequest(TEST_METHOD, "test1", responseType);
+		StepVerifier.create(responseMono1).then(() -> {
+			McpSchema.JSONRPCRequest request = transport.getLastSentMessageAsRequest();
+			assertThat(request.id()).isEqualTo("1");
+			transport.simulateIncomingMessage(
+					new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), "response1", null));
+		}).consumeNextWith(response -> assertThat(response).isEqualTo("response1")).verifyComplete();
+
+		// Send second request
+		Mono<String> responseMono2 = session.sendRequest(TEST_METHOD, "test2", responseType);
+		StepVerifier.create(responseMono2).then(() -> {
+			McpSchema.JSONRPCRequest request = transport.getLastSentMessageAsRequest();
+			assertThat(request.id()).isEqualTo("2");
+			transport.simulateIncomingMessage(
+					new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), "response2", null));
+		}).consumeNextWith(response -> assertThat(response).isEqualTo("response2")).verifyComplete();
+
+		session.close();
+	}
+
+	@Test
+	void testCustomRequestIdGeneratorWithPrefixedIds() {
+		AtomicLong counter = new AtomicLong(0);
+		RequestIdGenerator prefixedIdGenerator = () -> "custom-prefix-" + counter.incrementAndGet();
+
+		var transport = new MockMcpClientTransport();
+		var session = new McpClientSession(TIMEOUT, transport, Map.of(), Map.of(), Function.identity(),
+				prefixedIdGenerator);
+
+		Mono<String> responseMono = session.sendRequest(TEST_METHOD, "test", responseType);
+		StepVerifier.create(responseMono).then(() -> {
+			McpSchema.JSONRPCRequest request = transport.getLastSentMessageAsRequest();
+			assertThat((String) request.id()).startsWith("custom-prefix-");
+			assertThat(request.id()).isEqualTo("custom-prefix-1");
+			transport.simulateIncomingMessage(
+					new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), "response", null));
+		}).consumeNextWith(response -> assertThat(response).isEqualTo("response")).verifyComplete();
+
+		session.close();
+	}
+
+	@Test
+	void testDefaultRequestIdGeneratorProducesUniqueIds() {
+		var transport = new MockMcpClientTransport();
+		var session = new McpClientSession(TIMEOUT, transport, Map.of(), Map.of(), Function.identity());
+
+		// Send first request
+		Mono<String> responseMono1 = session.sendRequest(TEST_METHOD, "test1", responseType);
+		String[] requestIds = new String[2];
+
+		StepVerifier.create(responseMono1).then(() -> {
+			McpSchema.JSONRPCRequest request = transport.getLastSentMessageAsRequest();
+			requestIds[0] = (String) request.id();
+			assertThat(request.id()).isNotNull();
+			transport.simulateIncomingMessage(
+					new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), "response1", null));
+		}).consumeNextWith(response -> assertThat(response).isEqualTo("response1")).verifyComplete();
+
+		// Send second request
+		Mono<String> responseMono2 = session.sendRequest(TEST_METHOD, "test2", responseType);
+		StepVerifier.create(responseMono2).then(() -> {
+			McpSchema.JSONRPCRequest request = transport.getLastSentMessageAsRequest();
+			requestIds[1] = (String) request.id();
+			assertThat(request.id()).isNotNull();
+			assertThat(request.id()).isNotEqualTo(requestIds[0]);
+			transport.simulateIncomingMessage(
+					new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), "response2", null));
+		}).consumeNextWith(response -> assertThat(response).isEqualTo("response2")).verifyComplete();
+
+		session.close();
 	}
 
 }

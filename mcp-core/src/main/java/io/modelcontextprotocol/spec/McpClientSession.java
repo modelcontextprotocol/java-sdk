@@ -14,9 +14,7 @@ import reactor.core.publisher.MonoSink;
 
 import java.time.Duration;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 /**
@@ -56,11 +54,8 @@ public class McpClientSession implements McpSession {
 	/** Map of notification handlers keyed by method name */
 	private final ConcurrentHashMap<String, NotificationHandler> notificationHandlers = new ConcurrentHashMap<>();
 
-	/** Session-specific prefix for request IDs */
-	private final String sessionPrefix = UUID.randomUUID().toString().substring(0, 8);
-
-	/** Atomic counter for generating unique request IDs */
-	private final AtomicLong requestCounter = new AtomicLong(0);
+	/** Generator for creating unique request IDs */
+	private final RequestIdGenerator requestIdGenerator;
 
 	/**
 	 * Functional interface for handling incoming JSON-RPC requests. Implementations
@@ -123,6 +118,26 @@ public class McpClientSession implements McpSession {
 	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
 			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers,
 			Function<? super Mono<Void>, ? extends Publisher<Void>> connectHook) {
+		this(requestTimeout, transport, requestHandlers, notificationHandlers, connectHook,
+				RequestIdGenerator.ofDefault());
+	}
+
+	/**
+	 * Creates a new McpClientSession with the specified configuration, handlers, and
+	 * custom request ID generator.
+	 * @param requestTimeout Duration to wait for responses
+	 * @param transport Transport implementation for message exchange
+	 * @param requestHandlers Map of method names to request handlers
+	 * @param notificationHandlers Map of method names to notification handlers
+	 * @param connectHook Hook that allows transforming the connection Publisher prior to
+	 * subscribing
+	 * @param requestIdGenerator Generator for creating unique request IDs. If null, a
+	 * default generator will be used.
+	 */
+	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
+			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers,
+			Function<? super Mono<Void>, ? extends Publisher<Void>> connectHook,
+			RequestIdGenerator requestIdGenerator) {
 
 		Assert.notNull(requestTimeout, "The requestTimeout can not be null");
 		Assert.notNull(transport, "The transport can not be null");
@@ -133,6 +148,7 @@ public class McpClientSession implements McpSession {
 		this.transport = transport;
 		this.requestHandlers.putAll(requestHandlers);
 		this.notificationHandlers.putAll(notificationHandlers);
+		this.requestIdGenerator = requestIdGenerator != null ? requestIdGenerator : RequestIdGenerator.ofDefault();
 
 		this.transport.connect(mono -> mono.doOnNext(this::handle)).transform(connectHook).subscribe();
 	}
@@ -243,12 +259,11 @@ public class McpClientSession implements McpSession {
 	}
 
 	/**
-	 * Generates a unique request ID in a non-blocking way. Combines a session-specific
-	 * prefix with an atomic counter to ensure uniqueness.
+	 * Generates a unique request ID using the configured request ID generator.
 	 * @return A unique request ID string
 	 */
 	private String generateRequestId() {
-		return this.sessionPrefix + "-" + this.requestCounter.getAndIncrement();
+		return this.requestIdGenerator.generate();
 	}
 
 	/**
