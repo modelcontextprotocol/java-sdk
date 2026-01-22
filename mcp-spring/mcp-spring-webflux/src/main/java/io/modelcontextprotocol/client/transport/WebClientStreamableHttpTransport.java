@@ -510,7 +510,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		private boolean openConnectionOnStartup = false;
 
 		private List<String> supportedProtocolVersions = List.of(ProtocolVersions.MCP_2024_11_05,
-				ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18);
+				ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18, ProtocolVersions.MCP_2025_11_25);
 
 		private Builder(WebClient.Builder webClientBuilder) {
 			Assert.notNull(webClientBuilder, "WebClient.Builder must not be null");

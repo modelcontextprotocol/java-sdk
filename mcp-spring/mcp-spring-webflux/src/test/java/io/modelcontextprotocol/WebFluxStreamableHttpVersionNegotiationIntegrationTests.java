@@ -105,14 +105,14 @@ class WebFluxStreamableHttpVersionNegotiationIntegrationTests {
 			.hasSize(3)
 			.map(McpTestRequestRecordingExchangeFilterFunction.Call::headers)
 			.allSatisfy(headers -> assertThat(headers).containsEntry("mcp-protocol-version",
-					ProtocolVersions.MCP_2025_06_18));
+					ProtocolVersions.MCP_2025_11_25));
 
 		assertThat(response).isNotNull();
 		assertThat(response.content()).hasSize(1)
 			.first()
 			.extracting(McpSchema.TextContent.class::cast)
 			.extracting(McpSchema.TextContent::text)
-			.isEqualTo(ProtocolVersions.MCP_2025_06_18);
+			.isEqualTo(ProtocolVersions.MCP_2025_11_25);
 		mcpServer.close();
 	}
 
@@ -120,7 +120,7 @@ class WebFluxStreamableHttpVersionNegotiationIntegrationTests {
 	void usesServerSupportedVersion() {
 		var transport = WebClientStreamableHttpTransport
 			.builder(WebClient.builder().baseUrl("http://localhost:" + PORT))
-			.supportedProtocolVersions(List.of(ProtocolVersions.MCP_2025_06_18, "2263-03-18"))
+			.supportedProtocolVersions(List.of(ProtocolVersions.MCP_2025_11_25, "2263-03-18"))
 			.build();
 		var client = McpClient.sync(transport).requestTimeout(Duration.ofHours(10)).build();
 
@@ -137,14 +137,14 @@ class WebFluxStreamableHttpVersionNegotiationIntegrationTests {
 			.hasSize(2)
 			.map(McpTestRequestRecordingExchangeFilterFunction.Call::headers)
 			.allSatisfy(headers -> assertThat(headers).containsEntry("mcp-protocol-version",
-					ProtocolVersions.MCP_2025_06_18));
+					ProtocolVersions.MCP_2025_11_25));
 
 		assertThat(response).isNotNull();
 		assertThat(response.content()).hasSize(1)
 			.first()
 			.extracting(McpSchema.TextContent.class::cast)
 			.extracting(McpSchema.TextContent::text)
-			.isEqualTo(ProtocolVersions.MCP_2025_06_18);
+			.isEqualTo(ProtocolVersions.MCP_2025_11_25);
 		mcpServer.close();
 	}
 

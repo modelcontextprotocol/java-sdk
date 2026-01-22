@@ -29,7 +29,8 @@ public interface McpStatelessServerTransport {
 	Mono<Void> closeGracefully();
 
 	default List<String> protocolVersions() {
-		return List.of(ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18);
+		return List.of(ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18,
+				ProtocolVersions.MCP_2025_11_25);
 	}
 
 }
