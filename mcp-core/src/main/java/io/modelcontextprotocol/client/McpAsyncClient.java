@@ -1584,13 +1584,28 @@ public class McpAsyncClient {
 	};
 
 	/**
-	 * Get the status and metadata of a task.
+	 * Retrieves a task previously initiated by the client with the server.
+	 *
+	 * <p>
+	 * This method mirrors
+	 * {@link io.modelcontextprotocol.server.McpAsyncServerExchange#getTask(McpSchema.GetTaskRequest)},
+	 * which is used for when the server has initiated a task with the client.
+	 *
+	 * <p>
+	 * Example usage:
+	 *
+	 * <pre>{@code
+	 * var result = client.getTask(GetTaskRequest.builder()
+	 *     .taskId(taskId)
+	 *     .build())
+	 *     .block();
+	 * }</pre>
 	 *
 	 * <p>
 	 * <strong>Note:</strong> This is an experimental feature that may change in future
 	 * releases.
 	 * @param getTaskRequest The request containing the task ID.
-	 * @return A Mono that completes with the task status and metadata.
+	 * @return A Mono that completes with the task information.
 	 * @see McpSchema.GetTaskRequest
 	 * @see McpSchema.GetTaskResult
 	 */
@@ -1604,11 +1619,23 @@ public class McpAsyncClient {
 	}
 
 	/**
-	 * Get the status and metadata of a task by ID.
+	 * Retrieves a task previously initiated by the client with the server by its ID.
+	 *
+	 * <p>
+	 * This method mirrors
+	 * {@link io.modelcontextprotocol.server.McpAsyncServerExchange#getTask(McpSchema.GetTaskRequest)},
+	 * which is used for when the server has initiated a task with the client.
 	 *
 	 * <p>
 	 * This is a convenience overload that creates a {@link McpSchema.GetTaskRequest} with
 	 * the given task ID.
+	 *
+	 * <p>
+	 * Example usage:
+	 *
+	 * <pre>{@code
+	 * var result = client.getTask(taskId);
+	 * }</pre>
 	 *
 	 * <p>
 	 * <strong>Note:</strong> This is an experimental feature that may change in future
