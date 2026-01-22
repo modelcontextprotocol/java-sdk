@@ -509,13 +509,27 @@ public class McpSyncClient implements AutoCloseable {
 	}
 
 	/**
-	 * Get the status and metadata of a task.
+	 * Retrieves a task previously initiated by the client with the server.
+	 *
+	 * <p>
+	 * This method mirrors
+	 * {@link io.modelcontextprotocol.server.McpSyncServerExchange#getTask(McpSchema.GetTaskRequest)},
+	 * which is used for when the server has initiated a task with the client.
+	 *
+	 * <p>
+	 * Example usage:
+	 *
+	 * <pre>{@code
+	 * var result = client.getTask(GetTaskRequest.builder()
+	 *     .taskId(taskId)
+	 *     .build());
+	 * }</pre>
 	 *
 	 * <p>
 	 * <strong>Note:</strong> This is an experimental feature that may change in future
 	 * releases.
 	 * @param getTaskRequest The request containing the task ID.
-	 * @return The task status and metadata.
+	 * @return The task information.
 	 * @see McpSchema.GetTaskRequest
 	 * @see McpSchema.GetTaskResult
 	 */
@@ -524,21 +538,33 @@ public class McpSyncClient implements AutoCloseable {
 	}
 
 	/**
-	 * Get the status and metadata of a task by ID.
+	 * Retrieves a task previously initiated by the client with the server by its ID.
+	 *
+	 * <p>
+	 * This method mirrors
+	 * {@link io.modelcontextprotocol.server.McpSyncServerExchange#getTask(McpSchema.GetTaskRequest)},
+	 * which is used for when the server has initiated a task with the client.
 	 *
 	 * <p>
 	 * This is a convenience overload that creates a {@link McpSchema.GetTaskRequest} with
 	 * the given task ID.
 	 *
 	 * <p>
+	 * Example usage:
+	 *
+	 * <pre>{@code
+	 * var result = client.getTask(taskId);
+	 * }</pre>
+	 *
+	 * <p>
 	 * <strong>Note:</strong> This is an experimental feature that may change in future
 	 * releases.
 	 * @param taskId The task identifier to query.
-	 * @return The task status and metadata.
+	 * @return The task information.
 	 */
 	public McpSchema.GetTaskResult getTask(String taskId) {
 		Assert.hasText(taskId, "Task ID must not be null or empty");
-		return getTask(McpSchema.GetTaskRequest.builder().taskId(taskId).build());
+		return withProvidedContext(this.delegate.getTask(taskId)).block();
 	}
 
 	/**
@@ -560,7 +586,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * <pre>{@code
 	 * // For tool task results:
 	 * var result = client.getTaskResult(
-	 *     new GetTaskPayloadRequest(taskId, null),
+	 *     GetTaskPayloadRequest.builder().taskId(taskId).build(),
 	 *     new TypeRef<McpSchema.CallToolResult>(){});
 	 * }</pre>
 	 *
@@ -619,6 +645,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * @see McpSchema.ServerTaskPayloadResult
 	 */
 	public <T extends McpSchema.ServerTaskPayloadResult> T getTaskResult(String taskId, TypeRef<T> resultTypeRef) {
+		Assert.hasText(taskId, "Task ID must not be null or empty");
 		return withProvidedContext(this.delegate.getTaskResult(taskId, resultTypeRef)).block();
 	}
 
