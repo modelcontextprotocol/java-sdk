@@ -530,10 +530,30 @@ public class McpAsyncServerExchange {
 	// --------------------------
 
 	/**
-	 * Get the status of a task hosted by the client. This is used when the server has
-	 * sent a task-augmented request to the client and needs to poll for status updates.
-	 * @param getTaskRequest The request containing the task ID
-	 * @return A Mono that emits the task status
+	 * Retrieves a task previously initiated by the server with the client.
+	 *
+	 * <p>
+	 * This method mirrors
+	 * {@link io.modelcontextprotocol.client.McpAsyncClient#getTask(McpSchema.GetTaskRequest)},
+	 * which is used for when the client has initiated a task with the server.
+	 *
+	 * <p>
+	 * Example usage:
+	 *
+	 * <pre>{@code
+	 * var result = exchange.getTask(GetTaskRequest.builder()
+	 *     .taskId(taskId)
+	 *     .build())
+	 *     .block();
+	 * }</pre>
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param getTaskRequest The request containing the task ID.
+	 * @return A Mono that completes with the task information.
+	 * @see McpSchema.GetTaskRequest
+	 * @see McpSchema.GetTaskResult
 	 */
 	public Mono<McpSchema.GetTaskResult> getTask(McpSchema.GetTaskRequest getTaskRequest) {
 		if (this.clientCapabilities == null) {
@@ -547,11 +567,69 @@ public class McpAsyncServerExchange {
 	}
 
 	/**
-	 * Get the result of a completed task hosted by the client.
-	 * @param <T> The expected result type
-	 * @param getTaskPayloadRequest The request containing the task ID
-	 * @param resultTypeRef Type reference for deserializing the result
-	 * @return A Mono that emits the task result
+	 * Retrieves a task previously initiated by the server with the client by its ID.
+	 *
+	 * <p>
+	 * This method mirrors
+	 * {@link io.modelcontextprotocol.client.McpAsyncClient#getTask(String)}, which is
+	 * used for when the client has initiated a task with the server.
+	 *
+	 * <p>
+	 * This is a convenience overload that creates a {@link McpSchema.GetTaskRequest} with
+	 * the given task ID.
+	 *
+	 * <p>
+	 * Example usage:
+	 *
+	 * <pre>{@code
+	 * var result = exchange.getTask(taskId);
+	 * }</pre>
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param taskId The task identifier to query.
+	 * @return A Mono that completes with the task status and metadata.
+	 */
+	public Mono<McpSchema.GetTaskResult> getTask(String taskId) {
+		return this.getTask(McpSchema.GetTaskRequest.builder().taskId(taskId).build());
+	}
+
+	/**
+	 * Get the result of a completed task previously initiated by the server with the
+	 * client.
+	 *
+	 * <p>
+	 * The result type depends on the original request that created the task. For sampling
+	 * requests, use {@code new TypeRef<McpSchema.CreateMessageResult>(){}}. For
+	 * elicitation requests, use {@code new TypeRef<McpSchema.ElicitResult>(){}}.
+	 *
+	 * <p>
+	 * This method mirrors
+	 * {@link io.modelcontextprotocol.client.McpAsyncClient#getTaskResult(McpSchema.GetTaskPayloadRequest, TypeRef)},
+	 * which is used for when the client has initiated a task with the server.
+	 *
+	 * <p>
+	 * Example usage:
+	 *
+	 * <pre>{@code
+	 * // For sampling task results:
+	 * var result = exchange.getTaskResult(
+	 *     new GetTaskPayloadRequest(taskId, null),
+	 *     new TypeRef<McpSchema.CreateMessageResult>(){})
+	 *     .block();
+	 * }</pre>
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param <T> The expected result type, must extend
+	 * {@link McpSchema.ClientTaskPayloadResult}
+	 * @param getTaskPayloadRequest The request containing the task ID.
+	 * @param resultTypeRef Type reference for deserializing the result.
+	 * @return A Mono that completes with the task result.
+	 * @see McpSchema.GetTaskPayloadRequest
+	 * @see McpSchema.ClientTaskPayloadResult
 	 */
 	public <T extends McpSchema.ClientTaskPayloadResult> Mono<T> getTaskResult(
 			McpSchema.GetTaskPayloadRequest getTaskPayloadRequest, TypeRef<T> resultTypeRef) {
@@ -563,6 +641,51 @@ public class McpAsyncServerExchange {
 			return Mono.error(new IllegalStateException("Client must be configured with tasks capabilities"));
 		}
 		return this.session.sendRequest(McpSchema.METHOD_TASKS_RESULT, getTaskPayloadRequest, resultTypeRef);
+	}
+
+	/**
+	 * Get the result of a completed task previously initiated by the server with the
+	 * client by its task ID.
+	 *
+	 * <p>
+	 * This is a convenience overload that creates a
+	 * {@link McpSchema.GetTaskPayloadRequest} from the task ID.
+	 *
+	 * <p>
+	 * The result type depends on the original request that created the task. For sampling
+	 * requests, use {@code new TypeRef<McpSchema.CreateMessageResult>(){}}. For
+	 * elicitation requests, use {@code new TypeRef<McpSchema.ElicitResult>(){}}.
+	 *
+	 * <p>
+	 * This method mirrors
+	 * {@link io.modelcontextprotocol.client.McpAsyncClient#getTaskResult(String, TypeRef)},
+	 * which is used for when the client has initiated a task with the server.
+	 *
+	 * <p>
+	 * Example usage:
+	 *
+	 * <pre>{@code
+	 * // For sampling task results:
+	 * var result = exchange.getTaskResult(
+	 *     taskId,
+	 *     new TypeRef<McpSchema.CreateMessageResult>(){})
+	 *     .block();
+	 * }</pre>
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param <T> The expected result type, must extend
+	 * {@link McpSchema.ClientTaskPayloadResult}
+	 * @param taskId The task identifier.
+	 * @param resultTypeRef Type reference for deserializing the result.
+	 * @return A Mono that completes with the task result.
+	 * @see McpSchema.GetTaskPayloadRequest
+	 * @see McpSchema.ClientTaskPayloadResult
+	 */
+	public <T extends McpSchema.ClientTaskPayloadResult> Mono<T> getTaskResult(String taskId,
+			TypeRef<T> resultTypeRef) {
+		return this.getTaskResult(McpSchema.GetTaskPayloadRequest.builder().taskId(taskId).build(), resultTypeRef);
 	}
 
 	/**

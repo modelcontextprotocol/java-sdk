@@ -542,8 +542,8 @@ public class McpSyncClient implements AutoCloseable {
 	 *
 	 * <p>
 	 * This method mirrors
-	 * {@link io.modelcontextprotocol.server.McpSyncServerExchange#getTask(McpSchema.GetTaskRequest)},
-	 * which is used for when the server has initiated a task with the client.
+	 * {@link io.modelcontextprotocol.server.McpSyncServerExchange#getTask(String)}, which
+	 * is used for when the server has initiated a task with the client.
 	 *
 	 * <p>
 	 * This is a convenience overload that creates a {@link McpSchema.GetTaskRequest} with
@@ -620,7 +620,7 @@ public class McpSyncClient implements AutoCloseable {
 	 *
 	 * <p>
 	 * This method mirrors
-	 * {@link io.modelcontextprotocol.server.McpSyncServerExchange#getTaskResult(McpSchema.GetTaskPayloadRequest, TypeRef)},
+	 * {@link io.modelcontextprotocol.server.McpSyncServerExchange#getTaskResult(String, TypeRef)},
 	 * which is used for when the server has initiated a task with the client.
 	 *
 	 * <p>
