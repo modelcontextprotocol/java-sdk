@@ -1622,12 +1622,17 @@ public class McpAsyncClient {
 	}
 
 	/**
-	 * Get the result of a completed task.
+	 * Get the result of a completed task previously initiated by the client with the
+	 * server.
 	 *
 	 * <p>
 	 * The result type depends on the original request that created the task. For tool
-	 * calls, use {@code new TypeRef<McpSchema.CallToolResult>(){}}. For sampling
-	 * requests, use {@code new TypeRef<McpSchema.CreateMessageResult>(){}}.
+	 * calls, use {@code new TypeRef<McpSchema.CallToolResult>(){}}.
+	 *
+	 * <p>
+	 * This method mirrors
+	 * {@link io.modelcontextprotocol.server.McpSyncServerExchange#getTaskResult(McpSchema.GetTaskPayloadRequest, TypeRef)},
+	 * which is used for when the server has initiated a task with the client.
 	 *
 	 * <p>
 	 * Example usage:
@@ -1643,13 +1648,13 @@ public class McpAsyncClient {
 	 * <p>
 	 * <strong>Note:</strong> This is an experimental feature that may change in future
 	 * releases.
-	 * @param <T> The expected result type, must extend {@link McpSchema.Result}
+	 * @param <T> The expected result type, must extend
+	 * {@link McpSchema.ServerTaskPayloadResult}
 	 * @param getTaskPayloadRequest The request containing the task ID.
 	 * @param resultTypeRef Type reference for deserializing the result.
 	 * @return A Mono that completes with the task result.
 	 * @see McpSchema.GetTaskPayloadRequest
-	 * @see McpSchema.CallToolResult
-	 * @see McpSchema.CreateMessageResult
+	 * @see McpSchema.ServerTaskPayloadResult
 	 */
 	public <T extends McpSchema.ServerTaskPayloadResult> Mono<T> getTaskResult(
 			McpSchema.GetTaskPayloadRequest getTaskPayloadRequest, TypeRef<T> resultTypeRef) {
@@ -1662,19 +1667,43 @@ public class McpAsyncClient {
 	}
 
 	/**
-	 * Retrieves the result of a completed task by task ID.
+	 * Get the result of a completed task previously initiated by the client with the
+	 * server by its task ID.
 	 *
 	 * <p>
 	 * This is a convenience overload that creates a
 	 * {@link McpSchema.GetTaskPayloadRequest} from the task ID.
 	 *
 	 * <p>
+	 * The result type depends on the original request that created the task. For tool
+	 * calls, use {@code new TypeRef<McpSchema.CallToolResult>(){}}.
+	 *
+	 * <p>
+	 * This method mirrors
+	 * {@link io.modelcontextprotocol.server.McpAsyncServerExchange#getTaskResult(McpSchema.GetTaskPayloadRequest, TypeRef)},
+	 * which is used for when the server has initiated a task with the client.
+	 *
+	 * <p>
+	 * Example usage:
+	 *
+	 * <pre>{@code
+	 * // For tool task results:
+	 * var result = client.getTaskResult(
+	 *     taskId,
+	 *     new TypeRef<McpSchema.CallToolResult>(){})
+	 *     .block();
+	 * }</pre>
+	 *
+	 * <p>
 	 * <strong>Note:</strong> This is an experimental feature that may change in future
 	 * releases.
-	 * @param <T> The expected result type, must extend {@link McpSchema.Result}
+	 * @param <T> The expected result type, must extend
+	 * {@link McpSchema.ServerTaskPayloadResult}
 	 * @param taskId The task identifier.
 	 * @param resultTypeRef Type reference for deserializing the result.
 	 * @return A Mono that completes with the task result.
+	 * @see McpSchema.GetTaskPayloadRequest
+	 * @see McpSchema.ServerTaskPayloadResult
 	 */
 	public <T extends McpSchema.ServerTaskPayloadResult> Mono<T> getTaskResult(String taskId,
 			TypeRef<T> resultTypeRef) {
