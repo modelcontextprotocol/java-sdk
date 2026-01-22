@@ -544,6 +544,15 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 									"Error deserializing JSON-RPC message: " + responseEvent, e));
 						}
 					}
+
+					if (sentMessage instanceof McpSchema.JSONRPCNotification) {
+						logger.warn(
+								"Notification {} received unsupported Content-Type '{}' (status={}) in session {}; ignoring response.",
+								sentMessage, contentType, statusCode, sessionRepresentation);
+						deliveredSink.success();
+						return Flux.empty();
+					}
+
 					logger.warn("Unknown media type {} returned for POST in session {}", contentType,
 							sessionRepresentation);
 
