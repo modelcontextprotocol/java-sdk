@@ -1658,7 +1658,7 @@ public class McpAsyncClient {
 	 *
 	 * <p>
 	 * This method mirrors
-	 * {@link io.modelcontextprotocol.server.McpSyncServerExchange#getTaskResult(McpSchema.GetTaskPayloadRequest, TypeRef)},
+	 * {@link io.modelcontextprotocol.server.McpAsyncServerExchange#getTaskResult(McpSchema.GetTaskPayloadRequest, TypeRef)},
 	 * which is used for when the server has initiated a task with the client.
 	 *
 	 * <p>
