@@ -7,6 +7,7 @@ package io.modelcontextprotocol.client;
 import java.time.Duration;
 import java.util.List;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -310,8 +311,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * var request = new CallToolRequest("my-tool", Map.of("arg", "value"),
 	 *     new TaskMetadata(60000L), null);  // Optional task metadata
 	 *
-	 * List<ResponseMessage<CallToolResult>> messages = client.callToolStream(request);
-	 * for (var message : messages) {
+	 * client.callToolStream(request).forEach(message -> {
 	 *     switch (message) {
 	 *         case TaskCreatedMessage<CallToolResult> tc ->
 	 *             System.out.println("Task created: " + tc.task().taskId());
@@ -322,11 +322,11 @@ public class McpSyncClient implements AutoCloseable {
 	 *         case ErrorMessage<CallToolResult> e ->
 	 *             System.err.println("Error: " + e.error().getMessage());
 	 *     }
-	 * }
+	 * });
 	 * }</pre>
 	 * @param callToolRequest The request containing the tool name and arguments. If the
 	 * {@code task} field is set, the call will be task-augmented.
-	 * @return A list of {@link McpSchema.ResponseMessage} instances representing the
+	 * @return A stream of {@link McpSchema.ResponseMessage} instances representing the
 	 * progress and result of the tool call.
 	 * @see McpSchema.ResponseMessage
 	 * @see McpSchema.TaskCreatedMessage
@@ -334,9 +334,9 @@ public class McpSyncClient implements AutoCloseable {
 	 * @see McpSchema.ResultMessage
 	 * @see McpSchema.ErrorMessage
 	 */
-	public List<McpSchema.ResponseMessage<McpSchema.CallToolResult>> callToolStream(
+	public Stream<McpSchema.ResponseMessage<McpSchema.CallToolResult>> callToolStream(
 			McpSchema.CallToolRequest callToolRequest) {
-		return withProvidedContextFlux(this.delegate.callToolStream(callToolRequest)).collectList().block();
+		return withProvidedContextFlux(this.delegate.callToolStream(callToolRequest)).toStream();
 	}
 
 	/**

@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
@@ -1845,7 +1846,8 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	}
 
 	/** Extracts the task ID from a list of response messages. */
-	protected String extractTaskId(List<ResponseMessage<CallToolResult>> messages) {
+	protected String extractTaskId(Stream<ResponseMessage<CallToolResult>> messageStream) {
+		List<ResponseMessage<CallToolResult>> messages = messageStream.toList();
 		for (var msg : messages) {
 			if (msg instanceof TaskCreatedMessage<CallToolResult> tcm) {
 				return tcm.task().taskId();
@@ -1855,7 +1857,8 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	}
 
 	/** Extracts all task statuses from a list of response messages. */
-	protected List<TaskStatus> extractTaskStatuses(List<ResponseMessage<CallToolResult>> messages) {
+	protected List<TaskStatus> extractTaskStatuses(Stream<ResponseMessage<CallToolResult>> messageStream) {
+		List<ResponseMessage<CallToolResult>> messages = messageStream.toList();
 		List<TaskStatus> statuses = new ArrayList<>();
 		for (var msg : messages) {
 			if (msg instanceof TaskCreatedMessage<CallToolResult> tcm) {
@@ -2181,7 +2184,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 			// Call tool WITHOUT task metadata - should trigger automatic polling shim
 			var request = new McpSchema.CallToolRequest("auto-polling-tool", Map.of("input", "test-value"), null, null);
-			var messages = client.callToolStream(request);
+			var messages = client.callToolStream(request).toList();
 
 			// The automatic polling shim should poll and return the final result
 			assertThat(messages).as("Should have response messages").isNotEmpty();

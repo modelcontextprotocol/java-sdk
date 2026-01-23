@@ -11,6 +11,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * Represents a synchronous exchange with a Model Context Protocol (MCP) client. The
@@ -457,12 +458,12 @@ public class McpSyncServerExchange {
 	 * releases.
 	 * @param createMessageRequest The request containing the sampling parameters. If the
 	 * {@code task} field is set, the call will be task-augmented.
-	 * @return A list of {@link McpSchema.ResponseMessage} instances representing the
+	 * @return A stream of {@link McpSchema.ResponseMessage} instances representing the
 	 * progress and result
 	 */
-	public List<McpSchema.ResponseMessage<McpSchema.CreateMessageResult>> createMessageStream(
+	public Stream<McpSchema.ResponseMessage<McpSchema.CreateMessageResult>> createMessageStream(
 			McpSchema.CreateMessageRequest createMessageRequest) {
-		return this.exchange.createMessageStream(createMessageRequest).collectList().block();
+		return this.exchange.createMessageStream(createMessageRequest).toStream();
 	}
 
 	// --------------------------
@@ -506,12 +507,12 @@ public class McpSyncServerExchange {
 	 * releases.
 	 * @param elicitRequest The request containing the elicitation parameters. If the
 	 * {@code task} field is set, the call will be task-augmented.
-	 * @return A list of {@link McpSchema.ResponseMessage} instances representing the
+	 * @return A stream of {@link McpSchema.ResponseMessage} instances representing the
 	 * progress and result
 	 */
-	public List<McpSchema.ResponseMessage<McpSchema.ElicitResult>> createElicitationStream(
+	public Stream<McpSchema.ResponseMessage<McpSchema.ElicitResult>> createElicitationStream(
 			McpSchema.ElicitRequest elicitRequest) {
-		return this.exchange.createElicitationStream(elicitRequest).collectList().block();
+		return this.exchange.createElicitationStream(elicitRequest).toStream();
 	}
 
 }
