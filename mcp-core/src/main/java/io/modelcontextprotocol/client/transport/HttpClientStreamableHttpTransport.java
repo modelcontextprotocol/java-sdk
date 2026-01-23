@@ -295,12 +295,23 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 								if (statusCode >= 200 && statusCode < 300) {
 
 									if (MESSAGE_EVENT_TYPE.equals(responseEvent.sseEvent().event())) {
+										String data = responseEvent.sseEvent().data();
+										// Per 2025-11-25 spec (SEP-1699), servers may
+										// send SSE events
+										// with empty data to prime the client for
+										// reconnection.
+										// Skip these events as they contain no JSON-RPC
+										// message.
+										if (data == null || data.isBlank()) {
+											logger.debug("Skipping SSE event with empty data (stream primer)");
+											return Flux.empty();
+										}
 										try {
 											// We don't support batching ATM and probably
 											// won't since the next version considers
 											// removing it.
-											McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(
-													this.jsonMapper, responseEvent.sseEvent().data());
+											McpSchema.JSONRPCMessage message = McpSchema
+												.deserializeJsonRpcMessage(this.jsonMapper, data);
 
 											Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> idWithMessages = Tuples
 												.of(Optional.ofNullable(responseEvent.sseEvent().id()),
@@ -503,13 +514,22 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					else if (contentType.contains(TEXT_EVENT_STREAM)) {
 						return Flux.just(((ResponseSubscribers.SseResponseEvent) responseEvent).sseEvent())
 							.flatMap(sseEvent -> {
+								String data = sseEvent.data();
+								// Per 2025-11-25 spec (SEP-1699), servers may send SSE
+								// events
+								// with empty data to prime the client for reconnection.
+								// Skip these events as they contain no JSON-RPC message.
+								if (data == null || data.isBlank()) {
+									logger.debug("Skipping SSE event with empty data (stream primer)");
+									return Flux.empty();
+								}
 								try {
 									// We don't support batching ATM and probably
 									// won't
 									// since the
 									// next version considers removing it.
 									McpSchema.JSONRPCMessage message = McpSchema
-										.deserializeJsonRpcMessage(this.jsonMapper, sseEvent.data());
+										.deserializeJsonRpcMessage(this.jsonMapper, data);
 
 									Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> idWithMessages = Tuples
 										.of(Optional.ofNullable(sseEvent.id()), List.of(message));
