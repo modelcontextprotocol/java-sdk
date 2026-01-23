@@ -246,7 +246,7 @@ public abstract class AbstractMcpSyncClientTests {
 		withClient(transport, client -> {
 			client.initialize();
 
-			McpSchema.CallToolResult result = client.callTool(new McpSchema.CallToolRequest("annotatedMessage",
+			McpSchema.CallToolResult result = client.callTool(new McpSchema.CallToolRequest("get-annotated-message",
 					Map.of("messageType", messageType, "includeImage", true)));
 
 			assertThat(result).isNotNull();
@@ -616,7 +616,7 @@ public abstract class AbstractMcpSyncClientTests {
 				client.initialize();
 
 				McpSchema.CallToolResult result = client.callTool(
-						new McpSchema.CallToolRequest("sampleLLM", Map.of("prompt", message, "maxTokens", maxTokens)));
+						new McpSchema.CallToolRequest("trigger-sampling-request", Map.of("prompt", message, "maxTokens", maxTokens)));
 
 				// Verify tool response to ensure our sampling response was passed through
 				assertThat(result.content()).hasAtLeastOneElementOfType(McpSchema.TextContent.class);
@@ -654,7 +654,7 @@ public abstract class AbstractMcpSyncClientTests {
 
 			// Call a tool that sends progress notifications
 			CallToolRequest request = CallToolRequest.builder()
-				.name("longRunningOperation")
+				.name("trigger-long-running-operation")
 				.arguments(Map.of("duration", 1, "steps", 2))
 				.progressToken("test-token")
 				.build();

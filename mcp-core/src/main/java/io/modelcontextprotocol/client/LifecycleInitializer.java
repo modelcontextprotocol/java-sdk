@@ -309,7 +309,7 @@ class LifecycleInitializer {
 				initializeRequest, McpAsyncClient.INITIALIZE_RESULT_TYPE_REF);
 
 		return result.flatMap(initializeResult -> {
-			logger.info("Server response with Protocol: {}, Capabilities: {}, Info: {} and Instructions {}",
+			logger.info("Server initialization result with Protocol: {}, Capabilities: {}, Info: {} and Instructions {}",
 					initializeResult.protocolVersion(), initializeResult.capabilities(), initializeResult.serverInfo(),
 					initializeResult.instructions());
 

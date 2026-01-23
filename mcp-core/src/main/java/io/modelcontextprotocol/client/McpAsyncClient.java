@@ -396,9 +396,7 @@ public class McpAsyncClient {
 	 * @return A Mono that completes when the connection is closed
 	 */
 	public Mono<Void> closeGracefully() {
-		return Mono.defer(() -> {
-			return this.initializer.closeGracefully().then(transport.closeGracefully());
-		});
+		return transport.closeGracefully().then(this.initializer.closeGracefully().then());
 	}
 
 	// --------------------------

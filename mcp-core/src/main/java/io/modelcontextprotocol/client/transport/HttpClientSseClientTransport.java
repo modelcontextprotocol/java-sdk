@@ -365,6 +365,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 						try {
 							if (ENDPOINT_EVENT_TYPE.equals(responseEvent.sseEvent().event())) {
 								String messageEndpointUri = responseEvent.sseEvent().data();
+								logger.info("Received message endpoint URI: {}", messageEndpointUri);
 								if (this.messageEndpointSink.tryEmitValue(messageEndpointUri).isSuccess()) {
 									sink.success();
 									return Flux.empty(); // No further processing needed

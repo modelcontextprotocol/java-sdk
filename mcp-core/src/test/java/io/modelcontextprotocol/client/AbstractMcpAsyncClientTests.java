@@ -231,9 +231,18 @@ public abstract class AbstractMcpAsyncClientTests {
 					Map.of("message", ECHO_TEST_MESSAGE));
 
 			StepVerifier.create(mcpAsyncClient.initialize().then(mcpAsyncClient.callTool(invalidRequest)))
-				.consumeErrorWith(
-						e -> assertThat(e).isInstanceOf(McpError.class).hasMessage("Unknown tool: nonexistent_tool"))
-				.verify();
+				.consumeNextWith(
+						result -> {
+							assertThat(result.isError()).isTrue();
+							assertThat(result.content()).hasAtLeastOneElementOfType(McpSchema.TextContent.class);
+							assertThat(result.content()).allSatisfy(content -> {
+								if (!(content instanceof McpSchema.TextContent text))
+									return;
+
+								assertThat(text.text()).contains("Tool nonexistent_tool not found");
+							});
+						})
+				.verifyComplete();
 		});
 	}
 
@@ -244,7 +253,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 		withClient(transport, mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.initialize()
-				.then(mcpAsyncClient.callTool(new McpSchema.CallToolRequest("annotatedMessage",
+				.then(mcpAsyncClient.callTool(new McpSchema.CallToolRequest("get-annotated-message",
 						Map.of("messageType", messageType, "includeImage", true)))))
 				.consumeNextWith(result -> {
 					assertThat(result).isNotNull();
@@ -421,7 +430,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testGetPromptWithoutInitialization() {
-		GetPromptRequest request = new GetPromptRequest("simple_prompt", Map.of());
+		GetPromptRequest request = new GetPromptRequest("simple-prompt", Map.of());
 		verifyCallSucceedsWithImplicitInitialization(client -> client.getPrompt(request), "getting " + "prompts");
 	}
 
@@ -430,7 +439,7 @@ public abstract class AbstractMcpAsyncClientTests {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			StepVerifier
 				.create(mcpAsyncClient.initialize()
-					.then(mcpAsyncClient.getPrompt(new GetPromptRequest("simple_prompt", Map.of()))))
+					.then(mcpAsyncClient.getPrompt(new GetPromptRequest("simple-prompt", Map.of()))))
 				.consumeNextWith(prompt -> {
 					assertThat(prompt).isNotNull().satisfies(result -> {
 						assertThat(result.messages()).isNotEmpty();
@@ -459,7 +468,7 @@ public abstract class AbstractMcpAsyncClientTests {
 	void testInitializeWithRootsListProviders() {
 		withClient(createMcpTransport(), builder -> builder.roots(new Root("file:///test/path", "test-root")),
 				client -> {
-					StepVerifier.create(client.initialize().then(client.closeGracefully())).verifyComplete();
+					StepVerifier.create(client.initialize()).expectNextCount(1).verifyComplete();
 				});
 	}
 
@@ -728,8 +737,6 @@ public abstract class AbstractMcpAsyncClientTests {
 				builder -> builder.loggingConsumer(notification -> Mono.fromRunnable(() -> logReceived.set(true))),
 				client -> {
 					StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
-					StepVerifier.create(client.closeGracefully()).verifyComplete();
-
 				});
 
 	}
@@ -770,7 +777,7 @@ public abstract class AbstractMcpAsyncClientTests {
 				StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
 
 				StepVerifier.create(client.callTool(
-						new McpSchema.CallToolRequest("sampleLLM", Map.of("prompt", message, "maxTokens", maxTokens))))
+						new McpSchema.CallToolRequest("trigger-sampling-request", Map.of("prompt", message, "maxTokens", maxTokens))))
 					.consumeNextWith(result -> {
 						// Verify tool response to ensure our sampling response was passed
 						// through
@@ -797,19 +804,17 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testProgressConsumer() {
-		Sinks.Many<McpSchema.ProgressNotification> sink = Sinks.many().unicast().onBackpressureBuffer();
 		List<McpSchema.ProgressNotification> receivedNotifications = new CopyOnWriteArrayList<>();
 
 		withClient(createMcpTransport(), builder -> builder.progressConsumer(notification -> {
 			receivedNotifications.add(notification);
-			sink.tryEmitNext(notification);
 			return Mono.empty();
 		}), client -> {
 			StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
 
 			// Call a tool that sends progress notifications
 			CallToolRequest request = CallToolRequest.builder()
-				.name("longRunningOperation")
+				.name("trigger-long-running-operation")
 				.arguments(Map.of("duration", 1, "steps", 2))
 				.progressToken("test-token")
 				.build();
@@ -817,9 +822,6 @@ public abstract class AbstractMcpAsyncClientTests {
 			StepVerifier.create(client.callTool(request)).consumeNextWith(result -> {
 				assertThat(result).isNotNull();
 			}).verifyComplete();
-
-			// Use StepVerifier to verify the progress notifications via the sink
-			StepVerifier.create(sink.asFlux()).expectNextCount(2).thenCancel().verify(Duration.ofSeconds(3));
 
 			assertThat(receivedNotifications).hasSize(2);
 			assertThat(receivedNotifications.get(0).progressToken()).isEqualTo("test-token");

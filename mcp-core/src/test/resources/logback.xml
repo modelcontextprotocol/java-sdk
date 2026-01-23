@@ -9,13 +9,15 @@
     </appender>
 
     <!-- Main MCP package -->
-    <logger name="org.springframework.ai.mcp" level="INFO"/>
+    <logger name="io.modelcontextprotocol" level="DEBUG"/>
 
     <!-- Client packages -->
-    <logger name="org.springframework.ai.mcp.client" level="INFO"/>
+    <logger name="io.modelcontextprotocol.client" level="DEBUG"/>
 
     <!-- Spec package -->
-    <logger name="org.springframework.ai.mcp.spec" level="INFO"/>
+    <logger name="oio.modelcontextprotocol.spec" level="INFO"/>
+
+    <logger name="org.testcontainers.utility.RyukResourceReaper" level="ERROR"/>
 
     <!-- Root logger -->
     <root level="INFO">
