@@ -5,7 +5,6 @@
 package io.modelcontextprotocol.server;
 
 import io.modelcontextprotocol.common.McpTransportContext;
-import io.modelcontextprotocol.experimental.tasks.TaskMessageQueue;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
@@ -155,49 +154,8 @@ public class McpSyncServerExchange {
 	 * @see McpSyncServer#notifyTaskStatus(McpSchema.TaskStatusNotification) for
 	 * broadcasting to all clients
 	 */
-	public void notifyTaskStatus(McpSchema.TaskStatusNotification notification) {
-		this.exchange.notifyTaskStatus(notification).block();
-	}
-
-	/**
-	 * Gets the current task ID if this exchange is operating within a task context.
-	 * <p>
-	 * <strong>Warning:</strong> This is an experimental API that may change in future
-	 * releases. Use with caution in production environments.
-	 * @return The current task ID, or null if not in a task context
-	 */
-	public String getCurrentTaskId() {
-		return this.exchange.getCurrentTaskId();
-	}
-
-	/**
-	 * Creates a new exchange scoped to the specified task ID.
-	 * <p>
-	 * The returned exchange will have its task context set, making
-	 * {@link #getCurrentTaskId()} return the specified task ID.
-	 * <p>
-	 * <strong>Warning:</strong> This is an experimental API that may change in future
-	 * releases. Use with caution in production environments.
-	 * @param taskId The task ID to scope this exchange to
-	 * @return A new exchange with task context set
-	 */
-	public McpSyncServerExchange withTaskContext(String taskId) {
-		return new McpSyncServerExchange(this.exchange.withTaskContext(taskId));
-	}
-
-	/**
-	 * Creates a new exchange scoped to the specified task ID and message queue.
-	 * <p>
-	 * The returned exchange will have its task context and message queue set.
-	 * <p>
-	 * <strong>Warning:</strong> This is an experimental API that may change in future
-	 * releases. Use with caution in production environments.
-	 * @param taskId The task ID to scope this exchange to
-	 * @param queue The message queue for task communication
-	 * @return A new exchange with task context and message queue set
-	 */
-	public McpSyncServerExchange withTaskContext(String taskId, TaskMessageQueue queue) {
-		return new McpSyncServerExchange(this.exchange.withTaskContext(taskId, queue));
+	public void taskStatusNotification(McpSchema.TaskStatusNotification notification) {
+		this.exchange.taskStatusNotification(notification).block();
 	}
 
 	/**

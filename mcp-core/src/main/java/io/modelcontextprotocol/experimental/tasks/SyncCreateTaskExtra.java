@@ -8,6 +8,8 @@ import java.util.function.Consumer;
 
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import io.modelcontextprotocol.spec.McpSchema.TaskStatus;
 
 /**
  * Synchronous context passed to {@link SyncCreateTaskHandler} providing access to task
@@ -22,22 +24,12 @@ import io.modelcontextprotocol.spec.McpSchema;
  *
  * <pre>{@code
  * SyncCreateTaskHandler handler = (args, extra) -> {
- *     // Decide TTL based on request or use a default
- *     long ttl = extra.requestTtl() != null
- *         ? Math.min(extra.requestTtl(), Duration.ofMinutes(30).toMillis())
- *         : Duration.ofMinutes(5).toMillis();
+ *     McpSchema.Task task = extra.createTask(opts -> opts.pollInterval(500L));
  *
- *     Task task = extra.taskStore()
- *         .createTask(CreateTaskOptions.builder()
- *             .requestedTtl(ttl)
- *             .sessionId(extra.sessionId())
- *             .build())
- *         .block();
+ *     // Start external job - completion happens via getTaskHandler or external callback
+ *     externalApi.startJob(task.taskId(), args);
  *
- *     // Use exchange for client communication
- *     startBackgroundWork(task.taskId(), args, extra.exchange());
- *
- *     return new McpSchema.CreateTaskResult(task, null);
+ *     return McpSchema.CreateTaskResult.builder().task(task).build();
  * };
  * }</pre>
  *
@@ -52,37 +44,8 @@ import io.modelcontextprotocol.spec.McpSchema;
  *
  * @see SyncCreateTaskHandler
  * @see CreateTaskExtra
- * @see TaskStore
- * @see TaskMessageQueue
  */
 public interface SyncCreateTaskExtra {
-
-	/**
-	 * The task store for creating and managing tasks.
-	 *
-	 * <p>
-	 * Tools use this to create tasks with their desired configuration:
-	 *
-	 * <pre>{@code
-	 * Task task = extra.taskStore().createTask(CreateTaskOptions.builder()
-	 *     .requestedTtl(Duration.ofMinutes(5).toMillis())
-	 *     .pollInterval(Duration.ofSeconds(1).toMillis())
-	 *     .sessionId(extra.sessionId())
-	 *     .build()).block();
-	 * }</pre>
-	 * @return the TaskStore instance
-	 */
-	TaskStore<McpSchema.ServerTaskPayloadResult> taskStore();
-
-	/**
-	 * The message queue for task communication during INPUT_REQUIRED state.
-	 *
-	 * <p>
-	 * Use this for interactive tasks that need to communicate with the client during
-	 * execution.
-	 * @return the TaskMessageQueue instance, or null if not configured
-	 */
-	TaskMessageQueue taskMessageQueue();
 
 	/**
 	 * The server exchange for client interaction.
@@ -135,7 +98,7 @@ public interface SyncCreateTaskExtra {
 	McpSchema.Request originatingRequest();
 
 	// --------------------------
-	// Convenience Methods
+	// Task Creation
 	// --------------------------
 
 	/**
@@ -143,28 +106,20 @@ public interface SyncCreateTaskExtra {
 	 *
 	 * <p>
 	 * This method automatically uses {@link #originatingRequest()}, {@link #sessionId()},
-	 * and {@link #requestTtl()} from this context, eliminating common boilerplate:
+	 * and {@link #requestTtl()} from this context.
 	 *
 	 * <pre>{@code
-	 * // Instead of:
-	 * Task task = extra.taskStore().createTask(CreateTaskOptions.builder(extra.originatingRequest())
-	 *     .sessionId(extra.sessionId())
-	 *     .requestedTtl(extra.requestTtl())
-	 *     .build()).block();
-	 *
-	 * // You can simply use:
-	 * Task task = extra.createTask();
+	 * McpSchema.Task task = extra.createTask();
+	 * // Start background work that will complete the task later
+	 * new Thread(() -> {
+	 *     CallToolResult result = doWork(args);
+	 *     extra.completeTask(task.taskId(), result);
+	 * }).start();
+	 * return McpSchema.CreateTaskResult.builder().task(task).build();
 	 * }</pre>
-	 * @return the created Task
+	 * @return the created task
 	 */
-	default McpSchema.Task createTask() {
-		return taskStore()
-			.createTask(CreateTaskOptions.builder(originatingRequest())
-				.sessionId(sessionId())
-				.requestedTtl(requestTtl())
-				.build())
-			.block();
-	}
+	McpSchema.Task createTask();
 
 	/**
 	 * Convenience method to create a task with custom options, but inheriting session
@@ -172,33 +127,80 @@ public interface SyncCreateTaskExtra {
 	 *
 	 * <p>
 	 * This method pre-populates the builder with {@link #originatingRequest()},
-	 * {@link #sessionId()}, and {@link #requestTtl()}, then allows customization:
+	 * {@link #sessionId()}, and {@link #requestTtl()}, then allows customization.
 	 *
 	 * <pre>{@code
 	 * // Create a task with custom poll interval:
-	 * Task task = extra.createTask(opts -> opts.pollInterval(500L));
-	 *
-	 * // Create a task with custom TTL (ignoring client request):
-	 * Task task = extra.createTask(opts -> opts.requestedTtl(Duration.ofMinutes(10).toMillis()));
+	 * McpSchema.Task task = extra.createTask(opts -> opts.pollInterval(500L));
+	 * // Pass task ID explicitly for side-channeling
+	 * extra.exchange().createElicitation(request, task.taskId());
 	 * }</pre>
 	 * @param customizer function to customize options beyond the defaults
-	 * @return the created Task
+	 * @return the created task
 	 */
-	default McpSchema.Task createTask(Consumer<CreateTaskOptions.Builder> customizer) {
-		CreateTaskOptions.Builder builder = CreateTaskOptions.builder(originatingRequest())
-			.sessionId(sessionId())
-			.requestedTtl(requestTtl());
-		customizer.accept(builder);
-		return taskStore().createTask(builder.build()).block();
-	}
+	McpSchema.Task createTask(Consumer<CreateTaskOptions.Builder> customizer);
+
+	// --------------------------
+	// Task Lifecycle
+	// --------------------------
 
 	/**
-	 * Create a TaskContext for managing the given task's lifecycle.
-	 * @param task the task to create a context for
-	 * @return a TaskContext bound to the given task and this extra's infrastructure
+	 * Complete a task with a successful result.
+	 *
+	 * <p>
+	 * This marks the task as {@link TaskStatus#COMPLETED} and stores the result for
+	 * client retrieval.
+	 *
+	 * <pre>{@code
+	 * // In a getTaskHandler or external callback:
+	 * CallToolResult result = externalApi.getJobResult(taskId);
+	 * if (result != null) {
+	 *     extra.completeTask(taskId, result);
+	 * }
+	 * }</pre>
+	 * @param taskId the ID of the task to complete
+	 * @param result the tool result to store
 	 */
-	default TaskContext createTaskContext(McpSchema.Task task) {
-		return new DefaultTaskContext<>(task.taskId(), sessionId(), taskStore(), taskMessageQueue());
-	}
+	void completeTask(String taskId, CallToolResult result);
+
+	/**
+	 * Mark a task as failed with an error message.
+	 *
+	 * <p>
+	 * This marks the task as {@link TaskStatus#FAILED} with the provided message.
+	 *
+	 * <pre>{@code
+	 * // In a getTaskHandler or external callback:
+	 * try {
+	 *     CallToolResult result = externalApi.getJobResult(taskId);
+	 *     extra.completeTask(taskId, result);
+	 * } catch (Exception e) {
+	 *     extra.failTask(taskId, e.getMessage());
+	 * }
+	 * }</pre>
+	 * @param taskId the ID of the task to fail
+	 * @param message the error message describing what went wrong
+	 */
+	void failTask(String taskId, String message);
+
+	/**
+	 * Set a task to INPUT_REQUIRED status, triggering side-channel delivery.
+	 *
+	 * <p>
+	 * When a task is in {@link TaskStatus#INPUT_REQUIRED}, the client will poll via
+	 * {@code tasks/result} and receive any queued notifications or requests via
+	 * side-channeling.
+	 *
+	 * <pre>{@code
+	 * McpSchema.Task task = extra.createTask();
+	 * // Queue a notification for side-channel delivery
+	 * extra.exchange().loggingNotification(notification, task.taskId());
+	 * extra.setInputRequired(task.taskId(), "Waiting for user input");
+	 * return McpSchema.CreateTaskResult.builder().task(task).build();
+	 * }</pre>
+	 * @param taskId the ID of the task
+	 * @param message a status message describing what input is required
+	 */
+	void setInputRequired(String taskId, String message);
 
 }

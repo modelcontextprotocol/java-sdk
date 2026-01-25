@@ -21,20 +21,12 @@ import io.modelcontextprotocol.spec.McpSchema;
  *
  * <pre>{@code
  * SyncCreateTaskHandler handler = (args, extra) -> {
- *     // Tool decides TTL directly
- *     long ttl = Duration.ofMinutes(5).toMillis();
+ *     McpSchema.Task task = extra.createTask(opts -> opts.pollInterval(500L));
  *
- *     Task task = extra.taskStore()
- *         .createTask(CreateTaskOptions.builder()
- *             .requestedTtl(ttl)
- *             .sessionId(extra.sessionId())
- *             .build())
- *         .block();
+ *     // Start external job - completion happens via getTaskHandler or external callback
+ *     externalApi.startJob(task.taskId(), args);
  *
- *     // Start background work (blocking or async)
- *     startBackgroundWork(task.taskId(), args);
- *
- *     return new McpSchema.CreateTaskResult(task, null);
+ *     return McpSchema.CreateTaskResult.builder().task(task).build();
  * };
  * }</pre>
  *
@@ -59,7 +51,8 @@ public interface SyncCreateTaskHandler {
 	 * <li>Returning the created task wrapped in a CreateTaskResult</li>
 	 * </ul>
 	 * @param args The parsed tool arguments from the CallToolRequest
-	 * @param extra Context providing taskStore, exchange, and request metadata
+	 * @param extra Context providing task lifecycle methods, exchange, and request
+	 * metadata
 	 * @return the CreateTaskResult containing the created Task
 	 */
 	McpSchema.CreateTaskResult createTask(Map<String, Object> args, SyncCreateTaskExtra extra);

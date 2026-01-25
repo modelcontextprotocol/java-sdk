@@ -31,18 +31,12 @@ import io.modelcontextprotocol.util.Assert;
  *     .name("long-computation")
  *     .description("A long-running computation task")
  *     .createTaskHandler((args, extra) -> {
- *         long ttl = Duration.ofMinutes(5).toMillis();
- *         Task task = extra.taskStore()
- *             .createTask(CreateTaskOptions.builder()
- *                 .requestedTtl(ttl)
- *                 .sessionId(extra.sessionId())
- *                 .build())
- *             .block();
+ *         McpSchema.Task task = extra.createTask(opts -> opts.pollInterval(500L));
  *
- *         // Start background work
- *         startBackgroundComputation(task.taskId(), args);
+ *         // Start external job - completion happens via getTaskHandler or external callback
+ *         externalApi.startJob(task.taskId(), args);
  *
- *         return new McpSchema.CreateTaskResult(task, null);
+ *         return McpSchema.CreateTaskResult.builder().task(task).build();
  *     })
  *     .build();
  *
@@ -172,16 +166,12 @@ public final class TaskAwareSyncToolSpecification {
 		 *
 		 * <pre>{@code
 		 * .createTaskHandler((args, extra) -> {
-		 *     long ttl = Duration.ofMinutes(5).toMillis();
-		 *     Task task = extra.taskStore()
-		 *         .createTask(CreateTaskOptions.builder()
-		 *             .requestedTtl(ttl)
-		 *             .sessionId(extra.sessionId())
-		 *             .build())
-		 *         .block();
+		 *     McpSchema.Task task = extra.createTask(opts -> opts.pollInterval(500L));
 		 *
-		 *     startBackgroundWork(task.taskId(), args);
-		 *     return new McpSchema.CreateTaskResult(task, null);
+		 *     // Start external job - completion happens via getTaskHandler or external callback
+		 *     externalApi.startJob(task.taskId(), args);
+		 *
+		 *     return McpSchema.CreateTaskResult.builder().task(task).build();
 		 * })
 		 * }</pre>
 		 * @param createTaskHandler the task creation handler

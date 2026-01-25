@@ -4,9 +4,14 @@
 
 package io.modelcontextprotocol.experimental.tasks;
 
+import java.util.function.Consumer;
+
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import io.modelcontextprotocol.spec.McpSchema.TaskStatus;
 import io.modelcontextprotocol.util.Assert;
+import reactor.core.publisher.Mono;
 
 /**
  * Default implementation of {@link CreateTaskExtra}.
@@ -61,15 +66,31 @@ public class DefaultCreateTaskExtra implements CreateTaskExtra {
 		this.originatingRequest = originatingRequest;
 	}
 
-	@Override
-	public TaskStore<McpSchema.ServerTaskPayloadResult> taskStore() {
+	// --------------------------
+	// Internal accessors (for framework use only)
+	// --------------------------
+
+	/**
+	 * Returns the task store. This method is package-private for internal framework use
+	 * only.
+	 * @return the task store
+	 */
+	TaskStore<McpSchema.ServerTaskPayloadResult> taskStore() {
 		return this.taskStore;
 	}
 
-	@Override
-	public TaskMessageQueue taskMessageQueue() {
+	/**
+	 * Returns the message queue. This method is package-private for internal framework
+	 * use only.
+	 * @return the message queue, or null if not configured
+	 */
+	TaskMessageQueue taskMessageQueue() {
 		return this.taskMessageQueue;
 	}
+
+	// --------------------------
+	// CreateTaskExtra implementation
+	// --------------------------
 
 	@Override
 	public McpAsyncServerExchange exchange() {
@@ -89,6 +110,38 @@ public class DefaultCreateTaskExtra implements CreateTaskExtra {
 	@Override
 	public McpSchema.Request originatingRequest() {
 		return this.originatingRequest;
+	}
+
+	@Override
+	public Mono<McpSchema.Task> createTask() {
+		return this.taskStore.createTask(CreateTaskOptions.builder(originatingRequest())
+			.sessionId(sessionId())
+			.requestedTtl(requestTtl())
+			.build());
+	}
+
+	@Override
+	public Mono<McpSchema.Task> createTask(Consumer<CreateTaskOptions.Builder> customizer) {
+		CreateTaskOptions.Builder builder = CreateTaskOptions.builder(originatingRequest())
+			.sessionId(sessionId())
+			.requestedTtl(requestTtl());
+		customizer.accept(builder);
+		return this.taskStore.createTask(builder.build());
+	}
+
+	@Override
+	public Mono<Void> completeTask(String taskId, CallToolResult result) {
+		return this.taskStore.storeTaskResult(taskId, this.sessionId, TaskStatus.COMPLETED, result);
+	}
+
+	@Override
+	public Mono<Void> failTask(String taskId, String message) {
+		return this.taskStore.updateTaskStatus(taskId, this.sessionId, TaskStatus.FAILED, message);
+	}
+
+	@Override
+	public Mono<Void> setInputRequired(String taskId, String message) {
+		return this.taskStore.updateTaskStatus(taskId, this.sessionId, TaskStatus.INPUT_REQUIRED, message);
 	}
 
 }
