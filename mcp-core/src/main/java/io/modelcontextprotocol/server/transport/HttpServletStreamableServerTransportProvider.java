@@ -511,15 +511,16 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				HttpServletStreamableMcpSessionTransport sessionTransport = new HttpServletStreamableMcpSessionTransport(
 						sessionId, asyncContext, response.getWriter());
 
-				try {
-					session.responseStream(jsonrpcRequest, sessionTransport)
-						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
-						.block();
-				}
-				catch (Exception e) {
-					logger.error("Failed to handle request stream: {}", e.getMessage());
-					asyncContext.complete();
-				}
+				// Subscribe asynchronously instead of blocking - this allows
+				// bidirectional
+				// communication during request handling (e.g., side-channeling for tasks)
+				session.responseStream(jsonrpcRequest, sessionTransport)
+					.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
+					.doOnError(e -> {
+						logger.error("Failed to handle request stream: {}", e.getMessage());
+						asyncContext.complete();
+					})
+					.subscribe();
 			}
 			else {
 				this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,

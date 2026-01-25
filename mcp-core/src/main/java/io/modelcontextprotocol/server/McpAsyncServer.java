@@ -16,6 +16,7 @@ import java.util.function.BiFunction;
 
 import io.modelcontextprotocol.experimental.tasks.CreateTaskExtra;
 import io.modelcontextprotocol.experimental.tasks.DefaultCreateTaskExtra;
+import io.modelcontextprotocol.experimental.tasks.QueuedMessage;
 import io.modelcontextprotocol.experimental.tasks.TaskAwareAsyncToolSpecification;
 import io.modelcontextprotocol.experimental.tasks.TaskDefaults;
 import io.modelcontextprotocol.experimental.tasks.TaskMessageQueue;
@@ -190,7 +191,8 @@ public class McpAsyncServer {
 		this.protocolVersions = mcpTransportProvider.protocolVersions();
 
 		mcpTransportProvider.setSessionFactory(transport -> new McpServerSession(UUID.randomUUID().toString(),
-				requestTimeout, transport, this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers));
+				requestTimeout, transport, this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers,
+				this.taskMessageQueue, this.taskStore));
 	}
 
 	McpAsyncServer(McpStreamableServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
@@ -229,8 +231,9 @@ public class McpAsyncServer {
 
 		this.protocolVersions = mcpTransportProvider.protocolVersions();
 
-		mcpTransportProvider.setSessionFactory(new DefaultMcpStreamableServerSessionFactory(requestTimeout,
-				this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers));
+		mcpTransportProvider.setSessionFactory(
+				new DefaultMcpStreamableServerSessionFactory(requestTimeout, this::asyncInitializeRequestHandler,
+						requestHandlers, notificationHandlers, this.taskMessageQueue, this.taskStore));
 	}
 
 	private Map<String, McpNotificationHandler> prepareNotificationHandlers(McpServerFeatures.Async features) {
@@ -1568,25 +1571,173 @@ public class McpAsyncServer {
 	 * Default implementation for tasks/result that uses the task store. Uses a
 	 * pre-validated task to avoid redundant lookups and ensure session validation has
 	 * already occurred.
+	 *
+	 * <p>
+	 * This method handles the side-channeling flow for INPUT_REQUIRED tasks:
+	 * <ol>
+	 * <li>If task is already terminal, return result immediately</li>
+	 * <li>If task is INPUT_REQUIRED and has queued messages, process them via
+	 * side-channel</li>
+	 * <li>For WORKING status, watch until terminal</li>
+	 * </ol>
 	 */
 	private Mono<McpSchema.Result> defaultGetTaskResult(McpAsyncServerExchange exchange,
 			McpSchema.GetTaskPayloadRequest request, McpSchema.Task task) {
 		String sessionId = exchange.sessionId();
+		String taskId = request.taskId();
+
+		logger.debug("defaultGetTaskResult: Task {} status={}, messageQueue={}", taskId, task.status(),
+				this.taskMessageQueue != null ? "present" : "null");
 
 		// If already terminal, return result immediately
 		if (task.isTerminal()) {
-			return fetchTaskResult(request.taskId(), sessionId);
+			logger.debug("defaultGetTaskResult: Task {} is terminal, fetching result", taskId);
+			return fetchTaskResult(taskId, sessionId);
 		}
 
-		// Block until task reaches terminal state (per SEP-1686 spec)
-		return this.taskStore.watchTaskUntilTerminal(request.taskId(), sessionId, getEffectiveAutomaticPollingTimeout())
+		// Handle INPUT_REQUIRED by processing queued messages (side-channeling)
+		if (task.status() == McpSchema.TaskStatus.INPUT_REQUIRED && this.taskMessageQueue != null) {
+			logger.debug("defaultGetTaskResult: Task {} is INPUT_REQUIRED, starting side-channel processing", taskId);
+			return processQueuedMessagesAndWaitForTerminal(exchange, request, task);
+		}
+
+		// For WORKING status, just wait until terminal
+		return watchAndFetchResult(taskId, sessionId);
+	}
+
+	/**
+	 * Watches a task until it reaches terminal state, then fetches the result.
+	 */
+	private Mono<McpSchema.Result> watchAndFetchResult(String taskId, String sessionId) {
+		return this.taskStore.watchTaskUntilTerminal(taskId, sessionId, getEffectiveAutomaticPollingTimeout())
 			.last()
 			.onErrorResume(java.util.concurrent.TimeoutException.class,
 					e -> Mono.error(McpError.builder(ErrorCodes.INTERNAL_ERROR)
 						.message("Task did not complete within timeout")
-						.data("Task ID: " + request.taskId())
+						.data("Task ID: " + taskId)
 						.build()))
-			.flatMap(terminalTask -> fetchTaskResult(request.taskId(), sessionId));
+			.flatMap(terminalTask -> fetchTaskResult(taskId, sessionId));
+	}
+
+	/**
+	 * Processes all queued messages for an INPUT_REQUIRED task via side-channeling, then
+	 * waits for terminal state.
+	 *
+	 * <p>
+	 * This is the core side-channeling handler: it dequeues messages, sends them to the
+	 * client, and enqueues responses back. When the tool's waitForResponse() sees the
+	 * response, it unblocks and continues execution.
+	 */
+	private Mono<McpSchema.Result> processQueuedMessagesAndWaitForTerminal(McpAsyncServerExchange exchange,
+			McpSchema.GetTaskPayloadRequest request, McpSchema.Task task) {
+
+		String taskId = request.taskId();
+		String sessionId = exchange.sessionId();
+
+		logger.debug("processQueuedMessagesAndWaitForTerminal: Starting side-channel processing for task {}", taskId);
+
+		// Process all queued actionable messages
+		return processAllQueuedMessages(exchange, taskId)
+			.doOnSuccess(v -> logger
+				.debug("processQueuedMessagesAndWaitForTerminal: Finished processing queue for task {}", taskId))
+			.then(Mono.defer(() -> pollAndProcessUntilTerminal(exchange, request)));
+	}
+
+	/**
+	 * Processes all queued actionable messages for a task. Uses Flux for clean iteration.
+	 */
+	private Mono<Void> processAllQueuedMessages(McpAsyncServerExchange exchange, String taskId) {
+		return this.taskMessageQueue.dequeueAll(taskId)
+			.flatMapMany(Flux::fromIterable)
+			.concatMap(msg -> processMessage(exchange, msg, taskId)) // Process in order
+			.then();
+	}
+
+	/**
+	 * Processes a single queued message by sending it to the client.
+	 */
+	private Mono<Void> processMessage(McpAsyncServerExchange exchange, QueuedMessage msg, String taskId) {
+		// Handle Request messages (need to send and wait for response)
+		if (msg instanceof QueuedMessage.Request req) {
+			return sendRequestAndEnqueueResponse(exchange, req, taskId);
+		}
+
+		// Handle Notification messages (no response expected)
+		if (msg instanceof QueuedMessage.Notification notif) {
+			return sendNotificationToClient(exchange, notif);
+		}
+
+		// Response messages should never be returned by dequeue() - but handle gracefully
+		return Mono.empty();
+	}
+
+	/**
+	 * Sends a request to the client and enqueues the response for waitForResponse() to
+	 * pick up.
+	 */
+	private Mono<Void> sendRequestAndEnqueueResponse(McpAsyncServerExchange exchange, QueuedMessage.Request req,
+			String taskId) {
+		String requestId = String.valueOf(req.requestId());
+
+		logger.debug("sendRequestAndEnqueueResponse: Sending {} request {} to client for task {}", req.method(),
+				requestId, taskId);
+
+		// Determine the result TypeRef based on method
+		TypeRef<? extends McpSchema.Result> resultTypeRef = getResultTypeRef(req.method());
+
+		return exchange.getSession().sendRequest(req.method(), req.request(), resultTypeRef).flatMap(result -> {
+			logger.debug("sendRequestAndEnqueueResponse: Got response for request {}, enqueueing for task {}",
+					requestId, taskId);
+			// Enqueue response for the tool's waitForResponse() to retrieve
+			QueuedMessage.Response response = new QueuedMessage.Response(requestId, result);
+			return this.taskMessageQueue.enqueue(taskId, response);
+		});
+	}
+
+	/**
+	 * Returns the appropriate TypeRef for deserializing the result of a side-channel
+	 * request.
+	 */
+	private TypeRef<? extends McpSchema.Result> getResultTypeRef(String method) {
+		return switch (method) {
+			case McpSchema.METHOD_ELICITATION_CREATE -> new TypeRef<McpSchema.ElicitResult>() {
+			};
+			case McpSchema.METHOD_SAMPLING_CREATE_MESSAGE -> new TypeRef<McpSchema.CreateMessageResult>() {
+			};
+			default -> throw new IllegalArgumentException("Unsupported side-channel method: " + method);
+		};
+	}
+
+	/**
+	 * Sends a notification to the client without waiting for a response.
+	 */
+	private Mono<Void> sendNotificationToClient(McpAsyncServerExchange exchange, QueuedMessage.Notification notif) {
+		return exchange.getSession().sendNotification(notif.method(), notif.notification());
+	}
+
+	/**
+	 * Polls the task and processes messages until it reaches terminal state.
+	 *
+	 * <p>
+	 * This method handles the case where a task may go back to INPUT_REQUIRED multiple
+	 * times (e.g., multiple rounds of elicitation).
+	 */
+	private Mono<McpSchema.Result> pollAndProcessUntilTerminal(McpAsyncServerExchange exchange,
+			McpSchema.GetTaskPayloadRequest request) {
+
+		String taskId = request.taskId();
+		String sessionId = exchange.sessionId();
+
+		return this.taskStore.watchTaskUntilTerminal(taskId, sessionId, getEffectiveAutomaticPollingTimeout())
+			.takeUntil(t -> t.isTerminal() || t.status() == McpSchema.TaskStatus.INPUT_REQUIRED)
+			.last()
+			.flatMap(t -> {
+				if (t.isTerminal()) {
+					return fetchTaskResult(taskId, sessionId);
+				}
+				// Went back to INPUT_REQUIRED - recurse to process more messages
+				return processQueuedMessagesAndWaitForTerminal(exchange, request, t);
+			});
 	}
 
 	/**

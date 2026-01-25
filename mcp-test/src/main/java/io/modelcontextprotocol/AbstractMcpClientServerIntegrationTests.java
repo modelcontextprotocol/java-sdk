@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -1832,6 +1833,28 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	/** Creates a client with custom capabilities and optional elicitation handler. */
 	protected McpSyncClient createTaskClient(String clientType, String name, ClientCapabilities capabilities,
 			Function<ElicitRequest, ElicitResult> elicitationHandler) {
+		return createTaskClient(clientType, name, capabilities, elicitationHandler, null);
+	}
+
+	/**
+	 * Creates a client with custom capabilities and optional elicitation/sampling
+	 * handlers.
+	 */
+	protected McpSyncClient createTaskClient(String clientType, String name, ClientCapabilities capabilities,
+			Function<ElicitRequest, ElicitResult> elicitationHandler,
+			Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler) {
+		return createTaskClient(clientType, name, capabilities, elicitationHandler, samplingHandler, null, null);
+	}
+
+	/**
+	 * Creates a client with custom capabilities, optional handlers, and notification
+	 * consumers.
+	 */
+	protected McpSyncClient createTaskClient(String clientType, String name, ClientCapabilities capabilities,
+			Function<ElicitRequest, ElicitResult> elicitationHandler,
+			Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler,
+			Consumer<McpSchema.LoggingMessageNotification> loggingConsumer,
+			Consumer<McpSchema.ProgressNotification> progressConsumer) {
 		var builder = clientBuilders.get(clientType)
 			.clientInfo(new McpSchema.Implementation(name, "0.0.0"))
 			.capabilities(capabilities)
@@ -1839,6 +1862,18 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 		if (elicitationHandler != null) {
 			builder.elicitation(elicitationHandler);
+		}
+
+		if (samplingHandler != null) {
+			builder.sampling(samplingHandler);
+		}
+
+		if (loggingConsumer != null) {
+			builder.loggingConsumer(loggingConsumer);
+		}
+
+		if (progressConsumer != null) {
+			builder.progressConsumer(progressConsumer);
 		}
 
 		return builder.build();
@@ -2027,18 +2062,18 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		}
 	}
 
-	// ===== INPUT_REQUIRED and Elicitation Flow Tests =====
+	// ===== INPUT_REQUIRED and Side-Channeling Flow Tests =====
 
 	/**
-	 * Test: Elicitation during task execution.
-	 *
-	 * <p>
-	 * This test demonstrates the elicitation flow during task execution:
+	 * Tests elicitation during task execution using the side-channeling flow. The flow
+	 * is:
 	 * <ol>
-	 * <li>Client calls task-augmented tool
-	 * <li>Tool creates task in WORKING state
-	 * <li>Tool needs user input → sends elicitation request
-	 * <li>Client responds to elicitation
+	 * <li>Client calls tool → server creates task (WORKING)
+	 * <li>Tool needs user input → sets INPUT_REQUIRED, enqueues request
+	 * <li>Client sees INPUT_REQUIRED, calls tasks/result
+	 * <li>Server dequeues request, sends elicitation to client
+	 * <li>Client responds via elicitation handler
+	 * <li>Server enqueues response → tool's waitForResponse() unblocks
 	 * <li>Task continues → COMPLETED
 	 * </ol>
 	 */
@@ -2050,45 +2085,42 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 		AtomicReference<String> taskIdRef = new AtomicReference<>();
 		AtomicReference<String> elicitationResponse = new AtomicReference<>();
-		CountDownLatch elicitationReceivedLatch = new CountDownLatch(1);
+		CountDownLatch toolCompletedLatch = new CountDownLatch(1);
 
 		// Tool that needs user input during execution
-		BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<CallToolResult>> handler = (exchange,
-				request) -> {
-			String taskId = exchange.getCurrentTaskId();
-			if (taskId == null) {
-				return Mono.error(new RuntimeException("Task ID not available"));
-			}
-			taskIdRef.set(taskId);
-
-			return exchange.createElicitation(new ElicitRequest("Please provide a number:", null, null, null))
-				.doOnNext(result -> {
-					elicitationResponse.set(result.content() != null && !result.content().isEmpty()
-							? result.content().get("value").toString() : "no-response");
-					elicitationReceivedLatch.countDown();
-				})
-				.then(Mono.defer(() -> Mono.just(CallToolResult.builder()
-					.content(List.of(new TextContent("Got user input: " + elicitationResponse.get())))
-					.isError(false)
-					.build())));
-		};
-
+		// Pass task ID explicitly to enable side-channeling
 		var tool = TaskAwareAsyncToolSpecification.builder()
-			.name("needs-input-tool")
-			.description("Test tool")
+			.name("elicitation-side-channel-tool")
+			.description("Tool that uses elicitation via side-channeling")
 			.inputSchema(EMPTY_JSON_SCHEMA)
 			.taskSupportMode(TaskSupportMode.REQUIRED)
-			.createTaskHandler((args, extra) -> extra.createTask().flatMap(task -> {
-				McpSchema.CallToolRequest syntheticRequest = new McpSchema.CallToolRequest("needs-input-tool", args,
-						null, null);
-				return handler.apply(extra.exchange().withTaskContext(task.taskId()), syntheticRequest)
-					.flatMap(result -> extra.taskStore()
-						.storeTaskResult(task.taskId(), extra.sessionId(), TaskStatus.COMPLETED, result)
-						.thenReturn(task))
-					.onErrorResume(error -> extra.taskStore()
-						.updateTaskStatus(task.taskId(), extra.sessionId(), TaskStatus.FAILED, error.getMessage())
-						.thenReturn(task));
-			}).map(task -> McpSchema.CreateTaskResult.builder().task(task).build()))
+			.createTaskHandler((args, extra) -> extra.createTask(opts -> opts.pollInterval(100L)).flatMap(task -> {
+				taskIdRef.set(task.taskId());
+
+				// Start background work asynchronously via side-channeling
+				extra.exchange()
+					.createElicitation(new ElicitRequest("Please provide a number:", null, null, null), task.taskId())
+					.flatMap(result -> {
+						String response = result.content() != null && !result.content().isEmpty()
+								? result.content().get("value").toString() : "no-response";
+						elicitationResponse.set(response);
+
+						// Complete the task with the result
+						CallToolResult toolResult = CallToolResult.builder()
+							.content(List.of(new TextContent("Got user input via side-channel: " + response)))
+							.isError(false)
+							.build();
+
+						return extra.completeTask(task.taskId(), toolResult)
+							.doOnTerminate(toolCompletedLatch::countDown);
+					})
+					.onErrorResume(error -> extra.failTask(task.taskId(), error.getMessage())
+						.doOnTerminate(toolCompletedLatch::countDown))
+					.subscribe();
+
+				// Return the task immediately without waiting for elicitation
+				return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
+			}))
 			.build();
 
 		var server = createTaskServer(taskStore, messageQueue, tool);
@@ -2098,24 +2130,257 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.tasks(ClientCapabilities.ClientTaskCapabilities.builder().list().cancel().build())
 			.build();
 
-		try (var client = createTaskClient(clientType, "Elicitation Test Client", elicitationCapabilities,
+		try (var client = createTaskClient(clientType, "Elicitation Side-Channel Test Client", elicitationCapabilities,
 				(elicitRequest) -> new ElicitResult(ElicitResult.Action.ACCEPT, Map.of("value", "42"), null))) {
 			client.initialize();
 
-			var request = new McpSchema.CallToolRequest("needs-input-tool", Map.of(), DEFAULT_TASK_METADATA, null);
+			var request = new McpSchema.CallToolRequest("elicitation-side-channel-tool", Map.of(),
+					DEFAULT_TASK_METADATA, null);
 			var messages = client.callToolStream(request).toList();
 			var observedStates = extractTaskStatuses(messages);
 
-			if (taskIdRef.get() != null) {
-				boolean elicitationCompleted = elicitationReceivedLatch.await(10, TimeUnit.SECONDS);
-				assertThat(elicitationCompleted).as("Elicitation should be received and processed").isTrue();
+			// Wait for tool to complete
+			boolean toolCompleted = toolCompletedLatch.await(30, TimeUnit.SECONDS);
+			assertThat(toolCompleted).as("Tool should complete within timeout").isTrue();
 
+			if (taskIdRef.get() != null) {
 				await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
 					var task = client.getTask(McpSchema.GetTaskRequest.builder().taskId(taskIdRef.get()).build());
 					assertThat(task.status()).isIn(TaskStatus.COMPLETED, TaskStatus.FAILED);
 				});
 
-				assertThat(elicitationResponse.get()).isEqualTo("42");
+				// Verify elicitation response was received via side-channel
+				assertThat(elicitationResponse.get()).as("Elicitation response should be received via side-channel")
+					.isEqualTo("42");
+
+				// Verify the task went through INPUT_REQUIRED (side-channeling)
+				assertThat(observedStates).as("Task should transition through INPUT_REQUIRED for side-channeling")
+					.contains(TaskStatus.INPUT_REQUIRED);
+
+				assertValidStateTransitions(observedStates);
+			}
+		}
+		finally {
+			server.closeGracefully().block();
+		}
+	}
+
+	/**
+	 * Tests sampling during task execution using the side-channeling flow. The flow is:
+	 * <ol>
+	 * <li>Client calls tool → server creates task (WORKING)
+	 * <li>Tool needs LLM response → sets INPUT_REQUIRED, enqueues request
+	 * <li>Client sees INPUT_REQUIRED, calls tasks/result
+	 * <li>Server dequeues request, sends sampling request to client
+	 * <li>Client responds via sampling handler
+	 * <li>Server enqueues response → tool's waitForResponse() unblocks
+	 * <li>Task continues → COMPLETED
+	 * </ol>
+	 */
+	@ParameterizedTest(name = "{0} : {displayName}")
+	@MethodSource("clientsForTesting")
+	void testSamplingDuringTaskExecution(String clientType) throws InterruptedException {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		TaskMessageQueue messageQueue = new InMemoryTaskMessageQueue();
+
+		AtomicReference<String> taskIdRef = new AtomicReference<>();
+		AtomicReference<String> samplingResponse = new AtomicReference<>();
+		CountDownLatch toolCompletedLatch = new CountDownLatch(1);
+
+		// Tool that needs LLM sampling during execution
+		// Pass task ID explicitly to enable side-channeling
+		var tool = TaskAwareAsyncToolSpecification.builder()
+			.name("sampling-side-channel-tool")
+			.description("Tool that uses sampling via side-channeling")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.taskSupportMode(TaskSupportMode.REQUIRED)
+			.createTaskHandler((args, extra) -> extra.createTask(opts -> opts.pollInterval(100L)).flatMap(task -> {
+				taskIdRef.set(task.taskId());
+
+				// Create a sampling request
+				var samplingRequest = McpSchema.CreateMessageRequest.builder()
+					.messages(List
+						.of(new McpSchema.SamplingMessage(McpSchema.Role.USER, new TextContent("What is 2+2?"))))
+					.maxTokens(100)
+					.build();
+
+				// Start background work asynchronously via side-channeling
+				extra.exchange().createMessage(samplingRequest, task.taskId()).flatMap(result -> {
+					String response = result.content() != null && result.content() instanceof TextContent
+							? ((TextContent) result.content()).text() : "no-response";
+					samplingResponse.set(response);
+
+					// Complete the task with the result
+					CallToolResult toolResult = CallToolResult.builder()
+						.content(List.of(new TextContent("Got LLM response via side-channel: " + response)))
+						.isError(false)
+						.build();
+
+					return extra.completeTask(task.taskId(), toolResult).doOnTerminate(toolCompletedLatch::countDown);
+				})
+					.onErrorResume(error -> extra.failTask(task.taskId(), error.getMessage())
+						.doOnTerminate(toolCompletedLatch::countDown))
+					.subscribe();
+
+				// Return the task immediately without waiting for sampling
+				return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
+			}))
+			.build();
+
+		var server = createTaskServer(taskStore, messageQueue, tool);
+
+		ClientCapabilities samplingCapabilities = ClientCapabilities.builder()
+			.sampling()
+			.tasks(ClientCapabilities.ClientTaskCapabilities.builder().list().cancel().build())
+			.build();
+
+		try (var client = createTaskClient(clientType, "Sampling Side-Channel Test Client", samplingCapabilities,
+				// No elicitation handler
+				null,
+				// Sampling handler that returns a fixed response
+				(samplingRequest) -> new McpSchema.CreateMessageResult(McpSchema.Role.ASSISTANT,
+						new TextContent("The answer is 4"), null, null, null))) {
+			client.initialize();
+
+			var request = new McpSchema.CallToolRequest("sampling-side-channel-tool", Map.of(), DEFAULT_TASK_METADATA,
+					null);
+			var messages = client.callToolStream(request).toList();
+			var observedStates = extractTaskStatuses(messages);
+
+			// Wait for tool to complete
+			boolean toolCompleted = toolCompletedLatch.await(30, TimeUnit.SECONDS);
+			assertThat(toolCompleted).as("Tool should complete within timeout").isTrue();
+
+			if (taskIdRef.get() != null) {
+				await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
+					var task = client.getTask(McpSchema.GetTaskRequest.builder().taskId(taskIdRef.get()).build());
+					assertThat(task.status()).isIn(TaskStatus.COMPLETED, TaskStatus.FAILED);
+				});
+
+				// Verify sampling response was received via side-channel
+				assertThat(samplingResponse.get()).as("Sampling response should be received via side-channel")
+					.isEqualTo("The answer is 4");
+
+				// Verify the task went through INPUT_REQUIRED (side-channeling)
+				assertThat(observedStates).as("Task should transition through INPUT_REQUIRED for side-channeling")
+					.contains(TaskStatus.INPUT_REQUIRED);
+
+				assertValidStateTransitions(observedStates);
+			}
+		}
+		finally {
+			server.closeGracefully().block();
+		}
+	}
+
+	// ===== Notification Side-Channeling Tests =====
+
+	/**
+	 * Tests that notifications (logging, progress, task status) are properly queued and
+	 * delivered via side-channeling when a taskId is provided. The flow is:
+	 * <ol>
+	 * <li>Client calls tool → server creates task (WORKING)
+	 * <li>Tool enqueues notifications with taskId
+	 * <li>Tool sets INPUT_REQUIRED to trigger side-channel delivery
+	 * <li>Client sees INPUT_REQUIRED, calls tasks/result
+	 * <li>Server dequeues and delivers notifications to client
+	 * <li>Task continues → COMPLETED
+	 * </ol>
+	 */
+	@ParameterizedTest(name = "{0} : {displayName}")
+	@MethodSource("clientsForTesting")
+	void testNotificationQueueingViaSideChannel(String clientType) throws InterruptedException {
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
+		TaskMessageQueue messageQueue = new InMemoryTaskMessageQueue();
+
+		AtomicReference<String> taskIdRef = new AtomicReference<>();
+		List<McpSchema.LoggingMessageNotification> receivedLoggingNotifications = new CopyOnWriteArrayList<>();
+		List<McpSchema.ProgressNotification> receivedProgressNotifications = new CopyOnWriteArrayList<>();
+		CountDownLatch toolCompletedLatch = new CountDownLatch(1);
+
+		// Tool that enqueues notifications via side-channeling
+		var tool = TaskAwareAsyncToolSpecification.builder()
+			.name("notification-side-channel-tool")
+			.description("Tool that enqueues notifications via side-channeling")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.taskSupportMode(TaskSupportMode.REQUIRED)
+			.createTaskHandler((args, extra) -> extra.createTask(opts -> opts.pollInterval(100L)).flatMap(task -> {
+				taskIdRef.set(task.taskId());
+
+				// Enqueue notifications with taskId for side-channeling
+				extra.exchange()
+					.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+						.level(McpSchema.LoggingLevel.INFO)
+						.logger("test-logger")
+						.data("First log message via side-channel")
+						.build(), task.taskId())
+					.then(extra.exchange()
+						.progressNotification(
+								new McpSchema.ProgressNotification("progress-token", 50.0, 100.0, "Halfway there"),
+								task.taskId()))
+					.then(extra.exchange()
+						.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+							.level(McpSchema.LoggingLevel.INFO)
+							.logger("test-logger")
+							.data("Second log message via side-channel")
+							.build(), task.taskId()))
+					// Set INPUT_REQUIRED to trigger side-channel delivery
+					.then(extra.setInputRequired(task.taskId(), "Delivering notifications"))
+					// Wait for client to poll, see INPUT_REQUIRED, and trigger
+					// side-channel
+					.then(Mono.delay(Duration.ofSeconds(3)))
+					// Complete the task
+					.then(Mono.defer(() -> {
+						CallToolResult toolResult = CallToolResult.builder()
+							.content(List.of(new TextContent("Notifications delivered via side-channel")))
+							.isError(false)
+							.build();
+						return extra.completeTask(task.taskId(), toolResult)
+							.doOnTerminate(toolCompletedLatch::countDown);
+					}))
+					.subscribe();
+
+				// Return the task immediately
+				return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
+			}))
+			.build();
+
+		var server = createTaskServer(taskStore, messageQueue, tool);
+
+		ClientCapabilities capabilities = ClientCapabilities.builder()
+			.tasks(ClientCapabilities.ClientTaskCapabilities.builder().list().cancel().build())
+			.build();
+
+		try (var client = createTaskClient(clientType, "Notification Side-Channel Test Client", capabilities, null,
+				null, receivedLoggingNotifications::add, receivedProgressNotifications::add)) {
+			client.initialize();
+
+			var request = new McpSchema.CallToolRequest("notification-side-channel-tool", Map.of(),
+					DEFAULT_TASK_METADATA, null);
+			var messages = client.callToolStream(request).toList();
+			var observedStates = extractTaskStatuses(messages);
+
+			// Wait for tool to complete
+			boolean toolCompleted = toolCompletedLatch.await(30, TimeUnit.SECONDS);
+			assertThat(toolCompleted).as("Tool should complete within timeout").isTrue();
+
+			if (taskIdRef.get() != null) {
+				await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
+					var task = client.getTask(McpSchema.GetTaskRequest.builder().taskId(taskIdRef.get()).build());
+					assertThat(task.status()).isIn(TaskStatus.COMPLETED, TaskStatus.FAILED);
+				});
+
+				// Verify notifications were received via side-channel
+				assertThat(receivedLoggingNotifications).as("Should receive logging notifications via side-channel")
+					.hasSizeGreaterThanOrEqualTo(2);
+
+				assertThat(receivedProgressNotifications).as("Should receive progress notifications via side-channel")
+					.hasSizeGreaterThanOrEqualTo(1);
+
+				// Verify the task went through INPUT_REQUIRED (side-channeling trigger)
+				assertThat(observedStates).as("Task should transition through INPUT_REQUIRED for side-channeling")
+					.contains(TaskStatus.INPUT_REQUIRED);
+
 				assertValidStateTransitions(observedStates);
 			}
 		}
@@ -2167,8 +2432,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 						.addTextContent("Result from createTaskHandler: " + args.getOrDefault("input", "default"))
 						.isError(false)
 						.build();
-					return extra.taskStore()
-						.storeTaskResult(task.taskId(), extra.sessionId(), TaskStatus.COMPLETED, result)
+					return extra.completeTask(task.taskId(), result)
 						.thenReturn(McpSchema.CreateTaskResult.builder().task(task).build());
 				}))
 			.build();
@@ -2228,8 +2492,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 						.addTextContent("Task created via createTaskHandler!")
 						.isError(false)
 						.build();
-					return extra.taskStore()
-						.storeTaskResult(task.taskId(), extra.sessionId(), TaskStatus.COMPLETED, result)
+					return extra.completeTask(task.taskId(), result)
 						.thenReturn(McpSchema.CreateTaskResult.builder().task(task).build());
 				});
 			})

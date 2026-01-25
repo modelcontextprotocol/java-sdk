@@ -16,19 +16,15 @@ import reactor.core.publisher.Mono;
  *
  * <pre>{@code
  * CreateTaskHandler handler = (args, extra) -> {
- *     // Tool decides TTL directly
- *     long ttl = Duration.ofMinutes(5).toMillis();
+ *     return extra.createTask(opts -> opts.pollInterval(500L)).flatMap(task -> {
+ *         // Start background work that will complete the task later
+ *         doAsyncWork(args)
+ *             .flatMap(result -> extra.completeTask(task.taskId(), result))
+ *             .onErrorResume(e -> extra.failTask(task.taskId(), e.getMessage()))
+ *             .subscribe();
  *
- *     return extra.taskStore()
- *         .createTask(CreateTaskOptions.builder()
- *             .requestedTtl(ttl)
- *             .sessionId(extra.sessionId())
- *             .build())
- *         .flatMap(task -> {
- *             // Start background work
- *             doWork(task.taskId(), args, extra.exchange()).subscribe();
- *             return Mono.just(new McpSchema.CreateTaskResult(task, null));
- *         });
+ *         return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
+ *     });
  * };
  * }</pre>
  *
@@ -52,7 +48,8 @@ public interface CreateTaskHandler {
 	 * <li>Returning the created task wrapped in a CreateTaskResult</li>
 	 * </ul>
 	 * @param args The parsed tool arguments from the CallToolRequest
-	 * @param extra Context providing taskStore, exchange, and request metadata
+	 * @param extra Context providing task lifecycle methods, exchange, and request
+	 * metadata
 	 * @return a Mono emitting the CreateTaskResult containing the created Task
 	 */
 	Mono<McpSchema.CreateTaskResult> createTask(Map<String, Object> args, CreateTaskExtra extra);

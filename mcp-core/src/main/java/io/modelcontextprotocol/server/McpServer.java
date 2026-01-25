@@ -707,12 +707,13 @@ public interface McpServer {
 		 *     TaskAwareAsyncToolSpecification.builder()
 		 *         .name("long-computation")
 		 *         .description("A long-running computation")
-		 *         .createTask((args, extra) -> {
-		 *             return extra.taskStore().createTask(...)
-		 *                 .flatMap(task -> {
-		 *                     doWork(task.taskId(), args).subscribe();
-		 *                     return Mono.just(new CreateTaskResult(task, null));
-		 *                 });
+		 *         .createTaskHandler((args, extra) -> {
+		 *             return extra.createTask().flatMap(task -> {
+		 *                 doWork(task.taskId(), args)
+		 *                     .flatMap(result -> extra.completeTask(task.taskId(), result))
+		 *                     .subscribe();
+		 *                 return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
+		 *             });
 		 *         })
 		 *         .build()
 		 * )
@@ -1500,10 +1501,10 @@ public interface McpServer {
 		 *     TaskAwareSyncToolSpecification.builder()
 		 *         .name("long-computation")
 		 *         .description("A long-running computation")
-		 *         .createTask((args, extra) -> {
-		 *             Task task = extra.taskStore().createTask(...).block();
-		 *             startBackgroundWork(task.taskId(), args);
-		 *             return new CreateTaskResult(task, null);
+		 *         .createTaskHandler((args, extra) -> {
+		 *             McpSchema.Task task = extra.createTask();
+		 *             externalApi.startJob(task.taskId(), args);
+		 *             return McpSchema.CreateTaskResult.builder().task(task).build();
 		 *         })
 		 *         .build()
 		 * )

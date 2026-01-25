@@ -43,17 +43,6 @@ public final class TaskDefaults {
 	public static final int DEFAULT_PAGE_SIZE = 100;
 
 	/**
-	 * Default maximum queue size for task message queues.
-	 */
-	public static final int DEFAULT_MAX_QUEUE_SIZE = 1000;
-
-	/**
-	 * Maximum allowed queue size for task message queues. Values above this limit will be
-	 * rejected to prevent unbounded memory growth.
-	 */
-	public static final int MAX_ALLOWED_QUEUE_SIZE = 10_000;
-
-	/**
 	 * Maximum allowed TTL for tasks (24 hours). Setting a TTL higher than this will be
 	 * rejected to prevent tasks from lingering indefinitely.
 	 */
@@ -78,6 +67,14 @@ public final class TaskDefaults {
 	 */
 	public static final long DEFAULT_AUTOMATIC_POLLING_TIMEOUT_MS = 30 * 60 * 1000L; // 30
 																						// minutes
+
+	/**
+	 * Default timeout in minutes for side-channel operations (elicitation/sampling during
+	 * tasks). When a tool calls createElicitation() or createMessage() within a task
+	 * context, it will wait for the response via side-channeling for up to this duration.
+	 * Default is 5 minutes.
+	 */
+	public static final long DEFAULT_SIDE_CHANNEL_TIMEOUT_MINUTES = 5L;
 
 	/**
 	 * Default maximum number of concurrent tasks for in-memory task stores. This provides

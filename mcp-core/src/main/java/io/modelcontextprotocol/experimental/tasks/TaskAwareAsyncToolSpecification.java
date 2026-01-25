@@ -36,16 +36,13 @@ import reactor.core.scheduler.Schedulers;
  *     .description("A long-running computation task")
  *     .inputSchema(new JsonSchema("object", Map.of("input", Map.of("type", "string")), null, null, null, null))
  *     .createTaskHandler((args, extra) -> {
- *         long ttl = Duration.ofMinutes(5).toMillis();
- *         return extra.taskStore()
- *             .createTask(CreateTaskOptions.builder()
- *                 .requestedTtl(ttl)
- *                 .sessionId(extra.sessionId())
- *                 .build())
- *             .flatMap(task -> {
- *                 doExpensiveComputation(task.taskId(), args).subscribe();
- *                 return Mono.just(new McpSchema.CreateTaskResult(task, null));
- *             });
+ *         return extra.createTask(opts -> opts.pollInterval(500L)).flatMap(task -> {
+ *             doExpensiveComputation(task.taskId(), args)
+ *                 .flatMap(result -> extra.completeTask(task.taskId(), result))
+ *                 .onErrorResume(e -> extra.failTask(task.taskId(), e.getMessage()))
+ *                 .subscribe();
+ *             return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
+ *         });
  *     })
  *     .build();
  *
@@ -197,9 +194,12 @@ public final class TaskAwareAsyncToolSpecification {
 
 		// Wrap sync createTaskHandler
 		CreateTaskHandler asyncCreateTaskHandler = (args, extra) -> Mono.fromCallable(() -> {
-			SyncCreateTaskExtra syncExtra = new DefaultSyncCreateTaskExtra(extra.taskStore(), extra.taskMessageQueue(),
-					sync.createSyncExchange(extra.exchange()), extra.sessionId(), extra.requestTtl(),
-					extra.originatingRequest());
+			// Cast to DefaultCreateTaskExtra to access internal
+			// taskStore/taskMessageQueue
+			DefaultCreateTaskExtra defaultExtra = (DefaultCreateTaskExtra) extra;
+			SyncCreateTaskExtra syncExtra = new DefaultSyncCreateTaskExtra(defaultExtra.taskStore(),
+					defaultExtra.taskMessageQueue(), sync.createSyncExchange(extra.exchange()), extra.sessionId(),
+					extra.requestTtl(), extra.originatingRequest());
 			return sync.createTaskHandler().createTask(args, syncExtra);
 		}).subscribeOn(Schedulers.fromExecutor(executor));
 
@@ -251,16 +251,12 @@ public final class TaskAwareAsyncToolSpecification {
 		 *
 		 * <pre>{@code
 		 * .createTaskHandler((args, extra) -> {
-		 *     long ttl = Duration.ofMinutes(5).toMillis();
-		 *     return extra.taskStore()
-		 *         .createTask(CreateTaskOptions.builder()
-		 *             .requestedTtl(ttl)
-		 *             .sessionId(extra.sessionId())
-		 *             .build())
-		 *         .flatMap(task -> {
-		 *             doWork(task.taskId(), args).subscribe();
-		 *             return Mono.just(new McpSchema.CreateTaskResult(task, null));
-		 *         });
+		 *     return extra.createTask(opts -> opts.pollInterval(500L)).flatMap(task -> {
+		 *         doWork(task.taskId(), args)
+		 *             .flatMap(result -> extra.completeTask(task.taskId(), result))
+		 *             .subscribe();
+		 *         return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
+		 *     });
 		 * })
 		 * }</pre>
 		 * @param createTaskHandler the task creation handler

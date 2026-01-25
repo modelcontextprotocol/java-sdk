@@ -11,10 +11,6 @@
  * state persistence</li>
  * <li>{@link io.modelcontextprotocol.experimental.tasks.InMemoryTaskStore} - In-memory
  * TaskStore implementation</li>
- * <li>{@link io.modelcontextprotocol.experimental.tasks.TaskContext} - Runtime context
- * for task lifecycle management</li>
- * <li>{@link io.modelcontextprotocol.experimental.tasks.DefaultTaskContext} - Default
- * TaskContext implementation</li>
  * <li>{@link io.modelcontextprotocol.experimental.tasks.TaskMessageQueue} - Queue for
  * INPUT_REQUIRED state communication</li>
  * </ul>

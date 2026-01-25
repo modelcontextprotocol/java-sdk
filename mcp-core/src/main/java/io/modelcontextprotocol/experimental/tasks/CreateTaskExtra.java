@@ -8,6 +8,8 @@ import java.util.function.Consumer;
 
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import io.modelcontextprotocol.spec.McpSchema.TaskStatus;
 import reactor.core.publisher.Mono;
 
 /**
@@ -18,21 +20,15 @@ import reactor.core.publisher.Mono;
  *
  * <pre>{@code
  * CreateTaskHandler handler = (args, extra) -> {
- *     // Decide TTL based on request or use a default
- *     long ttl = extra.requestTtl() != null
- *         ? Math.min(extra.requestTtl(), Duration.ofMinutes(30).toMillis())
- *         : Duration.ofMinutes(5).toMillis();
+ *     return extra.createTask(opts -> opts.pollInterval(500L)).flatMap(task -> {
+ *         // Start async work that will complete the task later
+ *         doAsyncWork(args)
+ *             .flatMap(result -> extra.completeTask(task.taskId(), result))
+ *             .onErrorResume(e -> extra.failTask(task.taskId(), e.getMessage()))
+ *             .subscribe();
  *
- *     return extra.taskStore()
- *         .createTask(CreateTaskOptions.builder()
- *             .requestedTtl(ttl)
- *             .sessionId(extra.sessionId())
- *             .build())
- *         .flatMap(task -> {
- *             // Use exchange for client communication
- *             startBackgroundWork(task.taskId(), args, extra.exchange()).subscribe();
- *             return Mono.just(new McpSchema.CreateTaskResult(task, null));
- *         });
+ *         return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
+ *     });
  * };
  * }</pre>
  *
@@ -47,37 +43,8 @@ import reactor.core.publisher.Mono;
  *
  * @see CreateTaskHandler
  * @see SyncCreateTaskExtra
- * @see TaskStore
- * @see TaskMessageQueue
  */
 public interface CreateTaskExtra {
-
-	/**
-	 * The task store for creating and managing tasks.
-	 *
-	 * <p>
-	 * Tools use this to create tasks with their desired configuration:
-	 *
-	 * <pre>{@code
-	 * extra.taskStore().createTask(CreateTaskOptions.builder()
-	 *     .requestedTtl(Duration.ofMinutes(5).toMillis())
-	 *     .pollInterval(Duration.ofSeconds(1).toMillis())
-	 *     .sessionId(extra.sessionId())
-	 *     .build());
-	 * }</pre>
-	 * @return the TaskStore instance
-	 */
-	TaskStore<McpSchema.ServerTaskPayloadResult> taskStore();
-
-	/**
-	 * The message queue for task communication during INPUT_REQUIRED state.
-	 *
-	 * <p>
-	 * Use this for interactive tasks that need to communicate with the client during
-	 * execution.
-	 * @return the TaskMessageQueue instance, or null if not configured
-	 */
-	TaskMessageQueue taskMessageQueue();
 
 	/**
 	 * The server exchange for client interaction.
@@ -130,7 +97,7 @@ public interface CreateTaskExtra {
 	McpSchema.Request originatingRequest();
 
 	// --------------------------
-	// Convenience Methods
+	// Task Creation
 	// --------------------------
 
 	/**
@@ -138,26 +105,19 @@ public interface CreateTaskExtra {
 	 *
 	 * <p>
 	 * This method automatically uses {@link #originatingRequest()}, {@link #sessionId()},
-	 * and {@link #requestTtl()} from this context, eliminating common boilerplate:
+	 * and {@link #requestTtl()} from this context.
 	 *
 	 * <pre>{@code
-	 * // Instead of:
-	 * extra.taskStore().createTask(CreateTaskOptions.builder(extra.originatingRequest())
-	 *     .sessionId(extra.sessionId())
-	 *     .requestedTtl(extra.requestTtl())
-	 *     .build())
-	 *
-	 * // You can simply use:
-	 * extra.createTask()
+	 * extra.createTask().flatMap(task -> {
+	 *     doAsyncWork(args)
+	 *         .flatMap(result -> extra.completeTask(task.taskId(), result))
+	 *         .subscribe();
+	 *     return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
+	 * });
 	 * }</pre>
-	 * @return Mono that completes with the created Task
+	 * @return Mono that completes with the created task
 	 */
-	default Mono<McpSchema.Task> createTask() {
-		return taskStore().createTask(CreateTaskOptions.builder(originatingRequest())
-			.sessionId(sessionId())
-			.requestedTtl(requestTtl())
-			.build());
-	}
+	Mono<McpSchema.Task> createTask();
 
 	/**
 	 * Convenience method to create a task with custom options, but inheriting session
@@ -165,46 +125,88 @@ public interface CreateTaskExtra {
 	 *
 	 * <p>
 	 * This method pre-populates the builder with {@link #originatingRequest()},
-	 * {@link #sessionId()}, and {@link #requestTtl()}, then allows customization:
+	 * {@link #sessionId()}, and {@link #requestTtl()}, then allows customization.
 	 *
 	 * <pre>{@code
 	 * // Create a task with custom poll interval:
-	 * extra.createTask(opts -> opts.pollInterval(500L))
-	 *
-	 * // Create a task with custom TTL (ignoring client request):
-	 * extra.createTask(opts -> opts.requestedTtl(Duration.ofMinutes(10).toMillis()))
+	 * extra.createTask(opts -> opts.pollInterval(500L)).flatMap(task -> {
+	 *     // Pass task ID explicitly for side-channeling
+	 *     extra.exchange().createElicitation(request, task.taskId()).subscribe();
+	 *     return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
+	 * });
 	 * }</pre>
 	 * @param customizer function to customize options beyond the defaults
-	 * @return Mono that completes with the created Task
+	 * @return Mono that completes with the created task
 	 */
-	default Mono<McpSchema.Task> createTask(Consumer<CreateTaskOptions.Builder> customizer) {
-		CreateTaskOptions.Builder builder = CreateTaskOptions.builder(originatingRequest())
-			.sessionId(sessionId())
-			.requestedTtl(requestTtl());
-		customizer.accept(builder);
-		return taskStore().createTask(builder.build());
-	}
+	Mono<McpSchema.Task> createTask(Consumer<CreateTaskOptions.Builder> customizer);
+
+	// --------------------------
+	// Task Lifecycle
+	// --------------------------
 
 	/**
-	 * Create a TaskContext for managing the given task's lifecycle.
+	 * Complete a task with a successful result.
 	 *
 	 * <p>
-	 * This convenience method creates a TaskContext that uses this extra's task store and
-	 * message queue, reducing boilerplate in task handlers:
+	 * This marks the task as {@link TaskStatus#COMPLETED} and stores the result for
+	 * client retrieval.
 	 *
 	 * <pre>{@code
-	 * extra.createTask()
-	 *     .map(task -> extra.createTaskContext(task))
-	 *     .flatMap(ctx -> {
-	 *         // Use ctx to update status, send messages, etc.
-	 *         return ctx.complete(result);
-	 *     });
+	 * extra.createTask().flatMap(task -> {
+	 *     doAsyncWork(args)
+	 *         .flatMap(result -> extra.completeTask(task.taskId(), result))
+	 *         .subscribe();
+	 *     return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
+	 * });
 	 * }</pre>
-	 * @param task the task to create a context for
-	 * @return a TaskContext bound to the given task and this extra's infrastructure
+	 * @param taskId the ID of the task to complete
+	 * @param result the tool result to store
+	 * @return Mono that completes when the task is updated
 	 */
-	default TaskContext createTaskContext(McpSchema.Task task) {
-		return new DefaultTaskContext<>(task.taskId(), sessionId(), taskStore(), taskMessageQueue());
-	}
+	Mono<Void> completeTask(String taskId, CallToolResult result);
+
+	/**
+	 * Mark a task as failed with an error message.
+	 *
+	 * <p>
+	 * This marks the task as {@link TaskStatus#FAILED} with the provided message.
+	 *
+	 * <pre>{@code
+	 * extra.createTask().flatMap(task -> {
+	 *     doAsyncWork(args)
+	 *         .flatMap(result -> extra.completeTask(task.taskId(), result))
+	 *         .onErrorResume(e -> extra.failTask(task.taskId(), e.getMessage()))
+	 *         .subscribe();
+	 *     return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
+	 * });
+	 * }</pre>
+	 * @param taskId the ID of the task to fail
+	 * @param message the error message describing what went wrong
+	 * @return Mono that completes when the task is updated
+	 */
+	Mono<Void> failTask(String taskId, String message);
+
+	/**
+	 * Set a task to INPUT_REQUIRED status, triggering side-channel delivery.
+	 *
+	 * <p>
+	 * When a task is in {@link TaskStatus#INPUT_REQUIRED}, the client will poll via
+	 * {@code tasks/result} and receive any queued notifications or requests via
+	 * side-channeling.
+	 *
+	 * <pre>{@code
+	 * extra.createTask().flatMap(task -> {
+	 *     // Queue a notification for side-channel delivery
+	 *     extra.exchange().loggingNotification(notification, task.taskId())
+	 *         .then(extra.setInputRequired(task.taskId(), "Waiting for user input"))
+	 *         .subscribe();
+	 *     return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
+	 * });
+	 * }</pre>
+	 * @param taskId the ID of the task
+	 * @param message a status message describing what input is required
+	 * @return Mono that completes when the task is updated
+	 */
+	Mono<Void> setInputRequired(String taskId, String message);
 
 }

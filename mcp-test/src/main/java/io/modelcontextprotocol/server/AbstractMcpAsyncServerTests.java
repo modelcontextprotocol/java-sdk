@@ -765,8 +765,7 @@ public abstract class AbstractMcpAsyncServerTests {
 				CallToolResult result = CallToolResult.builder()
 					.content(List.of(new McpSchema.TextContent(resultText)))
 					.build();
-				return extra.taskStore()
-					.storeTaskResult(task.taskId(), null, TaskStatus.COMPLETED, result)
+				return extra.completeTask(task.taskId(), result)
 					.thenReturn(McpSchema.CreateTaskResult.builder().task(task).build());
 			}))
 			.build();
@@ -997,8 +996,7 @@ public abstract class AbstractMcpAsyncServerTests {
 						.addTextContent("Created via createTaskHandler")
 						.isError(false)
 						.build();
-					return extra.taskStore()
-						.storeTaskResult(task.taskId(), null, TaskStatus.COMPLETED, result)
+					return extra.completeTask(task.taskId(), result)
 						.thenReturn(McpSchema.CreateTaskResult.builder().task(task).build());
 				}))
 			.build();

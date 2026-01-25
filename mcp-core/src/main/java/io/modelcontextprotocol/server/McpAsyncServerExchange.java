@@ -8,6 +8,7 @@ import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.experimental.tasks.QueuedMessage;
 import io.modelcontextprotocol.experimental.tasks.TaskDefaults;
 import io.modelcontextprotocol.experimental.tasks.TaskMessageQueue;
+import io.modelcontextprotocol.experimental.tasks.TaskStore;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -50,16 +51,14 @@ public class McpAsyncServerExchange {
 	private final McpTransportContext transportContext;
 
 	/**
-	 * The current task ID if this exchange is executing within a task context. This is
-	 * set when handling task-augmented tool calls and allows the tool handler to access
-	 * the task ID for operations like elicitation-during-task.
-	 */
-	private final String currentTaskId;
-
-	/**
 	 * Optional message queue for enqueuing messages during task execution.
 	 */
 	private final TaskMessageQueue taskMessageQueue;
+
+	/**
+	 * Optional task store for updating task status during side-channeling.
+	 */
+	private final TaskStore<?> taskStore;
 
 	private static final TypeRef<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeRef<>() {
 	};
@@ -137,12 +136,13 @@ public class McpAsyncServerExchange {
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
 		this.transportContext = McpTransportContext.EMPTY;
-		this.currentTaskId = null;
 		this.taskMessageQueue = null;
+		this.taskStore = null;
 	}
 
 	/**
 	 * Create a new asynchronous exchange with the client.
+	 * @param sessionId The session ID.
 	 * @param session The server session representing a 1-1 interaction.
 	 * @param clientCapabilities The client capabilities that define the supported
 	 * features and functionality.
@@ -170,12 +170,12 @@ public class McpAsyncServerExchange {
 	public McpAsyncServerExchange(String sessionId, McpLoggableSession session,
 			McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
 			McpTransportContext transportContext, TaskMessageQueue taskMessageQueue) {
-		this(sessionId, session, clientCapabilities, clientInfo, transportContext, null, taskMessageQueue);
+		this(sessionId, session, clientCapabilities, clientInfo, transportContext, taskMessageQueue, null);
 	}
 
 	/**
-	 * Create a new asynchronous exchange with the client, optionally within a task
-	 * context.
+	 * Create a new asynchronous exchange with the client, task message queue, and task
+	 * store.
 	 * @param sessionId The session ID.
 	 * @param session The server session representing a 1-1 interaction.
 	 * @param clientCapabilities The client capabilities that define the supported
@@ -183,46 +183,20 @@ public class McpAsyncServerExchange {
 	 * @param clientInfo The client implementation information.
 	 * @param transportContext context associated with the client as extracted from the
 	 * transport
-	 * @param currentTaskId The current task ID if executing within a task context, null
-	 * otherwise
 	 * @param taskMessageQueue Optional message queue for task message enqueuing
+	 * @param taskStore Optional task store for updating task status during
+	 * side-channeling
 	 */
-	private McpAsyncServerExchange(String sessionId, McpLoggableSession session,
+	public McpAsyncServerExchange(String sessionId, McpLoggableSession session,
 			McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
-			McpTransportContext transportContext, String currentTaskId, TaskMessageQueue taskMessageQueue) {
+			McpTransportContext transportContext, TaskMessageQueue taskMessageQueue, TaskStore<?> taskStore) {
 		this.sessionId = sessionId;
 		this.session = session;
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
 		this.transportContext = transportContext;
-		this.currentTaskId = currentTaskId;
 		this.taskMessageQueue = taskMessageQueue;
-	}
-
-	/**
-	 * Create a new exchange that is scoped to a specific task. This is used when
-	 * executing tool handlers in a task context, allowing them to access the task ID for
-	 * operations like elicitation-during-task.
-	 * @param taskId The task ID to scope this exchange to
-	 * @return A new exchange instance with the task context set
-	 */
-	public McpAsyncServerExchange withTaskContext(String taskId) {
-		Assert.notNull(taskId, "Task ID must not be null");
-		return new McpAsyncServerExchange(this.sessionId, this.session, this.clientCapabilities, this.clientInfo,
-				this.transportContext, taskId, this.taskMessageQueue);
-	}
-
-	/**
-	 * Create a new exchange that is scoped to a specific task with an explicit message
-	 * queue.
-	 * @param taskId The task ID to scope this exchange to
-	 * @param queue The task message queue for enqueuing messages
-	 * @return A new exchange instance with the task context and queue set
-	 */
-	public McpAsyncServerExchange withTaskContext(String taskId, TaskMessageQueue queue) {
-		Assert.notNull(taskId, "Task ID must not be null");
-		return new McpAsyncServerExchange(this.sessionId, this.session, this.clientCapabilities, this.clientInfo,
-				this.transportContext, taskId, queue);
+		this.taskStore = taskStore;
 	}
 
 	/**
@@ -260,12 +234,12 @@ public class McpAsyncServerExchange {
 	}
 
 	/**
-	 * Get the current task ID if this exchange is executing within a task context. This
-	 * is set when handling task-augmented tool calls.
-	 * @return the current task ID, or null if not executing within a task context
+	 * Get the underlying session for this exchange. This is used internally for
+	 * side-channeling operations like sending requests during tasks/result handling.
+	 * @return the session
 	 */
-	public String getCurrentTaskId() {
-		return this.currentTaskId;
+	public McpLoggableSession getSession() {
+		return this.session;
 	}
 
 	/**
@@ -285,6 +259,25 @@ public class McpAsyncServerExchange {
 	 * Specification</a>
 	 */
 	public Mono<McpSchema.CreateMessageResult> createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
+		return createMessage(createMessageRequest, null);
+	}
+
+	/**
+	 * Create a new message using the sampling capabilities of the client within a task
+	 * context. When a taskId is provided, the request uses side-channeling: the task
+	 * status is set to INPUT_REQUIRED and the request is enqueued for delivery via
+	 * tasks/result instead of being sent immediately.
+	 * @param createMessageRequest The request to create a new message
+	 * @param taskId The task ID for side-channeling, or null for immediate send
+	 * @return A Mono that completes when the message has been created
+	 * @see McpSchema.CreateMessageRequest
+	 * @see McpSchema.CreateMessageResult
+	 * @see <a href=
+	 * "https://spec.modelcontextprotocol.io/specification/client/sampling/">Sampling
+	 * Specification</a>
+	 */
+	public Mono<McpSchema.CreateMessageResult> createMessage(McpSchema.CreateMessageRequest createMessageRequest,
+			String taskId) {
 		if (this.clientCapabilities == null) {
 			return Mono.error(new McpError("Client must be initialized. Call the initialize method first!"));
 		}
@@ -297,13 +290,12 @@ public class McpAsyncServerExchange {
 
 		// Add related task metadata to request if within task context
 		McpSchema.CreateMessageRequest requestWithMeta = createMessageRequest;
-		if (this.currentTaskId != null) {
+		if (taskId != null) {
 			Map<String, Object> meta = new java.util.HashMap<>();
 			if (createMessageRequest.meta() != null) {
 				meta.putAll(createMessageRequest.meta());
 			}
-			meta.put(McpSchema.RELATED_TASK_META_KEY,
-					McpSchema.RelatedTaskMetadata.builder().taskId(this.currentTaskId).build());
+			meta.put(McpSchema.RELATED_TASK_META_KEY, McpSchema.RelatedTaskMetadata.builder().taskId(taskId).build());
 			requestWithMeta = new McpSchema.CreateMessageRequest(createMessageRequest.messages(),
 					createMessageRequest.modelPreferences(), createMessageRequest.systemPrompt(),
 					createMessageRequest.includeContext(), createMessageRequest.temperature(),
@@ -311,40 +303,25 @@ public class McpAsyncServerExchange {
 					createMessageRequest.metadata(), createMessageRequest.task(), meta);
 		}
 
-		// Enqueue request if within task context
-		Mono<Void> enqueueRequest = Mono.empty();
 		final McpSchema.CreateMessageRequest finalRequest = requestWithMeta;
-		if (this.currentTaskId != null && this.taskMessageQueue != null) {
+
+		// Side-channel flow: set INPUT_REQUIRED, enqueue request (not sent directly),
+		// and wait for response via the message queue
+		if (taskId != null && this.taskMessageQueue != null && this.taskStore != null) {
 			QueuedMessage.Request queuedRequest = new QueuedMessage.Request(requestId,
 					McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, finalRequest);
-			enqueueRequest = this.taskMessageQueue.enqueue(this.currentTaskId, queuedRequest, null)
-				.doOnError(e -> logger.error("Failed to enqueue sampling request for task {}: {}", this.currentTaskId,
-						e.getMessage()))
-				// Message queue failures should not fail the main sampling operation.
-				// Errors are logged above; swallowing ensures the primary request
-				// succeeds.
-				.onErrorResume(e -> Mono.empty());
+
+			return this.taskStore
+				.updateTaskStatus(taskId, this.sessionId, McpSchema.TaskStatus.INPUT_REQUIRED, "Waiting for sampling")
+				.then(this.taskMessageQueue.enqueue(taskId, queuedRequest))
+				.then(this.taskMessageQueue.waitForResponse(taskId, requestId,
+						Duration.ofMinutes(TaskDefaults.DEFAULT_SIDE_CHANNEL_TIMEOUT_MINUTES)))
+				.map(response -> (McpSchema.CreateMessageResult) response.result());
 		}
 
-		return enqueueRequest
-			.then(this.session.sendRequest(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, finalRequest,
-					CREATE_MESSAGE_RESULT_TYPE_REF))
-			.flatMap(result -> {
-				// Enqueue response if within task context
-				if (this.currentTaskId != null && this.taskMessageQueue != null) {
-					QueuedMessage.Response queuedResponse = new QueuedMessage.Response(requestId, result);
-					return this.taskMessageQueue.enqueue(this.currentTaskId, queuedResponse, null)
-						.doOnError(e -> logger.error("Failed to enqueue sampling response for task {}: {}",
-								this.currentTaskId, e.getMessage()))
-						// Message queue failures should not fail the main sampling
-						// operation.
-						// Errors are logged above; swallowing ensures the primary request
-						// succeeds.
-						.onErrorResume(e -> Mono.empty())
-						.thenReturn(result);
-				}
-				return Mono.just(result);
-			});
+		// No task context or side-channeling not enabled: send immediately
+		return this.session.sendRequest(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, finalRequest,
+				CREATE_MESSAGE_RESULT_TYPE_REF);
 	}
 
 	/**
@@ -362,6 +339,24 @@ public class McpAsyncServerExchange {
 	 * Specification</a>
 	 */
 	public Mono<McpSchema.ElicitResult> createElicitation(McpSchema.ElicitRequest elicitRequest) {
+		return createElicitation(elicitRequest, null);
+	}
+
+	/**
+	 * Creates a new elicitation within a task context. When a taskId is provided, the
+	 * request uses side-channeling: the task status is set to INPUT_REQUIRED and the
+	 * request is enqueued for delivery via tasks/result instead of being sent
+	 * immediately.
+	 * @param elicitRequest The request to create a new elicitation
+	 * @param taskId The task ID for side-channeling, or null for immediate send
+	 * @return A Mono that completes when the elicitation has been resolved.
+	 * @see McpSchema.ElicitRequest
+	 * @see McpSchema.ElicitResult
+	 * @see <a href=
+	 * "https://spec.modelcontextprotocol.io/specification/client/elicitation/">Elicitation
+	 * Specification</a>
+	 */
+	public Mono<McpSchema.ElicitResult> createElicitation(McpSchema.ElicitRequest elicitRequest, String taskId) {
 		if (this.clientCapabilities == null) {
 			return Mono.error(new McpError("Client must be initialized. Call the initialize method first!"));
 		}
@@ -374,51 +369,40 @@ public class McpAsyncServerExchange {
 
 		// Add related task metadata to request if within task context
 		McpSchema.ElicitRequest requestWithMeta = elicitRequest;
-		if (this.currentTaskId != null) {
+		if (taskId != null) {
 			Map<String, Object> meta = new java.util.HashMap<>();
 			if (elicitRequest.meta() != null) {
 				meta.putAll(elicitRequest.meta());
 			}
-			meta.put(McpSchema.RELATED_TASK_META_KEY,
-					McpSchema.RelatedTaskMetadata.builder().taskId(this.currentTaskId).build());
+			meta.put(McpSchema.RELATED_TASK_META_KEY, McpSchema.RelatedTaskMetadata.builder().taskId(taskId).build());
 			requestWithMeta = new McpSchema.ElicitRequest(elicitRequest.message(), elicitRequest.requestedSchema(),
 					elicitRequest.task(), meta);
 		}
 
-		// Enqueue request if within task context
-		Mono<Void> enqueueRequest = Mono.empty();
 		final McpSchema.ElicitRequest finalRequest = requestWithMeta;
-		if (this.currentTaskId != null && this.taskMessageQueue != null) {
+
+		// Side-channel flow: set INPUT_REQUIRED, enqueue request (not sent directly),
+		// and wait for response via the message queue
+		if (taskId != null && this.taskMessageQueue != null && this.taskStore != null) {
+			logger.debug("createElicitation: Using side-channel flow for task {}", taskId);
 			QueuedMessage.Request queuedRequest = new QueuedMessage.Request(requestId,
 					McpSchema.METHOD_ELICITATION_CREATE, finalRequest);
-			enqueueRequest = this.taskMessageQueue.enqueue(this.currentTaskId, queuedRequest, null)
-				.doOnError(e -> logger.error("Failed to enqueue elicitation request for task {}: {}",
-						this.currentTaskId, e.getMessage()))
-				// Message queue failures should not fail the main elicitation operation.
-				// Errors are logged above; swallowing ensures the primary request
-				// succeeds.
-				.onErrorResume(e -> Mono.empty());
+
+			return this.taskStore
+				.updateTaskStatus(taskId, this.sessionId, McpSchema.TaskStatus.INPUT_REQUIRED,
+						"Waiting for elicitation")
+				.doOnSuccess(v -> logger.debug("createElicitation: Set INPUT_REQUIRED for task {}", taskId))
+				.then(this.taskMessageQueue.enqueue(taskId, queuedRequest))
+				.doOnSuccess(v -> logger.debug("createElicitation: Enqueued request {} for task {}", requestId, taskId))
+				.then(this.taskMessageQueue.waitForResponse(taskId, requestId,
+						Duration.ofMinutes(TaskDefaults.DEFAULT_SIDE_CHANNEL_TIMEOUT_MINUTES)))
+				.doOnSuccess(v -> logger.debug("createElicitation: Got response for request {} on task {}", requestId,
+						taskId))
+				.map(response -> (McpSchema.ElicitResult) response.result());
 		}
 
-		return enqueueRequest
-			.then(this.session.sendRequest(McpSchema.METHOD_ELICITATION_CREATE, finalRequest,
-					ELICITATION_RESULT_TYPE_REF))
-			.flatMap(result -> {
-				// Enqueue response if within task context
-				if (this.currentTaskId != null && this.taskMessageQueue != null) {
-					QueuedMessage.Response queuedResponse = new QueuedMessage.Response(requestId, result);
-					return this.taskMessageQueue.enqueue(this.currentTaskId, queuedResponse, null)
-						.doOnError(e -> logger.error("Failed to enqueue elicitation response for task {}: {}",
-								this.currentTaskId, e.getMessage()))
-						// Message queue failures should not fail the main elicitation
-						// operation.
-						// Errors are logged above; swallowing ensures the primary request
-						// succeeds.
-						.onErrorResume(e -> Mono.empty())
-						.thenReturn(result);
-				}
-				return Mono.just(result);
-			});
+		// No task context or side-channeling not enabled: send immediately
+		return this.session.sendRequest(McpSchema.METHOD_ELICITATION_CREATE, finalRequest, ELICITATION_RESULT_TYPE_REF);
 	}
 
 	/**
@@ -458,6 +442,21 @@ public class McpAsyncServerExchange {
 	 * @return A Mono that completes when the notification has been sent
 	 */
 	public Mono<Void> loggingNotification(LoggingMessageNotification loggingMessageNotification) {
+		return loggingNotification(loggingMessageNotification, null);
+	}
+
+	/**
+	 * Send a logging message notification to the client. Messages below the current
+	 * minimum logging level will be filtered out.
+	 *
+	 * <p>
+	 * When a taskId is provided, the notification is enqueued for delivery via the
+	 * side-channel (tasks/result) instead of being sent immediately.
+	 * @param loggingMessageNotification The logging message to send
+	 * @param taskId The task ID for side-channeling, or null for immediate send
+	 * @return A Mono that completes when the notification has been sent or enqueued
+	 */
+	public Mono<Void> loggingNotification(LoggingMessageNotification loggingMessageNotification, String taskId) {
 
 		if (loggingMessageNotification == null) {
 			return Mono.error(new McpError("Logging message must not be null"));
@@ -465,6 +464,13 @@ public class McpAsyncServerExchange {
 
 		return Mono.defer(() -> {
 			if (this.session.isNotificationForLevelAllowed(loggingMessageNotification.level())) {
+				// In task context: enqueue for side-channeling
+				if (taskId != null && this.taskMessageQueue != null) {
+					QueuedMessage.Notification queuedNotification = new QueuedMessage.Notification(
+							McpSchema.METHOD_NOTIFICATION_MESSAGE, loggingMessageNotification);
+					return this.taskMessageQueue.enqueue(taskId, queuedNotification);
+				}
+				// No task context: send immediately
 				return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_MESSAGE, loggingMessageNotification);
 			}
 			return Mono.empty();
@@ -478,9 +484,33 @@ public class McpAsyncServerExchange {
 	 * @return A Mono that completes when the notification has been sent
 	 */
 	public Mono<Void> progressNotification(McpSchema.ProgressNotification progressNotification) {
+		return progressNotification(progressNotification, null);
+	}
+
+	/**
+	 * Sends a notification to the client that the current progress status has changed for
+	 * long-running operations.
+	 *
+	 * <p>
+	 * When a taskId is provided, the notification is enqueued for delivery via the
+	 * side-channel (tasks/result) instead of being sent immediately.
+	 * @param progressNotification The progress notification to send
+	 * @param taskId The task ID for side-channeling, or null for immediate send
+	 * @return A Mono that completes when the notification has been sent or enqueued
+	 */
+	public Mono<Void> progressNotification(McpSchema.ProgressNotification progressNotification, String taskId) {
 		if (progressNotification == null) {
 			return Mono.error(new McpError("Progress notification must not be null"));
 		}
+
+		// In task context: enqueue for side-channeling
+		if (taskId != null && this.taskMessageQueue != null) {
+			QueuedMessage.Notification queuedNotification = new QueuedMessage.Notification(
+					McpSchema.METHOD_NOTIFICATION_PROGRESS, progressNotification);
+			return this.taskMessageQueue.enqueue(taskId, queuedNotification);
+		}
+
+		// No task context: send immediately
 		return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_PROGRESS, progressNotification);
 	}
 
@@ -500,10 +530,44 @@ public class McpAsyncServerExchange {
 	 * @see McpAsyncServer#notifyTaskStatus(McpSchema.TaskStatusNotification) for
 	 * broadcasting to all clients
 	 */
-	public Mono<Void> notifyTaskStatus(McpSchema.TaskStatusNotification notification) {
+	public Mono<Void> taskStatusNotification(McpSchema.TaskStatusNotification notification) {
+		return taskStatusNotification(notification, null);
+	}
+
+	/**
+	 * Sends a task status notification to THIS client only.
+	 *
+	 * <p>
+	 * This method sends a notification to the specific client associated with this
+	 * exchange. Use this for targeted notifications when a tool handler needs to update a
+	 * specific client about task progress.
+	 *
+	 * <p>
+	 * When a taskId is provided, the notification is enqueued for delivery via the
+	 * side-channel (tasks/result) instead of being sent immediately.
+	 *
+	 * <p>
+	 * For broadcasting task status to ALL connected clients, use
+	 * {@link McpAsyncServer#notifyTaskStatus(McpSchema.TaskStatusNotification)} instead.
+	 * @param notification The task status notification to send
+	 * @param taskId The task ID for side-channeling, or null for immediate send
+	 * @return A Mono that completes when the notification has been sent or enqueued
+	 * @see McpAsyncServer#notifyTaskStatus(McpSchema.TaskStatusNotification) for
+	 * broadcasting to all clients
+	 */
+	public Mono<Void> taskStatusNotification(McpSchema.TaskStatusNotification notification, String taskId) {
 		if (notification == null) {
 			return Mono.error(new IllegalStateException("Task status notification must not be null"));
 		}
+
+		// In task context: enqueue for side-channeling
+		if (taskId != null && this.taskMessageQueue != null) {
+			QueuedMessage.Notification queuedNotification = new QueuedMessage.Notification(
+					McpSchema.METHOD_NOTIFICATION_TASKS_STATUS, notification);
+			return this.taskMessageQueue.enqueue(taskId, queuedNotification);
+		}
+
+		// No task context: send immediately
 		return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_TASKS_STATUS, notification);
 	}
 

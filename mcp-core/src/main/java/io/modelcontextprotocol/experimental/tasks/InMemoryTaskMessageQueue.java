@@ -4,13 +4,17 @@
 
 package io.modelcontextprotocol.experimental.tasks;
 
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeoutException;
 
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
@@ -18,51 +22,54 @@ import reactor.core.publisher.Mono;
  *
  * <p>
  * This implementation stores messages in memory using thread-safe concurrent queues. Each
- * task has its own isolated queue.
+ * task has its own isolated queue for actionable messages (Request, Notification) and a
+ * separate queue for Response messages (used by waitForResponse).
  *
  * <h2>Thread Safety</h2>
  * <p>
  * This implementation is thread-safe. Queue operations use internal synchronization to
- * ensure atomicity of size checks and modifications during enqueue operations. The
- * internal queue references are managed by this class and should not be accessed directly
- * by external code.
+ * ensure atomicity of operations. The internal queue references are managed by this class
+ * and should not be accessed directly by external code.
+ *
+ * <h2>Message Routing</h2>
+ * <p>
+ * Messages are routed based on type:
+ * <ul>
+ * <li><b>Request/Notification</b> - Stored in the actionable queue, retrieved via
+ * {@link #dequeue} or {@link #dequeueAll}</li>
+ * <li><b>Response</b> - Stored in the response queue, retrieved exclusively via
+ * {@link #waitForResponse}</li>
+ * </ul>
  *
  * <p>
  * This is an experimental API that may change in future releases.
  */
 public class InMemoryTaskMessageQueue implements TaskMessageQueue {
 
-	// Use centralized default from TaskDefaults
-	private static final int DEFAULT_MAX_SIZE = TaskDefaults.DEFAULT_MAX_QUEUE_SIZE;
+	/**
+	 * Queue for actionable messages (Request, Notification) per task.
+	 */
+	private final Map<String, Queue<QueuedMessage>> actionableQueues = new ConcurrentHashMap<>();
 
-	private final Map<String, Queue<QueuedMessage>> queues = new ConcurrentHashMap<>();
+	/**
+	 * Queue for response messages per task. These are only retrieved via waitForResponse.
+	 */
+	private final Map<String, Queue<QueuedMessage.Response>> responseQueues = new ConcurrentHashMap<>();
 
 	@Override
-	public Mono<Void> enqueue(String taskId, QueuedMessage message, Integer maxSize) {
-		// Validate maxSize bounds to prevent unbounded memory growth
-		if (maxSize != null) {
-			if (maxSize < 1) {
-				return Mono.error(new IllegalArgumentException("maxSize must be at least 1, got: " + maxSize));
-			}
-			if (maxSize > TaskDefaults.MAX_ALLOWED_QUEUE_SIZE) {
-				return Mono.error(new IllegalArgumentException(
-						"maxSize must not exceed " + TaskDefaults.MAX_ALLOWED_QUEUE_SIZE + ", got: " + maxSize));
-			}
-		}
-
+	public Mono<Void> enqueue(String taskId, QueuedMessage message) {
 		return Mono.fromRunnable(() -> {
-			Queue<QueuedMessage> queue = queues.computeIfAbsent(taskId, k -> new ConcurrentLinkedQueue<>());
-
-			int effectiveMaxSize = maxSize != null ? maxSize : DEFAULT_MAX_SIZE;
-
-			// Synchronize to make size check + poll + offer atomic
-			// This prevents race conditions where concurrent enqueues could exceed
-			// maxSize
-			synchronized (queue) {
-				while (queue.size() >= effectiveMaxSize) {
-					queue.poll();
-				}
-				queue.offer(message);
+			if (message instanceof QueuedMessage.Response response) {
+				// Response messages go to the response queue
+				Queue<QueuedMessage.Response> responseQueue = responseQueues.computeIfAbsent(taskId,
+						k -> new ConcurrentLinkedQueue<>());
+				responseQueue.offer(response);
+			}
+			else {
+				// Request and Notification messages go to the actionable queue
+				Queue<QueuedMessage> actionableQueue = actionableQueues.computeIfAbsent(taskId,
+						k -> new ConcurrentLinkedQueue<>());
+				actionableQueue.offer(message);
 			}
 		});
 	}
@@ -70,7 +77,7 @@ public class InMemoryTaskMessageQueue implements TaskMessageQueue {
 	@Override
 	public Mono<QueuedMessage> dequeue(String taskId) {
 		return Mono.fromCallable(() -> {
-			Queue<QueuedMessage> queue = queues.get(taskId);
+			Queue<QueuedMessage> queue = actionableQueues.get(taskId);
 			if (queue == null) {
 				return null;
 			}
@@ -81,12 +88,11 @@ public class InMemoryTaskMessageQueue implements TaskMessageQueue {
 	@Override
 	public Mono<List<QueuedMessage>> dequeueAll(String taskId) {
 		return Mono.fromCallable(() -> {
-			Queue<QueuedMessage> queue = queues.get(taskId);
+			Queue<QueuedMessage> queue = actionableQueues.get(taskId);
 			if (queue == null) {
 				return List.of();
 			}
 
-			// Synchronize to prevent race with enqueue() which also syncs on queue
 			synchronized (queue) {
 				List<QueuedMessage> messages = new ArrayList<>(queue);
 				queue.clear();
@@ -95,31 +101,84 @@ public class InMemoryTaskMessageQueue implements TaskMessageQueue {
 		});
 	}
 
+	@Override
+	public Mono<QueuedMessage.Response> waitForResponse(String taskId, String requestId, Duration timeout) {
+		return Mono.defer(() -> {
+			// First check if response already exists
+			QueuedMessage.Response existing = pollResponseForRequest(taskId, requestId);
+			if (existing != null) {
+				return Mono.just(existing);
+			}
+
+			// Poll periodically until response arrives or timeout
+			return Flux.interval(Duration.ofMillis(50)).flatMap(tick -> {
+				QueuedMessage.Response response = pollResponseForRequest(taskId, requestId);
+				return response != null ? Mono.just(response) : Mono.empty();
+			})
+				.next() // Take first matching response
+				.timeout(timeout, Mono.error(new TimeoutException(
+						"No response received for request " + requestId + " within " + timeout.toMillis() + "ms")));
+		});
+	}
+
+	/**
+	 * Polls for a response with the matching request ID and removes it from the queue.
+	 * @param taskId the task identifier
+	 * @param requestId the request ID to match
+	 * @return the matching response, or null if not found
+	 */
+	private QueuedMessage.Response pollResponseForRequest(String taskId, String requestId) {
+		Queue<QueuedMessage.Response> queue = responseQueues.get(taskId);
+		if (queue == null) {
+			return null;
+		}
+
+		synchronized (queue) {
+			Iterator<QueuedMessage.Response> iterator = queue.iterator();
+			while (iterator.hasNext()) {
+				QueuedMessage.Response response = iterator.next();
+				if (requestId.equals(String.valueOf(response.requestId()))) {
+					iterator.remove();
+					return response;
+				}
+			}
+		}
+		return null;
+	}
+
 	/**
 	 * Clears all messages for a specific task.
 	 * @param taskId the task identifier
 	 */
 	public void clear(String taskId) {
-		queues.remove(taskId);
+		actionableQueues.remove(taskId);
+		responseQueues.remove(taskId);
 	}
 
 	@Override
 	public Mono<Void> clearTask(String taskId) {
-		return Mono.fromRunnable(() -> queues.remove(taskId));
+		return Mono.fromRunnable(() -> {
+			actionableQueues.remove(taskId);
+			responseQueues.remove(taskId);
+		});
 	}
 
 	/**
 	 * Clears all queues. Use with caution.
 	 */
 	public void clearAll() {
-		queues.clear();
+		actionableQueues.clear();
+		responseQueues.clear();
 	}
 
 	@Override
 	public Mono<Integer> getQueueSize(String taskId) {
 		return Mono.fromCallable(() -> {
-			Queue<QueuedMessage> queue = queues.get(taskId);
-			return queue != null ? queue.size() : 0;
+			Queue<QueuedMessage> actionable = actionableQueues.get(taskId);
+			Queue<QueuedMessage.Response> responses = responseQueues.get(taskId);
+			int actionableSize = actionable != null ? actionable.size() : 0;
+			int responseSize = responses != null ? responses.size() : 0;
+			return actionableSize + responseSize;
 		});
 	}
 
