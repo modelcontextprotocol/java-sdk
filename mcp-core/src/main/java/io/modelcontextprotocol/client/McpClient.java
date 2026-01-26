@@ -971,9 +971,9 @@ public interface McpClient {
 			return new McpAsyncClient(this.transport, this.requestTimeout, this.initializationTimeout,
 					jsonSchemaValidator,
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
-							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
-							this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
-							this.taskStatusConsumers, this.samplingHandler, this.elicitationHandler,
+							this.toolsChangeConsumers, this.taskStatusConsumers, this.resourcesChangeConsumers,
+							this.resourcesUpdateConsumers, this.promptsChangeConsumers, this.loggingConsumers,
+							this.progressConsumers, this.samplingHandler, this.elicitationHandler,
 							this.enableCallToolSchemaCaching, this.taskPollTimeout, this.taskStore != null),
 					this.taskStore);
 		}
