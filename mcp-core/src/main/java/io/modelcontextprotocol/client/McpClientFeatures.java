@@ -67,12 +67,12 @@ class McpClientFeatures {
 	 */
 	record Async(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 			Map<String, McpSchema.Root> roots, List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers,
+			List<Function<McpSchema.TaskStatusNotification, Mono<Void>>> taskStatusConsumers,
 			List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers,
 			List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers,
 			List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers,
 			List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers,
 			List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers,
-			List<Function<McpSchema.TaskStatusNotification, Mono<Void>>> taskStatusConsumers,
 			Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler,
 			Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler,
 			boolean enableCallToolSchemaCaching, Duration taskPollTimeout, boolean taskStorePresent) {
@@ -93,12 +93,12 @@ class McpClientFeatures {
 		public Async(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 				Map<String, McpSchema.Root> roots,
 				List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers,
+				List<Function<McpSchema.TaskStatusNotification, Mono<Void>>> taskStatusConsumers,
 				List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers,
 				List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers,
 				List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers,
 				List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers,
 				List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers,
-				List<Function<McpSchema.TaskStatusNotification, Mono<Void>>> taskStatusConsumers,
 				Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler,
 				Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler,
 				boolean enableCallToolSchemaCaching, Duration taskPollTimeout, boolean taskStorePresent) {
@@ -156,9 +156,9 @@ class McpClientFeatures {
 				List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers,
 				Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler,
 				Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler) {
-			this(clientInfo, clientCapabilities, roots, toolsChangeConsumers, resourcesChangeConsumers,
-					resourcesUpdateConsumers, promptsChangeConsumers, loggingConsumers, List.of(), List.of(),
-					samplingHandler, elicitationHandler, false, null, false);
+			this(clientInfo, clientCapabilities, roots, toolsChangeConsumers, List.of(), resourcesChangeConsumers,
+					resourcesUpdateConsumers, promptsChangeConsumers, loggingConsumers, List.of(), samplingHandler,
+					elicitationHandler, false, null, false);
 		}
 
 		/**
@@ -225,8 +225,8 @@ class McpClientFeatures {
 						: null;
 
 			return new Async(syncSpec.clientInfo(), syncSpec.clientCapabilities(), syncSpec.roots(),
-					toolsChangeConsumers, resourcesChangeConsumers, resourcesUpdateConsumers, promptsChangeConsumers,
-					loggingConsumers, progressConsumers, taskStatusConsumers, samplingHandler, elicitationHandler,
+					toolsChangeConsumers, taskStatusConsumers, resourcesChangeConsumers, resourcesUpdateConsumers,
+					promptsChangeConsumers, loggingConsumers, progressConsumers, samplingHandler, elicitationHandler,
 					syncSpec.enableCallToolSchemaCaching(), syncSpec.taskPollTimeout(), syncSpec.taskStorePresent());
 		}
 	}
