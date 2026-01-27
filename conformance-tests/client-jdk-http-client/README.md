@@ -143,7 +143,7 @@ The client:
 
 To add support for new scenarios:
 
-1. Add the scenario name to the switch statement in `Main.java`
+1. Add the scenario name to the switch statement in `ConformanceJdkClientMcpClient.java`
 2. Implement a dedicated handler method (e.g., `runAuthScenario()`, `runElicitationScenario()`)
 3. Register the scenario in the available scenarios list in the default case
 4. Rebuild the JAR

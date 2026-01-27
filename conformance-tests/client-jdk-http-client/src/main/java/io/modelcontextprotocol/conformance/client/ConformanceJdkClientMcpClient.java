@@ -16,16 +16,16 @@ import io.modelcontextprotocol.spec.McpSchema;
  * from command-line arguments.
  *
  * <p>
- * Usage: Main &lt;server-url&gt;
+ * Usage: ConformanceJdkClientMcpClient &lt;server-url&gt;
  *
  * @see <a href= "https://github.com/modelcontextprotocol/conformance">MCP Conformance
  * Test Framework</a>
  */
-public class Main {
+public class ConformanceJdkClientMcpClient {
 
 	public static void main(String[] args) {
 		if (args.length == 0) {
-			System.err.println("Usage: Main <server-url>");
+			System.err.println("Usage: ConformanceJdkClientMcpClient <server-url>");
 			System.err.println("The server URL must be provided as the last command-line argument.");
 			System.err.println("The MCP_CONFORMANCE_SCENARIO environment variable must be set.");
 			System.exit(1);

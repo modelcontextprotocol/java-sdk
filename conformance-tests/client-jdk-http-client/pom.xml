@@ -53,7 +53,7 @@
 							<transformers>
 								<transformer
 									implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-									<mainClass>io.modelcontextprotocol.conformance.client.Main</mainClass>
+									<mainClass>io.modelcontextprotocol.conformance.client.ConformanceJdkClientMcpClient</mainClass>
 								</transformer>
 								<transformer
 									implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
