@@ -1664,7 +1664,7 @@ public class McpAsyncServer {
 
 		// Handle Notification messages (no response expected)
 		if (msg instanceof QueuedMessage.Notification notif) {
-			return sendNotificationToClient(exchange, notif);
+			return sendNotificationToClient(exchange, notif, taskId);
 		}
 
 		// Response messages should never be returned by dequeue() - but handle gracefully
@@ -1711,8 +1711,58 @@ public class McpAsyncServer {
 	/**
 	 * Sends a notification to the client without waiting for a response.
 	 */
-	private Mono<Void> sendNotificationToClient(McpAsyncServerExchange exchange, QueuedMessage.Notification notif) {
-		return exchange.getSession().sendNotification(notif.method(), notif.notification());
+	private Mono<Void> sendNotificationToClient(McpAsyncServerExchange exchange, QueuedMessage.Notification notif,
+			String taskId) {
+		McpSchema.Notification notification = addRelatedTaskMetadataToNotification(taskId, notif.notification());
+		return exchange.getSession().sendNotification(notif.method(), notification);
+	}
+
+	/**
+	 * Adds related-task metadata to a notification. Task status notifications are
+	 * excluded as they already contain the taskId in their params.
+	 * @param taskId the task ID to include in the metadata
+	 * @param notification the notification to augment
+	 * @return the notification with related-task metadata added
+	 */
+	private McpSchema.Notification addRelatedTaskMetadataToNotification(String taskId,
+			McpSchema.Notification notification) {
+		// Handle all Notification subtypes (sealed interface guarantees exhaustiveness)
+		if (notification instanceof McpSchema.TaskStatusNotification tsn) {
+			// Already has taskId in params - spec says SHOULD NOT include metadata
+			return tsn;
+		}
+		else if (notification instanceof McpSchema.ProgressNotification pn) {
+			Map<String, Object> newMeta = mergeRelatedTaskMetadata(taskId, pn.meta());
+			return new McpSchema.ProgressNotification(pn.progressToken(), pn.progress(), pn.total(), pn.message(),
+					newMeta);
+		}
+		else if (notification instanceof McpSchema.LoggingMessageNotification ln) {
+			Map<String, Object> newMeta = mergeRelatedTaskMetadata(taskId, ln.meta());
+			return new McpSchema.LoggingMessageNotification(ln.level(), ln.logger(), ln.data(), newMeta);
+		}
+		else if (notification instanceof McpSchema.ResourcesUpdatedNotification rn) {
+			Map<String, Object> newMeta = mergeRelatedTaskMetadata(taskId, rn.meta());
+			return new McpSchema.ResourcesUpdatedNotification(rn.uri(), newMeta);
+		}
+
+		// This should never happen due to sealed interface, but satisfies compiler
+		throw new IllegalStateException("Unexpected notification type: " + notification.getClass().getName());
+	}
+
+	/**
+	 * Merges related-task metadata with existing metadata.
+	 * @param taskId the task ID to include
+	 * @param existingMeta the existing metadata (may be null)
+	 * @return a new map containing both the related-task metadata and any existing
+	 * metadata
+	 */
+	private Map<String, Object> mergeRelatedTaskMetadata(String taskId, Map<String, Object> existingMeta) {
+		Map<String, Object> newMeta = new HashMap<>();
+		newMeta.put(McpSchema.RELATED_TASK_META_KEY, Map.of("taskId", taskId));
+		if (existingMeta != null) {
+			newMeta.putAll(existingMeta);
+		}
+		return newMeta;
 	}
 
 	/**
@@ -1750,11 +1800,31 @@ public class McpAsyncServer {
 	@SuppressWarnings("unchecked")
 	private Mono<McpSchema.Result> fetchTaskResult(String taskId, String sessionId) {
 		return this.taskStore.getTaskResult(taskId, sessionId)
-			.map(result -> (McpSchema.Result) result)
+			.map(result -> addRelatedTaskMetadata(taskId, (McpSchema.Result) result))
 			.switchIfEmpty(Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
 				.message("Task result not available")
 				.data("Task ID: " + taskId)
 				.build()));
+	}
+
+	/**
+	 * Adds the related-task metadata to a server task result. The tasks/result operation
+	 * MUST include this metadata in its response, as the result structure itself does not
+	 * contain the task ID.
+	 * @param taskId the task ID to include in the metadata
+	 * @param result the result to add metadata to
+	 * @return the result with related-task metadata added
+	 */
+	private McpSchema.Result addRelatedTaskMetadata(String taskId, McpSchema.Result result) {
+		// Server-side tasks only produce CallToolResult (per ServerTaskPayloadResult
+		// sealed interface)
+		if (result instanceof McpSchema.CallToolResult ctr) {
+			Map<String, Object> newMeta = mergeRelatedTaskMetadata(taskId, ctr.meta());
+			return new McpSchema.CallToolResult(ctr.content(), ctr.isError(), ctr.structuredContent(), newMeta);
+		}
+
+		// For non-task results (e.g., direct tool calls), return as-is
+		return result;
 	}
 
 	/**

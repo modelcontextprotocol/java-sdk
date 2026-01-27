@@ -531,6 +531,202 @@ class McpAsyncClientResponseHandlerTests {
 	}
 
 	@Test
+	void testElicitationResponseIncludesRelatedTaskMetadata() {
+		MockMcpClientTransport transport = initializationEnabledTransport();
+
+		// Create a test elicitation handler that returns a simple response
+		Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler = request -> Mono
+			.just(new McpSchema.ElicitResult(McpSchema.ElicitResult.Action.ACCEPT, Map.of("value", "42"), null));
+
+		// Create client with elicitation capability and handler
+		McpAsyncClient asyncMcpClient = McpClient.async(transport)
+			.capabilities(ClientCapabilities.builder().elicitation().build())
+			.elicitation(elicitationHandler)
+			.build();
+
+		assertThat(asyncMcpClient.initialize().block()).isNotNull();
+
+		// Create elicitation request WITH related-task metadata (simulating
+		// side-channeling)
+		String taskId = "test-task-123";
+		Map<String, Object> relatedTaskMeta = Map.of("taskId", taskId);
+		Map<String, Object> requestMeta = Map.of(McpSchema.RELATED_TASK_META_KEY, relatedTaskMeta);
+
+		var elicitRequest = new McpSchema.ElicitRequest("What is your favorite number?",
+				Map.of("type", "object", "properties", Map.of("value", Map.of("type", "string"))), null, requestMeta);
+
+		// Simulate incoming request
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
+				McpSchema.METHOD_ELICITATION_CREATE, "test-id", elicitRequest);
+		transport.simulateIncomingMessage(request);
+
+		// Verify response
+		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
+		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
+
+		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
+		assertThat(response.id()).isEqualTo("test-id");
+		assertThat(response.error()).isNull();
+
+		McpSchema.ElicitResult result = transport.unmarshalFrom(response.result(), new TypeRef<>() {
+		});
+		assertThat(result).isNotNull();
+		assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+		assertThat(result.content()).isEqualTo(Map.of("value", "42"));
+
+		// Verify related-task metadata was echoed back
+		assertThat(result.meta()).isNotNull();
+		assertThat(result.meta()).containsKey(McpSchema.RELATED_TASK_META_KEY);
+		@SuppressWarnings("unchecked")
+		Map<String, Object> echoedRelatedTask = (Map<String, Object>) result.meta()
+			.get(McpSchema.RELATED_TASK_META_KEY);
+		assertThat(echoedRelatedTask.get("taskId")).isEqualTo(taskId);
+
+		asyncMcpClient.closeGracefully();
+	}
+
+	@Test
+	void testElicitationResponseWithoutRelatedTaskMetadata() {
+		MockMcpClientTransport transport = initializationEnabledTransport();
+
+		// Create a test elicitation handler that returns a response with custom meta
+		Map<String, Object> handlerMeta = Map.of("custom-key", "custom-value");
+		Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler = request -> Mono
+			.just(new McpSchema.ElicitResult(McpSchema.ElicitResult.Action.ACCEPT, Map.of("value", "42"), handlerMeta));
+
+		// Create client with elicitation capability and handler
+		McpAsyncClient asyncMcpClient = McpClient.async(transport)
+			.capabilities(ClientCapabilities.builder().elicitation().build())
+			.elicitation(elicitationHandler)
+			.build();
+
+		assertThat(asyncMcpClient.initialize().block()).isNotNull();
+
+		// Create elicitation request WITHOUT related-task metadata
+		var elicitRequest = new McpSchema.ElicitRequest("What is your favorite number?",
+				Map.of("type", "object", "properties", Map.of("value", Map.of("type", "string"))));
+
+		// Simulate incoming request
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
+				McpSchema.METHOD_ELICITATION_CREATE, "test-id", elicitRequest);
+		transport.simulateIncomingMessage(request);
+
+		// Verify response
+		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
+		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
+
+		McpSchema.ElicitResult result = transport.unmarshalFrom(response.result(), new TypeRef<>() {
+		});
+		assertThat(result).isNotNull();
+
+		// Verify handler's meta is preserved and no related-task was added
+		assertThat(result.meta()).isEqualTo(handlerMeta);
+		assertThat(result.meta()).doesNotContainKey(McpSchema.RELATED_TASK_META_KEY);
+
+		asyncMcpClient.closeGracefully();
+	}
+
+	@Test
+	void testSamplingResponseIncludesRelatedTaskMetadata() {
+		MockMcpClientTransport transport = initializationEnabledTransport();
+
+		// Create a test sampling handler that returns a simple response
+		Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler = request -> Mono
+			.just(new McpSchema.CreateMessageResult(McpSchema.Role.ASSISTANT, new McpSchema.TextContent("Response"),
+					"test-model", McpSchema.CreateMessageResult.StopReason.END_TURN, null));
+
+		// Create client with sampling capability and handler
+		McpAsyncClient asyncMcpClient = McpClient.async(transport)
+			.capabilities(ClientCapabilities.builder().sampling().build())
+			.sampling(samplingHandler)
+			.build();
+
+		assertThat(asyncMcpClient.initialize().block()).isNotNull();
+
+		// Create sampling request WITH related-task metadata (simulating side-channeling)
+		String taskId = "test-task-456";
+		Map<String, Object> relatedTaskMeta = Map.of("taskId", taskId);
+		Map<String, Object> requestMeta = Map.of(McpSchema.RELATED_TASK_META_KEY, relatedTaskMeta);
+
+		var messageRequest = new McpSchema.CreateMessageRequest(
+				List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("Test message"))),
+				null, "Test system prompt", McpSchema.CreateMessageRequest.ContextInclusionStrategy.NONE, 0.7, 100,
+				null, null, null, requestMeta);
+
+		// Simulate incoming request
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
+				McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, "test-id", messageRequest);
+		transport.simulateIncomingMessage(request);
+
+		// Verify response
+		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
+		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
+
+		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
+		assertThat(response.id()).isEqualTo("test-id");
+		assertThat(response.error()).isNull();
+
+		McpSchema.CreateMessageResult result = transport.unmarshalFrom(response.result(), new TypeRef<>() {
+		});
+		assertThat(result).isNotNull();
+		assertThat(result.role()).isEqualTo(McpSchema.Role.ASSISTANT);
+
+		// Verify related-task metadata was echoed back
+		assertThat(result.meta()).isNotNull();
+		assertThat(result.meta()).containsKey(McpSchema.RELATED_TASK_META_KEY);
+		@SuppressWarnings("unchecked")
+		Map<String, Object> echoedRelatedTask = (Map<String, Object>) result.meta()
+			.get(McpSchema.RELATED_TASK_META_KEY);
+		assertThat(echoedRelatedTask.get("taskId")).isEqualTo(taskId);
+
+		asyncMcpClient.closeGracefully();
+	}
+
+	@Test
+	void testElicitationResponseMergesHandlerMetaWithRelatedTask() {
+		MockMcpClientTransport transport = initializationEnabledTransport();
+
+		// Create a test elicitation handler that returns a response with custom meta
+		Map<String, Object> handlerMeta = Map.of("custom-key", "custom-value");
+		Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler = request -> Mono
+			.just(new McpSchema.ElicitResult(McpSchema.ElicitResult.Action.ACCEPT, Map.of("value", "42"), handlerMeta));
+
+		// Create client with elicitation capability and handler
+		McpAsyncClient asyncMcpClient = McpClient.async(transport)
+			.capabilities(ClientCapabilities.builder().elicitation().build())
+			.elicitation(elicitationHandler)
+			.build();
+
+		assertThat(asyncMcpClient.initialize().block()).isNotNull();
+
+		// Create elicitation request WITH related-task metadata
+		String taskId = "test-task-789";
+		Map<String, Object> relatedTaskMeta = Map.of("taskId", taskId);
+		Map<String, Object> requestMeta = Map.of(McpSchema.RELATED_TASK_META_KEY, relatedTaskMeta);
+
+		var elicitRequest = new McpSchema.ElicitRequest("Test?",
+				Map.of("type", "object", "properties", Map.of("value", Map.of("type", "string"))), null, requestMeta);
+
+		// Simulate incoming request
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
+				McpSchema.METHOD_ELICITATION_CREATE, "test-id", elicitRequest);
+		transport.simulateIncomingMessage(request);
+
+		// Verify response
+		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) transport.getLastSentMessage();
+		McpSchema.ElicitResult result = transport.unmarshalFrom(response.result(), new TypeRef<>() {
+		});
+
+		// Verify both handler's meta AND related-task are present (merged)
+		assertThat(result.meta()).isNotNull();
+		assertThat(result.meta()).containsKey("custom-key");
+		assertThat(result.meta().get("custom-key")).isEqualTo("custom-value");
+		assertThat(result.meta()).containsKey(McpSchema.RELATED_TASK_META_KEY);
+
+		asyncMcpClient.closeGracefully();
+	}
+
+	@Test
 	void testPingMessageRequestHandling() {
 		MockMcpClientTransport transport = initializationEnabledTransport();
 
