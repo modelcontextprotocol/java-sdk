@@ -2,9 +2,98 @@
 
 ## Summary
 
-The Java SDK conformance server implementation has been validated against the official MCP conformance test suite. Out of 40 total test checks in the "active" suite, **36 passed (90%)** and **4 failed (10%)**.
+The Java SDK has been validated against the official MCP conformance test suite for both server and client implementations.
 
-## Test Results
+### Server Tests
+Out of 40 total test checks in the "active" suite, **36 passed (90%)** and **4 failed (10%)**.
+
+### Client Tests
+The client conformance implementation supports 4 core scenarios (excluding auth):
+- ✅ initialize
+- ✅ tools_call
+- ✅ elicitation-sep1034-client-defaults
+- ✅ sse-retry
+
+## Client Test Results
+
+### ✅ Implemented Client Scenarios (4/4)
+
+#### 1. initialize
+**Status:** ✅ Implemented  
+**Description:** Tests the MCP client initialization handshake  
+**Validates:**
+- Protocol version negotiation
+- Client info (name and version)
+- Server capabilities handling
+- Proper connection establishment and closure
+
+#### 2. tools_call
+**Status:** ✅ Implemented  
+**Description:** Tests tool discovery and invocation  
+**Validates:**
+- Client initialization
+- Listing available tools from server
+- Calling the `add_numbers` tool with arguments (a=5, b=3)
+- Processing tool results
+
+#### 3. elicitation-sep1034-client-defaults
+**Status:** ✅ Implemented  
+**Description:** Tests that client applies default values for omitted elicitation fields (SEP-1034)  
+**Validates:**
+- Client properly applies default values from JSON schema
+- Supports string, integer, number, enum, and boolean defaults
+- Correctly handles elicitation requests from server
+- Sends complete responses with all required fields
+
+#### 4. sse-retry
+**Status:** ✅ Implemented  
+**Description:** Tests client respects SSE retry field timing and reconnects properly (SEP-1699)  
+**Validates:**
+- Client reconnects after SSE stream closure
+- Respects the retry field timing (waits specified milliseconds)
+- Sends Last-Event-ID header on reconnection
+- Handles graceful stream closure as reconnectable
+
+### Client Implementation Details
+
+The client conformance tests use:
+- **Transport:** `HttpClientStreamableHttpTransport` (JDK HTTP Client)
+- **Client Type:** `McpAsyncClient` with reactive (Reactor) API
+- **Configuration:** 30-second request timeout, test-client/1.0.0 identification
+- **Protocol:** Latest Streamable HTTP protocol (2025-03-26)
+
+### Running Client Tests
+
+Build the executable JAR:
+```bash
+cd conformance-tests/client-jdk-http-client
+../../mvnw clean package -DskipTests
+```
+
+Run with conformance framework:
+```bash
+npx @modelcontextprotocol/conformance client \
+  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-0.18.0-SNAPSHOT.jar" \
+  --scenario initialize
+
+npx @modelcontextprotocol/conformance client \
+  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-0.18.0-SNAPSHOT.jar" \
+  --scenario tools_call
+
+npx @modelcontextprotocol/conformance client \
+  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-0.18.0-SNAPSHOT.jar" \
+  --scenario elicitation-sep1034-client-defaults
+
+npx @modelcontextprotocol/conformance client \
+  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-0.18.0-SNAPSHOT.jar" \
+  --scenario sse-retry
+```
+
+### Excluded Scenarios
+
+**Auth Scenarios:** Authentication-related scenarios were excluded as per requirements. The conformance framework includes 15+ auth scenarios that test OAuth2, OIDC, and various authentication flows. These can be added in future iterations.
+
+## Server Test Results
 
 ### ✅ Passing Tests (36/40)
 
@@ -91,12 +180,30 @@ The Java SDK conformance server implementation has been validated against the of
 
 ## Changes Made
 
-### 1. Added Completion Support
+### Client Conformance Implementation
+
+#### 1. Base Client Scenarios
+- Implemented `initialize` scenario for basic handshake testing
+- Implemented `tools_call` scenario for tool discovery and invocation
+
+#### 2. Elicitation Defaults (SEP-1034)
+- Implemented `elicitation-sep1034-client-defaults` scenario
+- Tests client properly applies default values from JSON schema
+- Validates all primitive types: string, integer, number, enum, boolean
+
+#### 3. SSE Retry Handling (SEP-1699)
+- Implemented `sse-retry` scenario
+- Tests client respects retry field timing
+- Validates graceful reconnection with Last-Event-ID header
+
+### Server Conformance Implementation
+
+#### 1. Added Completion Support
 - Enabled `completions` capability in server capabilities
 - Implemented completion handler for `test_prompt_with_arguments` prompt
 - Returns minimal completion with required `total` field set to 0
 
-### 2. Added SEP-1034 Elicitation Defaults Tool
+#### 2. Added SEP-1034 Elicitation Defaults Tool
 - Implemented `test_elicitation_sep1034_defaults` tool
 - Supports default values for all primitive types:
   - String: "John Doe"
@@ -105,7 +212,7 @@ The Java SDK conformance server implementation has been validated against the of
   - Enum: "active" (from ["active", "inactive", "pending"])
   - Boolean: true
 
-### 3. Added SEP-1330 Enum Schema Improvements Tool
+#### 3. Added SEP-1330 Enum Schema Improvements Tool
 - Implemented `test_elicitation_sep1330_enums` tool
 - Supports all 5 enum variants:
   - Untitled single-select (enum array)
@@ -114,7 +221,7 @@ The Java SDK conformance server implementation has been validated against the of
   - Untitled multi-select (array with items.enum)
   - Titled multi-select (array with items.anyOf)
 
-### 4. Enabled Resources Capability
+#### 4. Enabled Resources Capability
 - Added `resources(true, false)` to server capabilities
 - Enables subscribe capability (though not fully implemented in SDK)
 
@@ -155,7 +262,9 @@ The HTTP transport does not validate Host/Origin headers, making localhost serve
 
 ## Testing Instructions
 
-To reproduce these tests:
+### Server Tests
+
+To reproduce server tests:
 
 ```bash
 # Start the conformance server
@@ -166,10 +275,33 @@ cd conformance-tests/server-servlet
 npx @modelcontextprotocol/conformance server --url http://localhost:8080/mcp --suite active
 ```
 
-To test individual scenarios:
+To test individual server scenarios:
 
 ```bash
 npx @modelcontextprotocol/conformance server --url http://localhost:8080/mcp --scenario tools-call-with-progress --verbose
+```
+
+### Client Tests
+
+To test client scenarios:
+
+```bash
+# Build the client JAR first
+cd conformance-tests/client-jdk-http-client
+../../mvnw clean package -DskipTests
+
+# Run individual scenarios
+npx @modelcontextprotocol/conformance client \
+  --command "java -jar target/client-jdk-http-client-0.18.0-SNAPSHOT.jar" \
+  --scenario initialize \
+  --verbose
+
+# Test all client scenarios
+for scenario in initialize tools_call elicitation-sep1034-client-defaults sse-retry; do
+  npx @modelcontextprotocol/conformance client \
+    --command "java -jar target/client-jdk-http-client-0.18.0-SNAPSHOT.jar" \
+    --scenario $scenario
+done
 ```
 
 ## Conclusion

@@ -29,6 +29,18 @@ Currently implemented scenarios:
   - Calls the `add_numbers` tool with test arguments (a=5, b=3)
   - Validates the tool result
 
+- **elicitation-sep1034-client-defaults**: Tests client applies default values for omitted elicitation fields (SEP-1034)
+  - Initializes the client
+  - Lists available tools from the server
+  - Calls the `test_client_elicitation_defaults` tool
+  - Validates that the client properly applies default values from JSON schema to elicitation responses
+
+- **sse-retry**: Tests client respects SSE retry field timing and reconnects properly (SEP-1699)
+  - Initializes the client
+  - Lists available tools from the server
+  - Calls the `test_reconnection` tool which triggers SSE stream closure
+  - Validates that the client properly reconnects with correct timing and Last-Event-ID header
+
 ## Building
 
 Build the executable JAR:
@@ -57,6 +69,14 @@ npx @modelcontextprotocol/conformance client \
 npx @modelcontextprotocol/conformance client \
   --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-0.18.0-SNAPSHOT.jar" \
   --scenario tools_call
+
+npx @modelcontextprotocol/conformance client \
+  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-0.18.0-SNAPSHOT.jar" \
+  --scenario elicitation-sep1034-client-defaults
+
+npx @modelcontextprotocol/conformance client \
+  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-0.18.0-SNAPSHOT.jar" \
+  --scenario sse-retry
 ```
 
 Run with verbose output:
@@ -139,7 +159,7 @@ case "new-scenario":
 
 Future enhancements:
 
-- Add more scenarios (auth, elicitation, etc.)
+- Add auth scenarios (currently excluded as per requirements)
 - Implement a comprehensive "everything-client" pattern
 - Add to CI/CD pipeline
 - Create expected-failures baseline for known issues
