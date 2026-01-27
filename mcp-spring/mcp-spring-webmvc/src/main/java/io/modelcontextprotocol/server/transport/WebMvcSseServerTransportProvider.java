@@ -471,8 +471,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 
 		private Duration keepAliveInterval;
 
-		private McpTransportContextExtractor<ServerRequest> contextExtractor = (
-				serverRequest) -> McpTransportContext.EMPTY;
+		private McpTransportContextExtractor<ServerRequest> contextExtractor;
 
 		/**
 		 * Sets the JSON object mapper to use for message serialization/deserialization.
@@ -560,7 +559,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				throw new IllegalStateException("MessageEndpoint must be set");
 			}
 			return new WebMvcSseServerTransportProvider(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
-					baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval, contextExtractor);
+					baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval,
+					contextExtractor == null ? new McpTransportContextExtractorServerRequest() : contextExtractor);
 		}
 
 	}

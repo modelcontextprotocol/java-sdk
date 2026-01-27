@@ -15,6 +15,7 @@ import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpStatelessServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
+import io.modelcontextprotocol.server.servlet.HttpServletRequestMcpTransportContextExtractor;
 import io.modelcontextprotocol.server.transport.HttpServletSseServerTransportProvider;
 import io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport;
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
@@ -22,6 +23,8 @@ import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.spec.McpSchema;
 import jakarta.servlet.Servlet;
 import jakarta.servlet.http.HttpServletRequest;
+
+import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
@@ -71,10 +74,20 @@ public class SyncServerMcpTransportContextIntegrationTests {
 		}
 	};
 
-	private final McpTransportContextExtractor<HttpServletRequest> serverContextExtractor = (HttpServletRequest r) -> {
-		var headerValue = r.getHeader(HEADER_NAME);
-		return headerValue != null ? McpTransportContext.create(Map.of("server-side-header-value", headerValue))
-				: McpTransportContext.EMPTY;
+	private final McpTransportContextExtractor<HttpServletRequest> serverContextExtractor = new HttpServletRequestMcpTransportContextExtractor() {
+		@Override
+		public McpTransportContext extract(HttpServletRequest request) {
+			return McpTransportContext.create(metadata(request));
+		}
+
+		private Map<String, Object> metadata(HttpServletRequest r) {
+			Map<String, Object> m = new HashMap<>(McpTransportContext.createMetadata(r::getHeader));
+			var headerValue = r.getHeader(HEADER_NAME);
+			if (headerValue != null) {
+				m.put("server-side-header-value", headerValue);
+			}
+			return m;
+		}
 	};
 
 	private final BiFunction<McpTransportContext, McpSchema.CallToolRequest, McpSchema.CallToolResult> statelessHandler = (

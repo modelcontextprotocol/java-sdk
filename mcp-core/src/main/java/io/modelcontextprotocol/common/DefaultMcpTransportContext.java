@@ -5,7 +5,9 @@
 package io.modelcontextprotocol.common;
 
 import java.util.Map;
+import java.util.Optional;
 
+import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.util.Assert;
 
 /**
@@ -26,6 +28,21 @@ class DefaultMcpTransportContext implements McpTransportContext {
 	@Override
 	public Object get(String key) {
 		return this.metadata.get(key);
+	}
+
+	@Override
+	public Optional<String> lastEventId() {
+		return Optional.ofNullable(metadata.get(HttpHeaders.LAST_EVENT_ID)).map(Object::toString);
+	}
+
+	@Override
+	public Optional<String> sessionId() {
+		return Optional.ofNullable(metadata.get(HttpHeaders.MCP_SESSION_ID)).map(Object::toString);
+	}
+
+	@Override
+	public Optional<String> protocolVersion() {
+		return Optional.ofNullable(metadata.get(HttpHeaders.PROTOCOL_VERSION)).map(Object::toString);
 	}
 
 	@Override

@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.server;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -13,6 +14,7 @@ import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTranspor
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpServer.AsyncSpecification;
 import io.modelcontextprotocol.server.McpServer.SyncSpecification;
+import io.modelcontextprotocol.server.servlet.HttpServletRequestMcpTransportContextExtractor;
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import jakarta.servlet.http.HttpServletRequest;
@@ -96,7 +98,17 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 	protected void prepareClients(int port, String mcpEndpoint) {
 	}
 
-	static McpTransportContextExtractor<HttpServletRequest> TEST_CONTEXT_EXTRACTOR = (r) -> McpTransportContext
-		.create(Map.of("important", "value"));
+	static McpTransportContextExtractor<HttpServletRequest> TEST_CONTEXT_EXTRACTOR = new HttpServletRequestMcpTransportContextExtractor() {
+		@Override
+		public McpTransportContext extract(HttpServletRequest request) {
+			return McpTransportContext.create(metadata(request));
+		}
+
+		private Map<String, Object> metadata(HttpServletRequest r) {
+			Map<String, Object> m = new HashMap<>(McpTransportContext.createMetadata(r::getHeader));
+			m.put("important", "value");
+			return m;
+		}
+	};
 
 }
