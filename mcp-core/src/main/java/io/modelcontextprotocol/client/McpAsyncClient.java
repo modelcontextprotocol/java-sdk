@@ -662,7 +662,7 @@ public class McpAsyncClient {
 			}
 
 			// Non-task-augmented request - execute directly
-			return this.samplingHandler.apply(request).map(result -> (McpSchema.Result) result);
+			return this.samplingHandler.apply(request).map(result -> processClientResult(request.meta(), result));
 		};
 	}
 
@@ -682,8 +682,57 @@ public class McpAsyncClient {
 			}
 
 			// Non-task-augmented request - execute directly
-			return this.elicitationHandler.apply(request).map(result -> (McpSchema.Result) result);
+			return this.elicitationHandler.apply(request).map(result -> processClientResult(request.meta(), result));
 		};
+	}
+
+	/**
+	 * Processes a client result before returning it to the server. Echoes related-task
+	 * metadata from the request to the response, which is necessary for the server to
+	 * associate elicitation/sampling responses with their originating task during
+	 * side-channeling.
+	 * @param requestMeta the request's _meta field
+	 * @param result the handler's result
+	 * @return the processed result with related-task metadata echoed (if present in
+	 * request)
+	 */
+	private McpSchema.Result processClientResult(Map<String, Object> requestMeta, McpSchema.Result result) {
+		if (requestMeta == null || !requestMeta.containsKey(McpSchema.RELATED_TASK_META_KEY)) {
+			return result;
+		}
+
+		Object relatedTask = requestMeta.get(McpSchema.RELATED_TASK_META_KEY);
+		Map<String, Object> newMeta = mergeRelatedTaskMetadata(relatedTask, result.meta());
+
+		// Client-side task payloads are ElicitResult or CreateMessageResult
+		// (per ClientTaskPayloadResult sealed interface)
+		if (result instanceof McpSchema.ElicitResult elicitResult) {
+			return new McpSchema.ElicitResult(elicitResult.action(), elicitResult.content(), newMeta);
+		}
+		else if (result instanceof McpSchema.CreateMessageResult messageResult) {
+			return new McpSchema.CreateMessageResult(messageResult.role(), messageResult.content(),
+					messageResult.model(), messageResult.stopReason(), newMeta);
+		}
+
+		// For other result types, return as-is (shouldn't happen for client-side task
+		// payloads)
+		return result;
+	}
+
+	/**
+	 * Merges related-task metadata with existing metadata.
+	 * @param relatedTask the related-task object to include
+	 * @param existingMeta the existing metadata (may be null)
+	 * @return a new map containing both the related-task metadata and any existing
+	 * metadata
+	 */
+	private Map<String, Object> mergeRelatedTaskMetadata(Object relatedTask, Map<String, Object> existingMeta) {
+		Map<String, Object> newMeta = new HashMap<>();
+		newMeta.put(McpSchema.RELATED_TASK_META_KEY, relatedTask);
+		if (existingMeta != null) {
+			newMeta.putAll(existingMeta);
+		}
+		return newMeta;
 	}
 
 	// --------------------------
