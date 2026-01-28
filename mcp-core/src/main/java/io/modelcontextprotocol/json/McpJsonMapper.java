@@ -87,24 +87,4 @@ public interface McpJsonMapper {
 	 */
 	byte[] writeValueAsBytes(Object value) throws IOException;
 
-	/**
-	 * Returns the default {@link McpJsonMapper}.
-	 * @return The default {@link McpJsonMapper}
-	 * @throws IllegalStateException If no {@link McpJsonMapper} implementation exists on
-	 * the classpath.
-	 */
-	static McpJsonMapper getDefault() {
-		return McpJsonInternal.getDefaultMapper();
-	}
-
-	/**
-	 * Creates a new default {@link McpJsonMapper}.
-	 * @return The default {@link McpJsonMapper}
-	 * @throws IllegalStateException If no {@link McpJsonMapper} implementation exists on
-	 * the classpath.
-	 */
-	static McpJsonMapper createDefault() {
-		return McpJsonInternal.createDefaultMapper();
-	}
-
 }

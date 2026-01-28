@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.client;
 
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -491,9 +492,12 @@ public interface McpClient {
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
-			return new McpSyncClient(new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout,
-					jsonSchemaValidator != null ? jsonSchemaValidator : JsonSchemaValidator.getDefault(),
-					asyncFeatures), this.contextProvider);
+			return new McpSyncClient(
+					new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout,
+							jsonSchemaValidator != null ? jsonSchemaValidator
+									: McpJsonDefaults.getDefaultJsonSchemaValidator(),
+							asyncFeatures),
+					this.contextProvider);
 		}
 
 	}
@@ -826,7 +830,7 @@ public interface McpClient {
 		 */
 		public McpAsyncClient build() {
 			var jsonSchemaValidator = (this.jsonSchemaValidator != null) ? this.jsonSchemaValidator
-					: JsonSchemaValidator.getDefault();
+					: McpJsonDefaults.getDefaultJsonSchemaValidator();
 			return new McpAsyncClient(this.transport, this.requestTimeout, this.initializationTimeout,
 					jsonSchemaValidator,
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,

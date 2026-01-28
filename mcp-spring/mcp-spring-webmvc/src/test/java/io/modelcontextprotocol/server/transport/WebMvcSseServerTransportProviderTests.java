@@ -7,6 +7,7 @@ package io.modelcontextprotocol.server.transport;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.TestUtil;
@@ -104,7 +105,7 @@ class WebMvcSseServerTransportProviderTests {
 				.baseUrl("http://localhost:" + PORT + "/")
 				.messageEndpoint(MESSAGE_ENDPOINT)
 				.sseEndpoint(WebMvcSseServerTransportProvider.DEFAULT_SSE_ENDPOINT)
-				.jsonMapper(McpJsonMapper.getDefault())
+				.jsonMapper(McpJsonDefaults.getDefaultMcpJsonMapper())
 				.contextExtractor(req -> McpTransportContext.EMPTY)
 				.build();
 		}

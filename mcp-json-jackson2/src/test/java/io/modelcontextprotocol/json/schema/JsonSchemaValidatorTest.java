@@ -8,13 +8,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.schema.jackson2.DefaultJsonSchemaValidator;
 
 class JsonSchemaValidatorTest {
 
 	@Test
 	void shouldUseJackson2Mapper() {
-		assertThat(JsonSchemaValidator.getDefault()).isInstanceOf(DefaultJsonSchemaValidator.class);
+		assertThat(McpJsonDefaults.getDefaultJsonSchemaValidator()).isInstanceOf(DefaultJsonSchemaValidator.class);
 	}
 
 }

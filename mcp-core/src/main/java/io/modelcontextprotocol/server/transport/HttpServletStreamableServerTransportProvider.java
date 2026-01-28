@@ -32,6 +32,7 @@ import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.util.KeepAliveScheduler;
 import jakarta.servlet.AsyncContext;
@@ -912,8 +913,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		public HttpServletStreamableServerTransportProvider build() {
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 			return new HttpServletStreamableServerTransportProvider(
-					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, mcpEndpoint, disallowDelete,
-					contextExtractor, keepAliveInterval, securityValidator);
+					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, mcpEndpoint,
+					disallowDelete, contextExtractor, keepAliveInterval, securityValidator);
 		}
 
 	}

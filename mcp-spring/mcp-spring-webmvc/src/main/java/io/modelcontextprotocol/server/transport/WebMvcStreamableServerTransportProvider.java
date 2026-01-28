@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -112,8 +113,6 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 	 * Constructs a new WebMvcStreamableServerTransportProvider instance.
 	 * @param jsonMapper The McpJsonMapper to use for JSON serialization/deserialization
 	 * of messages.
-	 * @param baseUrl The base URL for the message endpoint, used to construct the full
-	 * endpoint URL for clients.
 	 * @param mcpEndpoint The endpoint URI where clients should send their JSON-RPC
 	 * messages via HTTP. This endpoint will handle GET, POST, and DELETE requests.
 	 * @param disallowDelete Whether to disallow DELETE requests on the endpoint.
@@ -732,8 +731,8 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		public WebMvcStreamableServerTransportProvider build() {
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 			return new WebMvcStreamableServerTransportProvider(
-					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, mcpEndpoint, disallowDelete,
-					contextExtractor, keepAliveInterval, securityValidator);
+					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, mcpEndpoint,
+					disallowDelete, contextExtractor, keepAliveInterval, securityValidator);
 		}
 
 	}

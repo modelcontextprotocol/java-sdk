@@ -1,5 +1,6 @@
 package io.modelcontextprotocol.spec;
 
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import org.junit.jupiter.api.Test;
 import java.io.IOException;
@@ -10,7 +11,7 @@ class CompleteCompletionSerializationTest {
 
 	@Test
 	void codeCompletionSerialization() throws IOException {
-		McpJsonMapper jsonMapper = McpJsonMapper.getDefault();
+		McpJsonMapper jsonMapper = McpJsonDefaults.getDefaultMcpJsonMapper();
 		McpSchema.CompleteResult.CompleteCompletion codeComplete = new McpSchema.CompleteResult.CompleteCompletion(
 				Collections.emptyList(), 0, false);
 		String json = jsonMapper.writeValueAsString(codeComplete);

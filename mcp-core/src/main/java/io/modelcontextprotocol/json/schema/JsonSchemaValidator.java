@@ -41,24 +41,4 @@ public interface JsonSchemaValidator {
 	 */
 	ValidationResponse validate(Map<String, Object> schema, Object structuredContent);
 
-	/**
-	 * Creates the default {@link JsonSchemaValidator}.
-	 * @return The default {@link JsonSchemaValidator}
-	 * @throws IllegalStateException If no {@link JsonSchemaValidator} implementation
-	 * exists on the classpath.
-	 */
-	static JsonSchemaValidator createDefault() {
-		return JsonSchemaInternal.createDefaultValidator();
-	}
-
-	/**
-	 * Returns the default {@link JsonSchemaValidator}.
-	 * @return The default {@link JsonSchemaValidator}
-	 * @throws IllegalStateException If no {@link JsonSchemaValidator} implementation
-	 * exists on the classpath.
-	 */
-	static JsonSchemaValidator getDefault() {
-		return JsonSchemaInternal.getDefaultValidator();
-	}
-
 }

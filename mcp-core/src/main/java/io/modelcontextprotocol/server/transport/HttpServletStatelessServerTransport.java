@@ -16,6 +16,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -347,8 +348,9 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		 */
 		public HttpServletStatelessServerTransport build() {
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
-			return new HttpServletStatelessServerTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
-					mcpEndpoint, contextExtractor, securityValidator);
+			return new HttpServletStatelessServerTransport(
+					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, mcpEndpoint,
+					contextExtractor, securityValidator);
 		}
 
 	}
