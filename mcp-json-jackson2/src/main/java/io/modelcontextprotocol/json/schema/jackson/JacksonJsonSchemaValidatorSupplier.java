@@ -13,6 +13,9 @@ import io.modelcontextprotocol.json.schema.JsonSchemaValidatorSupplier;
  *
  * @see JsonSchemaValidatorSupplier
  * @see JsonSchemaValidator
+ * @deprecated since 18.0.0, use
+ * {@link io.modelcontextprotocol.json.schema.jackson2.JacksonJsonSchemaValidatorSupplier}
+ * instead. Will be removed in 19.0.0.
  */
 public class JacksonJsonSchemaValidatorSupplier implements JsonSchemaValidatorSupplier {
 

@@ -281,6 +281,13 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	@Override
 	public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+		String jsonText;
+		try {
+			jsonText = jsonMapper.writeValueAsString(message);
+		}
+		catch (IOException e) {
+			return Mono.error(new RuntimeException("Failed to serialize message", e));
+		}
 		return Mono.create(sink -> {
 			logger.debug("Sending message {}", message);
 			// Here we attempt to initialize the client.
@@ -293,6 +300,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 			Disposable connection = Flux.deferContextual(ctx -> webClient.post()
 				.uri(this.endpoint)
+				.contentType(MediaType.APPLICATION_JSON)
 				.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_EVENT_STREAM)
 				.header(HttpHeaders.PROTOCOL_VERSION,
 						ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
@@ -300,7 +308,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 				.headers(httpHeaders -> {
 					transportSession.sessionId().ifPresent(id -> httpHeaders.add(HttpHeaders.MCP_SESSION_ID, id));
 				})
-				.bodyValue(message)
+				.bodyValue(jsonText)
 				.exchangeToFlux(response -> {
 					if (transportSession
 						.markInitialized(response.headers().asHttpHeaders().getFirst(HttpHeaders.MCP_SESSION_ID))) {
@@ -318,7 +326,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 						long contentLength = response.headers().contentLength().orElse(-1);
 						// Existing SDKs consume notifications with no response body nor
 						// content type
-						if (contentType.isEmpty() || contentLength == 0) {
+						if (contentType.isEmpty() || contentLength == 0
+								|| response.statusCode().equals(HttpStatus.ACCEPTED)) {
 							logger.trace("Message was successfully sent via POST for session {}",
 									sessionRepresentation);
 							// signal the caller that the message was successfully
