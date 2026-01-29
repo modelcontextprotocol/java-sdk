@@ -14,7 +14,6 @@ import org.apache.catalina.LifecycleException;
 import org.apache.catalina.startup.Tomcat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.publisher.Mono;
 
 public class ConformanceServlet {
 
@@ -43,7 +42,7 @@ public class ConformanceServlet {
 			.build();
 
 		// Build server with all conformance test features
-		var mcpServer = McpServer.async(transportProvider)
+		var mcpServer = McpServer.sync(transportProvider)
 			.serverInfo("mcp-conformance-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder()
 				.completions()
@@ -60,6 +59,34 @@ public class ConformanceServlet {
 			.build();
 
 		// Set up embedded Tomcat
+		Tomcat tomcat = createEmbeddedTomcat(transportProvider);
+
+		try {
+			tomcat.start();
+			logger.info("Conformance MCP Servlet Server started on port {} with endpoint {}", PORT, MCP_ENDPOINT);
+			logger.info("Server URL: http://localhost:{}{}", PORT, MCP_ENDPOINT);
+
+			// Keep the server running
+			tomcat.getServer().await();
+		}
+		catch (LifecycleException e) {
+			logger.error("Failed to start Tomcat server", e);
+			throw e;
+		}
+		finally {
+			logger.info("Shutting down MCP server...");
+			mcpServer.closeGracefully();
+			try {
+				tomcat.stop();
+				tomcat.destroy();
+			}
+			catch (LifecycleException e) {
+				logger.error("Error during Tomcat shutdown", e);
+			}
+		}
+	}
+
+	private static Tomcat createEmbeddedTomcat(HttpServletStreamableServerTransportProvider transportProvider) {
 		Tomcat tomcat = new Tomcat();
 		tomcat.setPort(PORT);
 
@@ -79,36 +106,13 @@ public class ConformanceServlet {
 
 		var connector = tomcat.getConnector();
 		connector.setAsyncTimeout(30000);
-
-		try {
-			tomcat.start();
-			logger.info("Conformance MCP Servlet Server started on port {} with endpoint {}", PORT, MCP_ENDPOINT);
-			logger.info("Server URL: http://localhost:{}{}", PORT, MCP_ENDPOINT);
-
-			// Keep the server running
-			tomcat.getServer().await();
-		}
-		catch (LifecycleException e) {
-			logger.error("Failed to start Tomcat server", e);
-			throw e;
-		}
-		finally {
-			logger.info("Shutting down MCP server...");
-			mcpServer.closeGracefully().block();
-			try {
-				tomcat.stop();
-				tomcat.destroy();
-			}
-			catch (LifecycleException e) {
-				logger.error("Error during Tomcat shutdown", e);
-			}
-		}
+		return tomcat;
 	}
 
-	private static List<McpServerFeatures.AsyncToolSpecification> createToolSpecs() {
+	private static List<McpServerFeatures.SyncToolSpecification> createToolSpecs() {
 		return List.of(
 				// test_simple_text - Returns simple text content
-				McpServerFeatures.AsyncToolSpecification.builder()
+				McpServerFeatures.SyncToolSpecification.builder()
 					.tool(Tool.builder()
 						.name("test_simple_text")
 						.description("Returns simple text content for testing")
@@ -116,15 +120,15 @@ public class ConformanceServlet {
 						.build())
 					.callHandler((exchange, request) -> {
 						logger.info("Tool 'test_simple_text' called");
-						return Mono.just(CallToolResult.builder()
+						return CallToolResult.builder()
 							.content(List.of(new TextContent("This is a simple text response for testing.")))
 							.isError(false)
-							.build());
+							.build();
 					})
 					.build(),
 
 				// test_image_content - Returns image content
-				McpServerFeatures.AsyncToolSpecification.builder()
+				McpServerFeatures.SyncToolSpecification.builder()
 					.tool(Tool.builder()
 						.name("test_image_content")
 						.description("Returns image content for testing")
@@ -132,15 +136,15 @@ public class ConformanceServlet {
 						.build())
 					.callHandler((exchange, request) -> {
 						logger.info("Tool 'test_image_content' called");
-						return Mono.just(CallToolResult.builder()
+						return CallToolResult.builder()
 							.content(List.of(new ImageContent(null, RED_PIXEL_PNG, "image/png")))
 							.isError(false)
-							.build());
+							.build();
 					})
 					.build(),
 
 				// test_audio_content - Returns audio content
-				McpServerFeatures.AsyncToolSpecification.builder()
+				McpServerFeatures.SyncToolSpecification.builder()
 					.tool(Tool.builder()
 						.name("test_audio_content")
 						.description("Returns audio content for testing")
@@ -148,15 +152,15 @@ public class ConformanceServlet {
 						.build())
 					.callHandler((exchange, request) -> {
 						logger.info("Tool 'test_audio_content' called");
-						return Mono.just(CallToolResult.builder()
+						return CallToolResult.builder()
 							.content(List.of(new AudioContent(null, MINIMAL_WAV, "audio/wav")))
 							.isError(false)
-							.build());
+							.build();
 					})
 					.build(),
 
 				// test_embedded_resource - Returns embedded resource content
-				McpServerFeatures.AsyncToolSpecification.builder()
+				McpServerFeatures.SyncToolSpecification.builder()
 					.tool(Tool.builder()
 						.name("test_embedded_resource")
 						.description("Returns embedded resource content for testing")
@@ -167,13 +171,12 @@ public class ConformanceServlet {
 						TextResourceContents resourceContents = new TextResourceContents("test://embedded-resource",
 								"text/plain", "This is an embedded resource content.");
 						EmbeddedResource embeddedResource = new EmbeddedResource(null, resourceContents);
-						return Mono
-							.just(CallToolResult.builder().content(List.of(embeddedResource)).isError(false).build());
+						return CallToolResult.builder().content(List.of(embeddedResource)).isError(false).build();
 					})
 					.build(),
 
 				// test_multiple_content_types - Returns multiple content types
-				McpServerFeatures.AsyncToolSpecification.builder()
+				McpServerFeatures.SyncToolSpecification.builder()
 					.tool(Tool.builder()
 						.name("test_multiple_content_types")
 						.description("Returns multiple content types for testing")
@@ -185,16 +188,16 @@ public class ConformanceServlet {
 								"test://mixed-content-resource", "application/json",
 								"{\"test\":\"data\",\"value\":123}");
 						EmbeddedResource embeddedResource = new EmbeddedResource(null, resourceContents);
-						return Mono.just(CallToolResult.builder()
+						return CallToolResult.builder()
 							.content(List.of(new TextContent("Multiple content types test:"),
 									new ImageContent(null, RED_PIXEL_PNG, "image/png"), embeddedResource))
 							.isError(false)
-							.build());
+							.build();
 					})
 					.build(),
 
 				// test_tool_with_logging - Tool that sends log messages during execution
-				McpServerFeatures.AsyncToolSpecification.builder()
+				McpServerFeatures.SyncToolSpecification.builder()
 					.tool(Tool.builder()
 						.name("test_tool_with_logging")
 						.description("Tool that sends log messages during execution")
@@ -203,30 +206,27 @@ public class ConformanceServlet {
 					.callHandler((exchange, request) -> {
 						logger.info("Tool 'test_tool_with_logging' called");
 						// Send log notifications
-						return exchange
-							.loggingNotification(LoggingMessageNotification.builder()
-								.level(LoggingLevel.INFO)
-								.data("Tool execution started")
-								.build())
-							.then(Mono.delay(Duration.ofMillis(50)))
-							.then(exchange.loggingNotification(LoggingMessageNotification.builder()
-								.level(LoggingLevel.INFO)
-								.data("Tool processing data")
-								.build()))
-							.then(Mono.delay(Duration.ofMillis(50)))
-							.then(exchange.loggingNotification(LoggingMessageNotification.builder()
-								.level(LoggingLevel.INFO)
-								.data("Tool execution completed")
-								.build()))
-							.then(Mono.just(CallToolResult.builder()
-								.content(List.of(new TextContent("Tool execution completed with logging")))
-								.isError(false)
-								.build()));
+						exchange.loggingNotification(LoggingMessageNotification.builder()
+							.level(LoggingLevel.INFO)
+							.data("Tool execution started")
+							.build());
+						exchange.loggingNotification(LoggingMessageNotification.builder()
+							.level(LoggingLevel.INFO)
+							.data("Tool processing data")
+							.build());
+						exchange.loggingNotification(LoggingMessageNotification.builder()
+							.level(LoggingLevel.INFO)
+							.data("Tool execution completed")
+							.build());
+						return CallToolResult.builder()
+							.content(List.of(new TextContent("Tool execution completed with logging")))
+							.isError(false)
+							.build();
 					})
 					.build(),
 
 				// test_error_handling - Tool that always returns an error
-				McpServerFeatures.AsyncToolSpecification.builder()
+				McpServerFeatures.SyncToolSpecification.builder()
 					.tool(Tool.builder()
 						.name("test_error_handling")
 						.description("Tool that returns an error for testing error handling")
@@ -234,15 +234,15 @@ public class ConformanceServlet {
 						.build())
 					.callHandler((exchange, request) -> {
 						logger.info("Tool 'test_error_handling' called");
-						return Mono.just(CallToolResult.builder()
+						return CallToolResult.builder()
 							.content(List.of(new TextContent("This tool intentionally returns an error for testing")))
 							.isError(true)
-							.build());
+							.build();
 					})
 					.build(),
 
 				// test_tool_with_progress - Tool that reports progress
-				McpServerFeatures.AsyncToolSpecification.builder()
+				McpServerFeatures.SyncToolSpecification.builder()
 					.tool(Tool.builder()
 						.name("test_tool_with_progress")
 						.description("Tool that reports progress notifications")
@@ -250,35 +250,47 @@ public class ConformanceServlet {
 						.build())
 					.callHandler((exchange, request) -> {
 						logger.info("Tool 'test_tool_with_progress' called");
-						String progressToken = (String) request.meta().get("progressToken");
+						Object progressToken = request.meta().get("progressToken");
 						if (progressToken != null) {
 							// Send progress notifications sequentially
-							return exchange
-								.progressNotification(new ProgressNotification(progressToken, 0.0, 100.0, null))
-								.then(Mono.delay(Duration.ofMillis(50)))
-								.then(exchange
-									.progressNotification(new ProgressNotification(progressToken, 50.0, 100.0, null)))
-								.then(Mono.delay(Duration.ofMillis(50)))
-								.then(exchange
-									.progressNotification(new ProgressNotification(progressToken, 100.0, 100.0, null)))
-								.thenReturn(CallToolResult.builder()
-									.content(List.of(new TextContent("Tool execution completed with progress")))
-									.isError(false)
-									.build());
+							exchange.progressNotification(new ProgressNotification(progressToken, 0.0, 100.0, null));
+							// try {
+							// Thread.sleep(50);
+							// }
+							// catch (InterruptedException e) {
+							// Thread.currentThread().interrupt();
+							// }
+							exchange.progressNotification(new ProgressNotification(progressToken, 50.0, 100.0, null));
+							// try {
+							// Thread.sleep(50);
+							// }
+							// catch (InterruptedException e) {
+							// Thread.currentThread().interrupt();
+							// }
+							exchange.progressNotification(new ProgressNotification(progressToken, 100.0, 100.0, null));
+							return CallToolResult.builder()
+								.content(List.of(new TextContent("Tool execution completed with progress")))
+								.isError(false)
+								.build();
 						}
 						else {
 							// No progress token, just execute with delays
-							return Mono.delay(Duration.ofMillis(100))
-								.thenReturn(CallToolResult.builder()
-									.content(List.of(new TextContent("Tool execution completed without progress")))
-									.isError(false)
-									.build());
+							// try {
+							// Thread.sleep(100);
+							// }
+							// catch (InterruptedException e) {
+							// Thread.currentThread().interrupt();
+							// }
+							return CallToolResult.builder()
+								.content(List.of(new TextContent("Tool execution completed without progress")))
+								.isError(false)
+								.build();
 						}
 					})
 					.build(),
 
 				// test_sampling - Tool that requests LLM sampling from client
-				McpServerFeatures.AsyncToolSpecification.builder()
+				McpServerFeatures.SyncToolSpecification.builder()
 					.tool(Tool.builder()
 						.name("test_sampling")
 						.description("Tool that requests LLM sampling from client")
@@ -297,18 +309,17 @@ public class ConformanceServlet {
 							.maxTokens(100)
 							.build();
 
-						return exchange.createMessage(samplingRequest).flatMap(response -> {
-							String responseText = "LLM response: " + ((TextContent) response.content()).text();
-							return Mono.just(CallToolResult.builder()
-								.content(List.of(new TextContent(responseText)))
-								.isError(false)
-								.build());
-						});
+						CreateMessageResult response = exchange.createMessage(samplingRequest);
+						String responseText = "LLM response: " + ((TextContent) response.content()).text();
+						return CallToolResult.builder()
+							.content(List.of(new TextContent(responseText)))
+							.isError(false)
+							.build();
 					})
 					.build(),
 
 				// test_elicitation - Tool that requests user input from client
-				McpServerFeatures.AsyncToolSpecification.builder()
+				McpServerFeatures.SyncToolSpecification.builder()
 					.tool(Tool.builder()
 						.name("test_elicitation")
 						.description("Tool that requests user input from client")
@@ -329,20 +340,19 @@ public class ConformanceServlet {
 
 						ElicitRequest elicitRequest = new ElicitRequest(message, requestedSchema);
 
-						return exchange.createElicitation(elicitRequest).flatMap(response -> {
-							String responseText = "User response: action=" + response.action() + ", content="
-									+ response.content();
-							return Mono.just(CallToolResult.builder()
-								.content(List.of(new TextContent(responseText)))
-								.isError(false)
-								.build());
-						});
+						ElicitResult response = exchange.createElicitation(elicitRequest);
+						String responseText = "User response: action=" + response.action() + ", content="
+								+ response.content();
+						return CallToolResult.builder()
+							.content(List.of(new TextContent(responseText)))
+							.isError(false)
+							.build();
 					})
 					.build(),
 
 				// test_elicitation_sep1034_defaults - Tool with default values for all
 				// primitive types
-				McpServerFeatures.AsyncToolSpecification.builder()
+				McpServerFeatures.SyncToolSpecification.builder()
 					.tool(Tool.builder()
 						.name("test_elicitation_sep1034_defaults")
 						.description("Tool that requests elicitation with default values for all primitive types")
@@ -364,19 +374,18 @@ public class ConformanceServlet {
 						ElicitRequest elicitRequest = new ElicitRequest("Please provide your information with defaults",
 								requestedSchema);
 
-						return exchange.createElicitation(elicitRequest).flatMap(response -> {
-							String responseText = "Elicitation completed: action=" + response.action() + ", content="
-									+ response.content();
-							return Mono.just(CallToolResult.builder()
-								.content(List.of(new TextContent(responseText)))
-								.isError(false)
-								.build());
-						});
+						ElicitResult response = exchange.createElicitation(elicitRequest);
+						String responseText = "Elicitation completed: action=" + response.action() + ", content="
+								+ response.content();
+						return CallToolResult.builder()
+							.content(List.of(new TextContent(responseText)))
+							.isError(false)
+							.build();
 					})
 					.build(),
 
 				// test_elicitation_sep1330_enums - Tool with enum schema improvements
-				McpServerFeatures.AsyncToolSpecification.builder()
+				McpServerFeatures.SyncToolSpecification.builder()
 					.tool(Tool.builder()
 						.name("test_elicitation_sep1330_enums")
 						.description("Tool that requests elicitation with enum schema improvements")
@@ -417,31 +426,30 @@ public class ConformanceServlet {
 
 						ElicitRequest elicitRequest = new ElicitRequest("Select your preferences", requestedSchema);
 
-						return exchange.createElicitation(elicitRequest).flatMap(response -> {
-							String responseText = "Elicitation completed: action=" + response.action() + ", content="
-									+ response.content();
-							return Mono.just(CallToolResult.builder()
-								.content(List.of(new TextContent(responseText)))
-								.isError(false)
-								.build());
-						});
+						ElicitResult response = exchange.createElicitation(elicitRequest);
+						String responseText = "Elicitation completed: action=" + response.action() + ", content="
+								+ response.content();
+						return CallToolResult.builder()
+							.content(List.of(new TextContent(responseText)))
+							.isError(false)
+							.build();
 					})
 					.build());
 	}
 
-	private static List<McpServerFeatures.AsyncPromptSpecification> createPromptSpecs() {
+	private static List<McpServerFeatures.SyncPromptSpecification> createPromptSpecs() {
 		return List.of(
 				// test_simple_prompt - Simple prompt without arguments
-				new McpServerFeatures.AsyncPromptSpecification(
+				new McpServerFeatures.SyncPromptSpecification(
 						new Prompt("test_simple_prompt", null, "A simple prompt for testing", List.of()),
 						(exchange, request) -> {
 							logger.info("Prompt 'test_simple_prompt' requested");
-							return Mono.just(new GetPromptResult(null, List.of(new PromptMessage(Role.USER,
-									new TextContent("This is a simple prompt for testing.")))));
+							return new GetPromptResult(null, List.of(new PromptMessage(Role.USER,
+									new TextContent("This is a simple prompt for testing."))));
 						}),
 
 				// test_prompt_with_arguments - Prompt with arguments
-				new McpServerFeatures.AsyncPromptSpecification(
+				new McpServerFeatures.SyncPromptSpecification(
 						new Prompt("test_prompt_with_arguments", null, "A prompt with arguments for testing",
 								List.of(new PromptArgument("arg1", "First test argument", true),
 										new PromptArgument("arg2", "Second test argument", true))),
@@ -450,12 +458,12 @@ public class ConformanceServlet {
 							String arg1 = (String) request.arguments().get("arg1");
 							String arg2 = (String) request.arguments().get("arg2");
 							String text = String.format("Prompt with arguments: arg1='%s', arg2='%s'", arg1, arg2);
-							return Mono.just(new GetPromptResult(null,
-									List.of(new PromptMessage(Role.USER, new TextContent(text)))));
+							return new GetPromptResult(null,
+									List.of(new PromptMessage(Role.USER, new TextContent(text))));
 						}),
 
 				// test_prompt_with_embedded_resource - Prompt with embedded resource
-				new McpServerFeatures.AsyncPromptSpecification(
+				new McpServerFeatures.SyncPromptSpecification(
 						new Prompt("test_prompt_with_embedded_resource", null,
 								"A prompt with embedded resource for testing",
 								List.of(new PromptArgument("resourceUri", "URI of the resource to embed", true))),
@@ -465,66 +473,65 @@ public class ConformanceServlet {
 							TextResourceContents resourceContents = new TextResourceContents(resourceUri, "text/plain",
 									"Embedded resource content for testing.");
 							EmbeddedResource embeddedResource = new EmbeddedResource(null, resourceContents);
-							return Mono.just(new GetPromptResult(null,
+							return new GetPromptResult(null,
 									List.of(new PromptMessage(Role.USER, embeddedResource), new PromptMessage(Role.USER,
-											new TextContent("Please process the embedded resource above.")))));
+											new TextContent("Please process the embedded resource above."))));
 						}),
 
 				// test_prompt_with_image - Prompt with image content
-				new McpServerFeatures.AsyncPromptSpecification(new Prompt("test_prompt_with_image", null,
+				new McpServerFeatures.SyncPromptSpecification(new Prompt("test_prompt_with_image", null,
 						"A prompt with image content for testing", List.of()), (exchange, request) -> {
 							logger.info("Prompt 'test_prompt_with_image' requested");
-							return Mono.just(new GetPromptResult(null, List.of(
+							return new GetPromptResult(null, List.of(
 									new PromptMessage(Role.USER, new ImageContent(null, RED_PIXEL_PNG, "image/png")),
-									new PromptMessage(Role.USER, new TextContent("Please analyze the image above.")))));
+									new PromptMessage(Role.USER, new TextContent("Please analyze the image above."))));
 						}));
 	}
 
-	private static List<McpServerFeatures.AsyncResourceSpecification> createResourceSpecs() {
+	private static List<McpServerFeatures.SyncResourceSpecification> createResourceSpecs() {
 		return List.of(
 				// test://static-text - Static text resource
-				new McpServerFeatures.AsyncResourceSpecification(Resource.builder()
+				new McpServerFeatures.SyncResourceSpecification(Resource.builder()
 					.uri("test://static-text")
 					.name("Static Text Resource")
 					.description("A static text resource for testing")
 					.mimeType("text/plain")
 					.build(), (exchange, request) -> {
 						logger.info("Resource 'test://static-text' requested");
-						return Mono.just(new ReadResourceResult(List.of(new TextResourceContents("test://static-text",
-								"text/plain", "This is the content of the static text resource."))));
+						return new ReadResourceResult(List.of(new TextResourceContents("test://static-text",
+								"text/plain", "This is the content of the static text resource.")));
 					}),
 
 				// test://static-binary - Static binary resource (image)
-				new McpServerFeatures.AsyncResourceSpecification(Resource.builder()
+				new McpServerFeatures.SyncResourceSpecification(Resource.builder()
 					.uri("test://static-binary")
 					.name("Static Binary Resource")
 					.description("A static binary resource for testing")
 					.mimeType("image/png")
 					.build(), (exchange, request) -> {
 						logger.info("Resource 'test://static-binary' requested");
-						return Mono.just(new ReadResourceResult(
-								List.of(new BlobResourceContents("test://static-binary", "image/png", RED_PIXEL_PNG))));
+						return new ReadResourceResult(
+								List.of(new BlobResourceContents("test://static-binary", "image/png", RED_PIXEL_PNG)));
 					}),
 
 				// test://watched-resource - Resource that can be subscribed to
-				new McpServerFeatures.AsyncResourceSpecification(Resource.builder()
+				new McpServerFeatures.SyncResourceSpecification(Resource.builder()
 					.uri("test://watched-resource")
 					.name("Watched Resource")
 					.description("A resource that can be subscribed to for updates")
 					.mimeType("text/plain")
 					.build(), (exchange, request) -> {
 						logger.info("Resource 'test://watched-resource' requested");
-						return Mono
-							.just(new ReadResourceResult(List.of(new TextResourceContents("test://watched-resource",
-									"text/plain", "This is a watched resource content."))));
+						return new ReadResourceResult(List.of(new TextResourceContents("test://watched-resource",
+								"text/plain", "This is a watched resource content.")));
 					}));
 	}
 
-	private static List<McpServerFeatures.AsyncResourceTemplateSpecification> createResourceTemplateSpecs() {
+	private static List<McpServerFeatures.SyncResourceTemplateSpecification> createResourceTemplateSpecs() {
 		return List.of(
 				// test://template/{id}/data - Resource template with parameter
 				// substitution
-				new McpServerFeatures.AsyncResourceTemplateSpecification(ResourceTemplate.builder()
+				new McpServerFeatures.SyncResourceTemplateSpecification(ResourceTemplate.builder()
 					.uriTemplate("test://template/{id}/data")
 					.name("Template Resource")
 					.description("A resource template for testing parameter substitution")
@@ -537,21 +544,20 @@ public class ConformanceServlet {
 						String id = uri.replaceAll("test://template/(.+)/data", "$1");
 						String jsonContent = String
 							.format("{\"id\":\"%s\",\"templateTest\":true,\"data\":\"Data for ID: %s\"}", id, id);
-						return Mono.just(new ReadResourceResult(
-								List.of(new TextResourceContents(uri, "application/json", jsonContent))));
+						return new ReadResourceResult(
+								List.of(new TextResourceContents(uri, "application/json", jsonContent)));
 					}));
 	}
 
-	private static List<McpServerFeatures.AsyncCompletionSpecification> createCompletionSpecs() {
+	private static List<McpServerFeatures.SyncCompletionSpecification> createCompletionSpecs() {
 		return List.of(
 				// Completion for test_prompt_with_arguments
-				new McpServerFeatures.AsyncCompletionSpecification(new PromptReference("test_prompt_with_arguments"),
+				new McpServerFeatures.SyncCompletionSpecification(new PromptReference("test_prompt_with_arguments"),
 						(exchange, request) -> {
 							logger.info("Completion requested for prompt 'test_prompt_with_arguments', argument: {}",
 									request.argument().name());
 							// Return minimal completion with required fields
-							return Mono
-								.just(new CompleteResult(new CompleteResult.CompleteCompletion(List.of(), 0, false)));
+							return new CompleteResult(new CompleteResult.CompleteCompletion(List.of(), 0, false));
 						}));
 	}
 
