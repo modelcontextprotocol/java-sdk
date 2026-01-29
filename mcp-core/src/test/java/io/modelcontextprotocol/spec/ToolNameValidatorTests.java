@@ -1,0 +1,110 @@
+/*
+ * Copyright 2024-2024 the original author or authors.
+ */
+
+package io.modelcontextprotocol.spec;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * Tests for {@link ToolNameValidator}.
+ */
+class ToolNameValidatorTests {
+
+	@ParameterizedTest
+	@ValueSource(strings = { "getUser", "DATA_EXPORT_v2", "admin.tools.list", "my-tool", "Tool123", "a", "A",
+			"_private", "tool_name", "tool-name", "tool.name", "UPPERCASE", "lowercase", "MixedCase123" })
+	void validToolNames_strictMode(String name) {
+		assertThatCode(() -> ToolNameValidator.validate(name, true)).doesNotThrowAnyException();
+	}
+
+	@Test
+	void validToolName_maxLength() {
+		String name = "a".repeat(128);
+		assertThatCode(() -> ToolNameValidator.validate(name, true)).doesNotThrowAnyException();
+	}
+
+	@Test
+	void invalidToolName_null_strictMode() {
+		assertThatThrownBy(() -> ToolNameValidator.validate(null, true)).isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("null or empty");
+	}
+
+	@Test
+	void invalidToolName_empty_strictMode() {
+		assertThatThrownBy(() -> ToolNameValidator.validate("", true)).isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("null or empty");
+	}
+
+	@Test
+	void invalidToolName_tooLong_strictMode() {
+		String name = "a".repeat(129);
+		assertThatThrownBy(() -> ToolNameValidator.validate(name, true)).isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("128 characters");
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "tool name", // space
+			"tool,name", // comma
+			"tool@name", // at sign
+			"tool#name", // hash
+			"tool$name", // dollar
+			"tool%name", // percent
+			"tool&name", // ampersand
+			"tool*name", // asterisk
+			"tool+name", // plus
+			"tool=name", // equals
+			"tool/name", // slash
+			"tool\\name", // backslash
+			"tool:name", // colon
+			"tool;name", // semicolon
+			"tool'name", // single quote
+			"tool\"name", // double quote
+			"tool<name", // less than
+			"tool>name", // greater than
+			"tool?name", // question mark
+			"tool!name", // exclamation
+			"tool(name)", // parentheses
+			"tool[name]", // brackets
+			"tool{name}", // braces
+			"tool|name", // pipe
+			"tool~name", // tilde
+			"tool`name", // backtick
+			"tool^name", // caret
+			"tööl", // non-ASCII
+			"工具" // unicode
+	})
+	void invalidToolNames_specialCharacters_strictMode(String name) {
+		assertThatThrownBy(() -> ToolNameValidator.validate(name, true)).isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("invalid characters");
+	}
+
+	@Test
+	void invalidToolName_nonStrictMode_doesNotThrow() {
+		// Non-strict mode should not throw, just warn
+		assertThatCode(() -> ToolNameValidator.validate("invalid name", false)).doesNotThrowAnyException();
+		assertThatCode(() -> ToolNameValidator.validate(null, false)).doesNotThrowAnyException();
+		assertThatCode(() -> ToolNameValidator.validate("", false)).doesNotThrowAnyException();
+		assertThatCode(() -> ToolNameValidator.validate("a".repeat(129), false)).doesNotThrowAnyException();
+	}
+
+	@Test
+	void toolBuilder_validatesName_strictMode() {
+		assertThatThrownBy(() -> McpSchema.Tool.builder().name("invalid name with space").build())
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("invalid characters");
+	}
+
+	@Test
+	void toolBuilder_validName() {
+		McpSchema.Tool tool = McpSchema.Tool.builder().name("valid_tool-name.v1").build();
+		assertThat(tool.name()).isEqualTo("valid_tool-name.v1");
+	}
+
+}
