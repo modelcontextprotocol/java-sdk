@@ -2,8 +2,8 @@ package io.modelcontextprotocol.conformance.client;
 
 import java.time.Duration;
 
-import io.modelcontextprotocol.client.McpAsyncClient;
 import io.modelcontextprotocol.client.McpClient;
+import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 
@@ -74,12 +74,12 @@ public class ConformanceJdkClientMcpClient {
 	/**
 	 * Helper method to create and configure an MCP client with transport.
 	 * @param serverUrl the URL of the MCP server
-	 * @return configured McpAsyncClient instance
+	 * @return configured McpSyncClient instance
 	 */
-	private static McpAsyncClient createClient(String serverUrl) {
+	private static McpSyncClient createClient(String serverUrl) {
 		HttpClientStreamableHttpTransport transport = HttpClientStreamableHttpTransport.builder(serverUrl).build();
 
-		return McpClient.async(transport)
+		return McpClient.sync(transport)
 			.clientInfo(new McpSchema.Implementation("test-client", "1.0.0"))
 			.requestTimeout(Duration.ofSeconds(30))
 			.build();
@@ -88,19 +88,19 @@ public class ConformanceJdkClientMcpClient {
 	/**
 	 * Helper method to create and configure an MCP client with elicitation support.
 	 * @param serverUrl the URL of the MCP server
-	 * @return configured McpAsyncClient instance with elicitation handler
+	 * @return configured McpSyncClient instance with elicitation handler
 	 */
-	private static McpAsyncClient createClientWithElicitation(String serverUrl) {
+	private static McpSyncClient createClientWithElicitation(String serverUrl) {
 		HttpClientStreamableHttpTransport transport = HttpClientStreamableHttpTransport.builder(serverUrl).build();
 
 		// Build client capabilities with elicitation support
 		var capabilities = McpSchema.ClientCapabilities.builder().elicitation().build();
 
-		return McpClient.async(transport)
+		return McpClient.sync(transport)
 			.clientInfo(new McpSchema.Implementation("test-client", "1.0.0"))
 			.requestTimeout(Duration.ofSeconds(30))
 			.capabilities(capabilities)
-			.elicitation(request -> reactor.core.publisher.Mono.fromCallable(() -> {
+			.elicitation(request -> {
 				// Apply default values from the schema to create the content
 				var content = new java.util.HashMap<String, Object>();
 				var schema = request.requestedSchema();
@@ -121,7 +121,7 @@ public class ConformanceJdkClientMcpClient {
 
 				// Return accept action with the defaults applied
 				return new McpSchema.ElicitResult(McpSchema.ElicitResult.Action.ACCEPT, content, null);
-			}))
+			})
 			.build();
 	}
 
@@ -131,11 +131,11 @@ public class ConformanceJdkClientMcpClient {
 	 * @throws Exception if any error occurs during execution
 	 */
 	private static void runInitializeScenario(String serverUrl) throws Exception {
-		McpAsyncClient client = createClient(serverUrl);
+		McpSyncClient client = createClient(serverUrl);
 
 		try {
 			// Initialize client
-			client.initialize().block();
+			client.initialize();
 
 			System.out.println("Successfully connected to MCP server");
 		}
@@ -152,16 +152,16 @@ public class ConformanceJdkClientMcpClient {
 	 * @throws Exception if any error occurs during execution
 	 */
 	private static void runToolsCallScenario(String serverUrl) throws Exception {
-		McpAsyncClient client = createClient(serverUrl);
+		McpSyncClient client = createClient(serverUrl);
 
 		try {
 			// Initialize client
-			client.initialize().block();
+			client.initialize();
 
 			System.out.println("Successfully connected to MCP server");
 
 			// List available tools
-			McpSchema.ListToolsResult toolsResult = client.listTools().block();
+			McpSchema.ListToolsResult toolsResult = client.listTools();
 			System.out.println("Successfully listed tools");
 
 			// Call the add_numbers tool if it exists
@@ -174,8 +174,7 @@ public class ConformanceJdkClientMcpClient {
 						arguments.put("b", 3);
 
 						McpSchema.CallToolResult result = client
-							.callTool(new McpSchema.CallToolRequest("add_numbers", arguments))
-							.block();
+							.callTool(new McpSchema.CallToolRequest("add_numbers", arguments));
 
 						System.out.println("Successfully called add_numbers tool");
 						if (result != null && result.content() != null) {
@@ -200,16 +199,16 @@ public class ConformanceJdkClientMcpClient {
 	 * @throws Exception if any error occurs during execution
 	 */
 	private static void runElicitationDefaultsScenario(String serverUrl) throws Exception {
-		McpAsyncClient client = createClientWithElicitation(serverUrl);
+		McpSyncClient client = createClientWithElicitation(serverUrl);
 
 		try {
 			// Initialize client
-			client.initialize().block();
+			client.initialize();
 
 			System.out.println("Successfully connected to MCP server");
 
 			// List available tools
-			McpSchema.ListToolsResult toolsResult = client.listTools().block();
+			McpSchema.ListToolsResult toolsResult = client.listTools();
 			System.out.println("Successfully listed tools");
 
 			// Call the test_client_elicitation_defaults tool if it exists
@@ -220,8 +219,7 @@ public class ConformanceJdkClientMcpClient {
 						var arguments = new java.util.HashMap<String, Object>();
 
 						McpSchema.CallToolResult result = client
-							.callTool(new McpSchema.CallToolRequest("test_client_elicitation_defaults", arguments))
-							.block();
+							.callTool(new McpSchema.CallToolRequest("test_client_elicitation_defaults", arguments));
 
 						System.out.println("Successfully called test_client_elicitation_defaults tool");
 						if (result != null && result.content() != null) {
@@ -246,16 +244,16 @@ public class ConformanceJdkClientMcpClient {
 	 * @throws Exception if any error occurs during execution
 	 */
 	private static void runSSERetryScenario(String serverUrl) throws Exception {
-		McpAsyncClient client = createClient(serverUrl);
+		McpSyncClient client = createClient(serverUrl);
 
 		try {
 			// Initialize client
-			client.initialize().block();
+			client.initialize();
 
 			System.out.println("Successfully connected to MCP server");
 
 			// List available tools
-			McpSchema.ListToolsResult toolsResult = client.listTools().block();
+			McpSchema.ListToolsResult toolsResult = client.listTools();
 			System.out.println("Successfully listed tools");
 
 			// Call the test_reconnection tool if it exists
@@ -267,8 +265,7 @@ public class ConformanceJdkClientMcpClient {
 						var arguments = new java.util.HashMap<String, Object>();
 
 						McpSchema.CallToolResult result = client
-							.callTool(new McpSchema.CallToolRequest("test_reconnection", arguments))
-							.block();
+							.callTool(new McpSchema.CallToolRequest("test_reconnection", arguments));
 
 						System.out.println("Successfully called test_reconnection tool");
 						if (result != null && result.content() != null) {
