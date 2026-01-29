@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2026-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.json;
@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
-import io.modelcontextprotocol.json.schema.jackson.DefaultJsonSchemaValidator;
+import io.modelcontextprotocol.json.schema.jackson3.DefaultJsonSchemaValidator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -26,30 +26,30 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.json.JsonMapper;
 
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator.ValidationResponse;
 
 /**
  * Tests for {@link DefaultJsonSchemaValidator}.
  *
- * @author Christian Tzolov
+ * @author Filip Hrisafov
  */
 class DefaultJsonSchemaValidatorTests {
 
 	private DefaultJsonSchemaValidator validator;
 
-	private ObjectMapper objectMapper;
+	private JsonMapper jsonMapper;
 
 	@Mock
-	private ObjectMapper mockObjectMapper;
+	private JsonMapper mockJsonMapper;
 
 	@BeforeEach
 	void setUp() {
 		MockitoAnnotations.openMocks(this);
 		validator = new DefaultJsonSchemaValidator();
-		objectMapper = new ObjectMapper();
+		jsonMapper = JsonMapper.shared();
 	}
 
 	/**
@@ -57,7 +57,7 @@ class DefaultJsonSchemaValidatorTests {
 	 */
 	private Map<String, Object> toMap(String json) {
 		try {
-			return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {
+			return jsonMapper.readValue(json, new TypeReference<>() {
 			});
 		}
 		catch (Exception e) {
@@ -67,7 +67,7 @@ class DefaultJsonSchemaValidatorTests {
 
 	private List<Map<String, Object>> toListMap(String json) {
 		try {
-			return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {
+			return jsonMapper.readValue(json, new TypeReference<>() {
 			});
 		}
 		catch (Exception e) {
@@ -99,7 +99,7 @@ class DefaultJsonSchemaValidatorTests {
 
 	@Test
 	void testConstructorWithObjectMapper() {
-		ObjectMapper customMapper = new ObjectMapper();
+		JsonMapper customMapper = JsonMapper.builder().build();
 		DefaultJsonSchemaValidator customValidator = new DefaultJsonSchemaValidator(customMapper);
 
 		String schemaJson = """
@@ -595,14 +595,14 @@ class DefaultJsonSchemaValidatorTests {
 	}
 
 	@Test
-	void testValidateWithJsonProcessingException() throws Exception {
-		DefaultJsonSchemaValidator validatorWithMockMapper = new DefaultJsonSchemaValidator(mockObjectMapper);
+	void testValidateWithJsonProcessingException() {
+		DefaultJsonSchemaValidator validatorWithMockMapper = new DefaultJsonSchemaValidator(mockJsonMapper);
 
 		Map<String, Object> schema = Map.of("type", "object");
 		Map<String, Object> structuredContent = Map.of("key", "value");
 
 		// This will trigger our null check and throw JsonProcessingException
-		when(mockObjectMapper.valueToTree(any())).thenReturn(null);
+		when(mockJsonMapper.valueToTree(any())).thenReturn(null);
 
 		ValidationResponse response = validatorWithMockMapper.validate(schema, structuredContent);
 
@@ -633,8 +633,7 @@ class DefaultJsonSchemaValidatorTests {
 
 	private static Map<String, Object> staticToMap(String json) {
 		try {
-			ObjectMapper mapper = new ObjectMapper();
-			return mapper.readValue(json, new TypeReference<Map<String, Object>>() {
+			return JsonMapper.shared().readValue(json, new TypeReference<>() {
 			});
 		}
 		catch (Exception e) {
