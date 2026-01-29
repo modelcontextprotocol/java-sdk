@@ -1765,4 +1765,33 @@ public class McpSchemaTests {
 					{"progressToken":"progress-token-789","progress":0.25}"""));
 	}
 
+	// Tool Name Validation Tests
+
+	@Test
+	void testToolBuilderWithValidName() {
+		McpSchema.Tool tool = McpSchema.Tool.builder().name("valid_tool-name.v1").description("A test tool").build();
+
+		assertThat(tool.name()).isEqualTo("valid_tool-name.v1");
+		assertThat(tool.description()).isEqualTo("A test tool");
+	}
+
+	@Test
+	void testToolBuilderWithInvalidNameThrowsException() {
+		assertThatThrownBy(() -> McpSchema.Tool.builder().name("invalid tool name").build())
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("invalid characters");
+	}
+
+	@Test
+	void testListToolsResultDeserializationWithInvalidToolName() throws Exception {
+		// Deserialization should not throw, just warn
+		String json = """
+				{"tools":[{"name":"invalid tool name","description":"test"}],"nextCursor":null}""";
+
+		McpSchema.ListToolsResult result = JSON_MAPPER.readValue(json, McpSchema.ListToolsResult.class);
+
+		assertThat(result.tools()).hasSize(1);
+		assertThat(result.tools().get(0).name()).isEqualTo("invalid tool name");
+	}
+
 }

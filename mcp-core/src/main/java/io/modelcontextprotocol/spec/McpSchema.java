@@ -1325,6 +1325,15 @@ public final class McpSchema {
 		@JsonProperty("nextCursor") String nextCursor,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
 
+		/**
+		 * Compact constructor that validates tool names on deserialization (warns only).
+		 */
+		public ListToolsResult {
+			if (tools != null) {
+				tools.forEach(tool -> ToolNameValidator.validate(tool.name(), false));
+			}
+		}
+
 		public ListToolsResult(List<Tool> tools, String nextCursor) {
 			this(tools, nextCursor, null);
 		}
@@ -1466,7 +1475,7 @@ public final class McpSchema {
 			}
 
 			public Tool build() {
-				Assert.hasText(name, "name must not be empty");
+				ToolNameValidator.validate(name, true);
 				return new Tool(name, title, description, inputSchema, outputSchema, annotations, meta);
 			}
 
@@ -1507,6 +1516,13 @@ public final class McpSchema {
 		@JsonProperty("name") String name,
 		@JsonProperty("arguments") Map<String, Object> arguments,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
+
+		/**
+		 * Compact constructor that validates tool name on deserialization (warns only).
+		 */
+		public CallToolRequest {
+			ToolNameValidator.validate(name, false);
+		}
 
 		public CallToolRequest(McpJsonMapper jsonMapper, String name, String jsonArguments) {
 			this(name, parseJsonArguments(jsonMapper, jsonArguments), null);
