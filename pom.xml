@@ -62,20 +62,22 @@
 		<assert4j.version>3.27.6</assert4j.version>
 		<junit.version>5.10.2</junit.version>
 		<mockito.version>5.20.0</mockito.version>
-		<testcontainers.version>1.20.4</testcontainers.version>
+		<testcontainers.version>1.21.4</testcontainers.version>
 		<byte-buddy.version>1.17.8</byte-buddy.version>
 		<toxiproxy.version>1.21.0</toxiproxy.version>
 
 		<slf4j-api.version>2.0.16</slf4j-api.version>
 		<logback.version>1.5.15</logback.version>
-		<jackson.version>2.19.2</jackson.version>
+		<jackson-annotations.version>2.20</jackson-annotations.version>
+		<jackson2.version>2.20.1</jackson2.version>
+		<jackson3.version>3.0.3</jackson3.version>
 		<springframework.version>6.2.1</springframework.version>
 
 		<!-- plugin versions -->
 		<maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
 		<maven-surefire-plugin.version>3.1.2</maven-surefire-plugin.version>
 		<maven-failsafe-plugin.version>3.5.2</maven-failsafe-plugin.version>
-		<maven-javadoc-plugin.version>3.5.0</maven-javadoc-plugin.version>
+		<maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
 		<maven-source-plugin.version>3.3.0</maven-source-plugin.version>
 		<jacoco-maven-plugin.version>0.8.10</jacoco-maven-plugin.version>
 		<flatten-maven-plugin.version>1.5.0</flatten-maven-plugin.version>
@@ -96,8 +98,9 @@
 		<awaitility.version>4.2.0</awaitility.version>
 		<bnd-maven-plugin.version>7.1.0</bnd-maven-plugin.version>
 		<json-unit-assertj.version>4.1.0</json-unit-assertj.version>
-		<json-schema-validator.version>2.0.0</json-schema-validator.version>
-        <build-helper-maven-plugin.version>3.6.1</build-helper-maven-plugin.version>
+		<json-schema-validator-jackson2.version>2.0.0</json-schema-validator-jackson2.version>
+		<json-schema-validator-jackson3.version>3.0.0</json-schema-validator-jackson3.version>
+    <build-helper-maven-plugin.version>3.6.1</build-helper-maven-plugin.version>
 	</properties>
 
 	<modules>
@@ -105,10 +108,12 @@
 		<module>mcp</module>
         <module>mcp-core</module>
         <module>mcp-json-jackson2</module>
+        <module>mcp-json-jackson3</module>
         <module>mcp-json</module>
 		<module>mcp-spring/mcp-spring-webflux</module>
 		<module>mcp-spring/mcp-spring-webmvc</module>
 		<module>mcp-test</module>
+        <module>conformance-tests</module>
 	</modules>
 
 	<build>
@@ -302,6 +307,7 @@
 						<version>${maven-javadoc-plugin.version}</version>
 						<configuration>
 							<detectJavaApiLink>false</detectJavaApiLink>
+							<legacyMode>true</legacyMode>
 							<failOnError>false</failOnError>
 							<doclint>none</doclint>
 							<additionalOptions>

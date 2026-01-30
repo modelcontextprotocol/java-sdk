@@ -11,7 +11,7 @@
 	<artifactId>mcp-json-jackson2</artifactId>
 	<packaging>jar</packaging>
 	<name>Java MCP SDK JSON Jackson</name>
-	<description>Java MCP SDK JSON implementation based on Jackson</description>
+	<description>Java MCP SDK JSON implementation based on Jackson 2</description>
 	<url>https://github.com/modelcontextprotocol/java-sdk</url>
 	<scm>
 		<url>https://github.com/modelcontextprotocol/java-sdk</url>
@@ -42,12 +42,12 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>${jackson.version}</version>
+            <version>${jackson2.version}</version>
         </dependency>
         <dependency>
             <groupId>com.networknt</groupId>
             <artifactId>json-schema-validator</artifactId>
-            <version>${json-schema-validator.version}</version>
+            <version>${json-schema-validator-jackson2.version}</version>
         </dependency>
 
 		<dependency>

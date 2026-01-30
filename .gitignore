@@ -10,6 +10,7 @@ build/
 out
 /.gradletasknamecache
 **/*.flattened-pom.xml
+**/dependency-reduced-pom.xml
 
 ### IDE - Eclipse/STS ###
 .apt_generated

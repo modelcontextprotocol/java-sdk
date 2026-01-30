@@ -118,7 +118,8 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 						.handleRequest(transportContext, jsonrpcRequest)
 						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
 						.block();
-					return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(jsonrpcResponse);
+					String json = jsonMapper.writeValueAsString(jsonrpcResponse);
+					return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(json);
 				}
 				catch (Exception e) {
 					logger.error("Failed to handle request: {}", e.getMessage());
