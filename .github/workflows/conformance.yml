@@ -22,7 +22,7 @@ jobs:
 
       - name: Build and start server
         run: |
-          mvn clean package -pl conformance-tests/server-servlet -am -DskipTests
+          mvn clean install -DskipTests
           mvn exec:java -pl conformance-tests/server-servlet -Dexec.mainClass="io.modelcontextprotocol.conformance.server.ConformanceServlet" &
           timeout 30 bash -c 'until curl -s http://localhost:8080/mcp > /dev/null 2>&1; do sleep 0.5; done'
 
@@ -51,7 +51,7 @@ jobs:
           cache: 'maven'
 
       - name: Build client
-        run: mvn clean package -pl conformance-tests/client-jdk-http-client -am -DskipTests
+        run: mvn clean install -DskipTests
 
       - name: Run conformance test
         uses: modelcontextprotocol/conformance@v0.1.11
