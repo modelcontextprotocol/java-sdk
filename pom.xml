@@ -100,7 +100,7 @@
 		<json-unit-assertj.version>4.1.0</json-unit-assertj.version>
 		<json-schema-validator-jackson2.version>2.0.0</json-schema-validator-jackson2.version>
 		<json-schema-validator-jackson3.version>3.0.0</json-schema-validator-jackson3.version>
-    <build-helper-maven-plugin.version>3.6.1</build-helper-maven-plugin.version>
+		<build-helper-maven-plugin.version>3.6.1</build-helper-maven-plugin.version>
 	</properties>
 
 	<modules>
