@@ -4,7 +4,7 @@ This module contains a comprehensive MCP (Model Context Protocol) server impleme
 
 ## Conformance Test Results
 
-**Status: 36 out of 40 tests passing (90%)**
+**Status: 37 out of 40 tests passing (92.5%)**
 
 The server has been validated against the official [MCP conformance test suite](https://github.com/modelcontextprotocol/conformance). See [VALIDATION_RESULTS.md](../VALIDATION_RESULTS.md) for detailed results.
 
@@ -13,10 +13,10 @@ The server has been validated against the official [MCP conformance test suite](
 ✅ **Lifecycle & Utilities** (4/4)
 - Server initialization, ping, logging, completion
 
-✅ **Tools** (10/11)
+✅ **Tools** (11/11)
 - Text, image, audio, embedded resources, mixed content
 - Logging, error handling, sampling, elicitation
-- ⚠️ Progress notifications (SDK issue)
+- Progress notifications
 
 ✅ **Elicitation** (10/10)
 - SEP-1034: Default values for all primitive types
@@ -193,9 +193,8 @@ curl -X POST http://localhost:8080/mcp \
 
 See [VALIDATION_RESULTS.md](../VALIDATION_RESULTS.md) for details on:
 
-1. **Progress Notifications** - Timeout issue in async execution flow
-2. **Resource Subscriptions** - Not implemented in Java SDK
-3. **DNS Rebinding Protection** - Missing Host/Origin validation
+1. **Resource Subscriptions** - Not implemented in Java SDK
+2. **DNS Rebinding Protection** - Missing Host/Origin validation
 
 These are SDK-level limitations that require fixes in the core framework.
 

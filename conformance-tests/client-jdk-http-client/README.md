@@ -18,28 +18,30 @@ The client reads test scenarios from environment variables and accepts the serve
 Currently implemented scenarios:
 
 - **initialize**: Tests the MCP client initialization handshake only
-  - Validates protocol version negotiation
-  - Validates clientInfo (name and version)
-  - Validates proper handling of server capabilities
+  - ✅ Validates protocol version negotiation
+  - ✅ Validates clientInfo (name and version)
+  - ✅ Validates proper handling of server capabilities
   - Does NOT call any tools or perform additional operations
 
 - **tools_call**: Tests tool discovery and invocation
-  - Initializes the client
-  - Lists available tools from the server
-  - Calls the `add_numbers` tool with test arguments (a=5, b=3)
-  - Validates the tool result
+  - ✅ Initializes the client
+  - ✅ Lists available tools from the server
+  - ✅ Calls the `add_numbers` tool with test arguments (a=5, b=3)
+  - ✅ Validates the tool result
 
 - **elicitation-sep1034-client-defaults**: Tests client applies default values for omitted elicitation fields (SEP-1034)
-  - Initializes the client
-  - Lists available tools from the server
-  - Calls the `test_client_elicitation_defaults` tool
-  - Validates that the client properly applies default values from JSON schema to elicitation responses
+  - ✅ Initializes the client
+  - ✅ Lists available tools from the server
+  - ✅ Calls the `test_client_elicitation_defaults` tool
+  - ✅ Validates that the client properly applies default values from JSON schema to elicitation responses (5/5 checks pass)
 
 - **sse-retry**: Tests client respects SSE retry field timing and reconnects properly (SEP-1699)
-  - Initializes the client
-  - Lists available tools from the server
-  - Calls the `test_reconnection` tool which triggers SSE stream closure
-  - Validates that the client properly reconnects with correct timing and Last-Event-ID header
+  - ⚠️ Initializes the client
+  - ⚠️ Lists available tools from the server
+  - ⚠️ Calls the `test_reconnection` tool which triggers SSE stream closure
+  - ✅ Client reconnects after stream closure (PASSING)
+  - ❌ Client does not respect retry timing (FAILING)
+  - ⚠️ Client does not send Last-Event-ID header (WARNING - SHOULD requirement)
 
 ## Building
 
@@ -99,66 +101,34 @@ java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client
 
 ## Test Results
 
-The conformance framework generates test results in `results/initialize-<timestamp>/`:
+The conformance framework generates test results showing:
 
+**Current Status (3/4 scenarios passing):**
+- ✅ initialize: 1/1 checks passed
+- ✅ tools_call: 1/1 checks passed
+- ✅ elicitation-sep1034-client-defaults: 5/5 checks passed
+- ⚠️ sse-retry: 1/2 checks passed, 1 warning
+
+Test result files are generated in `results/<scenario>-<timestamp>/`:
 - `checks.json`: Array of conformance check results with pass/fail status
 - `stdout.txt`: Client stdout output
 - `stderr.txt`: Client stderr output
 
-## Implementation Details
+### Known Issue: SSE Retry Handling
 
-### Scenario Separation
+The `sse-retry` scenario currently fails because:
+1. The client treats the SSE `retry:` field as invalid instead of parsing it
+2. The client does not implement retry timing (reconnects immediately)
+3. The client does not send the Last-Event-ID header on reconnection
 
-The implementation follows a clean separation of concerns:
-
-- **initialize scenario**: Only performs initialization, no additional operations
-- **tools_call scenario**: Performs initialization, lists tools, and calls the `add_numbers` tool
-
-This separation ensures that each scenario tests exactly what it's supposed to test without side effects.
-
-### Transport
-
-Uses `HttpClientStreamableHttpTransport` which:
-- Implements the latest Streamable HTTP protocol (2025-03-26)
-- Uses the standard JDK `HttpClient` (no external HTTP client dependencies)
-- Supports protocol version negotiation
-- Handles SSE streams for server-to-client notifications
-
-### Client Configuration
-
-The client is configured with:
-- Client info: `test-client` version `1.0.0`
-- Request timeout: 30 seconds
-- Default capabilities (no special features required for basic tests)
-
-### Error Handling
-
-The client:
-- Exits with code 0 on success
-- Exits with code 1 on failure
-- Prints error messages to stderr
-- Each scenario handler is independent and self-contained
-
-## Adding New Scenarios
-
-To add support for new scenarios:
-
-1. Add the scenario name to the switch statement in `ConformanceJdkClientMcpClient.java`
-2. Implement a dedicated handler method (e.g., `runAuthScenario()`, `runElicitationScenario()`)
-3. Register the scenario in the available scenarios list in the default case
-4. Rebuild the JAR
-
-Example:
-```java
-case "new-scenario":
-    runNewScenario(serverUrl);
-    break;
-```
+This is a known limitation in the `HttpClientStreamableHttpTransport` implementation.
 
 ## Next Steps
 
 Future enhancements:
 
+- Fix SSE retry field handling (SEP-1699) to properly parse and respect retry timing
+- Implement Last-Event-ID header on reconnection for resumability
 - Add auth scenarios (currently excluded as per requirements)
 - Implement a comprehensive "everything-client" pattern
 - Add to CI/CD pipeline
