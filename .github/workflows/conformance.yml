@@ -1,0 +1,62 @@
+name: Conformance Tests
+
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  server:
+    name: Server Conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build and start server
+        run: |
+          mvn clean install -DskipTests
+          mvn exec:java -pl conformance-tests/server-servlet -Dexec.mainClass="io.modelcontextprotocol.conformance.server.ConformanceServlet" &
+          timeout 30 bash -c 'until curl -s http://localhost:8080/mcp > /dev/null 2>&1; do sleep 0.5; done'
+
+      - name: Run conformance tests
+        uses: modelcontextprotocol/conformance@v0.1.11
+        with:
+          mode: server
+          url: http://localhost:8080/mcp
+          suite: active
+          expected-failures: ./conformance-tests/conformance-baseline.yml
+
+  client:
+    name: Client Conformance
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        scenario: [initialize, tools_call, elicitation-sep1034-client-defaults, sse-retry]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build client
+        run: mvn clean install -DskipTests
+
+      - name: Run conformance test
+        uses: modelcontextprotocol/conformance@v0.1.11
+        with:
+          mode: client
+          command: 'java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-0.18.0-SNAPSHOT.jar'
+          scenario: ${{ matrix.scenario }}
+          expected-failures: ./conformance-tests/conformance-baseline.yml

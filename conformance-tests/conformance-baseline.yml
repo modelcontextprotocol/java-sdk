@@ -1,0 +1,17 @@
+# MCP Java SDK Conformance Test Baseline
+# This file lists known failing scenarios that are expected to fail until fixed.
+# See: https://github.com/modelcontextprotocol/conformance/blob/main/SDK_INTEGRATION.md
+
+server:
+  # Resource subscription not implemented in SDK
+  - resources-subscribe
+  - resources-unsubscribe
+  
+  # DNS rebinding protection missing Host/Origin validation
+  - dns-rebinding-protection
+
+client:
+  # SSE retry field handling not implemented
+  # - Client does not parse or respect retry: field timing
+  # - Client does not send Last-Event-ID header
+  - sse-retry

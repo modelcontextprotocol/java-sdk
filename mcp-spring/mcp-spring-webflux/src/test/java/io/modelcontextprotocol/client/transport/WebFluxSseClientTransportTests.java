@@ -10,9 +10,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import io.modelcontextprotocol.json.McpJsonMapper;
-import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
 import org.junit.jupiter.api.AfterAll;
@@ -147,7 +147,7 @@ class WebFluxSseClientTransportTests {
 		assertThatCode(() -> transport1.closeGracefully().block()).doesNotThrowAnyException();
 
 		// Test builder with custom ObjectMapper
-		ObjectMapper customMapper = new ObjectMapper();
+		JsonMapper customMapper = JsonMapper.builder().build();
 		WebFluxSseClientTransport transport2 = WebFluxSseClientTransport.builder(webClientBuilder)
 			.jsonMapper(new JacksonMcpJsonMapper(customMapper))
 			.build();

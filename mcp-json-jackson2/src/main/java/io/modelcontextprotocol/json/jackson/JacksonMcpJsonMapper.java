@@ -14,7 +14,12 @@ import java.io.IOException;
 /**
  * Jackson-based implementation of JsonMapper. Wraps a Jackson ObjectMapper but keeps the
  * SDK decoupled from Jackson at the API level.
+ *
+ * @deprecated since 18.0.0, use
+ * {@link io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper} instead. Will be
+ * removed in 19.0.0
  */
+@Deprecated(forRemoval = true, since = "18.0.0")
 public final class JacksonMcpJsonMapper implements McpJsonMapper {
 
 	private final ObjectMapper objectMapper;
