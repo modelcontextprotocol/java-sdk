@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.spec;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse.JSONRPCError;
 import io.modelcontextprotocol.util.Assert;
 
@@ -22,6 +23,10 @@ public class McpError extends RuntimeException {
 
 	private JSONRPCError jsonRpcError;
 
+	/**
+	 * Add @JsonCreator to make sure Jackson can deserialize it properly.
+	 */
+	@JsonCreator
 	public McpError(JSONRPCError jsonRpcError) {
 		super(jsonRpcError.message());
 		this.jsonRpcError = jsonRpcError;
