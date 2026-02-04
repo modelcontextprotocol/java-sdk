@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 - 2024 the original author or authors.
+ * Copyright 2024 - 2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server.transport;
@@ -8,6 +8,9 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.time.Duration;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -143,6 +146,11 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	private KeepAliveScheduler keepAliveScheduler;
 
 	/**
+	 * Security validator for validating HTTP requests.
+	 */
+	private final ServerTransportSecurityValidator securityValidator;
+
+	/**
 	 * Creates a new HttpServletSseServerTransportProvider instance with a custom SSE
 	 * endpoint.
 	 * @param jsonMapper The JSON object mapper to use for message
@@ -153,23 +161,25 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 * @param keepAliveInterval The interval for keep-alive pings, or null to disable
 	 * keep-alive functionality
 	 * @param contextExtractor The extractor for transport context from the request.
-	 * @deprecated Use the builder {@link #builder()} instead for better configuration
-	 * options.
+	 * @param securityValidator The security validator for validating HTTP requests.
 	 */
 	private HttpServletSseServerTransportProvider(McpJsonMapper jsonMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval,
-			McpTransportContextExtractor<HttpServletRequest> contextExtractor) {
+			McpTransportContextExtractor<HttpServletRequest> contextExtractor,
+			ServerTransportSecurityValidator securityValidator) {
 
 		Assert.notNull(jsonMapper, "JsonMapper must not be null");
 		Assert.notNull(messageEndpoint, "messageEndpoint must not be null");
 		Assert.notNull(sseEndpoint, "sseEndpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
+		Assert.notNull(securityValidator, "Security validator must not be null");
 
 		this.jsonMapper = jsonMapper;
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
 		this.contextExtractor = contextExtractor;
+		this.securityValidator = securityValidator;
 
 		if (keepAliveInterval != null) {
 
@@ -246,6 +256,15 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			return;
 		}
 
+		try {
+			Map<String, List<String>> headers = extractHeaders(request);
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			response.sendError(e.getStatusCode(), e.getMessage());
+			return;
+		}
+
 		response.setContentType("text/event-stream");
 		response.setCharacterEncoding(UTF_8);
 		response.setHeader("Cache-Control", "no-cache");
@@ -308,6 +327,15 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		String requestURI = request.getRequestURI();
 		if (!requestURI.endsWith(messageEndpoint)) {
 			response.sendError(HttpServletResponse.SC_NOT_FOUND);
+			return;
+		}
+
+		try {
+			Map<String, List<String>> headers = extractHeaders(request);
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			response.sendError(e.getStatusCode(), e.getMessage());
 			return;
 		}
 
@@ -409,6 +437,21 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		if (writer.checkError()) {
 			throw new IOException("Client disconnected");
 		}
+	}
+
+	/**
+	 * Extracts all headers from the HTTP servlet request into a map.
+	 * @param request The HTTP servlet request
+	 * @return A map of header names to their values
+	 */
+	private Map<String, List<String>> extractHeaders(HttpServletRequest request) {
+		Map<String, List<String>> headers = new HashMap<>();
+		Enumeration<String> names = request.getHeaderNames();
+		while (names.hasMoreElements()) {
+			String name = names.nextElement();
+			headers.put(name, Collections.list(request.getHeaders(name)));
+		}
+		return headers;
 	}
 
 	/**
@@ -547,6 +590,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 
 		private Duration keepAliveInterval;
 
+		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
+
 		/**
 		 * Sets the JsonMapper implementation to use for serialization/deserialization. If
 		 * not specified, a JacksonJsonMapper will be created from the configured
@@ -622,6 +667,18 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		}
 
 		/**
+		 * Sets the security validator for validating HTTP requests.
+		 * @param securityValidator The security validator to use. Must not be null.
+		 * @return This builder instance
+		 * @throws IllegalArgumentException if securityValidator is null
+		 */
+		public Builder securityValidator(ServerTransportSecurityValidator securityValidator) {
+			Assert.notNull(securityValidator, "Security validator must not be null");
+			this.securityValidator = securityValidator;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of HttpServletSseServerTransportProvider with the
 		 * configured settings.
 		 * @return A new HttpServletSseServerTransportProvider instance
@@ -633,7 +690,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			}
 			return new HttpServletSseServerTransportProvider(
 					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, baseUrl, messageEndpoint, sseEndpoint,
-					keepAliveInterval, contextExtractor);
+					keepAliveInterval, contextExtractor, securityValidator);
 		}
 
 	}

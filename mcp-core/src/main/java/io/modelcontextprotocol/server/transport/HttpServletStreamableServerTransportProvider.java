@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server.transport;
@@ -9,7 +9,11 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -120,6 +124,11 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	private KeepAliveScheduler keepAliveScheduler;
 
 	/**
+	 * Security validator for validating HTTP requests.
+	 */
+	private final ServerTransportSecurityValidator securityValidator;
+
+	/**
 	 * Constructs a new HttpServletStreamableServerTransportProvider instance.
 	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization of
 	 * messages.
@@ -127,19 +136,24 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * messages via HTTP. This endpoint will handle GET, POST, and DELETE requests.
 	 * @param disallowDelete Whether to disallow DELETE requests on the endpoint.
 	 * @param contextExtractor The extractor for transport context from the request.
+	 * @param keepAliveInterval The interval for keep-alive pings. If null, no keep-alive
+	 * will be scheduled.
+	 * @param securityValidator The security validator for validating HTTP requests.
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
 	private HttpServletStreamableServerTransportProvider(McpJsonMapper jsonMapper, String mcpEndpoint,
 			boolean disallowDelete, McpTransportContextExtractor<HttpServletRequest> contextExtractor,
-			Duration keepAliveInterval) {
+			Duration keepAliveInterval, ServerTransportSecurityValidator securityValidator) {
 		Assert.notNull(jsonMapper, "JsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "MCP endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
+		Assert.notNull(securityValidator, "Security validator must not be null");
 
 		this.jsonMapper = jsonMapper;
 		this.mcpEndpoint = mcpEndpoint;
 		this.disallowDelete = disallowDelete;
 		this.contextExtractor = contextExtractor;
+		this.securityValidator = securityValidator;
 
 		if (keepAliveInterval != null) {
 
@@ -243,6 +257,15 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		if (this.isClosing) {
 			response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Server is shutting down");
+			return;
+		}
+
+		try {
+			Map<String, List<String>> headers = extractHeaders(request);
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			response.sendError(e.getStatusCode(), e.getMessage());
 			return;
 		}
 
@@ -370,6 +393,15 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		if (this.isClosing) {
 			response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Server is shutting down");
+			return;
+		}
+
+		try {
+			Map<String, List<String>> headers = extractHeaders(request);
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			response.sendError(e.getStatusCode(), e.getMessage());
 			return;
 		}
 
@@ -536,6 +568,15 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			return;
 		}
 
+		try {
+			Map<String, List<String>> headers = extractHeaders(request);
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			response.sendError(e.getStatusCode(), e.getMessage());
+			return;
+		}
+
 		if (this.disallowDelete) {
 			response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
 			return;
@@ -584,6 +625,21 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		writer.write(jsonError);
 		writer.flush();
 		return;
+	}
+
+	/**
+	 * Extracts all headers from the HTTP servlet request into a map.
+	 * @param request The HTTP servlet request
+	 * @return A map of header names to their values
+	 */
+	private Map<String, List<String>> extractHeaders(HttpServletRequest request) {
+		Map<String, List<String>> headers = new HashMap<>();
+		Enumeration<String> names = request.getHeaderNames();
+		while (names.hasMoreElements()) {
+			String name = names.nextElement();
+			headers.put(name, Collections.list(request.getHeaders(name)));
+		}
+		return headers;
 	}
 
 	/**
@@ -774,6 +830,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		private Duration keepAliveInterval;
 
+		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
+
 		/**
 		 * Sets the JsonMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
@@ -834,6 +892,18 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		/**
+		 * Sets the security validator for validating HTTP requests.
+		 * @param securityValidator The security validator to use. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if securityValidator is null
+		 */
+		public Builder securityValidator(ServerTransportSecurityValidator securityValidator) {
+			Assert.notNull(securityValidator, "Security validator must not be null");
+			this.securityValidator = securityValidator;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link HttpServletStreamableServerTransportProvider}
 		 * with the configured settings.
 		 * @return A new HttpServletStreamableServerTransportProvider instance
@@ -843,7 +913,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 			return new HttpServletStreamableServerTransportProvider(
 					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, mcpEndpoint, disallowDelete,
-					contextExtractor, keepAliveInterval);
+					contextExtractor, keepAliveInterval, securityValidator);
 		}
 
 	}

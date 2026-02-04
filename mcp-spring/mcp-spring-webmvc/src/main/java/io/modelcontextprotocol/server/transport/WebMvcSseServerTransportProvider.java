@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server.transport;
@@ -7,6 +7,7 @@ package io.modelcontextprotocol.server.transport;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -119,6 +120,11 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	private KeepAliveScheduler keepAliveScheduler;
 
 	/**
+	 * Security validator for validating HTTP requests.
+	 */
+	private final ServerTransportSecurityValidator securityValidator;
+
+	/**
 	 * Constructs a new WebMvcSseServerTransportProvider instance.
 	 * @param jsonMapper The McpJsonMapper to use for JSON serialization/deserialization
 	 * of messages.
@@ -131,22 +137,26 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * @param keepAliveInterval The interval for sending keep-alive messages to clients.
 	 * @param contextExtractor The contextExtractor to fill in a
 	 * {@link McpTransportContext}.
+	 * @param securityValidator The security validator for validating HTTP requests.
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
 	private WebMvcSseServerTransportProvider(McpJsonMapper jsonMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval,
-			McpTransportContextExtractor<ServerRequest> contextExtractor) {
+			McpTransportContextExtractor<ServerRequest> contextExtractor,
+			ServerTransportSecurityValidator securityValidator) {
 		Assert.notNull(jsonMapper, "McpJsonMapper must not be null");
 		Assert.notNull(baseUrl, "Message base URL must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
+		Assert.notNull(securityValidator, "Security validator must not be null");
 
 		this.jsonMapper = jsonMapper;
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
 		this.contextExtractor = contextExtractor;
+		this.securityValidator = securityValidator;
 		this.routerFunction = RouterFunctions.route()
 			.GET(this.sseEndpoint, this::handleSseConnection)
 			.POST(this.messageEndpoint, this::handleMessage)
@@ -255,6 +265,14 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
+		try {
+			Map<String, List<String>> headers = request.headers().asHttpHeaders();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			return ServerResponse.status(e.getStatusCode()).body(e.getMessage());
+		}
+
 		// Send initial endpoint event
 		return ServerResponse.sse(sseBuilder -> {
 			WebMvcMcpSessionTransport sessionTransport = new WebMvcMcpSessionTransport(sseBuilder);
@@ -311,6 +329,14 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	private ServerResponse handleMessage(ServerRequest request) {
 		if (this.isClosing) {
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
+		}
+
+		try {
+			Map<String, List<String>> headers = request.headers().asHttpHeaders();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			return ServerResponse.status(e.getStatusCode()).body(e.getMessage());
 		}
 
 		if (request.param(SESSION_ID).isEmpty()) {
@@ -474,6 +500,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		private McpTransportContextExtractor<ServerRequest> contextExtractor = (
 				serverRequest) -> McpTransportContext.EMPTY;
 
+		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
+
 		/**
 		 * Sets the JSON object mapper to use for message serialization/deserialization.
 		 * @param jsonMapper The object mapper to use
@@ -550,6 +578,18 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		}
 
 		/**
+		 * Sets the security validator for validating HTTP requests.
+		 * @param securityValidator The security validator to use. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if securityValidator is null
+		 */
+		public Builder securityValidator(ServerTransportSecurityValidator securityValidator) {
+			Assert.notNull(securityValidator, "Security validator must not be null");
+			this.securityValidator = securityValidator;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of WebMvcSseServerTransportProvider with the configured
 		 * settings.
 		 * @return A new WebMvcSseServerTransportProvider instance
@@ -560,7 +600,7 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				throw new IllegalStateException("MessageEndpoint must be set");
 			}
 			return new WebMvcSseServerTransportProvider(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
-					baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval, contextExtractor);
+					baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval, contextExtractor, securityValidator);
 		}
 
 	}

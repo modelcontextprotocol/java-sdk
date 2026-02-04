@@ -1,5 +1,5 @@
 /*
- * Copyright 2025-2025 the original author or authors.
+ * Copyright 2025-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server.transport;
@@ -7,6 +7,7 @@ package io.modelcontextprotocol.server.transport;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -133,6 +134,11 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	private KeepAliveScheduler keepAliveScheduler;
 
 	/**
+	 * Security validator for validating HTTP requests.
+	 */
+	private final ServerTransportSecurityValidator securityValidator;
+
+	/**
 	 * Constructs a new WebFlux SSE server transport provider instance.
 	 * @param jsonMapper The ObjectMapper to use for JSON serialization/deserialization of
 	 * MCP messages. Must not be null.
@@ -144,22 +150,26 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 * @param keepAliveInterval The interval for sending keep-alive pings to clients.
 	 * @param contextExtractor The context extractor to use for extracting MCP transport
 	 * context from HTTP requests. Must not be null.
+	 * @param securityValidator The security validator for validating HTTP requests.
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
 	private WebFluxSseServerTransportProvider(McpJsonMapper jsonMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval,
-			McpTransportContextExtractor<ServerRequest> contextExtractor) {
+			McpTransportContextExtractor<ServerRequest> contextExtractor,
+			ServerTransportSecurityValidator securityValidator) {
 		Assert.notNull(jsonMapper, "ObjectMapper must not be null");
 		Assert.notNull(baseUrl, "Message base path must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
+		Assert.notNull(securityValidator, "Security validator must not be null");
 
 		this.jsonMapper = jsonMapper;
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
 		this.contextExtractor = contextExtractor;
+		this.securityValidator = securityValidator;
 		this.routerFunction = RouterFunctions.route()
 			.GET(this.sseEndpoint, this::handleSseConnection)
 			.POST(this.messageEndpoint, this::handleMessage)
@@ -273,6 +283,14 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
 		}
 
+		try {
+			Map<String, List<String>> headers = request.headers().asHttpHeaders();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			return ServerResponse.status(e.getStatusCode()).bodyValue(e.getMessage());
+		}
+
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		return ServerResponse.ok()
@@ -330,6 +348,14 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	private Mono<ServerResponse> handleMessage(ServerRequest request) {
 		if (isClosing) {
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
+		}
+
+		try {
+			Map<String, List<String>> headers = request.headers().asHttpHeaders();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			return ServerResponse.status(e.getStatusCode()).bodyValue(e.getMessage());
 		}
 
 		if (request.queryParam("sessionId").isEmpty()) {
@@ -436,6 +462,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		private McpTransportContextExtractor<ServerRequest> contextExtractor = (
 				serverRequest) -> McpTransportContext.EMPTY;
 
+		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
+
 		/**
 		 * Sets the McpJsonMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
@@ -514,6 +542,18 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		}
 
 		/**
+		 * Sets the security validator for validating HTTP requests.
+		 * @param securityValidator The security validator to use. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if securityValidator is null
+		 */
+		public Builder securityValidator(ServerTransportSecurityValidator securityValidator) {
+			Assert.notNull(securityValidator, "Security validator must not be null");
+			this.securityValidator = securityValidator;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link WebFluxSseServerTransportProvider} with the
 		 * configured settings.
 		 * @return A new WebFluxSseServerTransportProvider instance
@@ -522,7 +562,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		public WebFluxSseServerTransportProvider build() {
 			Assert.notNull(messageEndpoint, "Message endpoint must be set");
 			return new WebFluxSseServerTransportProvider(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
-					baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval, contextExtractor);
+					baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval, contextExtractor, securityValidator);
 		}
 
 	}

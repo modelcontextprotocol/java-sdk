@@ -1,5 +1,5 @@
 /*
- * Copyright 2025-2025 the original author or authors.
+ * Copyright 2025-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server.transport;
@@ -36,6 +36,7 @@ import reactor.core.publisher.Mono;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -67,17 +68,24 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 	private KeepAliveScheduler keepAliveScheduler;
 
+	/**
+	 * Security validator for validating HTTP requests.
+	 */
+	private final ServerTransportSecurityValidator securityValidator;
+
 	private WebFluxStreamableServerTransportProvider(McpJsonMapper jsonMapper, String mcpEndpoint,
 			McpTransportContextExtractor<ServerRequest> contextExtractor, boolean disallowDelete,
-			Duration keepAliveInterval) {
+			Duration keepAliveInterval, ServerTransportSecurityValidator securityValidator) {
 		Assert.notNull(jsonMapper, "JsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "Message endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
+		Assert.notNull(securityValidator, "Security validator must not be null");
 
 		this.jsonMapper = jsonMapper;
 		this.mcpEndpoint = mcpEndpoint;
 		this.contextExtractor = contextExtractor;
 		this.disallowDelete = disallowDelete;
+		this.securityValidator = securityValidator;
 		this.routerFunction = RouterFunctions.route()
 			.GET(this.mcpEndpoint, this::handleGet)
 			.POST(this.mcpEndpoint, this::handlePost)
@@ -166,6 +174,14 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
 		}
 
+		try {
+			Map<String, List<String>> headers = request.headers().asHttpHeaders();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			return ServerResponse.status(e.getStatusCode()).bodyValue(e.getMessage());
+		}
+
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		return Mono.defer(() -> {
@@ -219,6 +235,14 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 	private Mono<ServerResponse> handlePost(ServerRequest request) {
 		if (isClosing) {
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
+		}
+
+		try {
+			Map<String, List<String>> headers = request.headers().asHttpHeaders();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			return ServerResponse.status(e.getStatusCode()).bodyValue(e.getMessage());
 		}
 
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
@@ -308,6 +332,14 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 	private Mono<ServerResponse> handleDelete(ServerRequest request) {
 		if (isClosing) {
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
+		}
+
+		try {
+			Map<String, List<String>> headers = request.headers().asHttpHeaders();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			return ServerResponse.status(e.getStatusCode()).bodyValue(e.getMessage());
 		}
 
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
@@ -410,6 +442,8 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 		private Duration keepAliveInterval;
 
+		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
+
 		private Builder() {
 			// used by a static method
 		}
@@ -478,6 +512,18 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		}
 
 		/**
+		 * Sets the security validator for validating HTTP requests.
+		 * @param securityValidator The security validator to use. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if securityValidator is null
+		 */
+		public Builder securityValidator(ServerTransportSecurityValidator securityValidator) {
+			Assert.notNull(securityValidator, "Security validator must not be null");
+			this.securityValidator = securityValidator;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link WebFluxStreamableServerTransportProvider} with
 		 * the configured settings.
 		 * @return A new WebFluxStreamableServerTransportProvider instance
@@ -487,7 +533,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 			return new WebFluxStreamableServerTransportProvider(
 					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, mcpEndpoint, contextExtractor,
-					disallowDelete, keepAliveInterval);
+					disallowDelete, keepAliveInterval, securityValidator);
 		}
 
 	}

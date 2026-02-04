@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server.transport;
@@ -7,6 +7,11 @@ package io.modelcontextprotocol.server.transport;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,15 +63,23 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 
 	private volatile boolean isClosing = false;
 
+	/**
+	 * Security validator for validating HTTP requests.
+	 */
+	private final ServerTransportSecurityValidator securityValidator;
+
 	private HttpServletStatelessServerTransport(McpJsonMapper jsonMapper, String mcpEndpoint,
-			McpTransportContextExtractor<HttpServletRequest> contextExtractor) {
+			McpTransportContextExtractor<HttpServletRequest> contextExtractor,
+			ServerTransportSecurityValidator securityValidator) {
 		Assert.notNull(jsonMapper, "jsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "mcpEndpoint must not be null");
 		Assert.notNull(contextExtractor, "contextExtractor must not be null");
+		Assert.notNull(securityValidator, "Security validator must not be null");
 
 		this.jsonMapper = jsonMapper;
 		this.mcpEndpoint = mcpEndpoint;
 		this.contextExtractor = contextExtractor;
+		this.securityValidator = securityValidator;
 	}
 
 	@Override
@@ -119,6 +132,15 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 
 		if (isClosing) {
 			response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Server is shutting down");
+			return;
+		}
+
+		try {
+			Map<String, List<String>> headers = extractHeaders(request);
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			response.sendError(e.getStatusCode(), e.getMessage());
 			return;
 		}
 
@@ -210,6 +232,21 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 	}
 
 	/**
+	 * Extracts all headers from the HTTP servlet request into a map.
+	 * @param request The HTTP servlet request
+	 * @return A map of header names to their values
+	 */
+	private Map<String, List<String>> extractHeaders(HttpServletRequest request) {
+		Map<String, List<String>> headers = new HashMap<>();
+		Enumeration<String> names = request.getHeaderNames();
+		while (names.hasMoreElements()) {
+			String name = names.nextElement();
+			headers.put(name, Collections.list(request.getHeaders(name)));
+		}
+		return headers;
+	}
+
+	/**
 	 * Cleans up resources when the servlet is being destroyed.
 	 * <p>
 	 * This method ensures a graceful shutdown before calling the parent's destroy method.
@@ -242,6 +279,8 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 
 		private McpTransportContextExtractor<HttpServletRequest> contextExtractor = (
 				serverRequest) -> McpTransportContext.EMPTY;
+
+		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
 
 		private Builder() {
 			// used by a static method
@@ -289,6 +328,18 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		}
 
 		/**
+		 * Sets the security validator for validating HTTP requests.
+		 * @param securityValidator The security validator to use. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if securityValidator is null
+		 */
+		public Builder securityValidator(ServerTransportSecurityValidator securityValidator) {
+			Assert.notNull(securityValidator, "Security validator must not be null");
+			this.securityValidator = securityValidator;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link HttpServletStatelessServerTransport} with the
 		 * configured settings.
 		 * @return A new HttpServletStatelessServerTransport instance
@@ -297,7 +348,7 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		public HttpServletStatelessServerTransport build() {
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 			return new HttpServletStatelessServerTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
-					mcpEndpoint, contextExtractor);
+					mcpEndpoint, contextExtractor, securityValidator);
 		}
 
 	}
