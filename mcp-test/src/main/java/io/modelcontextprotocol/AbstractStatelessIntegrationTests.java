@@ -32,7 +32,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 
-import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -85,7 +84,7 @@ public abstract class AbstractStatelessIntegrationTests {
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpStatelessServerFeatures.SyncToolSpecification tool1 = McpStatelessServerFeatures.SyncToolSpecification
 			.builder()
-			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(Map.of()).build())
 			.callHandler((ctx, request) -> {
 
 				try {
@@ -135,11 +134,7 @@ public abstract class AbstractStatelessIntegrationTests {
 		McpStatelessSyncServer mcpServer = prepareSyncServerBuilder()
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(McpStatelessServerFeatures.SyncToolSpecification.builder()
-				.tool(Tool.builder()
-					.name("tool1")
-					.description("tool1 description")
-					.inputSchema(EMPTY_JSON_SCHEMA)
-					.build())
+				.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(Map.of()).build())
 				.callHandler((context, request) -> {
 					// We trigger a timeout on blocking read, raising an exception
 					Mono.never().block(Duration.ofSeconds(1));
@@ -173,7 +168,7 @@ public abstract class AbstractStatelessIntegrationTests {
 		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
 		McpStatelessServerFeatures.SyncToolSpecification tool1 = McpStatelessServerFeatures.SyncToolSpecification
 			.builder()
-			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(Map.of()).build())
 			.callHandler((ctx, request) -> {
 				// perform a blocking call to a remote service
 				try {
@@ -231,11 +226,7 @@ public abstract class AbstractStatelessIntegrationTests {
 			// Add a new tool
 			McpStatelessServerFeatures.SyncToolSpecification tool2 = McpStatelessServerFeatures.SyncToolSpecification
 				.builder()
-				.tool(Tool.builder()
-					.name("tool2")
-					.description("tool2 description")
-					.inputSchema(EMPTY_JSON_SCHEMA)
-					.build())
+				.tool(Tool.builder().name("tool2").description("tool2 description").inputSchema(Map.of()).build())
 				.callHandler((exchange, request) -> callResponse)
 				.build();
 

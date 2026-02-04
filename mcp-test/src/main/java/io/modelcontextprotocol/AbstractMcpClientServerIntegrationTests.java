@@ -55,7 +55,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -107,7 +106,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		var clientBuilder = clientBuilders.get(clientType);
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
-			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(Map.of()).build())
 			.callHandler((exchange, request) -> {
 				return exchange.createMessage(mock(McpSchema.CreateMessageRequest.class))
 					.then(Mono.just(mock(CallToolResult.class)));
@@ -157,7 +156,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		AtomicReference<CreateMessageResult> samplingResult = new AtomicReference<>();
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
-			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(Map.of()).build())
 			.callHandler((exchange, request) -> {
 
 				var createMessageRequest = McpSchema.CreateMessageRequest.builder()
@@ -236,7 +235,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		AtomicReference<CreateMessageResult> samplingResult = new AtomicReference<>();
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
-			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(Map.of()).build())
 			.callHandler((exchange, request) -> {
 
 				var createMessageRequest = McpSchema.CreateMessageRequest.builder()
@@ -311,7 +310,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.build();
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
-			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(Map.of()).build())
 			.callHandler((exchange, request) -> {
 
 				var createMessageRequest = McpSchema.CreateMessageRequest.builder()
@@ -361,7 +360,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		var clientBuilder = clientBuilders.get(clientType);
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
-			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(Map.of()).build())
 			.callHandler((exchange, request) -> exchange.createElicitation(mock(ElicitRequest.class))
 				.then(Mono.just(mock(CallToolResult.class))))
 			.build();
@@ -405,7 +404,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.build();
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
-			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(Map.of()).build())
 			.callHandler((exchange, request) -> {
 
 				var elicitationRequest = McpSchema.ElicitRequest.builder()
@@ -463,7 +462,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		AtomicReference<ElicitResult> resultRef = new AtomicReference<>();
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
-			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(Map.of()).build())
 			.callHandler((exchange, request) -> {
 
 				var elicitationRequest = McpSchema.ElicitRequest.builder()
@@ -534,7 +533,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		AtomicReference<ElicitResult> resultRef = new AtomicReference<>();
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
-			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(Map.of()).build())
 			.callHandler((exchange, request) -> {
 
 				var elicitationRequest = ElicitRequest.builder()
@@ -632,7 +631,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		var clientBuilder = clientBuilders.get(clientType);
 
 		McpServerFeatures.SyncToolSpecification tool = McpServerFeatures.SyncToolSpecification.builder()
-			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(Map.of()).build())
 			.callHandler((exchange, request) -> {
 
 				exchange.listRoots(); // try to list roots
@@ -774,7 +773,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.addContent(new McpSchema.TextContent("CALL RESPONSE; ctx=importantValue"))
 			.build();
 		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
-			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(Map.of()).build())
 			.callHandler((exchange, request) -> {
 
 				try {
@@ -825,11 +824,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		McpSyncServer mcpServer = prepareSyncServerBuilder()
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(McpServerFeatures.SyncToolSpecification.builder()
-				.tool(Tool.builder()
-					.name("tool1")
-					.description("tool1 description")
-					.inputSchema(EMPTY_JSON_SCHEMA)
-					.build())
+				.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(Map.of()).build())
 				.callHandler((exchange, request) -> {
 					// We trigger a timeout on blocking read, raising an exception
 					Mono.never().block(Duration.ofSeconds(1));
@@ -867,7 +862,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.addContent(new McpSchema.TextContent("CALL RESPONSE; ctx=value"))
 			.build();
 		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
-			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(Map.of()).build())
 			.callHandler((exchange, request) -> {
 
 				McpTransportContext transportContext = exchange.transportContext();
@@ -923,7 +918,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.build();
 
 		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
-			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(Map.of()).build())
 			.callHandler((exchange, request) -> {
 				// perform a blocking call to a remote service
 				try {
@@ -989,11 +984,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 			// Add a new tool
 			McpServerFeatures.SyncToolSpecification tool2 = McpServerFeatures.SyncToolSpecification.builder()
-				.tool(Tool.builder()
-					.name("tool2")
-					.description("tool2 description")
-					.inputSchema(EMPTY_JSON_SCHEMA)
-					.build())
+				.tool(Tool.builder().name("tool2").description("tool2 description").inputSchema(Map.of()).build())
 				.callHandler((exchange, request) -> callResponse)
 				.build();
 
@@ -1044,7 +1035,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.tool(Tool.builder()
 				.name("logging-test")
 				.description("Test logging notifications")
-				.inputSchema(EMPTY_JSON_SCHEMA)
+				.inputSchema(Map.of())
 				.build())
 			.callHandler((exchange, request) -> {
 
@@ -1161,7 +1152,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.tool(McpSchema.Tool.builder()
 				.name("progress-test")
 				.description("Test progress notifications")
-				.inputSchema(EMPTY_JSON_SCHEMA)
+				.inputSchema(Map.of())
 				.build())
 			.callHandler((exchange, request) -> {
 
@@ -1319,7 +1310,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.tool(Tool.builder()
 				.name("ping-async-test")
 				.description("Test ping async behavior")
-				.inputSchema(EMPTY_JSON_SCHEMA)
+				.inputSchema(Map.of())
 				.build())
 			.callHandler((exchange, request) -> {
 
