@@ -14,7 +14,7 @@ class McpJsonMapperTest {
 
 	@Test
 	void shouldUseJackson2Mapper() {
-		assertThat(McpJsonMapper.getDefault()).isInstanceOf(JacksonMcpJsonMapper.class);
+		assertThat(McpJsonDefaults.getDefaultMcpJsonMapper()).isInstanceOf(JacksonMcpJsonMapper.class);
 	}
 
 }

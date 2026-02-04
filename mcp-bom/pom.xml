@@ -40,13 +40,6 @@
                 <version>${project.version}</version>
             </dependency>
 
-            <!-- MCP JSON -->
-            <dependency>
-                <groupId>io.modelcontextprotocol.sdk</groupId>
-                <artifactId>mcp-json</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
             <!-- MCP JSON Jackson -->
             <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
