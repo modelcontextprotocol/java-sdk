@@ -7,6 +7,7 @@ import java.util.Map;
 
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
+import io.modelcontextprotocol.server.transport.DefaultServerTransportSecurityValidator;
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema.AudioContent;
 import io.modelcontextprotocol.spec.McpSchema.BlobResourceContents;
@@ -66,6 +67,8 @@ public class ConformanceServlet {
 			.builder()
 			.mcpEndpoint(MCP_ENDPOINT)
 			.keepAliveInterval(Duration.ofSeconds(30))
+			.securityValidator(
+					DefaultServerTransportSecurityValidator.builder().allowedOrigin("http://localhost:*").build())
 			.build();
 
 		// Build server with all conformance test features
