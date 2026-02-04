@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>io.modelcontextprotocol.sdk</groupId>
+		<artifactId>conformance-tests</artifactId>
+		<version>0.18.0-SNAPSHOT</version>
+	</parent>
+	<artifactId>client-jdk-http-client</artifactId>
+	<packaging>jar</packaging>
+	<name>MCP Conformance Tests - JDK HTTP Client</name>
+	<description>JDK HTTP Client conformance tests for the Java MCP SDK</description>
+	<url>https://github.com/modelcontextprotocol/java-sdk</url>
+
+	<scm>
+		<url>https://github.com/modelcontextprotocol/java-sdk</url>
+		<connection>git://github.com/modelcontextprotocol/java-sdk.git</connection>
+		<developerConnection>git@github.com/modelcontextprotocol/java-sdk.git</developerConnection>
+	</scm>
+
+	<dependencies>
+		<dependency>
+			<groupId>io.modelcontextprotocol.sdk</groupId>
+			<artifactId>mcp</artifactId>
+			<version>0.18.0-SNAPSHOT</version>
+		</dependency>
+
+		<!-- Logging -->
+		<dependency>
+			<groupId>ch.qos.logback</groupId>
+			<artifactId>logback-classic</artifactId>
+			<version>${logback.version}</version>
+			<scope>runtime</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<!-- Maven Shade Plugin for creating executable JAR with dependencies -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-shade-plugin</artifactId>
+				<version>3.5.1</version>
+				<executions>
+					<execution>
+						<phase>package</phase>
+						<goals>
+							<goal>shade</goal>
+						</goals>
+						<configuration>
+							<transformers>
+								<transformer
+									implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+									<mainClass>io.modelcontextprotocol.conformance.client.ConformanceJdkClientMcpClient</mainClass>
+								</transformer>
+								<transformer
+									implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
+							</transformers>
+							<filters>
+								<filter>
+									<artifact>*:*</artifact>
+									<excludes>
+										<exclude>META-INF/*.SF</exclude>
+										<exclude>META-INF/*.DSA</exclude>
+										<exclude>META-INF/*.RSA</exclude>
+									</excludes>
+								</filter>
+							</filters>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

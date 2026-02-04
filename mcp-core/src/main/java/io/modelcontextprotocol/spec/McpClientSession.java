@@ -166,9 +166,15 @@ public class McpClientSession implements McpSession {
 		else if (message instanceof McpSchema.JSONRPCRequest request) {
 			logger.debug("Received request: {}", request);
 			handleIncomingRequest(request).onErrorResume(error -> {
+
+				McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (error instanceof McpError mcpError
+						&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
+								// TODO: add error message through the data field
+								: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+										error.getMessage(), McpError.aggregateExceptionMessages(error));
+
 				var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
-						new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-								error.getMessage(), null));
+						jsonRpcError);
 				return Mono.just(errorResponse);
 			}).flatMap(this.transport::sendMessage).onErrorComplete(t -> {
 				logger.warn("Issue sending response to the client, ", t);

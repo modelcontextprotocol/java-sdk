@@ -13,7 +13,12 @@ import io.modelcontextprotocol.json.McpJsonMapperSupplier;
  * <p>
  * This implementation provides a {@link McpJsonMapper} backed by a Jackson
  * {@link com.fasterxml.jackson.databind.ObjectMapper}.
+ *
+ * @deprecated since 18.0.0, use
+ * {@link io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapperSupplier} instead.
+ * Will be removed in 19.0.0.
  */
+@Deprecated(forRemoval = true, since = "18.0.0")
 public class JacksonMcpJsonMapperSupplier implements McpJsonMapperSupplier {
 
 	/**

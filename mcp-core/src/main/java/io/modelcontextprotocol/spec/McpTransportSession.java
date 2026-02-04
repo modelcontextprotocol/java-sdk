@@ -4,9 +4,9 @@
 
 package io.modelcontextprotocol.spec;
 
-import org.reactivestreams.Publisher;
-
 import java.util.Optional;
+
+import org.reactivestreams.Publisher;
 
 /**
  * An abstraction of the session as perceived from the MCP transport layer. Not to be

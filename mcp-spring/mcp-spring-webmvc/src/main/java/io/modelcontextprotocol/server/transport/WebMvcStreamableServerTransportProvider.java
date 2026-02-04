@@ -240,7 +240,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
-		if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
+		if (request.headers().header(HttpHeaders.MCP_SESSION_ID).isEmpty()) {
 			return ServerResponse.badRequest().body("Session ID required in mcp-session-id header");
 		}
 
@@ -263,7 +263,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 						sessionId, sseBuilder);
 
 				// Check if this is a replay request
-				if (request.headers().asHttpHeaders().containsKey(HttpHeaders.LAST_EVENT_ID)) {
+				if (!request.headers().header(HttpHeaders.LAST_EVENT_ID).isEmpty()) {
 					String lastId = request.headers().asHttpHeaders().getFirst(HttpHeaders.LAST_EVENT_ID);
 
 					try {
@@ -354,7 +354,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 			}
 
 			// Handle other messages that require a session
-			if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
+			if (request.headers().header(HttpHeaders.MCP_SESSION_ID).isEmpty()) {
 				return ServerResponse.badRequest().body(new McpError("Session ID missing"));
 			}
 
@@ -433,7 +433,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
-		if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
+		if (request.headers().header(HttpHeaders.MCP_SESSION_ID).isEmpty()) {
 			return ServerResponse.badRequest().body("Session ID required in mcp-session-id header");
 		}
 

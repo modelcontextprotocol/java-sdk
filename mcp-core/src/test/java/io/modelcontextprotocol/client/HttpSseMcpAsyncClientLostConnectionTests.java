@@ -36,10 +36,9 @@ public class HttpSseMcpAsyncClientLostConnectionTests {
 	static Network network = Network.newNetwork();
 	static String host = "http://localhost:3001";
 
-	// Uses the https://github.com/tzolov/mcp-everything-server-docker-image
 	@SuppressWarnings("resource")
-	static GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v3")
-		.withCommand("node dist/index.js sse")
+	static GenericContainer<?> container = new GenericContainer<>("docker.io/node:lts-alpine3.23")
+		.withCommand("npx -y @modelcontextprotocol/server-everything@2025.12.18 sse")
 		.withLogConsumer(outputFrame -> System.out.println(outputFrame.getUtf8String()))
 		.withNetwork(network)
 		.withNetworkAliases("everything-server")
@@ -122,7 +121,7 @@ public class HttpSseMcpAsyncClientLostConnectionTests {
 	}
 
 	@Test
-	void testPingWithEaxctExceptionType() {
+	void testPingWithExactExceptionType() {
 		withClient(HttpClientSseClientTransport.builder(host).build(), mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.initialize()).expectNextCount(1).verifyComplete();
 

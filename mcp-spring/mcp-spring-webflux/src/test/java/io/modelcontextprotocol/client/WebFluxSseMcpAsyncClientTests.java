@@ -26,13 +26,12 @@ class WebFluxSseMcpAsyncClientTests extends AbstractMcpAsyncClientTests {
 
 	static String host = "http://localhost:3001";
 
-	// Uses the https://github.com/tzolov/mcp-everything-server-docker-image
 	@SuppressWarnings("resource")
-	static GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v3")
-		.withCommand("node dist/index.js sse")
+	static GenericContainer<?> container = new GenericContainer<>("docker.io/node:lts-alpine3.23")
+		.withCommand("npx -y @modelcontextprotocol/server-everything@2025.12.18 sse")
 		.withLogConsumer(outputFrame -> System.out.println(outputFrame.getUtf8String()))
 		.withExposedPorts(3001)
-		.waitingFor(Wait.forHttp("/").forStatusCode(404));
+		.waitingFor(Wait.forHttp("/").forStatusCode(404).forPort(3001));
 
 	@Override
 	protected McpClientTransport createMcpTransport() {

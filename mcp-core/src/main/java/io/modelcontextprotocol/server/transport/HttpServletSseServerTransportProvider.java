@@ -14,9 +14,9 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -69,7 +69,9 @@ import reactor.core.publisher.Mono;
 @WebServlet(asyncSupported = true)
 public class HttpServletSseServerTransportProvider extends HttpServlet implements McpServerTransportProvider {
 
-	/** Logger for this class */
+	/**
+	 * Logger for this class
+	 */
 	private static final Logger logger = LoggerFactory.getLogger(HttpServletSseServerTransportProvider.class);
 
 	public static final String UTF_8 = "UTF-8";
@@ -78,38 +80,60 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 
 	public static final String FAILED_TO_SEND_ERROR_RESPONSE = "Failed to send error response: {}";
 
-	/** Default endpoint path for SSE connections */
+	/**
+	 * Default endpoint path for SSE connections
+	 */
 	public static final String DEFAULT_SSE_ENDPOINT = "/sse";
 
-	/** Event type for regular messages */
+	/**
+	 * Event type for regular messages
+	 */
 	public static final String MESSAGE_EVENT_TYPE = "message";
 
-	/** Event type for endpoint information */
+	/**
+	 * Event type for endpoint information
+	 */
 	public static final String ENDPOINT_EVENT_TYPE = "endpoint";
+
+	public static final String SESSION_ID = "sessionId";
 
 	public static final String DEFAULT_BASE_URL = "";
 
-	/** JSON mapper for serialization/deserialization */
+	/**
+	 * JSON mapper for serialization/deserialization
+	 */
 	private final McpJsonMapper jsonMapper;
 
-	/** Base URL for the server transport */
+	/**
+	 * Base URL for the server transport
+	 */
 	private final String baseUrl;
 
-	/** The endpoint path for handling client messages */
+	/**
+	 * The endpoint path for handling client messages
+	 */
 	private final String messageEndpoint;
 
-	/** The endpoint path for handling SSE connections */
+	/**
+	 * The endpoint path for handling SSE connections
+	 */
 	private final String sseEndpoint;
 
-	/** Map of active client sessions, keyed by session ID */
+	/**
+	 * Map of active client sessions, keyed by session ID
+	 */
 	private final Map<String, McpServerSession> sessions = new ConcurrentHashMap<>();
 
 	private McpTransportContextExtractor<HttpServletRequest> contextExtractor;
 
-	/** Flag indicating if the transport is in the process of shutting down */
+	/**
+	 * Flag indicating if the transport is in the process of shutting down
+	 */
 	private final AtomicBoolean isClosing = new AtomicBoolean(false);
 
-	/** Session factory for creating new sessions */
+	/**
+	 * Session factory for creating new sessions
+	 */
 	private McpServerSession.Factory sessionFactory;
 
 	/**
@@ -243,7 +267,22 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		this.sessions.put(sessionId, session);
 
 		// Send initial endpoint event
-		this.sendEvent(writer, ENDPOINT_EVENT_TYPE, this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId);
+		this.sendEvent(writer, ENDPOINT_EVENT_TYPE, buildEndpointUrl(sessionId));
+	}
+
+	/**
+	 * Constructs the full message endpoint URL by combining the base URL, message path,
+	 * and the required session_id query parameter.
+	 * @param sessionId the unique session identifier
+	 * @return the fully qualified endpoint URL as a string
+	 */
+	private String buildEndpointUrl(String sessionId) {
+		// for WebMVC compatibility
+		if (this.baseUrl.endsWith("/")) {
+			return this.baseUrl.substring(0, this.baseUrl.length() - 1) + this.messageEndpoint + "?sessionId="
+					+ sessionId;
+		}
+		return this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId;
 	}
 
 	/**
@@ -434,8 +473,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		 * Converts data from one type to another using the configured JsonMapper.
 		 * @param data The source data object to convert
 		 * @param typeRef The target type reference
-		 * @return The converted object of type T
 		 * @param <T> The target type
+		 * @return The converted object of type T
 		 */
 		@Override
 		public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {

@@ -106,6 +106,8 @@ public class McpAsyncClient {
 	public static final TypeRef<McpSchema.ProgressNotification> PROGRESS_NOTIFICATION_TYPE_REF = new TypeRef<>() {
 	};
 
+	public static final String NEGOTIATED_PROTOCOL_VERSION = "io.modelcontextprotocol.client.negotiated-protocol-version";
+
 	/**
 	 * Client capabilities.
 	 */
@@ -402,6 +404,7 @@ public class McpAsyncClient {
 	// --------------------------
 	// Initialization
 	// --------------------------
+
 	/**
 	 * The initialization phase should be the first interaction between client and server.
 	 * The client will ensure it happens in case it has not been explicitly called and in
@@ -448,6 +451,7 @@ public class McpAsyncClient {
 	// --------------------------
 	// Roots
 	// --------------------------
+
 	/**
 	 * Adds a new root to the client's root list.
 	 * @param root The root to add.
@@ -625,13 +629,13 @@ public class McpAsyncClient {
 	 * @return A Mono that emits the list of all tools result
 	 */
 	public Mono<McpSchema.ListToolsResult> listTools() {
-		return this.listTools(McpSchema.FIRST_PAGE)
-			.expand(result -> (result.nextCursor() != null) ? this.listTools(result.nextCursor()) : Mono.empty())
-			.reduce(new McpSchema.ListToolsResult(new ArrayList<>(), null), (allToolsResult, result) -> {
-				allToolsResult.tools().addAll(result.tools());
-				return allToolsResult;
-			})
-			.map(result -> new McpSchema.ListToolsResult(Collections.unmodifiableList(result.tools()), null));
+		return this.listTools(McpSchema.FIRST_PAGE).expand(result -> {
+			String next = result.nextCursor();
+			return (next != null && !next.isEmpty()) ? this.listTools(next) : Mono.empty();
+		}).reduce(new McpSchema.ListToolsResult(new ArrayList<>(), null), (allToolsResult, result) -> {
+			allToolsResult.tools().addAll(result.tools());
+			return allToolsResult;
+		}).map(result -> new McpSchema.ListToolsResult(Collections.unmodifiableList(result.tools()), null));
 	}
 
 	/**
