@@ -60,7 +60,7 @@
 		<surefireArgLine/>
 
 		<assert4j.version>3.27.6</assert4j.version>
-		<junit.version>5.10.2</junit.version>
+		<junit.version>6.0.2</junit.version>
 		<mockito.version>5.20.0</mockito.version>
 		<testcontainers.version>1.21.4</testcontainers.version>
 		<byte-buddy.version>1.17.8</byte-buddy.version>
