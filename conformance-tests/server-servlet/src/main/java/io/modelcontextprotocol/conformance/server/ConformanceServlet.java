@@ -67,8 +67,10 @@ public class ConformanceServlet {
 			.builder()
 			.mcpEndpoint(MCP_ENDPOINT)
 			.keepAliveInterval(Duration.ofSeconds(30))
-			.securityValidator(
-					DefaultServerTransportSecurityValidator.builder().allowedOrigin("http://localhost:*").build())
+			.securityValidator(DefaultServerTransportSecurityValidator.builder()
+				.allowedOrigin("http://localhost:*")
+				.allowedHost("localhost:*")
+				.build())
 			.build();
 
 		// Build server with all conformance test features
