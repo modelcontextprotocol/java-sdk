@@ -13,6 +13,7 @@ import java.util.function.BiFunction;
 
 import io.modelcontextprotocol.experimental.tasks.TaskAwareAsyncToolSpecification;
 import io.modelcontextprotocol.experimental.tasks.TaskAwareSyncToolSpecification;
+import io.modelcontextprotocol.experimental.tasks.TaskManagerOptions;
 import io.modelcontextprotocol.experimental.tasks.TaskMessageQueue;
 import io.modelcontextprotocol.experimental.tasks.TaskStore;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -29,6 +30,18 @@ import reactor.core.scheduler.Schedulers;
  * @author Jihoon Kim
  */
 public class McpServerFeatures {
+
+	/**
+	 * Builds a {@link TaskManagerOptions} from a task store and message queue. Returns
+	 * null if neither is configured.
+	 */
+	static TaskManagerOptions buildTaskOptions(TaskStore<McpSchema.ServerTaskPayloadResult> taskStore,
+			TaskMessageQueue taskMessageQueue) {
+		if (taskStore == null && taskMessageQueue == null) {
+			return null;
+		}
+		return TaskManagerOptions.builder().store(taskStore).messageQueue(taskMessageQueue).build();
+	}
 
 	/**
 	 * Asynchronous server features specification.
@@ -112,6 +125,16 @@ public class McpServerFeatures {
 			this.instructions = instructions;
 			this.taskStore = taskStore;
 			this.taskMessageQueue = taskMessageQueue;
+		}
+
+		/**
+		 * Returns the task manager options created from the task store and message queue.
+		 * <p>
+		 * If neither a task store nor message queue is configured, returns null.
+		 * @return TaskManagerOptions instance or null if tasks are not configured
+		 */
+		public TaskManagerOptions taskOptions() {
+			return buildTaskOptions(this.taskStore, this.taskMessageQueue);
 		}
 
 		/**
@@ -251,6 +274,16 @@ public class McpServerFeatures {
 			this.instructions = instructions;
 			this.taskStore = taskStore;
 			this.taskMessageQueue = taskMessageQueue;
+		}
+
+		/**
+		 * Returns the task manager options created from the task store and message queue.
+		 * <p>
+		 * If neither a task store nor message queue is configured, returns null.
+		 * @return TaskManagerOptions instance or null if tasks are not configured
+		 */
+		public TaskManagerOptions taskOptions() {
+			return buildTaskOptions(this.taskStore, this.taskMessageQueue);
 		}
 
 	}

@@ -67,15 +67,15 @@ import reactor.core.scheduler.Schedulers;
  * The {@link TaskSupportMode} controls how the tool responds to calls with or without
  * task metadata:
  * <ul>
- * <li><strong>{@link TaskSupportMode#OPTIONAL}</strong> (default): Tool can be called
- * with OR without task metadata. When called without metadata, the server automatically
- * creates an internal task and polls it to completion, returning the result as if it were
- * a synchronous call. This provides backward compatibility for clients that don't support
+ * <li><strong>{@link TaskSupportMode#OPTIONAL}</strong>: Tool can be called with OR
+ * without task metadata. When called without metadata, the server automatically creates
+ * an internal task and polls it to completion, returning the result as if it were a
+ * synchronous call. This provides backward compatibility for clients that don't support
  * tasks.</li>
- * <li><strong>{@link TaskSupportMode#REQUIRED}</strong>: Tool MUST be called with task
- * metadata. Calls without metadata return error {@code -32601} (METHOD_NOT_FOUND). Use
- * this for tools where callers must explicitly handle task lifecycle (e.g., very
- * long-running operations, tasks requiring user input).</li>
+ * <li><strong>{@link TaskSupportMode#REQUIRED}</strong> (default): Tool MUST be called
+ * with task metadata. Calls without metadata return error {@code -32601}
+ * (METHOD_NOT_FOUND). Use this for tools where callers must explicitly handle task
+ * lifecycle (e.g., very long-running operations, tasks requiring user input).</li>
  * <li><strong>{@link TaskSupportMode#FORBIDDEN}</strong>: Tool cannot use tasks. This is
  * the default for normal (non-task-aware) tools. Task-aware tools should not use this
  * mode.</li>
@@ -176,8 +176,9 @@ public final class TaskAwareAsyncToolSpecification {
 	 *
 	 * <p>
 	 * <strong>Note:</strong> This conversion creates a new
-	 * {@link DefaultSyncCreateTaskExtra} internally. Custom {@link SyncCreateTaskExtra}
-	 * implementations from the original sync specification will not be preserved.
+	 * {@link DefaultSyncCreateTaskContext} internally. Custom
+	 * {@link SyncCreateTaskContext} implementations from the original sync specification
+	 * will not be preserved.
 	 * @param sync the synchronous specification to convert
 	 * @param executor the executor for running sync handlers (should be bounded)
 	 * @return an asynchronous task-aware tool specification
@@ -194,12 +195,9 @@ public final class TaskAwareAsyncToolSpecification {
 
 		// Wrap sync createTaskHandler
 		CreateTaskHandler asyncCreateTaskHandler = (args, extra) -> Mono.fromCallable(() -> {
-			// Cast to DefaultCreateTaskExtra to access internal
-			// taskStore/taskMessageQueue
-			DefaultCreateTaskExtra defaultExtra = (DefaultCreateTaskExtra) extra;
-			SyncCreateTaskExtra syncExtra = new DefaultSyncCreateTaskExtra(defaultExtra.taskStore(),
-					defaultExtra.taskMessageQueue(), sync.createSyncExchange(extra.exchange()), extra.sessionId(),
-					extra.requestTtl(), extra.originatingRequest());
+			DefaultCreateTaskContext defaultExtra = (DefaultCreateTaskContext) extra;
+			SyncCreateTaskContext syncExtra = new DefaultSyncCreateTaskContext(defaultExtra,
+					sync.createSyncExchange(extra.exchange()));
 			return sync.createTaskHandler().createTask(args, syncExtra);
 		}).subscribeOn(Schedulers.fromExecutor(executor));
 

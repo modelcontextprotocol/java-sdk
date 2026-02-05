@@ -31,8 +31,8 @@ import reactor.core.publisher.Mono;
  * <p>
  * This is an experimental API that may change in future releases.
  *
- * @see CreateTaskExtra
- * @see TaskAwareToolSpec
+ * @see CreateTaskContext
+ * @see TaskAwareAsyncToolSpecification
  */
 @FunctionalInterface
 public interface CreateTaskHandler {
@@ -52,6 +52,6 @@ public interface CreateTaskHandler {
 	 * metadata
 	 * @return a Mono emitting the CreateTaskResult containing the created Task
 	 */
-	Mono<McpSchema.CreateTaskResult> createTask(Map<String, Object> args, CreateTaskExtra extra);
+	Mono<McpSchema.CreateTaskResult> createTask(Map<String, Object> args, CreateTaskContext extra);
 
 }

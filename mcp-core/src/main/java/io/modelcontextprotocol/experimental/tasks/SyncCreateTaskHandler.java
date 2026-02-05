@@ -34,7 +34,7 @@ import io.modelcontextprotocol.spec.McpSchema;
  * This is an experimental API that may change in future releases.
  *
  * @see CreateTaskHandler
- * @see SyncCreateTaskExtra
+ * @see SyncCreateTaskContext
  * @see TaskAwareSyncToolSpecification
  */
 @FunctionalInterface
@@ -55,6 +55,6 @@ public interface SyncCreateTaskHandler {
 	 * metadata
 	 * @return the CreateTaskResult containing the created Task
 	 */
-	McpSchema.CreateTaskResult createTask(Map<String, Object> args, SyncCreateTaskExtra extra);
+	McpSchema.CreateTaskResult createTask(Map<String, Object> args, SyncCreateTaskContext extra);
 
 }

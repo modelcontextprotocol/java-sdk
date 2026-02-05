@@ -50,6 +50,22 @@ import reactor.core.scheduler.Schedulers;
 class McpClientFeatures {
 
 	/**
+	 * Build the task capabilities based on the presence of sampling and elicitation
+	 * handlers.
+	 */
+	private static McpSchema.ClientCapabilities.ClientTaskCapabilities buildTaskCapabilities(boolean hasSamplingHandler,
+			boolean hasElicitationHandler) {
+		var builder = McpSchema.ClientCapabilities.ClientTaskCapabilities.builder().list().cancel();
+		if (hasSamplingHandler) {
+			builder.samplingCreateMessage();
+		}
+		if (hasElicitationHandler) {
+			builder.elicitationCreate();
+		}
+		return builder.build();
+	}
+
+	/**
 	 * Asynchronous client features specification providing the capabilities and request
 	 * and notification handlers.
 	 *
@@ -110,7 +126,9 @@ class McpClientFeatures {
 							!Utils.isEmpty(roots) ? new McpSchema.ClientCapabilities.RootCapabilities(false) : null,
 							samplingHandler != null ? new McpSchema.ClientCapabilities.Sampling() : null,
 							elicitationHandler != null ? new McpSchema.ClientCapabilities.Elicitation() : null,
-							taskStorePresent ? buildTaskCapabilities(samplingHandler, elicitationHandler) : null);
+							taskStorePresent
+									? buildTaskCapabilities(samplingHandler != null, elicitationHandler != null)
+									: null);
 			this.roots = roots != null ? new ConcurrentHashMap<>(roots) : new ConcurrentHashMap<>();
 
 			this.toolsChangeConsumers = toolsChangeConsumers != null ? toolsChangeConsumers : List.of();
@@ -125,23 +143,6 @@ class McpClientFeatures {
 			this.enableCallToolSchemaCaching = enableCallToolSchemaCaching;
 			this.taskPollTimeout = taskPollTimeout;
 			this.taskStorePresent = taskStorePresent;
-		}
-
-		/**
-		 * Build the task capabilities based on the presence of sampling and elicitation
-		 * handlers.
-		 */
-		private static McpSchema.ClientCapabilities.ClientTaskCapabilities buildTaskCapabilities(
-				Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler,
-				Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler) {
-			var builder = McpSchema.ClientCapabilities.ClientTaskCapabilities.builder().list().cancel();
-			if (samplingHandler != null) {
-				builder.samplingCreateMessage();
-			}
-			if (elicitationHandler != null) {
-				builder.elicitationCreate();
-			}
-			return builder.build();
 		}
 
 		/**
@@ -293,7 +294,9 @@ class McpClientFeatures {
 							!Utils.isEmpty(roots) ? new McpSchema.ClientCapabilities.RootCapabilities(false) : null,
 							samplingHandler != null ? new McpSchema.ClientCapabilities.Sampling() : null,
 							elicitationHandler != null ? new McpSchema.ClientCapabilities.Elicitation() : null,
-							taskStorePresent ? buildTaskCapabilities(samplingHandler, elicitationHandler) : null);
+							taskStorePresent
+									? buildTaskCapabilities(samplingHandler != null, elicitationHandler != null)
+									: null);
 			this.roots = roots != null ? new HashMap<>(roots) : new HashMap<>();
 
 			this.toolsChangeConsumers = toolsChangeConsumers != null ? toolsChangeConsumers : List.of();
@@ -308,23 +311,6 @@ class McpClientFeatures {
 			this.enableCallToolSchemaCaching = enableCallToolSchemaCaching;
 			this.taskPollTimeout = taskPollTimeout;
 			this.taskStorePresent = taskStorePresent;
-		}
-
-		/**
-		 * Build the task capabilities based on the presence of sampling and elicitation
-		 * handlers.
-		 */
-		private static McpSchema.ClientCapabilities.ClientTaskCapabilities buildTaskCapabilities(
-				Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler,
-				Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler) {
-			var builder = McpSchema.ClientCapabilities.ClientTaskCapabilities.builder().list().cancel();
-			if (samplingHandler != null) {
-				builder.samplingCreateMessage();
-			}
-			if (elicitationHandler != null) {
-				builder.elicitationCreate();
-			}
-			return builder.build();
 		}
 
 		/**

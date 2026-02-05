@@ -6,45 +6,46 @@ package io.modelcontextprotocol.experimental.tasks;
 
 import java.util.function.Consumer;
 
-import io.modelcontextprotocol.server.McpAsyncServerExchange;
+import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.TaskStatus;
-import reactor.core.publisher.Mono;
 
 /**
- * Context passed to {@link CreateTaskHandler} providing access to task infrastructure and
- * request metadata.
- * <p />
+ * Synchronous context passed to {@link SyncCreateTaskHandler} providing access to task
+ * infrastructure and request metadata.
+ *
+ * <p>
+ * This is the synchronous variant of {@link CreateTaskContext}. It gives tool handlers
+ * access to everything needed to create and manage tasks.
+ *
+ * <p>
  * Example usage:
  *
  * <pre>{@code
- * CreateTaskHandler handler = (args, extra) -> {
- *     return extra.createTask(opts -> opts.pollInterval(500L)).flatMap(task -> {
- *         // Start async work that will complete the task later
- *         doAsyncWork(args)
- *             .flatMap(result -> extra.completeTask(task.taskId(), result))
- *             .onErrorResume(e -> extra.failTask(task.taskId(), e.getMessage()))
- *             .subscribe();
+ * SyncCreateTaskHandler handler = (args, extra) -> {
+ *     McpSchema.Task task = extra.createTask(opts -> opts.pollInterval(500L));
  *
- *         return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
- *     });
+ *     // Start external job - completion happens via getTaskHandler or external callback
+ *     externalApi.startJob(task.taskId(), args);
+ *
+ *     return McpSchema.CreateTaskResult.builder().task(task).build();
  * };
  * }</pre>
  *
  * <p>
- * <strong>Design Note:</strong> This interface mirrors {@link SyncCreateTaskExtra} for
- * the synchronous API. The duplication is intentional because async methods return
- * {@link Mono} while sync methods return values directly. This separation allows for
- * proper reactive and blocking semantics without forcing one paradigm on the other.
+ * <strong>Design Note:</strong> This interface mirrors {@link CreateTaskContext} for the
+ * asynchronous API. The duplication is intentional because async methods return
+ * {@code Mono} while sync methods return values directly. This separation allows for
+ * proper blocking semantics without requiring reactive programming knowledge.
  *
  * <p>
  * This is an experimental API that may change in future releases.
  *
- * @see CreateTaskHandler
- * @see SyncCreateTaskExtra
+ * @see SyncCreateTaskHandler
+ * @see CreateTaskContext
  */
-public interface CreateTaskExtra {
+public interface SyncCreateTaskContext {
 
 	/**
 	 * The server exchange for client interaction.
@@ -52,9 +53,9 @@ public interface CreateTaskExtra {
 	 * <p>
 	 * Provides access to session-scoped operations like sending notifications to the
 	 * client.
-	 * @return the McpAsyncServerExchange instance
+	 * @return the McpSyncServerExchange instance
 	 */
-	McpAsyncServerExchange exchange();
+	McpSyncServerExchange exchange();
 
 	/**
 	 * Session ID for task isolation.
@@ -108,16 +109,17 @@ public interface CreateTaskExtra {
 	 * and {@link #requestTtl()} from this context.
 	 *
 	 * <pre>{@code
-	 * extra.createTask().flatMap(task -> {
-	 *     doAsyncWork(args)
-	 *         .flatMap(result -> extra.completeTask(task.taskId(), result))
-	 *         .subscribe();
-	 *     return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
-	 * });
+	 * McpSchema.Task task = extra.createTask();
+	 * // Start background work that will complete the task later
+	 * new Thread(() -> {
+	 *     CallToolResult result = doWork(args);
+	 *     extra.completeTask(task.taskId(), result);
+	 * }).start();
+	 * return McpSchema.CreateTaskResult.builder().task(task).build();
 	 * }</pre>
-	 * @return Mono that completes with the created task
+	 * @return the created task
 	 */
-	Mono<McpSchema.Task> createTask();
+	McpSchema.Task createTask();
 
 	/**
 	 * Convenience method to create a task with custom options, but inheriting session
@@ -129,16 +131,14 @@ public interface CreateTaskExtra {
 	 *
 	 * <pre>{@code
 	 * // Create a task with custom poll interval:
-	 * extra.createTask(opts -> opts.pollInterval(500L)).flatMap(task -> {
-	 *     // Pass task ID explicitly for side-channeling
-	 *     extra.exchange().createElicitation(request, task.taskId()).subscribe();
-	 *     return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
-	 * });
+	 * McpSchema.Task task = extra.createTask(opts -> opts.pollInterval(500L));
+	 * // Pass task ID explicitly for side-channeling
+	 * extra.exchange().createElicitation(request, task.taskId());
 	 * }</pre>
 	 * @param customizer function to customize options beyond the defaults
-	 * @return Mono that completes with the created task
+	 * @return the created task
 	 */
-	Mono<McpSchema.Task> createTask(Consumer<CreateTaskOptions.Builder> customizer);
+	McpSchema.Task createTask(Consumer<CreateTaskOptions.Builder> customizer);
 
 	// --------------------------
 	// Task Lifecycle
@@ -152,18 +152,16 @@ public interface CreateTaskExtra {
 	 * client retrieval.
 	 *
 	 * <pre>{@code
-	 * extra.createTask().flatMap(task -> {
-	 *     doAsyncWork(args)
-	 *         .flatMap(result -> extra.completeTask(task.taskId(), result))
-	 *         .subscribe();
-	 *     return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
-	 * });
+	 * // In a getTaskHandler or external callback:
+	 * CallToolResult result = externalApi.getJobResult(taskId);
+	 * if (result != null) {
+	 *     extra.completeTask(taskId, result);
+	 * }
 	 * }</pre>
 	 * @param taskId the ID of the task to complete
 	 * @param result the tool result to store
-	 * @return Mono that completes when the task is updated
 	 */
-	Mono<Void> completeTask(String taskId, CallToolResult result);
+	void completeTask(String taskId, CallToolResult result);
 
 	/**
 	 * Mark a task as failed with an error message.
@@ -172,19 +170,18 @@ public interface CreateTaskExtra {
 	 * This marks the task as {@link TaskStatus#FAILED} with the provided message.
 	 *
 	 * <pre>{@code
-	 * extra.createTask().flatMap(task -> {
-	 *     doAsyncWork(args)
-	 *         .flatMap(result -> extra.completeTask(task.taskId(), result))
-	 *         .onErrorResume(e -> extra.failTask(task.taskId(), e.getMessage()))
-	 *         .subscribe();
-	 *     return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
-	 * });
+	 * // In a getTaskHandler or external callback:
+	 * try {
+	 *     CallToolResult result = externalApi.getJobResult(taskId);
+	 *     extra.completeTask(taskId, result);
+	 * } catch (Exception e) {
+	 *     extra.failTask(taskId, e.getMessage());
+	 * }
 	 * }</pre>
 	 * @param taskId the ID of the task to fail
 	 * @param message the error message describing what went wrong
-	 * @return Mono that completes when the task is updated
 	 */
-	Mono<Void> failTask(String taskId, String message);
+	void failTask(String taskId, String message);
 
 	/**
 	 * Set a task to INPUT_REQUIRED status, triggering side-channel delivery.
@@ -195,18 +192,15 @@ public interface CreateTaskExtra {
 	 * side-channeling.
 	 *
 	 * <pre>{@code
-	 * extra.createTask().flatMap(task -> {
-	 *     // Queue a notification for side-channel delivery
-	 *     extra.exchange().loggingNotification(notification, task.taskId())
-	 *         .then(extra.setInputRequired(task.taskId(), "Waiting for user input"))
-	 *         .subscribe();
-	 *     return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
-	 * });
+	 * McpSchema.Task task = extra.createTask();
+	 * // Queue a notification for side-channel delivery
+	 * extra.exchange().loggingNotification(notification, task.taskId());
+	 * extra.setInputRequired(task.taskId(), "Waiting for user input");
+	 * return McpSchema.CreateTaskResult.builder().task(task).build();
 	 * }</pre>
 	 * @param taskId the ID of the task
 	 * @param message a status message describing what input is required
-	 * @return Mono that completes when the task is updated
 	 */
-	Mono<Void> setInputRequired(String taskId, String message);
+	void setInputRequired(String taskId, String message);
 
 }

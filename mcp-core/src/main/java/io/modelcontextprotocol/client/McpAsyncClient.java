@@ -5,22 +5,19 @@
 package io.modelcontextprotocol.client;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 import io.modelcontextprotocol.client.LifecycleInitializer.Initialization;
-import io.modelcontextprotocol.experimental.tasks.CreateTaskOptions;
-import io.modelcontextprotocol.experimental.tasks.TaskDefaults;
+import io.modelcontextprotocol.experimental.tasks.ClientTaskHandler;
+import io.modelcontextprotocol.experimental.tasks.TaskManager;
 import io.modelcontextprotocol.experimental.tasks.TaskStore;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
@@ -47,8 +44,6 @@ import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.Disposable;
-import reactor.core.Disposables;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -116,9 +111,6 @@ public class McpAsyncClient {
 	public static final TypeRef<McpSchema.ProgressNotification> PROGRESS_NOTIFICATION_TYPE_REF = new TypeRef<>() {
 	};
 
-	public static final TypeRef<McpSchema.TaskStatusNotification> TASK_STATUS_NOTIFICATION_TYPE_REF = new TypeRef<>() {
-	};
-
 	public static final String NEGOTIATED_PROTOCOL_VERSION = "io.modelcontextprotocol.client.negotiated-protocol-version";
 
 	/**
@@ -184,16 +176,10 @@ public class McpAsyncClient {
 	private final boolean enableCallToolSchemaCaching;
 
 	/**
-	 * Task store for client-side task hosting (experimental). When set, the client can
-	 * host tasks for task-augmented sampling and elicitation requests from the server.
+	 * Client-side task handler (experimental). Manages task lifecycle, client-side task
+	 * hosting, and task-augmented streaming.
 	 */
-	private final TaskStore<McpSchema.ClientTaskPayloadResult> taskStore;
-
-	/**
-	 * Maximum duration to poll for task completion in callToolStream(). Null means use
-	 * the default timeout (5 minutes) to prevent infinite polling.
-	 */
-	private final Duration taskPollTimeout;
+	private final ClientTaskHandler clientTaskHandler;
 
 	/**
 	 * Create a new McpAsyncClient with the given transport and session request-response
@@ -222,8 +208,6 @@ public class McpAsyncClient {
 		this.jsonSchemaValidator = jsonSchemaValidator;
 		this.toolsOutputSchemaCache = new ConcurrentHashMap<>();
 		this.enableCallToolSchemaCaching = features.enableCallToolSchemaCaching();
-		this.taskStore = taskStore;
-		this.taskPollTimeout = features.taskPollTimeout();
 
 		// Request Handlers
 		Map<String, RequestHandler<?>> requestHandlers = new HashMap<>();
@@ -257,18 +241,6 @@ public class McpAsyncClient {
 			}
 			this.elicitationHandler = features.elicitationHandler();
 			requestHandlers.put(McpSchema.METHOD_ELICITATION_CREATE, elicitationCreateHandler());
-		}
-
-		// Task Handlers (for client-side task hosting)
-		if (this.taskStore != null && this.clientCapabilities.tasks() != null) {
-			requestHandlers.put(McpSchema.METHOD_TASKS_GET, clientTasksGetHandler());
-			requestHandlers.put(McpSchema.METHOD_TASKS_RESULT, clientTasksResultHandler());
-			if (this.clientCapabilities.tasks().list() != null) {
-				requestHandlers.put(McpSchema.METHOD_TASKS_LIST, clientTasksListHandler());
-			}
-			if (this.clientCapabilities.tasks().cancel() != null) {
-				requestHandlers.put(McpSchema.METHOD_TASKS_CANCEL, clientTasksCancelHandler());
-			}
 		}
 
 		// Notification Handlers
@@ -338,16 +310,6 @@ public class McpAsyncClient {
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_PROGRESS,
 				asyncProgressNotificationHandler(progressConsumersFinal));
 
-		// Task Status Notification
-		List<Function<McpSchema.TaskStatusNotification, Mono<Void>>> taskStatusConsumersFinal = new ArrayList<>();
-		taskStatusConsumersFinal
-			.add((notification) -> Mono.fromRunnable(() -> logger.debug("Task status: {}", notification)));
-		if (!Utils.isEmpty(features.taskStatusConsumers())) {
-			taskStatusConsumersFinal.addAll(features.taskStatusConsumers());
-		}
-		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_TASKS_STATUS,
-				asyncTaskStatusNotificationHandler(taskStatusConsumersFinal));
-
 		Function<Initialization, Mono<Void>> postInitializationHook = init -> {
 
 			if (init.initializeResult().capabilities().tools() == null || !enableCallToolSchemaCaching) {
@@ -373,6 +335,36 @@ public class McpAsyncClient {
 				postInitializationHook);
 
 		this.transport.setExceptionHandler(this.initializer::handleException);
+
+		// Build task status consumers for ClientTaskHandler
+		List<Function<McpSchema.TaskStatusNotification, Mono<Void>>> taskStatusConsumersFinal = new ArrayList<>();
+		taskStatusConsumersFinal
+			.add((notification) -> Mono.fromRunnable(() -> logger.debug("Task status: {}", notification)));
+		if (!Utils.isEmpty(features.taskStatusConsumers())) {
+			taskStatusConsumersFinal.addAll(features.taskStatusConsumers());
+		}
+
+		// Create ClientTaskHandler AFTER initializer is assigned so references are safe.
+		// The session factory lambda (above) captures
+		// requestHandlers/notificationHandlers
+		// by reference, so entries added here will be visible when the session is created
+		// lazily during initialization.
+		this.clientTaskHandler = new ClientTaskHandler(taskStore, features.taskPollTimeout(), taskStatusConsumersFinal,
+				this.clientCapabilities.tasks(), new ClientTaskHandler.SessionRequestSender() {
+					@Override
+					public <T> Mono<T> sendRequest(String method, Object params, TypeRef<T> typeRef) {
+						return McpAsyncClient.this.initializer.withInitialization("task request",
+								init -> init.mcpSession().sendRequest(method, params, typeRef));
+					}
+				},
+				(method, params) -> this.initializer.withInitialization("task notification",
+						init -> init.mcpSession().sendNotification(method, params)),
+				(params, typeRef) -> transport.unmarshalFrom(params, typeRef));
+
+		// Merge task handlers into session maps (visible to session factory lambda)
+		requestHandlers.putAll(this.clientTaskHandler.getRequestHandlers());
+		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_TASKS_STATUS,
+				this.clientTaskHandler.getTaskStatusNotificationHandler());
 	}
 
 	/**
@@ -439,10 +431,7 @@ public class McpAsyncClient {
 	 * Closes the client connection immediately.
 	 */
 	public void close() {
-		// Shutdown task store to clean up any scheduled cleanup tasks
-		if (this.taskStore != null) {
-			this.taskStore.shutdown().block(Duration.ofSeconds(5));
-		}
+		this.clientTaskHandler.close();
 		this.initializer.close();
 		this.transport.close();
 	}
@@ -452,12 +441,9 @@ public class McpAsyncClient {
 	 * @return A Mono that completes when the connection is closed
 	 */
 	public Mono<Void> closeGracefully() {
-		return Mono.defer(() -> {
-			Mono<Void> taskStoreShutdown = this.taskStore != null ? this.taskStore.shutdown() : Mono.empty();
-			return taskStoreShutdown.timeout(Duration.ofSeconds(5), Mono.empty())
-				.then(this.initializer.closeGracefully())
-				.then(transport.closeGracefully());
-		});
+		return Mono.defer(() -> this.clientTaskHandler.closeGracefully()
+			.then(this.initializer.closeGracefully())
+			.then(transport.closeGracefully()));
 	}
 
 	// --------------------------
@@ -601,53 +587,6 @@ public class McpAsyncClient {
 	}
 
 	// --------------------------
-	// Task-Augmented Request Support
-	// --------------------------
-
-	/**
-	 * Executes a task-augmented request, creating a background task and returning
-	 * immediately with a CreateTaskResult. This is a helper method that extracts the
-	 * common logic for task-augmented sampling and elicitation requests.
-	 * @param <T> The result type (must implement ClientTaskPayloadResult)
-	 * @param originatingRequest The original MCP request that triggered task creation
-	 * @param taskMetadata The task metadata from the request
-	 * @param handlerMono The handler execution that produces the result
-	 * @param operationType Name of the operation for logging (e.g., "sampling",
-	 * "elicitation")
-	 * @return A Mono that emits CreateTaskResult immediately
-	 */
-	private <T extends McpSchema.ClientTaskPayloadResult> Mono<McpSchema.Result> executeTaskAugmentedRequest(
-			McpSchema.Request originatingRequest, McpSchema.TaskMetadata taskMetadata, Mono<T> handlerMono,
-			String operationType) {
-		return this.taskStore
-			.createTask(CreateTaskOptions.builder(originatingRequest).requestedTtl(taskMetadata.ttl()).build())
-			.flatMap(task -> {
-				// Execute the handler in the background (fire-and-forget).
-				// The subscription completes naturally when the handler finishes.
-				// We don't track subscriptions because:
-				// 1. Disposing mid-flight causes data loss (result never stored)
-				// 2. Completed subscriptions are no-ops anyway
-				// 3. The taskStore handles cleanup via TTL expiration
-				handlerMono
-					.flatMap(result -> this.taskStore.storeTaskResult(task.taskId(), null,
-							McpSchema.TaskStatus.COMPLETED, result))
-					.onErrorResume(error -> this.taskStore
-						.updateTaskStatus(task.taskId(), null, McpSchema.TaskStatus.FAILED, error.getMessage())
-						.onErrorResume(storeError -> {
-							logger.error("Failed to update {} task status for {}: {}", operationType, task.taskId(),
-									storeError.getMessage());
-							return Mono.empty();
-						}))
-					.subscribe(unused -> {
-						// Background task completed successfully
-					}, error -> logger.error("Unexpected error in {} task {}: {}", operationType, task.taskId(),
-							error.getMessage()));
-				// Return CreateTaskResult immediately
-				return Mono.just((McpSchema.Result) McpSchema.CreateTaskResult.builder().task(task).build());
-			});
-	}
-
-	// --------------------------
 	// Sampling
 	// --------------------------
 
@@ -656,13 +595,14 @@ public class McpAsyncClient {
 			McpSchema.CreateMessageRequest request = transport.unmarshalFrom(params, CREATE_MESSAGE_REQUEST_TYPE_REF);
 
 			// Check for task-augmented request
-			if (request.task() != null && this.taskStore != null) {
-				return executeTaskAugmentedRequest(request, request.task(), this.samplingHandler.apply(request),
-						"sampling");
+			if (request.task() != null && this.clientTaskHandler.getTaskStore() != null) {
+				return this.clientTaskHandler.executeTaskAugmentedRequest(request, request.task(),
+						this.samplingHandler.apply(request), "sampling");
 			}
 
 			// Non-task-augmented request - execute directly
-			return this.samplingHandler.apply(request).map(result -> processClientResult(request.meta(), result));
+			return this.samplingHandler.apply(request)
+				.map(result -> this.clientTaskHandler.processClientResult(request.meta(), result));
 		};
 	}
 
@@ -676,112 +616,14 @@ public class McpAsyncClient {
 			});
 
 			// Check for task-augmented request
-			if (request.task() != null && this.taskStore != null) {
-				return executeTaskAugmentedRequest(request, request.task(), this.elicitationHandler.apply(request),
-						"elicitation");
+			if (request.task() != null && this.clientTaskHandler.getTaskStore() != null) {
+				return this.clientTaskHandler.executeTaskAugmentedRequest(request, request.task(),
+						this.elicitationHandler.apply(request), "elicitation");
 			}
 
 			// Non-task-augmented request - execute directly
-			return this.elicitationHandler.apply(request).map(result -> processClientResult(request.meta(), result));
-		};
-	}
-
-	/**
-	 * Processes a client result before returning it to the server. Echoes related-task
-	 * metadata from the request to the response, which is necessary for the server to
-	 * associate elicitation/sampling responses with their originating task during
-	 * side-channeling.
-	 * @param requestMeta the request's _meta field
-	 * @param result the handler's result
-	 * @return the processed result with related-task metadata echoed (if present in
-	 * request)
-	 */
-	private McpSchema.Result processClientResult(Map<String, Object> requestMeta, McpSchema.Result result) {
-		if (requestMeta == null || !requestMeta.containsKey(McpSchema.RELATED_TASK_META_KEY)) {
-			return result;
-		}
-
-		Object relatedTask = requestMeta.get(McpSchema.RELATED_TASK_META_KEY);
-		Map<String, Object> newMeta = mergeRelatedTaskMetadata(relatedTask, result.meta());
-
-		// Client-side task payloads are ElicitResult or CreateMessageResult
-		// (per ClientTaskPayloadResult sealed interface)
-		if (result instanceof McpSchema.ElicitResult elicitResult) {
-			return new McpSchema.ElicitResult(elicitResult.action(), elicitResult.content(), newMeta);
-		}
-		else if (result instanceof McpSchema.CreateMessageResult messageResult) {
-			return new McpSchema.CreateMessageResult(messageResult.role(), messageResult.content(),
-					messageResult.model(), messageResult.stopReason(), newMeta);
-		}
-
-		// For other result types, return as-is (shouldn't happen for client-side task
-		// payloads)
-		return result;
-	}
-
-	/**
-	 * Merges related-task metadata with existing metadata.
-	 * @param relatedTask the related-task object to include
-	 * @param existingMeta the existing metadata (may be null)
-	 * @return a new map containing both the related-task metadata and any existing
-	 * metadata
-	 */
-	private Map<String, Object> mergeRelatedTaskMetadata(Object relatedTask, Map<String, Object> existingMeta) {
-		Map<String, Object> newMeta = new HashMap<>();
-		newMeta.put(McpSchema.RELATED_TASK_META_KEY, relatedTask);
-		if (existingMeta != null) {
-			newMeta.putAll(existingMeta);
-		}
-		return newMeta;
-	}
-
-	// --------------------------
-	// Client-Side Task Hosting
-	// --------------------------
-
-	/**
-	 * Handler for tasks/get requests from the server (client-hosted tasks).
-	 */
-	private RequestHandler<McpSchema.GetTaskResult> clientTasksGetHandler() {
-		return params -> {
-			McpSchema.GetTaskRequest request = transport.unmarshalFrom(params, new TypeRef<>() {
-			});
-			return this.taskStore.getTask(request.taskId(), null)
-				.map(result -> result.task())
-				.map(McpSchema.GetTaskResult::fromTask);
-		};
-	}
-
-	/**
-	 * Handler for tasks/result requests from the server (client-hosted tasks).
-	 */
-	private RequestHandler<McpSchema.Result> clientTasksResultHandler() {
-		return params -> {
-			McpSchema.GetTaskPayloadRequest request = transport.unmarshalFrom(params, new TypeRef<>() {
-			});
-			return this.taskStore.getTaskResult(request.taskId(), null).cast(McpSchema.Result.class);
-		};
-	}
-
-	/**
-	 * Handler for tasks/list requests from the server (client-hosted tasks).
-	 */
-	private RequestHandler<McpSchema.ListTasksResult> clientTasksListHandler() {
-		return params -> {
-			McpSchema.PaginatedRequest request = transport.unmarshalFrom(params, new TypeRef<>() {
-			});
-			return this.taskStore.listTasks(request != null ? request.cursor() : null, null);
-		};
-	}
-
-	/**
-	 * Handler for tasks/cancel requests from the server (client-hosted tasks).
-	 */
-	private RequestHandler<McpSchema.CancelTaskResult> clientTasksCancelHandler() {
-		return params -> {
-			McpSchema.CancelTaskRequest request = transport.unmarshalFrom(params, new TypeRef<>() {
-			});
-			return this.taskStore.requestCancellation(request.taskId(), null).map(McpSchema.CancelTaskResult::fromTask);
+			return this.elicitationHandler.apply(request)
+				.map(result -> this.clientTaskHandler.processClientResult(request.meta(), result));
 		};
 	}
 
@@ -793,7 +635,24 @@ public class McpAsyncClient {
 	 * @return the task store, or null if client-side task hosting is not configured
 	 */
 	public TaskStore<McpSchema.ClientTaskPayloadResult> getTaskStore() {
-		return this.taskStore;
+		return this.clientTaskHandler.getTaskStore();
+	}
+
+	/**
+	 * Returns the task manager for task orchestration operations.
+	 * <p>
+	 * The task manager provides the outbound API for interacting with server-hosted
+	 * tasks, including streaming task results, getting task status, and cancelling tasks.
+	 * It also manages task lifecycle operations and message queuing for side-channel
+	 * communication.
+	 * <p>
+	 * <strong>Warning:</strong> This is an experimental API that may change in future
+	 * releases. Use with caution in production environments.
+	 * @return the task manager (never null; returns NullTaskManager if task support is
+	 * not configured)
+	 */
+	public TaskManager taskManager() {
+		return this.clientTaskHandler.taskManager();
 	}
 
 	// --------------------------
@@ -829,54 +688,17 @@ public class McpAsyncClient {
 	}
 
 	/**
-	 * Low-level method that invokes a tool with task augmentation, creating a background
-	 * task for long-running operations.
+	 * Invokes a tool with task augmentation, creating a background task for long-running
+	 * operations. For most use cases, prefer {@link #callToolStream} which handles
+	 * polling and result retrieval automatically.
 	 *
 	 * <p>
-	 * <strong>Recommendation:</strong> For most use cases, prefer {@link #callToolStream}
-	 * which provides a unified streaming interface that handles both regular and
-	 * task-augmented tool calls automatically, including polling and result retrieval.
-	 *
-	 * <p>
-	 * When calling a tool with task augmentation, the server creates a task and returns
-	 * immediately with a {@link McpSchema.CreateTaskResult} containing the task ID. The
-	 * actual tool execution happens asynchronously. Use {@link #getTask} to poll for task
-	 * status and {@link #getTaskResult} to retrieve the result once completed.
-	 *
-	 * <p>
-	 * <strong>Note:</strong> This is an experimental feature that may change in future
-	 * releases.
-	 *
-	 * <p>
-	 * Example usage (manual polling):
-	 *
-	 * <pre>{@code
-	 * var request = new CallToolRequest("slow-operation", args,
-	 *     new TaskMetadata(60000L), null);  // 60s TTL
-	 * var createResult = client.callToolTask(request).block();
-	 * String taskId = createResult.task().taskId();
-	 *
-	 * // Poll until complete
-	 * while (true) {
-	 *     var task = client.getTask(taskId).block();
-	 *     if (task.isTerminal()) break;
-	 *     Thread.sleep(task.pollInterval());
-	 * }
-	 *
-	 * // Get result
-	 * var result = client.getTaskResult(taskId, new TypeRef&lt;CallToolResult&gt;(){}).block();
-	 * }</pre>
-	 * @param callToolRequest The request containing the tool name, parameters, and task
-	 * metadata. The {@code task} field must be non-null.
-	 * @return A Mono that emits the task creation result containing the task ID and
-	 * initial status.
+	 * <strong>Experimental:</strong> This API may change in future releases.
+	 * @param callToolRequest the request containing the tool name, parameters, and task
+	 * metadata (the {@code task} field must be non-null)
+	 * @return a Mono that emits the task creation result
 	 * @throws IllegalArgumentException if the request does not include task metadata
 	 * @see #callToolStream
-	 * @see McpSchema.CallToolRequest
-	 * @see McpSchema.CreateTaskResult
-	 * @see McpSchema.TaskMetadata
-	 * @see #getTask
-	 * @see #getTaskResult
 	 */
 	public Mono<McpSchema.CreateTaskResult> callToolTask(McpSchema.CallToolRequest callToolRequest) {
 		if (callToolRequest.task() == null) {
@@ -893,76 +715,22 @@ public class McpAsyncClient {
 				return Mono.error(
 						new IllegalStateException("Server does not provide tasks capability with tools.call support"));
 			}
-			return init.mcpSession()
-				.sendRequest(McpSchema.METHOD_TOOLS_CALL, callToolRequest, CREATE_TASK_RESULT_TYPE_REF);
+			return this.clientTaskHandler.callToolTask(callToolRequest);
 		});
 	}
 
 	/**
-	 * The default poll interval in milliseconds for task status polling when the server
-	 * does not specify one.
-	 */
-	private static final long DEFAULT_TASK_POLL_INTERVAL_MS = TaskDefaults.DEFAULT_POLL_INTERVAL_MS;
-
-	/**
-	 * Default timeout for task polling operations. If not explicitly configured via the
-	 * builder, polling will timeout after this duration to prevent infinite loops.
-	 */
-	private static final Duration DEFAULT_TASK_POLL_TIMEOUT = Duration.ofMinutes(5);
-
-	/**
 	 * Calls a tool and returns a stream of response messages, handling both regular and
-	 * task-augmented tool calls automatically.
+	 * task-augmented tool calls automatically. For non-task requests, yields a single
+	 * {@link McpSchema.ResultMessage}. For task-augmented requests, yields
+	 * {@link McpSchema.TaskCreatedMessage}, status updates, and a final result or error.
 	 *
 	 * <p>
-	 * This method provides a unified streaming interface for tool execution:
-	 * <ul>
-	 * <li>For <strong>non-task</strong> requests (when {@code task} field is null):
-	 * yields a single {@link McpSchema.ResultMessage} or {@link McpSchema.ErrorMessage}
-	 * <li>For <strong>task-augmented</strong> requests: yields
-	 * {@link McpSchema.TaskCreatedMessage} → zero or more
-	 * {@link McpSchema.TaskStatusMessage} → {@link McpSchema.ResultMessage} or
-	 * {@link McpSchema.ErrorMessage}
-	 * </ul>
-	 *
-	 * <p>
-	 * This is the recommended way to call tools when you want to support both regular and
-	 * long-running tool executions without having to handle the decision logic yourself.
-	 *
-	 * <p>
-	 * <strong>Note:</strong> This is an experimental feature that may change in future
-	 * releases.
-	 *
-	 * <p>
-	 * Example usage (Java 21+ with pattern matching for switch):
-	 *
-	 * <pre>{@code
-	 * var request = new CallToolRequest("my-tool", Map.of("arg", "value"),
-	 *     new TaskMetadata(60000L), null);  // Optional task metadata
-	 *
-	 * client.callToolStream(request)
-	 *     .subscribe(message -> {
-	 *         switch (message) {
-	 *             case TaskCreatedMessage<CallToolResult> tc ->
-	 *                 log.info("Task created: {}", tc.task().taskId());
-	 *             case TaskStatusMessage<CallToolResult> ts ->
-	 *                 log.info("Status: {} - {}", ts.task().status(), ts.task().statusMessage());
-	 *             case ResultMessage<CallToolResult> r ->
-	 *                 handleResult(r.result());
-	 *             case ErrorMessage<CallToolResult> e ->
-	 *                 handleError(e.error());
-	 *         }
-	 *     });
-	 * }</pre>
-	 * @param callToolRequest The request containing the tool name and arguments. If the
-	 * {@code task} field is set, the call will be task-augmented.
-	 * @return A Flux that emits {@link McpSchema.ResponseMessage} instances representing
-	 * the progress and result of the tool call.
+	 * <strong>Experimental:</strong> This API may change in future releases.
+	 * @param callToolRequest the request containing the tool name and arguments; if the
+	 * {@code task} field is set, the call will be task-augmented
+	 * @return a Flux of {@link McpSchema.ResponseMessage} instances
 	 * @see McpSchema.ResponseMessage
-	 * @see McpSchema.TaskCreatedMessage
-	 * @see McpSchema.TaskStatusMessage
-	 * @see McpSchema.ResultMessage
-	 * @see McpSchema.ErrorMessage
 	 */
 	public Flux<McpSchema.ResponseMessage<McpSchema.CallToolResult>> callToolStream(
 			McpSchema.CallToolRequest callToolRequest) {
@@ -981,215 +749,8 @@ public class McpAsyncClient {
 				.flux();
 		}
 
-		// For task-augmented requests, handle the full lifecycle
-		return Flux.create(sink -> {
-			// Cancellation flag to stop polling when subscriber cancels
-			AtomicBoolean cancelled = new AtomicBoolean(false);
-
-			// Composite disposable to track all active subscriptions and prevent memory
-			// leaks
-			Disposable.Composite disposables = Disposables.composite();
-
-			sink.onCancel(() -> {
-				cancelled.set(true);
-				disposables.dispose();
-			});
-			sink.onDispose(() -> {
-				cancelled.set(true);
-				disposables.dispose();
-			});
-
-			// Step 1: Create the task
-			Disposable createTaskSub = this.callToolTask(callToolRequest).subscribe(createResult -> {
-				// Check if cancelled before proceeding
-				if (cancelled.get()) {
-					return;
-				}
-
-				McpSchema.Task task = createResult.task();
-				if (task == null) {
-					sink.error(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
-						.message("Task creation did not return a task")
-						.build());
-					return;
-				}
-
-				// Emit taskCreated message
-				sink.next(McpSchema.TaskCreatedMessage.of(task));
-
-				// Step 2: Start polling for task status (record start time for timeout)
-				pollTaskUntilTerminal(task.taskId(), sink, Instant.now(), cancelled, disposables);
-			}, error -> {
-				McpError mcpError = (error instanceof McpError) ? (McpError) error
-						: McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
-							.message(error.getMessage() != null ? error.getMessage() : "Unknown error")
-							.build();
-				sink.next(McpSchema.ErrorMessage.of(mcpError));
-				sink.complete();
-			});
-			disposables.add(createTaskSub);
-		});
-	}
-
-	/**
-	 * Polls task status until it reaches a terminal state, emitting status updates and
-	 * final result.
-	 * @param taskId the task ID to poll
-	 * @param sink the sink to emit messages to
-	 * @param startTime the time when polling started, used for timeout calculation
-	 * @param cancelled cancellation flag - when true, polling should stop
-	 * @param disposables composite disposable to track active subscriptions for cleanup
-	 */
-	private void pollTaskUntilTerminal(String taskId,
-			reactor.core.publisher.FluxSink<McpSchema.ResponseMessage<McpSchema.CallToolResult>> sink,
-			Instant startTime, AtomicBoolean cancelled, Disposable.Composite disposables) {
-
-		// Check if cancelled before proceeding
-		if (cancelled.get()) {
-			return;
-		}
-
-		// Check timeout (use configured timeout or default to prevent infinite loops)
-		Duration effectiveTimeout = this.taskPollTimeout != null ? this.taskPollTimeout : DEFAULT_TASK_POLL_TIMEOUT;
-		Duration elapsed = Duration.between(startTime, Instant.now());
-		if (elapsed.compareTo(effectiveTimeout) > 0) {
-			sink.next(McpSchema.ErrorMessage.of(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
-				.message("Task polling timed out after " + effectiveTimeout)
-				.build()));
-			sink.complete();
-			return;
-		}
-
-		Disposable getTaskSub = this.getTask(McpSchema.GetTaskRequest.builder().taskId(taskId).build())
-			.subscribe(taskResult -> {
-				// Check if cancelled before processing result
-				if (cancelled.get()) {
-					return;
-				}
-
-				McpSchema.Task task = taskResult.toTask();
-
-				// Emit status update
-				sink.next(McpSchema.TaskStatusMessage.of(task));
-
-				// Check TTL enforcement - if task has expired based on server's TTL
-				if (task.ttl() != null && task.createdAt() != null) {
-					try {
-						Instant createdAt = Instant.parse(task.createdAt());
-						Instant expiresAt = createdAt.plusMillis(task.ttl());
-						if (Instant.now().isAfter(expiresAt)) {
-							sink.next(McpSchema.ErrorMessage.of(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
-								.message("Task TTL expired after " + task.ttl() + "ms")
-								.build()));
-							sink.complete();
-							return;
-						}
-					}
-					catch (DateTimeParseException e) {
-						// Ignore TTL check errors and continue polling
-					}
-				}
-
-				// Check if terminal
-				if (task.isTerminal()) {
-					handleTerminalTask(taskId, task, sink, cancelled, disposables);
-				}
-				else if (task.status() == McpSchema.TaskStatus.INPUT_REQUIRED) {
-					// For input_required, call tasks/result which blocks until terminal
-					// (This handles elicitation/sampling that may happen server-side)
-					fetchTaskResultAndComplete(taskId, sink, cancelled, disposables);
-				}
-				else {
-					// Schedule next poll (only if not cancelled)
-					if (!cancelled.get()) {
-						long pollInterval = task.pollInterval() != null ? task.pollInterval()
-								: DEFAULT_TASK_POLL_INTERVAL_MS;
-						Disposable delaySub = Mono.delay(Duration.ofMillis(pollInterval))
-							.subscribe(
-									ignored -> pollTaskUntilTerminal(taskId, sink, startTime, cancelled, disposables));
-						disposables.add(delaySub);
-					}
-				}
-			}, error -> {
-				McpError mcpError = (error instanceof McpError) ? (McpError) error
-						: McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
-							.message(error.getMessage() != null ? error.getMessage() : "Unknown error")
-							.build();
-				sink.next(McpSchema.ErrorMessage.of(mcpError));
-				sink.complete();
-			});
-		disposables.add(getTaskSub);
-	}
-
-	/**
-	 * Handles a task that has reached a terminal state.
-	 * @param taskId the task ID
-	 * @param task the task in terminal state
-	 * @param sink the sink to emit messages to
-	 * @param cancelled cancellation flag - when true, should stop processing
-	 * @param disposables composite disposable to track active subscriptions for cleanup
-	 */
-	private void handleTerminalTask(String taskId, McpSchema.Task task,
-			reactor.core.publisher.FluxSink<McpSchema.ResponseMessage<McpSchema.CallToolResult>> sink,
-			AtomicBoolean cancelled, Disposable.Composite disposables) {
-		// Check if cancelled before proceeding
-		if (cancelled.get()) {
-			return;
-		}
-
-		if (task.status() == McpSchema.TaskStatus.COMPLETED) {
-			fetchTaskResultAndComplete(taskId, sink, cancelled, disposables);
-		}
-		else if (task.status() == McpSchema.TaskStatus.FAILED) {
-			String message = task.statusMessage() != null ? task.statusMessage() : "Task " + taskId + " failed";
-			sink.next(McpSchema.ErrorMessage
-				.of(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message(message).build()));
-			sink.complete();
-		}
-		else if (task.status() == McpSchema.TaskStatus.CANCELLED) {
-			sink.next(McpSchema.ErrorMessage.of(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
-				.message("Task " + taskId + " was cancelled")
-				.build()));
-			sink.complete();
-		}
-		else {
-			sink.complete();
-		}
-	}
-
-	/**
-	 * Fetches the task result and completes the stream.
-	 * @param taskId the task ID
-	 * @param sink the sink to emit messages to
-	 * @param cancelled cancellation flag - when true, should stop processing
-	 * @param disposables composite disposable to track active subscriptions for cleanup
-	 */
-	private void fetchTaskResultAndComplete(String taskId,
-			reactor.core.publisher.FluxSink<McpSchema.ResponseMessage<McpSchema.CallToolResult>> sink,
-			AtomicBoolean cancelled, Disposable.Composite disposables) {
-		// Check if cancelled before proceeding
-		if (cancelled.get()) {
-			return;
-		}
-
-		Disposable fetchResultSub = this
-			.getTaskResult(McpSchema.GetTaskPayloadRequest.builder().taskId(taskId).build(), CALL_TOOL_RESULT_TYPE_REF)
-			.subscribe(result -> {
-				// Check if cancelled before emitting result
-				if (cancelled.get()) {
-					return;
-				}
-				sink.next(McpSchema.ResultMessage.of(result));
-				sink.complete();
-			}, error -> {
-				McpError mcpError = (error instanceof McpError) ? (McpError) error
-						: McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
-							.message(error.getMessage() != null ? error.getMessage() : "Unknown error")
-							.build();
-				sink.next(McpSchema.ErrorMessage.of(mcpError));
-				sink.complete();
-			});
-		disposables.add(fetchResultSub);
+		// For task-augmented requests, delegate to ClientTaskHandler
+		return this.clientTaskHandler.callToolStreamTask(callToolRequest);
 	}
 
 	private McpSchema.CallToolResult validateToolResult(String toolName, McpSchema.CallToolResult result) {
@@ -1569,23 +1130,6 @@ public class McpAsyncClient {
 		};
 	}
 
-	private NotificationHandler asyncTaskStatusNotificationHandler(
-			List<Function<McpSchema.TaskStatusNotification, Mono<Void>>> taskStatusConsumers) {
-
-		return params -> {
-			McpSchema.TaskStatusNotification taskStatusNotification = transport.unmarshalFrom(params,
-					TASK_STATUS_NOTIFICATION_TYPE_REF);
-
-			return Flux.fromIterable(taskStatusConsumers)
-				.flatMap(consumer -> consumer.apply(taskStatusNotification))
-				.onErrorResume(error -> {
-					logger.error("Error handling task status notification", error);
-					return Mono.empty();
-				})
-				.then();
-		};
-	}
-
 	/**
 	 * This method is package-private and used for test only. Should not be called by user
 	 * code.
@@ -1620,77 +1164,27 @@ public class McpAsyncClient {
 	// Tasks (Experimental)
 	// ---------------------------------------
 
-	private static final TypeRef<McpSchema.GetTaskResult> GET_TASK_RESULT_TYPE_REF = new TypeRef<>() {
-	};
-
-	private static final TypeRef<McpSchema.ListTasksResult> LIST_TASKS_RESULT_TYPE_REF = new TypeRef<>() {
-	};
-
-	private static final TypeRef<McpSchema.CancelTaskResult> CANCEL_TASK_RESULT_TYPE_REF = new TypeRef<>() {
-	};
-
-	private static final TypeRef<McpSchema.CreateTaskResult> CREATE_TASK_RESULT_TYPE_REF = new TypeRef<>() {
-	};
-
 	/**
 	 * Retrieves a task previously initiated by the client with the server.
 	 *
 	 * <p>
-	 * This method mirrors
-	 * {@link io.modelcontextprotocol.server.McpAsyncServerExchange#getTask(McpSchema.GetTaskRequest)},
-	 * which is used for when the server has initiated a task with the client.
-	 *
-	 * <p>
-	 * Example usage:
-	 *
-	 * <pre>{@code
-	 * var result = client.getTask(GetTaskRequest.builder()
-	 *     .taskId(taskId)
-	 *     .build())
-	 *     .block();
-	 * }</pre>
-	 *
-	 * <p>
-	 * <strong>Note:</strong> This is an experimental feature that may change in future
-	 * releases.
-	 * @param getTaskRequest The request containing the task ID.
-	 * @return A Mono that completes with the task information.
-	 * @see McpSchema.GetTaskRequest
-	 * @see McpSchema.GetTaskResult
+	 * <strong>Experimental:</strong> This API may change in future releases.
+	 * @param getTaskRequest the request containing the task ID
+	 * @return a Mono that completes with the task information
 	 */
 	public Mono<McpSchema.GetTaskResult> getTask(McpSchema.GetTaskRequest getTaskRequest) {
 		return this.initializer.withInitialization("get task", init -> {
 			if (init.initializeResult().capabilities().tasks() == null) {
 				return Mono.error(new IllegalStateException("Server does not provide tasks capability"));
 			}
-			return init.mcpSession().sendRequest(McpSchema.METHOD_TASKS_GET, getTaskRequest, GET_TASK_RESULT_TYPE_REF);
+			return this.clientTaskHandler.getTask(getTaskRequest);
 		});
 	}
 
 	/**
-	 * Retrieves a task previously initiated by the client with the server by its ID.
-	 *
-	 * <p>
-	 * This method mirrors
-	 * {@link io.modelcontextprotocol.server.McpAsyncServerExchange#getTask(McpSchema.GetTaskRequest)},
-	 * which is used for when the server has initiated a task with the client.
-	 *
-	 * <p>
-	 * This is a convenience overload that creates a {@link McpSchema.GetTaskRequest} with
-	 * the given task ID.
-	 *
-	 * <p>
-	 * Example usage:
-	 *
-	 * <pre>{@code
-	 * var result = client.getTask(taskId);
-	 * }</pre>
-	 *
-	 * <p>
-	 * <strong>Note:</strong> This is an experimental feature that may change in future
-	 * releases.
-	 * @param taskId The task identifier to query.
-	 * @return A Mono that completes with the task status and metadata.
+	 * Convenience overload of {@link #getTask(McpSchema.GetTaskRequest)}.
+	 * @param taskId the task identifier to query
+	 * @return a Mono that completes with the task status and metadata
 	 */
 	public Mono<McpSchema.GetTaskResult> getTask(String taskId) {
 		Assert.hasText(taskId, "Task ID must not be null or empty");
@@ -1698,39 +1192,16 @@ public class McpAsyncClient {
 	}
 
 	/**
-	 * Get the result of a completed task previously initiated by the client with the
-	 * server.
+	 * Gets the result payload of a completed task. The result type depends on the
+	 * original request (e.g., {@code new TypeRef<McpSchema.CallToolResult>(){}} for tool
+	 * calls).
 	 *
 	 * <p>
-	 * The result type depends on the original request that created the task. For tool
-	 * calls, use {@code new TypeRef<McpSchema.CallToolResult>(){}}.
-	 *
-	 * <p>
-	 * This method mirrors
-	 * {@link io.modelcontextprotocol.server.McpAsyncServerExchange#getTaskResult(McpSchema.GetTaskPayloadRequest, TypeRef)},
-	 * which is used for when the server has initiated a task with the client.
-	 *
-	 * <p>
-	 * Example usage:
-	 *
-	 * <pre>{@code
-	 * // For tool task results:
-	 * var result = client.getTaskResult(
-	 *     new GetTaskPayloadRequest(taskId, null),
-	 *     new TypeRef<McpSchema.CallToolResult>(){})
-	 *     .block();
-	 * }</pre>
-	 *
-	 * <p>
-	 * <strong>Note:</strong> This is an experimental feature that may change in future
-	 * releases.
-	 * @param <T> The expected result type, must extend
-	 * {@link McpSchema.ServerTaskPayloadResult}
-	 * @param getTaskPayloadRequest The request containing the task ID.
-	 * @param resultTypeRef Type reference for deserializing the result.
-	 * @return A Mono that completes with the task result.
-	 * @see McpSchema.GetTaskPayloadRequest
-	 * @see McpSchema.ServerTaskPayloadResult
+	 * <strong>Experimental:</strong> This API may change in future releases.
+	 * @param <T> the expected result type
+	 * @param getTaskPayloadRequest the request containing the task ID
+	 * @param resultTypeRef type reference for deserializing the result
+	 * @return a Mono that completes with the task result
 	 */
 	public <T extends McpSchema.ServerTaskPayloadResult> Mono<T> getTaskResult(
 			McpSchema.GetTaskPayloadRequest getTaskPayloadRequest, TypeRef<T> resultTypeRef) {
@@ -1738,48 +1209,17 @@ public class McpAsyncClient {
 			if (init.initializeResult().capabilities().tasks() == null) {
 				return Mono.error(new IllegalStateException("Server does not provide tasks capability"));
 			}
-			return init.mcpSession().sendRequest(McpSchema.METHOD_TASKS_RESULT, getTaskPayloadRequest, resultTypeRef);
+			return this.clientTaskHandler.getTaskResult(getTaskPayloadRequest, resultTypeRef);
 		});
 	}
 
 	/**
-	 * Get the result of a completed task previously initiated by the client with the
-	 * server by its task ID.
-	 *
-	 * <p>
-	 * This is a convenience overload that creates a
-	 * {@link McpSchema.GetTaskPayloadRequest} from the task ID.
-	 *
-	 * <p>
-	 * The result type depends on the original request that created the task. For tool
-	 * calls, use {@code new TypeRef<McpSchema.CallToolResult>(){}}.
-	 *
-	 * <p>
-	 * This method mirrors
-	 * {@link io.modelcontextprotocol.server.McpAsyncServerExchange#getTaskResult(McpSchema.GetTaskPayloadRequest, TypeRef)},
-	 * which is used for when the server has initiated a task with the client.
-	 *
-	 * <p>
-	 * Example usage:
-	 *
-	 * <pre>{@code
-	 * // For tool task results:
-	 * var result = client.getTaskResult(
-	 *     taskId,
-	 *     new TypeRef<McpSchema.CallToolResult>(){})
-	 *     .block();
-	 * }</pre>
-	 *
-	 * <p>
-	 * <strong>Note:</strong> This is an experimental feature that may change in future
-	 * releases.
-	 * @param <T> The expected result type, must extend
-	 * {@link McpSchema.ServerTaskPayloadResult}
-	 * @param taskId The task identifier.
-	 * @param resultTypeRef Type reference for deserializing the result.
-	 * @return A Mono that completes with the task result.
-	 * @see McpSchema.GetTaskPayloadRequest
-	 * @see McpSchema.ServerTaskPayloadResult
+	 * Convenience overload of
+	 * {@link #getTaskResult(McpSchema.GetTaskPayloadRequest, TypeRef)}.
+	 * @param <T> the expected result type
+	 * @param taskId the task identifier
+	 * @param resultTypeRef type reference for deserializing the result
+	 * @return a Mono that completes with the task result
 	 */
 	public <T extends McpSchema.ServerTaskPayloadResult> Mono<T> getTaskResult(String taskId,
 			TypeRef<T> resultTypeRef) {
@@ -1790,17 +1230,11 @@ public class McpAsyncClient {
 	}
 
 	/**
-	 * List all tasks known by the server.
+	 * Lists all tasks known by the server, automatically handling pagination.
 	 *
 	 * <p>
-	 * This method automatically handles pagination, fetching all pages and combining them
-	 * into a single result with an unmodifiable list.
-	 *
-	 * <p>
-	 * <strong>Note:</strong> This is an experimental feature that may change in future
-	 * releases.
-	 * @return A Mono that completes with the list of all tasks.
-	 * @see McpSchema.ListTasksResult
+	 * <strong>Experimental:</strong> This API may change in future releases.
+	 * @return a Mono that completes with all tasks combined into a single result
 	 */
 	public Mono<McpSchema.ListTasksResult> listTasks() {
 		return this.listTasks(McpSchema.FIRST_PAGE).expand(result -> {
@@ -1816,14 +1250,9 @@ public class McpAsyncClient {
 	}
 
 	/**
-	 * List tasks known by the server with pagination support.
-	 *
-	 * <p>
-	 * <strong>Note:</strong> This is an experimental feature that may change in future
-	 * releases.
-	 * @param cursor Pagination cursor from a previous list request.
-	 * @return A Mono that completes with a page of tasks.
-	 * @see McpSchema.ListTasksResult
+	 * Lists tasks with pagination support.
+	 * @param cursor pagination cursor from a previous list request
+	 * @return a Mono that completes with a page of tasks
 	 */
 	public Mono<McpSchema.ListTasksResult> listTasks(String cursor) {
 		return this.initializer.withInitialization("list tasks", init -> {
@@ -1833,26 +1262,18 @@ public class McpAsyncClient {
 			if (init.initializeResult().capabilities().tasks().list() == null) {
 				return Mono.error(new IllegalStateException("Server does not provide tasks.list capability"));
 			}
-			return init.mcpSession()
-				.sendRequest(McpSchema.METHOD_TASKS_LIST, new McpSchema.PaginatedRequest(cursor),
-						LIST_TASKS_RESULT_TYPE_REF);
+			return this.clientTaskHandler.listTasks(cursor);
 		});
 	}
 
 	/**
-	 * Request cancellation of a task.
+	 * Requests cancellation of a task. Cancellation is cooperative — the server may not
+	 * honor it immediately.
 	 *
 	 * <p>
-	 * Note that cancellation is cooperative - the server may not honor the cancellation
-	 * request, or may take some time to cancel the task.
-	 *
-	 * <p>
-	 * <strong>Note:</strong> This is an experimental feature that may change in future
-	 * releases.
-	 * @param cancelTaskRequest The request containing the task ID.
-	 * @return A Mono that completes with the updated task status.
-	 * @see McpSchema.CancelTaskRequest
-	 * @see McpSchema.CancelTaskResult
+	 * <strong>Experimental:</strong> This API may change in future releases.
+	 * @param cancelTaskRequest the request containing the task ID
+	 * @return a Mono that completes with the updated task status
 	 */
 	public Mono<McpSchema.CancelTaskResult> cancelTask(McpSchema.CancelTaskRequest cancelTaskRequest) {
 		return this.initializer.withInitialization("cancel task", init -> {
@@ -1862,23 +1283,14 @@ public class McpAsyncClient {
 			if (init.initializeResult().capabilities().tasks().cancel() == null) {
 				return Mono.error(new IllegalStateException("Server does not provide tasks.cancel capability"));
 			}
-			return init.mcpSession()
-				.sendRequest(McpSchema.METHOD_TASKS_CANCEL, cancelTaskRequest, CANCEL_TASK_RESULT_TYPE_REF);
+			return this.clientTaskHandler.cancelTask(cancelTaskRequest);
 		});
 	}
 
 	/**
-	 * Request cancellation of a task by ID.
-	 *
-	 * <p>
-	 * This is a convenience overload that creates a {@link McpSchema.CancelTaskRequest}
-	 * with the given task ID.
-	 *
-	 * <p>
-	 * <strong>Note:</strong> This is an experimental feature that may change in future
-	 * releases.
-	 * @param taskId The task identifier to cancel.
-	 * @return A Mono that completes with the updated task status.
+	 * Convenience overload of {@link #cancelTask(McpSchema.CancelTaskRequest)}.
+	 * @param taskId the task identifier to cancel
+	 * @return a Mono that completes with the updated task status
 	 */
 	public Mono<McpSchema.CancelTaskResult> cancelTask(String taskId) {
 		Assert.hasText(taskId, "Task ID must not be null or empty");
