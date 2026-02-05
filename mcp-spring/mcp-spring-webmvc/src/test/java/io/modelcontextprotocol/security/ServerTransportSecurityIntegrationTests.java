@@ -63,6 +63,8 @@ public class ServerTransportSecurityIntegrationTests {
 
 	private static final String DISALLOWED_ORIGIN = "https://malicious.example.com";
 
+	private static final String DISALLOWED_HOST = "malicious.example.com:8080";
+
 	@Parameter
 	private static Class<?> configClass;
 
@@ -90,6 +92,7 @@ public class ServerTransportSecurityIntegrationTests {
 	void setUp() {
 		mcpClient = tomcatServer.appContext().getBean(McpSyncClient.class);
 		requestCustomizer = tomcatServer.appContext().getBean(TestRequestCustomizer.class);
+		requestCustomizer.reset();
 	}
 
 	@AfterEach
@@ -128,6 +131,29 @@ public class ServerTransportSecurityIntegrationTests {
 		requestCustomizer.setOriginHeader(baseUrl);
 		mcpClient.initialize();
 		requestCustomizer.setOriginHeader(DISALLOWED_ORIGIN);
+		assertThatThrownBy(() -> mcpClient.listTools());
+	}
+
+	@Test
+	void hostAllowed() {
+		// Host header is set by default by HttpClient to the request URI host
+		var result = mcpClient.initialize();
+		var tools = mcpClient.listTools();
+
+		assertThat(result.protocolVersion()).isNotEmpty();
+		assertThat(tools.tools()).isEmpty();
+	}
+
+	@Test
+	void connectHostNotAllowed() {
+		requestCustomizer.setHostHeader(DISALLOWED_HOST);
+		assertThatThrownBy(() -> mcpClient.initialize());
+	}
+
+	@Test
+	void messageHostNotAllowed() {
+		mcpClient.initialize();
+		requestCustomizer.setHostHeader(DISALLOWED_HOST);
 		assertThatThrownBy(() -> mcpClient.listTools());
 	}
 
@@ -195,7 +221,10 @@ public class ServerTransportSecurityIntegrationTests {
 
 		@Bean
 		DefaultServerTransportSecurityValidator validator() {
-			return DefaultServerTransportSecurityValidator.builder().allowedOrigin("http://localhost:*").build();
+			return DefaultServerTransportSecurityValidator.builder()
+				.allowedOrigin("http://localhost:*")
+				.allowedHost("localhost:*")
+				.build();
 		}
 
 	}
@@ -318,16 +347,30 @@ public class ServerTransportSecurityIntegrationTests {
 
 		private String originHeader = null;
 
+		private String hostHeader = null;
+
 		@Override
 		public void customize(HttpRequest.Builder builder, String method, URI endpoint, String body,
 				McpTransportContext context) {
 			if (originHeader != null) {
 				builder.header("Origin", originHeader);
 			}
+			if (hostHeader != null) {
+				builder.header("Host", hostHeader);
+			}
 		}
 
 		public void setOriginHeader(String originHeader) {
 			this.originHeader = originHeader;
+		}
+
+		public void setHostHeader(String hostHeader) {
+			this.hostHeader = hostHeader;
+		}
+
+		public void reset() {
+			this.originHeader = null;
+			this.hostHeader = null;
 		}
 
 	}
