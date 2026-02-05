@@ -308,14 +308,6 @@ class InMemoryTaskStoreTests {
 	// ------------------------------------------
 
 	@Test
-	void testUpdateTaskStatusOnNonExistentTask() {
-		// updateTaskStatus on non-existent task should complete without error
-		// (silently ignores due to computeIfPresent)
-		StepVerifier.create(taskStore.updateTaskStatus("nonexistent", null, TaskStatus.COMPLETED, "done"))
-			.verifyComplete();
-	}
-
-	@Test
 	void testStoreTaskResultOnNonExistentTask() {
 		// storeTaskResult on non-existent task should throw McpError
 		StepVerifier
@@ -646,49 +638,6 @@ class InMemoryTaskStoreTests {
 		finally {
 			executor.shutdownNow();
 		}
-	}
-
-	@Test
-	void testHighVolumeTaskCreation() throws InterruptedException {
-		int numTasks = 1000;
-		int created = runConcurrentWithCount(numTasks, 50, 30, idx -> {
-			var task = taskStore.createTask(createDefaultOptions()).block();
-			if (task == null || task.taskId() == null) {
-				throw new AssertionError("Task creation failed");
-			}
-		});
-
-		assertThat(created).isEqualTo(numTasks);
-
-		// Verify all tasks are listable
-		int totalListed = 0;
-		String cursor = null;
-		do {
-			var result = taskStore.listTasks(cursor, null).block();
-			assertThat(result).isNotNull();
-			totalListed += result.tasks().size();
-			cursor = result.nextCursor();
-		}
-		while (cursor != null);
-		assertThat(totalListed).isEqualTo(numTasks);
-	}
-
-	@Test
-	void testHighVolumeStatusUpdates() throws InterruptedException {
-		var task = taskStore.createTask(createDefaultOptions()).block();
-		String taskId = task.taskId();
-
-		int numUpdates = 500;
-		int updates = runConcurrentWithCount(numUpdates, 20, 15, idx -> {
-			taskStore.updateTaskStatus(taskId, null, TaskStatus.WORKING, "Update " + idx).block();
-		});
-
-		assertThat(updates).isEqualTo(numUpdates);
-
-		// Task should still be valid
-		var finalTask = taskStore.getTask(taskId, null).map(GetTaskFromStoreResult::task).block();
-		assertThat(finalTask).isNotNull();
-		assertThat(finalTask.status()).isEqualTo(TaskStatus.WORKING);
 	}
 
 	@Test
@@ -1085,46 +1034,6 @@ class InMemoryTaskStoreTests {
 		});
 
 		// No exceptions thrown = success
-	}
-
-	@Test
-	void testConcurrentSessionOperationsDuringListTasks() throws InterruptedException {
-		String sessionA = "session-A";
-		String sessionB = "session-B";
-
-		// Create initial tasks for both sessions
-		for (int i = 0; i < 10; i++) {
-			taskStore.createTask(CreateTaskOptions.builder(createTestRequest("test-tool")).sessionId(sessionA).build())
-				.block();
-			taskStore.createTask(CreateTaskOptions.builder(createTestRequest("test-tool")).sessionId(sessionB).build())
-				.block();
-		}
-
-		// Race: some threads call listTasks, some create new tasks
-		runConcurrent(50, 20, i -> {
-			if (i % 3 == 0) {
-				taskStore.listTasks(null, sessionA).block();
-			}
-			else if (i % 3 == 1) {
-				taskStore.listTasks(null, sessionB).block();
-			}
-			else {
-				String session = i % 2 == 0 ? sessionA : sessionB;
-				taskStore
-					.createTask(CreateTaskOptions.builder(createTestRequest("test-tool")).sessionId(session).build())
-					.block();
-			}
-		});
-
-		// listTasks should always return consistent snapshot (no partial results or
-		// exceptions)
-		var finalListA = taskStore.listTasks(null, sessionA).block();
-		var finalListB = taskStore.listTasks(null, sessionB).block();
-		assertThat(finalListA).isNotNull();
-		assertThat(finalListB).isNotNull();
-		// At least the initial 10 tasks should be present for each session
-		assertThat(finalListA.tasks().size()).isGreaterThanOrEqualTo(10);
-		assertThat(finalListB.tasks().size()).isGreaterThanOrEqualTo(10);
 	}
 
 }

@@ -14,11 +14,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
 
-import io.modelcontextprotocol.experimental.tasks.CreateTaskExtra;
-import io.modelcontextprotocol.experimental.tasks.DefaultCreateTaskExtra;
-import io.modelcontextprotocol.experimental.tasks.QueuedMessage;
+import io.modelcontextprotocol.experimental.tasks.ServerTaskToolHandler;
 import io.modelcontextprotocol.experimental.tasks.TaskAwareAsyncToolSpecification;
-import io.modelcontextprotocol.experimental.tasks.TaskDefaults;
+import io.modelcontextprotocol.experimental.tasks.TaskManager;
 import io.modelcontextprotocol.experimental.tasks.TaskMessageQueue;
 import io.modelcontextprotocol.experimental.tasks.TaskStore;
 import io.modelcontextprotocol.json.McpJsonMapper;
@@ -112,19 +110,6 @@ public class McpAsyncServer {
 
 	private final CopyOnWriteArrayList<McpServerFeatures.AsyncToolSpecification> tools = new CopyOnWriteArrayList<>();
 
-	// Index for fast lookup of tools by name
-	private final ConcurrentHashMap<String, McpServerFeatures.AsyncToolSpecification> toolsByName = new ConcurrentHashMap<>();
-
-	// Task-aware tools that support long-running operations
-	private final CopyOnWriteArrayList<TaskAwareAsyncToolSpecification> taskTools = new CopyOnWriteArrayList<>();
-
-	// Index for fast lookup of task tools by name (for task handler dispatch)
-	private final ConcurrentHashMap<String, TaskAwareAsyncToolSpecification> taskToolsByName = new ConcurrentHashMap<>();
-
-	// Lock for atomic tool registration to prevent race conditions between normal tools
-	// and task tools
-	private final Object toolRegistrationLock = new Object();
-
 	private final ConcurrentHashMap<String, McpServerFeatures.AsyncResourceSpecification> resources = new ConcurrentHashMap<>();
 
 	private final ConcurrentHashMap<String, McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates = new ConcurrentHashMap<>();
@@ -137,11 +122,7 @@ public class McpAsyncServer {
 
 	private final ConcurrentHashMap<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions = new ConcurrentHashMap<>();
 
-	private final TaskStore<McpSchema.ServerTaskPayloadResult> taskStore;
-
-	private final TaskMessageQueue taskMessageQueue;
-
-	private final Duration automaticPollingTimeout;
+	private final ServerTaskToolHandler taskToolHandler;
 
 	private List<String> protocolVersions;
 
@@ -163,36 +144,27 @@ public class McpAsyncServer {
 		this.serverInfo = features.serverInfo();
 		this.serverCapabilities = features.serverCapabilities().mutate().logging().build();
 		this.instructions = features.instructions();
-		List<McpServerFeatures.AsyncToolSpecification> wrappedTools = withStructuredOutputHandling(jsonSchemaValidator,
-				features.tools());
-		this.tools.addAll(wrappedTools);
-		// Populate toolsByName index for fast lookup
-		for (McpServerFeatures.AsyncToolSpecification tool : wrappedTools) {
-			this.toolsByName.put(tool.tool().name(), tool);
-		}
-		// Populate task tools from features
-		this.taskTools.addAll(features.taskTools());
-		for (TaskAwareAsyncToolSpecification taskTool : features.taskTools()) {
-			this.taskToolsByName.put(taskTool.tool().name(), taskTool);
-		}
+		this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, features.tools()));
 		this.resources.putAll(features.resources());
 		this.resourceTemplates.putAll(features.resourceTemplates());
 		this.prompts.putAll(features.prompts());
 		this.completions.putAll(features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
-		this.taskStore = features.taskStore();
-		this.taskMessageQueue = features.taskMessageQueue();
-		this.automaticPollingTimeout = automaticPollingTimeout;
+
+		this.taskToolHandler = new ServerTaskToolHandler(features.taskTools(), features.taskOptions(), jsonMapper,
+				mcpTransportProvider::notifyClients, automaticPollingTimeout);
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
 
 		this.protocolVersions = mcpTransportProvider.protocolVersions();
 
+		TaskStore<?> taskStore = this.taskToolHandler.getTaskStore();
+		TaskMessageQueue taskMessageQueue = this.taskToolHandler.getTaskMessageQueue();
 		mcpTransportProvider.setSessionFactory(transport -> new McpServerSession(UUID.randomUUID().toString(),
 				requestTimeout, transport, this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers,
-				this.taskMessageQueue, this.taskStore));
+				taskMessageQueue, taskStore));
 	}
 
 	McpAsyncServer(McpStreamableServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
@@ -204,36 +176,27 @@ public class McpAsyncServer {
 		this.serverInfo = features.serverInfo();
 		this.serverCapabilities = features.serverCapabilities().mutate().logging().build();
 		this.instructions = features.instructions();
-		List<McpServerFeatures.AsyncToolSpecification> wrappedTools = withStructuredOutputHandling(jsonSchemaValidator,
-				features.tools());
-		this.tools.addAll(wrappedTools);
-		// Populate toolsByName index for fast lookup
-		for (McpServerFeatures.AsyncToolSpecification tool : wrappedTools) {
-			this.toolsByName.put(tool.tool().name(), tool);
-		}
-		// Populate task tools from features
-		this.taskTools.addAll(features.taskTools());
-		for (TaskAwareAsyncToolSpecification taskTool : features.taskTools()) {
-			this.taskToolsByName.put(taskTool.tool().name(), taskTool);
-		}
+		this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, features.tools()));
 		this.resources.putAll(features.resources());
 		this.resourceTemplates.putAll(features.resourceTemplates());
 		this.prompts.putAll(features.prompts());
 		this.completions.putAll(features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
-		this.taskStore = features.taskStore();
-		this.taskMessageQueue = features.taskMessageQueue();
-		this.automaticPollingTimeout = automaticPollingTimeout;
+
+		this.taskToolHandler = new ServerTaskToolHandler(features.taskTools(), features.taskOptions(), jsonMapper,
+				mcpTransportProvider::notifyClients, automaticPollingTimeout);
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
 
 		this.protocolVersions = mcpTransportProvider.protocolVersions();
 
+		TaskStore<?> taskStore = this.taskToolHandler.getTaskStore();
+		TaskMessageQueue taskMessageQueue = this.taskToolHandler.getTaskMessageQueue();
 		mcpTransportProvider.setSessionFactory(
 				new DefaultMcpStreamableServerSessionFactory(requestTimeout, this::asyncInitializeRequestHandler,
-						requestHandlers, notificationHandlers, this.taskMessageQueue, this.taskStore));
+						requestHandlers, notificationHandlers, taskMessageQueue, taskStore));
 	}
 
 	private Map<String, McpNotificationHandler> prepareNotificationHandlers(McpServerFeatures.Async features) {
@@ -291,28 +254,10 @@ public class McpAsyncServer {
 			requestHandlers.put(McpSchema.METHOD_COMPLETION_COMPLETE, completionCompleteRequestHandler());
 		}
 
-		// Add tasks API handlers if the tasks capability is enabled
-		// Warn about capability/implementation mismatches
-		if (this.serverCapabilities.tasks() != null && this.taskStore == null) {
-			logger.warn("Server has tasks capability enabled but no TaskStore configured. "
-					+ "Task operations will not be available. Either provide a TaskStore or "
-					+ "remove the tasks capability.");
-		}
-		if (this.taskStore != null && this.serverCapabilities.tasks() == null) {
-			logger.warn("Server has TaskStore configured but tasks capability is not enabled. "
-					+ "Task operations will not be available. Either enable the tasks capability "
-					+ "or remove the TaskStore configuration.");
-		}
-		if (this.serverCapabilities.tasks() != null && this.taskStore != null) {
-			requestHandlers.put(McpSchema.METHOD_TASKS_GET, tasksGetRequestHandler());
-			requestHandlers.put(McpSchema.METHOD_TASKS_RESULT, tasksResultRequestHandler());
-			if (this.serverCapabilities.tasks().list() != null) {
-				requestHandlers.put(McpSchema.METHOD_TASKS_LIST, tasksListRequestHandler());
-			}
-			if (this.serverCapabilities.tasks().cancel() != null) {
-				requestHandlers.put(McpSchema.METHOD_TASKS_CANCEL, tasksCancelRequestHandler());
-			}
-		}
+		// Add tasks API handlers via ServerTaskToolHandler
+		this.taskToolHandler.logCapabilityMismatches(this.serverCapabilities.tasks());
+		requestHandlers.putAll(this.taskToolHandler.getRequestHandlers(this.serverCapabilities.tasks()));
+
 		return requestHandlers;
 	}
 
@@ -369,17 +314,14 @@ public class McpAsyncServer {
 	 * @return A Mono that completes when the server has been closed
 	 */
 	public Mono<Void> closeGracefully() {
-		Mono<Void> taskStoreShutdown = this.taskStore != null ? this.taskStore.shutdown() : Mono.empty();
-		return taskStoreShutdown.then(this.mcpTransportProvider.closeGracefully());
+		return this.taskToolHandler.closeGracefully().then(this.mcpTransportProvider.closeGracefully());
 	}
 
 	/**
 	 * Close the server immediately.
 	 */
 	public void close() {
-		if (this.taskStore != null) {
-			this.taskStore.shutdown().block(Duration.ofSeconds(5));
-		}
+		this.taskToolHandler.close();
 		this.mcpTransportProvider.close();
 	}
 
@@ -422,9 +364,9 @@ public class McpAsyncServer {
 
 		return Mono.defer(() -> {
 			String toolName = wrappedToolSpecification.tool().name();
-			synchronized (this.toolRegistrationLock) {
+			synchronized (this.taskToolHandler.getToolRegistrationLock()) {
 				// Check for name collision with task tools
-				if (this.taskToolsByName.containsKey(toolName)) {
+				if (this.taskToolHandler.hasToolNamed(toolName)) {
 					return Mono
 						.error(new IllegalArgumentException("A task tool with name '" + toolName + "' already exists"));
 				}
@@ -435,7 +377,6 @@ public class McpAsyncServer {
 				}
 
 				this.tools.add(wrappedToolSpecification);
-				this.toolsByName.put(toolName, wrappedToolSpecification);
 			}
 			logger.debug("Added tool handler: {}", toolName);
 
@@ -562,8 +503,15 @@ public class McpAsyncServer {
 	}
 
 	/**
-	 * List all registered tools.
-	 * @return A Flux stream of all registered tools
+	 * List all registered regular (non-task-aware) tools.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This method returns only regular tools registered via
+	 * {@link #addTool}. To get task-aware tools, use {@link #listTaskTools()}. When a
+	 * client calls {@code tools/list}, the response includes both regular tools and
+	 * task-aware tools merged together.
+	 * @return A Flux stream of all registered regular tools
+	 * @see #listTaskTools()
 	 */
 	public Flux<Tool> listTools() {
 		return Flux.fromIterable(this.tools).map(McpServerFeatures.AsyncToolSpecification::tool);
@@ -584,7 +532,6 @@ public class McpAsyncServer {
 
 		return Mono.defer(() -> {
 			if (this.tools.removeIf(toolSpecification -> toolSpecification.tool().name().equals(toolName))) {
-				this.toolsByName.remove(toolName);
 				logger.debug("Removed tool handler: {}", toolName);
 				if (this.serverCapabilities.tools().listChanged()) {
 					return notifyToolsListChanged();
@@ -609,43 +556,10 @@ public class McpAsyncServer {
 	 * @return Mono that completes when clients have been notified of the change
 	 */
 	public Mono<Void> addTaskTool(TaskAwareAsyncToolSpecification taskToolSpecification) {
-		if (taskToolSpecification == null) {
-			return Mono.error(new IllegalArgumentException("Task tool specification must not be null"));
-		}
-		if (taskToolSpecification.tool() == null) {
-			return Mono.error(new IllegalArgumentException("Tool must not be null"));
-		}
-		if (taskToolSpecification.createTaskHandler() == null) {
-			return Mono.error(new IllegalArgumentException("createTask handler must not be null"));
-		}
 		if (this.serverCapabilities.tools() == null) {
 			return Mono.error(new IllegalStateException("Server must be configured with tool capabilities"));
 		}
-
-		return Mono.defer(() -> {
-			String toolName = taskToolSpecification.tool().name();
-			synchronized (this.toolRegistrationLock) {
-				// Check for name collision with normal tools
-				if (this.toolsByName.containsKey(toolName)) {
-					return Mono.error(
-							new IllegalArgumentException("A normal tool with name '" + toolName + "' already exists"));
-				}
-
-				// Remove existing task tool with same name if present
-				if (this.taskTools.removeIf(th -> th.tool().name().equals(toolName))) {
-					logger.warn("Replace existing TaskTool with name '{}'", toolName);
-				}
-
-				this.taskTools.add(taskToolSpecification);
-				this.taskToolsByName.put(toolName, taskToolSpecification);
-			}
-			logger.debug("Added task tool handler: {}", toolName);
-
-			if (this.serverCapabilities.tools().listChanged()) {
-				return notifyToolsListChanged();
-			}
-			return Mono.empty();
-		});
+		return this.taskToolHandler.addTaskTool(taskToolSpecification, this.serverCapabilities.tools());
 	}
 
 	/**
@@ -654,27 +568,10 @@ public class McpAsyncServer {
 	 * @return Mono that completes when clients have been notified of the change
 	 */
 	public Mono<Void> removeTaskTool(String toolName) {
-		if (toolName == null) {
-			return Mono.error(new IllegalArgumentException("Tool name must not be null"));
-		}
 		if (this.serverCapabilities.tools() == null) {
 			return Mono.error(new IllegalStateException("Server must be configured with tool capabilities"));
 		}
-
-		return Mono.defer(() -> {
-			if (this.taskTools.removeIf(toolSpecification -> toolSpecification.tool().name().equals(toolName))) {
-				this.taskToolsByName.remove(toolName);
-				logger.debug("Removed task tool handler: {}", toolName);
-				if (this.serverCapabilities.tools().listChanged()) {
-					return notifyToolsListChanged();
-				}
-			}
-			else {
-				logger.warn("Ignore as a TaskTool with name '{}' not found", toolName);
-			}
-
-			return Mono.empty();
-		});
+		return this.taskToolHandler.removeTaskTool(toolName, this.serverCapabilities.tools());
 	}
 
 	/**
@@ -682,7 +579,7 @@ public class McpAsyncServer {
 	 * @return A Flux stream of all registered task-aware tools
 	 */
 	public Flux<Tool> listTaskTools() {
-		return Flux.fromIterable(this.taskTools).map(TaskAwareAsyncToolSpecification::tool);
+		return this.taskToolHandler.listTaskTools();
 	}
 
 	/**
@@ -698,7 +595,7 @@ public class McpAsyncServer {
 			// Combine normal tools and task tools into a single list
 			List<Tool> allTools = new java.util.ArrayList<>();
 			allTools.addAll(this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList());
-			allTools.addAll(this.taskTools.stream().map(TaskAwareAsyncToolSpecification::tool).toList());
+			allTools.addAll(this.taskToolHandler.getToolDefinitions());
 
 			return Mono.just(new McpSchema.ListToolsResult(allTools, null));
 		};
@@ -710,212 +607,31 @@ public class McpAsyncServer {
 					new TypeRef<McpSchema.CallToolRequest>() {
 					});
 
-			String toolName = callToolRequest.name();
-
 			// First, check if it's a normal tool
-			McpServerFeatures.AsyncToolSpecification normalTool = this.toolsByName.get(toolName);
+			McpServerFeatures.AsyncToolSpecification normalTool = this.tools.stream()
+				.filter(t -> t.tool().name().equals(callToolRequest.name()))
+				.findFirst()
+				.orElse(null);
 			if (normalTool != null) {
 				// Normal tools do not support task-augmented requests
 				if (callToolRequest.task() != null) {
 					return Mono.error(McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND)
-						.message("Tool '" + toolName + "' does not support task-augmented requests")
+						.message("Tool '" + callToolRequest.name() + "' does not support task-augmented requests")
 						.data("Remove the 'task' parameter or use a task-aware tool")
 						.build());
 				}
 				return normalTool.callHandler().apply(exchange, callToolRequest).cast(Object.class);
 			}
 
-			// Second, check if it's a task-aware tool
-			TaskAwareAsyncToolSpecification taskTool = this.taskToolsByName.get(toolName);
-			if (taskTool != null) {
-				return handleTaskToolCall(exchange, callToolRequest, taskTool).cast(Object.class);
-			}
-
-			// Tool not found
-			return Mono.error(McpError.builder(McpSchema.ErrorCodes.INVALID_PARAMS)
-				.message("Unknown tool: " + callToolRequest.name())
-				.data("Tool not found: " + callToolRequest.name())
-				.build());
+			// Second, delegate to task tool handler
+			return this.taskToolHandler.handleToolCall(exchange, callToolRequest)
+				.switchIfEmpty(
+						// Tool not found in either normal or task tools
+						Mono.error(McpError.builder(McpSchema.ErrorCodes.INVALID_PARAMS)
+							.message("Unknown tool: " + callToolRequest.name())
+							.data("Tool not found: " + callToolRequest.name())
+							.build()));
 		};
-	}
-
-	/**
-	 * Handles a call to a task-aware tool. Task-aware tools always support tasks and use
-	 * the createTaskHandler for task creation.
-	 */
-	private Mono<?> handleTaskToolCall(McpAsyncServerExchange exchange, McpSchema.CallToolRequest request,
-			TaskAwareAsyncToolSpecification taskTool) {
-
-		McpSchema.ToolExecution execution = taskTool.tool().execution();
-		McpSchema.TaskSupportMode taskSupportMode = execution != null ? execution.taskSupport() : null;
-
-		// Handle task-augmented calls
-		if (request.task() != null) {
-			// Check if server has task capability
-			if (this.taskStore == null) {
-				return Mono.error(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
-					.message("Server does not support tasks")
-					.data("Task store not configured")
-					.build());
-			}
-			return handleTaskToolCreateTask(exchange, request, taskTool);
-		}
-
-		// Check if tool REQUIRES task augmentation
-		if (taskSupportMode == McpSchema.TaskSupportMode.REQUIRED) {
-			return Mono.error(McpError.builder(McpSchema.ErrorCodes.INVALID_PARAMS)
-				.message("This tool requires task-augmented execution")
-				.data("Tool '" + request.name() + "' requires task metadata in the request")
-				.build());
-		}
-
-		// No task metadata - use automatic polling shim if taskStore is configured
-		if (this.taskStore != null) {
-			return handleAutomaticTaskPolling(exchange, request, taskTool);
-		}
-
-		// Fall back to direct call if no task store
-		return taskTool.callHandler().apply(exchange, request);
-	}
-
-	/**
-	 * Handles task creation for a task-aware tool. The tool's createTaskHandler has full
-	 * control over task creation including TTL configuration.
-	 */
-	private Mono<McpSchema.CreateTaskResult> handleTaskToolCreateTask(McpAsyncServerExchange exchange,
-			McpSchema.CallToolRequest request, TaskAwareAsyncToolSpecification taskTool) {
-
-		// Extract request TTL from task metadata.
-		// If null (no task metadata or TTL not specified), the TaskStore's default TTL
-		// will be used when creating the task. This allows clients to optionally request
-		// shorter TTLs but does not require them to specify one.
-		Long requestTtl = request.task() != null ? request.task().ttl() : null;
-
-		// Create the extra context for the handler
-		CreateTaskExtra extra = new DefaultCreateTaskExtra(this.taskStore, this.taskMessageQueue, exchange,
-				exchange.sessionId(), requestTtl, request);
-
-		// Delegate to the tool's createTaskHandler
-		Map<String, Object> args = request.arguments() != null ? request.arguments() : Map.of();
-
-		return taskTool.createTaskHandler()
-			.createTask(args, extra)
-			// Wrap non-McpError exceptions in McpError for consistent error handling
-			.onErrorMap(e -> !(e instanceof McpError),
-					e -> new McpError(new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-							"Task creation failed: " + e.getMessage(), null)));
-	}
-
-	/**
-	 * Handles automatic task polling for task-aware tools called without task metadata.
-	 *
-	 * <h3>When This Occurs</h3>
-	 * <p>
-	 * This behavior only occurs when ALL of the following are true:
-	 * <ul>
-	 * <li>The tool has {@link McpSchema.TaskSupportMode#OPTIONAL}</li>
-	 * <li>The request does NOT include task metadata</li>
-	 * <li>A {@link TaskStore} is configured on the server</li>
-	 * </ul>
-	 *
-	 * <h3>The Flow</h3>
-	 * <p>
-	 * When a task-aware tool is called without task metadata, we:
-	 * <ol>
-	 * <li>Call createTaskHandler internally to create an internal task</li>
-	 * <li>Poll the task at the configured poll interval until it reaches a terminal
-	 * state</li>
-	 * <li>Retrieve the final result and return it directly as a CallToolResult</li>
-	 * </ol>
-	 *
-	 * <p>
-	 * This makes the call appear synchronous to the caller - they receive the final
-	 * result without needing to manage task polling themselves.
-	 *
-	 * <h3>Contrast with REQUIRED Mode</h3>
-	 * <p>
-	 * Tools with {@link McpSchema.TaskSupportMode#REQUIRED} will return error -32601
-	 * (METHOD_NOT_FOUND) if called without task metadata. This automatic polling behavior
-	 * is only available for OPTIONAL mode tools.
-	 *
-	 * <h3>Limitations</h3>
-	 * <ul>
-	 * <li>Tasks requiring interactive input (INPUT_REQUIRED) will fail with an error
-	 * since automatic polling cannot support bidirectional communication</li>
-	 * <li>Long-running tasks may timeout based on the server's automatic polling timeout
-	 * configuration</li>
-	 * </ul>
-	 * @param exchange the server exchange context
-	 * @param request the original tool call request (without task metadata)
-	 * @param taskTool the task-aware tool specification
-	 * @return a Mono that completes with the final CallToolResult
-	 */
-	private Mono<McpSchema.CallToolResult> handleAutomaticTaskPolling(McpAsyncServerExchange exchange,
-			McpSchema.CallToolRequest request, TaskAwareAsyncToolSpecification taskTool) {
-
-		// Create the extra context for the handler (no request TTL since no task
-		// metadata)
-		CreateTaskExtra extra = new DefaultCreateTaskExtra(this.taskStore, this.taskMessageQueue, exchange,
-				exchange.sessionId(), null, request);
-
-		Map<String, Object> args = request.arguments() != null ? request.arguments() : Map.of();
-
-		// 1. Call createTask handler internally
-		return taskTool.createTaskHandler().createTask(args, extra).flatMap(createResult -> {
-			McpSchema.Task task = createResult.task();
-			if (task == null) {
-				return Mono.error(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
-					.message("createTaskHandler did not return a task")
-					.build());
-			}
-
-			String taskId = task.taskId();
-			long pollInterval = task.pollInterval() != null ? task.pollInterval()
-					: TaskDefaults.DEFAULT_POLL_INTERVAL_MS;
-
-			// 2. Poll until terminal state or INPUT_REQUIRED
-			// Note: INPUT_REQUIRED is not terminal but needs special handling for
-			// automatic polling
-			String sessionId = exchange.sessionId();
-			return Flux.interval(Duration.ofMillis(pollInterval)).flatMap(tick -> {
-				// Use getTaskHandler or default
-				if (taskTool.getTaskHandler() != null) {
-					return taskTool.getTaskHandler()
-						.handle(exchange, McpSchema.GetTaskRequest.builder().taskId(taskId).build())
-						.map(McpSchema.GetTaskResult::toTask);
-				}
-				return this.taskStore.getTask(taskId, sessionId)
-					.map(io.modelcontextprotocol.experimental.tasks.GetTaskFromStoreResult::task);
-			})
-				.filter(t -> t != null)
-				.takeUntil(t -> t.isTerminal() || t.status() == McpSchema.TaskStatus.INPUT_REQUIRED)
-				.last()
-				.timeout(getEffectiveAutomaticPollingTimeout())
-				.onErrorResume(java.util.concurrent.TimeoutException.class,
-						e -> Mono.error(new McpError(
-								new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-										"Task timed out waiting for completion: " + taskId, null))))
-				.flatMap(finalTask -> {
-					// Handle INPUT_REQUIRED - automatic polling cannot support
-					// interactive input
-					if (finalTask.status() == McpSchema.TaskStatus.INPUT_REQUIRED) {
-						return Mono.error(new McpError(new McpSchema.JSONRPCResponse.JSONRPCError(
-								McpSchema.ErrorCodes.INTERNAL_ERROR,
-								"Task requires interactive input which is not supported in automatic polling mode. "
-										+ "Use task-augmented requests (with TaskMetadata) to enable interactive input. "
-										+ "Task ID: " + taskId,
-								null)));
-					}
-					// 3. Get final result
-					if (taskTool.getTaskResultHandler() != null) {
-						return taskTool.getTaskResultHandler()
-							.handle(exchange, McpSchema.GetTaskPayloadRequest.builder().taskId(taskId).build())
-							.map(result -> (McpSchema.CallToolResult) result);
-					}
-					return this.taskStore.getTaskResult(taskId, sessionId)
-						.map(result -> (McpSchema.CallToolResult) result);
-				});
-		});
 	}
 
 	// ---------------------------------------
@@ -1463,7 +1179,24 @@ public class McpAsyncServer {
 	 * @return The task store, or null if tasks are not enabled
 	 */
 	public TaskStore<McpSchema.ServerTaskPayloadResult> getTaskStore() {
-		return this.taskStore;
+		return this.taskToolHandler.getTaskStore();
+	}
+
+	/**
+	 * Returns the task manager for task orchestration operations.
+	 * <p>
+	 * The task manager provides the outbound API for interacting with client-hosted
+	 * tasks, including streaming task results, getting task status, and cancelling tasks.
+	 * It also manages task lifecycle operations and message queuing for side-channel
+	 * communication.
+	 * <p>
+	 * <strong>Warning:</strong> This is an experimental API that may change in future
+	 * releases. Use with caution in production environments.
+	 * @return the task manager (never null; returns NullTaskManager if task support is
+	 * not configured)
+	 */
+	public TaskManager taskManager() {
+		return this.taskToolHandler.taskManager();
 	}
 
 	/**
@@ -1475,395 +1208,7 @@ public class McpAsyncServer {
 	 * @return The task message queue, or null if not configured
 	 */
 	public TaskMessageQueue getTaskMessageQueue() {
-		return this.taskMessageQueue;
-	}
-
-	private McpRequestHandler<McpSchema.GetTaskResult> tasksGetRequestHandler() {
-		return (exchange, params) -> {
-			McpSchema.GetTaskRequest request = jsonMapper.convertValue(params, new TypeRef<McpSchema.GetTaskRequest>() {
-			});
-
-			String sessionId = exchange.sessionId();
-
-			// Validate session ownership before any processing
-			return getTaskWithSessionValidation(request.taskId(), sessionId).flatMap(storeResult -> {
-				McpSchema.Task task = storeResult.task();
-				// Extract tool name from originating request (if it was a tool call)
-				String toolName = null;
-				if (storeResult.originatingRequest() instanceof McpSchema.CallToolRequest ctr) {
-					toolName = ctr.name();
-				}
-				// Check for custom handler
-				TaskAwareAsyncToolSpecification taskTool = toolName != null ? this.taskToolsByName.get(toolName) : null;
-				var handler = taskTool != null ? taskTool.getTaskHandler() : null;
-				if (handler != null) {
-					// Use custom handler - full override pattern (fetches everything
-					// independently)
-					return handler.handle(exchange, request);
-				}
-				// Fallback to default: already validated, just convert to result
-				return Mono.just(McpSchema.GetTaskResult.fromTask(task));
-			});
-		};
-	}
-
-	/**
-	 * Validates that the requesting session has permission to access the specified task.
-	 *
-	 * <p>
-	 * This implements session isolation for multi-client server scenarios. A task can be
-	 * accessed if:
-	 * <ul>
-	 * <li>The task has no associated session (single-client mode)</li>
-	 * <li>The requesting session ID matches the task's session ID</li>
-	 * </ul>
-	 *
-	 * <p>
-	 * If access is denied, the error message is intentionally vague ("Task not found") to
-	 * avoid revealing the existence of tasks belonging to other sessions.
-	 * @param taskId the ID of the task to access
-	 * @param exchangeSessionId the session ID of the requesting client
-	 * @return a Mono emitting the GetTaskFromStoreResult if access is allowed
-	 * @throws McpError with INVALID_PARAMS if task not found or access denied
-	 */
-	private Mono<io.modelcontextprotocol.experimental.tasks.GetTaskFromStoreResult> getTaskWithSessionValidation(
-			String taskId, String exchangeSessionId) {
-		// TaskStore.getTask performs session validation and returns empty if access
-		// denied
-		return this.taskStore.getTask(taskId, exchangeSessionId)
-			.switchIfEmpty(Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
-				.message("Task not found (may have expired after TTL)")
-				.data("Task ID: " + taskId)
-				.build()));
-	}
-
-	private McpRequestHandler<McpSchema.Result> tasksResultRequestHandler() {
-		return (exchange, params) -> {
-			McpSchema.GetTaskPayloadRequest request = jsonMapper.convertValue(params,
-					new TypeRef<McpSchema.GetTaskPayloadRequest>() {
-					});
-
-			String sessionId = exchange.sessionId();
-
-			// Validate session ownership before any processing
-			return getTaskWithSessionValidation(request.taskId(), sessionId).flatMap(storeResult -> {
-				McpSchema.Task task = storeResult.task();
-				// Extract tool name from originating request (if it was a tool call)
-				String toolName = null;
-				if (storeResult.originatingRequest() instanceof McpSchema.CallToolRequest ctr) {
-					toolName = ctr.name();
-				}
-				// Check for custom handler
-				TaskAwareAsyncToolSpecification taskTool = toolName != null ? this.taskToolsByName.get(toolName) : null;
-				var handler = taskTool != null ? taskTool.getTaskResultHandler() : null;
-				if (handler != null) {
-					// Use custom handler - full override pattern (fetches everything
-					// independently)
-					return handler.handle(exchange, request);
-				}
-				// Fallback to default task store lookup (session already validated)
-				return defaultGetTaskResult(exchange, request, task);
-			});
-		};
-	}
-
-	/**
-	 * Default implementation for tasks/result that uses the task store. Uses a
-	 * pre-validated task to avoid redundant lookups and ensure session validation has
-	 * already occurred.
-	 *
-	 * <p>
-	 * This method handles the side-channeling flow for INPUT_REQUIRED tasks:
-	 * <ol>
-	 * <li>If task is already terminal, return result immediately</li>
-	 * <li>If task is INPUT_REQUIRED and has queued messages, process them via
-	 * side-channel</li>
-	 * <li>For WORKING status, watch until terminal</li>
-	 * </ol>
-	 */
-	private Mono<McpSchema.Result> defaultGetTaskResult(McpAsyncServerExchange exchange,
-			McpSchema.GetTaskPayloadRequest request, McpSchema.Task task) {
-		String sessionId = exchange.sessionId();
-		String taskId = request.taskId();
-
-		logger.debug("defaultGetTaskResult: Task {} status={}, messageQueue={}", taskId, task.status(),
-				this.taskMessageQueue != null ? "present" : "null");
-
-		// If already terminal, return result immediately
-		if (task.isTerminal()) {
-			logger.debug("defaultGetTaskResult: Task {} is terminal, fetching result", taskId);
-			return fetchTaskResult(taskId, sessionId);
-		}
-
-		// Handle INPUT_REQUIRED by processing queued messages (side-channeling)
-		if (task.status() == McpSchema.TaskStatus.INPUT_REQUIRED && this.taskMessageQueue != null) {
-			logger.debug("defaultGetTaskResult: Task {} is INPUT_REQUIRED, starting side-channel processing", taskId);
-			return processQueuedMessagesAndWaitForTerminal(exchange, request, task);
-		}
-
-		// For WORKING status, just wait until terminal
-		return watchAndFetchResult(taskId, sessionId);
-	}
-
-	/**
-	 * Watches a task until it reaches terminal state, then fetches the result.
-	 */
-	private Mono<McpSchema.Result> watchAndFetchResult(String taskId, String sessionId) {
-		return this.taskStore.watchTaskUntilTerminal(taskId, sessionId, getEffectiveAutomaticPollingTimeout())
-			.last()
-			.onErrorResume(java.util.concurrent.TimeoutException.class,
-					e -> Mono.error(McpError.builder(ErrorCodes.INTERNAL_ERROR)
-						.message("Task did not complete within timeout")
-						.data("Task ID: " + taskId)
-						.build()))
-			.flatMap(terminalTask -> fetchTaskResult(taskId, sessionId));
-	}
-
-	/**
-	 * Processes all queued messages for an INPUT_REQUIRED task via side-channeling, then
-	 * waits for terminal state.
-	 *
-	 * <p>
-	 * This is the core side-channeling handler: it dequeues messages, sends them to the
-	 * client, and enqueues responses back. When the tool's waitForResponse() sees the
-	 * response, it unblocks and continues execution.
-	 */
-	private Mono<McpSchema.Result> processQueuedMessagesAndWaitForTerminal(McpAsyncServerExchange exchange,
-			McpSchema.GetTaskPayloadRequest request, McpSchema.Task task) {
-
-		String taskId = request.taskId();
-		String sessionId = exchange.sessionId();
-
-		logger.debug("processQueuedMessagesAndWaitForTerminal: Starting side-channel processing for task {}", taskId);
-
-		// Process all queued actionable messages
-		return processAllQueuedMessages(exchange, taskId)
-			.doOnSuccess(v -> logger
-				.debug("processQueuedMessagesAndWaitForTerminal: Finished processing queue for task {}", taskId))
-			.then(Mono.defer(() -> pollAndProcessUntilTerminal(exchange, request)));
-	}
-
-	/**
-	 * Processes all queued actionable messages for a task. Uses Flux for clean iteration.
-	 */
-	private Mono<Void> processAllQueuedMessages(McpAsyncServerExchange exchange, String taskId) {
-		return this.taskMessageQueue.dequeueAll(taskId)
-			.flatMapMany(Flux::fromIterable)
-			.concatMap(msg -> processMessage(exchange, msg, taskId)) // Process in order
-			.then();
-	}
-
-	/**
-	 * Processes a single queued message by sending it to the client.
-	 */
-	private Mono<Void> processMessage(McpAsyncServerExchange exchange, QueuedMessage msg, String taskId) {
-		// Handle Request messages (need to send and wait for response)
-		if (msg instanceof QueuedMessage.Request req) {
-			return sendRequestAndEnqueueResponse(exchange, req, taskId);
-		}
-
-		// Handle Notification messages (no response expected)
-		if (msg instanceof QueuedMessage.Notification notif) {
-			return sendNotificationToClient(exchange, notif, taskId);
-		}
-
-		// Response messages should never be returned by dequeue() - but handle gracefully
-		return Mono.empty();
-	}
-
-	/**
-	 * Sends a request to the client and enqueues the response for waitForResponse() to
-	 * pick up.
-	 */
-	private Mono<Void> sendRequestAndEnqueueResponse(McpAsyncServerExchange exchange, QueuedMessage.Request req,
-			String taskId) {
-		String requestId = String.valueOf(req.requestId());
-
-		logger.debug("sendRequestAndEnqueueResponse: Sending {} request {} to client for task {}", req.method(),
-				requestId, taskId);
-
-		// Determine the result TypeRef based on method
-		TypeRef<? extends McpSchema.Result> resultTypeRef = getResultTypeRef(req.method());
-
-		return exchange.getSession().sendRequest(req.method(), req.request(), resultTypeRef).flatMap(result -> {
-			logger.debug("sendRequestAndEnqueueResponse: Got response for request {}, enqueueing for task {}",
-					requestId, taskId);
-			// Enqueue response for the tool's waitForResponse() to retrieve
-			QueuedMessage.Response response = new QueuedMessage.Response(requestId, result);
-			return this.taskMessageQueue.enqueue(taskId, response);
-		});
-	}
-
-	/**
-	 * Returns the appropriate TypeRef for deserializing the result of a side-channel
-	 * request.
-	 */
-	private TypeRef<? extends McpSchema.Result> getResultTypeRef(String method) {
-		return switch (method) {
-			case McpSchema.METHOD_ELICITATION_CREATE -> new TypeRef<McpSchema.ElicitResult>() {
-			};
-			case McpSchema.METHOD_SAMPLING_CREATE_MESSAGE -> new TypeRef<McpSchema.CreateMessageResult>() {
-			};
-			default -> throw new IllegalArgumentException("Unsupported side-channel method: " + method);
-		};
-	}
-
-	/**
-	 * Sends a notification to the client without waiting for a response.
-	 */
-	private Mono<Void> sendNotificationToClient(McpAsyncServerExchange exchange, QueuedMessage.Notification notif,
-			String taskId) {
-		McpSchema.Notification notification = addRelatedTaskMetadataToNotification(taskId, notif.notification());
-		return exchange.getSession().sendNotification(notif.method(), notification);
-	}
-
-	/**
-	 * Adds related-task metadata to a notification. Task status notifications are
-	 * excluded as they already contain the taskId in their params.
-	 * @param taskId the task ID to include in the metadata
-	 * @param notification the notification to augment
-	 * @return the notification with related-task metadata added
-	 */
-	private McpSchema.Notification addRelatedTaskMetadataToNotification(String taskId,
-			McpSchema.Notification notification) {
-		// Handle all Notification subtypes (sealed interface guarantees exhaustiveness)
-		if (notification instanceof McpSchema.TaskStatusNotification tsn) {
-			// Already has taskId in params - spec says SHOULD NOT include metadata
-			return tsn;
-		}
-		else if (notification instanceof McpSchema.ProgressNotification pn) {
-			Map<String, Object> newMeta = mergeRelatedTaskMetadata(taskId, pn.meta());
-			return new McpSchema.ProgressNotification(pn.progressToken(), pn.progress(), pn.total(), pn.message(),
-					newMeta);
-		}
-		else if (notification instanceof McpSchema.LoggingMessageNotification ln) {
-			Map<String, Object> newMeta = mergeRelatedTaskMetadata(taskId, ln.meta());
-			return new McpSchema.LoggingMessageNotification(ln.level(), ln.logger(), ln.data(), newMeta);
-		}
-		else if (notification instanceof McpSchema.ResourcesUpdatedNotification rn) {
-			Map<String, Object> newMeta = mergeRelatedTaskMetadata(taskId, rn.meta());
-			return new McpSchema.ResourcesUpdatedNotification(rn.uri(), newMeta);
-		}
-
-		// This should never happen due to sealed interface, but satisfies compiler
-		throw new IllegalStateException("Unexpected notification type: " + notification.getClass().getName());
-	}
-
-	/**
-	 * Merges related-task metadata with existing metadata.
-	 * @param taskId the task ID to include
-	 * @param existingMeta the existing metadata (may be null)
-	 * @return a new map containing both the related-task metadata and any existing
-	 * metadata
-	 */
-	private Map<String, Object> mergeRelatedTaskMetadata(String taskId, Map<String, Object> existingMeta) {
-		Map<String, Object> newMeta = new HashMap<>();
-		newMeta.put(McpSchema.RELATED_TASK_META_KEY, Map.of("taskId", taskId));
-		if (existingMeta != null) {
-			newMeta.putAll(existingMeta);
-		}
-		return newMeta;
-	}
-
-	/**
-	 * Polls the task and processes messages until it reaches terminal state.
-	 *
-	 * <p>
-	 * This method handles the case where a task may go back to INPUT_REQUIRED multiple
-	 * times (e.g., multiple rounds of elicitation).
-	 */
-	private Mono<McpSchema.Result> pollAndProcessUntilTerminal(McpAsyncServerExchange exchange,
-			McpSchema.GetTaskPayloadRequest request) {
-
-		String taskId = request.taskId();
-		String sessionId = exchange.sessionId();
-
-		return this.taskStore.watchTaskUntilTerminal(taskId, sessionId, getEffectiveAutomaticPollingTimeout())
-			.takeUntil(t -> t.isTerminal() || t.status() == McpSchema.TaskStatus.INPUT_REQUIRED)
-			.last()
-			.flatMap(t -> {
-				if (t.isTerminal()) {
-					return fetchTaskResult(taskId, sessionId);
-				}
-				// Went back to INPUT_REQUIRED - recurse to process more messages
-				return processQueuedMessagesAndWaitForTerminal(exchange, request, t);
-			});
-	}
-
-	/**
-	 * Fetches the result for a task that is in terminal state.
-	 */
-	// Safe: TaskStore<ServerTaskPayloadResult> where ServerTaskPayloadResult is sealed to
-	// CallToolResult,
-	// which implements Result. The cast from ServerTaskPayloadResult to Result is always
-	// valid.
-	@SuppressWarnings("unchecked")
-	private Mono<McpSchema.Result> fetchTaskResult(String taskId, String sessionId) {
-		return this.taskStore.getTaskResult(taskId, sessionId)
-			.map(result -> addRelatedTaskMetadata(taskId, (McpSchema.Result) result))
-			.switchIfEmpty(Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
-				.message("Task result not available")
-				.data("Task ID: " + taskId)
-				.build()));
-	}
-
-	/**
-	 * Adds the related-task metadata to a server task result. The tasks/result operation
-	 * MUST include this metadata in its response, as the result structure itself does not
-	 * contain the task ID.
-	 * @param taskId the task ID to include in the metadata
-	 * @param result the result to add metadata to
-	 * @return the result with related-task metadata added
-	 */
-	private McpSchema.Result addRelatedTaskMetadata(String taskId, McpSchema.Result result) {
-		// Server-side tasks only produce CallToolResult (per ServerTaskPayloadResult
-		// sealed interface)
-		if (result instanceof McpSchema.CallToolResult ctr) {
-			Map<String, Object> newMeta = mergeRelatedTaskMetadata(taskId, ctr.meta());
-			return new McpSchema.CallToolResult(ctr.content(), ctr.isError(), ctr.structuredContent(), newMeta);
-		}
-
-		// For non-task results (e.g., direct tool calls), return as-is
-		return result;
-	}
-
-	/**
-	 * Returns the effective automatic polling timeout, using the configured value or the
-	 * default if not configured.
-	 */
-	private Duration getEffectiveAutomaticPollingTimeout() {
-		return this.automaticPollingTimeout != null ? this.automaticPollingTimeout
-				: Duration.ofMillis(TaskDefaults.DEFAULT_AUTOMATIC_POLLING_TIMEOUT_MS);
-	}
-
-	private McpRequestHandler<McpSchema.ListTasksResult> tasksListRequestHandler() {
-		return (exchange, params) -> {
-			McpSchema.PaginatedRequest request = jsonMapper.convertValue(params,
-					new TypeRef<McpSchema.PaginatedRequest>() {
-					});
-
-			// Use session-filtered listing for proper isolation
-			return this.taskStore.listTasks(request != null ? request.cursor() : null, exchange.sessionId());
-		};
-	}
-
-	private McpRequestHandler<McpSchema.CancelTaskResult> tasksCancelRequestHandler() {
-		return (exchange, params) -> {
-			McpSchema.CancelTaskRequest request = jsonMapper.convertValue(params,
-					new TypeRef<McpSchema.CancelTaskRequest>() {
-					});
-
-			String sessionId = exchange.sessionId();
-
-			// Validate session ownership before allowing cancellation
-			return getTaskWithSessionValidation(request.taskId(), sessionId)
-				.flatMap(task -> this.taskStore.requestCancellation(request.taskId(), sessionId))
-				.switchIfEmpty(Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
-					.message("Task not found (may have expired after TTL)")
-					.data("Task ID: " + request.taskId())
-					.build()))
-				.map(McpSchema.CancelTaskResult::fromTask);
-		};
+		return this.taskToolHandler.getTaskMessageQueue();
 	}
 
 	/**
@@ -1872,13 +1217,7 @@ public class McpAsyncServer {
 	 * @return A Mono that completes when all clients have been notified
 	 */
 	public Mono<Void> notifyTaskStatus(McpSchema.TaskStatusNotification taskStatusNotification) {
-		if (taskStatusNotification == null) {
-			return Mono.error(McpError.builder(ErrorCodes.INVALID_REQUEST)
-				.message("Task status notification must not be null")
-				.build());
-		}
-		return this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_TASKS_STATUS,
-				taskStatusNotification);
+		return this.taskToolHandler.notifyTaskStatus(taskStatusNotification);
 	}
 
 }

@@ -111,7 +111,7 @@ public class InMemoryTaskMessageQueue implements TaskMessageQueue {
 			}
 
 			// Poll periodically until response arrives or timeout
-			return Flux.interval(Duration.ofMillis(50)).flatMap(tick -> {
+			return Flux.interval(Duration.ofMillis(TaskDefaults.RESPONSE_POLL_INTERVAL_MS)).flatMap(tick -> {
 				QueuedMessage.Response response = pollResponseForRequest(taskId, requestId);
 				return response != null ? Mono.just(response) : Mono.empty();
 			})
@@ -150,7 +150,7 @@ public class InMemoryTaskMessageQueue implements TaskMessageQueue {
 	 * Clears all messages for a specific task.
 	 * @param taskId the task identifier
 	 */
-	public void clear(String taskId) {
+	void clear(String taskId) {
 		actionableQueues.remove(taskId);
 		responseQueues.remove(taskId);
 	}
@@ -166,7 +166,7 @@ public class InMemoryTaskMessageQueue implements TaskMessageQueue {
 	/**
 	 * Clears all queues. Use with caution.
 	 */
-	public void clearAll() {
+	void clearAll() {
 		actionableQueues.clear();
 		responseQueues.clear();
 	}

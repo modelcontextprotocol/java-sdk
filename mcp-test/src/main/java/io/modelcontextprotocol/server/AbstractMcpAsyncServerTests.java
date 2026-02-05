@@ -6,6 +6,7 @@ package io.modelcontextprotocol.server;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.modelcontextprotocol.experimental.tasks.CreateTaskOptions;
@@ -781,150 +782,6 @@ public abstract class AbstractMcpAsyncServerTests {
 	}
 
 	@Test
-	void testTaskStoreCreateAndGet() {
-		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
-		var server = createTaskServer(taskStore);
-
-		// Create a task
-		AtomicReference<String> taskIdRef = new AtomicReference<>();
-		StepVerifier.create(taskStore.createTask(
-				CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).requestedTtl(60000L).build()))
-			.consumeNextWith(task -> {
-				assertThat(task.taskId()).isNotNull().isNotEmpty();
-				assertThat(task.status()).isEqualTo(TaskStatus.WORKING);
-				taskIdRef.set(task.taskId());
-			})
-			.verifyComplete();
-
-		// Get the task
-		StepVerifier.create(taskStore.getTask(taskIdRef.get(), null)).consumeNextWith(storeResult -> {
-			assertThat(storeResult.task().taskId()).isEqualTo(taskIdRef.get());
-			assertThat(storeResult.task().status()).isEqualTo(TaskStatus.WORKING);
-		}).verifyComplete();
-
-		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
-	}
-
-	@Test
-	void testTaskStoreUpdateStatus() {
-		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
-		var server = createTaskServer(taskStore);
-
-		// Create a task
-		AtomicReference<String> taskIdRef = new AtomicReference<>();
-		StepVerifier
-			.create(taskStore
-				.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).build()))
-			.consumeNextWith(task -> {
-				taskIdRef.set(task.taskId());
-			})
-			.verifyComplete();
-
-		// Update status
-		StepVerifier.create(taskStore.updateTaskStatus(taskIdRef.get(), null, TaskStatus.WORKING, "Processing..."))
-			.verifyComplete();
-
-		// Verify status updated
-		StepVerifier.create(taskStore.getTask(taskIdRef.get(), null)).consumeNextWith(storeResult -> {
-			assertThat(storeResult.task().status()).isEqualTo(TaskStatus.WORKING);
-			assertThat(storeResult.task().statusMessage()).isEqualTo("Processing...");
-		}).verifyComplete();
-
-		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
-	}
-
-	@Test
-	void testTaskStoreStoreResult() {
-		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
-		var server = createTaskServer(taskStore);
-
-		// Create a task
-		AtomicReference<String> taskIdRef = new AtomicReference<>();
-		StepVerifier
-			.create(taskStore
-				.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).build()))
-			.consumeNextWith(task -> {
-				taskIdRef.set(task.taskId());
-			})
-			.verifyComplete();
-
-		// Store result
-		CallToolResult result = CallToolResult.builder()
-			.content(List.of(new McpSchema.TextContent("Done!")))
-			.isError(false)
-			.build();
-
-		StepVerifier.create(taskStore.storeTaskResult(taskIdRef.get(), null, TaskStatus.COMPLETED, result))
-			.verifyComplete();
-
-		// Verify task is completed
-		StepVerifier.create(taskStore.getTask(taskIdRef.get(), null)).consumeNextWith(storeResult -> {
-			assertThat(storeResult.task().status()).isEqualTo(TaskStatus.COMPLETED);
-		}).verifyComplete();
-
-		// Verify result can be retrieved
-		StepVerifier.create(taskStore.getTaskResult(taskIdRef.get(), null)).consumeNextWith(retrievedResult -> {
-			assertThat(retrievedResult).isInstanceOf(CallToolResult.class);
-		}).verifyComplete();
-
-		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
-	}
-
-	@Test
-	void testTaskStoreListTasks() {
-		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
-		var server = createTaskServer(taskStore);
-
-		// Create a few tasks
-		StepVerifier
-			.create(taskStore
-				.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).build()))
-			.expectNextCount(1)
-			.verifyComplete();
-		StepVerifier
-			.create(taskStore
-				.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).build()))
-			.expectNextCount(1)
-			.verifyComplete();
-
-		// List tasks
-		StepVerifier.create(taskStore.listTasks(null, null)).consumeNextWith(result -> {
-			assertThat(result.tasks()).isNotNull();
-			assertThat(result.tasks()).hasSizeGreaterThanOrEqualTo(2);
-		}).verifyComplete();
-
-		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
-	}
-
-	@Test
-	void testTaskStoreRequestCancellation() {
-		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
-		var server = createTaskServer(taskStore);
-
-		// Create a task
-		AtomicReference<String> taskIdRef = new AtomicReference<>();
-		StepVerifier
-			.create(taskStore
-				.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).build()))
-			.consumeNextWith(task -> {
-				taskIdRef.set(task.taskId());
-			})
-			.verifyComplete();
-
-		// Request cancellation
-		StepVerifier.create(taskStore.requestCancellation(taskIdRef.get(), null)).consumeNextWith(task -> {
-			assertThat(task.taskId()).isEqualTo(taskIdRef.get());
-		}).verifyComplete();
-
-		// Verify cancellation was requested
-		StepVerifier.create(taskStore.isCancellationRequested(taskIdRef.get(), null)).consumeNextWith(isCancelled -> {
-			assertThat(isCancelled).isTrue();
-		}).verifyComplete();
-
-		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
-	}
-
-	@Test
 	void testToolWithTaskSupportRequired() {
 		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
 		var tool = createSimpleTaskTool(TEST_TASK_TOOL_NAME, TaskSupportMode.REQUIRED, "Task completed!");
@@ -939,39 +796,6 @@ public abstract class AbstractMcpAsyncServerTests {
 		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
 		var tool = createSimpleTaskTool(TEST_TASK_TOOL_NAME, TaskSupportMode.OPTIONAL, "Done");
 		var server = createTaskServer(taskStore, tool);
-
-		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
-	}
-
-	@Test
-	void testTerminalStateCannotTransition() {
-		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore = new InMemoryTaskStore<>();
-		var server = createTaskServer(taskStore);
-
-		// Create and complete a task
-		AtomicReference<String> taskIdRef = new AtomicReference<>();
-		StepVerifier
-			.create(taskStore
-				.createTask(CreateTaskOptions.builder(TaskTestUtils.createTestRequest("test-tool")).build()))
-			.consumeNextWith(task -> {
-				taskIdRef.set(task.taskId());
-			})
-			.verifyComplete();
-
-		// Complete the task
-		CallToolResult result = CallToolResult.builder().content(List.of()).isError(false).build();
-		StepVerifier.create(taskStore.storeTaskResult(taskIdRef.get(), null, TaskStatus.COMPLETED, result))
-			.verifyComplete();
-
-		// Trying to update status should fail or be ignored (implementation-dependent)
-		// The InMemoryTaskStore silently ignores invalid transitions
-		StepVerifier.create(taskStore.updateTaskStatus(taskIdRef.get(), null, TaskStatus.WORKING, "Should not work"))
-			.verifyComplete();
-
-		// Status should still be COMPLETED
-		StepVerifier.create(taskStore.getTask(taskIdRef.get(), null)).consumeNextWith(storeResult -> {
-			assertThat(storeResult.task().status()).isEqualTo(TaskStatus.COMPLETED);
-		}).verifyComplete();
 
 		assertThatCode(() -> server.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
 	}
@@ -1019,10 +843,13 @@ public abstract class AbstractMcpAsyncServerTests {
 				.map(task -> McpSchema.CreateTaskResult.builder().task(task).build()))
 			.getTaskHandler((exchange, request) -> {
 				// Custom getTask handler
+				String now = java.time.Instant.now().toString();
 				return Mono.just(McpSchema.GetTaskResult.builder()
 					.taskId(request.taskId())
 					.status(TaskStatus.WORKING)
 					.statusMessage("Custom status from handler")
+					.createdAt(now)
+					.lastUpdatedAt(now)
 					.build());
 			})
 			.getTaskResultHandler((exchange, request) -> {

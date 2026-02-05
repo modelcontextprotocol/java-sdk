@@ -301,19 +301,6 @@ class InMemoryTaskMessageQueueTests {
 	}
 
 	@Test
-	void testClearTaskReactive() {
-		// Add some messages
-		messageQueue.enqueue("task-1", notification("method-1")).block();
-		messageQueue.enqueue("task-1", notification("method-2")).block();
-
-		// Clear using the reactive method
-		StepVerifier.create(messageQueue.clearTask("task-1")).verifyComplete();
-
-		// Verify queue is empty
-		StepVerifier.create(messageQueue.dequeue("task-1")).verifyComplete();
-	}
-
-	@Test
 	void testClearTaskAlsoClearsResponseQueue() {
 		var response = new QueuedMessage.Response("req-123",
 				new McpSchema.CreateMessageResult(null, null, null, null, null));

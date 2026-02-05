@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.experimental.tasks.TaskManager;
 import io.modelcontextprotocol.experimental.tasks.TaskStore;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -506,6 +507,23 @@ public class McpSyncClient implements AutoCloseable {
 	 */
 	public TaskStore<McpSchema.ClientTaskPayloadResult> getTaskStore() {
 		return this.delegate.getTaskStore();
+	}
+
+	/**
+	 * Returns the task manager for task orchestration operations.
+	 * <p>
+	 * The task manager provides the outbound API for interacting with server-hosted
+	 * tasks, including streaming task results, getting task status, and cancelling tasks.
+	 * It also manages task lifecycle operations and message queuing for side-channel
+	 * communication.
+	 * <p>
+	 * <strong>Warning:</strong> This is an experimental API that may change in future
+	 * releases. Use with caution in production environments.
+	 * @return the task manager (never null; returns NullTaskManager if task support is
+	 * not configured)
+	 */
+	public TaskManager taskManager() {
+		return this.delegate.taskManager();
 	}
 
 	/**

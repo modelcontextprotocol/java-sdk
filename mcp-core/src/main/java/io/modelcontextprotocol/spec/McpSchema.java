@@ -182,6 +182,69 @@ public final class McpSchema {
 			ElicitRequest, CompleteRequest, GetPromptRequest, ReadResourceRequest, SubscribeRequest, UnsubscribeRequest,
 			PaginatedRequest, GetTaskRequest, GetTaskPayloadRequest, CancelTaskRequest {
 
+		/**
+		 * Returns the MCP method string for a given request type.
+		 *
+		 * <p>
+		 * This mirrors {@link Notification#getNotificationMethod(Notification)} and
+		 * provides a single source of truth for request-type-to-method mapping.
+		 *
+		 * <p>
+		 * Note: {@link PaginatedRequest} is used for multiple methods (tools/list,
+		 * prompts/list, resources/list, tasks/list, etc.) and cannot be unambiguously
+		 * resolved. Callers must specify the method string directly for paginated
+		 * requests.
+		 * @param request the request to resolve
+		 * @return the MCP method string
+		 * @throws IllegalArgumentException if the request type cannot be unambiguously
+		 * mapped
+		 */
+		static String getRequestMethod(Request request) {
+			if (request instanceof McpSchema.InitializeRequest) {
+				return McpSchema.METHOD_INITIALIZE;
+			}
+			else if (request instanceof McpSchema.CallToolRequest) {
+				return McpSchema.METHOD_TOOLS_CALL;
+			}
+			else if (request instanceof McpSchema.CreateMessageRequest) {
+				return McpSchema.METHOD_SAMPLING_CREATE_MESSAGE;
+			}
+			else if (request instanceof McpSchema.ElicitRequest) {
+				return McpSchema.METHOD_ELICITATION_CREATE;
+			}
+			else if (request instanceof McpSchema.CompleteRequest) {
+				return McpSchema.METHOD_COMPLETION_COMPLETE;
+			}
+			else if (request instanceof McpSchema.GetPromptRequest) {
+				return McpSchema.METHOD_PROMPT_GET;
+			}
+			else if (request instanceof McpSchema.ReadResourceRequest) {
+				return McpSchema.METHOD_RESOURCES_READ;
+			}
+			else if (request instanceof McpSchema.SubscribeRequest) {
+				return McpSchema.METHOD_RESOURCES_SUBSCRIBE;
+			}
+			else if (request instanceof McpSchema.UnsubscribeRequest) {
+				return McpSchema.METHOD_RESOURCES_UNSUBSCRIBE;
+			}
+			else if (request instanceof McpSchema.GetTaskRequest) {
+				return McpSchema.METHOD_TASKS_GET;
+			}
+			else if (request instanceof McpSchema.GetTaskPayloadRequest) {
+				return McpSchema.METHOD_TASKS_RESULT;
+			}
+			else if (request instanceof McpSchema.CancelTaskRequest) {
+				return McpSchema.METHOD_TASKS_CANCEL;
+			}
+			else if (request instanceof McpSchema.PaginatedRequest) {
+				throw new IllegalArgumentException(
+						"PaginatedRequest is used for multiple methods (tools/list, prompts/list, "
+								+ "resources/list, tasks/list, etc.) and cannot be unambiguously resolved. "
+								+ "Specify the method string directly.");
+			}
+			throw new IllegalArgumentException("Unknown request type: " + request.getClass().getName());
+		}
+
 		default Object progressToken() {
 			if (meta() != null && meta().containsKey("progressToken")) {
 				return meta().get("progressToken");
@@ -224,6 +287,22 @@ public final class McpSchema {
 
 	public sealed interface Notification extends Meta permits ProgressNotification, LoggingMessageNotification,
 			ResourcesUpdatedNotification, TaskStatusNotification {
+
+		static String getNotificationMethod(Notification notification) {
+			if (notification instanceof McpSchema.ProgressNotification) {
+				return McpSchema.METHOD_NOTIFICATION_PROGRESS;
+			}
+			else if (notification instanceof McpSchema.LoggingMessageNotification) {
+				return McpSchema.METHOD_NOTIFICATION_MESSAGE;
+			}
+			else if (notification instanceof McpSchema.TaskStatusNotification) {
+				return McpSchema.METHOD_NOTIFICATION_TASKS_STATUS;
+			}
+			else if (notification instanceof McpSchema.ResourcesUpdatedNotification) {
+				return McpSchema.METHOD_NOTIFICATION_RESOURCES_UPDATED;
+			}
+			throw new IllegalArgumentException("Unknown notification type: " + notification.getClass().getName());
+		}
 
 	}
 

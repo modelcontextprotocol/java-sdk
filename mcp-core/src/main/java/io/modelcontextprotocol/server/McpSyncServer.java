@@ -9,6 +9,7 @@ import java.util.concurrent.Executor;
 
 import io.modelcontextprotocol.experimental.tasks.TaskAwareAsyncToolSpecification;
 import io.modelcontextprotocol.experimental.tasks.TaskAwareSyncToolSpecification;
+import io.modelcontextprotocol.experimental.tasks.TaskManager;
 import io.modelcontextprotocol.experimental.tasks.TaskMessageQueue;
 import io.modelcontextprotocol.experimental.tasks.TaskStore;
 import reactor.core.scheduler.Schedulers;
@@ -96,8 +97,15 @@ public class McpSyncServer {
 	}
 
 	/**
-	 * List all registered tools.
-	 * @return A list of all registered tools
+	 * List all registered regular (non-task-aware) tools.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This method returns only regular tools registered via
+	 * {@link #addTool}. To get task-aware tools, use {@link #listTaskTools()}. When a
+	 * client calls {@code tools/list}, the response includes both regular tools and
+	 * task-aware tools merged together.
+	 * @return A list of all registered regular tools
+	 * @see #listTaskTools()
 	 */
 	public List<McpSchema.Tool> listTools() {
 		return this.asyncServer.listTools().collectList().block();
@@ -174,6 +182,23 @@ public class McpSyncServer {
 	 */
 	public TaskMessageQueue getTaskMessageQueue() {
 		return this.asyncServer.getTaskMessageQueue();
+	}
+
+	/**
+	 * Returns the task manager for task orchestration operations.
+	 * <p>
+	 * The task manager provides the outbound API for interacting with client-hosted
+	 * tasks, including streaming task results, getting task status, and cancelling tasks.
+	 * It also manages task lifecycle operations and message queuing for side-channel
+	 * communication.
+	 * <p>
+	 * <strong>Warning:</strong> This is an experimental API that may change in future
+	 * releases. Use with caution in production environments.
+	 * @return the task manager (never null; returns NullTaskManager if task support is
+	 * not configured)
+	 */
+	public TaskManager taskManager() {
+		return this.asyncServer.taskManager();
 	}
 
 	/**

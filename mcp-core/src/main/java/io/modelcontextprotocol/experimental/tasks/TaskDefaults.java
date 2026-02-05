@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol.experimental.tasks;
 
+import java.time.Duration;
+
 import io.modelcontextprotocol.spec.McpSchema.JsonSchema;
 
 /**
@@ -82,6 +84,77 @@ public final class TaskDefaults {
 	 * cases.
 	 */
 	public static final int DEFAULT_MAX_TASKS = 10_000;
+
+	/**
+	 * Interval in minutes between expired-task cleanup runs in the in-memory task store.
+	 */
+	public static final long CLEANUP_INTERVAL_MINUTES = 1L;
+
+	/**
+	 * Timeout in milliseconds for clearing a single task's message queue during
+	 * expired-task cleanup. If the queue cleanup takes longer than this, it is abandoned
+	 * to avoid blocking the cleanup thread.
+	 */
+	public static final long MESSAGE_QUEUE_CLEANUP_TIMEOUT_MS = 1_000L;
+
+	/**
+	 * Interval in milliseconds for internal polling when waiting for a queued response
+	 * message in the in-memory message queue. This is a tight polling loop used within
+	 * {@code InMemoryTaskMessageQueue} to detect response arrival.
+	 */
+	public static final long RESPONSE_POLL_INTERVAL_MS = 50L;
+
+	/**
+	 * Timeout in seconds for task store shutdown. Used when blocking on task store
+	 * shutdown during client/server close, and when awaiting termination of the cleanup
+	 * executor in the in-memory task store.
+	 */
+	public static final long TASK_STORE_SHUTDOWN_TIMEOUT_SECONDS = 5L;
+
+	/**
+	 * Default number of maximum poll attempts before timing out. Used with
+	 * {@link #DEFAULT_POLL_INTERVAL_MS} to calculate dynamic timeouts.
+	 */
+	public static final int DEFAULT_MAX_POLL_ATTEMPTS = 60;
+
+	/**
+	 * Maximum timeout in milliseconds (1 hour). This prevents unbounded timeouts when
+	 * tasks specify very large poll intervals.
+	 */
+	public static final long MAX_TIMEOUT_MS = 3_600_000L;
+
+	/**
+	 * Calculates timeout based on poll interval. This provides reasonable timeouts that
+	 * scale with the polling frequency: 500ms poll interval = 30s timeout, 5000ms = 5 min
+	 * timeout. The result is capped at {@link #MAX_TIMEOUT_MS} to prevent unbounded
+	 * timeouts.
+	 * @param pollInterval the poll interval in milliseconds (null defaults to
+	 * {@link #DEFAULT_POLL_INTERVAL_MS})
+	 * @return the calculated timeout duration, capped at 1 hour
+	 */
+	public static Duration calculateTimeout(Long pollInterval) {
+		long interval = pollInterval != null ? pollInterval : DEFAULT_POLL_INTERVAL_MS;
+		long calculatedMs = interval * DEFAULT_MAX_POLL_ATTEMPTS;
+		return Duration.ofMillis(Math.min(calculatedMs, MAX_TIMEOUT_MS));
+	}
+
+	/**
+	 * Validates task configuration. Task-aware tools require a TaskStore to be configured
+	 * for task lifecycle management.
+	 *
+	 * <p>
+	 * Having a TaskStore without task tools is allowed (for future dynamic registration).
+	 * @param hasTaskTools whether task-aware tools have been registered
+	 * @param hasTaskStore whether a TaskStore has been configured
+	 * @throws IllegalStateException if task-aware tools are registered without a
+	 * TaskStore
+	 */
+	public static void validateTaskConfiguration(boolean hasTaskTools, boolean hasTaskStore) {
+		if (hasTaskTools && !hasTaskStore) {
+			throw new IllegalStateException("Task-aware tools registered but no TaskStore configured. "
+					+ "Add a TaskStore via .taskStore(store) or remove task tools.");
+		}
+	}
 
 	/**
 	 * Empty JSON schema representing an object with no properties. Used as the default

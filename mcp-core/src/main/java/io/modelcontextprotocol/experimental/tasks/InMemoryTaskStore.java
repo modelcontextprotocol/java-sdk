@@ -153,7 +153,8 @@ public class InMemoryTaskStore<R extends McpSchema.Result> implements TaskStore<
 			t.setDaemon(true);
 			return t;
 		});
-		this.cleanupExecutor.scheduleAtFixedRate(this::cleanupExpiredTasks, 1, 1, TimeUnit.MINUTES);
+		this.cleanupExecutor.scheduleAtFixedRate(this::cleanupExpiredTasks, TaskDefaults.CLEANUP_INTERVAL_MINUTES,
+				TaskDefaults.CLEANUP_INTERVAL_MINUTES, TimeUnit.MINUTES);
 	}
 
 	/**
@@ -645,10 +646,12 @@ public class InMemoryTaskStore<R extends McpSchema.Result> implements TaskStore<
 		// Clean up message queues asynchronously to avoid blocking the cleanup thread
 		if (messageQueue != null && !expiredTaskIds.isEmpty()) {
 			Flux.fromIterable(expiredTaskIds)
-				.flatMap(taskId -> messageQueue.clearTask(taskId).timeout(Duration.ofSeconds(1)).onErrorResume(e -> {
-					logger.warn("Failed to clear task queue for {}", taskId, e);
-					return Mono.empty();
-				}))
+				.flatMap(taskId -> messageQueue.clearTask(taskId)
+					.timeout(Duration.ofMillis(TaskDefaults.MESSAGE_QUEUE_CLEANUP_TIMEOUT_MS))
+					.onErrorResume(e -> {
+						logger.warn("Failed to clear task queue for {}", taskId, e);
+						return Mono.empty();
+					}))
 				.subscribe(null, // no per-item handling needed
 						error -> logger.warn("Error during message queue cleanup", error),
 						() -> logger.debug("Completed cleanup of {} message queues", expiredTaskIds.size()));
@@ -663,7 +666,8 @@ public class InMemoryTaskStore<R extends McpSchema.Result> implements TaskStore<
 		return Mono.fromRunnable(() -> {
 			cleanupExecutor.shutdown();
 			try {
-				if (!cleanupExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+				if (!cleanupExecutor.awaitTermination(TaskDefaults.TASK_STORE_SHUTDOWN_TIMEOUT_SECONDS,
+						TimeUnit.SECONDS)) {
 					cleanupExecutor.shutdownNow();
 				}
 			}

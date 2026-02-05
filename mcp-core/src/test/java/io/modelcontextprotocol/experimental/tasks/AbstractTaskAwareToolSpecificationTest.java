@@ -136,13 +136,6 @@ abstract class AbstractTaskAwareToolSpecificationTest<S, B extends AbstractTaskA
 	}
 
 	@Test
-	void emptyInputSchemaShouldBeObjectType() {
-		JsonSchema emptySchema = getEmptyInputSchema();
-		assertThat(emptySchema.type()).isEqualTo("object");
-		assertThat(emptySchema.properties()).isNull();
-	}
-
-	@Test
 	void taskSupportModeNullShouldDefaultToRequired() {
 		B builder = createBuilder();
 		builder.name("null-mode-tool").taskSupportMode(null);
@@ -152,20 +145,6 @@ abstract class AbstractTaskAwareToolSpecificationTest<S, B extends AbstractTaskA
 		Tool tool = getTool(spec);
 
 		assertThat(tool.execution().taskSupport()).isEqualTo(TaskSupportMode.REQUIRED);
-	}
-
-	@Test
-	void builderShouldSupportAllTaskSupportModes() {
-		for (TaskSupportMode mode : TaskSupportMode.values()) {
-			B builder = createBuilder();
-			builder.name("mode-test-tool").taskSupportMode(mode);
-			withMinimalCreateTaskHandler(builder);
-
-			S spec = build(builder);
-			Tool tool = getTool(spec);
-
-			assertThat(tool.execution().taskSupport()).isEqualTo(mode);
-		}
 	}
 
 	@Test

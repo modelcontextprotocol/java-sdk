@@ -95,8 +95,8 @@
  *
  * <h2>Context Types</h2>
  * <ul>
- * <li>{@link io.modelcontextprotocol.experimental.tasks.CreateTaskExtra} /
- * {@link io.modelcontextprotocol.experimental.tasks.SyncCreateTaskExtra} - Handler
+ * <li>{@link io.modelcontextprotocol.experimental.tasks.CreateTaskContext} /
+ * {@link io.modelcontextprotocol.experimental.tasks.SyncCreateTaskContext} - Handler
  * context</li>
  * <li>{@link io.modelcontextprotocol.experimental.tasks.CreateTaskOptions} - Task
  * creation configuration</li>
@@ -106,8 +106,6 @@
  * <ul>
  * <li>{@link io.modelcontextprotocol.experimental.tasks.TaskDefaults} - Default
  * constants</li>
- * <li>{@link io.modelcontextprotocol.experimental.tasks.TaskHelper} - State transition
- * utilities</li>
  * </ul>
  *
  * <p>

@@ -16,6 +16,7 @@ import java.util.function.BiFunction;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.experimental.tasks.TaskAwareAsyncToolSpecification;
 import io.modelcontextprotocol.experimental.tasks.TaskAwareSyncToolSpecification;
+import io.modelcontextprotocol.experimental.tasks.TaskDefaults;
 import io.modelcontextprotocol.experimental.tasks.TaskMessageQueue;
 import io.modelcontextprotocol.experimental.tasks.TaskStore;
 import io.modelcontextprotocol.json.McpJsonDefaults;
@@ -374,15 +375,7 @@ public interface McpServer {
 		 * TaskStore
 		 */
 		protected void validateTaskConfiguration() {
-			boolean hasTaskTools = !this.taskTools.isEmpty();
-			boolean hasTaskStore = this.taskStore != null;
-
-			if (hasTaskTools && !hasTaskStore) {
-				throw new IllegalStateException("Task-aware tools registered but no TaskStore configured. "
-						+ "Add a TaskStore via .taskStore(store) or remove task tools.");
-			}
-			// Note: Having taskStore without taskTools is allowed (for future dynamic
-			// registration)
+			TaskDefaults.validateTaskConfiguration(!this.taskTools.isEmpty(), this.taskStore != null);
 		}
 
 		/**
@@ -536,12 +529,14 @@ public interface McpServer {
 		 * <p>
 		 * <strong>Note:</strong> This is an experimental feature that may change in
 		 * future releases.
-		 * @param automaticPollingTimeout The maximum polling timeout. Must not be null.
+		 * @param automaticPollingTimeout The maximum polling timeout. Must not be null or
+		 * negative.
 		 * @return This builder instance for method chaining
-		 * @throws IllegalArgumentException if automaticPollingTimeout is null
+		 * @throws IllegalArgumentException if automaticPollingTimeout is null or negative
 		 */
 		public AsyncSpecification<S> automaticPollingTimeout(Duration automaticPollingTimeout) {
 			Assert.notNull(automaticPollingTimeout, "Automatic polling timeout must not be null");
+			Assert.isTrue(!automaticPollingTimeout.isNegative(), "Automatic polling timeout must not be negative");
 			this.automaticPollingTimeout = automaticPollingTimeout;
 			return this;
 		}
@@ -1169,15 +1164,7 @@ public interface McpServer {
 		 * TaskStore
 		 */
 		protected void validateTaskConfiguration() {
-			boolean hasTaskTools = !this.taskTools.isEmpty();
-			boolean hasTaskStore = this.taskStore != null;
-
-			if (hasTaskTools && !hasTaskStore) {
-				throw new IllegalStateException("Task-aware tools registered but no TaskStore configured. "
-						+ "Add a TaskStore via .taskStore(store) or remove task tools.");
-			}
-			// Note: Having taskStore without taskTools is allowed (for future dynamic
-			// registration)
+			TaskDefaults.validateTaskConfiguration(!this.taskTools.isEmpty(), this.taskStore != null);
 		}
 
 		/**
@@ -1331,12 +1318,14 @@ public interface McpServer {
 		 * <p>
 		 * <strong>Note:</strong> This is an experimental feature that may change in
 		 * future releases.
-		 * @param automaticPollingTimeout The maximum polling timeout. Must not be null.
+		 * @param automaticPollingTimeout The maximum polling timeout. Must not be null or
+		 * negative.
 		 * @return This builder instance for method chaining
-		 * @throws IllegalArgumentException if automaticPollingTimeout is null
+		 * @throws IllegalArgumentException if automaticPollingTimeout is null or negative
 		 */
 		public SyncSpecification<S> automaticPollingTimeout(Duration automaticPollingTimeout) {
 			Assert.notNull(automaticPollingTimeout, "Automatic polling timeout must not be null");
+			Assert.isTrue(!automaticPollingTimeout.isNegative(), "Automatic polling timeout must not be negative");
 			this.automaticPollingTimeout = automaticPollingTimeout;
 			return this;
 		}

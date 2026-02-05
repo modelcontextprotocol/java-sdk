@@ -6,32 +6,33 @@ package io.modelcontextprotocol.experimental.tasks;
 
 import java.util.function.Consumer;
 
-import io.modelcontextprotocol.server.McpSyncServerExchange;
+import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.TaskStatus;
 import io.modelcontextprotocol.util.Assert;
+import reactor.core.publisher.Mono;
 
 /**
- * Default implementation of {@link SyncCreateTaskExtra}.
+ * Default implementation of {@link CreateTaskContext}.
  *
  * <p>
- * This implementation is created by {@link io.modelcontextprotocol.server.McpSyncServer}
- * when delegating to a tool's {@link SyncCreateTaskHandler}.
+ * This implementation is created by {@link io.modelcontextprotocol.server.McpAsyncServer}
+ * when delegating to a tool's {@link CreateTaskHandler}.
  *
  * <p>
  * This is an experimental API that may change in future releases.
  *
- * @see SyncCreateTaskExtra
- * @see SyncCreateTaskHandler
+ * @see CreateTaskContext
+ * @see CreateTaskHandler
  */
-public class DefaultSyncCreateTaskExtra implements SyncCreateTaskExtra {
+public class DefaultCreateTaskContext implements CreateTaskContext {
 
 	private final TaskStore<McpSchema.ServerTaskPayloadResult> taskStore;
 
 	private final TaskMessageQueue taskMessageQueue;
 
-	private final McpSyncServerExchange exchange;
+	private final McpAsyncServerExchange exchange;
 
 	private final String sessionId;
 
@@ -40,7 +41,7 @@ public class DefaultSyncCreateTaskExtra implements SyncCreateTaskExtra {
 	private final McpSchema.Request originatingRequest;
 
 	/**
-	 * Creates a new DefaultSyncCreateTaskExtra instance.
+	 * Creates a new DefaultCreateTaskContext instance.
 	 * @param taskStore the task store for creating tasks (required)
 	 * @param taskMessageQueue the message queue for task communication (may be null)
 	 * @param exchange the server exchange for client interaction (required)
@@ -49,9 +50,8 @@ public class DefaultSyncCreateTaskExtra implements SyncCreateTaskExtra {
 	 * @param originatingRequest the original MCP request that triggered task creation
 	 * (required)
 	 */
-	public DefaultSyncCreateTaskExtra(TaskStore<McpSchema.ServerTaskPayloadResult> taskStore,
-			TaskMessageQueue taskMessageQueue, McpSyncServerExchange exchange, String sessionId, Long requestTtl,
-			McpSchema.Request originatingRequest) {
+	DefaultCreateTaskContext(TaskStore<McpSchema.ServerTaskPayloadResult> taskStore, TaskMessageQueue taskMessageQueue,
+			McpAsyncServerExchange exchange, String sessionId, Long requestTtl, McpSchema.Request originatingRequest) {
 		Assert.notNull(taskStore, "taskStore must not be null");
 		Assert.notNull(exchange, "exchange must not be null");
 		Assert.notNull(sessionId, "sessionId must not be null");
@@ -88,11 +88,11 @@ public class DefaultSyncCreateTaskExtra implements SyncCreateTaskExtra {
 	}
 
 	// --------------------------
-	// SyncCreateTaskExtra implementation
+	// CreateTaskContext implementation
 	// --------------------------
 
 	@Override
-	public McpSyncServerExchange exchange() {
+	public McpAsyncServerExchange exchange() {
 		return this.exchange;
 	}
 
@@ -112,37 +112,35 @@ public class DefaultSyncCreateTaskExtra implements SyncCreateTaskExtra {
 	}
 
 	@Override
-	public McpSchema.Task createTask() {
-		return this.taskStore
-			.createTask(CreateTaskOptions.builder(originatingRequest())
-				.sessionId(sessionId())
-				.requestedTtl(requestTtl())
-				.build())
-			.block();
+	public Mono<McpSchema.Task> createTask() {
+		return this.taskStore.createTask(CreateTaskOptions.builder(originatingRequest())
+			.sessionId(sessionId())
+			.requestedTtl(requestTtl())
+			.build());
 	}
 
 	@Override
-	public McpSchema.Task createTask(Consumer<CreateTaskOptions.Builder> customizer) {
+	public Mono<McpSchema.Task> createTask(Consumer<CreateTaskOptions.Builder> customizer) {
 		CreateTaskOptions.Builder builder = CreateTaskOptions.builder(originatingRequest())
 			.sessionId(sessionId())
 			.requestedTtl(requestTtl());
 		customizer.accept(builder);
-		return this.taskStore.createTask(builder.build()).block();
+		return this.taskStore.createTask(builder.build());
 	}
 
 	@Override
-	public void completeTask(String taskId, CallToolResult result) {
-		this.taskStore.storeTaskResult(taskId, this.sessionId, TaskStatus.COMPLETED, result).block();
+	public Mono<Void> completeTask(String taskId, CallToolResult result) {
+		return this.taskStore.storeTaskResult(taskId, this.sessionId, TaskStatus.COMPLETED, result);
 	}
 
 	@Override
-	public void failTask(String taskId, String message) {
-		this.taskStore.updateTaskStatus(taskId, this.sessionId, TaskStatus.FAILED, message).block();
+	public Mono<Void> failTask(String taskId, String message) {
+		return this.taskStore.updateTaskStatus(taskId, this.sessionId, TaskStatus.FAILED, message);
 	}
 
 	@Override
-	public void setInputRequired(String taskId, String message) {
-		this.taskStore.updateTaskStatus(taskId, this.sessionId, TaskStatus.INPUT_REQUIRED, message).block();
+	public Mono<Void> setInputRequired(String taskId, String message) {
+		return this.taskStore.updateTaskStatus(taskId, this.sessionId, TaskStatus.INPUT_REQUIRED, message);
 	}
 
 }

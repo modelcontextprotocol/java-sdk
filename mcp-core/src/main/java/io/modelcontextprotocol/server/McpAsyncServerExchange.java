@@ -9,6 +9,7 @@ import io.modelcontextprotocol.experimental.tasks.QueuedMessage;
 import io.modelcontextprotocol.experimental.tasks.TaskDefaults;
 import io.modelcontextprotocol.experimental.tasks.TaskMessageQueue;
 import io.modelcontextprotocol.experimental.tasks.TaskStore;
+import io.modelcontextprotocol.experimental.tasks.TaskTypeRefs;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -71,50 +72,6 @@ public class McpAsyncServerExchange {
 
 	public static final TypeRef<Object> OBJECT_TYPE_REF = new TypeRef<>() {
 	};
-
-	private static final TypeRef<McpSchema.GetTaskResult> GET_TASK_RESULT_TYPE_REF = new TypeRef<>() {
-	};
-
-	private static final TypeRef<McpSchema.CreateTaskResult> CREATE_TASK_RESULT_TYPE_REF = new TypeRef<>() {
-	};
-
-	private static final TypeRef<McpSchema.ListTasksResult> LIST_TASKS_RESULT_TYPE_REF = new TypeRef<>() {
-	};
-
-	private static final TypeRef<McpSchema.CancelTaskResult> CANCEL_TASK_RESULT_TYPE_REF = new TypeRef<>() {
-	};
-
-	/**
-	 * The default poll interval in milliseconds for task status polling when the client
-	 * does not specify one.
-	 */
-	private static final long DEFAULT_TASK_POLL_INTERVAL_MS = TaskDefaults.DEFAULT_POLL_INTERVAL_MS;
-
-	/**
-	 * Default number of maximum poll attempts before timing out. Used with poll interval
-	 * to calculate dynamic timeouts.
-	 */
-	private static final int DEFAULT_MAX_POLL_ATTEMPTS = 60;
-
-	/**
-	 * Maximum timeout in milliseconds (1 hour). This prevents unbounded timeouts when
-	 * tasks specify very large poll intervals.
-	 */
-	private static final long MAX_TIMEOUT_MS = 3600000L;
-
-	/**
-	 * Calculates timeout based on poll interval. This provides reasonable timeouts that
-	 * scale with the polling frequency: 500ms poll interval = 30s timeout, 5000ms = 5 min
-	 * timeout. The result is capped at {@link #MAX_TIMEOUT_MS} to prevent unbounded
-	 * timeouts.
-	 * @param pollInterval the poll interval in milliseconds
-	 * @return the calculated timeout duration, capped at 1 hour
-	 */
-	private static Duration calculateTimeout(Long pollInterval) {
-		long interval = pollInterval != null ? pollInterval : DEFAULT_TASK_POLL_INTERVAL_MS;
-		long calculatedMs = interval * DEFAULT_MAX_POLL_ATTEMPTS;
-		return Duration.ofMillis(Math.min(calculatedMs, MAX_TIMEOUT_MS));
-	}
 
 	/**
 	 * Create a new asynchronous exchange with the client.
@@ -464,14 +421,8 @@ public class McpAsyncServerExchange {
 
 		return Mono.defer(() -> {
 			if (this.session.isNotificationForLevelAllowed(loggingMessageNotification.level())) {
-				// In task context: enqueue for side-channeling
-				if (taskId != null && this.taskMessageQueue != null) {
-					QueuedMessage.Notification queuedNotification = new QueuedMessage.Notification(
-							McpSchema.METHOD_NOTIFICATION_MESSAGE, loggingMessageNotification);
-					return this.taskMessageQueue.enqueue(taskId, queuedNotification);
-				}
-				// No task context: send immediately
-				return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_MESSAGE, loggingMessageNotification);
+				return sendOrEnqueueNotification(McpSchema.METHOD_NOTIFICATION_MESSAGE, loggingMessageNotification,
+						taskId);
 			}
 			return Mono.empty();
 		});
@@ -503,15 +454,7 @@ public class McpAsyncServerExchange {
 			return Mono.error(new McpError("Progress notification must not be null"));
 		}
 
-		// In task context: enqueue for side-channeling
-		if (taskId != null && this.taskMessageQueue != null) {
-			QueuedMessage.Notification queuedNotification = new QueuedMessage.Notification(
-					McpSchema.METHOD_NOTIFICATION_PROGRESS, progressNotification);
-			return this.taskMessageQueue.enqueue(taskId, queuedNotification);
-		}
-
-		// No task context: send immediately
-		return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_PROGRESS, progressNotification);
+		return sendOrEnqueueNotification(McpSchema.METHOD_NOTIFICATION_PROGRESS, progressNotification, taskId);
 	}
 
 	/**
@@ -560,15 +503,22 @@ public class McpAsyncServerExchange {
 			return Mono.error(new IllegalStateException("Task status notification must not be null"));
 		}
 
-		// In task context: enqueue for side-channeling
-		if (taskId != null && this.taskMessageQueue != null) {
-			QueuedMessage.Notification queuedNotification = new QueuedMessage.Notification(
-					McpSchema.METHOD_NOTIFICATION_TASKS_STATUS, notification);
-			return this.taskMessageQueue.enqueue(taskId, queuedNotification);
-		}
+		return sendOrEnqueueNotification(McpSchema.METHOD_NOTIFICATION_TASKS_STATUS, notification, taskId);
+	}
 
-		// No task context: send immediately
-		return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_TASKS_STATUS, notification);
+	/**
+	 * Dispatches a notification either by enqueuing it for side-channel delivery (when in
+	 * a task context) or by sending it immediately through the session.
+	 * @param method the JSON-RPC notification method name
+	 * @param notification the notification payload
+	 * @param taskId the task ID for side-channeling, or null for immediate send
+	 * @return a Mono that completes when the notification has been sent or enqueued
+	 */
+	private Mono<Void> sendOrEnqueueNotification(String method, McpSchema.Notification notification, String taskId) {
+		if (taskId != null && this.taskMessageQueue != null) {
+			return this.taskMessageQueue.enqueue(taskId, new QueuedMessage.Notification(method, notification));
+		}
+		return this.session.sendNotification(method, notification);
 	}
 
 	/**
@@ -627,7 +577,7 @@ public class McpAsyncServerExchange {
 		if (this.clientCapabilities.tasks() == null) {
 			return Mono.error(new IllegalStateException("Client must be configured with tasks capabilities"));
 		}
-		return this.session.sendRequest(McpSchema.METHOD_TASKS_GET, getTaskRequest, GET_TASK_RESULT_TYPE_REF);
+		return this.session.sendRequest(McpSchema.METHOD_TASKS_GET, getTaskRequest, TaskTypeRefs.GET_TASK_RESULT);
 	}
 
 	/**
@@ -798,7 +748,7 @@ public class McpAsyncServerExchange {
 			return Mono.error(new IllegalStateException("Client must be configured with tasks.list capability"));
 		}
 		return this.session.sendRequest(McpSchema.METHOD_TASKS_LIST, new McpSchema.PaginatedRequest(cursor),
-				LIST_TASKS_RESULT_TYPE_REF);
+				TaskTypeRefs.LIST_TASKS_RESULT);
 	}
 
 	/**
@@ -825,7 +775,8 @@ public class McpAsyncServerExchange {
 		if (this.clientCapabilities.tasks().cancel() == null) {
 			return Mono.error(new IllegalStateException("Client must be configured with tasks.cancel capability"));
 		}
-		return this.session.sendRequest(McpSchema.METHOD_TASKS_CANCEL, cancelTaskRequest, CANCEL_TASK_RESULT_TYPE_REF);
+		return this.session.sendRequest(McpSchema.METHOD_TASKS_CANCEL, cancelTaskRequest,
+				TaskTypeRefs.CANCEL_TASK_RESULT);
 	}
 
 	/**
@@ -885,7 +836,7 @@ public class McpAsyncServerExchange {
 			return Mono.error(new IllegalStateException("Client must be configured with tasks capabilities"));
 		}
 		return this.session.sendRequest(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, createMessageRequest,
-				CREATE_TASK_RESULT_TYPE_REF);
+				TaskTypeRefs.CREATE_TASK_RESULT);
 	}
 
 	/**
@@ -988,7 +939,7 @@ public class McpAsyncServerExchange {
 			return Mono.error(new IllegalStateException("Client must be configured with tasks capabilities"));
 		}
 		return this.session.sendRequest(McpSchema.METHOD_ELICITATION_CREATE, elicitRequest,
-				CREATE_TASK_RESULT_TYPE_REF);
+				TaskTypeRefs.CREATE_TASK_RESULT);
 	}
 
 	/**
@@ -1092,8 +1043,8 @@ public class McpAsyncServerExchange {
 
 			// Set up polling using proper reactive composition
 			long pollInterval = initialTask.pollInterval() != null ? initialTask.pollInterval()
-					: DEFAULT_TASK_POLL_INTERVAL_MS;
-			Duration timeout = calculateTimeout(pollInterval);
+					: TaskDefaults.DEFAULT_POLL_INTERVAL_MS;
+			Duration timeout = TaskDefaults.calculateTimeout(pollInterval);
 
 			// Use Flux.interval + takeUntil instead of recursive subscribe
 			reactor.core.Disposable pollSubscription = Flux.interval(Duration.ofMillis(pollInterval))
