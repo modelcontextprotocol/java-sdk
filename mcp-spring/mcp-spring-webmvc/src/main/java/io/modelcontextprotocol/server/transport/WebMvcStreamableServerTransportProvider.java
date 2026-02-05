@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server.transport;
@@ -7,6 +7,7 @@ package io.modelcontextprotocol.server.transport;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -103,6 +104,11 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 	private KeepAliveScheduler keepAliveScheduler;
 
 	/**
+	 * Security validator for validating HTTP requests.
+	 */
+	private final ServerTransportSecurityValidator securityValidator;
+
+	/**
 	 * Constructs a new WebMvcStreamableServerTransportProvider instance.
 	 * @param jsonMapper The McpJsonMapper to use for JSON serialization/deserialization
 	 * of messages.
@@ -111,19 +117,26 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 	 * @param mcpEndpoint The endpoint URI where clients should send their JSON-RPC
 	 * messages via HTTP. This endpoint will handle GET, POST, and DELETE requests.
 	 * @param disallowDelete Whether to disallow DELETE requests on the endpoint.
+	 * @param contextExtractor The context extractor for transport context from the
+	 * request.
+	 * @param keepAliveInterval The interval for keep-alive pings. If null, no keep-alive
+	 * will be scheduled.
+	 * @param securityValidator The security validator for validating HTTP requests.
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
 	private WebMvcStreamableServerTransportProvider(McpJsonMapper jsonMapper, String mcpEndpoint,
 			boolean disallowDelete, McpTransportContextExtractor<ServerRequest> contextExtractor,
-			Duration keepAliveInterval) {
+			Duration keepAliveInterval, ServerTransportSecurityValidator securityValidator) {
 		Assert.notNull(jsonMapper, "McpJsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "MCP endpoint must not be null");
 		Assert.notNull(contextExtractor, "McpTransportContextExtractor must not be null");
+		Assert.notNull(securityValidator, "Security validator must not be null");
 
 		this.jsonMapper = jsonMapper;
 		this.mcpEndpoint = mcpEndpoint;
 		this.disallowDelete = disallowDelete;
 		this.contextExtractor = contextExtractor;
+		this.securityValidator = securityValidator;
 		this.routerFunction = RouterFunctions.route()
 			.GET(this.mcpEndpoint, this::handleGet)
 			.POST(this.mcpEndpoint, this::handlePost)
@@ -233,6 +246,14 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
+		try {
+			Map<String, List<String>> headers = request.headers().asHttpHeaders();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			return ServerResponse.status(e.getStatusCode()).body(e.getMessage());
+		}
+
 		List<MediaType> acceptHeaders = request.headers().asHttpHeaders().getAccept();
 		if (!acceptHeaders.contains(MediaType.TEXT_EVENT_STREAM)) {
 			return ServerResponse.badRequest().body("Invalid Accept header. Expected TEXT_EVENT_STREAM");
@@ -313,6 +334,14 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 	private ServerResponse handlePost(ServerRequest request) {
 		if (this.isClosing) {
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
+		}
+
+		try {
+			Map<String, List<String>> headers = request.headers().asHttpHeaders();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			return ServerResponse.status(e.getStatusCode()).body(e.getMessage());
 		}
 
 		List<MediaType> acceptHeaders = request.headers().asHttpHeaders().getAccept();
@@ -425,6 +454,14 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 	private ServerResponse handleDelete(ServerRequest request) {
 		if (this.isClosing) {
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
+		}
+
+		try {
+			Map<String, List<String>> headers = request.headers().asHttpHeaders();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			return ServerResponse.status(e.getStatusCode()).body(e.getMessage());
 		}
 
 		if (this.disallowDelete) {
@@ -609,6 +646,8 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 
 		private Duration keepAliveInterval;
 
+		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
+
 		/**
 		 * Sets the McpJsonMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
@@ -673,6 +712,18 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		}
 
 		/**
+		 * Sets the security validator for validating HTTP requests.
+		 * @param securityValidator The security validator to use. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if securityValidator is null
+		 */
+		public Builder securityValidator(ServerTransportSecurityValidator securityValidator) {
+			Assert.notNull(securityValidator, "Security validator must not be null");
+			this.securityValidator = securityValidator;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link WebMvcStreamableServerTransportProvider} with
 		 * the configured settings.
 		 * @return A new WebMvcStreamableServerTransportProvider instance
@@ -682,7 +733,7 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 			return new WebMvcStreamableServerTransportProvider(
 					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, mcpEndpoint, disallowDelete,
-					contextExtractor, keepAliveInterval);
+					contextExtractor, keepAliveInterval, securityValidator);
 		}
 
 	}

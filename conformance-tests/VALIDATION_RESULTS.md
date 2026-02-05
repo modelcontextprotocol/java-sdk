@@ -15,13 +15,12 @@
 - **Resources (4/6):** list, read-text, read-binary, templates-read
 - **Prompts (4/4):** list, simple, with-args, embedded-resource, with-image
 - **SSE Transport (2/2):** Multiple streams
-- **Security (1/2):** Localhost validation passes
+- **Security (2/2):** Localhost validation passes, DNS rebinding protection
 
 ### Failing (3/40)
 
 1. **resources-subscribe** - Not implemented in SDK
 2. **resources-unsubscribe** - Not implemented in SDK  
-3. **dns-rebinding-protection** - Missing Host/Origin validation (1/2 checks)
 
 ## Client Test Results
 
@@ -44,7 +43,6 @@
 
 1. **Resource Subscriptions:** SDK doesn't implement `resources/subscribe` and `resources/unsubscribe` handlers
 2. **Client SSE Retry:** Client doesn't parse or respect the `retry:` field, reconnects immediately, and doesn't send Last-Event-ID header
-3. **DNS Rebinding Protection:** Missing Host/Origin header validation in server transport
 
 ## Running Tests
 

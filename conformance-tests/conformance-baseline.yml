@@ -6,9 +6,6 @@ server:
   # Resource subscription not implemented in SDK
   - resources-subscribe
   - resources-unsubscribe
-  
-  # DNS rebinding protection missing Host/Origin validation
-  - dns-rebinding-protection
 
 client:
   # SSE retry field handling not implemented
