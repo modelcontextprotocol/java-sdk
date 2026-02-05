@@ -265,13 +265,22 @@ public class McpServerSession implements McpLoggableSession {
 						new TypeRef<McpSchema.InitializeRequest>() {
 						});
 
-				this.state.lazySet(STATE_INITIALIZING);
+				this.state.set(STATE_INITIALIZING);
 				this.init(initializeRequest.capabilities(), initializeRequest.clientInfo());
 				resultMono = this.initRequestHandler.handle(initializeRequest);
 			}
 			else {
-				// TODO handle errors for communication to this session without
-				// initialization happening first
+				// Reject requests before initialization completes to avoid indefinite
+				// blocking
+				if (this.state.get() < STATE_INITIALIZED) {
+					logger.warn("Received request '{}' before session initialization completed (state={})",
+							request.method(), this.state.get());
+					return Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
+							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INVALID_REQUEST,
+									"Session not initialized. Send 'initialize' request and 'notifications/initialized' first.",
+									null)));
+				}
+
 				var handler = this.requestHandlers.get(request.method());
 				if (handler == null) {
 					MethodNotFoundError error = getMethodNotFoundError(request.method());
@@ -281,6 +290,7 @@ public class McpServerSession implements McpLoggableSession {
 				}
 
 				resultMono = this.exchangeSink.asMono()
+					.timeout(this.requestTimeout)
 					.flatMap(exchange -> handler.handle(copyExchange(exchange, transportContext), request.params()));
 			}
 			return resultMono
@@ -307,11 +317,17 @@ public class McpServerSession implements McpLoggableSession {
 			McpTransportContext transportContext) {
 		return Mono.defer(() -> {
 			if (McpSchema.METHOD_NOTIFICATION_INITIALIZED.equals(notification.method())) {
-				this.state.lazySet(STATE_INITIALIZED);
+				this.state.set(STATE_INITIALIZED);
 				// FIXME: The session ID passed here is not the same as the one in the
 				// legacy SSE transport.
-				exchangeSink.tryEmitValue(new McpAsyncServerExchange(this.id, this, clientCapabilities.get(),
-						clientInfo.get(), transportContext));
+				McpAsyncServerExchange exchange = new McpAsyncServerExchange(this.id, this, clientCapabilities.get(),
+						clientInfo.get(), transportContext);
+				Sinks.EmitResult emitResult = exchangeSink.tryEmitValue(exchange);
+				if (emitResult.isFailure()) {
+					logger.error(
+							"Failed to emit exchange value for session {}: {} (this will cause request handlers to block indefinitely)",
+							this.id, emitResult);
+				}
 			}
 
 			var handler = notificationHandlers.get(notification.method());
@@ -320,6 +336,7 @@ public class McpServerSession implements McpLoggableSession {
 				return Mono.empty();
 			}
 			return this.exchangeSink.asMono()
+				.timeout(this.requestTimeout)
 				.flatMap(exchange -> handler.handle(copyExchange(exchange, transportContext), notification.params()));
 		});
 	}
