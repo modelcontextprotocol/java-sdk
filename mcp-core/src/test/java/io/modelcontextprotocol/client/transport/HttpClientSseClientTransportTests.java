@@ -78,7 +78,8 @@ class HttpClientSseClientTransportTests {
 		public TestHttpClientSseClientTransport(final String baseUri) {
 			super(HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(),
 					HttpRequest.newBuilder().header("Content-Type", "application/json"), baseUri, "/sse", JSON_MAPPER,
-					McpAsyncHttpClientRequestCustomizer.NOOP);
+					McpAsyncHttpClientRequestCustomizer.NOOP, client -> {
+					});
 		}
 
 		public int getInboundMessageCount() {
@@ -314,26 +315,6 @@ class HttpClientSseClientTransportTests {
 	}
 
 	@Test
-	void testCustomizeClient() {
-		// Create an atomic boolean to verify the customizer was called
-		AtomicBoolean customizerCalled = new AtomicBoolean(false);
-
-		// Create a transport with the customizer
-		HttpClientSseClientTransport customizedTransport = HttpClientSseClientTransport.builder(host)
-			.customizeClient(builder -> {
-				builder.version(HttpClient.Version.HTTP_2);
-				customizerCalled.set(true);
-			})
-			.build();
-
-		// Verify the customizer was called
-		assertThat(customizerCalled.get()).isTrue();
-
-		// Clean up
-		customizedTransport.closeGracefully().block();
-	}
-
-	@Test
 	void testCustomizeRequest() {
 		// Create an atomic boolean to verify the customizer was called
 		AtomicBoolean customizerCalled = new AtomicBoolean(false);
@@ -362,32 +343,6 @@ class HttpClientSseClientTransportTests {
 		// Verify the header was set correctly
 		assertThat(headerName.get()).isEqualTo("X-Custom-Header");
 		assertThat(headerValue.get()).isEqualTo("test-value");
-
-		// Clean up
-		customizedTransport.closeGracefully().block();
-	}
-
-	@Test
-	void testChainedCustomizations() {
-		// Create atomic booleans to verify both customizers were called
-		AtomicBoolean clientCustomizerCalled = new AtomicBoolean(false);
-		AtomicBoolean requestCustomizerCalled = new AtomicBoolean(false);
-
-		// Create a transport with both customizers chained
-		HttpClientSseClientTransport customizedTransport = HttpClientSseClientTransport.builder(host)
-			.customizeClient(builder -> {
-				builder.connectTimeout(Duration.ofSeconds(30));
-				clientCustomizerCalled.set(true);
-			})
-			.customizeRequest(builder -> {
-				builder.header("X-Api-Key", "test-api-key");
-				requestCustomizerCalled.set(true);
-			})
-			.build();
-
-		// Verify both customizers were called
-		assertThat(clientCustomizerCalled.get()).isTrue();
-		assertThat(requestCustomizerCalled.get()).isTrue();
 
 		// Clean up
 		customizedTransport.closeGracefully().block();
