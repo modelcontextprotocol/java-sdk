@@ -38,7 +38,7 @@
 								version:                ${versionmask;===;${version_cleanup;${project.version}}}
 								Bundle-SymbolicName:    ${project.groupId}.${project.artifactId}
 								Bundle-Version:         ${version}
-								Automatic-Module-Name:  ${project.groupId}.${project.artifactId}
+								Automatic-Module-Name:  ${project.groupId}.${replace;${project.artifactId};-;.}
 								Import-Package:         jakarta.*;resolution:=optional, \
 								                        *;
 								Export-Package:         io.modelcontextprotocol.*;version="${version}";-noimport:=true
