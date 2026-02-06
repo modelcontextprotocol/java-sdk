@@ -57,6 +57,8 @@ public class WebFluxServerTransportSecurityIntegrationTests {
 
 	private static final String DISALLOWED_ORIGIN = "https://malicious.example.com";
 
+	private static final String DISALLOWED_HOST = "malicious.example.com:8080";
+
 	@Parameter
 	private static Transport transport;
 
@@ -78,7 +80,7 @@ public class WebFluxServerTransportSecurityIntegrationTests {
 
 	private McpSyncClient mcpClient;
 
-	private final TestOriginHeaderExchangeFilterFunction exchangeFilterFunction = new TestOriginHeaderExchangeFilterFunction();
+	private final TestHeaderExchangeFilterFunction exchangeFilterFunction = new TestHeaderExchangeFilterFunction();
 
 	@BeforeEach
 	void setUp() {
@@ -124,6 +126,29 @@ public class WebFluxServerTransportSecurityIntegrationTests {
 		assertThatThrownBy(() -> mcpClient.listTools());
 	}
 
+	@Test
+	void hostAllowed() {
+		// Host header is set by default by WebClient to the request URI host
+		var result = mcpClient.initialize();
+		var tools = mcpClient.listTools();
+
+		assertThat(result.protocolVersion()).isNotEmpty();
+		assertThat(tools.tools()).isEmpty();
+	}
+
+	@Test
+	void connectHostNotAllowed() {
+		exchangeFilterFunction.setHostHeader(DISALLOWED_HOST);
+		assertThatThrownBy(() -> mcpClient.initialize());
+	}
+
+	@Test
+	void messageHostNotAllowed() {
+		mcpClient.initialize();
+		exchangeFilterFunction.setHostHeader(DISALLOWED_HOST);
+		assertThatThrownBy(() -> mcpClient.listTools());
+	}
+
 	// ----------------------------------------------------
 	// Server management
 	// ----------------------------------------------------
@@ -164,7 +189,7 @@ public class WebFluxServerTransportSecurityIntegrationTests {
 	 */
 	interface Transport {
 
-		McpSyncClient createMcpClient(String baseUrl, TestOriginHeaderExchangeFilterFunction customizer);
+		McpSyncClient createMcpClient(String baseUrl, TestHeaderExchangeFilterFunction customizer);
 
 		RouterFunction<?> routerFunction();
 
@@ -180,8 +205,10 @@ public class WebFluxServerTransportSecurityIntegrationTests {
 		public Sse() {
 			transportProvider = WebFluxSseServerTransportProvider.builder()
 				.messageEndpoint("/mcp/message")
-				.securityValidator(
-						DefaultServerTransportSecurityValidator.builder().allowedOrigin("http://localhost:*").build())
+				.securityValidator(DefaultServerTransportSecurityValidator.builder()
+					.allowedOrigin("http://localhost:*")
+					.allowedHost("localhost:*")
+					.build())
 				.build();
 			McpServer.sync(transportProvider)
 				.serverInfo("test-server", "1.0.0")
@@ -190,8 +217,7 @@ public class WebFluxServerTransportSecurityIntegrationTests {
 		}
 
 		@Override
-		public McpSyncClient createMcpClient(String baseUrl,
-				TestOriginHeaderExchangeFilterFunction exchangeFilterFunction) {
+		public McpSyncClient createMcpClient(String baseUrl, TestHeaderExchangeFilterFunction exchangeFilterFunction) {
 			var transport = WebFluxSseClientTransport
 				.builder(WebClient.builder().baseUrl(baseUrl).filter(exchangeFilterFunction))
 				.jsonMapper(McpJsonMapper.getDefault())
@@ -212,8 +238,10 @@ public class WebFluxServerTransportSecurityIntegrationTests {
 
 		public StreamableHttp() {
 			transportProvider = WebFluxStreamableServerTransportProvider.builder()
-				.securityValidator(
-						DefaultServerTransportSecurityValidator.builder().allowedOrigin("http://localhost:*").build())
+				.securityValidator(DefaultServerTransportSecurityValidator.builder()
+					.allowedOrigin("http://localhost:*")
+					.allowedHost("localhost:*")
+					.build())
 				.build();
 			McpServer.sync(transportProvider)
 				.serverInfo("test-server", "1.0.0")
@@ -222,8 +250,7 @@ public class WebFluxServerTransportSecurityIntegrationTests {
 		}
 
 		@Override
-		public McpSyncClient createMcpClient(String baseUrl,
-				TestOriginHeaderExchangeFilterFunction exchangeFilterFunction) {
+		public McpSyncClient createMcpClient(String baseUrl, TestHeaderExchangeFilterFunction exchangeFilterFunction) {
 			var transport = WebClientStreamableHttpTransport
 				.builder(WebClient.builder().baseUrl(baseUrl).filter(exchangeFilterFunction))
 				.jsonMapper(McpJsonMapper.getDefault())
@@ -245,8 +272,10 @@ public class WebFluxServerTransportSecurityIntegrationTests {
 
 		public Stateless() {
 			transportProvider = WebFluxStatelessServerTransport.builder()
-				.securityValidator(
-						DefaultServerTransportSecurityValidator.builder().allowedOrigin("http://localhost:*").build())
+				.securityValidator(DefaultServerTransportSecurityValidator.builder()
+					.allowedOrigin("http://localhost:*")
+					.allowedHost("localhost:*")
+					.build())
 				.build();
 			McpServer.sync(transportProvider)
 				.serverInfo("test-server", "1.0.0")
@@ -255,8 +284,7 @@ public class WebFluxServerTransportSecurityIntegrationTests {
 		}
 
 		@Override
-		public McpSyncClient createMcpClient(String baseUrl,
-				TestOriginHeaderExchangeFilterFunction exchangeFilterFunction) {
+		public McpSyncClient createMcpClient(String baseUrl, TestHeaderExchangeFilterFunction exchangeFilterFunction) {
 			var transport = WebClientStreamableHttpTransport
 				.builder(WebClient.builder().baseUrl(baseUrl).filter(exchangeFilterFunction))
 				.jsonMapper(McpJsonMapper.getDefault())
@@ -272,18 +300,30 @@ public class WebFluxServerTransportSecurityIntegrationTests {
 
 	}
 
-	static class TestOriginHeaderExchangeFilterFunction implements ExchangeFilterFunction {
+	static class TestHeaderExchangeFilterFunction implements ExchangeFilterFunction {
 
 		private String origin = null;
+
+		private String host = null;
 
 		public void setOriginHeader(String origin) {
 			this.origin = origin;
 		}
 
+		public void setHostHeader(String host) {
+			this.host = host;
+		}
+
 		@Override
 		public Mono<ClientResponse> filter(ClientRequest request, ExchangeFunction next) {
-			var updatedRequest = ClientRequest.from(request).header("origin", this.origin).build();
-			return next.exchange(updatedRequest);
+			var builder = ClientRequest.from(request);
+			if (this.origin != null) {
+				builder.header("Origin", this.origin);
+			}
+			if (this.host != null) {
+				builder.header("Host", this.host);
+			}
+			return next.exchange(builder.build());
 		}
 
 	}

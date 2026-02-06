@@ -12,10 +12,11 @@ import io.modelcontextprotocol.util.Assert;
 
 /**
  * Default implementation of {@link ServerTransportSecurityValidator} that validates the
- * Origin header against a list of allowed origins.
+ * Origin and Host headers against lists of allowed values.
  *
  * <p>
- * Supports exact matches and wildcard port patterns (e.g., "http://example.com:*").
+ * Supports exact matches and wildcard port patterns (e.g., "http://example.com:*" for
+ * origins, "example.com:*" for hosts).
  *
  * @author Daniel Garnier-Moiroux
  * @see ServerTransportSecurityValidator
@@ -25,31 +26,54 @@ public class DefaultServerTransportSecurityValidator implements ServerTransportS
 
 	private static final String ORIGIN_HEADER = "Origin";
 
+	private static final String HOST_HEADER = "Host";
+
 	private static final ServerTransportSecurityException INVALID_ORIGIN = new ServerTransportSecurityException(403,
 			"Invalid Origin header");
 
+	private static final ServerTransportSecurityException INVALID_HOST = new ServerTransportSecurityException(421,
+			"Invalid Host header");
+
 	private final List<String> allowedOrigins;
 
+	private final List<String> allowedHosts;
+
 	/**
-	 * Creates a new validator with the specified allowed origins.
+	 * Creates a new validator with the specified allowed origins and hosts.
 	 * @param allowedOrigins List of allowed origin patterns. Supports exact matches
 	 * (e.g., "http://example.com:8080") and wildcard ports (e.g., "http://example.com:*")
+	 * @param allowedHosts List of allowed host patterns. Supports exact matches (e.g.,
+	 * "example.com:8080") and wildcard ports (e.g., "example.com:*")
 	 */
-	public DefaultServerTransportSecurityValidator(List<String> allowedOrigins) {
+	public DefaultServerTransportSecurityValidator(List<String> allowedOrigins, List<String> allowedHosts) {
 		Assert.notNull(allowedOrigins, "allowedOrigins must not be null");
+		Assert.notNull(allowedHosts, "allowedHosts must not be null");
 		this.allowedOrigins = allowedOrigins;
+		this.allowedHosts = allowedHosts;
 	}
 
 	@Override
 	public void validateHeaders(Map<String, List<String>> headers) throws ServerTransportSecurityException {
+		boolean missingHost = true;
 		for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
 			if (ORIGIN_HEADER.equalsIgnoreCase(entry.getKey())) {
 				List<String> values = entry.getValue();
-				if (values != null && !values.isEmpty()) {
-					validateOrigin(values.get(0));
+				if (values == null || values.isEmpty()) {
+					throw INVALID_ORIGIN;
 				}
-				break;
+				validateOrigin(values.get(0));
 			}
+			else if (HOST_HEADER.equalsIgnoreCase(entry.getKey())) {
+				missingHost = false;
+				List<String> values = entry.getValue();
+				if (values == null || values.isEmpty()) {
+					throw INVALID_HOST;
+				}
+				validateHost(values.get(0));
+			}
+		}
+		if (!allowedHosts.isEmpty() && missingHost) {
+			throw INVALID_HOST;
 		}
 	}
 
@@ -83,6 +107,37 @@ public class DefaultServerTransportSecurityValidator implements ServerTransportS
 	}
 
 	/**
+	 * Validates a single host value against the allowed hosts.
+	 * @param host The host header value, or null if not present
+	 * @throws ServerTransportSecurityException if the host is not allowed
+	 */
+	private void validateHost(String host) throws ServerTransportSecurityException {
+		if (allowedHosts.isEmpty()) {
+			return;
+		}
+
+		// Host is required
+		if (host == null || host.isBlank()) {
+			throw INVALID_HOST;
+		}
+
+		for (String allowed : allowedHosts) {
+			if (allowed.equals(host)) {
+				return;
+			}
+			else if (allowed.endsWith(":*")) {
+				// Wildcard port pattern: "example.com:*"
+				String baseHost = allowed.substring(0, allowed.length() - 2);
+				if (host.equals(baseHost) || host.startsWith(baseHost + ":")) {
+					return;
+				}
+			}
+		}
+
+		throw INVALID_HOST;
+	}
+
+	/**
 	 * Creates a new builder for constructing a DefaultServerTransportSecurityValidator.
 	 * @return A new builder instance
 	 */
@@ -96,6 +151,8 @@ public class DefaultServerTransportSecurityValidator implements ServerTransportS
 	public static class Builder {
 
 		private final List<String> allowedOrigins = new ArrayList<>();
+
+		private final List<String> allowedHosts = new ArrayList<>();
 
 		/**
 		 * Adds an allowed origin pattern.
@@ -120,11 +177,32 @@ public class DefaultServerTransportSecurityValidator implements ServerTransportS
 		}
 
 		/**
+		 * Adds an allowed host pattern.
+		 * @param host The host to allow (e.g., "localhost:8080" or "example.com:*")
+		 * @return this builder instance
+		 */
+		public Builder allowedHost(String host) {
+			this.allowedHosts.add(host);
+			return this;
+		}
+
+		/**
+		 * Adds multiple allowed host patterns.
+		 * @param hosts The hosts to allow
+		 * @return this builder instance
+		 */
+		public Builder allowedHosts(List<String> hosts) {
+			Assert.notNull(hosts, "hosts must not be null");
+			this.allowedHosts.addAll(hosts);
+			return this;
+		}
+
+		/**
 		 * Builds the validator instance.
 		 * @return A new DefaultServerTransportSecurityValidator
 		 */
 		public DefaultServerTransportSecurityValidator build() {
-			return new DefaultServerTransportSecurityValidator(allowedOrigins);
+			return new DefaultServerTransportSecurityValidator(allowedOrigins, allowedHosts);
 		}
 
 	}
