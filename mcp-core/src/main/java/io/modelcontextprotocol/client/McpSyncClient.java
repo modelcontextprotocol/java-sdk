@@ -5,18 +5,24 @@
 package io.modelcontextprotocol.client;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.experimental.tasks.TaskManager;
+import io.modelcontextprotocol.experimental.tasks.TaskStore;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
 import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
 import io.modelcontextprotocol.util.Assert;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
@@ -200,14 +206,14 @@ public class McpSyncClient implements AutoCloseable {
 	 * Add a roots dynamically.
 	 */
 	public void addRoot(McpSchema.Root root) {
-		this.delegate.addRoot(root).block();
+		withProvidedContext(this.delegate.addRoot(root)).block();
 	}
 
 	/**
 	 * Remove a root dynamically.
 	 */
 	public void removeRoot(String rootUri) {
-		this.delegate.removeRoot(rootUri).block();
+		withProvidedContext(this.delegate.removeRoot(rootUri)).block();
 	}
 
 	/**
@@ -235,6 +241,103 @@ public class McpSyncClient implements AutoCloseable {
 	public McpSchema.CallToolResult callTool(McpSchema.CallToolRequest callToolRequest) {
 		return withProvidedContext(this.delegate.callTool(callToolRequest)).block();
 
+	}
+
+	/**
+	 * Low-level method that invokes a tool with task augmentation, creating a background
+	 * task for long-running operations.
+	 *
+	 * <p>
+	 * <strong>Recommendation:</strong> For most use cases, prefer {@link #callToolStream}
+	 * which provides a unified interface that handles both regular and task-augmented
+	 * tool calls automatically, including polling and result retrieval.
+	 *
+	 * <p>
+	 * When calling a tool with task augmentation, the server creates a task and returns
+	 * immediately with a {@link McpSchema.CreateTaskResult} containing the task ID. The
+	 * actual tool execution happens asynchronously. Use {@link #getTask} to poll for task
+	 * status and {@link #getTaskResult} to retrieve the result once completed.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param callToolRequest The request containing the tool name, parameters, and task
+	 * metadata. The {@code task} field must be non-null.
+	 * @return The task creation result containing the task ID and initial status.
+	 * @throws IllegalArgumentException if the request does not include task metadata
+	 * @see #callToolStream
+	 * @see McpSchema.CallToolRequest
+	 * @see McpSchema.CreateTaskResult
+	 * @see McpSchema.TaskMetadata
+	 * @see #getTask
+	 * @see #getTaskResult
+	 */
+	public McpSchema.CreateTaskResult callToolTask(McpSchema.CallToolRequest callToolRequest) {
+		return withProvidedContext(this.delegate.callToolTask(callToolRequest)).block();
+	}
+
+	/**
+	 * Calls a tool and returns a list of response messages, handling both regular and
+	 * task-augmented tool calls automatically.
+	 *
+	 * <p>
+	 * This method provides a unified interface for tool execution:
+	 * <ul>
+	 * <li>For <strong>non-task</strong> requests (when {@code task} field is null):
+	 * returns a list with a single {@link McpSchema.ResultMessage} or
+	 * {@link McpSchema.ErrorMessage}
+	 * <li>For <strong>task-augmented</strong> requests: returns a list containing
+	 * {@link McpSchema.TaskCreatedMessage} followed by zero or more
+	 * {@link McpSchema.TaskStatusMessage} and ending with {@link McpSchema.ResultMessage}
+	 * or {@link McpSchema.ErrorMessage}
+	 * </ul>
+	 *
+	 * <p>
+	 * This is the recommended way to call tools when you want to support both regular and
+	 * long-running tool executions without having to handle the decision logic yourself.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This method blocks until the tool execution completes. For
+	 * non-blocking streaming, use the async client's
+	 * {@link McpAsyncClient#callToolStream(McpSchema.CallToolRequest)} method.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 *
+	 * <p>
+	 * Example usage:
+	 *
+	 * <pre>{@code
+	 * var request = new CallToolRequest("my-tool", Map.of("arg", "value"),
+	 *     new TaskMetadata(60000L), null);  // Optional task metadata
+	 *
+	 * client.callToolStream(request).forEach(message -> {
+	 *     switch (message) {
+	 *         case TaskCreatedMessage<CallToolResult> tc ->
+	 *             System.out.println("Task created: " + tc.task().taskId());
+	 *         case TaskStatusMessage<CallToolResult> ts ->
+	 *             System.out.println("Status: " + ts.task().status());
+	 *         case ResultMessage<CallToolResult> r ->
+	 *             System.out.println("Result: " + r.result());
+	 *         case ErrorMessage<CallToolResult> e ->
+	 *             System.err.println("Error: " + e.error().getMessage());
+	 *     }
+	 * });
+	 * }</pre>
+	 * @param callToolRequest The request containing the tool name and arguments. If the
+	 * {@code task} field is set, the call will be task-augmented.
+	 * @return A stream of {@link McpSchema.ResponseMessage} instances representing the
+	 * progress and result of the tool call.
+	 * @see McpSchema.ResponseMessage
+	 * @see McpSchema.TaskCreatedMessage
+	 * @see McpSchema.TaskStatusMessage
+	 * @see McpSchema.ResultMessage
+	 * @see McpSchema.ErrorMessage
+	 */
+	public Stream<McpSchema.ResponseMessage<McpSchema.CallToolResult>> callToolStream(
+			McpSchema.CallToolRequest callToolRequest) {
+		return withProvidedContextFlux(this.delegate.callToolStream(callToolRequest)).toStream();
 	}
 
 	/**
@@ -394,6 +497,240 @@ public class McpSyncClient implements AutoCloseable {
 
 	}
 
+	// ---------------------------------------
+	// Tasks (Experimental)
+	// ---------------------------------------
+
+	/**
+	 * Returns the task store used for client-side task hosting.
+	 * @return the task store, or null if client-side task hosting is not configured
+	 */
+	public TaskStore<McpSchema.ClientTaskPayloadResult> getTaskStore() {
+		return this.delegate.getTaskStore();
+	}
+
+	/**
+	 * Returns the task manager for task orchestration operations.
+	 * <p>
+	 * The task manager provides the outbound API for interacting with server-hosted
+	 * tasks, including streaming task results, getting task status, and cancelling tasks.
+	 * It also manages task lifecycle operations and message queuing for side-channel
+	 * communication.
+	 * <p>
+	 * <strong>Warning:</strong> This is an experimental API that may change in future
+	 * releases. Use with caution in production environments.
+	 * @return the task manager (never null; returns NullTaskManager if task support is
+	 * not configured)
+	 */
+	public TaskManager taskManager() {
+		return this.delegate.taskManager();
+	}
+
+	/**
+	 * Retrieves a task previously initiated by the client with the server.
+	 *
+	 * <p>
+	 * This method mirrors
+	 * {@link io.modelcontextprotocol.server.McpSyncServerExchange#getTask(McpSchema.GetTaskRequest)},
+	 * which is used for when the server has initiated a task with the client.
+	 *
+	 * <p>
+	 * Example usage:
+	 *
+	 * <pre>{@code
+	 * var result = client.getTask(GetTaskRequest.builder()
+	 *     .taskId(taskId)
+	 *     .build());
+	 * }</pre>
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param getTaskRequest The request containing the task ID.
+	 * @return The task information.
+	 * @see McpSchema.GetTaskRequest
+	 * @see McpSchema.GetTaskResult
+	 */
+	public McpSchema.GetTaskResult getTask(McpSchema.GetTaskRequest getTaskRequest) {
+		return withProvidedContext(this.delegate.getTask(getTaskRequest)).block();
+	}
+
+	/**
+	 * Retrieves a task previously initiated by the client with the server by its ID.
+	 *
+	 * <p>
+	 * This method mirrors
+	 * {@link io.modelcontextprotocol.server.McpSyncServerExchange#getTask(String)}, which
+	 * is used for when the server has initiated a task with the client.
+	 *
+	 * <p>
+	 * This is a convenience overload that creates a {@link McpSchema.GetTaskRequest} with
+	 * the given task ID.
+	 *
+	 * <p>
+	 * Example usage:
+	 *
+	 * <pre>{@code
+	 * var result = client.getTask(taskId);
+	 * }</pre>
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param taskId The task identifier to query.
+	 * @return The task information.
+	 */
+	public McpSchema.GetTaskResult getTask(String taskId) {
+		Assert.hasText(taskId, "Task ID must not be null or empty");
+		return withProvidedContext(this.delegate.getTask(taskId)).block();
+	}
+
+	/**
+	 * Get the result of a completed task previously initiated by the client with the
+	 * server.
+	 *
+	 * <p>
+	 * The result type depends on the original request that created the task. For tool
+	 * calls, use {@code new TypeRef<McpSchema.CallToolResult>(){}}.
+	 *
+	 * <p>
+	 * This method mirrors
+	 * {@link io.modelcontextprotocol.server.McpSyncServerExchange#getTaskResult(McpSchema.GetTaskPayloadRequest, TypeRef)},
+	 * which is used for when the server has initiated a task with the client.
+	 *
+	 * <p>
+	 * Example usage:
+	 *
+	 * <pre>{@code
+	 * // For tool task results:
+	 * var result = client.getTaskResult(
+	 *     GetTaskPayloadRequest.builder().taskId(taskId).build(),
+	 *     new TypeRef<McpSchema.CallToolResult>(){});
+	 * }</pre>
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param <T> The expected result type, must extend
+	 * {@link McpSchema.ServerTaskPayloadResult}
+	 * @param getTaskPayloadRequest The request containing the task ID.
+	 * @param resultTypeRef Type reference for deserializing the result.
+	 * @return The task result.
+	 * @see McpSchema.GetTaskPayloadRequest
+	 * @see McpSchema.ServerTaskPayloadResult
+	 */
+	public <T extends McpSchema.ServerTaskPayloadResult> T getTaskResult(
+			McpSchema.GetTaskPayloadRequest getTaskPayloadRequest, TypeRef<T> resultTypeRef) {
+		return withProvidedContext(this.delegate.getTaskResult(getTaskPayloadRequest, resultTypeRef)).block();
+	}
+
+	/**
+	 * Get the result of a completed task previously initiated by the client with the
+	 * server by its task ID.
+	 *
+	 * <p>
+	 * This is a convenience overload that creates a
+	 * {@link McpSchema.GetTaskPayloadRequest} from the task ID.
+	 *
+	 * <p>
+	 * The result type depends on the original request that created the task. For tool
+	 * calls, use {@code new TypeRef<McpSchema.CallToolResult>(){}}.
+	 *
+	 * <p>
+	 * This method mirrors
+	 * {@link io.modelcontextprotocol.server.McpSyncServerExchange#getTaskResult(String, TypeRef)},
+	 * which is used for when the server has initiated a task with the client.
+	 *
+	 * <p>
+	 * Example usage:
+	 *
+	 * <pre>{@code
+	 * // For tool task results:
+	 * var result = client.getTaskResult(
+	 *     taskId,
+	 *     new TypeRef<McpSchema.CallToolResult>(){});
+	 * }</pre>
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param <T> The expected result type, must extend
+	 * {@link McpSchema.ServerTaskPayloadResult}
+	 * @param taskId The task identifier.
+	 * @param resultTypeRef Type reference for deserializing the result.
+	 * @return The task result.
+	 * @see McpSchema.GetTaskPayloadRequest
+	 * @see McpSchema.ServerTaskPayloadResult
+	 */
+	public <T extends McpSchema.ServerTaskPayloadResult> T getTaskResult(String taskId, TypeRef<T> resultTypeRef) {
+		Assert.hasText(taskId, "Task ID must not be null or empty");
+		return withProvidedContext(this.delegate.getTaskResult(taskId, resultTypeRef)).block();
+	}
+
+	/**
+	 * List all tasks known by the server.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @return The list of all tasks.
+	 * @see McpSchema.ListTasksResult
+	 */
+	public McpSchema.ListTasksResult listTasks() {
+		return withProvidedContext(this.delegate.listTasks()).block();
+	}
+
+	/**
+	 * List tasks known by the server with pagination support.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param cursor Pagination cursor from a previous list request.
+	 * @return A page of tasks.
+	 * @see McpSchema.ListTasksResult
+	 */
+	public McpSchema.ListTasksResult listTasks(String cursor) {
+		return withProvidedContext(this.delegate.listTasks(cursor)).block();
+	}
+
+	/**
+	 * Request cancellation of a task.
+	 *
+	 * <p>
+	 * Note that cancellation is cooperative - the server may not honor the cancellation
+	 * request, or may take some time to cancel the task.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param cancelTaskRequest The request containing the task ID.
+	 * @return The updated task status.
+	 * @see McpSchema.CancelTaskRequest
+	 * @see McpSchema.CancelTaskResult
+	 */
+	public McpSchema.CancelTaskResult cancelTask(McpSchema.CancelTaskRequest cancelTaskRequest) {
+		return withProvidedContext(this.delegate.cancelTask(cancelTaskRequest)).block();
+	}
+
+	/**
+	 * Request cancellation of a task by ID.
+	 *
+	 * <p>
+	 * This is a convenience overload that creates a {@link McpSchema.CancelTaskRequest}
+	 * with the given task ID.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param taskId The task identifier to cancel.
+	 * @return The updated task status.
+	 */
+	public McpSchema.CancelTaskResult cancelTask(String taskId) {
+		Assert.hasText(taskId, "Task ID must not be null or empty");
+		return cancelTask(McpSchema.CancelTaskRequest.builder().taskId(taskId).build());
+	}
+
 	/**
 	 * For a given action, on assembly, capture the "context" via the
 	 * {@link #contextProvider} and store it in the Reactor context.
@@ -401,6 +738,16 @@ public class McpSyncClient implements AutoCloseable {
 	 * @return the result of the action
 	 */
 	private <T> Mono<T> withProvidedContext(Mono<T> action) {
+		return action.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, this.contextProvider.get()));
+	}
+
+	/**
+	 * For a given Flux action, on assembly, capture the "context" via the
+	 * {@link #contextProvider} and store it in the Reactor context.
+	 * @param action the flux action to perform
+	 * @return the flux with context applied
+	 */
+	private <T> Flux<T> withProvidedContextFlux(Flux<T> action) {
 		return action.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, this.contextProvider.get()));
 	}
 

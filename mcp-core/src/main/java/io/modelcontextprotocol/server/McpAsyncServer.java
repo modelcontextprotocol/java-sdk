@@ -14,6 +14,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
 
+import io.modelcontextprotocol.experimental.tasks.ServerTaskToolHandler;
+import io.modelcontextprotocol.experimental.tasks.TaskAwareAsyncToolSpecification;
+import io.modelcontextprotocol.experimental.tasks.TaskManager;
+import io.modelcontextprotocol.experimental.tasks.TaskMessageQueue;
+import io.modelcontextprotocol.experimental.tasks.TaskStore;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
@@ -111,11 +116,13 @@ public class McpAsyncServer {
 
 	private final ConcurrentHashMap<String, McpServerFeatures.AsyncPromptSpecification> prompts = new ConcurrentHashMap<>();
 
-	// FIXME: this field is deprecated and should be remvoed together with the
+	// FIXME: this field is deprecated and should be removed together with the
 	// broadcasting loggingNotification.
 	private LoggingLevel minLoggingLevel = LoggingLevel.DEBUG;
 
 	private final ConcurrentHashMap<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions = new ConcurrentHashMap<>();
+
+	private final ServerTaskToolHandler taskToolHandler;
 
 	private List<String> protocolVersions;
 
@@ -130,7 +137,8 @@ public class McpAsyncServer {
 	 */
 	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
-			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
+			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
+			Duration automaticPollingTimeout) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
@@ -144,18 +152,25 @@ public class McpAsyncServer {
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
 
+		this.taskToolHandler = new ServerTaskToolHandler(features.taskTools(), features.taskOptions(), jsonMapper,
+				mcpTransportProvider::notifyClients, automaticPollingTimeout);
+
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
 
 		this.protocolVersions = mcpTransportProvider.protocolVersions();
 
+		TaskStore<?> taskStore = this.taskToolHandler.getTaskStore();
+		TaskMessageQueue taskMessageQueue = this.taskToolHandler.getTaskMessageQueue();
 		mcpTransportProvider.setSessionFactory(transport -> new McpServerSession(UUID.randomUUID().toString(),
-				requestTimeout, transport, this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers));
+				requestTimeout, transport, this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers,
+				taskMessageQueue, taskStore));
 	}
 
 	McpAsyncServer(McpStreamableServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
-			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
+			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
+			Duration automaticPollingTimeout) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
@@ -169,13 +184,19 @@ public class McpAsyncServer {
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
 
+		this.taskToolHandler = new ServerTaskToolHandler(features.taskTools(), features.taskOptions(), jsonMapper,
+				mcpTransportProvider::notifyClients, automaticPollingTimeout);
+
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
 
 		this.protocolVersions = mcpTransportProvider.protocolVersions();
 
-		mcpTransportProvider.setSessionFactory(new DefaultMcpStreamableServerSessionFactory(requestTimeout,
-				this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers));
+		TaskStore<?> taskStore = this.taskToolHandler.getTaskStore();
+		TaskMessageQueue taskMessageQueue = this.taskToolHandler.getTaskMessageQueue();
+		mcpTransportProvider.setSessionFactory(
+				new DefaultMcpStreamableServerSessionFactory(requestTimeout, this::asyncInitializeRequestHandler,
+						requestHandlers, notificationHandlers, taskMessageQueue, taskStore));
 	}
 
 	private Map<String, McpNotificationHandler> prepareNotificationHandlers(McpServerFeatures.Async features) {
@@ -232,6 +253,11 @@ public class McpAsyncServer {
 		if (this.serverCapabilities.completions() != null) {
 			requestHandlers.put(McpSchema.METHOD_COMPLETION_COMPLETE, completionCompleteRequestHandler());
 		}
+
+		// Add tasks API handlers via ServerTaskToolHandler
+		this.taskToolHandler.logCapabilityMismatches(this.serverCapabilities.tasks());
+		requestHandlers.putAll(this.taskToolHandler.getRequestHandlers(this.serverCapabilities.tasks()));
+
 		return requestHandlers;
 	}
 
@@ -288,13 +314,14 @@ public class McpAsyncServer {
 	 * @return A Mono that completes when the server has been closed
 	 */
 	public Mono<Void> closeGracefully() {
-		return this.mcpTransportProvider.closeGracefully();
+		return this.taskToolHandler.closeGracefully().then(this.mcpTransportProvider.closeGracefully());
 	}
 
 	/**
 	 * Close the server immediately.
 	 */
 	public void close() {
+		this.taskToolHandler.close();
 		this.mcpTransportProvider.close();
 	}
 
@@ -336,13 +363,22 @@ public class McpAsyncServer {
 		var wrappedToolSpecification = withStructuredOutputHandling(this.jsonSchemaValidator, toolSpecification);
 
 		return Mono.defer(() -> {
-			// Remove tools with duplicate tool names first
-			if (this.tools.removeIf(th -> th.tool().name().equals(wrappedToolSpecification.tool().name()))) {
-				logger.warn("Replace existing Tool with name '{}'", wrappedToolSpecification.tool().name());
-			}
+			String toolName = wrappedToolSpecification.tool().name();
+			synchronized (this.taskToolHandler.getToolRegistrationLock()) {
+				// Check for name collision with task tools
+				if (this.taskToolHandler.hasToolNamed(toolName)) {
+					return Mono
+						.error(new IllegalArgumentException("A task tool with name '" + toolName + "' already exists"));
+				}
 
-			this.tools.add(wrappedToolSpecification);
-			logger.debug("Added tool handler: {}", wrappedToolSpecification.tool().name());
+				// Remove tools with duplicate tool names first
+				if (this.tools.removeIf(th -> th.tool().name().equals(toolName))) {
+					logger.warn("Replace existing Tool with name '{}'", toolName);
+				}
+
+				this.tools.add(wrappedToolSpecification);
+			}
+			logger.debug("Added tool handler: {}", toolName);
 
 			if (this.serverCapabilities.tools().listChanged()) {
 				return notifyToolsListChanged();
@@ -467,8 +503,15 @@ public class McpAsyncServer {
 	}
 
 	/**
-	 * List all registered tools.
-	 * @return A Flux stream of all registered tools
+	 * List all registered regular (non-task-aware) tools.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This method returns only regular tools registered via
+	 * {@link #addTool}. To get task-aware tools, use {@link #listTaskTools()}. When a
+	 * client calls {@code tools/list}, the response includes both regular tools and
+	 * task-aware tools merged together.
+	 * @return A Flux stream of all registered regular tools
+	 * @see #listTaskTools()
 	 */
 	public Flux<Tool> listTools() {
 		return Flux.fromIterable(this.tools).map(McpServerFeatures.AsyncToolSpecification::tool);
@@ -489,7 +532,6 @@ public class McpAsyncServer {
 
 		return Mono.defer(() -> {
 			if (this.tools.removeIf(toolSpecification -> toolSpecification.tool().name().equals(toolName))) {
-
 				logger.debug("Removed tool handler: {}", toolName);
 				if (this.serverCapabilities.tools().listChanged()) {
 					return notifyToolsListChanged();
@@ -504,6 +546,43 @@ public class McpAsyncServer {
 	}
 
 	/**
+	 * Add a new task-aware tool at runtime.
+	 *
+	 * <p>
+	 * Task-aware tools support long-running operations with task lifecycle management
+	 * (SEP-1686). They differ from normal tools in that they can return tasks instead of
+	 * direct results.
+	 * @param taskToolSpecification The task-aware tool specification to add
+	 * @return Mono that completes when clients have been notified of the change
+	 */
+	public Mono<Void> addTaskTool(TaskAwareAsyncToolSpecification taskToolSpecification) {
+		if (this.serverCapabilities.tools() == null) {
+			return Mono.error(new IllegalStateException("Server must be configured with tool capabilities"));
+		}
+		return this.taskToolHandler.addTaskTool(taskToolSpecification, this.serverCapabilities.tools());
+	}
+
+	/**
+	 * Remove a task-aware tool at runtime.
+	 * @param toolName The name of the task-aware tool to remove
+	 * @return Mono that completes when clients have been notified of the change
+	 */
+	public Mono<Void> removeTaskTool(String toolName) {
+		if (this.serverCapabilities.tools() == null) {
+			return Mono.error(new IllegalStateException("Server must be configured with tool capabilities"));
+		}
+		return this.taskToolHandler.removeTaskTool(toolName, this.serverCapabilities.tools());
+	}
+
+	/**
+	 * List all registered task-aware tools.
+	 * @return A Flux stream of all registered task-aware tools
+	 */
+	public Flux<Tool> listTaskTools() {
+		return this.taskToolHandler.listTaskTools();
+	}
+
+	/**
 	 * Notifies clients that the list of available tools has changed.
 	 * @return A Mono that completes when all clients have been notified
 	 */
@@ -513,30 +592,45 @@ public class McpAsyncServer {
 
 	private McpRequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
 		return (exchange, params) -> {
-			List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList();
+			// Combine normal tools and task tools into a single list
+			List<Tool> allTools = new java.util.ArrayList<>();
+			allTools.addAll(this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList());
+			allTools.addAll(this.taskToolHandler.getToolDefinitions());
 
-			return Mono.just(new McpSchema.ListToolsResult(tools, null));
+			return Mono.just(new McpSchema.ListToolsResult(allTools, null));
 		};
 	}
 
-	private McpRequestHandler<CallToolResult> toolsCallRequestHandler() {
+	private McpRequestHandler<?> toolsCallRequestHandler() {
 		return (exchange, params) -> {
 			McpSchema.CallToolRequest callToolRequest = jsonMapper.convertValue(params,
 					new TypeRef<McpSchema.CallToolRequest>() {
 					});
 
-			Optional<McpServerFeatures.AsyncToolSpecification> toolSpecification = this.tools.stream()
-				.filter(tr -> callToolRequest.name().equals(tr.tool().name()))
-				.findAny();
-
-			if (toolSpecification.isEmpty()) {
-				return Mono.error(McpError.builder(McpSchema.ErrorCodes.INVALID_PARAMS)
-					.message("Unknown tool: invalid_tool_name")
-					.data("Tool not found: " + callToolRequest.name())
-					.build());
+			// First, check if it's a normal tool
+			McpServerFeatures.AsyncToolSpecification normalTool = this.tools.stream()
+				.filter(t -> t.tool().name().equals(callToolRequest.name()))
+				.findFirst()
+				.orElse(null);
+			if (normalTool != null) {
+				// Normal tools do not support task-augmented requests
+				if (callToolRequest.task() != null) {
+					return Mono.error(McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND)
+						.message("Tool '" + callToolRequest.name() + "' does not support task-augmented requests")
+						.data("Remove the 'task' parameter or use a task-aware tool")
+						.build());
+				}
+				return normalTool.callHandler().apply(exchange, callToolRequest).cast(Object.class);
 			}
 
-			return toolSpecification.get().callHandler().apply(exchange, callToolRequest);
+			// Second, delegate to task tool handler
+			return this.taskToolHandler.handleToolCall(exchange, callToolRequest)
+				.switchIfEmpty(
+						// Tool not found in either normal or task tools
+						Mono.error(McpError.builder(McpSchema.ErrorCodes.INVALID_PARAMS)
+							.message("Unknown tool: " + callToolRequest.name())
+							.data("Tool not found: " + callToolRequest.name())
+							.build()));
 		};
 	}
 
@@ -1071,6 +1165,59 @@ public class McpAsyncServer {
 	 */
 	void setProtocolVersions(List<String> protocolVersions) {
 		this.protocolVersions = protocolVersions;
+	}
+
+	// ---------------------------------------
+	// Task Management (Experimental)
+	// ---------------------------------------
+
+	/**
+	 * Get the task store used for managing long-running tasks.
+	 * <p>
+	 * <strong>Warning:</strong> This is an experimental API that may change in future
+	 * releases. Use with caution in production environments.
+	 * @return The task store, or null if tasks are not enabled
+	 */
+	public TaskStore<McpSchema.ServerTaskPayloadResult> getTaskStore() {
+		return this.taskToolHandler.getTaskStore();
+	}
+
+	/**
+	 * Returns the task manager for task orchestration operations.
+	 * <p>
+	 * The task manager provides the outbound API for interacting with client-hosted
+	 * tasks, including streaming task results, getting task status, and cancelling tasks.
+	 * It also manages task lifecycle operations and message queuing for side-channel
+	 * communication.
+	 * <p>
+	 * <strong>Warning:</strong> This is an experimental API that may change in future
+	 * releases. Use with caution in production environments.
+	 * @return the task manager (never null; returns NullTaskManager if task support is
+	 * not configured)
+	 */
+	public TaskManager taskManager() {
+		return this.taskToolHandler.taskManager();
+	}
+
+	/**
+	 * Get the task message queue used for task communication during input_required state.
+	 *
+	 * <p>
+	 * <strong>Warning:</strong> This is an experimental API that may change in future
+	 * releases. Use with caution in production environments.
+	 * @return The task message queue, or null if not configured
+	 */
+	public TaskMessageQueue getTaskMessageQueue() {
+		return this.taskToolHandler.getTaskMessageQueue();
+	}
+
+	/**
+	 * Sends a task status notification to all connected clients.
+	 * @param taskStatusNotification The task status notification to send
+	 * @return A Mono that completes when all clients have been notified
+	 */
+	public Mono<Void> notifyTaskStatus(McpSchema.TaskStatusNotification taskStatusNotification) {
+		return this.taskToolHandler.notifyTaskStatus(taskStatusNotification);
 	}
 
 }

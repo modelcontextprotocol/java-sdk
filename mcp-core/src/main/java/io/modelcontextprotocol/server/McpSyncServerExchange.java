@@ -5,8 +5,12 @@
 package io.modelcontextprotocol.server;
 
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
+
+import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * Represents a synchronous exchange with a Model Context Protocol (MCP) client. The
@@ -136,11 +140,337 @@ public class McpSyncServerExchange {
 	}
 
 	/**
+	 * Sends a task status notification to THIS client only.
+	 *
+	 * <p>
+	 * This method sends a notification to the specific client associated with this
+	 * exchange. Use this for targeted notifications when a tool handler needs to update a
+	 * specific client about task progress.
+	 *
+	 * <p>
+	 * For broadcasting task status to ALL connected clients, use
+	 * {@link McpSyncServer#notifyTaskStatus(McpSchema.TaskStatusNotification)} instead.
+	 * @param notification The task status notification to send
+	 * @see McpSyncServer#notifyTaskStatus(McpSchema.TaskStatusNotification) for
+	 * broadcasting to all clients
+	 */
+	public void taskStatusNotification(McpSchema.TaskStatusNotification notification) {
+		this.exchange.taskStatusNotification(notification).block();
+	}
+
+	/**
 	 * Sends a synchronous ping request to the client.
-	 * @return
+	 * @return The ping response from the client
 	 */
 	public Object ping() {
 		return this.exchange.ping().block();
+	}
+
+	// --------------------------
+	// Client Task Operations
+	// --------------------------
+
+	/**
+	 * Retrieves a task previously initiated by the server with the client.
+	 *
+	 * <p>
+	 * This method mirrors
+	 * {@link io.modelcontextprotocol.client.McpSyncClient#getTask(McpSchema.GetTaskRequest)},
+	 * which is used for when the client has initiated a task with the server.
+	 *
+	 * <p>
+	 * Example usage:
+	 *
+	 * <pre>{@code
+	 * var result = exchange.getTask(GetTaskRequest.builder()
+	 *     .taskId(taskId)
+	 *     .build());
+	 * }</pre>
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param getTaskRequest The request containing the task ID.
+	 * @return The task information.
+	 * @see McpSchema.GetTaskRequest
+	 * @see McpSchema.GetTaskResult
+	 */
+	public McpSchema.GetTaskResult getTask(McpSchema.GetTaskRequest getTaskRequest) {
+		return this.exchange.getTask(getTaskRequest).block();
+	}
+
+	/**
+	 * Retrieves a task previously initiated by the server with the client by its ID.
+	 *
+	 * <p>
+	 * This method mirrors
+	 * {@link io.modelcontextprotocol.client.McpSyncClient#getTask(String)}, which is used
+	 * for when the client has initiated a task with the server.
+	 *
+	 * <p>
+	 * This is a convenience overload that creates a {@link McpSchema.GetTaskRequest} with
+	 * the given task ID.
+	 *
+	 * <p>
+	 * Example usage:
+	 *
+	 * <pre>{@code
+	 * var result = exchange.getTask(taskId);
+	 * }</pre>
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param taskId The task identifier to query.
+	 * @return The task status and metadata.
+	 */
+	public McpSchema.GetTaskResult getTask(String taskId) {
+		return this.exchange.getTask(McpSchema.GetTaskRequest.builder().taskId(taskId).build()).block();
+	}
+
+	/**
+	 * Get the result of a completed task previously initiated by the server with the
+	 * client.
+	 *
+	 * <p>
+	 * The result type depends on the original request that created the task. For sampling
+	 * requests, use {@code new TypeRef<McpSchema.CreateMessageResult>(){}}. For
+	 * elicitation requests, use {@code new TypeRef<McpSchema.ElicitResult>(){}}.
+	 *
+	 * <p>
+	 * This method mirrors
+	 * {@link io.modelcontextprotocol.client.McpSyncClient#getTaskResult(McpSchema.GetTaskPayloadRequest, TypeRef)},
+	 * which is used for when the client has initiated a task with the server.
+	 *
+	 * <p>
+	 * Example usage:
+	 *
+	 * <pre>{@code
+	 * // For sampling task results:
+	 * var result = exchange.getTaskResult(
+	 *     new GetTaskPayloadRequest(taskId, null),
+	 *     new TypeRef<McpSchema.CreateMessageResult>(){});
+	 * }</pre>
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param <T> The expected result type, must extend
+	 * {@link McpSchema.ClientTaskPayloadResult}
+	 * @param getTaskPayloadRequest The request containing the task ID.
+	 * @param resultTypeRef Type reference for deserializing the result.
+	 * @return The task result.
+	 * @see McpSchema.GetTaskPayloadRequest
+	 * @see McpSchema.ClientTaskPayloadResult
+	 */
+	public <T extends McpSchema.ClientTaskPayloadResult> T getTaskResult(
+			McpSchema.GetTaskPayloadRequest getTaskPayloadRequest, TypeRef<T> resultTypeRef) {
+		return this.exchange.getTaskResult(getTaskPayloadRequest, resultTypeRef).block();
+	}
+
+	/**
+	 * Get the result of a completed task previously initiated by the server with the
+	 * client by its task ID.
+	 *
+	 * <p>
+	 * This is a convenience overload that creates a
+	 * {@link McpSchema.GetTaskPayloadRequest} from the task ID.
+	 *
+	 * <p>
+	 * The result type depends on the original request that created the task. For sampling
+	 * requests, use {@code new TypeRef<McpSchema.CreateMessageResult>(){}}. For
+	 * elicitation requests, use {@code new TypeRef<McpSchema.ElicitResult>(){}}.
+	 *
+	 * <p>
+	 * This method mirrors
+	 * {@link io.modelcontextprotocol.client.McpSyncClient#getTaskResult(String, TypeRef)},
+	 * which is used for when the client has initiated a task with the server.
+	 *
+	 * <p>
+	 * Example usage:
+	 *
+	 * <pre>{@code
+	 * // For sampling task results:
+	 * var result = exchange.getTaskResult(
+	 *     taskId,
+	 *     new TypeRef<McpSchema.CreateMessageResult>(){});
+	 * }</pre>
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param <T> The expected result type, must extend
+	 * {@link McpSchema.ClientTaskPayloadResult}
+	 * @param taskId The task identifier.
+	 * @param resultTypeRef Type reference for deserializing the result.
+	 * @return The task result.
+	 * @see McpSchema.GetTaskPayloadRequest
+	 * @see McpSchema.ClientTaskPayloadResult
+	 */
+	public <T extends McpSchema.ClientTaskPayloadResult> T getTaskResult(String taskId, TypeRef<T> resultTypeRef) {
+		return this.getTaskResult(McpSchema.GetTaskPayloadRequest.builder().taskId(taskId).build(), resultTypeRef);
+	}
+
+	/**
+	 * List all tasks hosted by the client.
+	 *
+	 * <p>
+	 * This method automatically handles pagination, fetching all pages and combining them
+	 * into a single result.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @return The list of all client tasks
+	 */
+	public McpSchema.ListTasksResult listTasks() {
+		return this.exchange.listTasks().block();
+	}
+
+	/**
+	 * List tasks hosted by the client with pagination support.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param cursor Pagination cursor from a previous list request
+	 * @return A page of client tasks
+	 */
+	public McpSchema.ListTasksResult listTasks(String cursor) {
+		return this.exchange.listTasks(cursor).block();
+	}
+
+	/**
+	 * Request cancellation of a task hosted by the client.
+	 *
+	 * <p>
+	 * Note that cancellation is cooperative - the client may not honor the cancellation
+	 * request, or may take some time to cancel the task.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param cancelTaskRequest The request containing the task ID
+	 * @return The updated task status
+	 */
+	public McpSchema.CancelTaskResult cancelTask(McpSchema.CancelTaskRequest cancelTaskRequest) {
+		return this.exchange.cancelTask(cancelTaskRequest).block();
+	}
+
+	/**
+	 * Request cancellation of a task hosted by the client by task ID.
+	 *
+	 * <p>
+	 * This is a convenience overload that creates a {@link McpSchema.CancelTaskRequest}
+	 * with the given task ID.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param taskId The task identifier to cancel
+	 * @return The updated task status
+	 */
+	public McpSchema.CancelTaskResult cancelTask(String taskId) {
+		return this.exchange.cancelTask(taskId).block();
+	}
+
+	// --------------------------
+	// Task-Augmented Sampling
+	// --------------------------
+
+	/**
+	 * Low-level method to create a new message using task-augmented sampling. The client
+	 * will process the request as a long-running task, allowing the server to poll for
+	 * status updates.
+	 *
+	 * <p>
+	 * <strong>Recommendation:</strong> For most use cases, prefer
+	 * {@link #createMessageStream} which provides a unified interface that handles both
+	 * regular and task-augmented sampling automatically, including polling and result
+	 * retrieval.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param createMessageRequest The request to create a new message (must have task
+	 * metadata)
+	 * @return The task creation result
+	 * @see #createMessageStream
+	 */
+	public McpSchema.CreateTaskResult createMessageTask(McpSchema.CreateMessageRequest createMessageRequest) {
+		return this.exchange.createMessageTask(createMessageRequest).block();
+	}
+
+	/**
+	 * Create a message and return a list of response messages, handling both regular and
+	 * task-augmented requests automatically.
+	 *
+	 * <p>
+	 * This method blocks until the sampling completes. For non-blocking streaming, use
+	 * the async exchange's
+	 * {@link McpAsyncServerExchange#createMessageStream(McpSchema.CreateMessageRequest)}
+	 * method.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param createMessageRequest The request containing the sampling parameters. If the
+	 * {@code task} field is set, the call will be task-augmented.
+	 * @return A stream of {@link McpSchema.ResponseMessage} instances representing the
+	 * progress and result
+	 */
+	public Stream<McpSchema.ResponseMessage<McpSchema.CreateMessageResult>> createMessageStream(
+			McpSchema.CreateMessageRequest createMessageRequest) {
+		return this.exchange.createMessageStream(createMessageRequest).toStream();
+	}
+
+	// --------------------------
+	// Task-Augmented Elicitation
+	// --------------------------
+
+	/**
+	 * Low-level method to create a new elicitation using task-augmented processing. The
+	 * client will process the request as a long-running task, allowing the server to poll
+	 * for status updates.
+	 *
+	 * <p>
+	 * <strong>Recommendation:</strong> For most use cases, prefer
+	 * {@link #createElicitationStream} which provides a unified interface that handles
+	 * both regular and task-augmented elicitation automatically, including polling and
+	 * result retrieval.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param elicitRequest The elicitation request (must have task metadata)
+	 * @return The task creation result
+	 * @see #createElicitationStream
+	 */
+	public McpSchema.CreateTaskResult createElicitationTask(McpSchema.ElicitRequest elicitRequest) {
+		return this.exchange.createElicitationTask(elicitRequest).block();
+	}
+
+	/**
+	 * Create an elicitation and return a list of response messages, handling both regular
+	 * and task-augmented requests automatically.
+	 *
+	 * <p>
+	 * This method blocks until the elicitation completes. For non-blocking streaming, use
+	 * the async exchange's
+	 * {@link McpAsyncServerExchange#createElicitationStream(McpSchema.ElicitRequest)}
+	 * method.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This is an experimental feature that may change in future
+	 * releases.
+	 * @param elicitRequest The request containing the elicitation parameters. If the
+	 * {@code task} field is set, the call will be task-augmented.
+	 * @return A stream of {@link McpSchema.ResponseMessage} instances representing the
+	 * progress and result
+	 */
+	public Stream<McpSchema.ResponseMessage<McpSchema.ElicitResult>> createElicitationStream(
+			McpSchema.ElicitRequest elicitRequest) {
+		return this.exchange.createElicitationStream(elicitRequest).toStream();
 	}
 
 }

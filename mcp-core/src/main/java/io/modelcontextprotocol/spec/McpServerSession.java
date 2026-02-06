@@ -12,6 +12,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.experimental.tasks.TaskMessageQueue;
+import io.modelcontextprotocol.experimental.tasks.TaskStore;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpInitRequestHandler;
 import io.modelcontextprotocol.server.McpNotificationHandler;
@@ -65,9 +67,16 @@ public class McpServerSession implements McpLoggableSession {
 
 	private volatile McpSchema.LoggingLevel minLoggingLevel = McpSchema.LoggingLevel.INFO;
 
+	/** Optional task message queue for side-channeling support. */
+	private final TaskMessageQueue taskMessageQueue;
+
+	/** Optional task store for side-channeling support. */
+	private final TaskStore<?> taskStore;
+
 	/**
 	 * Creates a new server session with the given parameters and the transport to use.
 	 * @param id session id
+	 * @param requestTimeout timeout for requests
 	 * @param transport the transport to use
 	 * @param initHandler called when a
 	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
@@ -78,17 +87,41 @@ public class McpServerSession implements McpLoggableSession {
 	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
 			McpInitRequestHandler initHandler, Map<String, McpRequestHandler<?>> requestHandlers,
 			Map<String, McpNotificationHandler> notificationHandlers) {
+		this(id, requestTimeout, transport, initHandler, requestHandlers, notificationHandlers, null, null);
+	}
+
+	/**
+	 * Creates a new server session with the given parameters, transport, and task
+	 * infrastructure.
+	 * @param id session id
+	 * @param requestTimeout timeout for requests
+	 * @param transport the transport to use
+	 * @param initHandler called when a
+	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
+	 * server
+	 * @param requestHandlers map of request handlers to use
+	 * @param notificationHandlers map of notification handlers to use
+	 * @param taskMessageQueue optional task message queue for side-channeling support
+	 * @param taskStore optional task store for side-channeling support
+	 */
+	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
+			McpInitRequestHandler initHandler, Map<String, McpRequestHandler<?>> requestHandlers,
+			Map<String, McpNotificationHandler> notificationHandlers, TaskMessageQueue taskMessageQueue,
+			TaskStore<?> taskStore) {
 		this.id = id;
 		this.requestTimeout = requestTimeout;
 		this.transport = transport;
 		this.initRequestHandler = initHandler;
 		this.requestHandlers = requestHandlers;
 		this.notificationHandlers = notificationHandlers;
+		this.taskMessageQueue = taskMessageQueue;
+		this.taskStore = taskStore;
 	}
 
 	/**
 	 * Creates a new server session with the given parameters and the transport to use.
 	 * @param id session id
+	 * @param requestTimeout timeout for requests
 	 * @param transport the transport to use
 	 * @param initHandler called when a
 	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
@@ -106,12 +139,7 @@ public class McpServerSession implements McpLoggableSession {
 			McpInitRequestHandler initHandler, InitNotificationHandler initNotificationHandler,
 			Map<String, McpRequestHandler<?>> requestHandlers,
 			Map<String, McpNotificationHandler> notificationHandlers) {
-		this.id = id;
-		this.requestTimeout = requestTimeout;
-		this.transport = transport;
-		this.initRequestHandler = initHandler;
-		this.requestHandlers = requestHandlers;
-		this.notificationHandlers = notificationHandlers;
+		this(id, requestTimeout, transport, initHandler, requestHandlers, notificationHandlers, null, null);
 	}
 
 	/**
@@ -311,7 +339,7 @@ public class McpServerSession implements McpLoggableSession {
 				// FIXME: The session ID passed here is not the same as the one in the
 				// legacy SSE transport.
 				exchangeSink.tryEmitValue(new McpAsyncServerExchange(this.id, this, clientCapabilities.get(),
-						clientInfo.get(), transportContext));
+						clientInfo.get(), transportContext, this.taskMessageQueue, this.taskStore));
 			}
 
 			var handler = notificationHandlers.get(notification.method());
@@ -333,7 +361,7 @@ public class McpServerSession implements McpLoggableSession {
 	 */
 	private McpAsyncServerExchange copyExchange(McpAsyncServerExchange exchange, McpTransportContext transportContext) {
 		return new McpAsyncServerExchange(exchange.sessionId(), this, exchange.getClientCapabilities(),
-				exchange.getClientInfo(), transportContext);
+				exchange.getClientInfo(), transportContext, this.taskMessageQueue, this.taskStore);
 	}
 
 	record MethodNotFoundError(String method, String message, Object data) {

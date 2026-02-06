@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.client;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -49,6 +50,22 @@ import reactor.core.scheduler.Schedulers;
 class McpClientFeatures {
 
 	/**
+	 * Build the task capabilities based on the presence of sampling and elicitation
+	 * handlers.
+	 */
+	private static McpSchema.ClientCapabilities.ClientTaskCapabilities buildTaskCapabilities(boolean hasSamplingHandler,
+			boolean hasElicitationHandler) {
+		var builder = McpSchema.ClientCapabilities.ClientTaskCapabilities.builder().list().cancel();
+		if (hasSamplingHandler) {
+			builder.samplingCreateMessage();
+		}
+		if (hasElicitationHandler) {
+			builder.elicitationCreate();
+		}
+		return builder.build();
+	}
+
+	/**
 	 * Asynchronous client features specification providing the capabilities and request
 	 * and notification handlers.
 	 *
@@ -66,6 +83,7 @@ class McpClientFeatures {
 	 */
 	record Async(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 			Map<String, McpSchema.Root> roots, List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers,
+			List<Function<McpSchema.TaskStatusNotification, Mono<Void>>> taskStatusConsumers,
 			List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers,
 			List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers,
 			List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers,
@@ -73,7 +91,7 @@ class McpClientFeatures {
 			List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers,
 			Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler,
 			Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler,
-			boolean enableCallToolSchemaCaching) {
+			boolean enableCallToolSchemaCaching, Duration taskPollTimeout, boolean taskStorePresent) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -91,6 +109,7 @@ class McpClientFeatures {
 		public Async(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 				Map<String, McpSchema.Root> roots,
 				List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers,
+				List<Function<McpSchema.TaskStatusNotification, Mono<Void>>> taskStatusConsumers,
 				List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers,
 				List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers,
 				List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers,
@@ -98,7 +117,7 @@ class McpClientFeatures {
 				List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers,
 				Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler,
 				Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler,
-				boolean enableCallToolSchemaCaching) {
+				boolean enableCallToolSchemaCaching, Duration taskPollTimeout, boolean taskStorePresent) {
 
 			Assert.notNull(clientInfo, "Client info must not be null");
 			this.clientInfo = clientInfo;
@@ -106,7 +125,10 @@ class McpClientFeatures {
 					: new McpSchema.ClientCapabilities(null,
 							!Utils.isEmpty(roots) ? new McpSchema.ClientCapabilities.RootCapabilities(false) : null,
 							samplingHandler != null ? new McpSchema.ClientCapabilities.Sampling() : null,
-							elicitationHandler != null ? new McpSchema.ClientCapabilities.Elicitation() : null);
+							elicitationHandler != null ? new McpSchema.ClientCapabilities.Elicitation() : null,
+							taskStorePresent
+									? buildTaskCapabilities(samplingHandler != null, elicitationHandler != null)
+									: null);
 			this.roots = roots != null ? new ConcurrentHashMap<>(roots) : new ConcurrentHashMap<>();
 
 			this.toolsChangeConsumers = toolsChangeConsumers != null ? toolsChangeConsumers : List.of();
@@ -115,9 +137,12 @@ class McpClientFeatures {
 			this.promptsChangeConsumers = promptsChangeConsumers != null ? promptsChangeConsumers : List.of();
 			this.loggingConsumers = loggingConsumers != null ? loggingConsumers : List.of();
 			this.progressConsumers = progressConsumers != null ? progressConsumers : List.of();
+			this.taskStatusConsumers = taskStatusConsumers != null ? taskStatusConsumers : List.of();
 			this.samplingHandler = samplingHandler;
 			this.elicitationHandler = elicitationHandler;
 			this.enableCallToolSchemaCaching = enableCallToolSchemaCaching;
+			this.taskPollTimeout = taskPollTimeout;
+			this.taskStorePresent = taskStorePresent;
 		}
 
 		/**
@@ -132,9 +157,9 @@ class McpClientFeatures {
 				List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers,
 				Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler,
 				Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler) {
-			this(clientInfo, clientCapabilities, roots, toolsChangeConsumers, resourcesChangeConsumers,
+			this(clientInfo, clientCapabilities, roots, toolsChangeConsumers, List.of(), resourcesChangeConsumers,
 					resourcesUpdateConsumers, promptsChangeConsumers, loggingConsumers, List.of(), samplingHandler,
-					elicitationHandler, false);
+					elicitationHandler, false, null, false);
 		}
 
 		/**
@@ -182,18 +207,28 @@ class McpClientFeatures {
 					.subscribeOn(Schedulers.boundedElastic()));
 			}
 
-			Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler = r -> Mono
-				.fromCallable(() -> syncSpec.samplingHandler().apply(r))
-				.subscribeOn(Schedulers.boundedElastic());
+			List<Function<McpSchema.TaskStatusNotification, Mono<Void>>> taskStatusConsumers = new ArrayList<>();
+			for (Consumer<McpSchema.TaskStatusNotification> consumer : syncSpec.taskStatusConsumers()) {
+				taskStatusConsumers.add(n -> Mono.<Void>fromRunnable(() -> consumer.accept(n))
+					.subscribeOn(Schedulers.boundedElastic()));
+			}
 
-			Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler = r -> Mono
-				.fromCallable(() -> syncSpec.elicitationHandler().apply(r))
-				.subscribeOn(Schedulers.boundedElastic());
+			Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler = syncSpec
+				.samplingHandler() != null
+						? r -> Mono.fromCallable(() -> syncSpec.samplingHandler().apply(r))
+							.subscribeOn(Schedulers.boundedElastic())
+						: null;
+
+			Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler = syncSpec
+				.elicitationHandler() != null
+						? r -> Mono.fromCallable(() -> syncSpec.elicitationHandler().apply(r))
+							.subscribeOn(Schedulers.boundedElastic())
+						: null;
 
 			return new Async(syncSpec.clientInfo(), syncSpec.clientCapabilities(), syncSpec.roots(),
-					toolsChangeConsumers, resourcesChangeConsumers, resourcesUpdateConsumers, promptsChangeConsumers,
-					loggingConsumers, progressConsumers, samplingHandler, elicitationHandler,
-					syncSpec.enableCallToolSchemaCaching);
+					toolsChangeConsumers, taskStatusConsumers, resourcesChangeConsumers, resourcesUpdateConsumers,
+					promptsChangeConsumers, loggingConsumers, progressConsumers, samplingHandler, elicitationHandler,
+					syncSpec.enableCallToolSchemaCaching(), syncSpec.taskPollTimeout(), syncSpec.taskStorePresent());
 		}
 	}
 
@@ -220,9 +255,10 @@ class McpClientFeatures {
 			List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers,
 			List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers,
 			List<Consumer<McpSchema.ProgressNotification>> progressConsumers,
+			List<Consumer<McpSchema.TaskStatusNotification>> taskStatusConsumers,
 			Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler,
 			Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler,
-			boolean enableCallToolSchemaCaching) {
+			boolean enableCallToolSchemaCaching, Duration taskPollTimeout, boolean taskStorePresent) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -246,9 +282,10 @@ class McpClientFeatures {
 				List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers,
 				List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers,
 				List<Consumer<McpSchema.ProgressNotification>> progressConsumers,
+				List<Consumer<McpSchema.TaskStatusNotification>> taskStatusConsumers,
 				Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler,
 				Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler,
-				boolean enableCallToolSchemaCaching) {
+				boolean enableCallToolSchemaCaching, Duration taskPollTimeout, boolean taskStorePresent) {
 
 			Assert.notNull(clientInfo, "Client info must not be null");
 			this.clientInfo = clientInfo;
@@ -256,7 +293,10 @@ class McpClientFeatures {
 					: new McpSchema.ClientCapabilities(null,
 							!Utils.isEmpty(roots) ? new McpSchema.ClientCapabilities.RootCapabilities(false) : null,
 							samplingHandler != null ? new McpSchema.ClientCapabilities.Sampling() : null,
-							elicitationHandler != null ? new McpSchema.ClientCapabilities.Elicitation() : null);
+							elicitationHandler != null ? new McpSchema.ClientCapabilities.Elicitation() : null,
+							taskStorePresent
+									? buildTaskCapabilities(samplingHandler != null, elicitationHandler != null)
+									: null);
 			this.roots = roots != null ? new HashMap<>(roots) : new HashMap<>();
 
 			this.toolsChangeConsumers = toolsChangeConsumers != null ? toolsChangeConsumers : List.of();
@@ -265,9 +305,12 @@ class McpClientFeatures {
 			this.promptsChangeConsumers = promptsChangeConsumers != null ? promptsChangeConsumers : List.of();
 			this.loggingConsumers = loggingConsumers != null ? loggingConsumers : List.of();
 			this.progressConsumers = progressConsumers != null ? progressConsumers : List.of();
+			this.taskStatusConsumers = taskStatusConsumers != null ? taskStatusConsumers : List.of();
 			this.samplingHandler = samplingHandler;
 			this.elicitationHandler = elicitationHandler;
 			this.enableCallToolSchemaCaching = enableCallToolSchemaCaching;
+			this.taskPollTimeout = taskPollTimeout;
+			this.taskStorePresent = taskStorePresent;
 		}
 
 		/**
@@ -282,8 +325,8 @@ class McpClientFeatures {
 				Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler,
 				Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler) {
 			this(clientInfo, clientCapabilities, roots, toolsChangeConsumers, resourcesChangeConsumers,
-					resourcesUpdateConsumers, promptsChangeConsumers, loggingConsumers, List.of(), samplingHandler,
-					elicitationHandler, false);
+					resourcesUpdateConsumers, promptsChangeConsumers, loggingConsumers, List.of(), List.of(),
+					samplingHandler, elicitationHandler, false, null, false);
 		}
 	}
 
