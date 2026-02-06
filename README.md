@@ -5,8 +5,8 @@
 [![Java Version](https://img.shields.io/badge/Java-17%2B-orange)](https://www.oracle.com/java/technologies/javase/jdk17-archive-downloads.html)
 
 
-A set of projects that provide Java SDK integration for the [Model Context Protocol](https://modelcontextprotocol.org/docs/concepts/architecture). 
-This SDK enables Java applications to interact with AI models and tools through a standardized interface, supporting both synchronous and asynchronous communication patterns.
+A set of projects that provide Java SDK / `io.projectreactor` integration for the [Model Context Protocol](https://modelcontextprotocol.org/docs/concepts/architecture). 
+This SDK enables Java applications that depend on `io.projectreactor` to interact with AI models and tools through a standardized interface, supporting both synchronous and asynchronous communication patterns.
 
 ## 📚 Reference Documentation 
 
