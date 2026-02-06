@@ -310,18 +310,19 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 				})
 				.bodyValue(jsonText)
 				.exchangeToFlux(response -> {
-					if (transportSession
-						.markInitialized(response.headers().asHttpHeaders().getFirst(HttpHeaders.MCP_SESSION_ID))) {
-						// Once we have a session, we try to open an async stream for
-						// the server to send notifications and requests out-of-band.
-						reconnect(null).contextWrite(sink.contextView()).subscribe();
-					}
-
 					String sessionRepresentation = sessionIdOrPlaceholder(transportSession);
 
 					// The spec mentions only ACCEPTED, but the existing SDKs can return
 					// 200 OK for notifications
 					if (response.statusCode().is2xxSuccessful()) {
+						// Only initialize session and open async stream for successful
+						// responses
+						if (transportSession
+							.markInitialized(response.headers().asHttpHeaders().getFirst(HttpHeaders.MCP_SESSION_ID))) {
+							// Once we have a session, we try to open an async stream for
+							// the server to send notifications and requests out-of-band.
+							reconnect(null).contextWrite(sink.contextView()).subscribe();
+						}
 						Optional<MediaType> contentType = response.headers().contentType();
 						long contentLength = response.headers().contentLength().orElse(-1);
 						// Existing SDKs consume notifications with no response body nor
