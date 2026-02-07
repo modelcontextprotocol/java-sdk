@@ -5,28 +5,23 @@
 package io.modelcontextprotocol.server;
 
 import io.modelcontextprotocol.common.McpTransportContext;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
-
 import io.modelcontextprotocol.json.McpJsonMapper;
-
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
-import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DefaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
+import io.modelcontextprotocol.util.ToolNameValidator;
 import reactor.core.publisher.Mono;
+
+import java.time.Duration;
+import java.util.*;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 
 /**
  * Factory class for creating Model Context Protocol (MCP) servers. MCP servers expose
@@ -291,6 +286,8 @@ public interface McpServer {
 
 		String instructions;
 
+		Boolean skipStrictToolNameValidation;
+
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
 		 * invoked by language models. Tools enable models to interact with external
@@ -408,6 +405,18 @@ public interface McpServer {
 		}
 
 		/**
+		 * Sets whether to skip strict tool name validation for this server. When set,
+		 * this takes priority over the system property
+		 * {@code io.modelcontextprotocol.skipStrictToolNameValidation}.
+		 * @param skip true to warn only, false to throw exception on invalid names
+		 * @return This builder instance for method chaining
+		 */
+		public AsyncSpecification<S> skipStrictToolNameValidation(boolean strict) {
+			this.skipStrictToolNameValidation = strict;
+			return this;
+		}
+
+		/**
 		 * Sets the server capabilities that will be advertised to clients during
 		 * connection initialization. Capabilities define what features the server
 		 * supports, such as:
@@ -459,6 +468,7 @@ public interface McpServer {
 				BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<CallToolResult>> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
+			validateToolName(tool.name());
 			assertNoDuplicateTool(tool.name());
 
 			this.tools.add(new McpServerFeatures.AsyncToolSpecification(tool, handler));
@@ -484,6 +494,7 @@ public interface McpServer {
 
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(callHandler, "Handler must not be null");
+			validateToolName(tool.name());
 			assertNoDuplicateTool(tool.name());
 
 			this.tools
@@ -506,6 +517,7 @@ public interface McpServer {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 
 			for (var tool : toolSpecifications) {
+				validateToolName(tool.tool().name());
 				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
@@ -533,10 +545,15 @@ public interface McpServer {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 
 			for (McpServerFeatures.AsyncToolSpecification tool : toolSpecifications) {
+				validateToolName(tool.tool().name());
 				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
 			return this;
+		}
+
+		private void validateToolName(String toolName) {
+			ToolNameValidator.validate(toolName, this.skipStrictToolNameValidation);
 		}
 
 		private void assertNoDuplicateTool(String toolName) {
@@ -888,6 +905,8 @@ public interface McpServer {
 
 		String instructions;
 
+		Boolean skipStrictToolNameValidation;
+
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
 		 * invoked by language models. Tools enable models to interact with external
@@ -1009,6 +1028,18 @@ public interface McpServer {
 		}
 
 		/**
+		 * Sets whether to skip strict tool name validation for this server. When set,
+		 * this takes priority over the system property
+		 * {@code io.modelcontextprotocol.skipStrictToolNameValidation}.
+		 * @param skip true to warn only, false to throw exception on invalid names
+		 * @return This builder instance for method chaining
+		 */
+		public SyncSpecification<S> skipStrictToolNameValidation(boolean strict) {
+			this.skipStrictToolNameValidation = strict;
+			return this;
+		}
+
+		/**
 		 * Sets the server capabilities that will be advertised to clients during
 		 * connection initialization. Capabilities define what features the server
 		 * supports, such as:
@@ -1059,6 +1090,7 @@ public interface McpServer {
 				BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
+			validateToolName(tool.name());
 			assertNoDuplicateTool(tool.name());
 
 			this.tools.add(new McpServerFeatures.SyncToolSpecification(tool, handler));
@@ -1083,6 +1115,7 @@ public interface McpServer {
 				BiFunction<McpSyncServerExchange, McpSchema.CallToolRequest, McpSchema.CallToolResult> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
+			validateToolName(tool.name());
 			assertNoDuplicateTool(tool.name());
 
 			this.tools.add(new McpServerFeatures.SyncToolSpecification(tool, null, handler));
@@ -1105,7 +1138,8 @@ public interface McpServer {
 
 			for (var tool : toolSpecifications) {
 				String toolName = tool.tool().name();
-				assertNoDuplicateTool(toolName); // Check against existing tools
+				validateToolName(toolName);
+				assertNoDuplicateTool(toolName);
 				this.tools.add(tool);
 			}
 
@@ -1133,10 +1167,15 @@ public interface McpServer {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 
 			for (McpServerFeatures.SyncToolSpecification tool : toolSpecifications) {
+				validateToolName(tool.tool().name());
 				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
 			return this;
+		}
+
+		private void validateToolName(String toolName) {
+			ToolNameValidator.validate(toolName, this.skipStrictToolNameValidation);
 		}
 
 		private void assertNoDuplicateTool(String toolName) {
@@ -1434,6 +1473,8 @@ public interface McpServer {
 
 		String instructions;
 
+		Boolean skipStrictToolNameValidation;
+
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
 		 * invoked by language models. Tools enable models to interact with external
@@ -1552,6 +1593,18 @@ public interface McpServer {
 		}
 
 		/**
+		 * Sets whether to skip strict tool name validation for this server. When set,
+		 * this takes priority over the system property
+		 * {@code io.modelcontextprotocol.skipStrictToolNameValidation}.
+		 * @param skip true to warn only, false to throw exception on invalid names
+		 * @return This builder instance for method chaining
+		 */
+		public StatelessAsyncSpecification skipStrictToolNameValidation(boolean strict) {
+			this.skipStrictToolNameValidation = strict;
+			return this;
+		}
+
+		/**
 		 * Sets the server capabilities that will be advertised to clients during
 		 * connection initialization. Capabilities define what features the server
 		 * supports, such as:
@@ -1589,6 +1642,7 @@ public interface McpServer {
 
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(callHandler, "Handler must not be null");
+			validateToolName(tool.name());
 			assertNoDuplicateTool(tool.name());
 
 			this.tools.add(new McpStatelessServerFeatures.AsyncToolSpecification(tool, callHandler));
@@ -1611,6 +1665,7 @@ public interface McpServer {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 
 			for (var tool : toolSpecifications) {
+				validateToolName(tool.tool().name());
 				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
@@ -1639,10 +1694,15 @@ public interface McpServer {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 
 			for (var tool : toolSpecifications) {
+				validateToolName(tool.tool().name());
 				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
 			return this;
+		}
+
+		private void validateToolName(String toolName) {
+			ToolNameValidator.validate(toolName, this.skipStrictToolNameValidation);
 		}
 
 		private void assertNoDuplicateTool(String toolName) {
@@ -1896,6 +1956,8 @@ public interface McpServer {
 
 		String instructions;
 
+		Boolean skipStrictToolNameValidation;
+
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
 		 * invoked by language models. Tools enable models to interact with external
@@ -2014,6 +2076,18 @@ public interface McpServer {
 		}
 
 		/**
+		 * Sets whether to skip strict tool name validation for this server. When set,
+		 * this takes priority over the system property
+		 * {@code io.modelcontextprotocol.skipStrictToolNameValidation}.
+		 * @param skip true to warn only, false to throw exception on invalid names
+		 * @return This builder instance for method chaining
+		 */
+		public StatelessSyncSpecification skipStrictToolNameValidation(boolean strict) {
+			this.skipStrictToolNameValidation = strict;
+			return this;
+		}
+
+		/**
 		 * Sets the server capabilities that will be advertised to clients during
 		 * connection initialization. Capabilities define what features the server
 		 * supports, such as:
@@ -2051,6 +2125,7 @@ public interface McpServer {
 
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(callHandler, "Handler must not be null");
+			validateToolName(tool.name());
 			assertNoDuplicateTool(tool.name());
 
 			this.tools.add(new McpStatelessServerFeatures.SyncToolSpecification(tool, callHandler));
@@ -2073,6 +2148,7 @@ public interface McpServer {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 
 			for (var tool : toolSpecifications) {
+				validateToolName(tool.tool().name());
 				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
@@ -2101,10 +2177,15 @@ public interface McpServer {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 
 			for (var tool : toolSpecifications) {
+				validateToolName(tool.tool().name());
 				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
 			return this;
+		}
+
+		private void validateToolName(String toolName) {
+			ToolNameValidator.validate(toolName, this.skipStrictToolNameValidation);
 		}
 
 		private void assertNoDuplicateTool(String toolName) {

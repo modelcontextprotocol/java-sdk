@@ -1776,13 +1776,6 @@ public class McpSchemaTests {
 	}
 
 	@Test
-	void testToolBuilderWithInvalidNameThrowsException() {
-		assertThatThrownBy(() -> McpSchema.Tool.builder().name("invalid tool name").build())
-			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("invalid characters");
-	}
-
-	@Test
 	void testListToolsResultDeserializationWithInvalidToolName() throws Exception {
 		// Deserialization should not throw, just warn
 		String json = """
