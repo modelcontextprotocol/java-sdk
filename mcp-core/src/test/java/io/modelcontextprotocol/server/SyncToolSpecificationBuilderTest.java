@@ -6,11 +6,17 @@ package io.modelcontextprotocol.server;
 
 import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 import java.util.List;
 import java.util.Map;
 
+import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.util.ToolNameValidator;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
@@ -24,6 +30,19 @@ import io.modelcontextprotocol.spec.McpSchema.Tool;
  * @author Christian Tzolov
  */
 class SyncToolSpecificationBuilderTest {
+
+	private McpServerTransportProvider transportProvider;
+
+	@BeforeEach
+	void setUp() {
+		transportProvider = mock(McpServerTransportProvider.class);
+		System.clearProperty(ToolNameValidator.SKIP_STRICT_VALIDATION_PROPERTY);
+	}
+
+	@AfterEach
+	void tearDown() {
+		System.clearProperty(ToolNameValidator.SKIP_STRICT_VALIDATION_PROPERTY);
+	}
 
 	@Test
 	void builderShouldCreateValidSyncToolSpecification() {
@@ -100,6 +119,44 @@ class SyncToolSpecificationBuilderTest {
 		assertThat(result.content().get(0)).isInstanceOf(TextContent.class);
 		assertThat(((TextContent) result.content().get(0)).text()).isEqualTo(expectedResult);
 		assertThat(result.isError()).isFalse();
+	}
+
+	@Test
+	void toolNameValidation_defaultShouldThrowOnInvalidName() {
+		Tool invalidTool = Tool.builder().name("invalid tool name").build();
+
+		assertThatThrownBy(() -> McpServer.sync(transportProvider).tool(invalidTool, (exchange, args) -> null))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("invalid characters");
+	}
+
+	@Test
+	void toolNameValidation_systemPropertySkipShouldWarnOnly() {
+		System.setProperty(ToolNameValidator.SKIP_STRICT_VALIDATION_PROPERTY, "true");
+		Tool invalidTool = Tool.builder().name("invalid tool name").build();
+
+		assertThatCode(() -> McpServer.sync(transportProvider).tool(invalidTool, (exchange, args) -> null))
+			.doesNotThrowAnyException();
+	}
+
+	@Test
+	void toolNameValidation_perServerSkipShouldWarnOnly() {
+		Tool invalidTool = Tool.builder().name("invalid tool name").build();
+
+		assertThatCode(() -> McpServer.sync(transportProvider)
+			.skipStrictToolNameValidation(true)
+			.tool(invalidTool, (exchange, args) -> null)).doesNotThrowAnyException();
+	}
+
+	@Test
+	void toolNameValidation_perServerSkipShouldOverrideSystemProperty() {
+		System.setProperty(ToolNameValidator.SKIP_STRICT_VALIDATION_PROPERTY, "true");
+		Tool invalidTool = Tool.builder().name("invalid tool name").build();
+
+		assertThatThrownBy(() -> McpServer.sync(transportProvider)
+			.skipStrictToolNameValidation(false)
+			.tool(invalidTool, (exchange, args) -> null)).isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("invalid characters");
 	}
 
 }
