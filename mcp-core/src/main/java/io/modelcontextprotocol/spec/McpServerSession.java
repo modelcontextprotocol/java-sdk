@@ -4,25 +4,25 @@
 
 package io.modelcontextprotocol.spec;
 
-import java.time.Duration;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
-
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpInitRequestHandler;
 import io.modelcontextprotocol.server.McpNotificationHandler;
 import io.modelcontextprotocol.server.McpRequestHandler;
-import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Sinks;
+
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Represents a Model Context Protocol (MCP) session on the server side. It manages
@@ -36,7 +36,9 @@ public class McpServerSession implements McpLoggableSession {
 
 	private final String id;
 
-	/** Duration to wait for request responses before timing out */
+	/**
+	 * Duration to wait for request responses before timing out
+	 */
 	private final Duration requestTimeout;
 
 	private final AtomicLong requestCounter = new AtomicLong(0);
@@ -165,6 +167,8 @@ public class McpServerSession implements McpLoggableSession {
 				this.pendingResponses.remove(requestId);
 				sink.error(error);
 			});
+			// remove pending response when sink is disposed(e.g. timeout)
+			sink.onDispose(() -> this.pendingResponses.remove(requestId));
 		}).timeout(requestTimeout).handle((jsonRpcResponse, sink) -> {
 			if (jsonRpcResponse.error() != null) {
 				sink.error(new McpError(jsonRpcResponse.error()));
@@ -345,13 +349,15 @@ public class McpServerSession implements McpLoggableSession {
 
 	@Override
 	public Mono<Void> closeGracefully() {
-		// TODO: clear pendingResponses and emit errors?
+		this.pendingResponses.values().forEach(sink -> sink.error(new RuntimeException("Session closed")));
+		this.pendingResponses.clear();
 		return this.transport.closeGracefully();
 	}
 
 	@Override
 	public void close() {
-		// TODO: clear pendingResponses and emit errors?
+		this.pendingResponses.values().forEach(sink -> sink.error(new RuntimeException("Session closed")));
+		this.pendingResponses.clear();
 		this.transport.close();
 	}
 
