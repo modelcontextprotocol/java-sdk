@@ -16,6 +16,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -128,10 +131,17 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private final String latestSupportedProtocolVersion;
 
+	/**
+	 * Consumer to handle HttpClient closure. If null, no cleanup is performed (external
+	 * HttpClient).
+	 */
+	private final Consumer<HttpClient> onCloseClient;
+
 	private HttpClientStreamableHttpTransport(McpJsonMapper jsonMapper, HttpClient httpClient,
 			HttpRequest.Builder requestBuilder, String baseUri, String endpoint, boolean resumableStreams,
 			boolean openConnectionOnStartup, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer,
-			List<String> supportedProtocolVersions) {
+			List<String> supportedProtocolVersions, Consumer<HttpClient> onCloseClient) {
+		Assert.notNull(onCloseClient, "onCloseClient must not be null");
 		this.jsonMapper = jsonMapper;
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
@@ -141,6 +151,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		this.openConnectionOnStartup = openConnectionOnStartup;
 		this.activeSession.set(createTransportSession());
 		this.httpRequestCustomizer = httpRequestCustomizer;
+		this.onCloseClient = onCloseClient;
 		this.supportedProtocolVersions = Collections.unmodifiableList(supportedProtocolVersions);
 		this.latestSupportedProtocolVersion = this.supportedProtocolVersions.stream()
 			.sorted(Comparator.reverseOrder())
@@ -230,11 +241,56 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		return Mono.defer(() -> {
 			logger.debug("Graceful close triggered");
 			McpTransportSession<Disposable> currentSession = this.activeSession.getAndUpdate(this::createClosedSession);
-			if (currentSession != null) {
-				return Mono.from(currentSession.closeGracefully());
+			Mono<Void> sessionClose = currentSession != null ? Mono.from(currentSession.closeGracefully())
+					: Mono.empty();
+
+			// First close the session, then handle HttpClient cleanup
+			if (onCloseClient != null) {
+				return sessionClose.then(Mono.fromRunnable(() -> onCloseClient.accept(httpClient)));
 			}
-			return Mono.empty();
+			return sessionClose;
 		});
+	}
+
+	/**
+	 * Closes HttpClient resources by shutting down its associated ExecutorService. This
+	 * allows the GC to reclaim HttpClient-related threads (including SelectorManager) on
+	 * the next garbage collection cycle.
+	 * <p>
+	 * This approach avoids using reflection, Unsafe, or Java 21+ specific APIs, making it
+	 * compatible with Java 17+.
+	 * @param executor the ExecutorService to shutdown
+	 */
+	private static void shutdownHttpClientExecutor(ExecutorService executor) {
+		if (executor == null) {
+			return;
+		}
+
+		try {
+			logger.debug("Shutting down HttpClient ExecutorService");
+			executor.shutdown();
+
+			// Wait for graceful shutdown
+			if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+				logger.debug("ExecutorService did not terminate in time, forcing shutdown");
+				executor.shutdownNow();
+
+				// Wait a bit more after forced shutdown
+				if (!executor.awaitTermination(2, TimeUnit.SECONDS)) {
+					logger.warn("ExecutorService did not terminate even after shutdownNow()");
+				}
+			}
+
+			logger.debug("HttpClient ExecutorService shutdown completed");
+		}
+		catch (InterruptedException e) {
+			logger.warn("Interrupted while shutting down HttpClient ExecutorService");
+			executor.shutdownNow();
+			Thread.currentThread().interrupt();
+		}
+		catch (Exception e) {
+			logger.warn("Failed to shutdown HttpClient ExecutorService cleanly: {}", e.getMessage());
+		}
 	}
 
 	private Mono<Disposable> reconnect(McpTransportStream<Disposable> stream) {
@@ -646,7 +702,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 		private McpJsonMapper jsonMapper;
 
-		private HttpClient.Builder clientBuilder = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1);
+		private HttpClient externalHttpClient;
 
 		private String endpoint = DEFAULT_ENDPOINT;
 
@@ -659,6 +715,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		private McpAsyncHttpClientRequestCustomizer httpRequestCustomizer = McpAsyncHttpClientRequestCustomizer.NOOP;
 
 		private Duration connectTimeout = Duration.ofSeconds(10);
+
+		private Consumer<HttpClient> onCloseClient = (HttpClient client) -> {
+		};
 
 		private List<String> supportedProtocolVersions = List.of(ProtocolVersions.MCP_2024_11_05,
 				ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18, ProtocolVersions.MCP_2025_11_25);
@@ -673,24 +732,19 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		}
 
 		/**
-		 * Sets the HTTP client builder.
-		 * @param clientBuilder the HTTP client builder
+		 * Provides an external HttpClient instance to use instead of creating a new one.
+		 * When an external HttpClient is provided, the transport will not attempt to
+		 * close it during graceful shutdown, leaving resource management to the caller.
+		 * <p>
+		 * Use this method when you want to share a single HttpClient instance across
+		 * multiple transports or when you need fine-grained control over HttpClient
+		 * lifecycle.
+		 * @param httpClient the HttpClient instance to use
 		 * @return this builder
 		 */
-		public Builder clientBuilder(HttpClient.Builder clientBuilder) {
-			Assert.notNull(clientBuilder, "clientBuilder must not be null");
-			this.clientBuilder = clientBuilder;
-			return this;
-		}
-
-		/**
-		 * Customizes the HTTP client builder.
-		 * @param clientCustomizer the consumer to customize the HTTP client builder
-		 * @return this builder
-		 */
-		public Builder customizeClient(final Consumer<HttpClient.Builder> clientCustomizer) {
-			Assert.notNull(clientCustomizer, "clientCustomizer must not be null");
-			clientCustomizer.accept(clientBuilder);
+		public Builder withExternalHttpClient(HttpClient httpClient) {
+			Assert.notNull(httpClient, "httpClient must not be null");
+			this.externalHttpClient = httpClient;
 			return this;
 		}
 
@@ -801,13 +855,17 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		}
 
 		/**
-		 * Sets the connection timeout for the HTTP client.
-		 * @param connectTimeout the connection timeout duration
+		 * Sets a custom consumer to handle HttpClient closure when the transport is
+		 * closed. This allows for custom cleanup logic beyond the default behavior.
+		 * <p>
+		 * Note: This is typically used for advanced use cases. The default behavior
+		 * (shutting down the internal ExecutorService) is sufficient for most scenarios.
+		 * @param onCloseClient the consumer to handle HttpClient closure
 		 * @return this builder
 		 */
-		public Builder connectTimeout(Duration connectTimeout) {
-			Assert.notNull(connectTimeout, "connectTimeout must not be null");
-			this.connectTimeout = connectTimeout;
+		public Builder onHttpClientClose(Consumer<HttpClient> onCloseClient) {
+			Assert.notNull(onCloseClient, "onCloseClient must not be null");
+			this.onCloseClient = onCloseClient;
 			return this;
 		}
 
@@ -841,10 +899,39 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 * @return a new instance of {@link HttpClientStreamableHttpTransport}
 		 */
 		public HttpClientStreamableHttpTransport build() {
-			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
+			HttpClient httpClient;
+			Consumer<HttpClient> closeHandler;
+
+			if (externalHttpClient != null) {
+				// Use external HttpClient, use custom close handler or no-op
+				httpClient = externalHttpClient;
+				closeHandler = onCloseClient;
+			}
+			else {
+				// Create internal HttpClient with custom ExecutorService
+				// Create a custom ExecutorService with meaningful thread names
+				ExecutorService internalExecutor = Executors.newCachedThreadPool(runnable -> {
+					Thread thread = new Thread(runnable);
+					thread.setName("MCP-HttpClient-" + thread.getId());
+					thread.setDaemon(true);
+					return thread;
+				});
+
+				httpClient = HttpClient.newBuilder()
+					.version(HttpClient.Version.HTTP_1_1)
+					.connectTimeout(this.connectTimeout)
+					.executor(internalExecutor)
+					.build();
+
+				// Combine default cleanup (shutdown executor) with custom handler if
+				// provided
+				closeHandler = (client) -> shutdownHttpClientExecutor(internalExecutor);
+				closeHandler = closeHandler.andThen(onCloseClient);
+			}
+
 			return new HttpClientStreamableHttpTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
 					httpClient, requestBuilder, baseUri, endpoint, resumableStreams, openConnectionOnStartup,
-					httpRequestCustomizer, supportedProtocolVersions);
+					httpRequestCustomizer, supportedProtocolVersions, closeHandler);
 		}
 
 	}
