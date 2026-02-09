@@ -45,7 +45,9 @@ public class McpServerFeatures {
 			Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
 			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
-			String instructions) {
+			String instructions,
+			boolean callGetToolCallbacksEverytime,
+			List<ToolCallbackProvider> toolCallbackProviders) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -58,6 +60,8 @@ public class McpServerFeatures {
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
 		 * @param instructions The server instructions text
+		 * @param callGetToolCallbacksEverytime If true, call getToolCallbacks on every tools/list request
+		 * @param toolCallbackProviders The list of tool callback providers
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
@@ -65,7 +69,9 @@ public class McpServerFeatures {
 				Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
 				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
-				String instructions) {
+				String instructions,
+				boolean callGetToolCallbacksEverytime,
+				List<ToolCallbackProvider> toolCallbackProviders) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -89,6 +95,8 @@ public class McpServerFeatures {
 			this.completions = (completions != null) ? completions : Map.of();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : List.of();
 			this.instructions = instructions;
+			this.callGetToolCallbacksEverytime = callGetToolCallbacksEverytime;
+			this.toolCallbackProviders = (toolCallbackProviders != null) ? toolCallbackProviders : List.of();
 		}
 
 		/**
@@ -136,7 +144,8 @@ public class McpServerFeatures {
 			}
 
 			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources, resourceTemplates,
-					prompts, completions, rootChangeConsumers, syncSpec.instructions());
+					prompts, completions, rootChangeConsumers, syncSpec.instructions(),
+					syncSpec.callGetToolCallbacksEverytime(), syncSpec.toolCallbackProviders());
 		}
 	}
 
@@ -159,7 +168,9 @@ public class McpServerFeatures {
 			Map<String, McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions,
-			List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers, String instructions) {
+			List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers, String instructions,
+			boolean callGetToolCallbacksEverytime,
+			List<ToolCallbackProvider> toolCallbackProviders) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -172,6 +183,8 @@ public class McpServerFeatures {
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
 		 * @param instructions The server instructions text
+		 * @param callGetToolCallbacksEverytime If true, call getToolCallbacks on every tools/list request
+		 * @param toolCallbackProviders The list of tool callback providers
 		 */
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpServerFeatures.SyncToolSpecification> tools,
@@ -180,7 +193,9 @@ public class McpServerFeatures {
 				Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions,
 				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers,
-				String instructions) {
+				String instructions,
+				boolean callGetToolCallbacksEverytime,
+				List<ToolCallbackProvider> toolCallbackProviders) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -204,6 +219,8 @@ public class McpServerFeatures {
 			this.completions = (completions != null) ? completions : new HashMap<>();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : new ArrayList<>();
 			this.instructions = instructions;
+			this.callGetToolCallbacksEverytime = callGetToolCallbacksEverytime;
+			this.toolCallbackProviders = (toolCallbackProviders != null) ? toolCallbackProviders : new ArrayList<>();
 		}
 
 	}

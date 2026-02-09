@@ -71,6 +71,10 @@ public class McpStatelessAsyncServer {
 
 	private final ConcurrentHashMap<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions = new ConcurrentHashMap<>();
 
+	private final boolean callGetToolCallbacksEverytime;
+
+	private final List<ToolCallbackProvider> toolCallbackProviders;
+
 	private List<String> protocolVersions;
 
 	private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
@@ -92,6 +96,19 @@ public class McpStatelessAsyncServer {
 		this.completions.putAll(features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
+		this.callGetToolCallbacksEverytime = features.callGetToolCallbacksEverytime();
+		this.toolCallbackProviders = features.toolCallbackProviders();
+		
+		// If flag is false, call getToolCallbacks during startup
+		// Note: ToolCallbackProvider returns McpServerFeatures.AsyncToolSpecification which
+		// is not directly compatible with stateless server. For startup, we can't easily
+		// convert the handlers, so we skip adding them at startup for stateless servers.
+		// They will only be available when callGetToolCallbacksEverytime is true.
+		if (!this.callGetToolCallbacksEverytime && !this.toolCallbackProviders.isEmpty()) {
+			logger.warn("ToolCallbackProvider is registered but callGetToolCallbacksEverytime is false. " +
+					"For stateless servers, tools from ToolCallbackProvider are only available when " +
+					"callGetToolCallbacksEverytime is true.");
+		}
 
 		Map<String, McpStatelessRequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -385,9 +402,28 @@ public class McpStatelessAsyncServer {
 
 	private McpStatelessRequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
 		return (ctx, params) -> {
-			List<Tool> tools = this.tools.stream()
+			List<Tool> tools = new ArrayList<>();
+			
+			// Add static tools
+			tools.addAll(this.tools.stream()
 				.map(McpStatelessServerFeatures.AsyncToolSpecification::tool)
-				.toList();
+				.toList());
+			
+			// If flag is true, call getToolCallbacks on every request
+			if (this.callGetToolCallbacksEverytime && !this.toolCallbackProviders.isEmpty()) {
+				for (ToolCallbackProvider provider : this.toolCallbackProviders) {
+					List<McpServerFeatures.AsyncToolSpecification> callbackTools = provider.getToolCallbacks();
+					if (callbackTools != null) {
+						// Extract Tool definitions from callback tools for listing
+						// Note: The handlers from McpServerFeatures.AsyncToolSpecification are not
+						// directly compatible with stateless server handlers, so we only use the Tool definitions
+						for (McpServerFeatures.AsyncToolSpecification callbackTool : callbackTools) {
+							tools.add(callbackTool.tool());
+						}
+					}
+				}
+			}
+			
 			return Mono.just(new McpSchema.ListToolsResult(tools, null));
 		};
 	}

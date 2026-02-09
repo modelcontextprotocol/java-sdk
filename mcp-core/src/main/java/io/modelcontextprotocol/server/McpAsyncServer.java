@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.server;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -117,6 +118,10 @@ public class McpAsyncServer {
 
 	private final ConcurrentHashMap<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions = new ConcurrentHashMap<>();
 
+	private final boolean callGetToolCallbacksEverytime;
+
+	private final List<ToolCallbackProvider> toolCallbackProviders;
+
 	private List<String> protocolVersions;
 
 	private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
@@ -143,6 +148,18 @@ public class McpAsyncServer {
 		this.completions.putAll(features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
+		this.callGetToolCallbacksEverytime = features.callGetToolCallbacksEverytime();
+		this.toolCallbackProviders = features.toolCallbackProviders();
+		
+		// If flag is false, call getToolCallbacks during startup
+		if (!this.callGetToolCallbacksEverytime && !this.toolCallbackProviders.isEmpty()) {
+			for (ToolCallbackProvider provider : this.toolCallbackProviders) {
+				List<McpServerFeatures.AsyncToolSpecification> callbackTools = provider.getToolCallbacks();
+				if (callbackTools != null) {
+					this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, callbackTools));
+				}
+			}
+		}
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
@@ -168,6 +185,18 @@ public class McpAsyncServer {
 		this.completions.putAll(features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
+		this.callGetToolCallbacksEverytime = features.callGetToolCallbacksEverytime();
+		this.toolCallbackProviders = features.toolCallbackProviders();
+		
+		// If flag is false, call getToolCallbacks during startup
+		if (!this.callGetToolCallbacksEverytime && !this.toolCallbackProviders.isEmpty()) {
+			for (ToolCallbackProvider provider : this.toolCallbackProviders) {
+				List<McpServerFeatures.AsyncToolSpecification> callbackTools = provider.getToolCallbacks();
+				if (callbackTools != null) {
+					this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, callbackTools));
+				}
+			}
+		}
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
@@ -513,8 +542,23 @@ public class McpAsyncServer {
 
 	private McpRequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
 		return (exchange, params) -> {
-			List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList();
-
+			List<Tool> tools = new ArrayList<>();
+			
+			// Add static tools
+			tools.addAll(this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList());
+			
+			// If flag is true, call getToolCallbacks on every request
+			if (this.callGetToolCallbacksEverytime && !this.toolCallbackProviders.isEmpty()) {
+				for (ToolCallbackProvider provider : this.toolCallbackProviders) {
+					List<McpServerFeatures.AsyncToolSpecification> callbackTools = provider.getToolCallbacks();
+					if (callbackTools != null) {
+						tools.addAll(callbackTools.stream()
+							.map(McpServerFeatures.AsyncToolSpecification::tool)
+							.toList());
+					}
+				}
+			}
+			
 			return Mono.just(new McpSchema.ListToolsResult(tools, null));
 		};
 	}
