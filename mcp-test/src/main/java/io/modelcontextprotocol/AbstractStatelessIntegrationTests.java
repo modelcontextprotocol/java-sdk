@@ -4,10 +4,13 @@
 
 package io.modelcontextprotocol;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -27,9 +30,9 @@ import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import net.javacrumbs.jsonunit.core.Option;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 
 import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
@@ -38,16 +41,29 @@ import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.awaitility.Awaitility.await;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public abstract class AbstractStatelessIntegrationTests {
 
 	protected ConcurrentHashMap<String, McpClient.SyncSpec> clientBuilders = new ConcurrentHashMap<>();
+
+	protected static HttpClient mockClient = mock(HttpClient.class);
 
 	abstract protected void prepareClients(int port, String mcpEndpoint);
 
 	abstract protected StatelessAsyncSpecification prepareAsyncServerBuilder();
 
 	abstract protected StatelessSyncSpecification prepareSyncServerBuilder();
+
+	@BeforeAll
+	protected static void initMockClient() throws IOException, InterruptedException {
+		HttpResponse<String> mockResponse = mock(HttpResponse.class);
+		when(mockResponse.body()).thenReturn(Files.readString(Path.of("pom.xml").toAbsolutePath()));
+		when(mockResponse.statusCode()).thenReturn(200);
+		when(mockClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(mockResponse);
+	}
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@MethodSource("clientsForTesting")
@@ -89,12 +105,11 @@ public abstract class AbstractStatelessIntegrationTests {
 			.callHandler((ctx, request) -> {
 
 				try {
-					HttpResponse<String> response = HttpClient.newHttpClient()
-						.send(HttpRequest.newBuilder()
-							.uri(URI.create(
-									"https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md"))
-							.GET()
-							.build(), HttpResponse.BodyHandlers.ofString());
+					HttpResponse<String> response = mockClient.send(HttpRequest.newBuilder()
+						.uri(URI.create(
+								"https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md"))
+						.GET()
+						.build(), HttpResponse.BodyHandlers.ofString());
 					String responseBody = response.body();
 					assertThat(responseBody).isNotBlank();
 				}
@@ -177,12 +192,11 @@ public abstract class AbstractStatelessIntegrationTests {
 			.callHandler((ctx, request) -> {
 				// perform a blocking call to a remote service
 				try {
-					HttpResponse<String> response = HttpClient.newHttpClient()
-						.send(HttpRequest.newBuilder()
-							.uri(URI.create(
-									"https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md"))
-							.GET()
-							.build(), HttpResponse.BodyHandlers.ofString());
+					HttpResponse<String> response = mockClient.send(HttpRequest.newBuilder()
+						.uri(URI.create(
+								"https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md"))
+						.GET()
+						.build(), HttpResponse.BodyHandlers.ofString());
 					String responseBody = response.body();
 					assertThat(responseBody).isNotBlank();
 				}
@@ -202,12 +216,11 @@ public abstract class AbstractStatelessIntegrationTests {
 		try (var mcpClient = clientBuilder.toolsChangeConsumer(toolsUpdate -> {
 			// perform a blocking call to a remote service
 			try {
-				HttpResponse<String> response = HttpClient.newHttpClient()
-					.send(HttpRequest.newBuilder()
-						.uri(URI.create(
-								"https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md"))
-						.GET()
-						.build(), HttpResponse.BodyHandlers.ofString());
+				HttpResponse<String> response = mockClient.send(HttpRequest.newBuilder()
+					.uri(URI.create(
+							"https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md"))
+					.GET()
+					.build(), HttpResponse.BodyHandlers.ofString());
 				String responseBody = response.body();
 				assertThat(responseBody).isNotBlank();
 			}

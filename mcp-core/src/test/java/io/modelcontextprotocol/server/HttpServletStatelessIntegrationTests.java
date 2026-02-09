@@ -43,7 +43,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.web.client.RestClient;
 
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.APPLICATION_JSON;
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.TEXT_EVENT_STREAM;
@@ -122,12 +121,14 @@ class HttpServletStatelessIntegrationTests {
 				Tool.builder().name("tool1").title("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build(),
 				(transportContext, request) -> {
 					// perform a blocking call to a remote service
-					String response = RestClient.create()
-						.get()
-						.uri("https://raw.githubusercontent.com/modelcontextprotocol/java-sdk/refs/heads/main/README.md")
-						.retrieve()
-						.body(String.class);
+					String response = "{\"result\":\"test result\"}";
 					assertThat(response).isNotBlank();
+					try {
+						Thread.sleep(1000L);
+					}
+					catch (InterruptedException e) {
+						throw new RuntimeException(e);
+					}
 					return callResponse;
 				});
 
