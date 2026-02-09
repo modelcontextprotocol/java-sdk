@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import io.modelcontextprotocol.client.transport.ResponseSubscribers.SseResponseEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
@@ -116,6 +117,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 */
 	private final McpAsyncHttpClientRequestCustomizer httpRequestCustomizer;
 
+	private final AtomicReference<Consumer<Void>> connectionClosedHandler = new AtomicReference<>();
+
 	/**
 	 * Creates a new transport instance with custom HTTP client builder, object mapper,
 	 * and headers.
@@ -129,7 +132,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 * @throws IllegalArgumentException if objectMapper, clientBuilder, or headers is null
 	 */
 	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
-			String sseEndpoint, McpJsonMapper jsonMapper, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer) {
+			String sseEndpoint, McpJsonMapper jsonMapper, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer,
+			Consumer<Void> connectionClosedHandler) {
 		Assert.notNull(jsonMapper, "jsonMapper must not be null");
 		Assert.hasText(baseUri, "baseUri must not be empty");
 		Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
@@ -142,11 +146,26 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
 		this.httpRequestCustomizer = httpRequestCustomizer;
+		this.connectionClosedHandler.set(connectionClosedHandler);
 	}
 
 	@Override
 	public List<String> protocolVersions() {
 		return List.of(ProtocolVersions.MCP_2024_11_05);
+	}
+
+	@Override
+	public void setConnectionClosedHandler(Consumer<Void> closedHandler) {
+		logger.debug("Connection closed handler registered");
+		connectionClosedHandler.set(closedHandler);
+	}
+
+	private void handleConnectionClosed() {
+		logger.debug("Handling connection closed");
+		Consumer<Void> handler = this.connectionClosedHandler.get();
+		if (handler != null) {
+			handler.accept(null);
+		}
 	}
 
 	/**
@@ -176,6 +195,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		private McpAsyncHttpClientRequestCustomizer httpRequestCustomizer = McpAsyncHttpClientRequestCustomizer.NOOP;
 
 		private Duration connectTimeout = Duration.ofSeconds(10);
+
+		private Consumer<Void> connectionClosedHandler = null;
 
 		/**
 		 * Creates a new builder instance.
@@ -321,13 +342,25 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		}
 
 		/**
+		 * Set the connection closed handler.
+		 * @param connectionClosedHandler the connection closed handler
+		 * @return this builder
+		 */
+		public Builder connectionClosedHandler(Consumer<Void> connectionClosedHandler) {
+			Assert.notNull(connectionClosedHandler, "connectionClosedHandler must not be null");
+			this.connectionClosedHandler = connectionClosedHandler;
+			return this;
+		}
+
+		/**
 		 * Builds a new {@link HttpClientSseClientTransport} instance.
 		 * @return a new transport instance
 		 */
 		public HttpClientSseClientTransport build() {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
 			return new HttpClientSseClientTransport(httpClient, requestBuilder, baseUri, sseEndpoint,
-					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, httpRequestCustomizer);
+					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, httpRequestCustomizer,
+					connectionClosedHandler);
 		}
 
 	}
@@ -352,9 +385,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 				.exceptionallyCompose(e -> {
 					sseSink.error(e);
 					return CompletableFuture.failedFuture(e);
-				}))
-				.map(responseEvent -> (ResponseSubscribers.SseResponseEvent) responseEvent)
-				.flatMap(responseEvent -> {
+				})).map(responseEvent -> (SseResponseEvent) responseEvent).flatMap(responseEvent -> {
 					if (isClosing) {
 						return Mono.empty();
 					}
@@ -388,26 +419,21 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 							sink.error(new McpTransportException("Error processing SSE event", e));
 						}
 					}
-					return Flux.<McpSchema.JSONRPCMessage>error(
-							new RuntimeException("Failed to send message: " + responseEvent));
+					return Flux.<JSONRPCMessage>error(new RuntimeException("Failed to send message: " + responseEvent));
 
-				})
-				.flatMap(jsonRpcMessage -> handler.apply(Mono.just(jsonRpcMessage)))
-				.onErrorComplete(t -> {
+				}).flatMap(jsonRpcMessage -> handler.apply(Mono.just(jsonRpcMessage))).onErrorComplete(t -> {
 					if (!isClosing) {
 						logger.warn("SSE stream observed an error", t);
 						sink.error(t);
 					}
 					return true;
-				})
-				.doFinally(s -> {
+				}).doFinally(s -> {
 					Disposable ref = this.sseSubscription.getAndSet(null);
 					if (ref != null && !ref.isDisposed()) {
 						ref.dispose();
 					}
-				})
-				.contextWrite(sink.contextView())
-				.subscribe();
+					handleConnectionClosed();
+				}).contextWrite(sink.contextView()).subscribe();
 
 			this.sseSubscription.set(connection);
 		}));

@@ -22,12 +22,15 @@ import java.util.function.Function;
 
 import io.modelcontextprotocol.client.McpAsyncClient;
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
+import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.ClosedMcpTransportSession;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
 import io.modelcontextprotocol.spec.HttpHeaders;
@@ -49,6 +52,20 @@ import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple2;
 import reactor.util.function.Tuples;
+
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.net.http.HttpResponse.BodyHandler;
+import java.time.Duration;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * An implementation of the Streamable HTTP protocol as defined by the
@@ -124,6 +141,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private final AtomicReference<Consumer<Throwable>> exceptionHandler = new AtomicReference<>();
 
+	private final AtomicReference<Consumer<Void>> connectionClosedHandler = new AtomicReference<>();
+
 	private final List<String> supportedProtocolVersions;
 
 	private final String latestSupportedProtocolVersion;
@@ -131,7 +150,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	private HttpClientStreamableHttpTransport(McpJsonMapper jsonMapper, HttpClient httpClient,
 			HttpRequest.Builder requestBuilder, String baseUri, String endpoint, boolean resumableStreams,
 			boolean openConnectionOnStartup, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer,
-			List<String> supportedProtocolVersions) {
+			Consumer<Void> connectionClosedHandler, List<String> supportedProtocolVersions) {
 		this.jsonMapper = jsonMapper;
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
@@ -141,6 +160,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		this.openConnectionOnStartup = openConnectionOnStartup;
 		this.activeSession.set(createTransportSession());
 		this.httpRequestCustomizer = httpRequestCustomizer;
+		this.connectionClosedHandler.set(connectionClosedHandler);
 		this.supportedProtocolVersions = Collections.unmodifiableList(supportedProtocolVersions);
 		this.latestSupportedProtocolVersion = this.supportedProtocolVersions.stream()
 			.sorted(Comparator.reverseOrder())
@@ -212,6 +232,12 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		this.exceptionHandler.set(handler);
 	}
 
+	@Override
+	public void setConnectionClosedHandler(Consumer<Void> closedHandler) {
+		logger.debug("Connection closed handler registered");
+		this.connectionClosedHandler.set(closedHandler);
+	}
+
 	private void handleException(Throwable t) {
 		logger.debug("Handling exception for session {}", sessionIdOrPlaceholder(this.activeSession.get()), t);
 		if (t instanceof McpTransportSessionNotFoundException) {
@@ -222,6 +248,14 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		Consumer<Throwable> handler = this.exceptionHandler.get();
 		if (handler != null) {
 			handler.accept(t);
+		}
+	}
+
+	private void handleConnectionClosed() {
+		logger.debug("Handling connection closed");
+		Consumer<Void> handler = this.connectionClosedHandler.get();
+		if (handler != null) {
+			handler.accept(null);
 		}
 	}
 
@@ -388,6 +422,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 								if (ref != null) {
 									transportSession.removeConnection(ref);
 								}
+								this.handleConnectionClosed();
 							}))
 				.contextWrite(ctx)
 				.subscribe();
@@ -660,6 +695,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 		private Duration connectTimeout = Duration.ofSeconds(10);
 
+		private Consumer<Void> connectionClosedHandler = null;
+
 		private List<String> supportedProtocolVersions = List.of(ProtocolVersions.MCP_2024_11_05,
 				ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18, ProtocolVersions.MCP_2025_11_25);
 
@@ -836,6 +873,17 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		}
 
 		/**
+		 * Set the connection closed handler.
+		 * @param connectionClosedHandler the connection closed handler
+		 * @return this builder
+		 */
+		public Builder connectionClosedHandler(Consumer<Void> connectionClosedHandler) {
+			Assert.notNull(connectionClosedHandler, "connectionClosedHandler must not be null");
+			this.connectionClosedHandler = connectionClosedHandler;
+			return this;
+		}
+
+		/**
 		 * Construct a fresh instance of {@link HttpClientStreamableHttpTransport} using
 		 * the current builder configuration.
 		 * @return a new instance of {@link HttpClientStreamableHttpTransport}
@@ -844,7 +892,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
 			return new HttpClientStreamableHttpTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
 					httpClient, requestBuilder, baseUri, endpoint, resumableStreams, openConnectionOnStartup,
-					httpRequestCustomizer, supportedProtocolVersions);
+					httpRequestCustomizer, connectionClosedHandler, supportedProtocolVersions);
 		}
 
 	}
