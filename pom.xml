@@ -99,7 +99,7 @@
 		<json-unit-assertj.version>4.1.0</json-unit-assertj.version>
 		<json-schema-validator-jackson2.version>2.0.0</json-schema-validator-jackson2.version>
 		<json-schema-validator-jackson3.version>3.0.0</json-schema-validator-jackson3.version>
-
+		<build-helper-maven-plugin.version>3.6.1</build-helper-maven-plugin.version>
 	</properties>
 
 	<modules>
@@ -117,6 +117,28 @@
 
 	<build>
 		<plugins>
+            <!-- Derive automatic module name from groupId, artifactId, replacing '-' with '.' -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>${build-helper-maven-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>rename-property</id>
+                        <goals>
+                            <goal>regex-property</goal>
+                        </goals>
+                        <phase>validate</phase>
+                        <configuration>
+                            <name>automatic.module.name</name>
+                            <value>${project.groupId}.${project.artifactId}</value>
+                            <regex>-</regex>
+                            <replacement>.</replacement>
+                            <failIfNoMatch>false</failIfNoMatch>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
 			<plugin>
 				<groupId>io.spring.javaformat</groupId>
 				<artifactId>spring-javaformat-maven-plugin</artifactId>
@@ -210,6 +232,7 @@
 						<manifestEntries>
 							<Implementation-Title>${project.artifactId}</Implementation-Title>
 							<Implementation-Version>${project.version}</Implementation-Version>
+                            <Automatic-Module-Name>${automatic.module.name}</Automatic-Module-Name>
 						</manifestEntries>
 					</archive>
 				</configuration>
