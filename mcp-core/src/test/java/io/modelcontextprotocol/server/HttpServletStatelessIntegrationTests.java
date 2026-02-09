@@ -17,6 +17,7 @@ import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.spec.HttpHeaders;
+import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.CompleteRequest;
@@ -53,6 +54,8 @@ import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Timeout(15)
 class HttpServletStatelessIntegrationTests {
@@ -308,7 +311,7 @@ class HttpServletStatelessIntegrationTests {
 				"type", "object",
 				"properties", Map.of(
 					"name", Map.of("type", "string"),
-					"age", Map.of("type", "number")),					
+					"age", Map.of("type", "number")),
 				"required", List.of("name", "age"))); // @formatter:on
 
 		Tool calculatorTool = Tool.builder()
@@ -637,6 +640,25 @@ class HttpServletStatelessIntegrationTests {
 		assertThat(jsonrpcResponse.error().message()).isEqualTo("testing");
 
 		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient" })
+	void testClientAttemptsToCallUnsupportedCapabilityJsonRpcError(String clientType) {
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().build())
+			.build();
+
+		var clientBuilder = clientBuilders.get(clientType);
+		try (var mcpClient = clientBuilder.build()) {
+			McpSchema.JSONRPCResponse.JSONRPCError promptsError = assertThrows(McpError.class, mcpClient::listPrompts)
+				.getJsonRpcError();
+			assertThat(promptsError.code()).isEqualTo(ErrorCodes.METHOD_NOT_FOUND);
+		}
+		finally {
+			mcpServer.close();
+		}
 	}
 
 	private double evaluateExpression(String expression) {
