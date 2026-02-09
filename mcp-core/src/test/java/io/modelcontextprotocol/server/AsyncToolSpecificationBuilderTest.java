@@ -4,7 +4,6 @@
 
 package io.modelcontextprotocol.server;
 
-import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -31,11 +30,7 @@ class AsyncToolSpecificationBuilderTest {
 	@Test
 	void builderShouldCreateValidAsyncToolSpecification() {
 
-		Tool tool = McpSchema.Tool.builder()
-			.name("test-tool")
-			.title("A test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool tool = McpSchema.Tool.builder().name("test-tool").title("A test tool").inputSchema(Map.of()).build();
 
 		McpServerFeatures.AsyncToolSpecification specification = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(tool)
@@ -59,11 +54,7 @@ class AsyncToolSpecificationBuilderTest {
 
 	@Test
 	void builderShouldThrowExceptionWhenCallToolIsNull() {
-		Tool tool = McpSchema.Tool.builder()
-			.name("test-tool")
-			.title("A test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool tool = McpSchema.Tool.builder().name("test-tool").title("A test tool").inputSchema(Map.of()).build();
 
 		assertThatThrownBy(() -> McpServerFeatures.AsyncToolSpecification.builder().tool(tool).build())
 			.isInstanceOf(IllegalArgumentException.class)
@@ -72,11 +63,7 @@ class AsyncToolSpecificationBuilderTest {
 
 	@Test
 	void builderShouldAllowMethodChaining() {
-		Tool tool = McpSchema.Tool.builder()
-			.name("test-tool")
-			.title("A test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool tool = McpSchema.Tool.builder().name("test-tool").title("A test tool").inputSchema(Map.of()).build();
 		McpServerFeatures.AsyncToolSpecification.Builder builder = McpServerFeatures.AsyncToolSpecification.builder();
 
 		// Then - verify method chaining returns the same builder instance
@@ -91,7 +78,7 @@ class AsyncToolSpecificationBuilderTest {
 		Tool tool = McpSchema.Tool.builder()
 			.name("calculator")
 			.title("Simple calculator")
-			.inputSchema(EMPTY_JSON_SCHEMA)
+			.inputSchema(Map.of())
 			.build();
 		String expectedResult = "42";
 
@@ -123,7 +110,7 @@ class AsyncToolSpecificationBuilderTest {
 		Tool tool = McpSchema.Tool.builder()
 			.name("deprecated-tool")
 			.title("A deprecated tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
+			.inputSchema(Map.of())
 			.build();
 		String expectedResult = "deprecated result";
 
@@ -167,11 +154,7 @@ class AsyncToolSpecificationBuilderTest {
 
 	@Test
 	void fromSyncShouldConvertSyncToolSpecificationCorrectly() {
-		Tool tool = McpSchema.Tool.builder()
-			.name("sync-tool")
-			.title("A sync tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool tool = McpSchema.Tool.builder().name("sync-tool").title("A sync tool").inputSchema(Map.of()).build();
 		String expectedResult = "sync result";
 
 		// Create a sync tool specification
@@ -212,7 +195,7 @@ class AsyncToolSpecificationBuilderTest {
 		Tool tool = McpSchema.Tool.builder()
 			.name("sync-deprecated-tool")
 			.title("A sync tool with deprecated call")
-			.inputSchema(EMPTY_JSON_SCHEMA)
+			.inputSchema(Map.of())
 			.build();
 		String expectedResult = "sync deprecated result";
 		McpAsyncServerExchange nullExchange = null; // Mock or create a suitable exchange
