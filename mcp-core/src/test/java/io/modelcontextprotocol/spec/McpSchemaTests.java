@@ -1775,16 +1775,4 @@ public class McpSchemaTests {
 		assertThat(tool.description()).isEqualTo("A test tool");
 	}
 
-	@Test
-	void testListToolsResultDeserializationWithInvalidToolName() throws Exception {
-		// Deserialization should not throw, just warn
-		String json = """
-				{"tools":[{"name":"invalid tool name","description":"test"}],"nextCursor":null}""";
-
-		McpSchema.ListToolsResult result = JSON_MAPPER.readValue(json, McpSchema.ListToolsResult.class);
-
-		assertThat(result.tools()).hasSize(1);
-		assertThat(result.tools().get(0).name()).isEqualTo("invalid tool name");
-	}
-
 }

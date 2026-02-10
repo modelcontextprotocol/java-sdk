@@ -23,6 +23,7 @@ import org.slf4j.LoggerFactory;
  * @see <a href=
  * "https://modelcontextprotocol.io/specification/draft/server/tools#tool-names">MCP
  * Specification - Tool Names</a>
+ * @author Andrei Shakirin
  */
 public final class ToolNameValidator {
 
@@ -33,55 +34,49 @@ public final class ToolNameValidator {
 	private static final Pattern VALID_NAME_PATTERN = Pattern.compile("^[A-Za-z0-9_\\-.]+$");
 
 	/**
-	 * System property to skip strict tool name validation. Set to "true" to warn only
-	 * instead of throwing exceptions. Default is false (strict).
+	 * System property for strict tool name validation. Set to "false" to warn only
+	 * instead of throwing exceptions. Default is true (strict).
 	 */
-	public static final String SKIP_STRICT_VALIDATION_PROPERTY = "io.modelcontextprotocol.skipStrictToolNameValidation";
+	public static final String STRICT_VALIDATION_PROPERTY = "io.modelcontextprotocol.strictToolNameValidation";
 
 	private ToolNameValidator() {
 	}
 
 	/**
-	 * Validates a tool name according to MCP specification. Uses strict validation
-	 * (throws exception) unless system property {@link #SKIP_STRICT_VALIDATION_PROPERTY}
-	 * is set to true.
-	 * @param name the tool name to validate
-	 * @throws IllegalArgumentException if validation fails and skip is not enabled
+	 * Returns the default strict validation setting from system property.
+	 * @return true if strict validation is enabled (default), false if disabled via
+	 * system property
 	 */
-	public static void validate(String name) {
-		validate(name, null);
+	public static boolean isStrictByDefault() {
+		return !"false".equalsIgnoreCase(System.getProperty(STRICT_VALIDATION_PROPERTY));
 	}
 
 	/**
 	 * Validates a tool name according to MCP specification.
 	 * @param name the tool name to validate
-	 * @param skip if true, logs warning only; if false, throws exception; if null, uses
-	 * system property {@link #SKIP_STRICT_VALIDATION_PROPERTY} (default: false)
-	 * @throws IllegalArgumentException if validation fails and skip is false
+	 * @param strict if true, throws exception on invalid name; if false, logs warning
+	 * only
+	 * @throws IllegalArgumentException if validation fails and strict is true
 	 */
-	public static void validate(String name, Boolean skip) {
-		boolean warnOnly = skip != null ? skip : Boolean.getBoolean(SKIP_STRICT_VALIDATION_PROPERTY);
-
+	public static void validate(String name, boolean strict) {
 		if (name == null || name.isEmpty()) {
-			handleError("Tool name must not be null or empty", name, warnOnly);
-			return;
+			handleError("Tool name must not be null or empty", name, strict);
 		}
-		if (name.length() > MAX_LENGTH) {
-			handleError("Tool name must not exceed 128 characters", name, warnOnly);
-			return;
+		else if (name.length() > MAX_LENGTH) {
+			handleError("Tool name must not exceed 128 characters", name, strict);
 		}
-		if (!VALID_NAME_PATTERN.matcher(name).matches()) {
-			handleError("Tool name contains invalid characters (allowed: A-Z, a-z, 0-9, _, -, .)", name, warnOnly);
+		else if (!VALID_NAME_PATTERN.matcher(name).matches()) {
+			handleError("Tool name contains invalid characters (allowed: A-Z, a-z, 0-9, _, -, .)", name, strict);
 		}
 	}
 
-	private static void handleError(String message, String name, boolean warnOnly) {
+	private static void handleError(String message, String name, boolean strict) {
 		String fullMessage = message + ": '" + name + "'";
-		if (warnOnly) {
-			logger.warn("{}. Processing continues, but tool name should be fixed.", fullMessage);
+		if (strict) {
+			throw new IllegalArgumentException(fullMessage);
 		}
 		else {
-			throw new IllegalArgumentException(fullMessage);
+			logger.warn("{}. Processing continues, but tool name should be fixed.", fullMessage);
 		}
 	}
 

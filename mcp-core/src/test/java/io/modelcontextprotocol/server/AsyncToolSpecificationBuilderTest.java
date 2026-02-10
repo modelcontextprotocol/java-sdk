@@ -18,6 +18,7 @@ import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.util.ToolNameValidator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
@@ -33,19 +34,6 @@ import reactor.test.StepVerifier;
  * @author Christian Tzolov
  */
 class AsyncToolSpecificationBuilderTest {
-
-	private McpServerTransportProvider transportProvider;
-
-	@BeforeEach
-	void setUp() {
-		transportProvider = mock(McpServerTransportProvider.class);
-		System.clearProperty(ToolNameValidator.SKIP_STRICT_VALIDATION_PROPERTY);
-	}
-
-	@AfterEach
-	void tearDown() {
-		System.clearProperty(ToolNameValidator.SKIP_STRICT_VALIDATION_PROPERTY);
-	}
 
 	@Test
 	void builderShouldCreateValidAsyncToolSpecification() {
@@ -283,42 +271,60 @@ class AsyncToolSpecificationBuilderTest {
 		assertThat(McpServerFeatures.AsyncToolSpecification.fromSync(null)).isNull();
 	}
 
-	@Test
-	void toolNameValidation_defaultShouldThrowOnInvalidName() {
-		Tool invalidTool = Tool.builder().name("invalid tool name").build();
+	@Nested
+	class ToolNameValidation {
 
-		assertThatThrownBy(() -> McpServer.async(transportProvider).tool(invalidTool, (exchange, args) -> null))
-			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("invalid characters");
-	}
+		private McpServerTransportProvider transportProvider;
 
-	@Test
-	void toolNameValidation_systemPropertySkipShouldWarnOnly() {
-		System.setProperty(ToolNameValidator.SKIP_STRICT_VALIDATION_PROPERTY, "true");
-		Tool invalidTool = Tool.builder().name("invalid tool name").build();
+		@BeforeEach
+		void setUp() {
+			transportProvider = mock(McpServerTransportProvider.class);
+			System.clearProperty(ToolNameValidator.STRICT_VALIDATION_PROPERTY);
+		}
 
-		assertThatCode(() -> McpServer.async(transportProvider).tool(invalidTool, (exchange, args) -> null))
-			.doesNotThrowAnyException();
-	}
+		@AfterEach
+		void tearDown() {
+			System.clearProperty(ToolNameValidator.STRICT_VALIDATION_PROPERTY);
+		}
 
-	@Test
-	void toolNameValidation_perServerSkipShouldWarnOnly() {
-		Tool invalidTool = Tool.builder().name("invalid tool name").build();
+		@Test
+		void defaultShouldThrowOnInvalidName() {
+			Tool invalidTool = Tool.builder().name("invalid tool name").build();
 
-		assertThatCode(() -> McpServer.async(transportProvider)
-			.skipStrictToolNameValidation(true)
-			.tool(invalidTool, (exchange, args) -> null)).doesNotThrowAnyException();
-	}
+			assertThatThrownBy(() -> McpServer.async(transportProvider).tool(invalidTool, (exchange, args) -> null))
+				.isInstanceOf(IllegalArgumentException.class)
+				.hasMessageContaining("invalid characters");
+		}
 
-	@Test
-	void toolNameValidation_perServerSkipShouldOverrideSystemProperty() {
-		System.setProperty(ToolNameValidator.SKIP_STRICT_VALIDATION_PROPERTY, "true");
-		Tool invalidTool = Tool.builder().name("invalid tool name").build();
+		@Test
+		void systemPropertyFalseShouldWarnOnly() {
+			System.setProperty(ToolNameValidator.STRICT_VALIDATION_PROPERTY, "false");
+			Tool invalidTool = Tool.builder().name("invalid tool name").build();
 
-		assertThatThrownBy(() -> McpServer.async(transportProvider)
-			.skipStrictToolNameValidation(false)
-			.tool(invalidTool, (exchange, args) -> null)).isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("invalid characters");
+			assertThatCode(() -> McpServer.async(transportProvider).tool(invalidTool, (exchange, args) -> null))
+				.doesNotThrowAnyException();
+		}
+
+		@Test
+		void perServerFalseShouldWarnOnly() {
+			Tool invalidTool = Tool.builder().name("invalid tool name").build();
+
+			assertThatCode(() -> McpServer.async(transportProvider)
+				.strictToolNameValidation(false)
+				.tool(invalidTool, (exchange, args) -> null)).doesNotThrowAnyException();
+		}
+
+		@Test
+		void perServerTrueShouldOverrideSystemProperty() {
+			System.setProperty(ToolNameValidator.STRICT_VALIDATION_PROPERTY, "false");
+			Tool invalidTool = Tool.builder().name("invalid tool name").build();
+
+			assertThatThrownBy(() -> McpServer.async(transportProvider)
+				.strictToolNameValidation(true)
+				.tool(invalidTool, (exchange, args) -> null)).isInstanceOf(IllegalArgumentException.class)
+				.hasMessageContaining("invalid characters");
+		}
+
 	}
 
 }

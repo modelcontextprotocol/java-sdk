@@ -659,7 +659,7 @@ public class McpAsyncClient {
 			.doOnNext(result -> {
 				// Validate tool names (warn only)
 				if (result.tools() != null) {
-					result.tools().forEach(tool -> ToolNameValidator.validate(tool.name(), true));
+					result.tools().forEach(tool -> ToolNameValidator.validate(tool.name(), false));
 				}
 				if (this.enableCallToolSchemaCaching && result.tools() != null) {
 					// Cache tools output schema

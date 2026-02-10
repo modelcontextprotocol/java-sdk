@@ -286,7 +286,7 @@ public interface McpServer {
 
 		String instructions;
 
-		Boolean skipStrictToolNameValidation;
+		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -405,14 +405,14 @@ public interface McpServer {
 		}
 
 		/**
-		 * Sets whether to skip strict tool name validation for this server. When set,
-		 * this takes priority over the system property
-		 * {@code io.modelcontextprotocol.skipStrictToolNameValidation}.
-		 * @param skip true to warn only, false to throw exception on invalid names
+		 * Sets whether to use strict tool name validation for this server. When set, this
+		 * takes priority over the system property
+		 * {@code io.modelcontextprotocol.strictToolNameValidation}.
+		 * @param strict true to throw exception on invalid names and false to warn only
 		 * @return This builder instance for method chaining
 		 */
-		public AsyncSpecification<S> skipStrictToolNameValidation(boolean strict) {
-			this.skipStrictToolNameValidation = strict;
+		public AsyncSpecification<S> strictToolNameValidation(boolean strict) {
+			this.strictToolNameValidation = strict;
 			return this;
 		}
 
@@ -553,7 +553,7 @@ public interface McpServer {
 		}
 
 		private void validateToolName(String toolName) {
-			ToolNameValidator.validate(toolName, this.skipStrictToolNameValidation);
+			ToolNameValidator.validate(toolName, this.strictToolNameValidation);
 		}
 
 		private void assertNoDuplicateTool(String toolName) {
@@ -905,7 +905,7 @@ public interface McpServer {
 
 		String instructions;
 
-		Boolean skipStrictToolNameValidation;
+		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -1028,14 +1028,14 @@ public interface McpServer {
 		}
 
 		/**
-		 * Sets whether to skip strict tool name validation for this server. When set,
-		 * this takes priority over the system property
-		 * {@code io.modelcontextprotocol.skipStrictToolNameValidation}.
-		 * @param skip true to warn only, false to throw exception on invalid names
+		 * Sets whether to use strict tool name validation for this server. When set, this
+		 * takes priority over the system property
+		 * {@code io.modelcontextprotocol.strictToolNameValidation}.
+		 * @param strict true to throw exception on invalid names, false to warn only
 		 * @return This builder instance for method chaining
 		 */
-		public SyncSpecification<S> skipStrictToolNameValidation(boolean strict) {
-			this.skipStrictToolNameValidation = strict;
+		public SyncSpecification<S> strictToolNameValidation(boolean strict) {
+			this.strictToolNameValidation = strict;
 			return this;
 		}
 
@@ -1175,7 +1175,7 @@ public interface McpServer {
 		}
 
 		private void validateToolName(String toolName) {
-			ToolNameValidator.validate(toolName, this.skipStrictToolNameValidation);
+			ToolNameValidator.validate(toolName, this.strictToolNameValidation);
 		}
 
 		private void assertNoDuplicateTool(String toolName) {
@@ -1473,7 +1473,7 @@ public interface McpServer {
 
 		String instructions;
 
-		Boolean skipStrictToolNameValidation;
+		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -1593,14 +1593,14 @@ public interface McpServer {
 		}
 
 		/**
-		 * Sets whether to skip strict tool name validation for this server. When set,
-		 * this takes priority over the system property
-		 * {@code io.modelcontextprotocol.skipStrictToolNameValidation}.
-		 * @param skip true to warn only, false to throw exception on invalid names
+		 * Sets whether to use strict tool name validation for this server. When set, this
+		 * takes priority over the system property
+		 * {@code io.modelcontextprotocol.strictToolNameValidation}.
+		 * @param strict true to throw exception on invalid names, false to warn only
 		 * @return This builder instance for method chaining
 		 */
-		public StatelessAsyncSpecification skipStrictToolNameValidation(boolean strict) {
-			this.skipStrictToolNameValidation = strict;
+		public StatelessAsyncSpecification strictToolNameValidation(boolean strict) {
+			this.strictToolNameValidation = strict;
 			return this;
 		}
 
@@ -1702,7 +1702,7 @@ public interface McpServer {
 		}
 
 		private void validateToolName(String toolName) {
-			ToolNameValidator.validate(toolName, this.skipStrictToolNameValidation);
+			ToolNameValidator.validate(toolName, this.strictToolNameValidation);
 		}
 
 		private void assertNoDuplicateTool(String toolName) {
@@ -1956,7 +1956,7 @@ public interface McpServer {
 
 		String instructions;
 
-		Boolean skipStrictToolNameValidation;
+		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -2076,14 +2076,14 @@ public interface McpServer {
 		}
 
 		/**
-		 * Sets whether to skip strict tool name validation for this server. When set,
-		 * this takes priority over the system property
-		 * {@code io.modelcontextprotocol.skipStrictToolNameValidation}.
-		 * @param skip true to warn only, false to throw exception on invalid names
+		 * Sets whether to use strict tool name validation for this server. When set, this
+		 * takes priority over the system property
+		 * {@code io.modelcontextprotocol.strictToolNameValidation}.
+		 * @param strict true to throw exception on invalid names, false to warn only
 		 * @return This builder instance for method chaining
 		 */
-		public StatelessSyncSpecification skipStrictToolNameValidation(boolean strict) {
-			this.skipStrictToolNameValidation = strict;
+		public StatelessSyncSpecification strictToolNameValidation(boolean strict) {
+			this.strictToolNameValidation = strict;
 			return this;
 		}
 
@@ -2185,7 +2185,7 @@ public interface McpServer {
 		}
 
 		private void validateToolName(String toolName) {
-			ToolNameValidator.validate(toolName, this.skipStrictToolNameValidation);
+			ToolNameValidator.validate(toolName, this.strictToolNameValidation);
 		}
 
 		private void assertNoDuplicateTool(String toolName) {

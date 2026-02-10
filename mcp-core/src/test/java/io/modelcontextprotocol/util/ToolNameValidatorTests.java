@@ -20,31 +20,31 @@ class ToolNameValidatorTests {
 	@ValueSource(strings = { "getUser", "DATA_EXPORT_v2", "admin.tools.list", "my-tool", "Tool123", "a", "A",
 			"_private", "tool_name", "tool-name", "tool.name", "UPPERCASE", "lowercase", "MixedCase123" })
 	void validToolNames_strictMode(String name) {
-		assertThatCode(() -> ToolNameValidator.validate(name, false)).doesNotThrowAnyException();
+		assertThatCode(() -> ToolNameValidator.validate(name, true)).doesNotThrowAnyException();
 	}
 
 	@Test
 	void validToolName_maxLength() {
 		String name = "a".repeat(128);
-		assertThatCode(() -> ToolNameValidator.validate(name, false)).doesNotThrowAnyException();
+		assertThatCode(() -> ToolNameValidator.validate(name, true)).doesNotThrowAnyException();
 	}
 
 	@Test
 	void invalidToolName_null_strictMode() {
-		assertThatThrownBy(() -> ToolNameValidator.validate(null, false)).isInstanceOf(IllegalArgumentException.class)
+		assertThatThrownBy(() -> ToolNameValidator.validate(null, true)).isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("null or empty");
 	}
 
 	@Test
 	void invalidToolName_empty_strictMode() {
-		assertThatThrownBy(() -> ToolNameValidator.validate("", false)).isInstanceOf(IllegalArgumentException.class)
+		assertThatThrownBy(() -> ToolNameValidator.validate("", true)).isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("null or empty");
 	}
 
 	@Test
 	void invalidToolName_tooLong_strictMode() {
 		String name = "a".repeat(129);
-		assertThatThrownBy(() -> ToolNameValidator.validate(name, false)).isInstanceOf(IllegalArgumentException.class)
+		assertThatThrownBy(() -> ToolNameValidator.validate(name, true)).isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("128 characters");
 	}
 
@@ -80,17 +80,17 @@ class ToolNameValidatorTests {
 			"工具" // unicode
 	})
 	void invalidToolNames_specialCharacters_strictMode(String name) {
-		assertThatThrownBy(() -> ToolNameValidator.validate(name, false)).isInstanceOf(IllegalArgumentException.class)
+		assertThatThrownBy(() -> ToolNameValidator.validate(name, true)).isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("invalid characters");
 	}
 
 	@Test
-	void invalidToolName_skipValidation_doesNotThrow() {
-		// skip=true means warn only, should not throw
-		assertThatCode(() -> ToolNameValidator.validate("invalid name", true)).doesNotThrowAnyException();
-		assertThatCode(() -> ToolNameValidator.validate(null, true)).doesNotThrowAnyException();
-		assertThatCode(() -> ToolNameValidator.validate("", true)).doesNotThrowAnyException();
-		assertThatCode(() -> ToolNameValidator.validate("a".repeat(129), true)).doesNotThrowAnyException();
+	void invalidToolName_nonStrictMode_doesNotThrow() {
+		// strict=false means warn only, should not throw
+		assertThatCode(() -> ToolNameValidator.validate("invalid name", false)).doesNotThrowAnyException();
+		assertThatCode(() -> ToolNameValidator.validate(null, false)).doesNotThrowAnyException();
+		assertThatCode(() -> ToolNameValidator.validate("", false)).doesNotThrowAnyException();
+		assertThatCode(() -> ToolNameValidator.validate("a".repeat(129), false)).doesNotThrowAnyException();
 	}
 
 }
