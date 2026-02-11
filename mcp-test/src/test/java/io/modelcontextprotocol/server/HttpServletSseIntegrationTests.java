@@ -8,12 +8,13 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.stream.Stream;
 
+import io.modelcontextprotocol.AbstractMcpClientServerIntegrationTests;
 import io.modelcontextprotocol.client.McpClient;
-import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
+import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpServer.AsyncSpecification;
 import io.modelcontextprotocol.server.McpServer.SyncSpecification;
-import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
+import io.modelcontextprotocol.server.transport.HttpServletSseServerTransportProvider;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import org.apache.catalina.LifecycleException;
@@ -27,13 +28,15 @@ import org.junit.jupiter.params.provider.Arguments;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Timeout(15)
-class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerIntegrationTests {
+class HttpServletSseIntegrationTests extends AbstractMcpClientServerIntegrationTests {
 
 	private static final int PORT = TomcatTestUtil.findAvailablePort();
 
-	private static final String MESSAGE_ENDPOINT = "/mcp/message";
+	private static final String CUSTOM_SSE_ENDPOINT = "/somePath/sse";
 
-	private HttpServletStreamableServerTransportProvider mcpServerTransportProvider;
+	private static final String CUSTOM_MESSAGE_ENDPOINT = "/otherPath/mcp/message";
+
+	private HttpServletSseServerTransportProvider mcpServerTransportProvider;
 
 	private Tomcat tomcat;
 
@@ -44,10 +47,10 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 	@BeforeEach
 	public void before() {
 		// Create and configure the transport provider
-		mcpServerTransportProvider = HttpServletStreamableServerTransportProvider.builder()
+		mcpServerTransportProvider = HttpServletSseServerTransportProvider.builder()
 			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
-			.mcpEndpoint(MESSAGE_ENDPOINT)
-			.keepAliveInterval(Duration.ofSeconds(1))
+			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
+			.sseEndpoint(CUSTOM_SSE_ENDPOINT)
 			.build();
 
 		tomcat = TomcatTestUtil.createTomcatServer("", PORT, mcpServerTransportProvider);
@@ -61,8 +64,8 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 
 		clientBuilders
 			.put("httpclient",
-					McpClient.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
-						.endpoint(MESSAGE_ENDPOINT)
+					McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
+						.sseEndpoint(CUSTOM_SSE_ENDPOINT)
 						.build()).requestTimeout(Duration.ofHours(10)));
 	}
 

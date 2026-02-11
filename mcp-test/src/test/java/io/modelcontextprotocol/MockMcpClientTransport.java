@@ -15,32 +15,38 @@ import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCNotification;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
-import io.modelcontextprotocol.spec.McpServerTransport;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 
 /**
- * A mock implementation of the {@link McpClientTransport} and {@link McpServerTransport}
- * interfaces.
- *
- * @deprecated not used. to be removed in the future.
+ * A mock implementation of the {@link McpClientTransport} interfaces.
  */
-@Deprecated
-public class MockMcpTransport implements McpClientTransport, McpServerTransport {
+public class MockMcpClientTransport implements McpClientTransport {
 
 	private final Sinks.Many<McpSchema.JSONRPCMessage> inbound = Sinks.many().unicast().onBackpressureBuffer();
 
 	private final List<McpSchema.JSONRPCMessage> sent = new ArrayList<>();
 
-	private final BiConsumer<MockMcpTransport, McpSchema.JSONRPCMessage> interceptor;
+	private final BiConsumer<MockMcpClientTransport, McpSchema.JSONRPCMessage> interceptor;
 
-	public MockMcpTransport() {
+	private String protocolVersion = McpSchema.LATEST_PROTOCOL_VERSION;
+
+	public MockMcpClientTransport() {
 		this((t, msg) -> {
 		});
 	}
 
-	public MockMcpTransport(BiConsumer<MockMcpTransport, McpSchema.JSONRPCMessage> interceptor) {
+	public MockMcpClientTransport(BiConsumer<MockMcpClientTransport, McpSchema.JSONRPCMessage> interceptor) {
 		this.interceptor = interceptor;
+	}
+
+	public MockMcpClientTransport withProtocolVersion(String protocolVersion) {
+		return this;
+	}
+
+	@Override
+	public List<String> protocolVersions() {
+		return List.of(protocolVersion);
 	}
 
 	public void simulateIncomingMessage(McpSchema.JSONRPCMessage message) {

@@ -11,6 +11,7 @@ import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.WebClientStreamableHttpTransport;
 import io.modelcontextprotocol.client.transport.WebFluxSseClientTransport;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.TestUtil;
@@ -194,7 +195,7 @@ public class WebFluxServerTransportSecurityIntegrationTests {
 				TestOriginHeaderExchangeFilterFunction exchangeFilterFunction) {
 			var transport = WebFluxSseClientTransport
 				.builder(WebClient.builder().baseUrl(baseUrl).filter(exchangeFilterFunction))
-				.jsonMapper(McpJsonMapper.getDefault())
+				.jsonMapper(McpJsonDefaults.getDefaultMcpJsonMapper())
 				.build();
 			return McpClient.sync(transport).initializationTimeout(Duration.ofMillis(500)).build();
 		}
@@ -226,7 +227,7 @@ public class WebFluxServerTransportSecurityIntegrationTests {
 				TestOriginHeaderExchangeFilterFunction exchangeFilterFunction) {
 			var transport = WebClientStreamableHttpTransport
 				.builder(WebClient.builder().baseUrl(baseUrl).filter(exchangeFilterFunction))
-				.jsonMapper(McpJsonMapper.getDefault())
+				.jsonMapper(McpJsonDefaults.getDefaultMcpJsonMapper())
 				.openConnectionOnStartup(true)
 				.build();
 			return McpClient.sync(transport).initializationTimeout(Duration.ofMillis(500)).build();
@@ -259,7 +260,7 @@ public class WebFluxServerTransportSecurityIntegrationTests {
 				TestOriginHeaderExchangeFilterFunction exchangeFilterFunction) {
 			var transport = WebClientStreamableHttpTransport
 				.builder(WebClient.builder().baseUrl(baseUrl).filter(exchangeFilterFunction))
-				.jsonMapper(McpJsonMapper.getDefault())
+				.jsonMapper(McpJsonDefaults.getDefaultMcpJsonMapper())
 				.openConnectionOnStartup(true)
 				.build();
 			return McpClient.sync(transport).initializationTimeout(Duration.ofMillis(500)).build();

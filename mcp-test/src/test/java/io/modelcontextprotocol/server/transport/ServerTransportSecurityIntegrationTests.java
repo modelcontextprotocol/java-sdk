@@ -15,7 +15,7 @@ import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
-import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.spec.McpSchema;
 import jakarta.servlet.http.HttpServlet;
@@ -195,7 +195,7 @@ class ServerTransportSecurityIntegrationTests {
 		public McpSyncClient createMcpClient(String baseUrl, TestRequestCustomizer requestCustomizer) {
 			var transport = HttpClientSseClientTransport.builder(baseUrl)
 				.httpRequestCustomizer(requestCustomizer)
-				.jsonMapper(McpJsonMapper.getDefault())
+				.jsonMapper(McpJsonDefaults.getDefaultMcpJsonMapper())
 				.build();
 			return McpClient.sync(transport).initializationTimeout(Duration.ofMillis(500)).build();
 		}
@@ -226,7 +226,7 @@ class ServerTransportSecurityIntegrationTests {
 		public McpSyncClient createMcpClient(String baseUrl, TestRequestCustomizer requestCustomizer) {
 			var transport = HttpClientStreamableHttpTransport.builder(baseUrl)
 				.httpRequestCustomizer(requestCustomizer)
-				.jsonMapper(McpJsonMapper.getDefault())
+				.jsonMapper(McpJsonDefaults.getDefaultMcpJsonMapper())
 				.openConnectionOnStartup(true)
 				.build();
 			return McpClient.sync(transport).initializationTimeout(Duration.ofMillis(500)).build();
@@ -258,7 +258,7 @@ class ServerTransportSecurityIntegrationTests {
 		public McpSyncClient createMcpClient(String baseUrl, TestRequestCustomizer requestCustomizer) {
 			var transport = HttpClientStreamableHttpTransport.builder(baseUrl)
 				.httpRequestCustomizer(requestCustomizer)
-				.jsonMapper(McpJsonMapper.getDefault())
+				.jsonMapper(McpJsonDefaults.getDefaultMcpJsonMapper())
 				.openConnectionOnStartup(true)
 				.build();
 			return McpClient.sync(transport).initializationTimeout(Duration.ofMillis(500)).build();

@@ -17,9 +17,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Test;
-
-import tools.jackson.databind.exc.InvalidTypeIdException;
 
 import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
 import net.javacrumbs.jsonunit.core.Option;
@@ -56,15 +55,19 @@ public class McpSchemaTests {
 	}
 
 	@Test
-	void testContentDeserializationWrongType() throws Exception {
-
+	void testContentDeserializationWrongType() {
 		assertThatThrownBy(() -> JSON_MAPPER.readValue("""
 				{"type":"WRONG","text":"XXX"}""", McpSchema.TextContent.class)).isInstanceOf(IOException.class)
-			.hasMessage("Failed to read value")
-			.cause()
-			.isInstanceOf(InvalidTypeIdException.class)
+			// Jackson 2 throws the InvalidTypeException directly, but Jackson 3 wraps it.
+			// Try to unwrap in case it's Jackson 3.
+			.extracting(throwable -> throwable.getCause() != null ? throwable.getCause() : throwable)
+			.asInstanceOf(InstanceOfAssertFactories.THROWABLE)
 			.hasMessageContaining(
-					"Could not resolve type id 'WRONG' as a subtype of `io.modelcontextprotocol.spec.McpSchema$TextContent`: known type ids = [audio, image, resource, resource_link, text]");
+					"Could not resolve type id 'WRONG' as a subtype of `io.modelcontextprotocol.spec.McpSchema$TextContent`: known type ids = [audio, image, resource, resource_link, text]")
+			.extracting(Object::getClass)
+			.extracting(Class::getSimpleName)
+			// Class name is the same for both Jackson 2 and 3, only the package differs.
+			.isEqualTo("InvalidTypeIdException");
 	}
 
 	@Test

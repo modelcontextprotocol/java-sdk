@@ -15,6 +15,7 @@ import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpStatelessSyncServer;
@@ -209,7 +210,7 @@ public class ServerTransportSecurityIntegrationTests {
 		McpSyncClient createMcpClient(McpSyncHttpClientRequestCustomizer requestCustomizer) {
 			var transport = HttpClientSseClientTransport.builder(baseUrl)
 				.httpRequestCustomizer(requestCustomizer)
-				.jsonMapper(McpJsonMapper.getDefault())
+				.jsonMapper(McpJsonDefaults.getDefaultMcpJsonMapper())
 				.build();
 			return McpClient.sync(transport).initializationTimeout(Duration.ofMillis(500)).build();
 		}
@@ -248,7 +249,7 @@ public class ServerTransportSecurityIntegrationTests {
 		McpSyncClient createMcpClient(McpSyncHttpClientRequestCustomizer requestCustomizer) {
 			var transport = HttpClientStreamableHttpTransport.builder(baseUrl)
 				.httpRequestCustomizer(requestCustomizer)
-				.jsonMapper(McpJsonMapper.getDefault())
+				.jsonMapper(McpJsonDefaults.getDefaultMcpJsonMapper())
 				.openConnectionOnStartup(true)
 				.build();
 			return McpClient.sync(transport).initializationTimeout(Duration.ofMillis(500)).build();
@@ -286,7 +287,7 @@ public class ServerTransportSecurityIntegrationTests {
 		McpSyncClient createMcpClient(McpSyncHttpClientRequestCustomizer requestCustomizer) {
 			var transport = HttpClientStreamableHttpTransport.builder(baseUrl)
 				.httpRequestCustomizer(requestCustomizer)
-				.jsonMapper(McpJsonMapper.getDefault())
+				.jsonMapper(McpJsonDefaults.getDefaultMcpJsonMapper())
 				.openConnectionOnStartup(true)
 				.build();
 			return McpClient.sync(transport).initializationTimeout(Duration.ofMillis(500)).build();
