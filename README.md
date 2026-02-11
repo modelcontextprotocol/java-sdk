@@ -83,11 +83,11 @@ The following sections explain what we chose, why it made sense, and how the cho
 
 ### 1. JSON Serialization
 
-* **SDK Choice**: Jackson for JSON serialization and deserialization, behind an SDK abstraction (`mcp-json`)
+* **SDK Choice**: Jackson for JSON serialization and deserialization, behind an SDK abstraction (package `io.modelcontextprotocol.json` in `mcp-core`)
 
 * **Why**: Jackson is widely adopted across the Java ecosystem, provides strong performance and a mature annotation model, and is familiar to the SDK team and many potential contributors.
 
-* **How we expose it**: Public APIs use a zero-dependency abstraction (`mcp-json`). Jackson is shipped as the default implementation (`mcp-jackson2`), but alternatives can be plugged in.
+* **How we expose it**: Public APIs use a bundled abstraction. Jackson is shipped as the default implementation (`mcp-json-jackson3`), but alternatives can be plugged in.
 
 * **How it fits the SDK**: This offers a pragmatic default while keeping flexibility for projects that prefer different JSON libraries.
 
@@ -168,14 +168,25 @@ MCP supports both clients (applications consuming MCP servers) and servers (appl
 
 The SDK is organized into modules to separate concerns and allow adopters to bring in only what they need:
 * `mcp-bom` – Dependency versions
-* `mcp-core` – Reference implementation (STDIO, JDK HttpClient, Servlet)
-* `mcp-json` – JSON abstraction
-* `mcp-jackson2` – Jackson implementation of JSON binding
-* `mcp` – Convenience bundle (core + Jackson)
+* `mcp-core` – Reference implementation (STDIO, JDK HttpClient, Servlet), JSON binding interface definitions
+* `mcp-json-jackson2` – Jackson 2 implementation of JSON binding
+* `mcp-json-jackson3` – Jackson 3 implementation of JSON binding
+* `mcp` – Convenience bundle (core + Jackson 3)
 * `mcp-test` – Shared testing utilities
 * `mcp-spring` – Spring integrations (WebClient, WebFlux, WebMVC)
 
 For example, a minimal adopter may depend only on `mcp` (core + Jackson), while a Spring-based application can use `mcp-spring` for deeper framework integration.
+
+Additionally, `mcp-test` contains integration tests for `mcp-core`.
+`mcp-core` needs a JSON implementation to run full integration tests.
+Implementations such as `mcp-json-jackson3`, depend on `mcp-core`, and therefore cannot be imported in `mcp-core` for tests.
+Instead, all integration tests that need a JSON implementation are now in `mcp-test`, and use `jackson3` by default.
+A `jackson2` maven profile allows to run integration tests with Jackson 2, like so:
+
+
+```bash
+./mvnw -pl mcp-test -am -Pjackson2 test
+```
 
 ### Future Directions
 
