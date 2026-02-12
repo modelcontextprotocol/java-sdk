@@ -21,12 +21,9 @@ import io.modelcontextprotocol.util.Assert;
  * @see ServerTransportSecurityValidator
  * @see ServerTransportSecurityException
  */
-public class DefaultServerTransportSecurityValidator implements ServerTransportSecurityValidator {
+public final class DefaultServerTransportSecurityValidator implements ServerTransportSecurityValidator {
 
 	private static final String ORIGIN_HEADER = "Origin";
-
-	private static final ServerTransportSecurityException INVALID_ORIGIN = new ServerTransportSecurityException(403,
-			"Invalid Origin header");
 
 	private final List<String> allowedOrigins;
 
@@ -35,7 +32,7 @@ public class DefaultServerTransportSecurityValidator implements ServerTransportS
 	 * @param allowedOrigins List of allowed origin patterns. Supports exact matches
 	 * (e.g., "http://example.com:8080") and wildcard ports (e.g., "http://example.com:*")
 	 */
-	public DefaultServerTransportSecurityValidator(List<String> allowedOrigins) {
+	private DefaultServerTransportSecurityValidator(List<String> allowedOrigins) {
 		Assert.notNull(allowedOrigins, "allowedOrigins must not be null");
 		this.allowedOrigins = allowedOrigins;
 	}
@@ -79,7 +76,7 @@ public class DefaultServerTransportSecurityValidator implements ServerTransportS
 
 		}
 
-		throw INVALID_ORIGIN;
+		throw new ServerTransportSecurityException(403, "Invalid Origin header");
 	}
 
 	/**

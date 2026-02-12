@@ -7,9 +7,6 @@ package io.modelcontextprotocol.server.transport;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.Collections;
-import java.util.Enumeration;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -137,7 +134,7 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		}
 
 		try {
-			Map<String, List<String>> headers = extractHeaders(request);
+			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
 			this.securityValidator.validateHeaders(headers);
 		}
 		catch (ServerTransportSecurityException e) {
@@ -230,21 +227,6 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		PrintWriter writer = response.getWriter();
 		writer.write(jsonError);
 		writer.flush();
-	}
-
-	/**
-	 * Extracts all headers from the HTTP servlet request into a map.
-	 * @param request The HTTP servlet request
-	 * @return A map of header names to their values
-	 */
-	private Map<String, List<String>> extractHeaders(HttpServletRequest request) {
-		Map<String, List<String>> headers = new HashMap<>();
-		Enumeration<String> names = request.getHeaderNames();
-		while (names.hasMoreElements()) {
-			String name = names.nextElement();
-			headers.put(name, Collections.list(request.getHeaders(name)));
-		}
-		return headers;
 	}
 
 	/**
