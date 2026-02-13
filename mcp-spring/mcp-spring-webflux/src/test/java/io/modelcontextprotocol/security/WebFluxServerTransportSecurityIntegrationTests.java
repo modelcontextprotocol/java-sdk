@@ -221,7 +221,7 @@ public class WebFluxServerTransportSecurityIntegrationTests {
 		public McpSyncClient createMcpClient(String baseUrl, TestHeaderExchangeFilterFunction exchangeFilterFunction) {
 			var transport = WebFluxSseClientTransport
 				.builder(WebClient.builder().baseUrl(baseUrl).filter(exchangeFilterFunction))
-				.jsonMapper(McpJsonDefaults.getDefaultMcpJsonMapper())
+				.jsonMapper(McpJsonDefaults.getMapper())
 				.build();
 			return McpClient.sync(transport).initializationTimeout(Duration.ofMillis(500)).build();
 		}
@@ -254,7 +254,7 @@ public class WebFluxServerTransportSecurityIntegrationTests {
 		public McpSyncClient createMcpClient(String baseUrl, TestHeaderExchangeFilterFunction exchangeFilterFunction) {
 			var transport = WebClientStreamableHttpTransport
 				.builder(WebClient.builder().baseUrl(baseUrl).filter(exchangeFilterFunction))
-				.jsonMapper(McpJsonDefaults.getDefaultMcpJsonMapper())
+				.jsonMapper(McpJsonDefaults.getMapper())
 				.openConnectionOnStartup(true)
 				.build();
 			return McpClient.sync(transport).initializationTimeout(Duration.ofMillis(500)).build();
@@ -288,7 +288,7 @@ public class WebFluxServerTransportSecurityIntegrationTests {
 		public McpSyncClient createMcpClient(String baseUrl, TestHeaderExchangeFilterFunction exchangeFilterFunction) {
 			var transport = WebClientStreamableHttpTransport
 				.builder(WebClient.builder().baseUrl(baseUrl).filter(exchangeFilterFunction))
-				.jsonMapper(McpJsonDefaults.getDefaultMcpJsonMapper())
+				.jsonMapper(McpJsonDefaults.getMapper())
 				.openConnectionOnStartup(true)
 				.build();
 			return McpClient.sync(transport).initializationTimeout(Duration.ofMillis(500)).build();

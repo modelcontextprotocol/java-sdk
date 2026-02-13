@@ -105,7 +105,7 @@ class WebMvcSseServerTransportProviderTests {
 				.baseUrl("http://localhost:" + PORT + "/")
 				.messageEndpoint(MESSAGE_ENDPOINT)
 				.sseEndpoint(WebMvcSseServerTransportProvider.DEFAULT_SSE_ENDPOINT)
-				.jsonMapper(McpJsonDefaults.getDefaultMcpJsonMapper())
+				.jsonMapper(McpJsonDefaults.getMapper())
 				.contextExtractor(req -> McpTransportContext.EMPTY)
 				.build();
 		}

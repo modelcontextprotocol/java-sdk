@@ -562,9 +562,8 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		 */
 		public WebFluxSseServerTransportProvider build() {
 			Assert.notNull(messageEndpoint, "Message endpoint must be set");
-			return new WebFluxSseServerTransportProvider(
-					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, baseUrl,
-					messageEndpoint, sseEndpoint, keepAliveInterval, contextExtractor, securityValidator);
+			return new WebFluxSseServerTransportProvider(jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
+					baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval, contextExtractor, securityValidator);
 		}
 
 	}

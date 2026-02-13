@@ -15,7 +15,7 @@ class JsonSchemaValidatorTest {
 
 	@Test
 	void shouldUseJackson2Mapper() {
-		assertThat(McpJsonDefaults.getDefaultJsonSchemaValidator()).isInstanceOf(DefaultJsonSchemaValidator.class);
+		assertThat(McpJsonDefaults.getSchemaValidator()).isInstanceOf(DefaultJsonSchemaValidator.class);
 	}
 
 }

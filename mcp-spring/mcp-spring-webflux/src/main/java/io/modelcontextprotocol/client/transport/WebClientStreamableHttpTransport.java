@@ -616,9 +616,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		 * @return a new instance of {@link WebClientStreamableHttpTransport}
 		 */
 		public WebClientStreamableHttpTransport build() {
-			return new WebClientStreamableHttpTransport(
-					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, webClientBuilder,
-					endpoint, resumableStreams, openConnectionOnStartup, supportedProtocolVersions);
+			return new WebClientStreamableHttpTransport(jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
+					webClientBuilder, endpoint, resumableStreams, openConnectionOnStartup, supportedProtocolVersions);
 		}
 
 	}

@@ -11,7 +11,7 @@ class CompleteCompletionSerializationTest {
 
 	@Test
 	void codeCompletionSerialization() throws IOException {
-		McpJsonMapper jsonMapper = McpJsonDefaults.getDefaultMcpJsonMapper();
+		McpJsonMapper jsonMapper = McpJsonDefaults.getMapper();
 		McpSchema.CompleteResult.CompleteCompletion codeComplete = new McpSchema.CompleteResult.CompleteCompletion(
 				Collections.emptyList(), 0, false);
 		String json = jsonMapper.writeValueAsString(codeComplete);

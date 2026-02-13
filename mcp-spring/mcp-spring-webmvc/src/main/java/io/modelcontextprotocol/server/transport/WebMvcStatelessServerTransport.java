@@ -264,9 +264,8 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 		 */
 		public WebMvcStatelessServerTransport build() {
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
-			return new WebMvcStatelessServerTransport(
-					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, mcpEndpoint,
-					contextExtractor, securityValidator);
+			return new WebMvcStatelessServerTransport(jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
+					mcpEndpoint, contextExtractor, securityValidator);
 		}
 
 	}

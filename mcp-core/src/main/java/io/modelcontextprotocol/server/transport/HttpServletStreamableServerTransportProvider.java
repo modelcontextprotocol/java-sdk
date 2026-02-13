@@ -895,8 +895,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		public HttpServletStreamableServerTransportProvider build() {
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 			return new HttpServletStreamableServerTransportProvider(
-					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, mcpEndpoint,
-					disallowDelete, contextExtractor, keepAliveInterval, securityValidator);
+					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, mcpEndpoint, disallowDelete,
+					contextExtractor, keepAliveInterval, securityValidator);
 		}
 
 	}

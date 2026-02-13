@@ -843,10 +843,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 */
 		public HttpClientStreamableHttpTransport build() {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
-			return new HttpClientStreamableHttpTransport(
-					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, httpClient,
-					requestBuilder, baseUri, endpoint, resumableStreams, openConnectionOnStartup, httpRequestCustomizer,
-					supportedProtocolVersions);
+			return new HttpClientStreamableHttpTransport(jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
+					httpClient, requestBuilder, baseUri, endpoint, resumableStreams, openConnectionOnStartup,
+					httpRequestCustomizer, supportedProtocolVersions);
 		}
 
 	}

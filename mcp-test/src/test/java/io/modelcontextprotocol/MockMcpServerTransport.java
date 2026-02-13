@@ -68,7 +68,7 @@ public class MockMcpServerTransport implements McpServerTransport {
 
 	@Override
 	public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
-		return McpJsonDefaults.getDefaultMcpJsonMapper().convertValue(data, typeRef);
+		return McpJsonDefaults.getMapper().convertValue(data, typeRef);
 	}
 
 }

@@ -70,7 +70,7 @@ class StdioServerTransportProviderTests {
 		when(mockSession.closeGracefully()).thenReturn(Mono.empty());
 		when(mockSession.sendNotification(any(), any())).thenReturn(Mono.empty());
 
-		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getDefaultMcpJsonMapper(), System.in,
+		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getMapper(), System.in,
 				testOutPrintStream);
 	}
 
@@ -101,8 +101,7 @@ class StdioServerTransportProviderTests {
 		String jsonMessage = "{\"jsonrpc\":\"2.0\",\"method\":\"test\",\"params\":{},\"id\":1}\n";
 		InputStream stream = new ByteArrayInputStream(jsonMessage.getBytes(StandardCharsets.UTF_8));
 
-		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getDefaultMcpJsonMapper(), stream,
-				System.out);
+		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getMapper(), stream, System.out);
 		// Set up a real session to capture the message
 		AtomicReference<McpSchema.JSONRPCMessage> capturedMessage = new AtomicReference<>();
 		CountDownLatch messageLatch = new CountDownLatch(1);
@@ -182,7 +181,7 @@ class StdioServerTransportProviderTests {
 	@Test
 	void shouldHandleNotificationBeforeSessionFactoryIsSet() {
 
-		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getDefaultMcpJsonMapper());
+		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getMapper());
 		// Send notification before setting session factory
 		StepVerifier.create(transportProvider.notifyClients("testNotification", Map.of("key", "value")))
 			.verifyErrorSatisfies(error -> {
@@ -197,8 +196,7 @@ class StdioServerTransportProviderTests {
 		String jsonMessage = "{invalid json}\n";
 		InputStream stream = new ByteArrayInputStream(jsonMessage.getBytes(StandardCharsets.UTF_8));
 
-		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getDefaultMcpJsonMapper(), stream,
-				testOutPrintStream);
+		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getMapper(), stream, testOutPrintStream);
 
 		// Set up a session factory
 		transportProvider.setSessionFactory(sessionFactory);

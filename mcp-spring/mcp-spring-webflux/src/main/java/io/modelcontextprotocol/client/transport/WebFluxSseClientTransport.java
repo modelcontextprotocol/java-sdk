@@ -405,7 +405,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 		 */
 		public WebFluxSseClientTransport build() {
 			return new WebFluxSseClientTransport(webClientBuilder,
-					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, sseEndpoint);
+					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, sseEndpoint);
 		}
 
 	}

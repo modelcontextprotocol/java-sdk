@@ -533,8 +533,8 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		public WebFluxStreamableServerTransportProvider build() {
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 			return new WebFluxStreamableServerTransportProvider(
-					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, mcpEndpoint,
-					contextExtractor, disallowDelete, keepAliveInterval, securityValidator);
+					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, mcpEndpoint, contextExtractor,
+					disallowDelete, keepAliveInterval, securityValidator);
 		}
 
 	}

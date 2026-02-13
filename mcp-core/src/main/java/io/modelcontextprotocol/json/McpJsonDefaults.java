@@ -9,8 +9,8 @@ import io.modelcontextprotocol.util.McpServiceLoader;
 
 /**
  * This class is to be used to provide access to the default McpJsonMapper and to the
- * default JsonSchemaValidator instances via the static methods: getDefaultMcpJsonMapper
- * and getDefaultJsonSchemaValidator.
+ * default JsonSchemaValidator instances via the static methods: getMapper and
+ * getSchemaValidator.
  * <p>
  * The initialization of (singleton) instances of this class is different in non-OSGi
  * environments and OSGi environments. Specifically, in non-OSGi environments The
@@ -51,7 +51,7 @@ public class McpJsonDefaults {
 		mcpMapperServiceLoader.unsetSupplier(supplier);
 	}
 
-	public synchronized static McpJsonMapper getDefaultMcpJsonMapper() {
+	public synchronized static McpJsonMapper getMapper() {
 		if (mcpMapperServiceLoader == null) {
 			new McpJsonDefaults();
 		}
@@ -66,7 +66,7 @@ public class McpJsonDefaults {
 		mcpValidatorServiceLoader.unsetSupplier(supplier);
 	}
 
-	public synchronized static JsonSchemaValidator getDefaultJsonSchemaValidator() {
+	public synchronized static JsonSchemaValidator getSchemaValidator() {
 		if (mcpValidatorServiceLoader == null) {
 			new McpJsonDefaults();
 		}

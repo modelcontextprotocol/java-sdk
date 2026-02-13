@@ -223,7 +223,7 @@ class ServerTransportSecurityIntegrationTests {
 		public McpSyncClient createMcpClient(String baseUrl, TestRequestCustomizer requestCustomizer) {
 			var transport = HttpClientSseClientTransport.builder(baseUrl)
 				.httpRequestCustomizer(requestCustomizer)
-				.jsonMapper(McpJsonDefaults.getDefaultMcpJsonMapper())
+				.jsonMapper(McpJsonDefaults.getMapper())
 				.build();
 			return McpClient.sync(transport).initializationTimeout(Duration.ofMillis(500)).build();
 		}
@@ -256,7 +256,7 @@ class ServerTransportSecurityIntegrationTests {
 		public McpSyncClient createMcpClient(String baseUrl, TestRequestCustomizer requestCustomizer) {
 			var transport = HttpClientStreamableHttpTransport.builder(baseUrl)
 				.httpRequestCustomizer(requestCustomizer)
-				.jsonMapper(McpJsonDefaults.getDefaultMcpJsonMapper())
+				.jsonMapper(McpJsonDefaults.getMapper())
 				.openConnectionOnStartup(true)
 				.build();
 			return McpClient.sync(transport).initializationTimeout(Duration.ofMillis(500)).build();
@@ -290,7 +290,7 @@ class ServerTransportSecurityIntegrationTests {
 		public McpSyncClient createMcpClient(String baseUrl, TestRequestCustomizer requestCustomizer) {
 			var transport = HttpClientStreamableHttpTransport.builder(baseUrl)
 				.httpRequestCustomizer(requestCustomizer)
-				.jsonMapper(McpJsonDefaults.getDefaultMcpJsonMapper())
+				.jsonMapper(McpJsonDefaults.getMapper())
 				.openConnectionOnStartup(true)
 				.build();
 			return McpClient.sync(transport).initializationTimeout(Duration.ofMillis(500)).build();

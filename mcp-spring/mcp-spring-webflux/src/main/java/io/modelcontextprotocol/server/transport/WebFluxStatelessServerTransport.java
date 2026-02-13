@@ -245,9 +245,8 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 		 */
 		public WebFluxStatelessServerTransport build() {
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
-			return new WebFluxStatelessServerTransport(
-					jsonMapper == null ? McpJsonDefaults.getDefaultMcpJsonMapper() : jsonMapper, mcpEndpoint,
-					contextExtractor, securityValidator);
+			return new WebFluxStatelessServerTransport(jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
+					mcpEndpoint, contextExtractor, securityValidator);
 		}
 
 	}
