@@ -192,7 +192,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		 * This constructor is deprecated and will be removed or made {@code protected} or
 		 * {@code private} in a future release.
 		 */
-		@Deprecated(forRemoval = true)
+		@Deprecated
 		public Builder(String baseUri) {
 			Assert.hasText(baseUri, "baseUri must not be empty");
 			this.baseUri = baseUri;
@@ -254,10 +254,24 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		}
 
 		/**
-		 * Customizes the HTTP client builder.
+		 * Applies the given consumer to the shared {@link HttpRequest.Builder} <b>once,
+		 * at build time</b>. Any headers set here (e.g., {@code Authorization}) are
+		 * frozen into the template and copied to every subsequent request via
+		 * {@code requestBuilder.copy()}. They <b>cannot be updated</b> after the
+		 * transport is built.
+		 * <p>
+		 * For dynamic, per-request customization (e.g., OAuth token refresh), use
+		 * {@link #httpRequestCustomizer(McpSyncHttpClientRequestCustomizer)} or
+		 * {@link #asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer)}
+		 * instead.
 		 * @param requestCustomizer the consumer to customize the HTTP request builder
 		 * @return this builder
+		 * @deprecated Use
+		 * {@link #httpRequestCustomizer(McpSyncHttpClientRequestCustomizer)} or
+		 * {@link #asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer)} which
+		 * run on every request and support dynamic headers.
 		 */
+		@Deprecated
 		public Builder customizeRequest(final Consumer<HttpRequest.Builder> requestCustomizer) {
 			Assert.notNull(requestCustomizer, "requestCustomizer must not be null");
 			requestCustomizer.accept(requestBuilder);
