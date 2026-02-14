@@ -33,9 +33,8 @@
 						<configuration>
 							<bnd><![CDATA[
 								Bundle-Name:            Bundle ${project.groupId} : ${project.artifactId}
-								version:                ${versionmask;===;${version_cleanup;${project.version}}}
 								Bundle-SymbolicName:    ${project.groupId}.${project.artifactId}
-								Bundle-Version:         ${version}
+								Bundle-Version:         ${project.version}
 								Automatic-Module-Name:  ${project.groupId}.${project.artifactId}
 								Bundle-ActivationPolicy: lazy
 								Import-Package:         io.modelcontextprotocol.json,io.modelcontextprotocol.json.schema, \
