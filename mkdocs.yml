@@ -8,7 +8,7 @@ edit_uri: edit/main/docs/
 theme:
   name: material
   favicon: images/favicon.svg
-  logo: images/logo-dark.svg
+  logo: images/logo-light.svg
   palette:
     - scheme: default
       primary: green
@@ -65,6 +65,9 @@ markdown_extensions:
   - pymdownx.caret
   - pymdownx.keys
   - pymdownx.tilde
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - attr_list
   - md_in_html
   - tables

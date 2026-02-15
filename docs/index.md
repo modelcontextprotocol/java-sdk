@@ -5,28 +5,28 @@ description: Introduction to the Model Context Protocol (MCP) Java SDK
 
 # MCP Java SDK
 
-Java SDK for the [Model Context Protocol](https://modelcontextprotocol.org/docs/concepts/architecture)
+Java SDK for the [Model Context Protocol](https://modelcontextprotocol.io/docs/concepts/architecture)
 enables standardized integration between AI models and tools.
 
 ## Features
 
 - MCP Client and MCP Server implementations supporting:
-    - Protocol [version compatibility negotiation](https://spec.modelcontextprotocol.io/specification/2024-11-05/basic/lifecycle/#initialization) with multiple protocol versions
-    - [Tool](https://spec.modelcontextprotocol.io/specification/2024-11-05/server/tools/) discovery, execution, list change notifications, and structured output with schema validation
-    - [Resource](https://spec.modelcontextprotocol.io/specification/2024-11-05/server/resources/) management with URI templates
-    - [Roots](https://spec.modelcontextprotocol.io/specification/2024-11-05/client/roots/) list management and notifications
-    - [Prompt](https://spec.modelcontextprotocol.io/specification/2024-11-05/server/prompts/) handling and management
-    - [Sampling](https://spec.modelcontextprotocol.io/specification/2024-11-05/client/sampling/) support for AI model interactions
+    - Protocol [version compatibility negotiation](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#initialization) with multiple protocol versions
+    - [Tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools) discovery, execution, list change notifications, and structured output with schema validation
+    - [Resources](https://modelcontextprotocol.io/specification/2025-11-25/server/resources) management with URI templates
+    - [Roots](https://modelcontextprotocol.io/specification/2025-11-25/client/roots) list management and notifications
+    - [Prompts](https://modelcontextprotocol.io/specification/2025-11-25/server/prompts) handling and management
+    - [Sampling](https://modelcontextprotocol.io/specification/2025-11-25/client/sampling) support for AI model interactions
     - [Elicitation](https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation) support for requesting user input from servers
     - [Completions](https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/completion) for argument autocompletion suggestions
-    - Progress notifications for tracking long-running operations
-    - Structured logging with configurable severity levels
+    - [Progress](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/progress) - progress notifications for tracking long-running operations
+    - [Logging](https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/logging) - structured logging with configurable severity levels
 - Multiple transport implementations:
     - Default transports (included in core `mcp` module, no external web frameworks required):
-        - Stdio-based transport for process-based communication
+        - [STDIO](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#stdio)-based transport for process-based communication
         - Java HttpClient-based SSE client transport for HTTP SSE Client-side streaming
         - Servlet-based SSE server transport for HTTP SSE Server streaming
-        - **Streamable HTTP** transport for efficient bidirectional communication (client and server)
+        - [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#streamable-http) transport for efficient bidirectional communication (client and server)
     - Optional Spring-based transports (convenience if using Spring Framework):
         - WebFlux SSE client and server transports for reactive HTTP streaming
         - WebFlux Streamable HTTP server transport
@@ -41,7 +41,8 @@ enables standardized integration between AI models and tools.
 !!! tip
     The core `io.modelcontextprotocol.sdk:mcp` module provides default STDIO, SSE, and Streamable HTTP client and server transport implementations without requiring external web frameworks.
 
-    Spring-specific transports are available as optional dependencies for convenience when using the [Spring Framework](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html).
+    Spring-specific transports are available as optional dependencies for convenience when using the [MCP Client Boot Starter](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html) and [MCP Server Boot Starter](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-server-boot-starter-docs.html).  
+    Also consider the [MCP Annotations](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-annotations-overview.html) and [MCP Security](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-security.html).
 
 ## Architecture
 
