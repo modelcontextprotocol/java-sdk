@@ -22,6 +22,7 @@
 
 	<modules>
 		<module>client-jdk-http-client</module>
+		<module>client-spring-http-client</module>
 		<module>server-servlet</module>
 	</modules>
 
