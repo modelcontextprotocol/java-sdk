@@ -4,6 +4,10 @@
 
 package io.modelcontextprotocol.server;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -308,7 +312,7 @@ class HttpServletStatelessIntegrationTests {
 				"type", "object",
 				"properties", Map.of(
 					"name", Map.of("type", "string"),
-					"age", Map.of("type", "number")),					
+					"age", Map.of("type", "number")),
 				"required", List.of("name", "age"))); // @formatter:on
 
 		Tool calculatorTool = Tool.builder()
@@ -637,6 +641,42 @@ class HttpServletStatelessIntegrationTests {
 		assertThat(jsonrpcResponse.error().message()).isEqualTo("testing");
 
 		mcpServer.close();
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "tools/list", "resources/list", "prompts/list" })
+	void testMissingHandlerReturnsMethodNotFoundError(String method) throws Exception {
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().build())
+			.build();
+
+		HttpResponse<String> response;
+
+		try {
+			HttpRequest request = HttpRequest.newBuilder()
+				.uri(URI.create("http://localhost:" + PORT + CUSTOM_MESSAGE_ENDPOINT))
+				.header("Content-Type", "application/json")
+				.header("Accept", "application/json, text/event-stream")
+				.POST(HttpRequest.BodyPublishers.ofString("""
+						{
+							"jsonrpc": "2.0",
+							"method": "%s",
+							"id": "test-request-123",
+							"params": {}
+						}
+						""".formatted(method)))
+				.build();
+
+			response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+
+		final var responseBody = response.body();
+		assertThatJson(responseBody).inPath("error.code").isEqualTo(McpSchema.ErrorCodes.METHOD_NOT_FOUND);
+		assertThatJson(responseBody).inPath("error.message").isEqualTo("Method not found: " + method);
 	}
 
 	private double evaluateExpression(String expression) {
