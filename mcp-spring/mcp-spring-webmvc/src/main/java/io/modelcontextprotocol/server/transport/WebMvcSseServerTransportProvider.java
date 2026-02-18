@@ -282,10 +282,13 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			logger.debug("Creating new SSE connection for session: {}", sessionId);
 			sseBuilder.onComplete(() -> {
 				logger.debug("SSE connection completed for session: {}", sessionId);
+				// explicitly close the session when the SSE connection is completed
+				session.close();
 				sessions.remove(sessionId);
 			});
 			sseBuilder.onTimeout(() -> {
 				logger.debug("SSE connection timed out for session: {}", sessionId);
+				session.close();
 				sessions.remove(sessionId);
 			});
 			this.sessions.put(sessionId, session);
@@ -409,6 +412,12 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				try {
 					String jsonText = jsonMapper.writeValueAsString(message);
 					sseBuilder.event(MESSAGE_EVENT_TYPE).data(jsonText);
+				}
+				catch (IOException e) {
+					if (logger.isDebugEnabled()) {
+						logger.debug("Failed to send message: {}", e.getMessage());
+					}
+					sseBuilder.error(e);
 				}
 				catch (Exception e) {
 					logger.error("Failed to send message: {}", e.getMessage());
