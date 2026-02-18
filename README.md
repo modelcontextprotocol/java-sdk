@@ -90,7 +90,7 @@ The following sections explain what we chose, why it made sense, and how the cho
 
 * **Why**: Jackson is widely adopted across the Java ecosystem, provides strong performance and a mature annotation model, and is familiar to the SDK team and many potential contributors.
 
-* **How we expose it**: Public APIs use a bundled abstraction. Jackson is shipped as the default implementation (`mcp-json-jackson3`), but alternatives can be plugged in.
+* **How we expose it**: Public APIs use a bundled abstraction. Jackson is shipped as the default implementation (`mcp-json-jackson2`), but alternatives can be plugged in.
 
 * **How it fits the SDK**: This offers a pragmatic default while keeping flexibility for projects that prefer different JSON libraries.
 
@@ -174,7 +174,7 @@ The SDK is organized into modules to separate concerns and allow adopters to bri
 * `mcp-core` – Reference implementation (STDIO, JDK HttpClient, Servlet), JSON binding interface definitions
 * `mcp-json-jackson2` – Jackson 2 implementation of JSON binding
 * `mcp-json-jackson3` – Jackson 3 implementation of JSON binding
-* `mcp` – Convenience bundle (core + Jackson 3)
+* `mcp` – Convenience bundle (core + Jackson 2)
 * `mcp-test` – Shared testing utilities
 * `mcp-spring` – Spring integrations (WebClient, WebFlux, WebMVC)
 
