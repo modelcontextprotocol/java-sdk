@@ -309,13 +309,15 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 				}
 				else {
 					// Establish new listening stream
-					McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
+					Mono<McpStreamableServerSession.McpStreamableServerSessionStream> listeningStream = session
 						.listeningStream(sessionTransport);
-
-					sseBuilder.onComplete(() -> {
+					listeningStream.subscribe(serverSessionStream -> sseBuilder.onComplete(() -> {
 						logger.debug("SSE connection completed for session: {}", sessionId);
-						listeningStream.close();
-					});
+						serverSessionStream.close();
+					}), error -> {
+						sseBuilder.error(error);
+						logger.error("Failed to create listening stream", error);
+					}, () -> logger.debug("Listening stream created successfully"));
 				}
 			}, Duration.ZERO);
 		}

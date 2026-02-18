@@ -18,7 +18,7 @@
     <logger name="io.modelcontextprotocol.server.transport" level="INFO"/>
 
     <!-- Spec package -->
-    <logger name="io.modelcontextprotocol.spec" level="INFO"/>
+    <logger name="io.modelcontextprotocol.spec" level="DEBUG"/>
 
     <!-- Root logger -->
     <root level="INFO">
