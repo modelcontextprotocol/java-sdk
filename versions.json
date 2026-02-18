@@ -3,8 +3,15 @@
     "version": "0.18.0-SNAPSHOT",
     "title": "0.18.0-SNAPSHOT",
     "aliases": [
-      "dev",
-      "latest-snapshot"
+      "latest-snapshot",
+      "dev"
+    ]
+  },
+  {
+    "version": "0.18.0",
+    "title": "0.18.0",
+    "aliases": [
+      "latest"
     ]
   }
 ]
