@@ -2,7 +2,7 @@
 name: Miscellaneous
 about: Suggest an improvement for this project
 title: ''
-labels: 'status: waiting-for-triage'
+labels: status/waiting for triage
 assignees: ''
 
 ---

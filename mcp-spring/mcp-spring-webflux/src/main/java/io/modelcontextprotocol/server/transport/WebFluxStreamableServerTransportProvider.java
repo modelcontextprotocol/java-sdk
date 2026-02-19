@@ -1,12 +1,13 @@
 /*
- * Copyright 2025-2025 the original author or authors.
+ * Copyright 2025-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server.transport;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.server.DefaultMcpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpError;
@@ -15,7 +16,6 @@ import io.modelcontextprotocol.spec.McpStreamableServerSession;
 import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.ProtocolVersions;
-import io.modelcontextprotocol.server.McpTransportContext;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.KeepAliveScheduler;
 
@@ -37,6 +37,7 @@ import reactor.core.publisher.Mono;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -50,7 +51,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 	public static final String MESSAGE_EVENT_TYPE = "message";
 
-	private final ObjectMapper objectMapper;
+	private final McpJsonMapper jsonMapper;
 
 	private final String mcpEndpoint;
 
@@ -68,17 +69,24 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 	private KeepAliveScheduler keepAliveScheduler;
 
-	private WebFluxStreamableServerTransportProvider(ObjectMapper objectMapper, String mcpEndpoint,
+	/**
+	 * Security validator for validating HTTP requests.
+	 */
+	private final ServerTransportSecurityValidator securityValidator;
+
+	private WebFluxStreamableServerTransportProvider(McpJsonMapper jsonMapper, String mcpEndpoint,
 			McpTransportContextExtractor<ServerRequest> contextExtractor, boolean disallowDelete,
-			Duration keepAliveInterval) {
-		Assert.notNull(objectMapper, "ObjectMapper must not be null");
+			Duration keepAliveInterval, ServerTransportSecurityValidator securityValidator) {
+		Assert.notNull(jsonMapper, "JsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "Message endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
+		Assert.notNull(securityValidator, "Security validator must not be null");
 
-		this.objectMapper = objectMapper;
+		this.jsonMapper = jsonMapper;
 		this.mcpEndpoint = mcpEndpoint;
 		this.contextExtractor = contextExtractor;
 		this.disallowDelete = disallowDelete;
+		this.securityValidator = securityValidator;
 		this.routerFunction = RouterFunctions.route()
 			.GET(this.mcpEndpoint, this::handleGet)
 			.POST(this.mcpEndpoint, this::handlePost)
@@ -98,7 +106,8 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 	@Override
 	public List<String> protocolVersions() {
-		return List.of(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26);
+		return List.of(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26,
+				ProtocolVersions.MCP_2025_06_18, ProtocolVersions.MCP_2025_11_25);
 	}
 
 	@Override
@@ -166,7 +175,15 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
+		try {
+			Map<String, List<String>> headers = request.headers().asHttpHeaders();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			return ServerResponse.status(e.getStatusCode()).bodyValue(e.getMessage());
+		}
+
+		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		return Mono.defer(() -> {
 			List<MediaType> acceptHeaders = request.headers().asHttpHeaders().getAccept();
@@ -174,7 +191,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 				return ServerResponse.badRequest().build();
 			}
 
-			if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
+			if (request.headers().header(HttpHeaders.MCP_SESSION_ID).isEmpty()) {
 				return ServerResponse.badRequest().build(); // TODO: say we need a session
 															// id
 			}
@@ -187,11 +204,13 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 				return ServerResponse.notFound().build();
 			}
 
-			if (request.headers().asHttpHeaders().containsKey(HttpHeaders.LAST_EVENT_ID)) {
+			if (!request.headers().header(HttpHeaders.LAST_EVENT_ID).isEmpty()) {
 				String lastId = request.headers().asHttpHeaders().getFirst(HttpHeaders.LAST_EVENT_ID);
 				return ServerResponse.ok()
 					.contentType(MediaType.TEXT_EVENT_STREAM)
-					.body(session.replay(lastId), ServerSentEvent.class);
+					.body(session.replay(lastId)
+						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext)),
+							ServerSentEvent.class);
 			}
 
 			return ServerResponse.ok()
@@ -202,7 +221,9 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 					McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
 						.listeningStream(sessionTransport);
 					sink.onDispose(listeningStream::close);
-				}), ServerSentEvent.class);
+					// TODO Clarify why the outer context is not present in the
+					// Flux.create sink?
+				}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext)), ServerSentEvent.class);
 
 		}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext));
 	}
@@ -217,7 +238,15 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
+		try {
+			Map<String, List<String>> headers = request.headers().asHttpHeaders();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			return ServerResponse.status(e.getStatusCode()).bodyValue(e.getMessage());
+		}
+
+		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		List<MediaType> acceptHeaders = request.headers().asHttpHeaders().getAccept();
 		if (!(acceptHeaders.contains(MediaType.APPLICATION_JSON)
@@ -227,12 +256,13 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 		return request.bodyToMono(String.class).<ServerResponse>flatMap(body -> {
 			try {
-				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
+				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
 				if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest
 						&& jsonrpcRequest.method().equals(McpSchema.METHOD_INITIALIZE)) {
-					McpSchema.InitializeRequest initializeRequest = objectMapper.convertValue(jsonrpcRequest.params(),
-							new TypeReference<McpSchema.InitializeRequest>() {
-							});
+					var typeReference = new TypeRef<McpSchema.InitializeRequest>() {
+					};
+					McpSchema.InitializeRequest initializeRequest = jsonMapper.convertValue(jsonrpcRequest.params(),
+							typeReference);
 					McpStreamableServerSession.McpStreamableServerSessionInit init = this.sessionFactory
 						.startSession(initializeRequest);
 					sessions.put(init.session().getId(), init.session());
@@ -240,7 +270,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 						McpSchema.JSONRPCResponse jsonrpcResponse = new McpSchema.JSONRPCResponse(
 								McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), initializeResult, null);
 						try {
-							return this.objectMapper.writeValueAsString(jsonrpcResponse);
+							return this.jsonMapper.writeValueAsString(jsonrpcResponse);
 						}
 						catch (IOException e) {
 							logger.warn("Failed to serialize initResponse", e);
@@ -253,7 +283,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 							.bodyValue(initResult));
 				}
 
-				if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
+				if (request.headers().header(HttpHeaders.MCP_SESSION_ID).isEmpty()) {
 					return ServerResponse.badRequest().bodyValue(new McpError("Session ID missing"));
 				}
 
@@ -282,7 +312,10 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 								return true;
 							}).contextWrite(sink.contextView()).subscribe();
 							sink.onCancel(streamSubscription);
-						}), ServerSentEvent.class);
+							// TODO Clarify why the outer context is not present in the
+							// Flux.create sink?
+						}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext)),
+								ServerSentEvent.class);
 				}
 				else {
 					return ServerResponse.badRequest().bodyValue(new McpError("Unknown message type"));
@@ -302,10 +335,18 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).bodyValue("Server is shutting down");
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.extract(request, new DefaultMcpTransportContext());
+		try {
+			Map<String, List<String>> headers = request.headers().asHttpHeaders();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			return ServerResponse.status(e.getStatusCode()).bodyValue(e.getMessage());
+		}
+
+		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		return Mono.defer(() -> {
-			if (!request.headers().asHttpHeaders().containsKey(HttpHeaders.MCP_SESSION_ID)) {
+			if (request.headers().header(HttpHeaders.MCP_SESSION_ID).isEmpty()) {
 				return ServerResponse.badRequest().build(); // TODO: say we need a session
 															// id
 			}
@@ -343,7 +384,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message, String messageId) {
 			return Mono.fromSupplier(() -> {
 				try {
-					return objectMapper.writeValueAsString(message);
+					return jsonMapper.writeValueAsString(message);
 				}
 				catch (IOException e) {
 					throw Exceptions.propagate(e);
@@ -363,8 +404,8 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		}
 
 		@Override
-		public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-			return objectMapper.convertValue(data, typeRef);
+		public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+			return jsonMapper.convertValue(data, typeRef);
 		}
 
 		@Override
@@ -391,30 +432,33 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 	 */
 	public static class Builder {
 
-		private ObjectMapper objectMapper;
+		private McpJsonMapper jsonMapper;
 
 		private String mcpEndpoint = "/mcp";
 
-		private McpTransportContextExtractor<ServerRequest> contextExtractor = (serverRequest, context) -> context;
+		private McpTransportContextExtractor<ServerRequest> contextExtractor = (
+				serverRequest) -> McpTransportContext.EMPTY;
 
 		private boolean disallowDelete;
 
 		private Duration keepAliveInterval;
+
+		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
 
 		private Builder() {
 			// used by a static method
 		}
 
 		/**
-		 * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
-		 * messages.
-		 * @param objectMapper The ObjectMapper instance. Must not be null.
+		 * Sets the {@link McpJsonMapper} to use for JSON serialization/deserialization of
+		 * MCP messages.
+		 * @param jsonMapper The {@link McpJsonMapper} instance. Must not be null.
 		 * @return this builder instance
-		 * @throws IllegalArgumentException if objectMapper is null
+		 * @throws IllegalArgumentException if jsonMapper is null
 		 */
-		public Builder objectMapper(ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "ObjectMapper must not be null");
-			this.objectMapper = objectMapper;
+		public Builder jsonMapper(McpJsonMapper jsonMapper) {
+			Assert.notNull(jsonMapper, "McpJsonMapper must not be null");
+			this.jsonMapper = jsonMapper;
 			return this;
 		}
 
@@ -469,17 +513,28 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		}
 
 		/**
+		 * Sets the security validator for validating HTTP requests.
+		 * @param securityValidator The security validator to use. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if securityValidator is null
+		 */
+		public Builder securityValidator(ServerTransportSecurityValidator securityValidator) {
+			Assert.notNull(securityValidator, "Security validator must not be null");
+			this.securityValidator = securityValidator;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link WebFluxStreamableServerTransportProvider} with
 		 * the configured settings.
 		 * @return A new WebFluxStreamableServerTransportProvider instance
 		 * @throws IllegalStateException if required parameters are not set
 		 */
 		public WebFluxStreamableServerTransportProvider build() {
-			Assert.notNull(objectMapper, "ObjectMapper must be set");
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
-
-			return new WebFluxStreamableServerTransportProvider(objectMapper, mcpEndpoint, contextExtractor,
-					disallowDelete, keepAliveInterval);
+			return new WebFluxStreamableServerTransportProvider(
+					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, mcpEndpoint, contextExtractor,
+					disallowDelete, keepAliveInterval, securityValidator);
 		}
 
 	}

@@ -6,20 +6,21 @@ package io.modelcontextprotocol.server;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
+import java.util.stream.Stream;
 
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.provider.Arguments;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.modelcontextprotocol.AbstractStatelessIntegrationTests;
 import io.modelcontextprotocol.client.McpClient;
@@ -39,6 +40,10 @@ class WebMvcStatelessIntegrationTests extends AbstractStatelessIntegrationTests 
 
 	private WebMvcStatelessServerTransport mcpServerTransport;
 
+	static Stream<Arguments> clientsForTesting() {
+		return Stream.of(Arguments.of("httpclient"), Arguments.of("webflux"));
+	}
+
 	@Configuration
 	@EnableWebMvc
 	static class TestConfig {
@@ -46,10 +51,7 @@ class WebMvcStatelessIntegrationTests extends AbstractStatelessIntegrationTests 
 		@Bean
 		public WebMvcStatelessServerTransport webMvcStatelessServerTransport() {
 
-			return WebMvcStatelessServerTransport.builder()
-				.objectMapper(new ObjectMapper())
-				.messageEndpoint(MESSAGE_ENDPOINT)
-				.build();
+			return WebMvcStatelessServerTransport.builder().messageEndpoint(MESSAGE_ENDPOINT).build();
 
 		}
 

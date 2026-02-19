@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol.client;
 
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Timeout;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.testcontainers.containers.GenericContainer;
@@ -17,10 +19,9 @@ public class WebClientStreamableHttpAsyncClientTests extends AbstractMcpAsyncCli
 
 	static String host = "http://localhost:3001";
 
-	// Uses the https://github.com/tzolov/mcp-everything-server-docker-image
 	@SuppressWarnings("resource")
-	GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v2")
-		.withCommand("node dist/index.js streamableHttp")
+	static GenericContainer<?> container = new GenericContainer<>("docker.io/node:lts-alpine3.23")
+		.withCommand("npx -y @modelcontextprotocol/server-everything@2025.12.18 streamableHttp")
 		.withLogConsumer(outputFrame -> System.out.println(outputFrame.getUtf8String()))
 		.withExposedPorts(3001)
 		.waitingFor(Wait.forHttp("/").forStatusCode(404));
@@ -30,15 +31,15 @@ public class WebClientStreamableHttpAsyncClientTests extends AbstractMcpAsyncCli
 		return WebClientStreamableHttpTransport.builder(WebClient.builder().baseUrl(host)).build();
 	}
 
-	@Override
-	protected void onStart() {
+	@BeforeAll
+	static void startContainer() {
 		container.start();
 		int port = container.getMappedPort(3001);
 		host = "http://" + container.getHost() + ":" + port;
 	}
 
-	@Override
-	public void onClose() {
+	@AfterAll
+	static void stopContainer() {
 		container.stop();
 	}
 

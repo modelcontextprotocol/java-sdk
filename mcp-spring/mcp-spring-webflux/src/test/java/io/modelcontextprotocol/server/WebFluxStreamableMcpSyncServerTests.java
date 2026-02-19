@@ -4,7 +4,6 @@
 
 package io.modelcontextprotocol.server;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.server.transport.WebFluxStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import org.junit.jupiter.api.Timeout;
@@ -32,7 +31,6 @@ class WebFluxStreamableMcpSyncServerTests extends AbstractMcpSyncServerTests {
 
 	private McpStreamableServerTransportProvider createMcpTransportProvider() {
 		var transportProvider = WebFluxStreamableServerTransportProvider.builder()
-			.objectMapper(new ObjectMapper())
 			.messageEndpoint(MESSAGE_ENDPOINT)
 			.build();
 

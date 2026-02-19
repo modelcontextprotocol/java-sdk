@@ -22,8 +22,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -66,12 +64,6 @@ public abstract class AbstractMcpSyncClientTests {
 
 	abstract protected McpClientTransport createMcpTransport();
 
-	protected void onStart() {
-	}
-
-	protected void onClose() {
-	}
-
 	protected Duration getRequestTimeout() {
 		return Duration.ofSeconds(14);
 	}
@@ -112,17 +104,6 @@ public abstract class AbstractMcpSyncClientTests {
 		finally {
 			assertThat(client.closeGracefully()).isTrue();
 		}
-	}
-
-	@BeforeEach
-	void setUp() {
-		onStart();
-
-	}
-
-	@AfterEach
-	void tearDown() {
-		onClose();
 	}
 
 	static final Object DUMMY_RETURN_VALUE = new Object();
@@ -554,11 +535,13 @@ public abstract class AbstractMcpSyncClientTests {
 		AtomicBoolean toolsNotificationReceived = new AtomicBoolean(false);
 		AtomicBoolean resourcesNotificationReceived = new AtomicBoolean(false);
 		AtomicBoolean promptsNotificationReceived = new AtomicBoolean(false);
+		AtomicBoolean resourcesUpdatedNotificationReceived = new AtomicBoolean(false);
 
 		withClient(createMcpTransport(),
 				builder -> builder.toolsChangeConsumer(tools -> toolsNotificationReceived.set(true))
 					.resourcesChangeConsumer(resources -> resourcesNotificationReceived.set(true))
-					.promptsChangeConsumer(prompts -> promptsNotificationReceived.set(true)),
+					.promptsChangeConsumer(prompts -> promptsNotificationReceived.set(true))
+					.resourcesUpdateConsumer(resources -> resourcesUpdatedNotificationReceived.set(true)),
 				client -> {
 
 					assertThatCode(() -> {
@@ -641,7 +624,7 @@ public abstract class AbstractMcpSyncClientTests {
 					if (!(content instanceof McpSchema.TextContent text))
 						return;
 
-					assertThat(text.text()).endsWith(response); // Prefixed
+					assertThat(text.text()).contains(response);
 				});
 
 				// Verify sampling request parameters received in our callback

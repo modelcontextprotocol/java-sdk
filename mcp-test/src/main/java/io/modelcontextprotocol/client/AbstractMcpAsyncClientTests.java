@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.client;
 
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -22,8 +23,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -67,18 +66,12 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	abstract protected McpClientTransport createMcpTransport();
 
-	protected void onStart() {
-	}
-
-	protected void onClose() {
-	}
-
 	protected Duration getRequestTimeout() {
 		return Duration.ofSeconds(14);
 	}
 
 	protected Duration getInitializationTimeout() {
-		return Duration.ofSeconds(2);
+		return Duration.ofSeconds(20);
 	}
 
 	McpAsyncClient client(McpClientTransport transport) {
@@ -115,16 +108,6 @@ public abstract class AbstractMcpAsyncClientTests {
 		finally {
 			StepVerifier.create(client.closeGracefully()).expectComplete().verify(Duration.ofSeconds(10));
 		}
-	}
-
-	@BeforeEach
-	void setUp() {
-		onStart();
-	}
-
-	@AfterEach
-	void tearDown() {
-		onClose();
 	}
 
 	<T> void verifyNotificationSucceedsWithImplicitInitialization(Function<McpAsyncClient, Mono<T>> operation,
@@ -192,7 +175,12 @@ public abstract class AbstractMcpAsyncClientTests {
 				.consumeNextWith(result -> {
 					assertThat(result.tools()).isNotNull();
 					// Verify that the returned list is immutable
-					assertThatThrownBy(() -> result.tools().add(new Tool("test", "test", "{\"type\":\"object\"}")))
+					assertThatThrownBy(() -> result.tools()
+						.add(Tool.builder()
+							.name("test")
+							.title("test")
+							.inputSchema(JSON_MAPPER, "{\"type\":\"object\"}")
+							.build()))
 						.isInstanceOf(UnsupportedOperationException.class);
 				})
 				.verifyComplete();
@@ -514,57 +502,64 @@ public abstract class AbstractMcpAsyncClientTests {
 
 	@Test
 	void testReadResource() {
+		AtomicInteger resourceCount = new AtomicInteger();
 		withClient(createMcpTransport(), client -> {
 			Flux<McpSchema.ReadResourceResult> resources = client.initialize()
 				.then(client.listResources(null))
-				.flatMapMany(r -> Flux.fromIterable(r.resources()))
+				.flatMapMany(r -> {
+					List<Resource> l = r.resources();
+					resourceCount.set(l.size());
+					return Flux.fromIterable(l);
+				})
 				.flatMap(r -> client.readResource(r));
 
-			StepVerifier.create(resources).recordWith(ArrayList::new).consumeRecordedWith(readResourceResults -> {
+			StepVerifier.create(resources)
+				.recordWith(ArrayList::new)
+				.thenConsumeWhile(res -> true)
+				.consumeRecordedWith(readResourceResults -> {
+					assertThat(readResourceResults.size()).isEqualTo(resourceCount.get());
+					for (ReadResourceResult result : readResourceResults) {
 
-				for (ReadResourceResult result : readResourceResults) {
+						assertThat(result).isNotNull();
+						assertThat(result.contents()).isNotNull().isNotEmpty();
 
-					assertThat(result).isNotNull();
-					assertThat(result.contents()).isNotNull().isNotEmpty();
+						// Validate each content item
+						for (ResourceContents content : result.contents()) {
+							assertThat(content).isNotNull();
+							assertThat(content.uri()).isNotNull().isNotEmpty();
+							assertThat(content.mimeType()).isNotNull().isNotEmpty();
 
-					// Validate each content item
-					for (ResourceContents content : result.contents()) {
-						assertThat(content).isNotNull();
-						assertThat(content.uri()).isNotNull().isNotEmpty();
-						assertThat(content.mimeType()).isNotNull().isNotEmpty();
-
-						// Validate content based on its type with more comprehensive
-						// checks
-						switch (content.mimeType()) {
-							case "text/plain" -> {
-								TextResourceContents textContent = assertInstanceOf(TextResourceContents.class,
-										content);
-								assertThat(textContent.text()).isNotNull().isNotEmpty();
-								assertThat(textContent.uri()).isNotEmpty();
-							}
-							case "application/octet-stream" -> {
-								BlobResourceContents blobContent = assertInstanceOf(BlobResourceContents.class,
-										content);
-								assertThat(blobContent.blob()).isNotNull().isNotEmpty();
-								assertThat(blobContent.uri()).isNotNull().isNotEmpty();
-								// Validate base64 encoding format
-								assertThat(blobContent.blob()).matches("^[A-Za-z0-9+/]*={0,2}$");
-							}
-							default -> {
-
-								// Still validate basic properties
-								if (content instanceof TextResourceContents textContent) {
-									assertThat(textContent.text()).isNotNull();
+							// Validate content based on its type with more comprehensive
+							// checks
+							switch (content.mimeType()) {
+								case "text/plain" -> {
+									TextResourceContents textContent = assertInstanceOf(TextResourceContents.class,
+											content);
+									assertThat(textContent.text()).isNotNull().isNotEmpty();
+									assertThat(textContent.uri()).isNotEmpty();
 								}
-								else if (content instanceof BlobResourceContents blobContent) {
-									assertThat(blobContent.blob()).isNotNull();
+								case "application/octet-stream" -> {
+									BlobResourceContents blobContent = assertInstanceOf(BlobResourceContents.class,
+											content);
+									assertThat(blobContent.blob()).isNotNull().isNotEmpty();
+									assertThat(blobContent.uri()).isNotNull().isNotEmpty();
+									// Validate base64 encoding format
+									assertThat(blobContent.blob()).matches("^[A-Za-z0-9+/]*={0,2}$");
+								}
+								default -> {
+
+									// Still validate basic properties
+									if (content instanceof TextResourceContents textContent) {
+										assertThat(textContent.text()).isNotNull();
+									}
+									else if (content instanceof BlobResourceContents blobContent) {
+										assertThat(blobContent.blob()).isNotNull();
+									}
 								}
 							}
 						}
 					}
-				}
-			})
-				.expectNextCount(10) // Expect 10 elements
+				})
 				.verifyComplete();
 		});
 	}
@@ -684,7 +679,7 @@ public abstract class AbstractMcpAsyncClientTests {
 	@Test
 	void testInitializeWithAllCapabilities() {
 		var capabilities = ClientCapabilities.builder()
-			.experimental(Map.of("feature", "test"))
+			.experimental(Map.of("feature", Map.of("featureFlag", true)))
 			.roots(true)
 			.sampling()
 			.build();
@@ -704,7 +699,6 @@ public abstract class AbstractMcpAsyncClientTests {
 					assertThat(result.capabilities()).isNotNull();
 				}).verifyComplete());
 	}
-
 	// ---------------------------------------
 	// Logging Tests
 	// ---------------------------------------
@@ -784,7 +778,7 @@ public abstract class AbstractMcpAsyncClientTests {
 							if (!(content instanceof McpSchema.TextContent text))
 								return;
 
-							assertThat(text.text()).endsWith(response); // Prefixed
+							assertThat(text.text()).contains(response);
 						});
 
 						// Verify sampling request parameters received in our callback

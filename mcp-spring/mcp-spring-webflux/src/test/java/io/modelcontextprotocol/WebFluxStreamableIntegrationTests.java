@@ -5,23 +5,28 @@
 package io.modelcontextprotocol;
 
 import java.time.Duration;
+import java.util.Map;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.provider.Arguments;
+
 import org.springframework.http.server.reactive.HttpHandler;
 import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.server.RouterFunctions;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.web.reactive.function.server.ServerRequest;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.client.transport.WebClientStreamableHttpTransport;
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServer.AsyncSpecification;
 import io.modelcontextprotocol.server.McpServer.SyncSpecification;
+import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.server.TestUtil;
 import io.modelcontextprotocol.server.transport.WebFluxStreamableServerTransportProvider;
 import reactor.netty.DisposableServer;
@@ -37,6 +42,13 @@ class WebFluxStreamableIntegrationTests extends AbstractMcpClientServerIntegrati
 	private DisposableServer httpServer;
 
 	private WebFluxStreamableServerTransportProvider mcpStreamableServerTransportProvider;
+
+	static McpTransportContextExtractor<ServerRequest> TEST_CONTEXT_EXTRACTOR = (r) -> McpTransportContext
+		.create(Map.of("important", "value"));
+
+	static Stream<Arguments> clientsForTesting() {
+		return Stream.of(Arguments.of("httpclient"), Arguments.of("webflux"));
+	}
 
 	@Override
 	protected void prepareClients(int port, String mcpEndpoint) {
@@ -69,8 +81,8 @@ class WebFluxStreamableIntegrationTests extends AbstractMcpClientServerIntegrati
 	public void before() {
 
 		this.mcpStreamableServerTransportProvider = WebFluxStreamableServerTransportProvider.builder()
-			.objectMapper(new ObjectMapper())
 			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
+			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
 			.build();
 
 		HttpHandler httpHandler = RouterFunctions
