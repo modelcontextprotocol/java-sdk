@@ -26,8 +26,8 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Jackson 2 Integration Tests
-        run: mvn -pl mcp-test -am -Pjackson2 test
+      - name: Jackson 3 Integration Tests
+        run: mvn -pl mcp-test -am -Pjackson3 test
 
       - name: Build and Test
         run: mvn clean verify

@@ -152,9 +152,6 @@
 	<profiles>
 		<profile>
 			<id>jackson3</id>
-			<activation>
-				<activeByDefault>true</activeByDefault>
-			</activation>
 			<dependencies>
 				<dependency>
 					<groupId>io.modelcontextprotocol.sdk</groupId>
@@ -166,6 +163,9 @@
 		</profile>
 		<profile>
 			<id>jackson2</id>
+			<activation>
+				<activeByDefault>true</activeByDefault>
+			</activation>
 			<dependencies>
 				<dependency>
 					<groupId>io.modelcontextprotocol.sdk</groupId>
