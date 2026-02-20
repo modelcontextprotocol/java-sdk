@@ -20,6 +20,10 @@
 		<developerConnection>git@github.com/modelcontextprotocol/java-sdk.git</developerConnection>
 	</scm>
 
+	<properties>
+		<maven.deploy.skip>true</maven.deploy.skip>
+	</properties>
+
 	<dependencies>
 		<dependency>
 			<groupId>io.modelcontextprotocol.sdk</groupId>

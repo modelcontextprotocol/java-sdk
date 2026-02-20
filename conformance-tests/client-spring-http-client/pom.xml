@@ -26,6 +26,7 @@
 	<properties>
 		<java.version>17</java.version>
 		<spring-ai.version>2.0.0-M2</spring-ai.version>
+		<maven.deploy.skip>true</maven.deploy.skip>
 	</properties>
 
 	<dependencies>

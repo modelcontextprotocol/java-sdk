@@ -20,6 +20,10 @@
 		<developerConnection>git@github.com/modelcontextprotocol/java-sdk.git</developerConnection>
 	</scm>
 
+	<properties>
+		<maven.deploy.skip>true</maven.deploy.skip>
+	</properties>
+	
 	<modules>
 		<module>client-jdk-http-client</module>
 		<module>client-spring-http-client</module>
