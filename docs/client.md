@@ -19,7 +19,8 @@ The MCP Client is a key component in the Model Context Protocol (MCP) architectu
 !!! tip
     The core `io.modelcontextprotocol.sdk:mcp` module provides STDIO, SSE, and Streamable HTTP client transport implementations without requiring external web frameworks.
 
-    Spring-specific transport implementations are available as an **optional** dependency `io.modelcontextprotocol.sdk:mcp-spring-webflux` for [Spring Framework](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html) users.
+    The Spring-specific WebFlux transport (`mcp-spring-webflux`) is now part of [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`) and is no longer shipped by this SDK.
+    See the [MCP Client Boot Starter](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-client-boot-starter-docs.html) documentation for Spring-based client setup.
 
 The client provides both synchronous and asynchronous APIs for flexibility in different application contexts.
 
@@ -135,26 +136,20 @@ The client provides both synchronous and asynchronous APIs for flexibility in di
 
 The transport layer handles the communication between MCP clients and servers, providing different implementations for various use cases. The client transport manages message serialization, connection establishment, and protocol-specific communication patterns.
 
-=== "STDIO"
+### STDIO
 
-    Creates transport for process-based communication using stdin/stdout:
+Creates transport for process-based communication using stdin/stdout:
 
-    ```java
-    ServerParameters params = ServerParameters.builder("npx")
-        .args("-y", "@modelcontextprotocol/server-everything", "dir")
-        .build();
-    McpTransport transport = new StdioClientTransport(params);
-    ```
+```java
+ServerParameters params = ServerParameters.builder("npx")
+    .args("-y", "@modelcontextprotocol/server-everything", "dir")
+    .build();
+McpTransport transport = new StdioClientTransport(params);
+```
 
-=== "SSE (HttpClient)"
+### Streamable HTTP
 
-    Creates a framework-agnostic (pure Java API) SSE client transport. Included in the core `mcp` module:
-
-    ```java
-    McpTransport transport = new HttpClientSseClientTransport("http://your-mcp-server");
-    ```
-
-=== "Streamable HTTP"
+=== "Streamable HttpClient"
 
     Creates a Streamable HTTP client transport for efficient bidirectional communication. Included in the core `mcp` module:
 
@@ -172,15 +167,35 @@ The transport layer handles the communication between MCP clients and servers, p
     - Custom HTTP request customization
     - Multiple protocol version negotiation
 
-=== "SSE (WebFlux)"
+=== "Streamable WebClient (external)"
 
-    Creates WebFlux-based SSE client transport. Requires the `mcp-spring-webflux` dependency:
+    Creates Streamable HTTP WebClient-based client transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+
+    ```java
+    McpTransport transport = WebFluxSseClientTransport
+        .builder(WebClient.builder().baseUrl("http://your-mcp-server"))
+        .build();
+    ```
+
+### SSE HTTP (Legacy)
+
+=== "SSE HttpClient"
+
+    Creates a framework-agnostic (pure Java API) SSE client transport. Included in the core `mcp` module:
+
+    ```java
+    McpTransport transport = new HttpClientSseClientTransport("http://your-mcp-server");
+    ```
+=== "SSE WebClient (external)"
+
+    Creates WebFlux-based SSE client transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     WebClient.Builder webClientBuilder = WebClient.builder()
         .baseUrl("http://your-mcp-server");
     McpTransport transport = new WebFluxSseClientTransport(webClientBuilder);
     ```
+
 
 ## Client Capabilities
 
