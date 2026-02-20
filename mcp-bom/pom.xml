@@ -54,20 +54,6 @@
                 <version>${project.version}</version>
             </dependency>
 
-            <!-- MCP Transport - WebFlux SSE -->
-            <dependency>
-                <groupId>io.modelcontextprotocol.sdk</groupId>
-                <artifactId>mcp-spring-webflux</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
-            <!-- MCP Transport - WebMVC SSE -->
-            <dependency>
-                <groupId>io.modelcontextprotocol.sdk</groupId>
-                <artifactId>mcp-spring-webmvc</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
         </dependencies>
     </dependencyManagement>
 

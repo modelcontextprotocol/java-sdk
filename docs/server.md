@@ -21,7 +21,8 @@ The MCP Server is a foundational component in the Model Context Protocol (MCP) a
 !!! tip
     The core `io.modelcontextprotocol.sdk:mcp` module provides STDIO, SSE, and Streamable HTTP server transport implementations without requiring external web frameworks.
 
-    Spring-specific transport implementations are available as **optional** dependencies `io.modelcontextprotocol.sdk:mcp-spring-webflux`, `io.modelcontextprotocol.sdk:mcp-spring-webmvc` for [Spring Framework](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html) users.
+    Spring-specific transport implementations (`mcp-spring-webflux`, `mcp-spring-webmvc`) are now part of [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`) and are no longer shipped by this SDK.
+    See the [MCP Server Boot Starter](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-server-boot-starter-docs.html) documentation for Spring-based server setup.
 
 The server supports both synchronous and asynchronous APIs, allowing for flexible integration in different application contexts.
 
@@ -167,7 +168,7 @@ The SDK includes several built-in transport provider implementations:
 
 === "Streamable HTTP (WebFlux)"
 
-    Creates WebFlux-based Streamable HTTP server transport. Requires the `mcp-spring-webflux` dependency:
+    Creates WebFlux-based Streamable HTTP server transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     @Configuration
@@ -197,7 +198,7 @@ The SDK includes several built-in transport provider implementations:
 
 === "Streamable HTTP (WebMvc)"
 
-    Creates WebMvc-based Streamable HTTP server transport. Requires the `mcp-spring-webmvc` dependency:
+    Creates WebMvc-based Streamable HTTP server transport. Requires the `mcp-spring-webmvc` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     @Configuration
@@ -221,7 +222,7 @@ The SDK includes several built-in transport provider implementations:
 
 === "SSE (WebFlux)"
 
-    Creates WebFlux-based SSE server transport. Requires the `mcp-spring-webflux` dependency:
+    Creates WebFlux-based SSE server transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     @Configuration
@@ -247,7 +248,7 @@ The SDK includes several built-in transport provider implementations:
 
 === "SSE (WebMvc)"
 
-    Creates WebMvc-based SSE server transport. Requires the `mcp-spring-webmvc` dependency:
+    Creates WebMvc-based SSE server transport. Requires the `mcp-spring-webmvc` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     @Configuration

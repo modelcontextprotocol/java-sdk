@@ -27,7 +27,7 @@ enables standardized integration between AI models and tools.
         - Java HttpClient-based SSE client transport for HTTP SSE Client-side streaming
         - Servlet-based SSE server transport for HTTP SSE Server streaming
         - [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#streamable-http) transport for efficient bidirectional communication (client and server)
-    - Optional Spring-based transports (convenience if using Spring Framework):
+    - Optional Spring-based transports (available in [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+, no longer part of this SDK):
         - WebFlux SSE client and server transports for reactive HTTP streaming
         - WebFlux Streamable HTTP server transport
         - WebMVC SSE server transport for servlet-based HTTP streaming
@@ -41,7 +41,8 @@ enables standardized integration between AI models and tools.
 !!! tip
     The core `io.modelcontextprotocol.sdk:mcp` module provides default STDIO, SSE, and Streamable HTTP client and server transport implementations without requiring external web frameworks.
 
-    Spring-specific transports are available as optional dependencies for convenience when using the [MCP Client Boot Starter](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html) and [MCP Server Boot Starter](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-server-boot-starter-docs.html).  
+    Spring-specific transports (WebFlux, WebMVC) are now part of [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ and are no longer shipped by this SDK.
+    Use the [MCP Client Boot Starter](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html) and [MCP Server Boot Starter](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-server-boot-starter-docs.html) from Spring AI.
     Also consider the [MCP Annotations](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-annotations-overview.html) and [MCP Security](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-security.html).
 
 ## Architecture
@@ -55,8 +56,9 @@ The SDK follows a layered architecture with clear separation of concerns:
 - **Session Layer (McpSession)**: Manages communication patterns and state.
 - **Transport Layer (McpTransport)**: Handles JSON-RPC message serialization/deserialization via:
     - StdioTransport (stdin/stdout) in the core module
-    - HTTP SSE transports in dedicated transport modules (Java HttpClient, Spring WebFlux, Spring WebMVC)
+    - HTTP SSE transports in dedicated transport modules (Java HttpClient, Servlet)
     - Streamable HTTP transports for efficient bidirectional communication
+    - Spring WebFlux and Spring WebMVC transports (available in [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+)
 
 The MCP Client is a key component in the Model Context Protocol (MCP) architecture, responsible for establishing and managing connections with MCP servers.
 It implements the client-side of the protocol.
@@ -78,19 +80,19 @@ Key Interactions:
 
 The SDK is organized into modules to separate concerns and allow adopters to bring in only what they need:
 
-| Module | Artifact ID | Purpose |
-|--------|------------|---------|
-| `mcp-bom` | `mcp-bom` | Bill of Materials for dependency management |
-| `mcp-core` | `mcp-core` | Core reference implementation (STDIO, JDK HttpClient, Servlet, Streamable HTTP) |
-| `mcp-json-jackson2` | `mcp-json-jackson2` | Jackson 2.x JSON serialization implementation |
-| `mcp-json-jackson3` | `mcp-json-jackson3` | Jackson 3.x JSON serialization implementation |
-| `mcp` | `mcp` | Convenience bundle (`mcp-core` + `mcp-json-jackson3`) |
-| `mcp-test` | `mcp-test` | Shared testing utilities and integration tests |
-| `mcp-spring-webflux` | `mcp-spring-webflux` | Spring WebFlux integration (SSE and Streamable HTTP) |
-| `mcp-spring-webmvc` | `mcp-spring-webmvc` | Spring WebMVC integration (SSE and Streamable HTTP) |
+| Module | Artifact ID | Group | Purpose |
+|--------|------------|-------|---------|
+| `mcp-bom` | `mcp-bom` | `io.modelcontextprotocol.sdk` | Bill of Materials for dependency management |
+| `mcp-core` | `mcp-core` | `io.modelcontextprotocol.sdk` | Core reference implementation (STDIO, JDK HttpClient, Servlet, Streamable HTTP) |
+| `mcp-json-jackson2` | `mcp-json-jackson2` | `io.modelcontextprotocol.sdk` | Jackson 2.x JSON serialization implementation |
+| `mcp-json-jackson3` | `mcp-json-jackson3` | `io.modelcontextprotocol.sdk` | Jackson 3.x JSON serialization implementation |
+| `mcp` | `mcp` | `io.modelcontextprotocol.sdk` | Convenience bundle (`mcp-core` + `mcp-json-jackson3`) |
+| `mcp-test` | `mcp-test` | `io.modelcontextprotocol.sdk` | Shared testing utilities and integration tests |
+| `mcp-spring-webflux` _(external)_ | `mcp-spring-webflux` | `org.springframework.ai` | Spring WebFlux integration — part of [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ |
+| `mcp-spring-webmvc` _(external)_ | `mcp-spring-webmvc` | `org.springframework.ai` | Spring WebMVC integration — part of [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ |
 
 !!! tip
-    A minimal adopter may depend only on `mcp` (core + Jackson 3), while a Spring-based application can add `mcp-spring-webflux` or `mcp-spring-webmvc` for deeper framework integration.
+    A minimal adopter may depend only on `mcp` (core + Jackson 3). Spring-based applications should use the `mcp-spring-webflux` or `mcp-spring-webmvc` artifacts from [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`), no longer part of this SDK.
 
 ## Next Steps
 

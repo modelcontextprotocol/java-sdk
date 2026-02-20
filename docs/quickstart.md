@@ -44,21 +44,24 @@ Add the following dependency to your project:
     </dependency>
     ```
 
-    If you're using the Spring Framework and want Spring-specific transport implementations, add one of the following optional dependencies:
+    If you're using Spring Framework, the Spring-specific transport implementations are now part of [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```xml
-    <!-- Optional: Spring WebFlux-based SSE and Streamable HTTP client and server transport -->
+    <!-- Optional: Spring WebFlux-based SSE and Streamable HTTP client and server transport (Spring AI 2.0+) -->
     <dependency>
-        <groupId>io.modelcontextprotocol.sdk</groupId>
+        <groupId>org.springframework.ai</groupId>
         <artifactId>mcp-spring-webflux</artifactId>
     </dependency>
 
-    <!-- Optional: Spring WebMVC-based SSE and Streamable HTTP server transport -->
+    <!-- Optional: Spring WebMVC-based SSE and Streamable HTTP server transport (Spring AI 2.0+) -->
     <dependency>
-        <groupId>io.modelcontextprotocol.sdk</groupId>
+        <groupId>org.springframework.ai</groupId>
         <artifactId>mcp-spring-webmvc</artifactId>
     </dependency>
     ```
+
+    !!! note
+        When using the `spring-ai-bom` or Spring AI starter dependencies (`spring-ai-starter-mcp-server-webflux`, `spring-ai-starter-mcp-server-webmvc`, `spring-ai-starter-mcp-client-webflux`) no explicit version is needed — the BOM manages it automatically.
 
 === "Gradle"
 
@@ -89,17 +92,17 @@ Add the following dependency to your project:
     }
     ```
 
-    If you're using the Spring Framework and want Spring-specific transport implementations, add one of the following optional dependencies:
+    If you're using Spring Framework, the Spring-specific transport implementations are now part of [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```groovy
-    // Optional: Spring WebFlux-based SSE and Streamable HTTP client and server transport
+    // Optional: Spring WebFlux-based SSE and Streamable HTTP client and server transport (Spring AI 2.0+)
     dependencies {
-        implementation "io.modelcontextprotocol.sdk:mcp-spring-webflux"
+        implementation "org.springframework.ai:mcp-spring-webflux"
     }
 
-    // Optional: Spring WebMVC-based SSE and Streamable HTTP server transport
+    // Optional: Spring WebMVC-based SSE and Streamable HTTP server transport (Spring AI 2.0+)
     dependencies {
-        implementation "io.modelcontextprotocol.sdk:mcp-spring-webmvc"
+        implementation "org.springframework.ai:mcp-spring-webmvc"
     }
     ```
 
@@ -153,8 +156,8 @@ The following dependencies are available and managed by the BOM:
 - **JSON Serialization**
     - `io.modelcontextprotocol.sdk:mcp-json-jackson3` - Jackson 3.x JSON serialization implementation (included in `mcp` bundle).
     - `io.modelcontextprotocol.sdk:mcp-json-jackson2` - Jackson 2.x JSON serialization implementation for projects that require Jackson 2.x compatibility.
-- **Optional Transport Dependencies** (convenience if using Spring Framework)
-    - `io.modelcontextprotocol.sdk:mcp-spring-webflux` - WebFlux-based SSE and Streamable HTTP transport implementation for reactive applications.
-    - `io.modelcontextprotocol.sdk:mcp-spring-webmvc` - WebMVC-based SSE and Streamable HTTP transport implementation for servlet-based applications.
+- **Optional Spring Transport Dependencies** (part of [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+, group `org.springframework.ai`)
+    - `org.springframework.ai:mcp-spring-webflux` - WebFlux-based SSE and Streamable HTTP transport implementation for reactive applications.
+    - `org.springframework.ai:mcp-spring-webmvc` - WebMVC-based SSE and Streamable HTTP transport implementation for servlet-based applications.
 - **Testing Dependencies**
     - `io.modelcontextprotocol.sdk:mcp-test` - Testing utilities and support for MCP-based applications.

@@ -19,7 +19,8 @@ The MCP Client is a key component in the Model Context Protocol (MCP) architectu
 !!! tip
     The core `io.modelcontextprotocol.sdk:mcp` module provides STDIO, SSE, and Streamable HTTP client transport implementations without requiring external web frameworks.
 
-    Spring-specific transport implementations are available as an **optional** dependency `io.modelcontextprotocol.sdk:mcp-spring-webflux` for [Spring Framework](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html) users.
+    The Spring-specific WebFlux transport (`mcp-spring-webflux`) is now part of [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`) and is no longer shipped by this SDK.
+    See the [MCP Client Boot Starter](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html) documentation for Spring-based client setup.
 
 The client provides both synchronous and asynchronous APIs for flexibility in different application contexts.
 
@@ -174,7 +175,7 @@ The transport layer handles the communication between MCP clients and servers, p
 
 === "SSE (WebFlux)"
 
-    Creates WebFlux-based SSE client transport. Requires the `mcp-spring-webflux` dependency:
+    Creates WebFlux-based SSE client transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     WebClient.Builder webClientBuilder = WebClient.builder()
