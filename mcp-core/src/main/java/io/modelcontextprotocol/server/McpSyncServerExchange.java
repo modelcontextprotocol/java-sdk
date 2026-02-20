@@ -143,4 +143,13 @@ public class McpSyncServerExchange {
 		return this.exchange.ping().block();
 	}
 
+	/**
+	 * Cancels a previously issued request to the client (server-to-client direction).
+	 * @param requestId The ID of the request to cancel
+	 * @param reason An optional human-readable reason for the cancellation
+	 */
+	public void cancelRequest(Object requestId, String reason) {
+		this.exchange.cancelRequest(requestId, reason).block();
+	}
+
 }

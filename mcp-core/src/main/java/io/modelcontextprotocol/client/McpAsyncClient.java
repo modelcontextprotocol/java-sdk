@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import io.modelcontextprotocol.client.LifecycleInitializer.Initialization;
@@ -22,6 +23,7 @@ import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpClientSession.NotificationHandler;
 import io.modelcontextprotocol.spec.McpClientSession.RequestHandler;
 import io.modelcontextprotocol.spec.McpClientTransport;
+import io.modelcontextprotocol.spec.McpRequestHandle;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
@@ -447,6 +449,61 @@ public class McpAsyncClient {
 	public Mono<Object> ping() {
 		return this.initializer.withInitialization("pinging the server",
 				init -> init.mcpSession().sendRequest(McpSchema.METHOD_PING, null, OBJECT_TYPE_REF));
+	}
+
+	// --------------------------
+	// Cancellation
+	// --------------------------
+
+	/**
+	 * Cancels a previously issued request by its ID. Sends a
+	 * {@code notifications/cancelled} notification to the server and errors the pending
+	 * response locally.
+	 * @param requestId The ID of the request to cancel
+	 * @param reason An optional human-readable reason for the cancellation
+	 * @return A Mono that completes when the cancellation notification is sent
+	 */
+	public Mono<Void> cancelRequest(Object requestId, String reason) {
+		if (!this.isInitialized()) {
+			return Mono.error(new IllegalStateException("Cannot cancel request before initialization"));
+		}
+		Object initId = this.initializer.getInitializeRequestId();
+		if (initId != null && initId.equals(requestId)) {
+			return Mono.error(new IllegalArgumentException("The initialize request MUST NOT be cancelled"));
+		}
+		return this.initializer.withInitialization("cancelling request",
+				init -> init.mcpSession().sendCancellation(requestId, reason));
+	}
+
+	/**
+	 * Calls a tool and returns a handle that can be used to cancel the request.
+	 * @param callToolRequest The request containing the tool name and input parameters
+	 * @return A McpRequestHandle containing the request ID, response Mono, and a cancel
+	 * function
+	 */
+	public McpRequestHandle<McpSchema.CallToolResult> callToolWithHandle(McpSchema.CallToolRequest callToolRequest) {
+		AtomicReference<String> requestIdRef = new AtomicReference<>();
+
+		Mono<McpSchema.CallToolResult> responseMono = this.initializer.withInitialization("calling tool with handle",
+				init -> {
+					if (init.initializeResult().capabilities().tools() == null) {
+						return Mono.error(new IllegalStateException("Server does not provide tools capability"));
+					}
+					McpClientSession.RequestMono<McpSchema.CallToolResult> rm = init.mcpSession()
+						.sendRequestWithId(McpSchema.METHOD_TOOLS_CALL, callToolRequest, CALL_TOOL_RESULT_TYPE_REF);
+					requestIdRef.set(rm.requestId());
+					return rm.response()
+						.flatMap(result -> Mono.just(validateToolResult(callToolRequest.name(), result)));
+				});
+
+		return McpRequestHandle.lazy(requestIdRef, responseMono, reason -> {
+			String id = requestIdRef.get();
+			if (id == null) {
+				return Mono.error(new IllegalStateException(
+						"Cannot cancel: request has not been issued yet. Subscribe to the response Mono first."));
+			}
+			return this.cancelRequest(id, reason);
+		});
 	}
 
 	// --------------------------

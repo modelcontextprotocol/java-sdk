@@ -23,6 +23,8 @@ import io.modelcontextprotocol.server.McpNotificationHandler;
 import io.modelcontextprotocol.server.McpRequestHandler;
 import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.util.Assert;
+import reactor.core.Disposable;
+import reactor.core.Disposables;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
@@ -59,6 +61,11 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	private final AtomicReference<McpLoggableSession> listeningStreamRef;
 
 	private final MissingMcpTransportSession missingMcpTransportSession;
+
+	private final ConcurrentHashMap<String, Disposable> inProgressInbound = new ConcurrentHashMap<>();
+
+	private static final TypeRef<McpSchema.CancelledNotification> CANCELLED_NOTIFICATION_TYPE_REF = new TypeRef<>() {
+	};
 
 	private volatile McpSchema.LoggingLevel minLoggingLevel = McpSchema.LoggingLevel.INFO;
 
@@ -173,7 +180,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
 									error.message(), error.data())));
 			}
-			return requestHandler
+			Mono<Void> pipeline = requestHandler
 				.handle(new McpAsyncServerExchange(this.id, stream, clientCapabilities.get(), clientInfo.get(),
 						transportContext), jsonrpcRequest.params())
 				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), result,
@@ -190,6 +197,16 @@ public class McpStreamableServerSession implements McpLoggableSession {
 				})
 				.flatMap(transport::sendMessage)
 				.then(transport.closeGracefully());
+
+			return pipeline.doOnSubscribe(sub -> {
+				if (jsonrpcRequest.id() != null) {
+					inProgressInbound.put(String.valueOf(jsonrpcRequest.id()), Disposables.composite(sub::cancel));
+				}
+			}).doFinally(signal -> {
+				if (jsonrpcRequest.id() != null) {
+					inProgressInbound.remove(String.valueOf(jsonrpcRequest.id()));
+				}
+			});
 		});
 	}
 
@@ -201,6 +218,19 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	public Mono<Void> accept(McpSchema.JSONRPCNotification notification) {
 		return Mono.deferContextual(ctx -> {
 			McpTransportContext transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
+
+			if (McpSchema.METHOD_NOTIFICATION_CANCELLED.equals(notification.method())) {
+				McpSchema.CancelledNotification cancelled = unmarshalCancelled(notification.params());
+				if (cancelled != null) {
+					String normalizedId = String.valueOf(cancelled.requestId());
+					logger.debug("Client cancelled request {}: {}", normalizedId, cancelled.reason());
+					var inProgress = this.inProgressInbound.remove(normalizedId);
+					if (inProgress != null && !inProgress.isDisposed()) {
+						inProgress.dispose();
+					}
+				}
+			}
+
 			McpNotificationHandler notificationHandler = this.notificationHandlers.get(notification.method());
 			if (notificationHandler == null) {
 				logger.warn("No handler registered for notification method: {}", notification);
@@ -211,6 +241,16 @@ public class McpStreamableServerSession implements McpLoggableSession {
 					this.clientCapabilities.get(), this.clientInfo.get(), transportContext), notification.params());
 		});
 
+	}
+
+	private McpSchema.CancelledNotification unmarshalCancelled(Object params) {
+		if (params instanceof Map<?, ?> map) {
+			Object requestId = map.get("requestId");
+			Object reasonValue = map.get("reason");
+			String reason = reasonValue instanceof String s ? s : null;
+			return new McpSchema.CancelledNotification(requestId, reason);
+		}
+		return null;
 	}
 
 	/**

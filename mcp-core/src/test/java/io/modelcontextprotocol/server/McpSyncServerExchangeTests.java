@@ -689,4 +689,35 @@ class McpSyncServerExchangeTests {
 		verify(mockSession, times(2)).sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeRef.class));
 	}
 
+	// ---------------------------------------
+	// Cancel Request Tests
+	// ---------------------------------------
+
+	@Test
+	void testCancelRequestDelegatesToSendCancellation() {
+		when(mockSession.sendCancellation(any(), any())).thenReturn(Mono.empty());
+
+		exchange.cancelRequest("req-sync-1", "test reason");
+
+		verify(mockSession, times(1)).sendCancellation("req-sync-1", "test reason");
+	}
+
+	@Test
+	void testCancelRequestWithNullReason() {
+		when(mockSession.sendCancellation(any(), any())).thenReturn(Mono.empty());
+
+		exchange.cancelRequest("req-sync-2", null);
+
+		verify(mockSession, times(1)).sendCancellation("req-sync-2", null);
+	}
+
+	@Test
+	void testCancelRequestWithSessionError() {
+		when(mockSession.sendCancellation(any(), any()))
+			.thenReturn(Mono.error(new RuntimeException("Transport error")));
+
+		assertThatThrownBy(() -> exchange.cancelRequest("req-sync-3", "timeout")).isInstanceOf(RuntimeException.class)
+			.hasMessage("Transport error");
+	}
+
 }

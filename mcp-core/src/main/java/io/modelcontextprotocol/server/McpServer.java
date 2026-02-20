@@ -237,7 +237,7 @@ public interface McpServer {
 		public McpAsyncServer build() {
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
-					this.instructions);
+					this.instructions, this.cancellationConsumer);
 
 			var jsonSchemaValidator = (this.jsonSchemaValidator != null) ? this.jsonSchemaValidator
 					: McpJsonDefaults.getSchemaValidator();
@@ -265,7 +265,7 @@ public interface McpServer {
 		public McpAsyncServer build() {
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
-					this.instructions);
+					this.instructions, this.cancellationConsumer);
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
 					: McpJsonDefaults.getSchemaValidator();
 			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
@@ -332,6 +332,8 @@ public interface McpServer {
 		final Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions = new HashMap<>();
 
 		final List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeHandlers = new ArrayList<>();
+
+		BiFunction<McpAsyncServerExchange, McpSchema.CancelledNotification, Mono<Void>> cancellationConsumer;
 
 		Duration requestTimeout = Duration.ofHours(10); // Default timeout
 
@@ -803,6 +805,20 @@ public interface McpServer {
 				@SuppressWarnings("unchecked") BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>... handlers) {
 			Assert.notNull(handlers, "Handlers list must not be null");
 			return this.rootsChangeHandlers(Arrays.asList(handlers));
+		}
+
+		/**
+		 * Registers an optional consumer that is invoked when a
+		 * {@code notifications/cancelled} notification is received from the client. The
+		 * session layer already handles the core cancellation logic; this consumer is for
+		 * application-level side-effects (e.g. logging, metrics, UI updates).
+		 * @param consumer The cancellation consumer
+		 * @return This builder instance for method chaining
+		 */
+		public AsyncSpecification<S> cancellationConsumer(
+				BiFunction<McpAsyncServerExchange, McpSchema.CancelledNotification, Mono<Void>> consumer) {
+			this.cancellationConsumer = consumer;
+			return this;
 		}
 
 		/**

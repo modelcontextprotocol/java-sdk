@@ -1768,4 +1768,97 @@ public class McpSchemaTests {
 					{"progressToken":"progress-token-789","progress":0.25}"""));
 	}
 
+	// Cancelled Notification Tests
+
+	@Test
+	void testCancelledNotificationSerialization() throws Exception {
+		McpSchema.CancelledNotification notification = new McpSchema.CancelledNotification("req-123", "user cancelled");
+
+		String value = JSON_MAPPER.writeValueAsString(notification);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER).isObject().isEqualTo(json("""
+				{"requestId":"req-123","reason":"user cancelled"}"""));
+	}
+
+	@Test
+	void testCancelledNotificationDeserialization() throws Exception {
+		McpSchema.CancelledNotification notification = JSON_MAPPER.readValue("""
+				{"requestId":"req-456","reason":"timeout exceeded"}
+				""", McpSchema.CancelledNotification.class);
+
+		assertThat(notification.requestId()).isEqualTo("req-456");
+		assertThat(notification.reason()).isEqualTo("timeout exceeded");
+		assertThat(notification.meta()).isNull();
+	}
+
+	@Test
+	void testCancelledNotificationWithNullReason() throws Exception {
+		McpSchema.CancelledNotification notification = new McpSchema.CancelledNotification("req-789", null);
+
+		String value = JSON_MAPPER.writeValueAsString(notification);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER).isObject().isEqualTo(json("""
+				{"requestId":"req-789"}"""));
+
+		assertThat(notification.reason()).isNull();
+		assertThat(notification.meta()).isNull();
+	}
+
+	@Test
+	void testCancelledNotificationWithMeta() throws Exception {
+		Map<String, Object> meta = Map.of("key", "value");
+		McpSchema.CancelledNotification notification = new McpSchema.CancelledNotification("req-meta", "reason", meta);
+
+		String value = JSON_MAPPER.writeValueAsString(notification);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER).isObject().isEqualTo(json("""
+				{"requestId":"req-meta","reason":"reason","_meta":{"key":"value"}}"""));
+	}
+
+	@Test
+	void testCancelledNotificationDeserializationIgnoresUnknownFields() throws Exception {
+		McpSchema.CancelledNotification notification = JSON_MAPPER.readValue("""
+				{"requestId":"req-extra","reason":"test","unknownField":"ignored"}
+				""", McpSchema.CancelledNotification.class);
+
+		assertThat(notification.requestId()).isEqualTo("req-extra");
+		assertThat(notification.reason()).isEqualTo("test");
+	}
+
+	@Test
+	void testCancelledNotificationWithNumericRequestId() throws Exception {
+		McpSchema.CancelledNotification notification = JSON_MAPPER.readValue("""
+				{"requestId":42,"reason":"numeric id test"}
+				""", McpSchema.CancelledNotification.class);
+
+		assertThat(notification.requestId()).isEqualTo(42);
+		assertThat(notification.reason()).isEqualTo("numeric id test");
+	}
+
+	@Test
+	void testCancelledNotificationRoundTrip() throws Exception {
+		McpSchema.CancelledNotification original = new McpSchema.CancelledNotification("round-trip-id",
+				"round trip test");
+
+		String json = JSON_MAPPER.writeValueAsString(original);
+		McpSchema.CancelledNotification deserialized = JSON_MAPPER.readValue(json,
+				McpSchema.CancelledNotification.class);
+
+		assertThat(deserialized.requestId()).isEqualTo(original.requestId());
+		assertThat(deserialized.reason()).isEqualTo(original.reason());
+	}
+
+	@Test
+	void testCancelledNotificationImplementsNotificationInterface() {
+		McpSchema.CancelledNotification notification = new McpSchema.CancelledNotification("test", "test");
+		assertThat(notification).isInstanceOf(McpSchema.Notification.class);
+	}
+
+	@Test
+	void testErrorCodesRequestCancelled() {
+		assertThat(McpSchema.ErrorCodes.REQUEST_CANCELLED).isEqualTo(-32800);
+	}
+
+	@Test
+	void testMethodNotificationCancelledConstant() {
+		assertThat(McpSchema.METHOD_NOTIFICATION_CANCELLED).isEqualTo("notifications/cancelled");
+	}
+
 }

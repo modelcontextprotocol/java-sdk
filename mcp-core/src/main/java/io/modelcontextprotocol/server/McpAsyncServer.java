@@ -183,6 +183,16 @@ public class McpAsyncServer {
 
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_INITIALIZED, (exchange, params) -> Mono.empty());
 
+		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_CANCELLED, (exchange, params) -> {
+			if (features.cancellationConsumer() != null) {
+				McpSchema.CancelledNotification cancelled = jsonMapper.convertValue(params,
+						new TypeRef<McpSchema.CancelledNotification>() {
+						});
+				return features.cancellationConsumer().apply(exchange, cancelled);
+			}
+			return Mono.empty();
+		});
+
 		List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers = features
 			.rootsChangeConsumers();
 

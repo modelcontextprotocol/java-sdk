@@ -9,6 +9,8 @@ import io.modelcontextprotocol.util.Assert;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.Disposable;
+import reactor.core.Disposables;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 
@@ -55,6 +57,15 @@ public class McpClientSession implements McpSession {
 
 	/** Map of notification handlers keyed by method name */
 	private final ConcurrentHashMap<String, NotificationHandler> notificationHandlers = new ConcurrentHashMap<>();
+
+	/**
+	 * Tracks in-progress inbound requests (requests the server sent to us) for
+	 * cancellation
+	 */
+	private final ConcurrentHashMap<String, Disposable> inProgressInbound = new ConcurrentHashMap<>();
+
+	private static final TypeRef<McpSchema.CancelledNotification> CANCELLED_NOTIFICATION_TYPE_REF = new TypeRef<>() {
+	};
 
 	/** Session-specific prefix for request IDs */
 	private final String sessionPrefix = UUID.randomUUID().toString().substring(0, 8);
@@ -134,6 +145,22 @@ public class McpClientSession implements McpSession {
 		this.requestHandlers.putAll(requestHandlers);
 		this.notificationHandlers.putAll(notificationHandlers);
 
+		this.notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_CANCELLED, params -> {
+			McpSchema.CancelledNotification cancelled = transport.unmarshalFrom(params,
+					CANCELLED_NOTIFICATION_TYPE_REF);
+			if (cancelled != null) {
+				String normalizedId = String.valueOf(cancelled.requestId());
+				logger.debug("Received cancellation for request {}: {}", normalizedId, cancelled.reason());
+
+				var inbound = this.inProgressInbound.remove(normalizedId);
+				if (inbound != null && !inbound.isDisposed()) {
+					inbound.dispose();
+				}
+			}
+
+			return Mono.empty();
+		});
+
 		this.transport.connect(mono -> mono.doOnNext(this::handle)).transform(connectHook).subscribe();
 	}
 
@@ -176,7 +203,15 @@ public class McpClientSession implements McpSession {
 				var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
 						jsonRpcError);
 				return Mono.just(errorResponse);
-			}).flatMap(this.transport::sendMessage).onErrorComplete(t -> {
+			}).flatMap(this.transport::sendMessage).doOnSubscribe(sub -> {
+				if (request.id() != null) {
+					inProgressInbound.put(String.valueOf(request.id()), Disposables.composite(sub::cancel));
+				}
+			}).doFinally(signal -> {
+				if (request.id() != null) {
+					inProgressInbound.remove(String.valueOf(request.id()));
+				}
+			}).onErrorComplete(t -> {
 				logger.warn("Issue sending response to the client, ", t);
 				return true;
 			}).subscribe();
@@ -286,6 +321,79 @@ public class McpClientSession implements McpSession {
 					deliveredResponseSink.next(this.transport.unmarshalFrom(jsonRpcResponse.result(), typeRef));
 				}
 			}
+		});
+	}
+
+	/**
+	 * Composite holding a request ID and the response Mono, enabling cancellation by ID.
+	 *
+	 * @param <T> The response type
+	 * @param requestId The generated request ID
+	 * @param response The Mono that will emit the response
+	 */
+	public record RequestMono<T>(String requestId, Mono<T> response) {
+	}
+
+	/**
+	 * Sends a request and exposes the generated request ID for cancellation support.
+	 * @param <T> The expected response type
+	 * @param method The method name to call
+	 * @param requestParams The request parameters
+	 * @param typeRef Type reference for response deserialization
+	 * @return A RequestMono containing both the request ID and the response Mono
+	 */
+	public <T> RequestMono<T> sendRequestWithId(String method, Object requestParams, TypeRef<T> typeRef) {
+		String requestId = this.generateRequestId();
+		Mono<T> mono = Mono.deferContextual(ctx -> Mono.<McpSchema.JSONRPCResponse>create(pendingResponseSink -> {
+			logger.debug("Sending message for method {}", method);
+			this.pendingResponses.put(requestId, pendingResponseSink);
+			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, method,
+					requestId, requestParams);
+			this.transport.sendMessage(jsonrpcRequest).contextWrite(ctx).subscribe(v -> {
+			}, error -> {
+				this.pendingResponses.remove(requestId);
+				pendingResponseSink.error(error);
+			});
+		})).timeout(this.requestTimeout).handle((jsonRpcResponse, deliveredResponseSink) -> {
+			if (jsonRpcResponse.error() != null) {
+				logger.error("Error handling request: {}", jsonRpcResponse.error());
+				deliveredResponseSink.error(new McpError(jsonRpcResponse.error()));
+			}
+			else {
+				if (typeRef.getType().equals(Void.class)) {
+					deliveredResponseSink.complete();
+				}
+				else {
+					deliveredResponseSink.next(this.transport.unmarshalFrom(jsonRpcResponse.result(), typeRef));
+				}
+			}
+		});
+		return new RequestMono<>(requestId, mono);
+	}
+
+	/**
+	 * Cancels a previously issued outbound request (client-to-server direction). The
+	 * pending response is errored locally and a cancellation notification is sent to the
+	 * server.
+	 * @param requestId The ID of the request to cancel
+	 * @param reason An optional human-readable reason
+	 * @return A Mono that completes when the cancellation notification is sent
+	 */
+	public Mono<Void> sendCancellation(Object requestId, String reason) {
+		return Mono.defer(() -> {
+			var pending = this.pendingResponses.remove(requestId);
+			if (pending != null) {
+				pending.error(
+						new McpError(new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.REQUEST_CANCELLED,
+								"Request cancelled locally" + (reason != null ? ": " + reason : ""), null)));
+			}
+			return this
+				.sendNotification(McpSchema.METHOD_NOTIFICATION_CANCELLED,
+						new McpSchema.CancelledNotification(requestId, reason))
+				.onErrorResume(e -> {
+					logger.warn("Failed to send cancellation notification for request {}", requestId, e);
+					return Mono.empty();
+				});
 		});
 	}
 
