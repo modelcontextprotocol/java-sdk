@@ -94,7 +94,7 @@
 		<asciidoctorj-pdf.version>1.6.2</asciidoctorj-pdf.version>
 		<tomcat.version>11.0.2</tomcat.version>
 		<jakarta.servlet.version>6.1.0</jakarta.servlet.version>
-		<awaitility.version>4.2.0</awaitility.version>
+		<awaitility.version>4.3.0</awaitility.version>
 		<bnd-maven-plugin.version>7.1.0</bnd-maven-plugin.version>
 		<json-unit-assertj.version>4.1.0</json-unit-assertj.version>
 		<json-schema-validator-jackson2.version>2.0.0</json-schema-validator-jackson2.version>
