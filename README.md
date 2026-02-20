@@ -20,9 +20,9 @@ For comprehensive guides and SDK API documentation
 - [Java MCP Server](https://modelcontextprotocol.github.io/java-sdk/server/) - Learn how to implement and configure a MCP servers.
 
 #### Spring AI MCP documentation
-[Spring AI MCP](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) extends the MCP Java SDK with Spring Boot integration, providing both [client](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html) and [server](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-server-boot-starter-docs.html) starters. 
-The [MCP Annotations](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-annotations-overview.html) - provides annotation-based method handling for MCP servers and clients in Java.
-The [MCP Security](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-security.html) - provides comprehensive OAuth 2.0 and API key-based security support for Model Context Protocol implementations in Spring AI.
+[Spring AI MCP](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) extends the MCP Java SDK with Spring Boot integration, providing both [client](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-client-boot-starter-docs.html) and [server](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-server-boot-starter-docs.html) starters. 
+The [MCP Annotations](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-annotations-overview.html) - provides annotation-based method handling for MCP servers and clients in Java.
+The [MCP Security](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-security.html) - provides comprehensive OAuth 2.0 and API key-based security support for Model Context Protocol implementations in Spring AI.
 Bootstrap your AI applications with MCP support using [Spring Initializer](https://start.spring.io).
 
 ## Development
@@ -139,21 +139,21 @@ MCP supports both clients (applications consuming MCP servers) and servers (appl
 
 #### Client Transport in the SDK
 
-* **SDK Choice**: JDK HttpClient (Java 11+) as the default client, with optional Spring WebClient support
+* **SDK Choice**: JDK HttpClient (Java 11+) as the default client
 
-* **Why**: The JDK HttpClient is built-in, portable, and supports streaming responses. This keeps the default lightweight with no extra dependencies. Spring WebClient support is available for Spring-based projects.
+* **Why**: The JDK HttpClient is built-in, portable, and supports streaming responses. This keeps the default lightweight with no extra dependencies.
 
-* **How we expose it**: MCP Client APIs are transport-agnostic. The core module ships with JDK HttpClient transport. A Spring module provides WebClient integration.
+* **How we expose it**: MCP Client APIs are transport-agnostic. The core module ships with JDK HttpClient transport. Spring WebClient-based transport is available in [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+.
 
 * **How it fits the SDK**: This ensures all applications can talk to MCP servers out of the box, while allowing richer integration in Spring and other environments.
 
 #### Server Transport in the SDK
 
-* **SDK Choice**: Jakarta Servlet implementation in core, with optional Spring WebFlux and Spring WebMVC providers
+* **SDK Choice**: Jakarta Servlet implementation in core
 
-* **Why**: Servlet is the most widely deployed Java server API. WebFlux and WebMVC cover a significant part of the Spring community. Together these provide reach across blocking and non-blocking models.
+* **Why**: Servlet is the most widely deployed Java server API, providing broad reach across blocking and non-blocking models without additional dependencies.
 
-* **How we expose it**: Server APIs are transport-agnostic. Core includes Servlet support. Spring modules extend support for WebFlux and WebMVC.
+* **How we expose it**: Server APIs are transport-agnostic. Core includes Servlet support. Spring WebFlux and WebMVC server transports are available in [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+.
 
 * **How it fits the SDK**: This allows developers to expose MCP servers in the most common Java environments today, while enabling other transport implementations such as Netty, Vert.x, or Helidon.
 
@@ -176,9 +176,10 @@ The SDK is organized into modules to separate concerns and allow adopters to bri
 * `mcp-json-jackson3` – Jackson 3 implementation of JSON binding
 * `mcp` – Convenience bundle (core + Jackson 3)
 * `mcp-test` – Shared testing utilities
-* `mcp-spring` – Spring integrations (WebClient, WebFlux, WebMVC)
 
-For example, a minimal adopter may depend only on `mcp` (core + Jackson), while a Spring-based application can use `mcp-spring` for deeper framework integration.
+Spring integrations (WebClient, WebFlux, WebMVC) are now part of [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`).
+
+For example, a minimal adopter may depend only on `mcp` (core + Jackson), while a Spring-based application can use the Spring AI `mcp-spring-webflux` or `mcp-spring-webmvc` artifacts for deeper framework integration.
 
 Additionally, `mcp-test` contains integration tests for `mcp-core`.
 `mcp-core` needs a JSON implementation to run full integration tests.
