@@ -73,20 +73,20 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 * Event type for JSON-RPC messages received through the SSE connection. The server
 	 * sends messages with this event type to transmit JSON-RPC protocol data.
 	 */
-	private static final String MESSAGE_EVENT_TYPE = "message";
+	protected static final String MESSAGE_EVENT_TYPE = "message";
 
 	/**
 	 * Event type for receiving the message endpoint URI from the server. The server MUST
 	 * send this event when a client connects, providing the URI where the client should
 	 * send its messages via HTTP POST.
 	 */
-	private static final String ENDPOINT_EVENT_TYPE = "endpoint";
+	protected static final String ENDPOINT_EVENT_TYPE = "endpoint";
 
 	/**
 	 * Default SSE endpoint path as specified by the MCP transport specification. This
 	 * endpoint is used to establish the SSE connection with the server.
 	 */
-	private static final String DEFAULT_SSE_ENDPOINT = "/sse";
+	protected static final String DEFAULT_SSE_ENDPOINT = "/sse";
 
 	/**
 	 * Type reference for parsing SSE events containing string data.
@@ -98,7 +98,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 * WebClient instance for handling both SSE connections and HTTP POST requests. Used
 	 * for establishing the SSE connection and sending outbound messages.
 	 */
-	private final WebClient webClient;
+	protected final WebClient webClient;
 
 	/**
 	 * JSON mapper for serializing outbound messages and deserializing inbound messages.
@@ -128,7 +128,7 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 * The SSE endpoint URI provided by the server. Used for sending outbound messages via
 	 * HTTP POST requests.
 	 */
-	private String sseEndpoint;
+	protected String sseEndpoint;
 
 	/**
 	 * Constructs a new SseClientTransport with the specified WebClient builder and
