@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server;
@@ -63,31 +63,37 @@ import reactor.core.publisher.Mono;
  * </ul>
  *
  * <p>
- * Example of creating a basic synchronous server: <pre>{@code
+ * Example of creating a basic synchronous server:
+ *
+ * <pre>{@code
  * McpServer.sync(transportProvider)
- *     .serverInfo("my-server", "1.0.0")
- *     .tool(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
- *           (exchange, args) -> CallToolResult.builder()
- *                   .content(List.of(new McpSchema.TextContent("Result: " + calculate(args))))
- *                   .isError(false)
- *                   .build())
- *     .build();
+ * 		.serverInfo("my-server", "1.0.0")
+ * 		.tool(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
+ * 				(exchange, args) -> CallToolResult.builder()
+ * 						.content(List.of(new McpSchema.TextContent("Result: " + calculate(args))))
+ * 						.isError(false)
+ * 						.build())
+ * 		.build();
  * }</pre>
  *
- * Example of creating a basic asynchronous server: <pre>{@code
+ * Example of creating a basic asynchronous server:
+ *
+ * <pre>{@code
  * McpServer.async(transportProvider)
- *     .serverInfo("my-server", "1.0.0")
- *     .tool(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
- *           (exchange, args) -> Mono.fromSupplier(() -> calculate(args))
- *               .map(result -> CallToolResult.builder()
- *                   .content(List.of(new McpSchema.TextContent("Result: " + result)))
- *                   .isError(false)
- *                   .build()))
- *     .build();
+ * 		.serverInfo("my-server", "1.0.0")
+ * 		.tool(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
+ * 				(exchange, args) -> Mono.fromSupplier(() -> calculate(args))
+ * 						.map(result -> CallToolResult.builder()
+ * 								.content(List.of(new McpSchema.TextContent("Result: " + result)))
+ * 								.isError(false)
+ * 								.build()))
+ * 		.build();
  * }</pre>
  *
  * <p>
- * Example with comprehensive asynchronous configuration: <pre>{@code
+ * Example with comprehensive asynchronous configuration:
+ *
+ * <pre>{@code
  * McpServer.async(transportProvider)
  *     .serverInfo("advanced-server", "2.0.0")
  *     .capabilities(new ServerCapabilities(...))
@@ -235,7 +241,7 @@ public interface McpServer {
 		 */
 		@Override
 		public McpAsyncServer build() {
-			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
+			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools, null,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
 					this.instructions);
 
@@ -263,7 +269,7 @@ public interface McpServer {
 		 */
 		@Override
 		public McpAsyncServer build() {
-			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
+			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools, null,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
 					this.instructions);
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
@@ -303,6 +309,12 @@ public interface McpServer {
 		final List<McpServerFeatures.AsyncToolSpecification> tools = new ArrayList<>();
 
 		/**
+		 * Custom repository for managing tools. If not set, the default
+		 * {@link InMemoryToolsRepository} will be used.
+		 */
+		ToolsRepository toolsRepository;
+
+		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
 		 * expose resources to clients. Resources allow servers to share data that
 		 * provides context to language models, such as files, database schemas, or
@@ -336,6 +348,24 @@ public interface McpServer {
 		Duration requestTimeout = Duration.ofHours(10); // Default timeout
 
 		public abstract McpAsyncServer build();
+
+		/**
+		 * Sets a custom tools repository for managing tool specifications. This allows
+		 * for context-aware tool filtering and dynamic tool management.
+		 *
+		 * <p>
+		 * If not set, the server will use the default {@link InMemoryToolsRepository}
+		 * which stores all tools in memory without any filtering.
+		 * @param toolsRepository The custom tools repository implementation. Must not be
+		 * null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if toolsRepository is null
+		 */
+		public AsyncSpecification<S> toolsRepository(ToolsRepository toolsRepository) {
+			Assert.notNull(toolsRepository, "Tools repository must not be null");
+			this.toolsRepository = toolsRepository;
+			return this;
+		}
 
 		/**
 		 * Sets the URI template manager factory to use for creating URI templates. This
@@ -447,7 +477,9 @@ public interface McpServer {
 		 * {@link McpServerFeatures.AsyncToolSpecification} explicitly.
 		 *
 		 * <p>
-		 * Example usage: <pre>{@code
+		 * Example usage:
+		 *
+		 * <pre>{@code
 		 * .tool(
 		 *     Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
 		 *     (exchange, args) -> Mono.fromSupplier(() -> calculate(args))
@@ -535,7 +567,9 @@ public interface McpServer {
 		 * method provides a convenient way to register multiple tools inline.
 		 *
 		 * <p>
-		 * Example usage: <pre>{@code
+		 * Example usage:
+		 *
+		 * <pre>{@code
 		 * .tools(
 		 *     McpServerFeatures.AsyncToolSpecification.builder().tool(calculatorTool).callTool(calculatorHandler).build(),
 		 *     McpServerFeatures.AsyncToolSpecification.builder().tool(weatherTool).callTool(weatherHandler).build(),
@@ -607,7 +641,9 @@ public interface McpServer {
 		 * provides a convenient way to register multiple resources inline.
 		 *
 		 * <p>
-		 * Example usage: <pre>{@code
+		 * Example usage:
+		 *
+		 * <pre>{@code
 		 * .resources(
 		 *     new McpServerFeatures.AsyncResourceSpecification(fileResource, fileHandler),
 		 *     new McpServerFeatures.AsyncResourceSpecification(dbResource, dbHandler),
@@ -670,7 +706,9 @@ public interface McpServer {
 		 * source.
 		 *
 		 * <p>
-		 * Example usage: <pre>{@code
+		 * Example usage:
+		 *
+		 * <pre>{@code
 		 * .prompts(Map.of("analysis", new McpServerFeatures.AsyncPromptSpecification(
 		 *     new Prompt("analysis", "Code analysis template"),
 		 *     request -> Mono.fromSupplier(() -> generateAnalysisPrompt(request))
@@ -708,7 +746,9 @@ public interface McpServer {
 		 * provides a convenient way to register multiple prompts inline.
 		 *
 		 * <p>
-		 * Example usage: <pre>{@code
+		 * Example usage:
+		 *
+		 * <pre>{@code
 		 * .prompts(
 		 *     new McpServerFeatures.AsyncPromptSpecification(analysisPrompt, analysisHandler),
 		 *     new McpServerFeatures.AsyncPromptSpecification(summaryPrompt, summaryHandler),
@@ -1070,7 +1110,9 @@ public interface McpServer {
 		 * {@link McpServerFeatures.SyncToolSpecification} explicitly.
 		 *
 		 * <p>
-		 * Example usage: <pre>{@code
+		 * Example usage:
+		 *
+		 * <pre>{@code
 		 * .tool(
 		 *     Tool.builder().name("calculator").title("Performs calculations".inputSchema(schema).build(),
 		 *     (exchange, args) -> CallToolResult.builder()
@@ -1156,7 +1198,9 @@ public interface McpServer {
 		 * method provides a convenient way to register multiple tools inline.
 		 *
 		 * <p>
-		 * Example usage: <pre>{@code
+		 * Example usage:
+		 *
+		 * <pre>{@code
 		 * .tools(
 		 *     new ToolSpecification(calculatorTool, calculatorHandler),
 		 *     new ToolSpecification(weatherTool, weatherHandler),
@@ -1229,7 +1273,9 @@ public interface McpServer {
 		 * provides a convenient way to register multiple resources inline.
 		 *
 		 * <p>
-		 * Example usage: <pre>{@code
+		 * Example usage:
+		 *
+		 * <pre>{@code
 		 * .resources(
 		 *     new ResourceSpecification(fileResource, fileHandler),
 		 *     new ResourceSpecification(dbResource, dbHandler),
@@ -1289,7 +1335,9 @@ public interface McpServer {
 		 * source.
 		 *
 		 * <p>
-		 * Example usage: <pre>{@code
+		 * Example usage:
+		 *
+		 * <pre>{@code
 		 * Map<String, PromptSpecification> prompts = new HashMap<>();
 		 * prompts.put("analysis", new PromptSpecification(
 		 *     new Prompt("analysis", "Code analysis template"),
@@ -1328,7 +1376,9 @@ public interface McpServer {
 		 * provides a convenient way to register multiple prompts inline.
 		 *
 		 * <p>
-		 * Example usage: <pre>{@code
+		 * Example usage:
+		 *
+		 * <pre>{@code
 		 * .prompts(
 		 *     new PromptSpecification(analysisPrompt, analysisHandler),
 		 *     new PromptSpecification(summaryPrompt, summaryHandler),
@@ -1683,7 +1733,9 @@ public interface McpServer {
 		 * method provides a convenient way to register multiple tools inline.
 		 *
 		 * <p>
-		 * Example usage: <pre>{@code
+		 * Example usage:
+		 *
+		 * <pre>{@code
 		 * .tools(
 		 *     McpServerFeatures.AsyncToolSpecification.builder().tool(calculatorTool).callTool(calculatorHandler).build(),
 		 *     McpServerFeatures.AsyncToolSpecification.builder().tool(weatherTool).callTool(weatherHandler).build(),
@@ -1756,7 +1808,9 @@ public interface McpServer {
 		 * provides a convenient way to register multiple resources inline.
 		 *
 		 * <p>
-		 * Example usage: <pre>{@code
+		 * Example usage:
+		 *
+		 * <pre>{@code
 		 * .resources(
 		 *     new McpServerFeatures.AsyncResourceSpecification(fileResource, fileHandler),
 		 *     new McpServerFeatures.AsyncResourceSpecification(dbResource, dbHandler),
@@ -1817,7 +1871,9 @@ public interface McpServer {
 		 * source.
 		 *
 		 * <p>
-		 * Example usage: <pre>{@code
+		 * Example usage:
+		 *
+		 * <pre>{@code
 		 * .prompts(Map.of("analysis", new McpServerFeatures.AsyncPromptSpecification(
 		 *     new Prompt("analysis", "Code analysis template"),
 		 *     request -> Mono.fromSupplier(() -> generateAnalysisPrompt(request))
@@ -1856,7 +1912,9 @@ public interface McpServer {
 		 * provides a convenient way to register multiple prompts inline.
 		 *
 		 * <p>
-		 * Example usage: <pre>{@code
+		 * Example usage:
+		 *
+		 * <pre>{@code
 		 * .prompts(
 		 *     new McpServerFeatures.AsyncPromptSpecification(analysisPrompt, analysisHandler),
 		 *     new McpServerFeatures.AsyncPromptSpecification(summaryPrompt, summaryHandler),
@@ -2166,7 +2224,9 @@ public interface McpServer {
 		 * method provides a convenient way to register multiple tools inline.
 		 *
 		 * <p>
-		 * Example usage: <pre>{@code
+		 * Example usage:
+		 *
+		 * <pre>{@code
 		 * .tools(
 		 *     McpServerFeatures.SyncToolSpecification.builder().tool(calculatorTool).callTool(calculatorHandler).build(),
 		 *     McpServerFeatures.SyncToolSpecification.builder().tool(weatherTool).callTool(weatherHandler).build(),
@@ -2239,7 +2299,9 @@ public interface McpServer {
 		 * provides a convenient way to register multiple resources inline.
 		 *
 		 * <p>
-		 * Example usage: <pre>{@code
+		 * Example usage:
+		 *
+		 * <pre>{@code
 		 * .resources(
 		 *     new McpServerFeatures.SyncResourceSpecification(fileResource, fileHandler),
 		 *     new McpServerFeatures.SyncResourceSpecification(dbResource, dbHandler),
@@ -2300,7 +2362,9 @@ public interface McpServer {
 		 * source.
 		 *
 		 * <p>
-		 * Example usage: <pre>{@code
+		 * Example usage:
+		 *
+		 * <pre>{@code
 		 * .prompts(Map.of("analysis", new McpServerFeatures.SyncPromptSpecification(
 		 *     new Prompt("analysis", "Code analysis template"),
 		 *     request -> Mono.fromSupplier(() -> generateAnalysisPrompt(request))
@@ -2339,7 +2403,9 @@ public interface McpServer {
 		 * provides a convenient way to register multiple prompts inline.
 		 *
 		 * <p>
-		 * Example usage: <pre>{@code
+		 * Example usage:
+		 *
+		 * <pre>{@code
 		 * .prompts(
 		 *     new McpServerFeatures.SyncPromptSpecification(analysisPrompt, analysisHandler),
 		 *     new McpServerFeatures.SyncPromptSpecification(summaryPrompt, summaryHandler),
