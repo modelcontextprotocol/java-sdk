@@ -186,19 +186,6 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		}
 
 		/**
-		 * Creates a new builder with the specified base URI.
-		 * @param baseUri the base URI of the MCP server
-		 * @deprecated Use {@link HttpClientSseClientTransport#builder(String)} instead.
-		 * This constructor is deprecated and will be removed or made {@code protected} or
-		 * {@code private} in a future release.
-		 */
-		@Deprecated(forRemoval = true)
-		public Builder(String baseUri) {
-			Assert.hasText(baseUri, "baseUri must not be empty");
-			this.baseUri = baseUri;
-		}
-
-		/**
 		 * Sets the base URI.
 		 * @param baseUri the base URI
 		 * @return this builder

@@ -12,3 +12,7 @@ client:
   # - Client does not parse or respect retry: field timing
   # - Client does not send Last-Event-ID header
   - sse-retry
+  # CIMD not implemented yet
+  - auth/basic-cimd
+  # Scope step up beyond initial authorization request not implemented
+  - auth/scope-step-up

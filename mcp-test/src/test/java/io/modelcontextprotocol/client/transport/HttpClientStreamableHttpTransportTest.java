@@ -8,6 +8,7 @@ import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientReq
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Map;
@@ -78,7 +79,7 @@ class HttpClientStreamableHttpTransportTest {
 
 		withTransport(transport, (t) -> {
 			// Send test message
-			var initializeRequest = new McpSchema.InitializeRequest(McpSchema.LATEST_PROTOCOL_VERSION,
+			var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_11_25,
 					McpSchema.ClientCapabilities.builder().roots(true).build(),
 					new McpSchema.Implementation("MCP Client", "0.3.1"));
 			var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
@@ -108,7 +109,7 @@ class HttpClientStreamableHttpTransportTest {
 
 		withTransport(transport, (t) -> {
 			// Send test message
-			var initializeRequest = new McpSchema.InitializeRequest(McpSchema.LATEST_PROTOCOL_VERSION,
+			var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_11_25,
 					McpSchema.ClientCapabilities.builder().roots(true).build(),
 					new McpSchema.Implementation("MCP Client", "0.3.1"));
 			var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
@@ -131,7 +132,7 @@ class HttpClientStreamableHttpTransportTest {
 
 		StepVerifier.create(transport.closeGracefully()).verifyComplete();
 
-		var initializeRequest = new McpSchema.InitializeRequest(McpSchema.LATEST_PROTOCOL_VERSION,
+		var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_11_25,
 				McpSchema.ClientCapabilities.builder().roots(true).build(),
 				new McpSchema.Implementation("MCP Client", "0.3.1"));
 		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
@@ -146,7 +147,7 @@ class HttpClientStreamableHttpTransportTest {
 	void testCloseInitialized() {
 		var transport = HttpClientStreamableHttpTransport.builder(host).build();
 
-		var initializeRequest = new McpSchema.InitializeRequest(McpSchema.LATEST_PROTOCOL_VERSION,
+		var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_11_25,
 				McpSchema.ClientCapabilities.builder().roots(true).build(),
 				new McpSchema.Implementation("MCP Client", "0.3.1"));
 		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,

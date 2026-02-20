@@ -13,6 +13,7 @@ import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCNotification;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
 import reactor.core.publisher.Mono;
@@ -29,7 +30,7 @@ public class MockMcpClientTransport implements McpClientTransport {
 
 	private final BiConsumer<MockMcpClientTransport, McpSchema.JSONRPCMessage> interceptor;
 
-	private String protocolVersion = McpSchema.LATEST_PROTOCOL_VERSION;
+	private String protocolVersion = ProtocolVersions.MCP_2025_11_25;
 
 	public MockMcpClientTransport() {
 		this((t, msg) -> {

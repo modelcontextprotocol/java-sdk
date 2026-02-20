@@ -282,7 +282,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		if (!badRequestErrors.isEmpty()) {
 			String combinedMessage = String.join("; ", badRequestErrors);
-			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, new McpError(combinedMessage));
+			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+					McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND).message(combinedMessage).build());
 			return;
 		}
 
@@ -430,7 +431,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 					&& jsonrpcRequest.method().equals(McpSchema.METHOD_INITIALIZE)) {
 				if (!badRequestErrors.isEmpty()) {
 					String combinedMessage = String.join("; ", badRequestErrors);
-					this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, new McpError(combinedMessage));
+					this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+							McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND).message(combinedMessage).build());
 					return;
 				}
 
@@ -460,7 +462,9 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				catch (Exception e) {
 					logger.error("Failed to initialize session: {}", e.getMessage());
 					this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-							new McpError("Failed to initialize session: " + e.getMessage()));
+							McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+								.message("Failed to initialize session: " + e.getMessage())
+								.build());
 					return;
 				}
 			}
@@ -473,7 +477,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 			if (!badRequestErrors.isEmpty()) {
 				String combinedMessage = String.join("; ", badRequestErrors);
-				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, new McpError(combinedMessage));
+				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+						McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND).message(combinedMessage).build());
 				return;
 			}
 
@@ -481,7 +486,9 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 			if (session == null) {
 				this.responseError(response, HttpServletResponse.SC_NOT_FOUND,
-						new McpError("Session not found: " + sessionId));
+						McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+							.message("Session not found: " + sessionId)
+							.build());
 				return;
 			}
 
@@ -523,19 +530,23 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			}
 			else {
 				this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-						new McpError("Unknown message type"));
+						McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST).message("Unknown message type").build());
 			}
 		}
 		catch (IllegalArgumentException | IOException e) {
 			logger.error("Failed to deserialize message: {}", e.getMessage());
 			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
-					new McpError("Invalid message format: " + e.getMessage()));
+					McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+						.message("Invalid message format: " + e.getMessage())
+						.build());
 		}
 		catch (Exception e) {
 			logger.error("Error handling message: {}", e.getMessage());
 			try {
 				this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-						new McpError("Error processing message: " + e.getMessage()));
+						McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+							.message("Error processing message: " + e.getMessage())
+							.build());
 			}
 			catch (IOException ex) {
 				logger.error(FAILED_TO_SEND_ERROR_RESPONSE, ex.getMessage());
@@ -584,7 +595,9 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		if (request.getHeader(HttpHeaders.MCP_SESSION_ID) == null) {
 			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
-					new McpError("Session ID required in mcp-session-id header"));
+					McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND)
+						.message("Session ID required in mcp-session-id header")
+						.build());
 			return;
 		}
 
@@ -605,7 +618,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			logger.error("Failed to delete session {}: {}", sessionId, e.getMessage());
 			try {
 				this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-						new McpError(e.getMessage()));
+						McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message(e.getMessage()).build());
 			}
 			catch (IOException ex) {
 				logger.error(FAILED_TO_SEND_ERROR_RESPONSE, ex.getMessage());

@@ -60,3 +60,45 @@ jobs:
           command: 'java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-1.0.0-SNAPSHOT.jar'
           scenario: ${{ matrix.scenario }}
           expected-failures: ./conformance-tests/conformance-baseline.yml
+
+  auth:
+    name: Auth Conformance
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        scenario:
+        - auth/metadata-default
+        - auth/metadata-var1
+        - auth/metadata-var2
+        - auth/metadata-var3
+        - auth/basic-cimd
+        - auth/scope-from-www-authenticate
+        - auth/scope-from-scopes-supported
+        - auth/scope-omitted-when-undefined
+        - auth/scope-step-up
+        - auth/scope-retry-limit
+        - auth/token-endpoint-auth-basic
+        - auth/token-endpoint-auth-post
+        - auth/token-endpoint-auth-none
+        - auth/pre-registration
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build client
+        run: mvn clean install -DskipTests
+
+      - name: Run conformance test
+        uses: modelcontextprotocol/conformance@v0.1.15
+        with:
+          node-version: '22' # see https://github.com/modelcontextprotocol/conformance/pull/162
+          mode: client
+          command: 'java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-1.0.0-SNAPSHOT.jar'
+          scenario: ${{ matrix.scenario }}
+          expected-failures: ./conformance-tests/conformance-baseline.yml

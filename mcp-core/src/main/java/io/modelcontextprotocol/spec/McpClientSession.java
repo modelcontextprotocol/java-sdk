@@ -102,21 +102,6 @@ public class McpClientSession implements McpSession {
 	 * @param transport Transport implementation for message exchange
 	 * @param requestHandlers Map of method names to request handlers
 	 * @param notificationHandlers Map of method names to notification handlers
-	 * @deprecated Use
-	 * {@link #McpClientSession(Duration, McpClientTransport, Map, Map, Function)}
-	 */
-	@Deprecated
-	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
-			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
-		this(requestTimeout, transport, requestHandlers, notificationHandlers, Function.identity());
-	}
-
-	/**
-	 * Creates a new McpClientSession with the specified configuration and handlers.
-	 * @param requestTimeout Duration to wait for responses
-	 * @param transport Transport implementation for message exchange
-	 * @param requestHandlers Map of method names to request handlers
-	 * @param notificationHandlers Map of method names to notification handlers
 	 * @param connectHook Hook that allows transforming the connection Publisher prior to
 	 * subscribing
 	 */

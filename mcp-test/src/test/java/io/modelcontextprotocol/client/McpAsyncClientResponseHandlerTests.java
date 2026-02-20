@@ -13,6 +13,7 @@ import java.util.function.Function;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.MockMcpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.PaginatedRequest;
@@ -42,7 +43,7 @@ class McpAsyncClientResponseHandlerTests {
 
 	private static MockMcpClientTransport initializationEnabledTransport(
 			McpSchema.ServerCapabilities mockServerCapabilities, McpSchema.Implementation mockServerInfo) {
-		McpSchema.InitializeResult mockInitResult = new McpSchema.InitializeResult(McpSchema.LATEST_PROTOCOL_VERSION,
+		McpSchema.InitializeResult mockInitResult = new McpSchema.InitializeResult(ProtocolVersions.MCP_2025_11_25,
 				mockServerCapabilities, mockServerInfo, "Test instructions");
 
 		return new MockMcpClientTransport((t, message) -> {
@@ -51,7 +52,7 @@ class McpAsyncClientResponseHandlerTests {
 						r.id(), mockInitResult, null);
 				t.simulateIncomingMessage(initResponse);
 			}
-		}).withProtocolVersion(McpSchema.LATEST_PROTOCOL_VERSION);
+		}).withProtocolVersion(ProtocolVersions.MCP_2025_11_25);
 	}
 
 	@Test
@@ -212,8 +213,12 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Create a mock resources list that the server will return
-		McpSchema.Resource mockResource = new McpSchema.Resource("test://resource", "Test Resource", "A test resource",
-				"text/plain", null);
+		McpSchema.Resource mockResource = McpSchema.Resource.builder()
+			.uri("test://resource")
+			.name("Test Resource")
+			.description("A test resource")
+			.mimeType("text/plain")
+			.build();
 		McpSchema.ListResourcesResult mockResourcesResult = new McpSchema.ListResourcesResult(List.of(mockResource),
 				null);
 
