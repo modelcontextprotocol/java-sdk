@@ -27,7 +27,7 @@ jobs:
           timeout 30 bash -c 'until curl -s http://localhost:8080/mcp > /dev/null 2>&1; do sleep 0.5; done'
 
       - name: Run conformance tests
-        uses: modelcontextprotocol/conformance@v0.1.11
+        uses: modelcontextprotocol/conformance@v0.1.15
         with:
           mode: server
           url: http://localhost:8080/mcp
@@ -54,7 +54,7 @@ jobs:
         run: mvn clean install -DskipTests
 
       - name: Run conformance test
-        uses: modelcontextprotocol/conformance@v0.1.11
+        uses: modelcontextprotocol/conformance@v0.1.15
         with:
           mode: client
           command: 'java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-1.0.0-SNAPSHOT.jar'
