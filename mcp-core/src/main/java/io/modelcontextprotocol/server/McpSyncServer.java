@@ -5,7 +5,14 @@
 package io.modelcontextprotocol.server;
 
 import java.util.List;
+import java.util.concurrent.Executor;
 
+import io.modelcontextprotocol.experimental.tasks.TaskAwareAsyncToolSpecification;
+import io.modelcontextprotocol.experimental.tasks.TaskAwareSyncToolSpecification;
+import io.modelcontextprotocol.experimental.tasks.TaskManager;
+import io.modelcontextprotocol.experimental.tasks.TaskMessageQueue;
+import io.modelcontextprotocol.experimental.tasks.TaskStore;
+import reactor.core.scheduler.Schedulers;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.util.Assert;
@@ -90,8 +97,15 @@ public class McpSyncServer {
 	}
 
 	/**
-	 * List all registered tools.
-	 * @return A list of all registered tools
+	 * List all registered regular (non-task-aware) tools.
+	 *
+	 * <p>
+	 * <strong>Note:</strong> This method returns only regular tools registered via
+	 * {@link #addTool}. To get task-aware tools, use {@link #listTaskTools()}. When a
+	 * client calls {@code tools/list}, the response includes both regular tools and
+	 * task-aware tools merged together.
+	 * @return A list of all registered regular tools
+	 * @see #listTaskTools()
 	 */
 	public List<McpSchema.Tool> listTools() {
 		return this.asyncServer.listTools().collectList().block();
@@ -103,6 +117,88 @@ public class McpSyncServer {
 	 */
 	public void removeTool(String toolName) {
 		this.asyncServer.removeTool(toolName).block();
+	}
+
+	/**
+	 * Add a new task-aware tool at runtime.
+	 *
+	 * <p>
+	 * Task-aware tools support long-running operations with task lifecycle management
+	 * (SEP-1686). The sync specification is converted to async and delegated to the
+	 * underlying async server.
+	 * @param taskToolSpecification The task-aware tool specification to add
+	 */
+	public void addTaskTool(TaskAwareSyncToolSpecification taskToolSpecification) {
+		Executor executor = this.immediateExecution ? Runnable::run : Schedulers.boundedElastic()::schedule;
+		TaskAwareAsyncToolSpecification asyncSpec = TaskAwareAsyncToolSpecification.fromSync(taskToolSpecification,
+				executor);
+		this.asyncServer.addTaskTool(asyncSpec).block();
+	}
+
+	/**
+	 * List all registered task-aware tools.
+	 * @return A list of all registered task-aware tools
+	 */
+	public List<McpSchema.Tool> listTaskTools() {
+		return this.asyncServer.listTaskTools().collectList().block();
+	}
+
+	/**
+	 * Remove a task-aware tool.
+	 * @param toolName The name of the task-aware tool to remove
+	 */
+	public void removeTaskTool(String toolName) {
+		this.asyncServer.removeTaskTool(toolName).block();
+	}
+
+	/**
+	 * Sends a task status notification to the client.
+	 * <p>
+	 * <strong>Warning:</strong> This is an experimental API that may change in future
+	 * releases. Use with caution in production environments.
+	 * @param notification The task status notification to send
+	 */
+	public void notifyTaskStatus(McpSchema.TaskStatusNotification notification) {
+		this.asyncServer.notifyTaskStatus(notification).block();
+	}
+
+	/**
+	 * Get the task store used for managing long-running tasks.
+	 * <p>
+	 * <strong>Warning:</strong> This is an experimental API that may change in future
+	 * releases. Use with caution in production environments.
+	 * @return The task store, or null if tasks are not enabled
+	 */
+	public TaskStore<McpSchema.ServerTaskPayloadResult> getTaskStore() {
+		return this.asyncServer.getTaskStore();
+	}
+
+	/**
+	 * Get the task message queue used for task communication during input_required state.
+	 * <p>
+	 * <strong>Warning:</strong> This is an experimental API that may change in future
+	 * releases. Use with caution in production environments.
+	 * @return The task message queue, or null if not configured
+	 */
+	public TaskMessageQueue getTaskMessageQueue() {
+		return this.asyncServer.getTaskMessageQueue();
+	}
+
+	/**
+	 * Returns the task manager for task orchestration operations.
+	 * <p>
+	 * The task manager provides the outbound API for interacting with client-hosted
+	 * tasks, including streaming task results, getting task status, and cancelling tasks.
+	 * It also manages task lifecycle operations and message queuing for side-channel
+	 * communication.
+	 * <p>
+	 * <strong>Warning:</strong> This is an experimental API that may change in future
+	 * releases. Use with caution in production environments.
+	 * @return the task manager (never null; returns NullTaskManager if task support is
+	 * not configured)
+	 */
+	public TaskManager taskManager() {
+		return this.asyncServer.taskManager();
 	}
 
 	/**

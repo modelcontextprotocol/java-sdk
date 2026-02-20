@@ -24,6 +24,7 @@ import reactor.test.StepVerifier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -693,6 +694,302 @@ class McpAsyncServerExchangeTests {
 
 		// Verify that sendRequest was called twice
 		verify(mockSession, times(2)).sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeRef.class));
+	}
+
+	// ---------------------------------------
+	// List Tasks Tests
+	// ---------------------------------------
+
+	@Test
+	void testListTasksWithNullCapabilities() {
+		McpAsyncServerExchange exchangeWithNullCapabilities = new McpAsyncServerExchange(mockSession, null, clientInfo);
+
+		StepVerifier.create(exchangeWithNullCapabilities.listTasks("cursor")).verifyErrorSatisfies(error -> {
+			assertThat(error).isInstanceOf(IllegalStateException.class)
+				.hasMessage("Client must be initialized. Call the initialize method first!");
+		});
+
+		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_TASKS_LIST), any(), any(TypeRef.class));
+	}
+
+	@Test
+	void testListTasksWithoutTasksCapabilities() {
+		McpSchema.ClientCapabilities capabilitiesWithoutTasks = McpSchema.ClientCapabilities.builder()
+			.roots(true)
+			.build();
+
+		McpAsyncServerExchange exchangeWithoutTasks = new McpAsyncServerExchange(mockSession, capabilitiesWithoutTasks,
+				clientInfo);
+
+		StepVerifier.create(exchangeWithoutTasks.listTasks("cursor")).verifyErrorSatisfies(error -> {
+			assertThat(error).isInstanceOf(IllegalStateException.class)
+				.hasMessage("Client must be configured with tasks capabilities");
+		});
+
+		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_TASKS_LIST), any(), any(TypeRef.class));
+	}
+
+	@Test
+	void testListTasksWithoutListCapability() {
+		McpSchema.ClientCapabilities capabilitiesWithoutList = McpSchema.ClientCapabilities.builder()
+			.tasks(McpSchema.ClientCapabilities.ClientTaskCapabilities.builder().build())
+			.build();
+
+		McpAsyncServerExchange exchangeWithoutList = new McpAsyncServerExchange(mockSession, capabilitiesWithoutList,
+				clientInfo);
+
+		StepVerifier.create(exchangeWithoutList.listTasks("cursor")).verifyErrorSatisfies(error -> {
+			assertThat(error).isInstanceOf(IllegalStateException.class)
+				.hasMessage("Client must be configured with tasks.list capability");
+		});
+
+		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_TASKS_LIST), any(), any(TypeRef.class));
+	}
+
+	@Test
+	void testListTasksWithSinglePage() {
+		McpSchema.ClientCapabilities capabilitiesWithTasks = McpSchema.ClientCapabilities.builder()
+			.tasks(McpSchema.ClientCapabilities.ClientTaskCapabilities.builder().list().build())
+			.build();
+
+		McpAsyncServerExchange exchangeWithTasks = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithTasks, clientInfo, McpTransportContext.EMPTY);
+
+		List<McpSchema.Task> tasks = Arrays.asList(
+				McpSchema.Task.builder()
+					.taskId("task-1")
+					.status(McpSchema.TaskStatus.WORKING)
+					.createdAt("2024-01-01T00:00:00Z")
+					.lastUpdatedAt("2024-01-01T00:00:00Z")
+					.build(),
+				McpSchema.Task.builder()
+					.taskId("task-2")
+					.status(McpSchema.TaskStatus.COMPLETED)
+					.createdAt("2024-01-01T00:00:00Z")
+					.lastUpdatedAt("2024-01-01T00:01:00Z")
+					.build());
+		McpSchema.ListTasksResult singlePageResult = McpSchema.ListTasksResult.builder().tasks(tasks).build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_TASKS_LIST), any(McpSchema.PaginatedRequest.class),
+				any(TypeRef.class)))
+			.thenReturn(Mono.just(singlePageResult));
+
+		StepVerifier.create(exchangeWithTasks.listTasks()).assertNext(result -> {
+			assertThat(result.tasks()).hasSize(2);
+			assertThat(result.tasks().get(0).taskId()).isEqualTo("task-1");
+			assertThat(result.tasks().get(1).taskId()).isEqualTo("task-2");
+			assertThat(result.nextCursor()).isNull();
+
+			// Verify that the returned list is unmodifiable
+			assertThatThrownBy(() -> result.tasks()
+				.add(McpSchema.Task.builder()
+					.taskId("test")
+					.status(McpSchema.TaskStatus.WORKING)
+					.createdAt("2024-01-01T00:00:00Z")
+					.lastUpdatedAt("2024-01-01T00:00:00Z")
+					.build()))
+				.isInstanceOf(UnsupportedOperationException.class);
+		}).verifyComplete();
+	}
+
+	@Test
+	void testListTasksWithMultiplePages() {
+		McpSchema.ClientCapabilities capabilitiesWithTasks = McpSchema.ClientCapabilities.builder()
+			.tasks(McpSchema.ClientCapabilities.ClientTaskCapabilities.builder().list().build())
+			.build();
+
+		McpAsyncServerExchange exchangeWithTasks = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithTasks, clientInfo, McpTransportContext.EMPTY);
+
+		List<McpSchema.Task> page1Tasks = Arrays.asList(McpSchema.Task.builder()
+			.taskId("task-1")
+			.status(McpSchema.TaskStatus.WORKING)
+			.createdAt("2024-01-01T00:00:00Z")
+			.lastUpdatedAt("2024-01-01T00:00:00Z")
+			.build());
+		List<McpSchema.Task> page2Tasks = Arrays.asList(McpSchema.Task.builder()
+			.taskId("task-2")
+			.status(McpSchema.TaskStatus.COMPLETED)
+			.createdAt("2024-01-01T00:00:00Z")
+			.lastUpdatedAt("2024-01-01T00:01:00Z")
+			.build());
+
+		McpSchema.ListTasksResult page1Result = McpSchema.ListTasksResult.builder()
+			.tasks(page1Tasks)
+			.nextCursor("cursor1")
+			.build();
+		McpSchema.ListTasksResult page2Result = McpSchema.ListTasksResult.builder().tasks(page2Tasks).build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_TASKS_LIST), eq(new McpSchema.PaginatedRequest(null)),
+				any(TypeRef.class)))
+			.thenReturn(Mono.just(page1Result));
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_TASKS_LIST), eq(new McpSchema.PaginatedRequest("cursor1")),
+				any(TypeRef.class)))
+			.thenReturn(Mono.just(page2Result));
+
+		StepVerifier.create(exchangeWithTasks.listTasks()).assertNext(result -> {
+			assertThat(result.tasks()).hasSize(2);
+			assertThat(result.tasks().get(0).taskId()).isEqualTo("task-1");
+			assertThat(result.tasks().get(1).taskId()).isEqualTo("task-2");
+			assertThat(result.nextCursor()).isNull();
+
+			// Verify that the returned list is unmodifiable
+			assertThatThrownBy(() -> result.tasks()
+				.add(McpSchema.Task.builder()
+					.taskId("test")
+					.status(McpSchema.TaskStatus.WORKING)
+					.createdAt("2024-01-01T00:00:00Z")
+					.lastUpdatedAt("2024-01-01T00:00:00Z")
+					.build()))
+				.isInstanceOf(UnsupportedOperationException.class);
+		}).verifyComplete();
+	}
+
+	// ---------------------------------------
+	// Cancel Task Tests
+	// ---------------------------------------
+
+	@Test
+	void testCancelTaskWithNullCapabilities() {
+		McpAsyncServerExchange exchangeWithNullCapabilities = new McpAsyncServerExchange(mockSession, null, clientInfo);
+
+		StepVerifier
+			.create(exchangeWithNullCapabilities
+				.cancelTask(McpSchema.CancelTaskRequest.builder().taskId("task-1").build()))
+			.verifyErrorSatisfies(error -> {
+				assertThat(error).isInstanceOf(IllegalStateException.class)
+					.hasMessage("Client must be initialized. Call the initialize method first!");
+			});
+
+		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_TASKS_CANCEL), any(), any(TypeRef.class));
+	}
+
+	@Test
+	void testCancelTaskWithoutTasksCapabilities() {
+		McpSchema.ClientCapabilities capabilitiesWithoutTasks = McpSchema.ClientCapabilities.builder()
+			.roots(true)
+			.build();
+
+		McpAsyncServerExchange exchangeWithoutTasks = new McpAsyncServerExchange(mockSession, capabilitiesWithoutTasks,
+				clientInfo);
+
+		StepVerifier
+			.create(exchangeWithoutTasks.cancelTask(McpSchema.CancelTaskRequest.builder().taskId("task-1").build()))
+			.verifyErrorSatisfies(error -> {
+				assertThat(error).isInstanceOf(IllegalStateException.class)
+					.hasMessage("Client must be configured with tasks capabilities");
+			});
+
+		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_TASKS_CANCEL), any(), any(TypeRef.class));
+	}
+
+	@Test
+	void testCancelTaskWithoutCancelCapability() {
+		McpSchema.ClientCapabilities capabilitiesWithoutCancel = McpSchema.ClientCapabilities.builder()
+			.tasks(McpSchema.ClientCapabilities.ClientTaskCapabilities.builder().build())
+			.build();
+
+		McpAsyncServerExchange exchangeWithoutCancel = new McpAsyncServerExchange(mockSession,
+				capabilitiesWithoutCancel, clientInfo);
+
+		StepVerifier
+			.create(exchangeWithoutCancel.cancelTask(McpSchema.CancelTaskRequest.builder().taskId("task-1").build()))
+			.verifyErrorSatisfies(error -> {
+				assertThat(error).isInstanceOf(IllegalStateException.class)
+					.hasMessage("Client must be configured with tasks.cancel capability");
+			});
+
+		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_TASKS_CANCEL), any(), any(TypeRef.class));
+	}
+
+	@Test
+	void testCancelTaskSuccess() {
+		McpSchema.ClientCapabilities capabilitiesWithTasks = McpSchema.ClientCapabilities.builder()
+			.tasks(McpSchema.ClientCapabilities.ClientTaskCapabilities.builder().cancel().build())
+			.build();
+
+		McpAsyncServerExchange exchangeWithTasks = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithTasks, clientInfo, McpTransportContext.EMPTY);
+
+		McpSchema.CancelTaskResult expectedResult = McpSchema.CancelTaskResult.builder()
+			.taskId("task-1")
+			.status(McpSchema.TaskStatus.CANCELLED)
+			.createdAt("2024-01-01T00:00:00Z")
+			.lastUpdatedAt("2024-01-01T00:01:00Z")
+			.build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_TASKS_CANCEL),
+				argThat((McpSchema.CancelTaskRequest req) -> "task-1".equals(req.taskId())), any(TypeRef.class)))
+			.thenReturn(Mono.just(expectedResult));
+
+		StepVerifier
+			.create(exchangeWithTasks.cancelTask(McpSchema.CancelTaskRequest.builder().taskId("task-1").build()))
+			.assertNext(result -> {
+				assertThat(result.taskId()).isEqualTo("task-1");
+				assertThat(result.status()).isEqualTo(McpSchema.TaskStatus.CANCELLED);
+			})
+			.verifyComplete();
+	}
+
+	@Test
+	void testCancelTaskByIdSuccess() {
+		McpSchema.ClientCapabilities capabilitiesWithTasks = McpSchema.ClientCapabilities.builder()
+			.tasks(McpSchema.ClientCapabilities.ClientTaskCapabilities.builder().cancel().build())
+			.build();
+
+		McpAsyncServerExchange exchangeWithTasks = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithTasks, clientInfo, McpTransportContext.EMPTY);
+
+		McpSchema.CancelTaskResult expectedResult = McpSchema.CancelTaskResult.builder()
+			.taskId("task-1")
+			.status(McpSchema.TaskStatus.CANCELLED)
+			.createdAt("2024-01-01T00:00:00Z")
+			.lastUpdatedAt("2024-01-01T00:01:00Z")
+			.build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_TASKS_CANCEL),
+				argThat((McpSchema.CancelTaskRequest req) -> "task-1".equals(req.taskId())), any(TypeRef.class)))
+			.thenReturn(Mono.just(expectedResult));
+
+		StepVerifier.create(exchangeWithTasks.cancelTask("task-1")).assertNext(result -> {
+			assertThat(result.taskId()).isEqualTo("task-1");
+			assertThat(result.status()).isEqualTo(McpSchema.TaskStatus.CANCELLED);
+		}).verifyComplete();
+	}
+
+	@Test
+	void testCancelTaskByIdWithNullId() {
+		McpSchema.ClientCapabilities capabilitiesWithTasks = McpSchema.ClientCapabilities.builder()
+			.tasks(McpSchema.ClientCapabilities.ClientTaskCapabilities.builder().cancel().build())
+			.build();
+
+		McpAsyncServerExchange exchangeWithTasks = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithTasks, clientInfo, McpTransportContext.EMPTY);
+
+		assertThatThrownBy(() -> exchangeWithTasks.cancelTask((String) null))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("Task ID must not be null or empty");
+	}
+
+	@Test
+	void testCancelTaskWithSessionError() {
+		McpSchema.ClientCapabilities capabilitiesWithTasks = McpSchema.ClientCapabilities.builder()
+			.tasks(McpSchema.ClientCapabilities.ClientTaskCapabilities.builder().cancel().build())
+			.build();
+
+		McpAsyncServerExchange exchangeWithTasks = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithTasks, clientInfo, McpTransportContext.EMPTY);
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_TASKS_CANCEL), any(McpSchema.CancelTaskRequest.class),
+				any(TypeRef.class)))
+			.thenReturn(Mono.error(new RuntimeException("Session communication error")));
+
+		StepVerifier
+			.create(exchangeWithTasks.cancelTask(McpSchema.CancelTaskRequest.builder().taskId("task-1").build()))
+			.verifyErrorSatisfies(error -> {
+				assertThat(error).isInstanceOf(RuntimeException.class).hasMessage("Session communication error");
+			});
 	}
 
 }

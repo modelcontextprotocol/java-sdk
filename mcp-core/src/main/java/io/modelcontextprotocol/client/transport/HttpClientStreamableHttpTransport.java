@@ -101,11 +101,13 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private static final String TEXT_EVENT_STREAM = "text/event-stream";
 
-	public static int NOT_FOUND = 404;
+	public static final int ACCEPTED = 202;
 
-	public static int METHOD_NOT_ALLOWED = 405;
+	public static final int NOT_FOUND = 404;
 
-	public static int BAD_REQUEST = 400;
+	public static final int METHOD_NOT_ALLOWED = 405;
+
+	public static final int BAD_REQUEST = 400;
 
 	private final McpJsonMapper jsonMapper;
 
@@ -504,11 +506,13 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						.orElse(null);
 
 					// For empty content or HTTP code 202 (ACCEPTED), assume success
-					if (contentType.isBlank() || "0".equals(contentLength) || statusCode == 202) {
-						// if (contentType.isBlank() || "0".equals(contentLength)) {
+					if (contentType.isBlank() || "0".equals(contentLength) || statusCode == ACCEPTED) {
 						logger.debug("No body returned for POST in session {}", sessionRepresentation);
-						// No content type means no response body, so we can just
-						// return an empty stream
+						// No content type, zero content length, or 202 Accepted means
+						// no response body expected, so we return an empty stream.
+						// Per the spec, 202 is used to acknowledge
+						// notifications/responses
+						// where no reply is expected.
 						deliveredSink.success();
 						return Flux.empty();
 					}
