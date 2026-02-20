@@ -3,24 +3,15 @@
  */
 package io.modelcontextprotocol.server;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.stream.Stream;
-
-import org.apache.catalina.LifecycleException;
-import org.apache.catalina.LifecycleState;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.params.provider.Arguments;
-
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.servlet.config.annotation.EnableWebMvc;
-import org.springframework.web.servlet.function.RouterFunction;
-import org.springframework.web.servlet.function.ServerResponse;
 
 import io.modelcontextprotocol.AbstractStatelessIntegrationTests;
 import io.modelcontextprotocol.client.McpClient;
@@ -29,6 +20,22 @@ import io.modelcontextprotocol.client.transport.WebClientStreamableHttpTransport
 import io.modelcontextprotocol.server.McpServer.StatelessAsyncSpecification;
 import io.modelcontextprotocol.server.McpServer.StatelessSyncSpecification;
 import io.modelcontextprotocol.server.transport.WebMvcStatelessServerTransport;
+import io.modelcontextprotocol.spec.McpSchema;
+import org.apache.catalina.LifecycleException;
+import org.apache.catalina.LifecycleState;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.servlet.config.annotation.EnableWebMvc;
+import org.springframework.web.servlet.function.RouterFunction;
+import org.springframework.web.servlet.function.ServerResponse;
 import reactor.core.scheduler.Schedulers;
 
 @Timeout(15)
@@ -129,6 +136,39 @@ class WebMvcStatelessIntegrationTests extends AbstractStatelessIntegrationTests 
 				throw new RuntimeException("Failed to stop Tomcat", e);
 			}
 		}
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "tools/list", "resources/list", "prompts/list" })
+	void testMissingHandlerReturnsMethodNotFoundError(String method) throws Exception {
+		var mcpServer = prepareSyncServerBuilder().build();
+
+		HttpResponse<String> response;
+
+		try {
+			HttpRequest request = HttpRequest.newBuilder()
+				.uri(URI.create("http://localhost:" + PORT + MESSAGE_ENDPOINT))
+				.header("Content-Type", "application/json")
+				.header("Accept", "application/json, text/event-stream")
+				.POST(HttpRequest.BodyPublishers.ofString("""
+						{
+							"jsonrpc": "2.0",
+							"method": "%s",
+							"id": "test-request-123",
+							"params": {}
+						}
+						""".formatted(method)))
+				.build();
+
+			response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+
+		final var responseBody = response.body();
+		assertThatJson(responseBody).inPath("error.code").isEqualTo(McpSchema.ErrorCodes.METHOD_NOT_FOUND);
+		assertThatJson(responseBody).inPath("error.message").isEqualTo("Method not found: " + method);
 	}
 
 }
