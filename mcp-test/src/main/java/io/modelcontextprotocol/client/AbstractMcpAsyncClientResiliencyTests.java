@@ -45,7 +45,7 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 	private static final Logger logger = LoggerFactory.getLogger(AbstractMcpAsyncClientResiliencyTests.class);
 
 	static Network network = Network.newNetwork();
-	static String host = "http://localhost:3001";
+	public static String host = "http://localhost:3001";
 
 	@SuppressWarnings("resource")
 	static GenericContainer<?> container = new GenericContainer<>("docker.io/node:lts-alpine3.23")
