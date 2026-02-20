@@ -112,7 +112,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 
 	private final String sseEndpoint;
 
-	private final RouterFunction<?> routerFunction;
+	private final RouterFunction<ServerResponse> routerFunction;
 
 	private McpServerSession.Factory sessionFactory;
 
@@ -269,7 +269,7 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 	 * </ul>
 	 * @return The configured {@link RouterFunction} for handling HTTP requests
 	 */
-	public RouterFunction<?> getRouterFunction() {
+	public RouterFunction<ServerResponse> getRouterFunction() {
 		return this.routerFunction;
 	}
 

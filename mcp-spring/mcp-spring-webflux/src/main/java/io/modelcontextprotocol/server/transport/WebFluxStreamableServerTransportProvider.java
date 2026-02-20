@@ -57,7 +57,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 	private final boolean disallowDelete;
 
-	private final RouterFunction<?> routerFunction;
+	private final RouterFunction<ServerResponse> routerFunction;
 
 	private McpStreamableServerSession.Factory sessionFactory;
 
@@ -161,7 +161,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 	 * </ul>
 	 * @return The configured {@link RouterFunction} for handling HTTP requests
 	 */
-	public RouterFunction<?> getRouterFunction() {
+	public RouterFunction<ServerResponse> getRouterFunction() {
 		return this.routerFunction;
 	}
 

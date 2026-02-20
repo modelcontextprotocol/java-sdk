@@ -22,7 +22,7 @@ static class MyConfig {
 	// Router function for SSE transport used by Spring WebFlux to start an HTTP
 	// server.
 	@Bean
-	public RouterFunction<?> mcpRouterFunction(WebFluxSseServerTransport transport) {
+	public RouterFunction<ServerResponse> mcpRouterFunction(WebFluxSseServerTransport transport) {
 		return transport.getRouterFunction();
 	}
 
