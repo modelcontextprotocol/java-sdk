@@ -320,6 +320,9 @@
 						<extensions>true</extensions>
 						<configuration>
 							<publishingServerId>central</publishingServerId>
+                            <excludeArtifacts>
+                                mcp-parent,conformance-tests,client-jdk-http-client,client-spring-http-client,server-servlet
+                            </excludeArtifacts>							
 							<autoPublish>true</autoPublish>
 						</configuration>
 					</plugin>
