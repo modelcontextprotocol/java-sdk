@@ -28,6 +28,8 @@ import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.KeepAliveScheduler;
 import jakarta.servlet.AsyncContext;
+import jakarta.servlet.AsyncEvent;
+import jakarta.servlet.AsyncListener;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -272,6 +274,40 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		String sessionId = UUID.randomUUID().toString();
 		AsyncContext asyncContext = request.startAsync();
 		asyncContext.setTimeout(0);
+
+		asyncContext.addListener(new AsyncListener() {
+            @Override
+            public void onComplete(AsyncEvent event) {
+                logger.debug("AsyncContext completed for session {}", sessionId);
+                sessions.remove(sessionId);
+            }
+
+            @Override
+            public void onTimeout(AsyncEvent event) {
+                logger.warn("Session {} timeout, cleaning up", sessionId);
+                sessions.remove(sessionId);
+                try {
+                    event.getAsyncContext().complete();
+                } catch (Exception e) {
+                    logger.error("Error completing async context on timeout", e);
+                }
+            }
+
+            @Override
+            public void onError(AsyncEvent event) {
+                logger.error("AsyncContext error for session {}: {}", sessionId, event.getThrowable().getMessage());
+                sessions.remove(sessionId);
+                try {
+                    event.getAsyncContext().complete();
+                } catch (Exception e) {
+                    logger.error("Error completing async context on error", e);
+                }
+            }
+
+            @Override
+            public void onStartAsync(AsyncEvent event) {
+            }
+        });
 
 		PrintWriter writer = response.getWriter();
 
