@@ -24,7 +24,11 @@ import org.slf4j.LoggerFactory;
  * NetworkNT JSON Schema Validator library for validation.
  *
  * @author Christian Tzolov
+ * @deprecated since 18.0.0, use
+ * {@link io.modelcontextprotocol.json.schema.jackson2.DefaultJsonSchemaValidator}
+ * instead. Will be removed in 19.0.0.
  */
+@Deprecated(forRemoval = true, since = "18.0.0")
 public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 
 	private static final Logger logger = LoggerFactory.getLogger(DefaultJsonSchemaValidator.class);

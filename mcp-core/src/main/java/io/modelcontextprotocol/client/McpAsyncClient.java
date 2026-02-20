@@ -30,6 +30,7 @@ import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
 import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
+import io.modelcontextprotocol.util.ToolNameValidator;
 import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
@@ -105,6 +106,8 @@ public class McpAsyncClient {
 
 	public static final TypeRef<McpSchema.ProgressNotification> PROGRESS_NOTIFICATION_TYPE_REF = new TypeRef<>() {
 	};
+
+	public static final String NEGOTIATED_PROTOCOL_VERSION = "io.modelcontextprotocol.client.negotiated-protocol-version";
 
 	/**
 	 * Client capabilities.
@@ -654,6 +657,10 @@ public class McpAsyncClient {
 			.sendRequest(McpSchema.METHOD_TOOLS_LIST, new McpSchema.PaginatedRequest(cursor),
 					LIST_TOOLS_RESULT_TYPE_REF)
 			.doOnNext(result -> {
+				// Validate tool names (warn only)
+				if (result.tools() != null) {
+					result.tools().forEach(tool -> ToolNameValidator.validate(tool.name(), false));
+				}
 				if (this.enableCallToolSchemaCaching && result.tools() != null) {
 					// Cache tools output schema
 					result.tools()

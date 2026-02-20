@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server.transport;
@@ -7,24 +7,23 @@ package io.modelcontextprotocol.server.transport;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
-import java.util.UUID;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
+import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
-
-import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.ProtocolVersions;
-import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.KeepAliveScheduler;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -36,6 +35,7 @@ import org.springframework.web.servlet.function.RouterFunctions;
 import org.springframework.web.servlet.function.ServerRequest;
 import org.springframework.web.servlet.function.ServerResponse;
 import org.springframework.web.servlet.function.ServerResponse.SseBuilder;
+import org.springframework.web.util.UriComponentsBuilder;
 
 /**
  * Server-side implementation of the Model Context Protocol (MCP) transport layer using
@@ -87,6 +87,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 */
 	public static final String ENDPOINT_EVENT_TYPE = "endpoint";
 
+	public static final String SESSION_ID = "sessionId";
+
 	/**
 	 * Default SSE endpoint path as specified by the MCP transport specification.
 	 */
@@ -119,6 +121,11 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	private KeepAliveScheduler keepAliveScheduler;
 
 	/**
+	 * Security validator for validating HTTP requests.
+	 */
+	private final ServerTransportSecurityValidator securityValidator;
+
+	/**
 	 * Constructs a new WebMvcSseServerTransportProvider instance.
 	 * @param jsonMapper The McpJsonMapper to use for JSON serialization/deserialization
 	 * of messages.
@@ -131,22 +138,26 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 * @param keepAliveInterval The interval for sending keep-alive messages to clients.
 	 * @param contextExtractor The contextExtractor to fill in a
 	 * {@link McpTransportContext}.
+	 * @param securityValidator The security validator for validating HTTP requests.
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
 	private WebMvcSseServerTransportProvider(McpJsonMapper jsonMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval,
-			McpTransportContextExtractor<ServerRequest> contextExtractor) {
+			McpTransportContextExtractor<ServerRequest> contextExtractor,
+			ServerTransportSecurityValidator securityValidator) {
 		Assert.notNull(jsonMapper, "McpJsonMapper must not be null");
 		Assert.notNull(baseUrl, "Message base URL must not be null");
 		Assert.notNull(messageEndpoint, "Message endpoint must not be null");
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
+		Assert.notNull(securityValidator, "Security validator must not be null");
 
 		this.jsonMapper = jsonMapper;
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
 		this.contextExtractor = contextExtractor;
+		this.securityValidator = securityValidator;
 		this.routerFunction = RouterFunctions.route()
 			.GET(this.sseEndpoint, this::handleSseConnection)
 			.POST(this.messageEndpoint, this::handleMessage)
@@ -255,41 +266,54 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
-		String sessionId = UUID.randomUUID().toString();
-		logger.debug("Creating new SSE connection for session: {}", sessionId);
+		try {
+			Map<String, List<String>> headers = request.headers().asHttpHeaders();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			return ServerResponse.status(e.getStatusCode()).body(e.getMessage());
+		}
 
 		// Send initial endpoint event
-		try {
-			return ServerResponse.sse(sseBuilder -> {
-				sseBuilder.onComplete(() -> {
-					logger.debug("SSE connection completed for session: {}", sessionId);
-					sessions.remove(sessionId);
-				});
-				sseBuilder.onTimeout(() -> {
-					logger.debug("SSE connection timed out for session: {}", sessionId);
-					sessions.remove(sessionId);
-				});
+		return ServerResponse.sse(sseBuilder -> {
+			WebMvcMcpSessionTransport sessionTransport = new WebMvcMcpSessionTransport(sseBuilder);
+			McpServerSession session = sessionFactory.create(sessionTransport);
+			String sessionId = session.getId();
+			logger.debug("Creating new SSE connection for session: {}", sessionId);
+			sseBuilder.onComplete(() -> {
+				logger.debug("SSE connection completed for session: {}", sessionId);
+				sessions.remove(sessionId);
+			});
+			sseBuilder.onTimeout(() -> {
+				logger.debug("SSE connection timed out for session: {}", sessionId);
+				sessions.remove(sessionId);
+			});
+			this.sessions.put(sessionId, session);
 
-				WebMvcMcpSessionTransport sessionTransport = new WebMvcMcpSessionTransport(sessionId, sseBuilder);
-				McpServerSession session = sessionFactory.create(sessionTransport);
-				this.sessions.put(sessionId, session);
+			try {
+				sseBuilder.event(ENDPOINT_EVENT_TYPE).data(buildEndpointUrl(sessionId));
+			}
+			catch (Exception e) {
+				logger.error("Failed to send initial endpoint event: {}", e.getMessage());
+				this.sessions.remove(sessionId);
+				sseBuilder.error(e);
+			}
+		}, Duration.ZERO);
+	}
 
-				try {
-					sseBuilder.id(sessionId)
-						.event(ENDPOINT_EVENT_TYPE)
-						.data(this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId);
-				}
-				catch (Exception e) {
-					logger.error("Failed to send initial endpoint event: {}", e.getMessage());
-					sseBuilder.error(e);
-				}
-			}, Duration.ZERO);
-		}
-		catch (Exception e) {
-			logger.error("Failed to send initial endpoint event to session {}: {}", sessionId, e.getMessage());
-			sessions.remove(sessionId);
-			return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-		}
+	/**
+	 * Constructs the full message endpoint URL by combining the base URL, message path,
+	 * and the required session_id query parameter.
+	 * @param sessionId the unique session identifier
+	 * @return the fully qualified endpoint URL as a string
+	 */
+	private String buildEndpointUrl(String sessionId) {
+		// for WebMVC compatibility
+		return UriComponentsBuilder.fromUriString(this.baseUrl)
+			.path(this.messageEndpoint)
+			.queryParam(SESSION_ID, sessionId)
+			.build()
+			.toUriString();
 	}
 
 	/**
@@ -308,11 +332,19 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
-		if (request.param("sessionId").isEmpty()) {
+		try {
+			Map<String, List<String>> headers = request.headers().asHttpHeaders();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			return ServerResponse.status(e.getStatusCode()).body(e.getMessage());
+		}
+
+		if (request.param(SESSION_ID).isEmpty()) {
 			return ServerResponse.badRequest().body(new McpError("Session ID missing in message endpoint"));
 		}
 
-		String sessionId = request.param("sessionId").get();
+		String sessionId = request.param(SESSION_ID).get();
 		McpServerSession session = sessions.get(sessionId);
 
 		if (session == null) {
@@ -327,9 +359,9 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 
 			// Process the message through the session's handle method
 			session.handle(message).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext)).block(); // Block
-																														// for
-																														// WebMVC
-																														// compatibility
+			// for
+			// WebMVC
+			// compatibility
 
 			return ServerResponse.ok().build();
 		}
@@ -349,8 +381,6 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 	 */
 	private class WebMvcMcpSessionTransport implements McpServerTransport {
 
-		private final String sessionId;
-
 		private final SseBuilder sseBuilder;
 
 		/**
@@ -360,14 +390,11 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		private final ReentrantLock sseBuilderLock = new ReentrantLock();
 
 		/**
-		 * Creates a new session transport with the specified ID and SSE builder.
-		 * @param sessionId The unique identifier for this session
+		 * Creates a new session transport with the specified SSE builder.
 		 * @param sseBuilder The SSE builder for sending server events to the client
 		 */
-		WebMvcMcpSessionTransport(String sessionId, SseBuilder sseBuilder) {
-			this.sessionId = sessionId;
+		WebMvcMcpSessionTransport(SseBuilder sseBuilder) {
 			this.sseBuilder = sseBuilder;
-			logger.debug("Session transport {} initialized with SSE builder", sessionId);
 		}
 
 		/**
@@ -381,11 +408,10 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 				sseBuilderLock.lock();
 				try {
 					String jsonText = jsonMapper.writeValueAsString(message);
-					sseBuilder.id(sessionId).event(MESSAGE_EVENT_TYPE).data(jsonText);
-					logger.debug("Message sent to session {}", sessionId);
+					sseBuilder.event(MESSAGE_EVENT_TYPE).data(jsonText);
 				}
 				catch (Exception e) {
-					logger.error("Failed to send message to session {}: {}", sessionId, e.getMessage());
+					logger.error("Failed to send message: {}", e.getMessage());
 					sseBuilder.error(e);
 				}
 				finally {
@@ -398,8 +424,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		 * Converts data from one type to another using the configured McpJsonMapper.
 		 * @param data The source data object to convert
 		 * @param typeRef The target type reference
-		 * @return The converted object of type T
 		 * @param <T> The target type
+		 * @return The converted object of type T
 		 */
 		@Override
 		public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
@@ -413,14 +439,12 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		@Override
 		public Mono<Void> closeGracefully() {
 			return Mono.fromRunnable(() -> {
-				logger.debug("Closing session transport: {}", sessionId);
 				sseBuilderLock.lock();
 				try {
 					sseBuilder.complete();
-					logger.debug("Successfully completed SSE builder for session {}", sessionId);
 				}
 				catch (Exception e) {
-					logger.warn("Failed to complete SSE builder for session {}: {}", sessionId, e.getMessage());
+					logger.warn("Failed to complete SSE builder: {}", e.getMessage());
 				}
 				finally {
 					sseBuilderLock.unlock();
@@ -436,10 +460,9 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			sseBuilderLock.lock();
 			try {
 				sseBuilder.complete();
-				logger.debug("Successfully completed SSE builder for session {}", sessionId);
 			}
 			catch (Exception e) {
-				logger.warn("Failed to complete SSE builder for session {}: {}", sessionId, e.getMessage());
+				logger.warn("Failed to complete SSE builder: {}", e.getMessage());
 			}
 			finally {
 				sseBuilderLock.unlock();
@@ -477,6 +500,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 
 		private McpTransportContextExtractor<ServerRequest> contextExtractor = (
 				serverRequest) -> McpTransportContext.EMPTY;
+
+		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
 
 		/**
 		 * Sets the JSON object mapper to use for message serialization/deserialization.
@@ -554,6 +579,18 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 		}
 
 		/**
+		 * Sets the security validator for validating HTTP requests.
+		 * @param securityValidator The security validator to use. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if securityValidator is null
+		 */
+		public Builder securityValidator(ServerTransportSecurityValidator securityValidator) {
+			Assert.notNull(securityValidator, "Security validator must not be null");
+			this.securityValidator = securityValidator;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of WebMvcSseServerTransportProvider with the configured
 		 * settings.
 		 * @return A new WebMvcSseServerTransportProvider instance
@@ -563,8 +600,8 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			if (messageEndpoint == null) {
 				throw new IllegalStateException("MessageEndpoint must be set");
 			}
-			return new WebMvcSseServerTransportProvider(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
-					baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval, contextExtractor);
+			return new WebMvcSseServerTransportProvider(jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
+					baseUrl, messageEndpoint, sseEndpoint, keepAliveInterval, contextExtractor, securityValidator);
 		}
 
 	}

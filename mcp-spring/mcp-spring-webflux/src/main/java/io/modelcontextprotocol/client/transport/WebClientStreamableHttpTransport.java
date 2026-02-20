@@ -24,6 +24,8 @@ import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+import io.modelcontextprotocol.client.McpAsyncClient;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.ClosedMcpTransportSession;
@@ -225,7 +227,9 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			Disposable connection = webClient.get()
 				.uri(this.endpoint)
 				.accept(MediaType.TEXT_EVENT_STREAM)
-				.header(HttpHeaders.PROTOCOL_VERSION, this.latestSupportedProtocolVersion)
+				.header(HttpHeaders.PROTOCOL_VERSION,
+						ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
+								this.latestSupportedProtocolVersion))
 				.headers(httpHeaders -> {
 					transportSession.sessionId().ifPresent(id -> httpHeaders.add(HttpHeaders.MCP_SESSION_ID, id));
 					if (stream != null) {
@@ -278,6 +282,13 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 
 	@Override
 	public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+		String jsonText;
+		try {
+			jsonText = jsonMapper.writeValueAsString(message);
+		}
+		catch (IOException e) {
+			return Mono.error(new RuntimeException("Failed to serialize message", e));
+		}
 		return Mono.create(sink -> {
 			logger.debug("Sending message {}", message);
 			// Here we attempt to initialize the client.
@@ -288,14 +299,17 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
 			final McpTransportSession<Disposable> transportSession = this.activeSession.get();
 
-			Disposable connection = webClient.post()
+			Disposable connection = Flux.deferContextual(ctx -> webClient.post()
 				.uri(this.endpoint)
+				.contentType(MediaType.APPLICATION_JSON)
 				.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_EVENT_STREAM)
-				.header(HttpHeaders.PROTOCOL_VERSION, this.latestSupportedProtocolVersion)
+				.header(HttpHeaders.PROTOCOL_VERSION,
+						ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
+								this.latestSupportedProtocolVersion))
 				.headers(httpHeaders -> {
 					transportSession.sessionId().ifPresent(id -> httpHeaders.add(HttpHeaders.MCP_SESSION_ID, id));
 				})
-				.bodyValue(message)
+				.bodyValue(jsonText)
 				.exchangeToFlux(response -> {
 					if (transportSession
 						.markInitialized(response.headers().asHttpHeaders().getFirst(HttpHeaders.MCP_SESSION_ID))) {
@@ -313,7 +327,8 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 						long contentLength = response.headers().contentLength().orElse(-1);
 						// Existing SDKs consume notifications with no response body nor
 						// content type
-						if (contentType.isEmpty() || contentLength == 0) {
+						if (contentType.isEmpty() || contentLength == 0
+								|| response.statusCode().equals(HttpStatus.ACCEPTED)) {
 							logger.trace("Message was successfully sent via POST for session {}",
 									sessionRepresentation);
 							// signal the caller that the message was successfully
@@ -350,7 +365,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 						}
 						return this.extractError(response, sessionRepresentation);
 					}
-				})
+				}))
 				.flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage)))
 				.onErrorComplete(t -> {
 					// handle the error first
@@ -504,7 +519,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		private boolean openConnectionOnStartup = false;
 
 		private List<String> supportedProtocolVersions = List.of(ProtocolVersions.MCP_2024_11_05,
-				ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18);
+				ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18, ProtocolVersions.MCP_2025_11_25);
 
 		private Builder(WebClient.Builder webClientBuilder) {
 			Assert.notNull(webClientBuilder, "WebClient.Builder must not be null");
@@ -601,7 +616,7 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 		 * @return a new instance of {@link WebClientStreamableHttpTransport}
 		 */
 		public WebClientStreamableHttpTransport build() {
-			return new WebClientStreamableHttpTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+			return new WebClientStreamableHttpTransport(jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
 					webClientBuilder, endpoint, resumableStreams, openConnectionOnStartup, supportedProtocolVersions);
 		}
 

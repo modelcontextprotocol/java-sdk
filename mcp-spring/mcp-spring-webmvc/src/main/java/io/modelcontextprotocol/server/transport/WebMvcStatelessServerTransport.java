@@ -1,10 +1,11 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server.transport;
 
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
@@ -24,6 +25,7 @@ import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Implementation of a WebMVC based {@link McpStatelessServerTransport}.
@@ -50,15 +52,23 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 
 	private volatile boolean isClosing = false;
 
+	/**
+	 * Security validator for validating HTTP requests.
+	 */
+	private final ServerTransportSecurityValidator securityValidator;
+
 	private WebMvcStatelessServerTransport(McpJsonMapper jsonMapper, String mcpEndpoint,
-			McpTransportContextExtractor<ServerRequest> contextExtractor) {
+			McpTransportContextExtractor<ServerRequest> contextExtractor,
+			ServerTransportSecurityValidator securityValidator) {
 		Assert.notNull(jsonMapper, "jsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "mcpEndpoint must not be null");
 		Assert.notNull(contextExtractor, "contextExtractor must not be null");
+		Assert.notNull(securityValidator, "Security validator must not be null");
 
 		this.jsonMapper = jsonMapper;
 		this.mcpEndpoint = mcpEndpoint;
 		this.contextExtractor = contextExtractor;
+		this.securityValidator = securityValidator;
 		this.routerFunction = RouterFunctions.route()
 			.GET(this.mcpEndpoint, this::handleGet)
 			.POST(this.mcpEndpoint, this::handlePost)
@@ -100,6 +110,14 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 			return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).body("Server is shutting down");
 		}
 
+		try {
+			Map<String, List<String>> headers = request.headers().asHttpHeaders();
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			return ServerResponse.status(e.getStatusCode()).body(e.getMessage());
+		}
+
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		List<MediaType> acceptHeaders = request.headers().asHttpHeaders().getAccept();
@@ -118,7 +136,8 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 						.handleRequest(transportContext, jsonrpcRequest)
 						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
 						.block();
-					return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(jsonrpcResponse);
+					String json = jsonMapper.writeValueAsString(jsonrpcResponse);
+					return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(json);
 				}
 				catch (Exception e) {
 					logger.error("Failed to handle request: {}", e.getMessage());
@@ -178,6 +197,8 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 		private McpTransportContextExtractor<ServerRequest> contextExtractor = (
 				serverRequest) -> McpTransportContext.EMPTY;
 
+		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
+
 		private Builder() {
 			// used by a static method
 		}
@@ -224,6 +245,18 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 		}
 
 		/**
+		 * Sets the security validator for validating HTTP requests.
+		 * @param securityValidator The security validator to use. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if securityValidator is null
+		 */
+		public Builder securityValidator(ServerTransportSecurityValidator securityValidator) {
+			Assert.notNull(securityValidator, "Security validator must not be null");
+			this.securityValidator = securityValidator;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link WebMvcStatelessServerTransport} with the
 		 * configured settings.
 		 * @return A new WebMvcStatelessServerTransport instance
@@ -231,8 +264,8 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 		 */
 		public WebMvcStatelessServerTransport build() {
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
-			return new WebMvcStatelessServerTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
-					mcpEndpoint, contextExtractor);
+			return new WebMvcStatelessServerTransport(jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
+					mcpEndpoint, contextExtractor, securityValidator);
 		}
 
 	}

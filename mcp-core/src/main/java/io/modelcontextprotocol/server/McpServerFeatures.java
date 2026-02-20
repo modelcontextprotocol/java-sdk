@@ -334,7 +334,13 @@ public class McpServerFeatures {
 	 *
 	 * <pre>{@code
 	 * new McpServerFeatures.AsyncResourceSpecification(
-	 * 		new Resource("docs", "Documentation files", "text/markdown"),
+	 *     Resource.builder()
+	 *         .uri("docs")
+	 *         .name("Documentation files")
+	 * 		   .title("Documentation files")
+	 * 		   .mimeType("text/markdown")
+	 * 		   .description("Markdown documentation files")
+	 * 		   .build(),
 	 * 		(exchange, request) -> Mono.fromSupplier(() -> readFile(request.getPath()))
 	 * 				.map(ReadResourceResult::new))
 	 * }</pre>
@@ -508,7 +514,10 @@ public class McpServerFeatures {
 	 * 				.build()
 	 * 		.toolHandler((exchange, req) -> {
 	 * 			String expr = (String) req.arguments().get("expression");
-	 * 			return new CallToolResult("Result: " + evaluate(expr));
+	 * 			return CallToolResult.builder()
+	 *                   .content(List.of(new McpSchema.TextContent("Result: " + evaluate(expr))))
+	 *                   .isError(false)
+	 *                   .build();
 	 * 		}))
 	 *      .build();
 	 * }</pre>
@@ -604,7 +613,13 @@ public class McpServerFeatures {
 	 *
 	 * <pre>{@code
 	 * new McpServerFeatures.SyncResourceSpecification(
-	 * 		new Resource("docs", "Documentation files", "text/markdown"),
+	 *     Resource.builder()
+	 *         .uri("docs")
+	 *         .name("Documentation files")
+	 * 		   .title("Documentation files")
+	 * 		   .mimeType("text/markdown")
+	 * 		   .description("Markdown documentation files")
+	 * 		   .build(),
 	 * 		(exchange, request) -> {
 	 * 			String content = readFile(request.getPath());
 	 * 			return new ReadResourceResult(content);

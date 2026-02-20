@@ -1,1 +1,1 @@
-io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapperSupplier
+io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapperSupplier

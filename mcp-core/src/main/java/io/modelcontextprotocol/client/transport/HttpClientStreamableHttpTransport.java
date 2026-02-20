@@ -20,10 +20,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import io.modelcontextprotocol.client.McpAsyncClient;
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.ClosedMcpTransportSession;
@@ -193,7 +195,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				.uri(uri)
 				.header("Cache-Control", "no-cache")
 				.header(HttpHeaders.MCP_SESSION_ID, sessionId)
-				.header(HttpHeaders.PROTOCOL_VERSION, this.latestSupportedProtocolVersion)
+				.header(HttpHeaders.PROTOCOL_VERSION,
+						ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
+								this.latestSupportedProtocolVersion))
 				.DELETE();
 			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "DELETE", uri, null, transportContext));
@@ -264,7 +268,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				var builder = requestBuilder.uri(uri)
 					.header(HttpHeaders.ACCEPT, TEXT_EVENT_STREAM)
 					.header("Cache-Control", "no-cache")
-					.header(HttpHeaders.PROTOCOL_VERSION, this.latestSupportedProtocolVersion)
+					.header(HttpHeaders.PROTOCOL_VERSION,
+							connectionCtx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
+									this.latestSupportedProtocolVersion))
 					.GET();
 				var transportContext = connectionCtx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 				return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
@@ -290,12 +296,23 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 								if (statusCode >= 200 && statusCode < 300) {
 
 									if (MESSAGE_EVENT_TYPE.equals(responseEvent.sseEvent().event())) {
+										String data = responseEvent.sseEvent().data();
+										// Per 2025-11-25 spec (SEP-1699), servers may
+										// send SSE events
+										// with empty data to prime the client for
+										// reconnection.
+										// Skip these events as they contain no JSON-RPC
+										// message.
+										if (data == null || data.isBlank()) {
+											logger.debug("Skipping SSE event with empty data (stream primer)");
+											return Flux.empty();
+										}
 										try {
 											// We don't support batching ATM and probably
 											// won't since the next version considers
 											// removing it.
-											McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(
-													this.jsonMapper, responseEvent.sseEvent().data());
+											McpSchema.JSONRPCMessage message = McpSchema
+												.deserializeJsonRpcMessage(this.jsonMapper, data);
 
 											Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> idWithMessages = Tuples
 												.of(Optional.ofNullable(responseEvent.sseEvent().id()),
@@ -439,7 +456,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					.header(HttpHeaders.ACCEPT, APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
 					.header(HttpHeaders.CONTENT_TYPE, APPLICATION_JSON)
 					.header(HttpHeaders.CACHE_CONTROL, "no-cache")
-					.header(HttpHeaders.PROTOCOL_VERSION, this.latestSupportedProtocolVersion)
+					.header(HttpHeaders.PROTOCOL_VERSION,
+							ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
+									this.latestSupportedProtocolVersion))
 					.POST(HttpRequest.BodyPublishers.ofString(jsonBody));
 				var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 				return Mono
@@ -484,7 +503,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						.firstValue(HttpHeaders.CONTENT_LENGTH)
 						.orElse(null);
 
-					if (contentType.isBlank() || "0".equals(contentLength)) {
+					// For empty content or HTTP code 202 (ACCEPTED), assume success
+					if (contentType.isBlank() || "0".equals(contentLength) || statusCode == 202) {
+						// if (contentType.isBlank() || "0".equals(contentLength)) {
 						logger.debug("No body returned for POST in session {}", sessionRepresentation);
 						// No content type means no response body, so we can just
 						// return an empty stream
@@ -494,13 +515,22 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					else if (contentType.contains(TEXT_EVENT_STREAM)) {
 						return Flux.just(((ResponseSubscribers.SseResponseEvent) responseEvent).sseEvent())
 							.flatMap(sseEvent -> {
+								String data = sseEvent.data();
+								// Per 2025-11-25 spec (SEP-1699), servers may send SSE
+								// events
+								// with empty data to prime the client for reconnection.
+								// Skip these events as they contain no JSON-RPC message.
+								if (data == null || data.isBlank()) {
+									logger.debug("Skipping SSE event with empty data (stream primer)");
+									return Flux.empty();
+								}
 								try {
 									// We don't support batching ATM and probably
 									// won't
 									// since the
 									// next version considers removing it.
 									McpSchema.JSONRPCMessage message = McpSchema
-										.deserializeJsonRpcMessage(this.jsonMapper, sseEvent.data());
+										.deserializeJsonRpcMessage(this.jsonMapper, data);
 
 									Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> idWithMessages = Tuples
 										.of(Optional.ofNullable(sseEvent.id()), List.of(message));
@@ -632,7 +662,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		private Duration connectTimeout = Duration.ofSeconds(10);
 
 		private List<String> supportedProtocolVersions = List.of(ProtocolVersions.MCP_2024_11_05,
-				ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18);
+				ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18, ProtocolVersions.MCP_2025_11_25);
 
 		/**
 		 * Creates a new builder with the specified base URI.
@@ -813,7 +843,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 */
 		public HttpClientStreamableHttpTransport build() {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
-			return new HttpClientStreamableHttpTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+			return new HttpClientStreamableHttpTransport(jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
 					httpClient, requestBuilder, baseUri, endpoint, resumableStreams, openConnectionOnStartup,
 					httpRequestCustomizer, supportedProtocolVersions);
 		}

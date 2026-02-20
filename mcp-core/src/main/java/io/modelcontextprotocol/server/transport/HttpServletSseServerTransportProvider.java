@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 - 2024 the original author or authors.
+ * Copyright 2024 - 2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server.transport;
@@ -14,9 +14,10 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -69,7 +70,9 @@ import reactor.core.publisher.Mono;
 @WebServlet(asyncSupported = true)
 public class HttpServletSseServerTransportProvider extends HttpServlet implements McpServerTransportProvider {
 
-	/** Logger for this class */
+	/**
+	 * Logger for this class
+	 */
 	private static final Logger logger = LoggerFactory.getLogger(HttpServletSseServerTransportProvider.class);
 
 	public static final String UTF_8 = "UTF-8";
@@ -78,38 +81,60 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 
 	public static final String FAILED_TO_SEND_ERROR_RESPONSE = "Failed to send error response: {}";
 
-	/** Default endpoint path for SSE connections */
+	/**
+	 * Default endpoint path for SSE connections
+	 */
 	public static final String DEFAULT_SSE_ENDPOINT = "/sse";
 
-	/** Event type for regular messages */
+	/**
+	 * Event type for regular messages
+	 */
 	public static final String MESSAGE_EVENT_TYPE = "message";
 
-	/** Event type for endpoint information */
+	/**
+	 * Event type for endpoint information
+	 */
 	public static final String ENDPOINT_EVENT_TYPE = "endpoint";
+
+	public static final String SESSION_ID = "sessionId";
 
 	public static final String DEFAULT_BASE_URL = "";
 
-	/** JSON mapper for serialization/deserialization */
+	/**
+	 * JSON mapper for serialization/deserialization
+	 */
 	private final McpJsonMapper jsonMapper;
 
-	/** Base URL for the server transport */
+	/**
+	 * Base URL for the server transport
+	 */
 	private final String baseUrl;
 
-	/** The endpoint path for handling client messages */
+	/**
+	 * The endpoint path for handling client messages
+	 */
 	private final String messageEndpoint;
 
-	/** The endpoint path for handling SSE connections */
+	/**
+	 * The endpoint path for handling SSE connections
+	 */
 	private final String sseEndpoint;
 
-	/** Map of active client sessions, keyed by session ID */
+	/**
+	 * Map of active client sessions, keyed by session ID
+	 */
 	private final Map<String, McpServerSession> sessions = new ConcurrentHashMap<>();
 
 	private McpTransportContextExtractor<HttpServletRequest> contextExtractor;
 
-	/** Flag indicating if the transport is in the process of shutting down */
+	/**
+	 * Flag indicating if the transport is in the process of shutting down
+	 */
 	private final AtomicBoolean isClosing = new AtomicBoolean(false);
 
-	/** Session factory for creating new sessions */
+	/**
+	 * Session factory for creating new sessions
+	 */
 	private McpServerSession.Factory sessionFactory;
 
 	/**
@@ -117,6 +142,11 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 * set. Disabled by default.
 	 */
 	private KeepAliveScheduler keepAliveScheduler;
+
+	/**
+	 * Security validator for validating HTTP requests.
+	 */
+	private final ServerTransportSecurityValidator securityValidator;
 
 	/**
 	 * Creates a new HttpServletSseServerTransportProvider instance with a custom SSE
@@ -129,23 +159,25 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 * @param keepAliveInterval The interval for keep-alive pings, or null to disable
 	 * keep-alive functionality
 	 * @param contextExtractor The extractor for transport context from the request.
-	 * @deprecated Use the builder {@link #builder()} instead for better configuration
-	 * options.
+	 * @param securityValidator The security validator for validating HTTP requests.
 	 */
 	private HttpServletSseServerTransportProvider(McpJsonMapper jsonMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval,
-			McpTransportContextExtractor<HttpServletRequest> contextExtractor) {
+			McpTransportContextExtractor<HttpServletRequest> contextExtractor,
+			ServerTransportSecurityValidator securityValidator) {
 
 		Assert.notNull(jsonMapper, "JsonMapper must not be null");
 		Assert.notNull(messageEndpoint, "messageEndpoint must not be null");
 		Assert.notNull(sseEndpoint, "sseEndpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
+		Assert.notNull(securityValidator, "Security validator must not be null");
 
 		this.jsonMapper = jsonMapper;
 		this.baseUrl = baseUrl;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
 		this.contextExtractor = contextExtractor;
+		this.securityValidator = securityValidator;
 
 		if (keepAliveInterval != null) {
 
@@ -222,6 +254,15 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			return;
 		}
 
+		try {
+			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			response.sendError(e.getStatusCode(), e.getMessage());
+			return;
+		}
+
 		response.setContentType("text/event-stream");
 		response.setCharacterEncoding(UTF_8);
 		response.setHeader("Cache-Control", "no-cache");
@@ -243,7 +284,22 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		this.sessions.put(sessionId, session);
 
 		// Send initial endpoint event
-		this.sendEvent(writer, ENDPOINT_EVENT_TYPE, this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId);
+		this.sendEvent(writer, ENDPOINT_EVENT_TYPE, buildEndpointUrl(sessionId));
+	}
+
+	/**
+	 * Constructs the full message endpoint URL by combining the base URL, message path,
+	 * and the required session_id query parameter.
+	 * @param sessionId the unique session identifier
+	 * @return the fully qualified endpoint URL as a string
+	 */
+	private String buildEndpointUrl(String sessionId) {
+		// for WebMVC compatibility
+		if (this.baseUrl.endsWith("/")) {
+			return this.baseUrl.substring(0, this.baseUrl.length() - 1) + this.messageEndpoint + "?sessionId="
+					+ sessionId;
+		}
+		return this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId;
 	}
 
 	/**
@@ -269,6 +325,15 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		String requestURI = request.getRequestURI();
 		if (!requestURI.endsWith(messageEndpoint)) {
 			response.sendError(HttpServletResponse.SC_NOT_FOUND);
+			return;
+		}
+
+		try {
+			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
+			this.securityValidator.validateHeaders(headers);
+		}
+		catch (ServerTransportSecurityException e) {
+			response.sendError(e.getStatusCode(), e.getMessage());
 			return;
 		}
 
@@ -434,8 +499,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		 * Converts data from one type to another using the configured JsonMapper.
 		 * @param data The source data object to convert
 		 * @param typeRef The target type reference
-		 * @return The converted object of type T
 		 * @param <T> The target type
+		 * @return The converted object of type T
 		 */
 		@Override
 		public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
@@ -507,6 +572,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 				serverRequest) -> McpTransportContext.EMPTY;
 
 		private Duration keepAliveInterval;
+
+		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
 
 		/**
 		 * Sets the JsonMapper implementation to use for serialization/deserialization. If
@@ -583,6 +650,18 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		}
 
 		/**
+		 * Sets the security validator for validating HTTP requests.
+		 * @param securityValidator The security validator to use. Must not be null.
+		 * @return This builder instance
+		 * @throws IllegalArgumentException if securityValidator is null
+		 */
+		public Builder securityValidator(ServerTransportSecurityValidator securityValidator) {
+			Assert.notNull(securityValidator, "Security validator must not be null");
+			this.securityValidator = securityValidator;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of HttpServletSseServerTransportProvider with the
 		 * configured settings.
 		 * @return A new HttpServletSseServerTransportProvider instance
@@ -593,8 +672,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 				throw new IllegalStateException("MessageEndpoint must be set");
 			}
 			return new HttpServletSseServerTransportProvider(
-					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, baseUrl, messageEndpoint, sseEndpoint,
-					keepAliveInterval, contextExtractor);
+					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, baseUrl, messageEndpoint,
+					sseEndpoint, keepAliveInterval, contextExtractor, securityValidator);
 		}
 
 	}
