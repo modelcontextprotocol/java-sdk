@@ -33,7 +33,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * Tests for {@link LifecycleInitializer} postInitializationHook functionality.
- * 
+ *
  * @author Christian Tzolov
  */
 class LifecycleInitializerPostInitializationHookTests {
@@ -70,6 +70,8 @@ class LifecycleInitializerPostInitializationHookTests {
 		when(mockSessionSupplier.apply(any(ContextView.class))).thenReturn(mockClientSession);
 		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any()))
 			.thenReturn(Mono.just(MOCK_INIT_RESULT));
+		when(mockClientSession.sendRequestWithId(eq(McpSchema.METHOD_INITIALIZE), any(), any()))
+			.thenAnswer(inv -> new McpClientSession.RequestMono<>("init-1", Mono.just(MOCK_INIT_RESULT)));
 		when(mockClientSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_INITIALIZED), any()))
 			.thenReturn(Mono.empty());
 		when(mockClientSession.closeGracefully()).thenReturn(Mono.empty());
@@ -163,8 +165,9 @@ class LifecycleInitializerPostInitializationHookTests {
 
 	@Test
 	void shouldNotInvokePostInitializationHookWhenInitializationFails() {
-		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any()))
-			.thenReturn(Mono.error(new RuntimeException("Initialization failed")));
+		when(mockClientSession.sendRequestWithId(eq(McpSchema.METHOD_INITIALIZE), any(), any()))
+			.thenAnswer(inv -> new McpClientSession.RequestMono<>("init-1",
+					Mono.error(new RuntimeException("Initialization failed"))));
 
 		StepVerifier.create(initializer.withInitialization("test", init -> Mono.just(init.initializeResult())))
 			.expectError(RuntimeException.class)

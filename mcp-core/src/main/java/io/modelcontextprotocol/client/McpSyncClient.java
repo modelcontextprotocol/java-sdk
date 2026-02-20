@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.spec.McpRequestHandle;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
@@ -219,6 +220,20 @@ public class McpSyncClient implements AutoCloseable {
 	}
 
 	// --------------------------
+	// Cancellation
+	// --------------------------
+
+	/**
+	 * Cancels a previously issued request. IMPORTANT: This method MUST be called from a
+	 * different thread than the one blocked waiting on the request result.
+	 * @param requestId The ID of the request to cancel
+	 * @param reason An optional human-readable reason for the cancellation
+	 */
+	public void cancelRequest(Object requestId, String reason) {
+		withProvidedContext(this.delegate.cancelRequest(requestId, reason)).block();
+	}
+
+	// --------------------------
 	// Tools
 	// --------------------------
 	/**
@@ -234,7 +249,16 @@ public class McpSyncClient implements AutoCloseable {
 	 */
 	public McpSchema.CallToolResult callTool(McpSchema.CallToolRequest callToolRequest) {
 		return withProvidedContext(this.delegate.callTool(callToolRequest)).block();
+	}
 
+	/**
+	 * Calls a tool with a specific timeout.
+	 * @param callToolRequest The request containing the tool name and input parameters
+	 * @param timeout The maximum duration to wait for the result
+	 * @return The tool execution result
+	 */
+	public McpSchema.CallToolResult callTool(McpSchema.CallToolRequest callToolRequest, Duration timeout) {
+		return withProvidedContext(this.delegate.callTool(callToolRequest)).timeout(timeout).block();
 	}
 
 	/**

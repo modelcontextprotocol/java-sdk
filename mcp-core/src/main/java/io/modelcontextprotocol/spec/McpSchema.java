@@ -99,6 +99,9 @@ public final class McpSchema {
 
 	public static final String METHOD_NOTIFICATION_ROOTS_LIST_CHANGED = "notifications/roots/list_changed";
 
+	// Cancellation
+	public static final String METHOD_NOTIFICATION_CANCELLED = "notifications/cancelled";
+
 	// Sampling Methods
 	public static final String METHOD_SAMPLING_CREATE_MESSAGE = "sampling/createMessage";
 
@@ -143,6 +146,11 @@ public final class McpSchema {
 		 */
 		public static final int RESOURCE_NOT_FOUND = -32002;
 
+		/**
+		 * The request was cancelled.
+		 */
+		public static final int REQUEST_CANCELLED = -32800;
+
 	}
 
 	/**
@@ -179,8 +187,8 @@ public final class McpSchema {
 
 	}
 
-	public sealed interface Notification extends Meta
-			permits ProgressNotification, LoggingMessageNotification, ResourcesUpdatedNotification {
+	public sealed interface Notification extends Meta permits ProgressNotification, LoggingMessageNotification,
+			ResourcesUpdatedNotification, CancelledNotification {
 
 	}
 
@@ -2237,6 +2245,26 @@ public final class McpSchema {
 
 		public ResourcesUpdatedNotification(String uri) {
 			this(uri, null);
+		}
+	}
+
+	/**
+	 * Notification sent by either side to cancel a previously-issued request. Per the MCP
+	 * spec, cancellation MUST only reference requests issued in the same direction.
+	 *
+	 * @param requestId The ID of the request to cancel.
+	 * @param reason An optional human-readable reason for the cancellation.
+	 * @param meta See specification for notes on _meta usage
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record CancelledNotification(// @formatter:off
+		@JsonProperty("requestId") Object requestId,
+		@JsonProperty("reason") String reason,
+		@JsonProperty("_meta") Map<String, Object> meta) implements Notification { // @formatter:on
+
+		public CancelledNotification(Object requestId, String reason) {
+			this(requestId, reason, null);
 		}
 	}
 

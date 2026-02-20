@@ -697,4 +697,46 @@ class McpAsyncServerExchangeTests {
 		verify(mockSession, times(2)).sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeRef.class));
 	}
 
+	// ---------------------------------------
+	// Cancel Request Tests
+	// ---------------------------------------
+
+	@Test
+	void testCancelRequestDelegatesToSendCancellation() {
+		when(mockSession.sendCancellation(any(), any())).thenReturn(Mono.empty());
+
+		StepVerifier.create(exchange.cancelRequest("req-123", "user aborted")).verifyComplete();
+
+		verify(mockSession, times(1)).sendCancellation("req-123", "user aborted");
+	}
+
+	@Test
+	void testCancelRequestWithNullReason() {
+		when(mockSession.sendCancellation(any(), any())).thenReturn(Mono.empty());
+
+		StepVerifier.create(exchange.cancelRequest("req-456", null)).verifyComplete();
+
+		verify(mockSession, times(1)).sendCancellation("req-456", null);
+	}
+
+	@Test
+	void testCancelRequestWithSessionError() {
+		when(mockSession.sendCancellation(any(), any()))
+			.thenReturn(Mono.error(new RuntimeException("Transport error")));
+
+		StepVerifier.create(exchange.cancelRequest("req-789", "timeout")).verifyErrorSatisfies(error -> {
+			assertThat(error).isInstanceOf(RuntimeException.class).hasMessage("Transport error");
+		});
+	}
+
+	@Test
+	void testCancelRequestMultipleTimes() {
+		when(mockSession.sendCancellation(any(), any())).thenReturn(Mono.empty());
+
+		StepVerifier.create(exchange.cancelRequest("req-1", "first cancel")).verifyComplete();
+		StepVerifier.create(exchange.cancelRequest("req-1", "second cancel")).verifyComplete();
+
+		verify(mockSession, times(2)).sendCancellation(eq("req-1"), any());
+	}
+
 }

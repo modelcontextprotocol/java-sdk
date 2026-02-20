@@ -20,6 +20,8 @@ import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.Disposable;
+import reactor.core.Disposables;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Sinks;
@@ -62,6 +64,11 @@ public class McpServerSession implements McpLoggableSession {
 	private static final int STATE_INITIALIZED = 2;
 
 	private final AtomicInteger state = new AtomicInteger(STATE_UNINITIALIZED);
+
+	private final ConcurrentHashMap<String, Disposable> inProgressInbound = new ConcurrentHashMap<>();
+
+	private static final TypeRef<McpSchema.CancelledNotification> CANCELLED_NOTIFICATION_TYPE_REF = new TypeRef<>() {
+	};
 
 	private volatile McpSchema.LoggingLevel minLoggingLevel = McpSchema.LoggingLevel.INFO;
 
@@ -204,7 +211,15 @@ public class McpServerSession implements McpLoggableSession {
 							jsonRpcError);
 					// TODO: Should the error go to SSE or back as POST return?
 					return this.transport.sendMessage(errorResponse).then(Mono.empty());
-				}).flatMap(this.transport::sendMessage);
+				}).flatMap(this.transport::sendMessage).doOnSubscribe(sub -> {
+					if (request.id() != null) {
+						inProgressInbound.put(String.valueOf(request.id()), Disposables.composite(sub::cancel));
+					}
+				}).doFinally(signal -> {
+					if (request.id() != null) {
+						inProgressInbound.remove(String.valueOf(request.id()));
+					}
+				});
 			}
 			else if (message instanceof McpSchema.JSONRPCNotification notification) {
 				// TODO handle errors for communication to without initialization
@@ -286,6 +301,20 @@ public class McpServerSession implements McpLoggableSession {
 						clientInfo.get(), transportContext));
 			}
 
+			if (McpSchema.METHOD_NOTIFICATION_CANCELLED.equals(notification.method())) {
+				McpSchema.CancelledNotification cancelled = transport.unmarshalFrom(notification.params(),
+						CANCELLED_NOTIFICATION_TYPE_REF);
+				if (cancelled != null) {
+					String normalizedId = String.valueOf(cancelled.requestId());
+					logger.debug("Client cancelled request {}: {}", normalizedId, cancelled.reason());
+					var inbound = this.inProgressInbound.remove(normalizedId);
+					if (inbound != null && !inbound.isDisposed()) {
+						logger.debug("Disposing in-progress request pipeline for {}", normalizedId);
+						inbound.dispose();
+					}
+				}
+			}
+
 			var handler = notificationHandlers.get(notification.method());
 			if (handler == null) {
 				logger.warn("No handler registered for notification method: {}", notification);
@@ -313,6 +342,32 @@ public class McpServerSession implements McpLoggableSession {
 
 	private MethodNotFoundError getMethodNotFoundError(String method) {
 		return new MethodNotFoundError(method, "Method not found: " + method, null);
+	}
+
+	/**
+	 * Cancels a previously issued outbound request (server-to-client direction). The
+	 * pending response is errored locally and a cancellation notification is sent to the
+	 * client.
+	 * @param requestId The ID of the request to cancel
+	 * @param reason An optional human-readable reason
+	 * @return A Mono that completes when the cancellation notification is sent
+	 */
+	public Mono<Void> sendCancellation(Object requestId, String reason) {
+		return Mono.defer(() -> {
+			var pending = this.pendingResponses.remove(requestId);
+			if (pending != null) {
+				pending.error(
+						new McpError(new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.REQUEST_CANCELLED,
+								"Request cancelled locally" + (reason != null ? ": " + reason : ""), null)));
+			}
+			return this
+				.sendNotification(McpSchema.METHOD_NOTIFICATION_CANCELLED,
+						new McpSchema.CancelledNotification(requestId, reason))
+				.onErrorResume(e -> {
+					logger.warn("Failed to send cancellation notification for request {}", requestId, e);
+					return Mono.empty();
+				});
+		});
 	}
 
 	@Override

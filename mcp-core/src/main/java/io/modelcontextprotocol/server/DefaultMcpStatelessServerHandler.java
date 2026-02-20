@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
+import java.util.HashMap;
 import java.util.Map;
 
 class DefaultMcpStatelessServerHandler implements McpStatelessServerHandler {
@@ -24,7 +25,11 @@ class DefaultMcpStatelessServerHandler implements McpStatelessServerHandler {
 	public DefaultMcpStatelessServerHandler(Map<String, McpStatelessRequestHandler<?>> requestHandlers,
 			Map<String, McpStatelessNotificationHandler> notificationHandlers) {
 		this.requestHandlers = requestHandlers;
-		this.notificationHandlers = notificationHandlers;
+		this.notificationHandlers = new HashMap<>(notificationHandlers);
+		this.notificationHandlers.putIfAbsent(McpSchema.METHOD_NOTIFICATION_CANCELLED, (ctx, params) -> {
+			logger.debug("Ignoring cancellation in stateless mode");
+			return Mono.empty();
+		});
 	}
 
 	@Override

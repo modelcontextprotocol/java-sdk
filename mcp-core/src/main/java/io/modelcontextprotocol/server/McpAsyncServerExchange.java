@@ -228,6 +228,17 @@ public class McpAsyncServerExchange {
 	}
 
 	/**
+	 * Cancels a previously issued request to the client (server-to-client direction).
+	 * Sends a {@code notifications/cancelled} notification.
+	 * @param requestId The ID of the request to cancel
+	 * @param reason An optional human-readable reason for the cancellation
+	 * @return A Mono that completes when the cancellation notification is sent
+	 */
+	public Mono<Void> cancelRequest(Object requestId, String reason) {
+		return this.session.sendCancellation(requestId, reason);
+	}
+
+	/**
 	 * Set the minimum logging level for the client. Messages below this level will be
 	 * filtered out.
 	 * @param minLoggingLevel The minimum logging level
