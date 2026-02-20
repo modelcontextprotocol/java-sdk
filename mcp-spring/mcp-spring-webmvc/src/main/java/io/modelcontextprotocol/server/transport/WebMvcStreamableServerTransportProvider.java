@@ -347,7 +347,9 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		if (!acceptHeaders.contains(MediaType.TEXT_EVENT_STREAM)
 				|| !acceptHeaders.contains(MediaType.APPLICATION_JSON)) {
 			return ServerResponse.badRequest()
-				.body(new McpError("Invalid Accept headers. Expected TEXT_EVENT_STREAM and APPLICATION_JSON"));
+				.body(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+					.message("Invalid Accept headers. Expected TEXT_EVENT_STREAM and APPLICATION_JSON")
+					.build());
 		}
 
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
@@ -377,13 +379,15 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 				}
 				catch (Exception e) {
 					logger.error("Failed to initialize session: {}", e.getMessage());
-					return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new McpError(e.getMessage()));
+					return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+						.body(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message(e.getMessage()).build());
 				}
 			}
 
 			// Handle other messages that require a session
 			if (request.headers().header(HttpHeaders.MCP_SESSION_ID).isEmpty()) {
-				return ServerResponse.badRequest().body(new McpError("Session ID missing"));
+				return ServerResponse.badRequest()
+					.body(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message("Session ID missing").build());
 			}
 
 			String sessionId = request.headers().asHttpHeaders().getFirst(HttpHeaders.MCP_SESSION_ID);
@@ -391,7 +395,9 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 
 			if (session == null) {
 				return ServerResponse.status(HttpStatus.NOT_FOUND)
-					.body(new McpError("Session not found: " + sessionId));
+					.body(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+						.message("Session not found: " + sessionId)
+						.build());
 			}
 
 			if (message instanceof McpSchema.JSONRPCResponse jsonrpcResponse) {
@@ -432,16 +438,20 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 			}
 			else {
 				return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
-					.body(new McpError("Unknown message type"));
+					.body(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+						.message("Unknown message type")
+						.build());
 			}
 		}
 		catch (IllegalArgumentException | IOException e) {
 			logger.error("Failed to deserialize message: {}", e.getMessage());
-			return ServerResponse.badRequest().body(new McpError("Invalid message format"));
+			return ServerResponse.badRequest()
+				.body(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message("Invalid message format").build());
 		}
 		catch (Exception e) {
 			logger.error("Error handling message: {}", e.getMessage());
-			return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new McpError(e.getMessage()));
+			return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+				.body(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message(e.getMessage()).build());
 		}
 	}
 
@@ -487,7 +497,8 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 		}
 		catch (Exception e) {
 			logger.error("Failed to delete session {}: {}", sessionId, e.getMessage());
-			return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new McpError(e.getMessage()));
+			return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+				.body(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message(e.getMessage()).build());
 		}
 	}
 

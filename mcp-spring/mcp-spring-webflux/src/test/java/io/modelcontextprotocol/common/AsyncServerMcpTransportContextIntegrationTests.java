@@ -91,8 +91,10 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 
 	private final BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> asyncStatelessHandler = (
 			transportContext, request) -> {
-		return Mono
-			.just(new McpSchema.CallToolResult(transportContext.get("server-side-header-value").toString(), null));
+		return Mono.just(McpSchema.CallToolResult.builder()
+			.addTextContent(transportContext.get("server-side-header-value").toString())
+			.isError(false)
+			.build());
 	};
 
 	private final BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> asyncStatefulHandler = (
@@ -196,7 +198,10 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 
 		var mcpServer = McpServer.async(streamableServerTransport)
 			.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
-			.tools(new McpServerFeatures.AsyncToolSpecification(tool, null, asyncStatefulHandler))
+			.tools(McpServerFeatures.AsyncToolSpecification.builder()
+				.tool(tool)
+				.callHandler(asyncStatefulHandler)
+				.build())
 			.build();
 
 		StepVerifier.create(asyncStreamableClient.initialize()).assertNext(initResult -> {
@@ -228,7 +233,10 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 
 		var mcpServer = McpServer.async(sseServerTransport)
 			.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
-			.tools(new McpServerFeatures.AsyncToolSpecification(tool, null, asyncStatefulHandler))
+			.tools(McpServerFeatures.AsyncToolSpecification.builder()
+				.tool(tool)
+				.callHandler(asyncStatefulHandler)
+				.build())
 			.build();
 
 		StepVerifier.create(asyncSseClient.initialize()).assertNext(initResult -> {

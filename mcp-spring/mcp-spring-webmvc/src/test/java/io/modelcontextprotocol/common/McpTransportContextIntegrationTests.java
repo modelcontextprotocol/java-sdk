@@ -91,8 +91,10 @@ public class McpTransportContextIntegrationTests {
 	};
 
 	private static final BiFunction<McpTransportContext, McpSchema.CallToolRequest, McpSchema.CallToolResult> statelessHandler = (
-			transportContext,
-			request) -> new McpSchema.CallToolResult(transportContext.get("server-side-header-value").toString(), null);
+			transportContext, request) -> McpSchema.CallToolResult.builder()
+				.addTextContent(transportContext.get("server-side-header-value").toString())
+				.isError(false)
+				.build();
 
 	private static final BiFunction<McpSyncServerExchange, McpSchema.CallToolRequest, McpSchema.CallToolResult> statefulHandler = (
 			exchange, request) -> statelessHandler.apply(exchange.transportContext(), request);
@@ -259,7 +261,10 @@ public class McpTransportContextIntegrationTests {
 		public McpSyncServer mcpStreamableServer(WebMvcStreamableServerTransportProvider transportProvider) {
 			return McpServer.sync(transportProvider)
 				.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
-				.tools(new McpServerFeatures.SyncToolSpecification(tool, null, statefulHandler))
+				.tools(McpServerFeatures.SyncToolSpecification.builder()
+					.tool(tool)
+					.callHandler(statefulHandler)
+					.build())
 				.build();
 		}
 
@@ -287,7 +292,10 @@ public class McpTransportContextIntegrationTests {
 		public McpSyncServer mcpSseServer(WebMvcSseServerTransportProvider transportProvider) {
 			return McpServer.sync(transportProvider)
 				.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
-				.tools(new McpServerFeatures.SyncToolSpecification(tool, null, statefulHandler))
+				.tools(McpServerFeatures.SyncToolSpecification.builder()
+					.tool(tool)
+					.callHandler(statefulHandler)
+					.build())
 				.build();
 
 		}

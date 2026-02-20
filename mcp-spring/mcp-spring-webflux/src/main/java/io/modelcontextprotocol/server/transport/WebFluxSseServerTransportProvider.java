@@ -360,14 +360,18 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 		}
 
 		if (request.queryParam("sessionId").isEmpty()) {
-			return ServerResponse.badRequest().bodyValue(new McpError("Session ID missing in message endpoint"));
+			return ServerResponse.badRequest()
+				.bodyValue(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+					.message("Session ID missing in message endpoint")
+					.build());
 		}
 
 		McpServerSession session = sessions.get(request.queryParam("sessionId").get());
 
 		if (session == null) {
 			return ServerResponse.status(HttpStatus.NOT_FOUND)
-				.bodyValue(new McpError("Session not found: " + request.queryParam("sessionId").get()));
+				.bodyValue(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+					.message("Session not found: " + request.queryParam("sessionId").get()));
 		}
 
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
@@ -381,12 +385,17 @@ public class WebFluxSseServerTransportProvider implements McpServerTransportProv
 					// - the error is signalled on the SSE connection
 					// return ServerResponse.ok().build();
 					return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
-						.bodyValue(new McpError(error.getMessage()));
+						.bodyValue(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+							.message(error.getMessage())
+							.build());
 				});
 			}
 			catch (IllegalArgumentException | IOException e) {
 				logger.error("Failed to deserialize message: {}", e.getMessage());
-				return ServerResponse.badRequest().bodyValue(new McpError("Invalid message format"));
+				return ServerResponse.badRequest()
+					.bodyValue(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+						.message("Invalid message format")
+						.build());
 			}
 		}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext));
 	}

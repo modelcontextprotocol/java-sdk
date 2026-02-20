@@ -41,10 +41,26 @@ public class ResourceTemplateListingTest {
 	void testResourceListingWithMixedResources() {
 		// Create resource list with both regular and template resources
 		List<McpSchema.Resource> allResources = List.of(
-				new McpSchema.Resource("file:///test/doc1.txt", "Document 1", "text/plain", null, null),
-				new McpSchema.Resource("file:///test/doc2.txt", "Document 2", "text/plain", null, null),
-				new McpSchema.Resource("file:///test/{type}/document.txt", "Typed Document", "text/plain", null, null),
-				new McpSchema.Resource("file:///users/{userId}/files/{fileId}", "User File", "text/plain", null, null));
+				McpSchema.Resource.builder()
+					.uri("file:///test/doc1.txt")
+					.name("Document 1")
+					.mimeType("text/plain")
+					.build(),
+				McpSchema.Resource.builder()
+					.uri("file:///test/doc2.txt")
+					.name("Document 2")
+					.mimeType("text/plain")
+					.build(),
+				McpSchema.Resource.builder()
+					.uri("file:///test/{type}/document.txt")
+					.name("Typed Document")
+					.mimeType("text/plain")
+					.build(),
+				McpSchema.Resource.builder()
+					.uri("file:///users/{userId}/files/{fileId}")
+					.name("User File")
+					.mimeType("text/plain")
+					.build());
 
 		// Apply the filter logic from McpAsyncServer line 438
 		List<McpSchema.Resource> filteredResources = allResources.stream()
@@ -61,9 +77,16 @@ public class ResourceTemplateListingTest {
 	void testResourceTemplatesListedSeparately() {
 		// Create mixed resources
 		List<McpSchema.Resource> resources = List.of(
-				new McpSchema.Resource("file:///test/regular.txt", "Regular Resource", "text/plain", null, null),
-				new McpSchema.Resource("file:///test/user/{userId}/profile.txt", "User Profile", "text/plain", null,
-						null));
+				McpSchema.Resource.builder()
+					.uri("file:///test/regular.txt")
+					.name("Regular Resource")
+					.mimeType("text/plain")
+					.build(),
+				McpSchema.Resource.builder()
+					.uri("file:///test/user/{userId}/profile.txt")
+					.name("User Profile")
+					.mimeType("text/plain")
+					.build());
 
 		// Create explicit resource template
 		McpSchema.ResourceTemplate explicitTemplate = new McpSchema.ResourceTemplate(

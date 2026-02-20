@@ -326,7 +326,7 @@ public class McpAsyncServer {
 		if (toolSpecification.tool() == null) {
 			return Mono.error(new IllegalArgumentException("Tool must not be null"));
 		}
-		if (toolSpecification.call() == null && toolSpecification.callHandler() == null) {
+		if (toolSpecification.callHandler() == null) {
 			return Mono.error(new IllegalArgumentException("Tool call handler must not be null"));
 		}
 		if (this.serverCapabilities.tools() == null) {
@@ -868,32 +868,6 @@ public class McpAsyncServer {
 	// ---------------------------------------
 	// Logging Management
 	// ---------------------------------------
-
-	/**
-	 * This implementation would, incorrectly, broadcast the logging message to all
-	 * connected clients, using a single minLoggingLevel for all of them. Similar to the
-	 * sampling and roots, the logging level should be set per client session and use the
-	 * ServerExchange to send the logging message to the right client.
-	 * @param loggingMessageNotification The logging message to send
-	 * @return A Mono that completes when the notification has been sent
-	 * @deprecated Use
-	 * {@link McpAsyncServerExchange#loggingNotification(LoggingMessageNotification)}
-	 * instead.
-	 */
-	@Deprecated
-	public Mono<Void> loggingNotification(LoggingMessageNotification loggingMessageNotification) {
-
-		if (loggingMessageNotification == null) {
-			return Mono.error(new McpError("Logging message must not be null"));
-		}
-
-		if (loggingMessageNotification.level().level() < minLoggingLevel.level()) {
-			return Mono.empty();
-		}
-
-		return this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_MESSAGE,
-				loggingMessageNotification);
-	}
 
 	private McpRequestHandler<Object> setLoggerRequestHandler() {
 		return (exchange, params) -> {

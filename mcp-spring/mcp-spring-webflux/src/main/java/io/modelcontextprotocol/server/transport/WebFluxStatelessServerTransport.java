@@ -135,7 +135,9 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 						catch (IOException e) {
 							logger.error("Failed to serialize response: {}", e.getMessage());
 							return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
-								.bodyValue(new McpError("Failed to serialize response"));
+								.bodyValue(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+									.message("Failed to serialize response")
+									.build());
 						}
 					});
 				}
@@ -145,12 +147,17 @@ public class WebFluxStatelessServerTransport implements McpStatelessServerTransp
 				}
 				else {
 					return ServerResponse.badRequest()
-						.bodyValue(new McpError("The server accepts either requests or notifications"));
+						.bodyValue(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+							.message("The server accepts either requests or notifications")
+							.build());
 				}
 			}
 			catch (IllegalArgumentException | IOException e) {
 				logger.error("Failed to deserialize message: {}", e.getMessage());
-				return ServerResponse.badRequest().bodyValue(new McpError("Invalid message format"));
+				return ServerResponse.badRequest()
+					.bodyValue(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+						.message("Invalid message format")
+						.build());
 			}
 		}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext));
 	}

@@ -284,7 +284,10 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 				}
 
 				if (request.headers().header(HttpHeaders.MCP_SESSION_ID).isEmpty()) {
-					return ServerResponse.badRequest().bodyValue(new McpError("Session ID missing"));
+					return ServerResponse.badRequest()
+						.bodyValue(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+							.message("Session ID missing")
+							.build());
 				}
 
 				String sessionId = request.headers().asHttpHeaders().getFirst(HttpHeaders.MCP_SESSION_ID);
@@ -292,7 +295,9 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 
 				if (session == null) {
 					return ServerResponse.status(HttpStatus.NOT_FOUND)
-						.bodyValue(new McpError("Session not found: " + sessionId));
+						.bodyValue(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+							.message("Session not found: " + sessionId)
+							.build());
 				}
 
 				if (message instanceof McpSchema.JSONRPCResponse jsonrpcResponse) {
@@ -318,12 +323,18 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 								ServerSentEvent.class);
 				}
 				else {
-					return ServerResponse.badRequest().bodyValue(new McpError("Unknown message type"));
+					return ServerResponse.badRequest()
+						.bodyValue(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+							.message("Unknown message type")
+							.build());
 				}
 			}
 			catch (IllegalArgumentException | IOException e) {
 				logger.error("Failed to deserialize message: {}", e.getMessage());
-				return ServerResponse.badRequest().bodyValue(new McpError("Invalid message format"));
+				return ServerResponse.badRequest()
+					.bodyValue(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+						.message("Invalid message format")
+						.build());
 			}
 		})
 			.switchIfEmpty(ServerResponse.badRequest().build())

@@ -301,7 +301,8 @@ class McpAsyncServerExchangeTests {
 	@Test
 	void testCreateElicitationWithNullCapabilities() {
 		// Given - Create exchange with null capabilities
-		McpAsyncServerExchange exchangeWithNullCapabilities = new McpAsyncServerExchange(mockSession, null, clientInfo);
+		McpAsyncServerExchange exchangeWithNullCapabilities = new McpAsyncServerExchange("testSessionId", mockSession,
+				null, clientInfo, McpTransportContext.EMPTY);
 
 		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
 			.message("Please provide your name")
@@ -324,8 +325,8 @@ class McpAsyncServerExchangeTests {
 			.roots(true)
 			.build();
 
-		McpAsyncServerExchange exchangeWithoutElicitation = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithoutElicitation, clientInfo);
+		McpAsyncServerExchange exchangeWithoutElicitation = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithoutElicitation, clientInfo, McpTransportContext.EMPTY);
 
 		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
 			.message("Please provide your name")
@@ -348,8 +349,8 @@ class McpAsyncServerExchangeTests {
 			.elicitation()
 			.build();
 
-		McpAsyncServerExchange exchangeWithElicitation = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithElicitation, clientInfo);
+		McpAsyncServerExchange exchangeWithElicitation = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY);
 
 		// Create a complex elicit request with schema
 		java.util.Map<String, Object> requestedSchema = new java.util.HashMap<>();
@@ -391,8 +392,8 @@ class McpAsyncServerExchangeTests {
 			.elicitation()
 			.build();
 
-		McpAsyncServerExchange exchangeWithElicitation = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithElicitation, clientInfo);
+		McpAsyncServerExchange exchangeWithElicitation = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY);
 
 		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
 			.message("Please provide sensitive information")
@@ -418,8 +419,8 @@ class McpAsyncServerExchangeTests {
 			.elicitation()
 			.build();
 
-		McpAsyncServerExchange exchangeWithElicitation = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithElicitation, clientInfo);
+		McpAsyncServerExchange exchangeWithElicitation = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY);
 
 		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
 			.message("Please provide your information")
@@ -445,8 +446,8 @@ class McpAsyncServerExchangeTests {
 			.elicitation()
 			.build();
 
-		McpAsyncServerExchange exchangeWithElicitation = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithElicitation, clientInfo);
+		McpAsyncServerExchange exchangeWithElicitation = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY);
 
 		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
 			.message("Please provide your name")
@@ -467,7 +468,8 @@ class McpAsyncServerExchangeTests {
 	@Test
 	void testCreateMessageWithNullCapabilities() {
 
-		McpAsyncServerExchange exchangeWithNullCapabilities = new McpAsyncServerExchange(mockSession, null, clientInfo);
+		McpAsyncServerExchange exchangeWithNullCapabilities = new McpAsyncServerExchange("testSessionId", mockSession,
+				null, clientInfo, McpTransportContext.EMPTY);
 
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
 			.messages(Arrays
@@ -492,8 +494,8 @@ class McpAsyncServerExchangeTests {
 			.roots(true)
 			.build();
 
-		McpAsyncServerExchange exchangeWithoutSampling = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithoutSampling, clientInfo);
+		McpAsyncServerExchange exchangeWithoutSampling = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithoutSampling, clientInfo, McpTransportContext.EMPTY);
 
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
 			.messages(Arrays
@@ -517,8 +519,8 @@ class McpAsyncServerExchangeTests {
 			.sampling()
 			.build();
 
-		McpAsyncServerExchange exchangeWithSampling = new McpAsyncServerExchange(mockSession, capabilitiesWithSampling,
-				clientInfo);
+		McpAsyncServerExchange exchangeWithSampling = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithSampling, clientInfo, McpTransportContext.EMPTY);
 
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
 			.messages(Arrays
@@ -553,8 +555,8 @@ class McpAsyncServerExchangeTests {
 			.sampling()
 			.build();
 
-		McpAsyncServerExchange exchangeWithSampling = new McpAsyncServerExchange(mockSession, capabilitiesWithSampling,
-				clientInfo);
+		McpAsyncServerExchange exchangeWithSampling = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithSampling, clientInfo, McpTransportContext.EMPTY);
 
 		// Create request with image content
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
@@ -588,8 +590,8 @@ class McpAsyncServerExchangeTests {
 			.sampling()
 			.build();
 
-		McpAsyncServerExchange exchangeWithSampling = new McpAsyncServerExchange(mockSession, capabilitiesWithSampling,
-				clientInfo);
+		McpAsyncServerExchange exchangeWithSampling = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithSampling, clientInfo, McpTransportContext.EMPTY);
 
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
 			.messages(Arrays
@@ -612,8 +614,8 @@ class McpAsyncServerExchangeTests {
 			.sampling()
 			.build();
 
-		McpAsyncServerExchange exchangeWithSampling = new McpAsyncServerExchange(mockSession, capabilitiesWithSampling,
-				clientInfo);
+		McpAsyncServerExchange exchangeWithSampling = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithSampling, clientInfo, McpTransportContext.EMPTY);
 
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
 			.messages(Arrays.asList(new McpSchema.SamplingMessage(McpSchema.Role.USER,
@@ -662,7 +664,7 @@ class McpAsyncServerExchangeTests {
 	@Test
 	void testPingWithMcpError() {
 		// Given - Mock an MCP-specific error during ping
-		McpError mcpError = new McpError("Server unavailable");
+		McpError mcpError = McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message("Server unavailable").build();
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeRef.class)))
 			.thenReturn(Mono.error(mcpError));
 

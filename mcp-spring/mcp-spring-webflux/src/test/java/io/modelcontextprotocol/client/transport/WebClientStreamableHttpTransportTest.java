@@ -4,6 +4,7 @@
 package io.modelcontextprotocol.client.transport;
 
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -45,7 +46,7 @@ class WebClientStreamableHttpTransportTest {
 
 		StepVerifier.create(transport.closeGracefully()).verifyComplete();
 
-		var initializeRequest = new McpSchema.InitializeRequest(McpSchema.LATEST_PROTOCOL_VERSION,
+		var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_11_25,
 				McpSchema.ClientCapabilities.builder().roots(true).build(),
 				new McpSchema.Implementation("MCP Client", "0.3.1"));
 		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
@@ -60,7 +61,7 @@ class WebClientStreamableHttpTransportTest {
 	void testCloseInitialized() {
 		var transport = WebClientStreamableHttpTransport.builder(builder).build();
 
-		var initializeRequest = new McpSchema.InitializeRequest(McpSchema.LATEST_PROTOCOL_VERSION,
+		var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_11_25,
 				McpSchema.ClientCapabilities.builder().roots(true).build(),
 				new McpSchema.Implementation("MCP Client", "0.3.1"));
 		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
