@@ -223,18 +223,7 @@ public class McpServerFeatures {
 	 * map of tool arguments.
 	 */
 	public record AsyncToolSpecification(McpSchema.Tool tool,
-			@Deprecated BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> call,
 			BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler) {
-
-		/**
-		 * @deprecated Use {@link AsyncToolSpecification(McpSchema.Tool, null,
-		 * BiFunction)} instead.
-		 **/
-		@Deprecated
-		public AsyncToolSpecification(McpSchema.Tool tool,
-				BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> call) {
-			this(tool, call, (exchange, toolReq) -> call.apply(exchange, toolReq.arguments()));
-		}
 
 		static AsyncToolSpecification fromSync(SyncToolSpecification syncToolSpec) {
 			return fromSync(syncToolSpec, false);
@@ -247,13 +236,6 @@ public class McpServerFeatures {
 				return null;
 			}
 
-			BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<McpSchema.CallToolResult>> deprecatedCall = (syncToolSpec
-				.call() != null) ? (exchange, map) -> {
-					var toolResult = Mono
-						.fromCallable(() -> syncToolSpec.call().apply(new McpSyncServerExchange(exchange), map));
-					return immediate ? toolResult : toolResult.subscribeOn(Schedulers.boundedElastic());
-				} : null;
-
 			BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler = (
 					exchange, req) -> {
 				var toolResult = Mono
@@ -261,7 +243,7 @@ public class McpServerFeatures {
 				return immediate ? toolResult : toolResult.subscribeOn(Schedulers.boundedElastic());
 			};
 
-			return new AsyncToolSpecification(syncToolSpec.tool(), deprecatedCall, callHandler);
+			return new AsyncToolSpecification(syncToolSpec.tool(), callHandler);
 		}
 
 		/**
@@ -304,7 +286,7 @@ public class McpServerFeatures {
 				Assert.notNull(tool, "Tool must not be null");
 				Assert.notNull(callHandler, "Call handler function must not be null");
 
-				return new AsyncToolSpecification(tool, null, callHandler);
+				return new AsyncToolSpecification(tool, callHandler);
 			}
 
 		}
@@ -523,25 +505,15 @@ public class McpServerFeatures {
 	 * }</pre>
 	 *
 	 * @param tool The tool definition including name, description, and parameter schema
-	 * @param call (Deprected) The function that implements the tool's logic, receiving
-	 * arguments and returning results. The function's first argument is an
-	 * {@link McpSyncServerExchange} upon which the server can interact with the connected
 	 * @param callHandler The function that implements the tool's logic, receiving a
 	 * {@link McpSyncServerExchange} and a
 	 * {@link io.modelcontextprotocol.spec.McpSchema.CallToolRequest} and returning
 	 * results. The function's first argument is an {@link McpSyncServerExchange} upon
-	 * which the server can interact with the client. The second arguments is a map of
-	 * arguments passed to the tool.
+	 * which the server can interact with the client. The second argument is a request
+	 * object containing the arguments passed to the tool.
 	 */
 	public record SyncToolSpecification(McpSchema.Tool tool,
-			@Deprecated BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> call,
 			BiFunction<McpSyncServerExchange, CallToolRequest, McpSchema.CallToolResult> callHandler) {
-
-		@Deprecated
-		public SyncToolSpecification(McpSchema.Tool tool,
-				BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> call) {
-			this(tool, call, (exchange, toolReq) -> call.apply(exchange, toolReq.arguments()));
-		}
 
 		/**
 		 * Builder for creating SyncToolSpecification instances.
@@ -583,7 +555,7 @@ public class McpServerFeatures {
 				Assert.notNull(tool, "Tool must not be null");
 				Assert.notNull(callHandler, "CallTool function must not be null");
 
-				return new SyncToolSpecification(tool, null, callHandler);
+				return new SyncToolSpecification(tool, callHandler);
 			}
 
 		}

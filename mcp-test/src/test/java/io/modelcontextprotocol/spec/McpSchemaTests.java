@@ -17,10 +17,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Test;
 
-import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
 import net.javacrumbs.jsonunit.core.Option;
 
 /**
@@ -72,7 +72,7 @@ public class McpSchemaTests {
 
 	@Test
 	void testImageContent() throws Exception {
-		McpSchema.ImageContent test = new McpSchema.ImageContent(null, null, "base64encodeddata", "image/png");
+		McpSchema.ImageContent test = new McpSchema.ImageContent(null, "base64encodeddata", "image/png");
 		String value = JSON_MAPPER.writeValueAsString(test);
 
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -160,7 +160,7 @@ public class McpSchemaTests {
 		McpSchema.TextResourceContents resourceContents = new McpSchema.TextResourceContents("resource://test",
 				"text/plain", "Sample resource content");
 
-		McpSchema.EmbeddedResource test = new McpSchema.EmbeddedResource(null, null, resourceContents);
+		McpSchema.EmbeddedResource test = new McpSchema.EmbeddedResource(null, resourceContents);
 
 		String value = JSON_MAPPER.writeValueAsString(test);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -191,7 +191,7 @@ public class McpSchemaTests {
 		McpSchema.BlobResourceContents resourceContents = new McpSchema.BlobResourceContents("resource://test",
 				"application/octet-stream", "base64encodedblob");
 
-		McpSchema.EmbeddedResource test = new McpSchema.EmbeddedResource(null, null, resourceContents);
+		McpSchema.EmbeddedResource test = new McpSchema.EmbeddedResource(null, resourceContents);
 
 		String value = JSON_MAPPER.writeValueAsString(test);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -366,8 +366,13 @@ public class McpSchemaTests {
 		McpSchema.Annotations annotations = new McpSchema.Annotations(
 				Arrays.asList(McpSchema.Role.USER, McpSchema.Role.ASSISTANT), 0.8);
 
-		McpSchema.Resource resource = new McpSchema.Resource("resource://test", "Test Resource", "A test resource",
-				"text/plain", annotations);
+		McpSchema.Resource resource = McpSchema.Resource.builder()
+			.uri("resource://test")
+			.name("Test Resource")
+			.description("A test resource")
+			.mimeType("text/plain")
+			.annotations(annotations)
+			.build();
 
 		String value = JSON_MAPPER.writeValueAsString(resource);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -451,11 +456,19 @@ public class McpSchemaTests {
 
 	@Test
 	void testListResourcesResult() throws Exception {
-		McpSchema.Resource resource1 = new McpSchema.Resource("resource://test1", "Test Resource 1",
-				"First test resource", "text/plain", null);
+		McpSchema.Resource resource1 = McpSchema.Resource.builder()
+			.uri("resource://test1")
+			.name("Test Resource 1")
+			.description("First test resource")
+			.mimeType("text/plain")
+			.build();
 
-		McpSchema.Resource resource2 = new McpSchema.Resource("resource://test2", "Test Resource 2",
-				"Second test resource", "application/json", null);
+		McpSchema.Resource resource2 = McpSchema.Resource.builder()
+			.uri("resource://test2")
+			.name("Test Resource 2")
+			.description("Second test resource")
+			.mimeType("application/json")
+			.build();
 
 		Map<String, Object> meta = Map.of("metaKey", "metaValue");
 
@@ -1274,7 +1287,7 @@ public class McpSchemaTests {
 	@Test
 	void testCallToolResultBuilderWithMultipleContents() throws Exception {
 		McpSchema.TextContent textContent = new McpSchema.TextContent("Text result");
-		McpSchema.ImageContent imageContent = new McpSchema.ImageContent(null, null, "base64data", "image/png");
+		McpSchema.ImageContent imageContent = new McpSchema.ImageContent(null, "base64data", "image/png");
 
 		McpSchema.CallToolResult result = McpSchema.CallToolResult.builder()
 			.addContent(textContent)
@@ -1295,7 +1308,7 @@ public class McpSchemaTests {
 	@Test
 	void testCallToolResultBuilderWithContentList() throws Exception {
 		McpSchema.TextContent textContent = new McpSchema.TextContent("Text result");
-		McpSchema.ImageContent imageContent = new McpSchema.ImageContent(null, null, "base64data", "image/png");
+		McpSchema.ImageContent imageContent = new McpSchema.ImageContent(null, "base64data", "image/png");
 		List<McpSchema.Content> contents = Arrays.asList(textContent, imageContent);
 
 		McpSchema.CallToolResult result = McpSchema.CallToolResult.builder().content(contents).isError(true).build();
@@ -1324,27 +1337,6 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(json("""
 					{"content":[{"type":"text","text":"Error: Operation failed"}],"isError":true}"""));
-	}
-
-	@Test
-	void testCallToolResultStringConstructor() throws Exception {
-		// Test the existing string constructor alongside the builder
-		McpSchema.CallToolResult result1 = new McpSchema.CallToolResult("Simple result", false);
-		McpSchema.CallToolResult result2 = McpSchema.CallToolResult.builder()
-			.addTextContent("Simple result")
-			.isError(false)
-			.build();
-
-		String value1 = JSON_MAPPER.writeValueAsString(result1);
-		String value2 = JSON_MAPPER.writeValueAsString(result2);
-
-		// Both should produce the same JSON
-		assertThat(value1).isEqualTo(value2);
-		assertThatJson(value1).when(Option.IGNORING_ARRAY_ORDER)
-			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
-			.isObject()
-			.isEqualTo(json("""
-					{"content":[{"type":"text","text":"Simple result"}],"isError":false}"""));
 	}
 
 	// Sampling Tests

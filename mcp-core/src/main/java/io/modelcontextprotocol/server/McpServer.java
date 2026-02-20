@@ -66,9 +66,9 @@ import reactor.core.publisher.Mono;
  * Example of creating a basic synchronous server: <pre>{@code
  * McpServer.sync(transportProvider)
  *     .serverInfo("my-server", "1.0.0")
- *     .tool(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
- *           (exchange, args) -> CallToolResult.builder()
- *                   .content(List.of(new McpSchema.TextContent("Result: " + calculate(args))))
+ *     .toolCall(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
+ *           (exchange, request) -> CallToolResult.builder()
+ *                   .content(List.of(new McpSchema.TextContent("Result: " + calculate(request.arguments()))))
  *                   .isError(false)
  *                   .build())
  *     .build();
@@ -77,8 +77,8 @@ import reactor.core.publisher.Mono;
  * Example of creating a basic asynchronous server: <pre>{@code
  * McpServer.async(transportProvider)
  *     .serverInfo("my-server", "1.0.0")
- *     .tool(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
- *           (exchange, args) -> Mono.fromSupplier(() -> calculate(args))
+ *     .toolCall(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
+ *           (exchange, request) -> Mono.fromSupplier(() -> calculate(request.arguments()))
  *               .map(result -> CallToolResult.builder()
  *                   .content(List.of(new McpSchema.TextContent("Result: " + result)))
  *                   .isError(false)
@@ -438,46 +438,6 @@ public interface McpServer {
 		public AsyncSpecification<S> capabilities(McpSchema.ServerCapabilities serverCapabilities) {
 			Assert.notNull(serverCapabilities, "Server capabilities must not be null");
 			this.serverCapabilities = serverCapabilities;
-			return this;
-		}
-
-		/**
-		 * Adds a single tool with its implementation handler to the server. This is a
-		 * convenience method for registering individual tools without creating a
-		 * {@link McpServerFeatures.AsyncToolSpecification} explicitly.
-		 *
-		 * <p>
-		 * Example usage: <pre>{@code
-		 * .tool(
-		 *     Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
-		 *     (exchange, args) -> Mono.fromSupplier(() -> calculate(args))
-		 *         .map(result -> CallToolResult.builder()
-		 *                   .content(List.of(new McpSchema.TextContent("Result: " + result)))
-		 *                   .isError(false)
-		 *                   .build()))
-		 * )
-		 * }</pre>
-		 * @param tool The tool definition including name, description, and schema. Must
-		 * not be null.
-		 * @param handler The function that implements the tool's logic. Must not be null.
-		 * The function's first argument is an {@link McpAsyncServerExchange} upon which
-		 * the server can interact with the connected client. The second argument is the
-		 * map of arguments passed to the tool.
-		 * @return This builder instance for method chaining
-		 * @throws IllegalArgumentException if tool or handler is null
-		 * @deprecated Use {@link #toolCall(McpSchema.Tool, BiFunction)} instead for tool
-		 * calls that require a request object.
-		 */
-		@Deprecated
-		public AsyncSpecification<S> tool(McpSchema.Tool tool,
-				BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<CallToolResult>> handler) {
-			Assert.notNull(tool, "Tool must not be null");
-			Assert.notNull(handler, "Handler must not be null");
-			validateToolName(tool.name());
-			assertNoDuplicateTool(tool.name());
-
-			this.tools.add(new McpServerFeatures.AsyncToolSpecification(tool, handler));
-
 			return this;
 		}
 
@@ -1068,45 +1028,6 @@ public interface McpServer {
 		 * Adds a single tool with its implementation handler to the server. This is a
 		 * convenience method for registering individual tools without creating a
 		 * {@link McpServerFeatures.SyncToolSpecification} explicitly.
-		 *
-		 * <p>
-		 * Example usage: <pre>{@code
-		 * .tool(
-		 *     Tool.builder().name("calculator").title("Performs calculations".inputSchema(schema).build(),
-		 *     (exchange, args) -> CallToolResult.builder()
-		 *                   .content(List.of(new McpSchema.TextContent("Result: " + calculate(args))))
-		 *                   .isError(false)
-		 *                   .build())
-		 * )
-		 * }</pre>
-		 * @param tool The tool definition including name, description, and schema. Must
-		 * not be null.
-		 * @param handler The function that implements the tool's logic. Must not be null.
-		 * The function's first argument is an {@link McpSyncServerExchange} upon which
-		 * the server can interact with the connected client. The second argument is the
-		 * list of arguments passed to the tool.
-		 * @return This builder instance for method chaining
-		 * @throws IllegalArgumentException if tool or handler is null
-		 * @deprecated Use {@link #toolCall(McpSchema.Tool, BiFunction)} instead for tool
-		 * calls that require a request object.
-		 */
-		@Deprecated
-		public SyncSpecification<S> tool(McpSchema.Tool tool,
-				BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> handler) {
-			Assert.notNull(tool, "Tool must not be null");
-			Assert.notNull(handler, "Handler must not be null");
-			validateToolName(tool.name());
-			assertNoDuplicateTool(tool.name());
-
-			this.tools.add(new McpServerFeatures.SyncToolSpecification(tool, handler));
-
-			return this;
-		}
-
-		/**
-		 * Adds a single tool with its implementation handler to the server. This is a
-		 * convenience method for registering individual tools without creating a
-		 * {@link McpServerFeatures.SyncToolSpecification} explicitly.
 		 * @param tool The tool definition including name, description, and schema. Must
 		 * not be null.
 		 * @param handler The function that implements the tool's logic. Must not be null.
@@ -1123,7 +1044,7 @@ public interface McpServer {
 			validateToolName(tool.name());
 			assertNoDuplicateTool(tool.name());
 
-			this.tools.add(new McpServerFeatures.SyncToolSpecification(tool, null, handler));
+			this.tools.add(new McpServerFeatures.SyncToolSpecification(tool, handler));
 
 			return this;
 		}

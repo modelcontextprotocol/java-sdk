@@ -56,7 +56,6 @@ class AsyncToolSpecificationBuilderTest {
 		assertThat(specification).isNotNull();
 		assertThat(specification.tool()).isEqualTo(tool);
 		assertThat(specification.callHandler()).isNotNull();
-		assertThat(specification.call()).isNull(); // deprecated field should be null
 	}
 
 	@Test
@@ -107,66 +106,14 @@ class AsyncToolSpecificationBuilderTest {
 
 		McpServerFeatures.AsyncToolSpecification specification = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(tool)
-			.callHandler((exchange, request) -> {
-				return Mono.just(CallToolResult.builder()
-					.content(List.of(new TextContent(expectedResult)))
-					.isError(false)
-					.build());
-			})
+			.callHandler((exchange, request) -> Mono.just(
+					CallToolResult.builder().content(List.of(new TextContent(expectedResult))).isError(false).build()))
 			.build();
 
 		CallToolRequest request = new CallToolRequest("calculator", Map.of());
 		Mono<CallToolResult> resultMono = specification.callHandler().apply(null, request);
 
 		StepVerifier.create(resultMono).assertNext(result -> {
-			assertThat(result).isNotNull();
-			assertThat(result.content()).hasSize(1);
-			assertThat(result.content().get(0)).isInstanceOf(TextContent.class);
-			assertThat(((TextContent) result.content().get(0)).text()).isEqualTo(expectedResult);
-			assertThat(result.isError()).isFalse();
-		}).verifyComplete();
-	}
-
-	@Test
-	@SuppressWarnings("deprecation")
-	void deprecatedConstructorShouldWorkCorrectly() {
-		Tool tool = McpSchema.Tool.builder()
-			.name("deprecated-tool")
-			.title("A deprecated tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
-		String expectedResult = "deprecated result";
-
-		// Test the deprecated constructor that takes a 'call' function
-		McpServerFeatures.AsyncToolSpecification specification = new McpServerFeatures.AsyncToolSpecification(tool,
-				(exchange,
-						arguments) -> Mono.just(CallToolResult.builder()
-							.content(List.of(new TextContent(expectedResult)))
-							.isError(false)
-							.build()));
-
-		assertThat(specification).isNotNull();
-		assertThat(specification.tool()).isEqualTo(tool);
-		assertThat(specification.call()).isNotNull(); // deprecated field should be set
-		assertThat(specification.callHandler()).isNotNull(); // should be automatically
-																// created
-
-		// Test that the callTool function works (it should delegate to the call function)
-		CallToolRequest request = new CallToolRequest("deprecated-tool", Map.of("arg1", "value1"));
-		Mono<CallToolResult> resultMono = specification.callHandler().apply(null, request);
-
-		StepVerifier.create(resultMono).assertNext(result -> {
-			assertThat(result).isNotNull();
-			assertThat(result.content()).hasSize(1);
-			assertThat(result.content().get(0)).isInstanceOf(TextContent.class);
-			assertThat(((TextContent) result.content().get(0)).text()).isEqualTo(expectedResult);
-			assertThat(result.isError()).isFalse();
-		}).verifyComplete();
-
-		// Test that the deprecated call function also works directly
-		Mono<CallToolResult> callResultMono = specification.call().apply(null, request.arguments());
-
-		StepVerifier.create(callResultMono).assertNext(result -> {
 			assertThat(result).isNotNull();
 			assertThat(result.content()).hasSize(1);
 			assertThat(result.content().get(0)).isInstanceOf(TextContent.class);
@@ -200,67 +147,12 @@ class AsyncToolSpecificationBuilderTest {
 		assertThat(asyncSpec).isNotNull();
 		assertThat(asyncSpec.tool()).isEqualTo(tool);
 		assertThat(asyncSpec.callHandler()).isNotNull();
-		assertThat(asyncSpec.call()).isNull(); // should be null since sync spec doesn't
-												// have deprecated call
 
 		// Test that the converted async specification works correctly
 		CallToolRequest request = new CallToolRequest("sync-tool", Map.of("param", "value"));
 		Mono<CallToolResult> resultMono = asyncSpec.callHandler().apply(null, request);
 
 		StepVerifier.create(resultMono).assertNext(result -> {
-			assertThat(result).isNotNull();
-			assertThat(result.content()).hasSize(1);
-			assertThat(result.content().get(0)).isInstanceOf(TextContent.class);
-			assertThat(((TextContent) result.content().get(0)).text()).isEqualTo(expectedResult);
-			assertThat(result.isError()).isFalse();
-		}).verifyComplete();
-	}
-
-	@Test
-	@SuppressWarnings("deprecation")
-	void fromSyncShouldConvertSyncToolSpecificationWithDeprecatedCallCorrectly() {
-		Tool tool = McpSchema.Tool.builder()
-			.name("sync-deprecated-tool")
-			.title("A sync tool with deprecated call")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
-		String expectedResult = "sync deprecated result";
-		McpAsyncServerExchange nullExchange = null; // Mock or create a suitable exchange
-													// if needed
-
-		// Create a sync tool specification using the deprecated constructor
-		McpServerFeatures.SyncToolSpecification syncSpec = new McpServerFeatures.SyncToolSpecification(tool,
-				(exchange, arguments) -> CallToolResult.builder()
-					.content(List.of(new TextContent(expectedResult)))
-					.isError(false)
-					.build());
-
-		// Convert to async using fromSync
-		McpServerFeatures.AsyncToolSpecification asyncSpec = McpServerFeatures.AsyncToolSpecification
-			.fromSync(syncSpec);
-
-		assertThat(asyncSpec).isNotNull();
-		assertThat(asyncSpec.tool()).isEqualTo(tool);
-		assertThat(asyncSpec.callHandler()).isNotNull();
-		assertThat(asyncSpec.call()).isNotNull(); // should be set since sync spec has
-													// deprecated call
-
-		// Test that the converted async specification works correctly via callTool
-		CallToolRequest request = new CallToolRequest("sync-deprecated-tool", Map.of("param", "value"));
-		Mono<CallToolResult> resultMono = asyncSpec.callHandler().apply(nullExchange, request);
-
-		StepVerifier.create(resultMono).assertNext(result -> {
-			assertThat(result).isNotNull();
-			assertThat(result.content()).hasSize(1);
-			assertThat(result.content().get(0)).isInstanceOf(TextContent.class);
-			assertThat(((TextContent) result.content().get(0)).text()).isEqualTo(expectedResult);
-			assertThat(result.isError()).isFalse();
-		}).verifyComplete();
-
-		// Test that the deprecated call function also works
-		Mono<CallToolResult> callResultMono = asyncSpec.call().apply(nullExchange, request.arguments());
-
-		StepVerifier.create(callResultMono).assertNext(result -> {
 			assertThat(result).isNotNull();
 			assertThat(result.content()).hasSize(1);
 			assertThat(result.content().get(0)).isInstanceOf(TextContent.class);
@@ -302,7 +194,8 @@ class AsyncToolSpecificationBuilderTest {
 		void defaultShouldThrowOnInvalidName() {
 			Tool invalidTool = Tool.builder().name("invalid tool name").build();
 
-			assertThatThrownBy(() -> McpServer.async(transportProvider).tool(invalidTool, (exchange, args) -> null))
+			assertThatThrownBy(
+					() -> McpServer.async(transportProvider).toolCall(invalidTool, (exchange, request) -> null))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("invalid characters");
 		}
@@ -312,7 +205,7 @@ class AsyncToolSpecificationBuilderTest {
 			System.setProperty(ToolNameValidator.STRICT_VALIDATION_PROPERTY, "false");
 			Tool invalidTool = Tool.builder().name("invalid tool name").build();
 
-			assertThatCode(() -> McpServer.async(transportProvider).tool(invalidTool, (exchange, args) -> null))
+			assertThatCode(() -> McpServer.async(transportProvider).toolCall(invalidTool, (exchange, request) -> null))
 				.doesNotThrowAnyException();
 			assertThat(logAppender.list).hasSize(1);
 		}
@@ -323,7 +216,7 @@ class AsyncToolSpecificationBuilderTest {
 
 			assertThatCode(() -> McpServer.async(transportProvider)
 				.strictToolNameValidation(false)
-				.tool(invalidTool, (exchange, args) -> null)).doesNotThrowAnyException();
+				.toolCall(invalidTool, (exchange, request) -> null)).doesNotThrowAnyException();
 			assertThat(logAppender.list).hasSize(1);
 		}
 
@@ -334,7 +227,7 @@ class AsyncToolSpecificationBuilderTest {
 
 			assertThatThrownBy(() -> McpServer.async(transportProvider)
 				.strictToolNameValidation(true)
-				.tool(invalidTool, (exchange, args) -> null)).isInstanceOf(IllegalArgumentException.class)
+				.toolCall(invalidTool, (exchange, request) -> null)).isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("invalid characters");
 		}
 

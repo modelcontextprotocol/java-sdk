@@ -343,7 +343,9 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			response.setContentType(APPLICATION_JSON);
 			response.setCharacterEncoding(UTF_8);
 			response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-			String jsonError = jsonMapper.writeValueAsString(new McpError("Session ID missing in message endpoint"));
+			String jsonError = jsonMapper.writeValueAsString(McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND)
+				.message("Session ID missing in message endpoint")
+				.build());
 			PrintWriter writer = response.getWriter();
 			writer.write(jsonError);
 			writer.flush();
@@ -356,7 +358,9 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			response.setContentType(APPLICATION_JSON);
 			response.setCharacterEncoding(UTF_8);
 			response.setStatus(HttpServletResponse.SC_NOT_FOUND);
-			String jsonError = jsonMapper.writeValueAsString(new McpError("Session not found: " + sessionId));
+			String jsonError = jsonMapper.writeValueAsString(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+				.message("Session not found: " + sessionId)
+				.build());
 			PrintWriter writer = response.getWriter();
 			writer.write(jsonError);
 			writer.flush();
@@ -383,7 +387,9 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		catch (Exception e) {
 			logger.error("Error processing message: {}", e.getMessage());
 			try {
-				McpError mcpError = new McpError(e.getMessage());
+				McpError mcpError = McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+					.message(e.getMessage())
+					.build();
 				response.setContentType(APPLICATION_JSON);
 				response.setCharacterEncoding(UTF_8);
 				response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
