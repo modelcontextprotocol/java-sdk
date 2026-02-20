@@ -25,7 +25,7 @@ class InMemoryTransportTest {
 				.name("test-tool")
 				.description("a test tool")
 				.inputSchema(new McpSchema.JsonSchema("object", Map.of(), List.of(), true, null, null))
-				.build(), (exchange, request) -> new McpSchema.CallToolResult("test-result", false))
+				.build(), (exchange, request) -> McpSchema.CallToolResult.builder().addTextContent("test-result").build())
 			.build();
 
 	}

@@ -1,10 +1,10 @@
 package io.modelcontextprotocol.transport.inmemory;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.json.McpJsonMapper;
-import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
+import io.modelcontextprotocol.json.jackson3.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.spec.McpSchema;
 import reactor.core.publisher.Sinks;
+import tools.jackson.databind.json.JsonMapper;
 
 import static java.util.Objects.requireNonNull;
 
@@ -18,6 +18,6 @@ public record InMemoryTransport(Sinks.Many<McpSchema.JSONRPCMessage> clientSink,
 
 	public InMemoryTransport() {
 		this(Sinks.many().multicast().onBackpressureBuffer(), Sinks.many().multicast().onBackpressureBuffer(),
-				new JacksonMcpJsonMapper(new ObjectMapper()));
+				new JacksonMcpJsonMapper(new JsonMapper()));
 	}
 }
