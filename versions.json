@@ -12,20 +12,10 @@
     "aliases": []
   },
   {
-    "version": "0.18.0",
-    "title": "0.18.0",
-    "aliases": []
-  },
-  {
     "version": "v0.18.1",
     "title": "v0.18.1",
     "aliases": [
       "latest"
     ]
-  },
-  {
-    "version": "v0.18.0",
-    "title": "v0.18.0",
-    "aliases": []
   }
 ]
