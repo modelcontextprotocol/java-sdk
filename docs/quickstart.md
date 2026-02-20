@@ -44,7 +44,7 @@ Add the following dependency to your project:
     </dependency>
     ```
 
-    If you're using Spring Framework, the Spring-specific transport implementations are now part of [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+    If you're using Spring Framework, the Spring-specific transport implementations are now part of [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```xml
     <!-- Optional: Spring WebFlux-based SSE and Streamable HTTP client and server transport (Spring AI 2.0+) -->
@@ -92,7 +92,7 @@ Add the following dependency to your project:
     }
     ```
 
-    If you're using Spring Framework, the Spring-specific transport implementations are now part of [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+    If you're using Spring Framework, the Spring-specific transport implementations are now part of [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```groovy
     // Optional: Spring WebFlux-based SSE and Streamable HTTP client and server transport (Spring AI 2.0+)
@@ -156,7 +156,7 @@ The following dependencies are available and managed by the BOM:
 - **JSON Serialization**
     - `io.modelcontextprotocol.sdk:mcp-json-jackson3` - Jackson 3.x JSON serialization implementation (included in `mcp` bundle).
     - `io.modelcontextprotocol.sdk:mcp-json-jackson2` - Jackson 2.x JSON serialization implementation for projects that require Jackson 2.x compatibility.
-- **Optional Spring Transport Dependencies** (part of [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+, group `org.springframework.ai`)
+- **Optional Spring Transport Dependencies** (part of [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+, group `org.springframework.ai`)
     - `org.springframework.ai:mcp-spring-webflux` - WebFlux-based SSE and Streamable HTTP transport implementation for reactive applications.
     - `org.springframework.ai:mcp-spring-webmvc` - WebMVC-based SSE and Streamable HTTP transport implementation for servlet-based applications.
 - **Testing Dependencies**

@@ -21,8 +21,8 @@ The MCP Server is a foundational component in the Model Context Protocol (MCP) a
 !!! tip
     The core `io.modelcontextprotocol.sdk:mcp` module provides STDIO, SSE, and Streamable HTTP server transport implementations without requiring external web frameworks.
 
-    Spring-specific transport implementations (`mcp-spring-webflux`, `mcp-spring-webmvc`) are now part of [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`) and are no longer shipped by this SDK.
-    See the [MCP Server Boot Starter](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-server-boot-starter-docs.html) documentation for Spring-based server setup.
+    Spring-specific transport implementations (`mcp-spring-webflux`, `mcp-spring-webmvc`) are now part of [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`) and are no longer shipped by this SDK.
+    See the [MCP Server Boot Starter](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-server-boot-starter-docs.html) documentation for Spring-based server setup.
 
 The server supports both synchronous and asynchronous APIs, allowing for flexible integration in different application contexts.
 
@@ -105,25 +105,27 @@ The transport layer in the MCP SDK is responsible for handling the communication
 It provides different implementations to support various communication protocols and patterns.
 The SDK includes several built-in transport provider implementations:
 
-=== "STDIO"
+### STDIO
 
-    Create process-based transport using stdin/stdout:
+Create process-based transport using stdin/stdout:
 
-    ```java
-    StdioServerTransportProvider transportProvider =
-        new StdioServerTransportProvider(new ObjectMapper());
-    ```
+```java
+StdioServerTransportProvider transportProvider =
+    new StdioServerTransportProvider(new ObjectMapper());
+```
 
-    Provides bidirectional JSON-RPC message handling over standard input/output streams with non-blocking message processing, serialization/deserialization, and graceful shutdown support.
+Provides bidirectional JSON-RPC message handling over standard input/output streams with non-blocking message processing, serialization/deserialization, and graceful shutdown support.
 
-    Key features:
+Key features:
 
-    - Bidirectional communication through stdin/stdout
-    - Process-based integration support
-    - Simple setup and configuration
-    - Lightweight implementation
+- Bidirectional communication through stdin/stdout
+- Process-based integration support
+- Simple setup and configuration
+- Lightweight implementation
 
-=== "Streamable HTTP (Servlet)"
+### Streamable HTTP
+
+=== "Streamable HTTP Servlet"
 
     Creates a Servlet-based Streamable HTTP server transport. Included in the core `mcp` module:
 
@@ -166,9 +168,9 @@ The SDK includes several built-in transport provider implementations:
     - Security validation support
     - Graceful shutdown support
 
-=== "Streamable HTTP (WebFlux)"
+=== "Streamable HTTP WebFlux (external)"
 
-    Creates WebFlux-based Streamable HTTP server transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+    Creates WebFlux-based Streamable HTTP server transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     @Configuration
@@ -196,9 +198,9 @@ The SDK includes several built-in transport provider implementations:
     - Configurable keep-alive intervals
     - Security validation support
 
-=== "Streamable HTTP (WebMvc)"
+=== "Streamable HTTP WebMvc (external)"
 
-    Creates WebMvc-based Streamable HTTP server transport. Requires the `mcp-spring-webmvc` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+    Creates WebMvc-based Streamable HTTP server transport. Requires the `mcp-spring-webmvc` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     @Configuration
@@ -220,61 +222,9 @@ The SDK includes several built-in transport provider implementations:
     }
     ```
 
-=== "SSE (WebFlux)"
+### SSE HTTP (Legacy)
 
-    Creates WebFlux-based SSE server transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
-
-    ```java
-    @Configuration
-    class McpConfig {
-        @Bean
-        WebFluxSseServerTransportProvider webFluxSseServerTransportProvider(ObjectMapper mapper) {
-            return new WebFluxSseServerTransportProvider(mapper, "/mcp/message");
-        }
-
-        @Bean
-        RouterFunction<?> mcpRouterFunction(WebFluxSseServerTransportProvider transportProvider) {
-            return transportProvider.getRouterFunction();
-        }
-    }
-    ```
-
-    Implements the MCP HTTP with SSE transport specification, providing:
-
-    - Reactive HTTP streaming with WebFlux
-    - Concurrent client connections through SSE endpoints
-    - Message routing and session management
-    - Graceful shutdown capabilities
-
-=== "SSE (WebMvc)"
-
-    Creates WebMvc-based SSE server transport. Requires the `mcp-spring-webmvc` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
-
-    ```java
-    @Configuration
-    @EnableWebMvc
-    class McpConfig {
-        @Bean
-        WebMvcSseServerTransportProvider webMvcSseServerTransportProvider(ObjectMapper mapper) {
-            return new WebMvcSseServerTransportProvider(mapper, "/mcp/message");
-        }
-
-        @Bean
-        RouterFunction<ServerResponse> mcpRouterFunction(
-                WebMvcSseServerTransportProvider transportProvider) {
-            return transportProvider.getRouterFunction();
-        }
-    }
-    ```
-
-    Implements the MCP HTTP with SSE transport specification, providing:
-
-    - Server-side event streaming
-    - Integration with Spring WebMVC
-    - Support for traditional web applications
-    - Synchronous operation handling
-
-=== "SSE (Servlet)"
+=== "SSE Servlet"
 
     Creates a Servlet-based SSE server transport. Included in the core `mcp` module.
     The `HttpServletSseServerTransportProvider` can be used with any Servlet container.
@@ -307,6 +257,61 @@ The SDK includes several built-in transport provider implementations:
         - Message endpoint (configurable) for client-to-server requests
     - Error handling and response formatting
     - Graceful shutdown support
+
+=== "SSE WebFlux (external)"
+
+    Creates WebFlux-based SSE server transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+
+    ```java
+    @Configuration
+    class McpConfig {
+        @Bean
+        WebFluxSseServerTransportProvider webFluxSseServerTransportProvider(ObjectMapper mapper) {
+            return new WebFluxSseServerTransportProvider(mapper, "/mcp/message");
+        }
+
+        @Bean
+        RouterFunction<?> mcpRouterFunction(WebFluxSseServerTransportProvider transportProvider) {
+            return transportProvider.getRouterFunction();
+        }
+    }
+    ```
+
+    Implements the MCP HTTP with SSE transport specification, providing:
+
+    - Reactive HTTP streaming with WebFlux
+    - Concurrent client connections through SSE endpoints
+    - Message routing and session management
+    - Graceful shutdown capabilities
+
+=== "SSE WebMvc (external)"
+
+    Creates WebMvc-based SSE server transport. Requires the `mcp-spring-webmvc` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+
+    ```java
+    @Configuration
+    @EnableWebMvc
+    class McpConfig {
+        @Bean
+        WebMvcSseServerTransportProvider webMvcSseServerTransportProvider(ObjectMapper mapper) {
+            return new WebMvcSseServerTransportProvider(mapper, "/mcp/message");
+        }
+
+        @Bean
+        RouterFunction<ServerResponse> mcpRouterFunction(
+                WebMvcSseServerTransportProvider transportProvider) {
+            return transportProvider.getRouterFunction();
+        }
+    }
+    ```
+
+    Implements the MCP HTTP with SSE transport specification, providing:
+
+    - Server-side event streaming
+    - Integration with Spring WebMVC
+    - Support for traditional web applications
+    - Synchronous operation handling
+
 
 ## Server Capabilities
 
@@ -750,6 +755,182 @@ mcpClient.setLoggingLevel(McpSchema.LoggingLevel.INFO);
 
 Clients can control the minimum logging level they receive through the `mcpClient.setLoggingLevel(level)` request. Messages below the set level will be filtered out.
 Supported logging levels (in order of increasing severity): DEBUG (0), INFO (1), NOTICE (2), WARNING (3), ERROR (4), CRITICAL (5), ALERT (6), EMERGENCY (7)
+
+## MCP Security
+
+The [MCP Security](https://github.com/spring-ai-community/mcp-security) community library provides OAuth 2.0 resource server support and API key authentication for Spring AI MCP servers.
+
+!!! note
+    This is a community project (`org.springaicommunity`), not officially part of the MCP Java SDK. It requires Spring AI 2.0.x (`mcp-server-security` version 0.1.x) and is compatible with **Spring WebMVC-based servers only**. For Spring AI 1.1.x, use version 0.0.6.
+
+### Add Dependency
+
+=== "Maven"
+
+    ```xml
+    <dependencies>
+        <dependency>
+            <groupId>org.springaicommunity</groupId>
+            <artifactId>mcp-server-security</artifactId>
+            <version>0.1.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <!-- Optional: required for OAuth2 resource server support -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+        </dependency>
+    </dependencies>
+    ```
+
+=== "Gradle"
+
+    ```groovy
+    implementation("org.springaicommunity:mcp-server-security:0.1.1")
+    implementation("org.springframework.boot:spring-boot-starter-security")
+    // Optional: required for OAuth2 resource server support
+    implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
+    ```
+
+### OAuth2 Authentication
+
+Enable a Streamable HTTP or Stateless MCP server in `application.properties`:
+
+```properties
+spring.ai.mcp.server.name=my-mcp-server
+# Supported protocols: STREAMABLE, STATELESS
+spring.ai.mcp.server.protocol=STREAMABLE
+```
+
+Then configure Spring Security with the `McpServerOAuth2Configurer` to require authentication on every request:
+
+```java
+@Configuration
+@EnableWebSecurity
+class McpServerConfiguration {
+
+    @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}")
+    private String issuerUrl;
+
+    @Bean
+    SecurityFilterChain securityFilterChain(HttpSecurity http) {
+        return http
+                // Require authentication on every request
+                .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+                .with(
+                        McpServerOAuth2Configurer.mcpServerOAuth2(),
+                        mcpAuthorization -> {
+                            // Required: the issuer URI of the authorization server
+                            mcpAuthorization.authorizationServer(issuerUrl);
+                            // Optional: validate the `aud` claim (RFC 8707 Resource Indicators)
+                            // Not all authorization servers include this claim. Defaults to false.
+                            mcpAuthorization.validateAudienceClaim(true);
+                        }
+                )
+                .build();
+    }
+}
+```
+
+### Fine-Grained: Secure Tool Calls Only
+
+To allow `initialize` and `tools/list` publicly while requiring authentication for `tools/call`, enable method security and open the `/mcp` endpoint:
+
+```java
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity  // enables @PreAuthorize on individual methods
+class McpServerConfiguration {
+
+    @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}")
+    private String issuerUrl;
+
+    @Bean
+    SecurityFilterChain securityFilterChain(HttpSecurity http) {
+        return http
+                .authorizeHttpRequests(auth -> {
+                    auth.requestMatchers("/mcp").permitAll();
+                    auth.anyRequest().authenticated();
+                })
+                .with(
+                        McpServerOAuth2Configurer.mcpServerOAuth2(),
+                        mcpAuthorization -> mcpAuthorization.authorizationServer(issuerUrl)
+                )
+                .build();
+    }
+}
+```
+
+Then annotate individual tool methods with `@PreAuthorize`. The current authentication is also accessible via `SecurityContextHolder`:
+
+```java
+@Service
+public class MyToolsService {
+
+    @PreAuthorize("isAuthenticated()")
+    @McpTool(name = "greeter", description = "A tool that greets the authenticated user")
+    public String greet(
+            @McpToolParam(description = "The language for the greeting") String language
+    ) {
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        return switch (language.toLowerCase()) {
+            case "english" -> "Hello, " + authentication.getName() + "!";
+            case "french"  -> "Salut " + authentication.getName() + "!";
+            default        -> "Hello " + authentication.getName() + "!";
+        };
+    }
+}
+```
+
+### API Key Authentication
+
+For API key-based authentication, provide an `ApiKeyEntityRepository` implementation and configure the `mcpServerApiKey()` configurer:
+
+```java
+@Configuration
+@EnableWebSecurity
+class McpServerConfiguration {
+
+    @Bean
+    SecurityFilterChain securityFilterChain(HttpSecurity http) {
+        return http
+                .authorizeHttpRequests(authz -> authz.anyRequest().authenticated())
+                .with(
+                        mcpServerApiKey(),
+                        apiKey -> {
+                            // Required: repository of valid API keys
+                            apiKey.apiKeyRepository(apiKeyRepository());
+                            // Optional: customize the header name (default: X-API-Key)
+                            // apiKey.headerName("CUSTOM-API-KEY");
+                        }
+                )
+                .build();
+    }
+
+    private ApiKeyEntityRepository<ApiKeyEntityImpl> apiKeyRepository() {
+        var apiKey = ApiKeyEntityImpl.builder()
+                .name("my api key")
+                .id("api01")
+                .secret("mycustomapikey")
+                .build();
+        return new InMemoryApiKeyEntityRepository<>(List.of(apiKey));
+    }
+}
+```
+
+Clients send the key using the `X-API-Key: api01.mycustomapikey` header format (`<id>.<secret>`).
+
+!!! warning
+    `InMemoryApiKeyEntityRepository` uses bcrypt for key hashing and is not suited for high-traffic production use. Provide a custom `ApiKeyEntityRepository` implementation for production deployments.
+
+### Known Limitations
+
+- The deprecated SSE transport is not supported. Use Streamable HTTP or Stateless transport.
+- Spring WebFlux-based servers are not supported — WebMVC only.
+- Opaque tokens are not supported. JWT is required for OAuth2.
 
 ## Error Handling
 
