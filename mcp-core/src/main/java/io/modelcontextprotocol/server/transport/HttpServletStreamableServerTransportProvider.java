@@ -56,6 +56,7 @@ import reactor.core.publisher.Mono;
  * @author Zachary German
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @author Yanming Zhou
  * @see McpStreamableServerTransportProvider
  * @see HttpServlet
  */
@@ -533,14 +534,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 		catch (Exception e) {
 			logger.error("Error handling message: {}", e.getMessage());
-			try {
-				this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-						new McpError("Error processing message: " + e.getMessage()));
-			}
-			catch (IOException ex) {
-				logger.error(FAILED_TO_SEND_ERROR_RESPONSE, ex.getMessage());
-				response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error processing message");
-			}
+			this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+					new McpError("Error processing message: " + e.getMessage()));
 		}
 	}
 
@@ -603,26 +598,24 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 		catch (Exception e) {
 			logger.error("Failed to delete session {}: {}", sessionId, e.getMessage());
-			try {
-				this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-						new McpError(e.getMessage()));
-			}
-			catch (IOException ex) {
-				logger.error(FAILED_TO_SEND_ERROR_RESPONSE, ex.getMessage());
-				response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error deleting session");
-			}
+			this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, new McpError(e.getMessage()));
 		}
 	}
 
 	public void responseError(HttpServletResponse response, int httpCode, McpError mcpError) throws IOException {
-		response.setContentType(APPLICATION_JSON);
-		response.setCharacterEncoding(UTF_8);
-		response.setStatus(httpCode);
-		String jsonError = jsonMapper.writeValueAsString(mcpError);
-		PrintWriter writer = response.getWriter();
-		writer.write(jsonError);
-		writer.flush();
-		return;
+		try {
+			response.setContentType(APPLICATION_JSON);
+			response.setCharacterEncoding(UTF_8);
+			response.setStatus(httpCode);
+			String jsonError = jsonMapper.writeValueAsString(mcpError);
+			PrintWriter writer = response.getWriter();
+			writer.write(jsonError);
+			writer.flush();
+		}
+		catch (IOException ex) {
+			logger.error(FAILED_TO_SEND_ERROR_RESPONSE, ex.getMessage());
+			response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error processing message");
+		}
 	}
 
 	/**

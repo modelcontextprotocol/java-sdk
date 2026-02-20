@@ -35,6 +35,7 @@ import reactor.core.publisher.Mono;
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @author Yanming Zhou
  */
 @WebServlet(asyncSupported = true)
 public class HttpServletStatelessServerTransport extends HttpServlet implements McpStatelessServerTransport {
@@ -220,13 +221,19 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 	 * @throws IOException If an I/O error occurs
 	 */
 	private void responseError(HttpServletResponse response, int httpCode, McpError mcpError) throws IOException {
-		response.setContentType(APPLICATION_JSON);
-		response.setCharacterEncoding(UTF_8);
-		response.setStatus(httpCode);
-		String jsonError = jsonMapper.writeValueAsString(mcpError);
-		PrintWriter writer = response.getWriter();
-		writer.write(jsonError);
-		writer.flush();
+		try {
+			response.setContentType(APPLICATION_JSON);
+			response.setCharacterEncoding(UTF_8);
+			response.setStatus(httpCode);
+			String jsonError = jsonMapper.writeValueAsString(mcpError);
+			PrintWriter writer = response.getWriter();
+			writer.write(jsonError);
+			writer.flush();
+		}
+		catch (IOException ex) {
+			logger.error(FAILED_TO_SEND_ERROR_RESPONSE, ex.getMessage());
+			response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error processing message");
+		}
 	}
 
 	/**
