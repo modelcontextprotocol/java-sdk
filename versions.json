@@ -7,6 +7,13 @@
     ]
   },
   {
+    "version": "1.0.0-RC3",
+    "title": "1.0.0-RC3",
+    "aliases": [
+      "latest"
+    ]
+  },
+  {
     "version": "0.18.1-SNAPSHOT",
     "title": "0.18.1-SNAPSHOT",
     "aliases": []
@@ -14,8 +21,6 @@
   {
     "version": "v0.18.1",
     "title": "v0.18.1",
-    "aliases": [
-      "latest"
-    ]
+    "aliases": []
   }
 ]
