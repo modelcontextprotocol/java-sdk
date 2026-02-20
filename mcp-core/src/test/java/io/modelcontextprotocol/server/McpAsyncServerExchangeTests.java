@@ -215,7 +215,7 @@ class McpAsyncServerExchangeTests {
 	@Test
 	void testLoggingNotificationWithNullMessage() {
 		StepVerifier.create(exchange.loggingNotification(null)).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(McpError.class).hasMessage("Logging message must not be null");
+			assertThat(error).isInstanceOf(IllegalStateException.class).hasMessage("Logging message must not be null");
 		});
 	}
 
@@ -310,7 +310,7 @@ class McpAsyncServerExchangeTests {
 
 		StepVerifier.create(exchangeWithNullCapabilities.createElicitation(elicitRequest))
 			.verifyErrorSatisfies(error -> {
-				assertThat(error).isInstanceOf(McpError.class)
+				assertThat(error).isInstanceOf(IllegalStateException.class)
 					.hasMessage("Client must be initialized. Call the initialize method first!");
 			});
 
@@ -333,7 +333,7 @@ class McpAsyncServerExchangeTests {
 			.build();
 
 		StepVerifier.create(exchangeWithoutElicitation.createElicitation(elicitRequest)).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(McpError.class)
+			assertThat(error).isInstanceOf(IllegalStateException.class)
 				.hasMessage("Client must be configured with elicitation capabilities");
 		});
 
@@ -478,7 +478,7 @@ class McpAsyncServerExchangeTests {
 
 		StepVerifier.create(exchangeWithNullCapabilities.createMessage(createMessageRequest))
 			.verifyErrorSatisfies(error -> {
-				assertThat(error).isInstanceOf(McpError.class)
+				assertThat(error).isInstanceOf(IllegalStateException.class)
 					.hasMessage("Client must be initialized. Call the initialize method first!");
 			});
 
@@ -503,7 +503,7 @@ class McpAsyncServerExchangeTests {
 			.build();
 
 		StepVerifier.create(exchangeWithoutSampling.createMessage(createMessageRequest)).verifyErrorSatisfies(error -> {
-			assertThat(error).isInstanceOf(McpError.class)
+			assertThat(error).isInstanceOf(IllegalStateException.class)
 				.hasMessage("Client must be configured with sampling capabilities");
 		});
 

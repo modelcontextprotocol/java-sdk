@@ -96,7 +96,8 @@ public class McpClientSession implements McpSession {
 
 	}
 
-	/** Creates a new McpClientSession with the specified configuration and handlers.
+	/**
+	 * Creates a new McpClientSession with the specified configuration and handlers.
 	 * @param requestTimeout Duration to wait for responses
 	 * @param transport Transport implementation for message exchange
 	 * @param requestHandlers Map of method names to request handlers

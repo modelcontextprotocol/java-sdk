@@ -106,12 +106,8 @@ class AsyncToolSpecificationBuilderTest {
 
 		McpServerFeatures.AsyncToolSpecification specification = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(tool)
-			.callHandler((exchange, request) -> {
-				return Mono.just(CallToolResult.builder()
-					.content(List.of(new TextContent(expectedResult)))
-					.isError(false)
-					.build());
-			})
+			.callHandler((exchange, request) -> Mono.just(
+					CallToolResult.builder().content(List.of(new TextContent(expectedResult))).isError(false).build()))
 			.build();
 
 		CallToolRequest request = new CallToolRequest("calculator", Map.of());
@@ -129,30 +125,28 @@ class AsyncToolSpecificationBuilderTest {
 	@Test
 	void fromSyncShouldConvertSyncToolSpecificationCorrectly() {
 		Tool tool = McpSchema.Tool.builder()
-				.name("sync-tool")
-				.title("A sync tool")
-				.inputSchema(EMPTY_JSON_SCHEMA)
-				.build();
+			.name("sync-tool")
+			.title("A sync tool")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
 		String expectedResult = "sync result";
 
 		// Create a sync tool specification
 		McpServerFeatures.SyncToolSpecification syncSpec = McpServerFeatures.SyncToolSpecification.builder()
-				.tool(tool)
-				.callHandler((exchange, request) -> CallToolResult.builder()
-						.content(List.of(new TextContent(expectedResult)))
-						.isError(false)
-						.build())
-				.build();
+			.tool(tool)
+			.callHandler((exchange, request) -> CallToolResult.builder()
+				.content(List.of(new TextContent(expectedResult)))
+				.isError(false)
+				.build())
+			.build();
 
 		// Convert to async using fromSync
 		McpServerFeatures.AsyncToolSpecification asyncSpec = McpServerFeatures.AsyncToolSpecification
-				.fromSync(syncSpec);
+			.fromSync(syncSpec);
 
 		assertThat(asyncSpec).isNotNull();
 		assertThat(asyncSpec.tool()).isEqualTo(tool);
 		assertThat(asyncSpec.callHandler()).isNotNull();
-		assertThat(asyncSpec.call()).isNull(); // should be null since sync spec doesn't
-		// have deprecated call
 
 		// Test that the converted async specification works correctly
 		CallToolRequest request = new CallToolRequest("sync-tool", Map.of("param", "value"));

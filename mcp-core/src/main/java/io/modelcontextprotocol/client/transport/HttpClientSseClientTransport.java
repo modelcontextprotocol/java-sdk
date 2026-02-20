@@ -185,7 +185,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			// Default constructor
 		}
 
-		/** Sets the base URI.
+		/**
+		 * Sets the base URI.
 		 * @param baseUri the base URI
 		 * @return this builder
 		 */

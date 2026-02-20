@@ -49,7 +49,8 @@ public class McpAsyncServerExchange {
 	public static final TypeRef<Object> OBJECT_TYPE_REF = new TypeRef<>() {
 	};
 
-	/** Create a new asynchronous exchange with the client.
+	/**
+	 * Create a new asynchronous exchange with the client.
 	 * @param session The server session representing a 1-1 interaction.
 	 * @param clientCapabilities The client capabilities that define the supported
 	 * features and functionality.
@@ -119,7 +120,8 @@ public class McpAsyncServerExchange {
 	 */
 	public Mono<McpSchema.CreateMessageResult> createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
 		if (this.clientCapabilities == null) {
-			return Mono.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
+			return Mono
+				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
 		}
 		if (this.clientCapabilities.sampling() == null) {
 			return Mono.error(new IllegalStateException("Client must be configured with sampling capabilities"));
@@ -144,7 +146,8 @@ public class McpAsyncServerExchange {
 	 */
 	public Mono<McpSchema.ElicitResult> createElicitation(McpSchema.ElicitRequest elicitRequest) {
 		if (this.clientCapabilities == null) {
-			return Mono.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
+			return Mono
+				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
 		}
 		if (this.clientCapabilities.elicitation() == null) {
 			return Mono.error(new IllegalStateException("Client must be configured with elicitation capabilities"));
