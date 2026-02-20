@@ -478,19 +478,21 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					})).onErrorMap(CompletionException.class, t -> t.getCause()).onErrorComplete().subscribe();
 
 			})).flatMap(responseEvent -> {
-				if (transportSession.markInitialized(
-						responseEvent.responseInfo().headers().firstValue("mcp-session-id").orElseGet(() -> null))) {
-					// Once we have a session, we try to open an async stream for
-					// the server to send notifications and requests out-of-band.
-
-					reconnect(null).contextWrite(deliveredSink.contextView()).subscribe();
-				}
-
 				String sessionRepresentation = sessionIdOrPlaceholder(transportSession);
 
 				int statusCode = responseEvent.responseInfo().statusCode();
 
 				if (statusCode >= 200 && statusCode < 300) {
+					// Only initialize session and open async stream for successful
+					// responses
+					if (transportSession.markInitialized(responseEvent.responseInfo()
+						.headers()
+						.firstValue("mcp-session-id")
+						.orElseGet(() -> null))) {
+						// Once we have a session, we try to open an async stream for
+						// the server to send notifications and requests out-of-band.
+						reconnect(null).contextWrite(deliveredSink.contextView()).subscribe();
+					}
 
 					String contentType = responseEvent.responseInfo()
 						.headers()
