@@ -247,13 +247,17 @@ public final class McpSchema {
 		/**
 		 * Constructor that validates MCP-specific ID requirements. Unlike base JSON-RPC,
 		 * MCP requires that: (1) Requests MUST include a string or integer ID; (2) The ID
-		 * MUST NOT be null
+		 * MUST NOT be null.
 		 */
 		public JSONRPCRequest {
-			Assert.notNull(id, "MCP requests MUST include an ID - null IDs are not allowed");
-			Assert.isTrue(id instanceof String || id instanceof Integer || id instanceof Long,
-					"MCP requests MUST have an ID that is either a string or integer");
+			validateID(id);
 		}
+	}
+
+	private static void validateID(Object id) {
+		Assert.notNull(id, "MCP requests/responses MUST include an ID - null IDs are not allowed");
+		Assert.isTrue(id instanceof String || id instanceof Integer || id instanceof Long,
+				"MCP requests/responses MUST have an ID that is either a string or integer");
 	}
 
 	/**
@@ -290,6 +294,16 @@ public final class McpSchema {
 		@JsonProperty("id") Object id,
 		@JsonProperty("result") Object result,
 		@JsonProperty("error") JSONRPCError error) implements JSONRPCMessage { // @formatter:on
+
+		/**
+		 * Constructor that validates (a) MCP-specific ID requirements (unlike base
+		 * JSON-RPC, MCP requires that: (1) Requests MUST include a string or integer ID;
+		 * (2) The ID MUST NOT be null.) and (b) that EITHER result OR error are non-null.
+		 */
+		public JSONRPCResponse {
+			validateID(id);
+			Assert.isTrue(result != null || error != null, "MCP responses MUST have EITHER a result OR an error");
+		}
 
 		/**
 		 * A response to a request that indicates an error occurred.
