@@ -123,7 +123,7 @@ public interface McpClient {
 	 * @throws IllegalArgumentException if transport is null
 	 */
 	static SyncSpec sync(McpClientTransport transport) {
-		return new SyncSpec(transport);
+		return new McpClient.SyncSpec(transport);
 	}
 
 	/**
@@ -158,44 +158,46 @@ public interface McpClient {
 	 * <li>Change notification handlers for tools, resources, and prompts
 	 * <li>Custom message sampling logic
 	 * </ul>
+	 *
+	 * This class can be extended by subclass.
 	 */
 	class SyncSpec {
 
-		private final McpClientTransport transport;
+		protected final McpClientTransport transport;
 
-		private Duration requestTimeout = Duration.ofSeconds(20); // Default timeout
+		protected Duration requestTimeout = Duration.ofSeconds(20); // Default timeout
 
-		private Duration initializationTimeout = Duration.ofSeconds(20);
+		protected Duration initializationTimeout = Duration.ofSeconds(20);
 
-		private ClientCapabilities capabilities;
+		protected ClientCapabilities capabilities;
 
-		private Implementation clientInfo = new Implementation("Java SDK MCP Client", "0.15.0");
+		protected Implementation clientInfo = new Implementation("Java SDK MCP Client", "0.15.0");
 
-		private final Map<String, Root> roots = new HashMap<>();
+		protected final Map<String, Root> roots = new HashMap<>();
 
-		private final List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers = new ArrayList<>();
+		protected final List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers = new ArrayList<>();
 
-		private final List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers = new ArrayList<>();
+		protected final List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers = new ArrayList<>();
 
-		private final List<Consumer<List<McpSchema.ResourceContents>>> resourcesUpdateConsumers = new ArrayList<>();
+		protected final List<Consumer<List<McpSchema.ResourceContents>>> resourcesUpdateConsumers = new ArrayList<>();
 
-		private final List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers = new ArrayList<>();
+		protected final List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers = new ArrayList<>();
 
-		private final List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers = new ArrayList<>();
+		protected final List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers = new ArrayList<>();
 
-		private final List<Consumer<McpSchema.ProgressNotification>> progressConsumers = new ArrayList<>();
+		protected final List<Consumer<McpSchema.ProgressNotification>> progressConsumers = new ArrayList<>();
 
-		private Function<CreateMessageRequest, CreateMessageResult> samplingHandler;
+		protected Function<CreateMessageRequest, CreateMessageResult> samplingHandler;
 
-		private Function<ElicitRequest, ElicitResult> elicitationHandler;
+		protected Function<ElicitRequest, ElicitResult> elicitationHandler;
 
-		private Supplier<McpTransportContext> contextProvider = () -> McpTransportContext.EMPTY;
+		protected Supplier<McpTransportContext> contextProvider = () -> McpTransportContext.EMPTY;
 
-		private JsonSchemaValidator jsonSchemaValidator;
+		protected JsonSchemaValidator jsonSchemaValidator;
 
-		private boolean enableCallToolSchemaCaching = false; // Default to false
+		protected boolean enableCallToolSchemaCaching = false; // Default to false
 
-		private SyncSpec(McpClientTransport transport) {
+		public SyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
 			this.transport = transport;
 		}
@@ -514,42 +516,44 @@ public interface McpClient {
 	 * <li>Change notification handlers for tools, resources, and prompts
 	 * <li>Custom message sampling logic
 	 * </ul>
+	 *
+	 * This class can be extended by subclass.
 	 */
 	class AsyncSpec {
 
-		private final McpClientTransport transport;
+		protected final McpClientTransport transport;
 
-		private Duration requestTimeout = Duration.ofSeconds(20); // Default timeout
+		protected Duration requestTimeout = Duration.ofSeconds(20); // Default timeout
 
-		private Duration initializationTimeout = Duration.ofSeconds(20);
+		protected Duration initializationTimeout = Duration.ofSeconds(20);
 
-		private ClientCapabilities capabilities;
+		protected ClientCapabilities capabilities;
 
-		private Implementation clientInfo = new Implementation("Java SDK MCP Client", "0.15.0");
+		protected Implementation clientInfo = new Implementation("Java SDK MCP Client", "0.15.0");
 
-		private final Map<String, Root> roots = new HashMap<>();
+		protected final Map<String, Root> roots = new HashMap<>();
 
-		private final List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers = new ArrayList<>();
+		protected final List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers = new ArrayList<>();
 
-		private final List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers = new ArrayList<>();
+		protected final List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers = new ArrayList<>();
 
-		private final List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers = new ArrayList<>();
+		protected final List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers = new ArrayList<>();
 
-		private final List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers = new ArrayList<>();
+		protected final List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers = new ArrayList<>();
 
-		private final List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers = new ArrayList<>();
+		protected final List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers = new ArrayList<>();
 
-		private final List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers = new ArrayList<>();
+		protected final List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers = new ArrayList<>();
 
-		private Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler;
+		protected Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler;
 
-		private Function<ElicitRequest, Mono<ElicitResult>> elicitationHandler;
+		protected Function<ElicitRequest, Mono<ElicitResult>> elicitationHandler;
 
-		private JsonSchemaValidator jsonSchemaValidator;
+		protected JsonSchemaValidator jsonSchemaValidator;
 
-		private boolean enableCallToolSchemaCaching = false; // Default to false
+		protected boolean enableCallToolSchemaCaching = false; // Default to false
 
-		private AsyncSpec(McpClientTransport transport) {
+		public AsyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
 			this.transport = transport;
 		}
