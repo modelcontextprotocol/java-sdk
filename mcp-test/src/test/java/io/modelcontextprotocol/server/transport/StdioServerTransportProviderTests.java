@@ -145,7 +145,7 @@ class StdioServerTransportProviderTests {
 		InputStream stream = new ByteArrayInputStream(jsonMessage.getBytes(StandardCharsets.UTF_8));
 
 		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getMapper(), stream, System.out);
-
+		// Set up a real session to capture the message
 		AtomicReference<McpSchema.JSONRPCMessage> capturedMessage = new AtomicReference<>();
 		CountDownLatch messageLatch = new CountDownLatch(1);
 
@@ -160,8 +160,10 @@ class StdioServerTransportProviderTests {
 			return session;
 		};
 
+		// Set session factory
 		transportProvider.setSessionFactory(realSessionFactory);
 
+		// Wait for the message to be processed using the latch
 		StepVerifier.create(Mono.fromCallable(() -> messageLatch.await(100, TimeUnit.SECONDS)).flatMap(success -> {
 			if (!success) {
 				return Mono.error(new AssertionError("Timeout waiting for message processing"));
