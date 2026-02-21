@@ -139,7 +139,7 @@ class StdioServerTransportProviderTests {
 	@SuppressWarnings("unchecked")
 	void shouldHandleUtf8EncodedMessages() throws Exception {
 
-		String utf8Content = "한글 테스트 🎉 café 日本語";
+		String utf8Content = "한글 漢字 café 🎉";
 		String jsonMessage = "{\"jsonrpc\":\"2.0\",\"method\":\"test\"," + "\"params\":{\"message\":\"" + utf8Content
 				+ "\"},\"id\":1}\n";
 		InputStream stream = new ByteArrayInputStream(jsonMessage.getBytes(StandardCharsets.UTF_8));
