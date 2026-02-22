@@ -200,7 +200,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 					inboundReady.tryEmitValue(null);
 					BufferedReader reader = null;
 					try {
-						reader = new BufferedReader(new InputStreamReader(inputStream));
+						reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
 						while (!isClosing.get()) {
 							try {
 								String line = reader.readLine();
