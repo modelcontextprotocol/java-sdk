@@ -1,22 +1,5 @@
 [
   {
-    "version": "1.0.0-SNAPSHOT",
-    "title": "1.0.0-SNAPSHOT",
-    "aliases": [
-      "latest-snapshot"
-    ]
-  },
-  {
-    "version": "1.0.0-RC3",
-    "title": "1.0.0-RC3",
-    "aliases": []
-  },
-  {
-    "version": "0.18.1-SNAPSHOT",
-    "title": "0.18.1-SNAPSHOT",
-    "aliases": []
-  },
-  {
     "version": "v1.0.0-RC3",
     "title": "v1.0.0-RC3",
     "aliases": [
@@ -24,8 +7,20 @@
     ]
   },
   {
+    "version": "1.0.0-SNAPSHOT",
+    "title": "1.0.0-SNAPSHOT",
+    "aliases": [
+      "latest-snapshot"
+    ]
+  },
+  {
     "version": "v0.18.1",
     "title": "v0.18.1",
+    "aliases": []
+  },
+  {
+    "version": "0.18.1-SNAPSHOT",
+    "title": "0.18.1-SNAPSHOT",
     "aliases": []
   }
 ]
