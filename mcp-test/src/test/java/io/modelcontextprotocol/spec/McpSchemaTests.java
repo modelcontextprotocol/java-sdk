@@ -1583,6 +1583,50 @@ public class McpSchemaTests {
 		assertThat(request.progressToken()).isEqualTo("complete-progress-789");
 	}
 
+	@Test
+	void testCompleteRequestWithResourceRefDeserialization() throws IOException {
+		McpSchema.CompleteRequest request = JSON_MAPPER.readValue("""
+				{
+				     "ref": {
+				       "type": "ref/resource",
+				       "uri": "file:///test.txt"
+				     },
+				     "argument": {
+				       "name": "path",
+				       "value": "/partial/path"
+				     },
+				     "_meta": {
+				       "progressToken": "complete-progress-789"
+				     }
+				}""", McpSchema.CompleteRequest.class);
+
+		assertThat(request).usingRecursiveComparison()
+			.ignoringFields("ref.type")
+			.isEqualTo(new McpSchema.CompleteRequest(new McpSchema.ResourceReference("file:///test.txt"),
+					new McpSchema.CompleteRequest.CompleteArgument("path", "/partial/path"),
+					Map.of("progressToken", "complete-progress-789"), null));
+	}
+
+	@Test
+	void testCompleteRequestWithPromptRefDeserialization() throws IOException {
+		McpSchema.CompleteRequest request = JSON_MAPPER.readValue("""
+				{
+				     "ref": {
+				       "type": "ref/prompt",
+				       "name": "test-prompt"
+				     },
+				     "argument": {
+				       "name": "arg1",
+				       "value": "partial-value"
+				     }
+				}""", McpSchema.CompleteRequest.class);
+
+		assertThat(request).usingRecursiveComparison()
+			.ignoringFields("ref.type")
+			.isEqualTo(new McpSchema.CompleteRequest(new McpSchema.PromptReference("test-prompt"),
+					new McpSchema.CompleteRequest.CompleteArgument("arg1", "partial-value"), null, null));
+	}
+
 	// Roots Tests
 
 	@Test
