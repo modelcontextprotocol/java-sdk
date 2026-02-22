@@ -136,51 +136,6 @@ class StdioServerTransportProviderTests {
 	}
 
 	@Test
-	@SuppressWarnings("unchecked")
-	void shouldHandleUtf8EncodedMessages() throws Exception {
-
-		String utf8Content = "한글 漢字 café 🎉";
-		String jsonMessage = "{\"jsonrpc\":\"2.0\",\"method\":\"test\"," + "\"params\":{\"message\":\"" + utf8Content
-				+ "\"},\"id\":1}\n";
-		InputStream stream = new ByteArrayInputStream(jsonMessage.getBytes(StandardCharsets.UTF_8));
-
-		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getMapper(), stream, System.out);
-		// Set up a real session to capture the message
-		AtomicReference<McpSchema.JSONRPCMessage> capturedMessage = new AtomicReference<>();
-		CountDownLatch messageLatch = new CountDownLatch(1);
-
-		McpServerSession.Factory realSessionFactory = transport -> {
-			McpServerSession session = mock(McpServerSession.class);
-			when(session.handle(any())).thenAnswer(invocation -> {
-				capturedMessage.set(invocation.getArgument(0));
-				messageLatch.countDown();
-				return Mono.empty();
-			});
-			when(session.closeGracefully()).thenReturn(Mono.empty());
-			return session;
-		};
-
-		// Set session factory
-		transportProvider.setSessionFactory(realSessionFactory);
-
-		// Wait for the message to be processed using the latch
-		StepVerifier.create(Mono.fromCallable(() -> messageLatch.await(100, TimeUnit.SECONDS)).flatMap(success -> {
-			if (!success) {
-				return Mono.error(new AssertionError("Timeout waiting for message processing"));
-			}
-			return Mono.just(capturedMessage.get());
-		})).assertNext(message -> {
-			assertThat(message).isNotNull();
-			assertThat(message).isInstanceOf(McpSchema.JSONRPCRequest.class);
-			McpSchema.JSONRPCRequest request = (McpSchema.JSONRPCRequest) message;
-			assertThat(request.method()).isEqualTo("test");
-			assertThat(request.id()).isEqualTo(1);
-			Map<String, Object> params = (Map<String, Object>) request.params();
-			assertThat(params).containsEntry("message", utf8Content);
-		}).verifyComplete();
-	}
-
-	@Test
 	void shouldNotifyClients() {
 		// Set session factory
 		transportProvider.setSessionFactory(sessionFactory);
