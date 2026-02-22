@@ -1,4 +1,8 @@
 package io.modelcontextprotocol.spec;
 
-public record StoredEvent(String eventId, String streamId, McpSchema.JSONRPCMessage event, long timestamp) {
+public record StoredEvent(MessageId messageId, McpSchema.JSONRPCMessage message, long timestamp) {
+
+	public String transportId() {
+		return messageId.transportId();
+	}
 }

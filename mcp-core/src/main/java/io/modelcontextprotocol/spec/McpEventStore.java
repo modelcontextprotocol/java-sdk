@@ -5,8 +5,10 @@ import reactor.core.publisher.Mono;
 
 public interface McpEventStore {
 
-	Mono<String> storeEvent(String streamId, McpSchema.JSONRPCMessage message);
+	Mono<Void> storeEvent(MessageId messageId, McpSchema.JSONRPCMessage message);
 
-	Flux<StoredEvent> replayEventsAfter(String lastEventId);
+	Flux<StoredEvent> replayEventsAfter(MessageId lastEventId);
+
+	Mono<Void> clearEventsOfTransportAfterTtl(String transportId);
 
 }

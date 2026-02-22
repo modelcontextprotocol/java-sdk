@@ -62,6 +62,8 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	private volatile McpSchema.LoggingLevel minLoggingLevel = McpSchema.LoggingLevel.INFO;
 
+	private McpEventStore eventStore;
+
 	/**
 	 * Create an instance of the streamable session.
 	 * @param id session ID
@@ -74,8 +76,8 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	 */
 	public McpStreamableServerSession(String id, McpSchema.ClientCapabilities clientCapabilities,
 			McpSchema.Implementation clientInfo, Duration requestTimeout,
-			Map<String, McpRequestHandler<?>> requestHandlers,
-			Map<String, McpNotificationHandler> notificationHandlers) {
+			Map<String, McpRequestHandler<?>> requestHandlers, Map<String, McpNotificationHandler> notificationHandlers,
+			McpEventStore eventStore) {
 		this.id = id;
 		this.missingMcpTransportSession = new MissingMcpTransportSession(id);
 		this.listeningStreamRef = new AtomicReference<>(this.missingMcpTransportSession);
@@ -84,6 +86,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		this.requestTimeout = requestTimeout;
 		this.requestHandlers = requestHandlers;
 		this.notificationHandlers = notificationHandlers;
+		this.eventStore = eventStore;
 	}
 
 	@Override
@@ -144,10 +147,19 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		return listeningStream;
 	}
 
-	// TODO: keep track of history by keeping a map from eventId to stream and then
-	// iterate over the events using the lastEventId
-	public Flux<McpSchema.JSONRPCMessage> replay(Object lastEventId) {
-		return Flux.empty();
+	/**
+	 * Replay message that were send after the given message ID on same stream. If no
+	 * message store is configuraed or the message ID is (#code null}, returns on empty
+	 * Flux.
+	 * @param lastEventId the last message ID the client received
+	 * @return a Flux of stored events to replay, each contains the message ID and message
+	 */
+	public Flux<StoredEvent> replay(String lastEventId) {
+		if (this.eventStore == null || lastEventId == null) {
+			return Flux.empty();
+		}
+
+		return this.eventStore.replayEventsAfter(MessageId.from(lastEventId));
 	}
 
 	/**
@@ -188,7 +200,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 							null, jsonRpcError);
 					return Mono.just(errorResponse);
 				})
-				.flatMap(transport::sendMessage)
+				.flatMap(stream::storeAndSave)
 				.then(transport.closeGracefully());
 		});
 	}
@@ -325,7 +337,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 		private final String transportId;
 
-		private final Supplier<String> uuidGenerator;
+		private final Supplier<MessageId> messageIdGenerator;
 
 		/**
 		 * Constructor accepting the dedicated transport representing the SSE stream.
@@ -336,7 +348,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 			this.transportId = UUID.randomUUID().toString();
 			// This ID design allows for a constant-time extraction of the history by
 			// precisely identifying the SSE stream using the first component
-			this.uuidGenerator = () -> this.transportId + "_" + UUID.randomUUID();
+			this.messageIdGenerator = () -> MessageId.of(this.transportId, UUID.randomUUID().toString());
 		}
 
 		@Override
@@ -360,9 +372,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 				this.pendingResponses.put(requestId, sink);
 				McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
 						method, requestId, requestParams);
-				String messageId = this.uuidGenerator.get();
-				// TODO: store message in history
-				this.transport.sendMessage(jsonrpcRequest, messageId).subscribe(v -> {
+				storeAndSave(jsonrpcRequest).subscribe(v -> {
 				}, sink::error);
 			}).timeout(requestTimeout).doOnError(e -> {
 				this.pendingResponses.remove(requestId);
@@ -386,9 +396,19 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		public Mono<Void> sendNotification(String method, Object params) {
 			McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(
 					McpSchema.JSONRPC_VERSION, method, params);
-			String messageId = this.uuidGenerator.get();
-			// TODO: store message in history
-			return this.transport.sendMessage(jsonrpcNotification, messageId);
+			return storeAndSave(jsonrpcNotification);
+		}
+
+		Mono<Void> storeAndSave(McpSchema.JSONRPCMessage message) {
+			McpEventStore store = McpStreamableServerSession.this.eventStore;
+			MessageId messageId = this.messageIdGenerator.get();
+
+			if (store != null) {
+				return store.storeEvent(messageId, message)
+					.doOnNext(v -> this.transport.sendMessage(message, messageId.value()));
+			}
+
+			return this.transport.sendMessage(message, messageId.value());
 		}
 
 		@Override
@@ -400,7 +420,9 @@ public class McpStreamableServerSession implements McpLoggableSession {
 				McpStreamableServerSession.this.listeningStreamRef.compareAndExchange(this,
 						McpStreamableServerSession.this.missingMcpTransportSession);
 				McpStreamableServerSession.this.requestIdToStream.values().removeIf(this::equals);
-				return this.transport.closeGracefully();
+
+				return McpStreamableServerSession.this.eventStore.clearEventsOfTransportAfterTtl(transportId)
+					.then(this.transport.closeGracefully());
 			});
 		}
 
