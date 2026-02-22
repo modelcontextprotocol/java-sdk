@@ -25,7 +25,6 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.CompleteResult.CompleteCompletion;
 import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
-import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
 import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
@@ -995,47 +994,24 @@ public class McpAsyncServer {
 	}
 
 	/**
-	 * Parses the raw JSON-RPC request parameters into a {@link McpSchema.CompleteRequest}
+	 * Converts raw JSON-RPC request parameters into a {@link McpSchema.CompleteRequest}
 	 * object.
 	 * <p>
-	 * This method manually extracts the `ref` and `argument` fields from the input map,
-	 * determines the correct reference type (either prompt or resource), and constructs a
-	 * fully-typed {@code CompleteRequest} instance.
-	 * @param object the raw request parameters, expected to be a Map containing "ref" and
-	 * "argument" entries.
+	 * This method extracts the `ref` field to ensure it is not null and validates the
+	 * structure of the request. It uses the {@code jsonMapper} to map the input object
+	 * into a {@code CompleteRequest} instance.
+	 * @param object the raw request parameters, expected to be a JSON-compatible object
+	 * containing "ref" and other fields.
 	 * @return a {@link McpSchema.CompleteRequest} representing the structured completion
 	 * request.
-	 * @throws IllegalArgumentException if the "ref" type is not recognized.
+	 * @throws IllegalArgumentException if the "ref" field is null.
 	 */
-	@SuppressWarnings("unchecked")
 	private McpSchema.CompleteRequest parseCompletionParams(Object object) {
-		Map<String, Object> params = (Map<String, Object>) object;
-		Map<String, Object> refMap = (Map<String, Object>) params.get("ref");
-		Map<String, Object> argMap = (Map<String, Object>) params.get("argument");
-		Map<String, Object> contextMap = (Map<String, Object>) params.get("context");
-		Map<String, Object> meta = (Map<String, Object>) params.get("_meta");
-
-		String refType = (String) refMap.get("type");
-
-		McpSchema.CompleteReference ref = switch (refType) {
-			case PromptReference.TYPE -> new McpSchema.PromptReference(refType, (String) refMap.get("name"),
-					refMap.get("title") != null ? (String) refMap.get("title") : null);
-			case ResourceReference.TYPE -> new McpSchema.ResourceReference(refType, (String) refMap.get("uri"));
-			default -> throw new IllegalArgumentException("Invalid ref type: " + refType);
-		};
-
-		String argName = (String) argMap.get("name");
-		String argValue = (String) argMap.get("value");
-		McpSchema.CompleteRequest.CompleteArgument argument = new McpSchema.CompleteRequest.CompleteArgument(argName,
-				argValue);
-
-		McpSchema.CompleteRequest.CompleteContext context = null;
-		if (contextMap != null) {
-			Map<String, String> arguments = (Map<String, String>) contextMap.get("arguments");
-			context = new McpSchema.CompleteRequest.CompleteContext(arguments);
+		McpSchema.CompleteRequest request = jsonMapper.convertValue(object, McpSchema.CompleteRequest.class);
+		if (request.ref() == null) {
+			throw new IllegalArgumentException("Completion request ref must not be null");
 		}
-
-		return new McpSchema.CompleteRequest(ref, argument, meta, context);
+		return request;
 	}
 
 	/**
