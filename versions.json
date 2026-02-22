@@ -9,14 +9,19 @@
   {
     "version": "1.0.0-RC3",
     "title": "1.0.0-RC3",
-    "aliases": [
-      "latest"
-    ]
+    "aliases": []
   },
   {
     "version": "0.18.1-SNAPSHOT",
     "title": "0.18.1-SNAPSHOT",
     "aliases": []
+  },
+  {
+    "version": "v1.0.0-RC3",
+    "title": "v1.0.0-RC3",
+    "aliases": [
+      "latest"
+    ]
   },
   {
     "version": "v0.18.1",
