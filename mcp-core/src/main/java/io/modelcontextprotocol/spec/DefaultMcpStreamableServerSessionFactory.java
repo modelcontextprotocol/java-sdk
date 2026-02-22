@@ -4,12 +4,12 @@
 
 package io.modelcontextprotocol.spec;
 
-import io.modelcontextprotocol.server.McpNotificationHandler;
-import io.modelcontextprotocol.server.McpRequestHandler;
-
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
+
+import io.modelcontextprotocol.server.McpNotificationHandler;
+import io.modelcontextprotocol.server.McpRequestHandler;
 
 /**
  * A default implementation of {@link McpStreamableServerSession.Factory}.
@@ -26,21 +26,25 @@ public class DefaultMcpStreamableServerSessionFactory implements McpStreamableSe
 
 	Map<String, McpNotificationHandler> notificationHandlers;
 
+	McpEventStore eventStore;
+
 	/**
 	 * Constructs an instance
 	 * @param requestTimeout timeout for requests
 	 * @param initRequestHandler initialization request handler
 	 * @param requestHandlers map of MCP request handlers keyed by method name
 	 * @param notificationHandlers map of MCP notification handlers keyed by method name
+	 * @param eventStore message store for SSE resumability and replay
 	 */
 	public DefaultMcpStreamableServerSessionFactory(Duration requestTimeout,
 			McpStreamableServerSession.InitRequestHandler initRequestHandler,
-			Map<String, McpRequestHandler<?>> requestHandlers,
-			Map<String, McpNotificationHandler> notificationHandlers) {
+			Map<String, McpRequestHandler<?>> requestHandlers, Map<String, McpNotificationHandler> notificationHandlers,
+			McpEventStore eventStore) {
 		this.requestTimeout = requestTimeout;
 		this.initRequestHandler = initRequestHandler;
 		this.requestHandlers = requestHandlers;
 		this.notificationHandlers = notificationHandlers;
+		this.eventStore = eventStore;
 	}
 
 	@Override
@@ -48,7 +52,8 @@ public class DefaultMcpStreamableServerSessionFactory implements McpStreamableSe
 			McpSchema.InitializeRequest initializeRequest) {
 		return new McpStreamableServerSession.McpStreamableServerSessionInit(
 				new McpStreamableServerSession(UUID.randomUUID().toString(), initializeRequest.capabilities(),
-						initializeRequest.clientInfo(), requestTimeout, requestHandlers, notificationHandlers),
+						initializeRequest.clientInfo(), requestTimeout, requestHandlers, notificationHandlers,
+						eventStore),
 				this.initRequestHandler.handle(initializeRequest));
 	}
 
