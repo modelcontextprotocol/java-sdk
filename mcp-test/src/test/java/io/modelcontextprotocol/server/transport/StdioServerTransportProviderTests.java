@@ -4,9 +4,11 @@
 
 package io.modelcontextprotocol.server.transport;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -15,13 +17,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -133,6 +133,42 @@ class StdioServerTransportProviderTests {
 			assertThat(request.method()).isEqualTo("test");
 			assertThat(request.id()).isEqualTo(1);
 		}).verifyComplete();
+	}
+
+	@Test
+	void shouldHandleUtf8MessagesWithNonUtf8DefaultCharset() throws Exception {
+		String utf8Content = "한글 漢字 café 🎉";
+		String jsonMessage = "{\"jsonrpc\":\"2.0\",\"method\":\"test\"," + "\"params\":{\"message\":\"" + utf8Content
+				+ "\"},\"id\":1}\n";
+
+		// Start a subprocess with non-UTF-8 default charset
+		String javaHome = System.getProperty("java.home");
+		String classpath = System.getProperty("java.class.path");
+		ProcessBuilder pb = new ProcessBuilder(javaHome + "/bin/java", "-Dfile.encoding=ISO-8859-1", "-cp", classpath,
+				StdioUtf8TestServer.class.getName());
+		pb.redirectErrorStream(false);
+		Process process = pb.start();
+
+		try {
+			// Write UTF-8 encoded JSON-RPC message to the subprocess stdin
+			process.getOutputStream().write(jsonMessage.getBytes(StandardCharsets.UTF_8));
+			process.getOutputStream().flush();
+			process.getOutputStream().close();
+
+			// Read the echoed message from subprocess stdout
+			String result;
+			try (BufferedReader reader = new BufferedReader(
+					new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+				result = reader.readLine();
+			}
+
+			// Verify that multi-byte UTF-8 characters survived the round trip
+			assertThat(result).isEqualTo(utf8Content);
+		}
+		finally {
+			process.destroyForcibly();
+			process.waitFor(10, TimeUnit.SECONDS);
+		}
 	}
 
 	@Test
