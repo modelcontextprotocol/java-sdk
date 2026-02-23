@@ -7,11 +7,6 @@
     ]
   },
   {
-    "version": "1.0.0-SNAPSHOT",
-    "title": "1.0.0-SNAPSHOT",
-    "aliases": []
-  },
-  {
     "version": "1.0.0",
     "title": "1.0.0",
     "aliases": [
@@ -21,11 +16,6 @@
   {
     "version": "0.18.1-SNAPSHOT",
     "title": "0.18.1-SNAPSHOT",
-    "aliases": []
-  },
-  {
-    "version": "v1.0.0-RC3",
-    "title": "v1.0.0-RC3",
     "aliases": []
   },
   {
