@@ -57,7 +57,7 @@ jobs:
         uses: modelcontextprotocol/conformance@v0.1.11
         with:
           mode: client
-          command: 'java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-1.0.0-SNAPSHOT.jar'
+          command: 'java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-*-SNAPSHOT.jar'
           scenario: ${{ matrix.scenario }}
           expected-failures: ./conformance-tests/conformance-baseline.yml
 
@@ -99,6 +99,6 @@ jobs:
         with:
           node-version: '22' # see https://github.com/modelcontextprotocol/conformance/pull/162
           mode: client
-          command: 'java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-1.0.0-SNAPSHOT.jar'
+          command: 'java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-*-SNAPSHOT.jar'
           scenario: ${{ matrix.scenario }}
           expected-failures: ./conformance-tests/conformance-baseline.yml
