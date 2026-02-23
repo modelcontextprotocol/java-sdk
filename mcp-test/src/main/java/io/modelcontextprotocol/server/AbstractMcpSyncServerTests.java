@@ -672,7 +672,7 @@ public abstract class AbstractMcpSyncServerTests {
 		var server = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(TaskTestUtils.DEFAULT_TASK_CAPABILITIES)
 			.taskStore(taskStore)
-			.tool(taskTool,
+			.toolCall(taskTool,
 					(exchange, args) -> CallToolResult.builder()
 						.content(List.of(new McpSchema.TextContent("Task completed!")))
 						.isError(false)
@@ -692,7 +692,7 @@ public abstract class AbstractMcpSyncServerTests {
 		var server = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(TaskTestUtils.DEFAULT_TASK_CAPABILITIES)
 			.taskStore(taskStore)
-			.tool(taskTool, (exchange, args) -> CallToolResult.builder().content(List.of()).isError(false).build())
+			.toolCall(taskTool, (exchange, args) -> CallToolResult.builder().content(List.of()).isError(false).build())
 			.build();
 
 		assertThatCode(server::closeGracefully).doesNotThrowAnyException();

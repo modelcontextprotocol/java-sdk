@@ -704,7 +704,8 @@ class McpAsyncServerExchangeTests {
 
 	@Test
 	void testListTasksWithNullCapabilities() {
-		McpAsyncServerExchange exchangeWithNullCapabilities = new McpAsyncServerExchange(mockSession, null, clientInfo);
+		McpAsyncServerExchange exchangeWithNullCapabilities = new McpAsyncServerExchange("testSessionId", mockSession,
+				null, clientInfo, McpTransportContext.EMPTY);
 
 		StepVerifier.create(exchangeWithNullCapabilities.listTasks("cursor")).verifyErrorSatisfies(error -> {
 			assertThat(error).isInstanceOf(IllegalStateException.class)
@@ -720,8 +721,8 @@ class McpAsyncServerExchangeTests {
 			.roots(true)
 			.build();
 
-		McpAsyncServerExchange exchangeWithoutTasks = new McpAsyncServerExchange(mockSession, capabilitiesWithoutTasks,
-				clientInfo);
+		McpAsyncServerExchange exchangeWithoutTasks = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithoutTasks, clientInfo, McpTransportContext.EMPTY);
 
 		StepVerifier.create(exchangeWithoutTasks.listTasks("cursor")).verifyErrorSatisfies(error -> {
 			assertThat(error).isInstanceOf(IllegalStateException.class)
@@ -737,8 +738,8 @@ class McpAsyncServerExchangeTests {
 			.tasks(McpSchema.ClientCapabilities.ClientTaskCapabilities.builder().build())
 			.build();
 
-		McpAsyncServerExchange exchangeWithoutList = new McpAsyncServerExchange(mockSession, capabilitiesWithoutList,
-				clientInfo);
+		McpAsyncServerExchange exchangeWithoutList = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithoutList, clientInfo, McpTransportContext.EMPTY);
 
 		StepVerifier.create(exchangeWithoutList.listTasks("cursor")).verifyErrorSatisfies(error -> {
 			assertThat(error).isInstanceOf(IllegalStateException.class)
@@ -854,7 +855,8 @@ class McpAsyncServerExchangeTests {
 
 	@Test
 	void testCancelTaskWithNullCapabilities() {
-		McpAsyncServerExchange exchangeWithNullCapabilities = new McpAsyncServerExchange(mockSession, null, clientInfo);
+		McpAsyncServerExchange exchangeWithNullCapabilities = new McpAsyncServerExchange("testSessionId", mockSession,
+				null, clientInfo, McpTransportContext.EMPTY);
 
 		StepVerifier
 			.create(exchangeWithNullCapabilities
@@ -873,8 +875,8 @@ class McpAsyncServerExchangeTests {
 			.roots(true)
 			.build();
 
-		McpAsyncServerExchange exchangeWithoutTasks = new McpAsyncServerExchange(mockSession, capabilitiesWithoutTasks,
-				clientInfo);
+		McpAsyncServerExchange exchangeWithoutTasks = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithoutTasks, clientInfo, McpTransportContext.EMPTY);
 
 		StepVerifier
 			.create(exchangeWithoutTasks.cancelTask(McpSchema.CancelTaskRequest.builder().taskId("task-1").build()))
@@ -892,8 +894,8 @@ class McpAsyncServerExchangeTests {
 			.tasks(McpSchema.ClientCapabilities.ClientTaskCapabilities.builder().build())
 			.build();
 
-		McpAsyncServerExchange exchangeWithoutCancel = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithoutCancel, clientInfo);
+		McpAsyncServerExchange exchangeWithoutCancel = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithoutCancel, clientInfo, McpTransportContext.EMPTY);
 
 		StepVerifier
 			.create(exchangeWithoutCancel.cancelTask(McpSchema.CancelTaskRequest.builder().taskId("task-1").build()))

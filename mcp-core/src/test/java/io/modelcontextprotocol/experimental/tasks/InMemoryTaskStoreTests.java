@@ -57,7 +57,7 @@ class InMemoryTaskStoreTests {
 	// ------------------------------------------
 
 	private CallToolResult createTestResult(String text) {
-		return CallToolResult.builder().content(List.of(new TextContent(null, null, text))).isError(false).build();
+		return CallToolResult.builder().content(List.of(new TextContent(null, text))).isError(false).build();
 	}
 
 	/**

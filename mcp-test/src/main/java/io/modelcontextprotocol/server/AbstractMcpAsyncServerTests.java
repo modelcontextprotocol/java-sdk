@@ -837,7 +837,7 @@ public abstract class AbstractMcpAsyncServerTests {
 
 		assertThatThrownBy(() -> {
 			prepareAsyncServerBuilder()
-				.tool(normalTool,
+				.toolCall(normalTool,
 						(exchange, args) -> Mono
 							.just(CallToolResult.builder().content(List.of()).isError(false).build()))
 				.taskTools(TaskAwareAsyncToolSpecification.builder()
