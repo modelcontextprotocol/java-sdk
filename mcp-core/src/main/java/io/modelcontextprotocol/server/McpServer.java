@@ -14,6 +14,11 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.experimental.tasks.TaskAwareAsyncToolSpecification;
+import io.modelcontextprotocol.experimental.tasks.TaskAwareSyncToolSpecification;
+import io.modelcontextprotocol.experimental.tasks.TaskDefaults;
+import io.modelcontextprotocol.experimental.tasks.TaskMessageQueue;
+import io.modelcontextprotocol.experimental.tasks.TaskStore;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
@@ -235,15 +240,17 @@ public interface McpServer {
 		 */
 		@Override
 		public McpAsyncServer build() {
+			validateTaskConfiguration();
+
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
-					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
-					this.instructions);
+					this.taskTools, this.resources, this.resourceTemplates, this.prompts, this.completions,
+					this.rootsChangeHandlers, this.instructions, this.taskStore, this.taskMessageQueue);
 
 			var jsonSchemaValidator = (this.jsonSchemaValidator != null) ? this.jsonSchemaValidator
 					: McpJsonDefaults.getSchemaValidator();
 
 			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator);
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, automaticPollingTimeout);
 		}
 
 	}
@@ -263,13 +270,15 @@ public interface McpServer {
 		 */
 		@Override
 		public McpAsyncServer build() {
+			validateTaskConfiguration();
+
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
-					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
-					this.instructions);
+					this.taskTools, this.resources, this.resourceTemplates, this.prompts, this.completions,
+					this.rootsChangeHandlers, this.instructions, this.taskStore, this.taskMessageQueue);
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
 					: McpJsonDefaults.getSchemaValidator();
 			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator);
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, automaticPollingTimeout);
 		}
 
 	}
@@ -303,6 +312,12 @@ public interface McpServer {
 		final List<McpServerFeatures.AsyncToolSpecification> tools = new ArrayList<>();
 
 		/**
+		 * Task-aware tools that support long-running operations via task-augmented
+		 * execution (SEP-1686). This is an experimental feature.
+		 */
+		final List<TaskAwareAsyncToolSpecification> taskTools = new ArrayList<>();
+
+		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
 		 * expose resources to clients. Resources allow servers to share data that
 		 * provides context to language models, such as files, database schemas, or
@@ -333,9 +348,35 @@ public interface McpServer {
 
 		final List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeHandlers = new ArrayList<>();
 
-		Duration requestTimeout = Duration.ofHours(10); // Default timeout
+		Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
+
+		/**
+		 * The task store for managing long-running tasks. This is an experimental
+		 * feature.
+		 */
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore;
+
+		/**
+		 * The message queue for task communication. This is an experimental feature.
+		 */
+		TaskMessageQueue taskMessageQueue;
+
+		/**
+		 * The timeout for automatic task polling. This is an experimental feature.
+		 */
+		Duration automaticPollingTimeout;
 
 		public abstract McpAsyncServer build();
+
+		/**
+		 * Validates task configuration. Task-aware tools require a TaskStore to be
+		 * configured for task lifecycle management.
+		 * @throws IllegalStateException if task-aware tools are registered without a
+		 * TaskStore
+		 */
+		protected void validateTaskConfiguration() {
+			TaskDefaults.validateTaskConfiguration(!this.taskTools.isEmpty(), this.taskStore != null);
+		}
 
 		/**
 		 * Sets the URI template manager factory to use for creating URI templates. This
@@ -442,6 +483,65 @@ public interface McpServer {
 		}
 
 		/**
+		 * Sets the task store for managing long-running tasks. This enables support for
+		 * MCP Tasks, allowing servers to create tasks that clients can poll for status
+		 * and results.
+		 *
+		 * <p>
+		 * <strong>Note:</strong> This is an experimental feature that may change in
+		 * future releases.
+		 * @param taskStore The task store implementation. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if taskStore is null
+		 */
+		public AsyncSpecification<S> taskStore(TaskStore<McpSchema.ServerTaskPayloadResult> taskStore) {
+			Assert.notNull(taskStore, "Task store must not be null");
+			this.taskStore = taskStore;
+			return this;
+		}
+
+		/**
+		 * Sets the message queue for task communication. This enables servers to queue
+		 * messages (like elicitation requests) during task execution that clients can
+		 * retrieve via streaming.
+		 *
+		 * <p>
+		 * <strong>Note:</strong> This is an experimental feature that may change in
+		 * future releases.
+		 * @param taskMessageQueue The message queue implementation. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if taskMessageQueue is null
+		 */
+		public AsyncSpecification<S> taskMessageQueue(TaskMessageQueue taskMessageQueue) {
+			Assert.notNull(taskMessageQueue, "Task message queue must not be null");
+			this.taskMessageQueue = taskMessageQueue;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum timeout for automatic task polling. When a task-enabled tool
+		 * is called without task metadata, the server creates a task internally and polls
+		 * until completion. This timeout prevents indefinite polling.
+		 *
+		 * <p>
+		 * If not set, defaults to 30 minutes.
+		 *
+		 * <p>
+		 * <strong>Note:</strong> This is an experimental feature that may change in
+		 * future releases.
+		 * @param automaticPollingTimeout The maximum polling timeout. Must not be null or
+		 * negative.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if automaticPollingTimeout is null or negative
+		 */
+		public AsyncSpecification<S> automaticPollingTimeout(Duration automaticPollingTimeout) {
+			Assert.notNull(automaticPollingTimeout, "Automatic polling timeout must not be null");
+			Assert.isTrue(!automaticPollingTimeout.isNegative(), "Automatic polling timeout must not be negative");
+			this.automaticPollingTimeout = automaticPollingTimeout;
+			return this;
+		}
+
+		/**
 		 * Adds a single tool with its implementation handler to the server. This is a
 		 * convenience method for registering individual tools without creating a
 		 * {@link McpServerFeatures.AsyncToolSpecification} explicitly.
@@ -521,8 +621,78 @@ public interface McpServer {
 			ToolNameValidator.validate(toolName, this.strictToolNameValidation);
 		}
 
+		/**
+		 * Adds multiple task-aware tools with their handlers to the server using a List.
+		 * Task-aware tools support long-running operations via task-augmented execution
+		 * (SEP-1686).
+		 *
+		 * <p>
+		 * <strong>Note:</strong> This is an experimental feature that may change in
+		 * future releases.
+		 * @param taskToolSpecifications The list of task-aware tool specifications to
+		 * add. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if taskToolSpecifications is null
+		 * @see #taskTools(TaskAwareAsyncToolSpecification...)
+		 */
+		public AsyncSpecification<S> taskTools(List<TaskAwareAsyncToolSpecification> taskToolSpecifications) {
+			Assert.notNull(taskToolSpecifications, "Task tool specifications list must not be null");
+
+			for (var taskTool : taskToolSpecifications) {
+				assertNoDuplicateTool(taskTool.tool().name());
+				this.taskTools.add(taskTool);
+			}
+			return this;
+		}
+
+		/**
+		 * Adds multiple task-aware tools with their handlers to the server using varargs.
+		 * Task-aware tools support long-running operations via task-augmented execution
+		 * (SEP-1686).
+		 *
+		 * <p>
+		 * <strong>Note:</strong> This is an experimental feature that may change in
+		 * future releases.
+		 *
+		 * <p>
+		 * Example usage:
+		 *
+		 * <pre>{@code
+		 * .taskTools(
+		 *     TaskAwareAsyncToolSpecification.builder()
+		 *         .name("long-computation")
+		 *         .description("A long-running computation")
+		 *         .createTaskHandler((args, extra) -> {
+		 *             return extra.createTask().flatMap(task -> {
+		 *                 doWork(task.taskId(), args)
+		 *                     .flatMap(result -> extra.completeTask(task.taskId(), result))
+		 *                     .subscribe();
+		 *                 return Mono.just(McpSchema.CreateTaskResult.builder().task(task).build());
+		 *             });
+		 *         })
+		 *         .build()
+		 * )
+		 * }</pre>
+		 * @param taskToolSpecifications The task-aware tool specifications to add. Must
+		 * not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if taskToolSpecifications is null
+		 */
+		public AsyncSpecification<S> taskTools(TaskAwareAsyncToolSpecification... taskToolSpecifications) {
+			Assert.notNull(taskToolSpecifications, "Task tool specifications must not be null");
+
+			for (var taskTool : taskToolSpecifications) {
+				assertNoDuplicateTool(taskTool.tool().name());
+				this.taskTools.add(taskTool);
+			}
+			return this;
+		}
+
 		private void assertNoDuplicateTool(String toolName) {
 			if (this.tools.stream().anyMatch(toolSpec -> toolSpec.tool().name().equals(toolName))) {
+				throw new IllegalArgumentException("Tool with name '" + toolName + "' is already registered.");
+			}
+			if (this.taskTools.stream().anyMatch(taskToolSpec -> taskToolSpec.tool().name().equals(toolName))) {
 				throw new IllegalArgumentException("Tool with name '" + toolName + "' is already registered.");
 			}
 		}
@@ -809,16 +979,19 @@ public interface McpServer {
 		 */
 		@Override
 		public McpSyncServer build() {
+			validateTaskConfiguration();
+
 			McpServerFeatures.Sync syncFeatures = new McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,
-					this.tools, this.resources, this.resourceTemplates, this.prompts, this.completions,
-					this.rootsChangeHandlers, this.instructions);
+					this.tools, this.taskTools, this.resources, this.resourceTemplates, this.prompts, this.completions,
+					this.rootsChangeHandlers, this.instructions, this.taskStore, this.taskMessageQueue);
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures,
 					this.immediateExecution);
 
 			var asyncServer = new McpAsyncServer(transportProvider,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, requestTimeout,
 					uriTemplateManagerFactory,
-					jsonSchemaValidator != null ? jsonSchemaValidator : McpJsonDefaults.getSchemaValidator());
+					jsonSchemaValidator != null ? jsonSchemaValidator : McpJsonDefaults.getSchemaValidator(),
+					automaticPollingTimeout);
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -840,16 +1013,18 @@ public interface McpServer {
 		 */
 		@Override
 		public McpSyncServer build() {
+			validateTaskConfiguration();
+
 			McpServerFeatures.Sync syncFeatures = new McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,
-					this.tools, this.resources, this.resourceTemplates, this.prompts, this.completions,
-					this.rootsChangeHandlers, this.instructions);
+					this.tools, this.taskTools, this.resources, this.resourceTemplates, this.prompts, this.completions,
+					this.rootsChangeHandlers, this.instructions, this.taskStore, this.taskMessageQueue);
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures,
 					this.immediateExecution);
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
 					: McpJsonDefaults.getSchemaValidator();
 			var asyncServer = new McpAsyncServer(transportProvider,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator);
+					this.uriTemplateManagerFactory, jsonSchemaValidator, automaticPollingTimeout);
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -880,6 +1055,12 @@ public interface McpServer {
 		 * schema.
 		 */
 		final List<McpServerFeatures.SyncToolSpecification> tools = new ArrayList<>();
+
+		/**
+		 * Task-aware tools that support long-running operations via task-augmented
+		 * execution (SEP-1686). This is an experimental feature.
+		 */
+		final List<TaskAwareSyncToolSpecification> taskTools = new ArrayList<>();
 
 		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
@@ -918,7 +1099,33 @@ public interface McpServer {
 
 		boolean immediateExecution = false;
 
+		/**
+		 * The task store for managing long-running tasks. This is an experimental
+		 * feature.
+		 */
+		TaskStore<McpSchema.ServerTaskPayloadResult> taskStore;
+
+		/**
+		 * The message queue for task communication. This is an experimental feature.
+		 */
+		TaskMessageQueue taskMessageQueue;
+
+		/**
+		 * The timeout for automatic task polling. This is an experimental feature.
+		 */
+		Duration automaticPollingTimeout;
+
 		public abstract McpSyncServer build();
+
+		/**
+		 * Validates task configuration. Task-aware tools require a TaskStore to be
+		 * configured for task lifecycle management.
+		 * @throws IllegalStateException if task-aware tools are registered without a
+		 * TaskStore
+		 */
+		protected void validateTaskConfiguration() {
+			TaskDefaults.validateTaskConfiguration(!this.taskTools.isEmpty(), this.taskStore != null);
+		}
 
 		/**
 		 * Sets the URI template manager factory to use for creating URI templates. This
@@ -1025,6 +1232,65 @@ public interface McpServer {
 		}
 
 		/**
+		 * Sets the task store for managing long-running tasks. This enables support for
+		 * MCP Tasks, allowing servers to create tasks that clients can poll for status
+		 * and results.
+		 *
+		 * <p>
+		 * <strong>Note:</strong> This is an experimental feature that may change in
+		 * future releases.
+		 * @param taskStore The task store implementation. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if taskStore is null
+		 */
+		public SyncSpecification<S> taskStore(TaskStore<McpSchema.ServerTaskPayloadResult> taskStore) {
+			Assert.notNull(taskStore, "Task store must not be null");
+			this.taskStore = taskStore;
+			return this;
+		}
+
+		/**
+		 * Sets the message queue for task communication. This enables support for
+		 * input_required task state, allowing tasks to queue messages while waiting for
+		 * user input (elicitation).
+		 *
+		 * <p>
+		 * <strong>Note:</strong> This is an experimental feature that may change in
+		 * future releases.
+		 * @param taskMessageQueue The message queue implementation. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if taskMessageQueue is null
+		 */
+		public SyncSpecification<S> taskMessageQueue(TaskMessageQueue taskMessageQueue) {
+			Assert.notNull(taskMessageQueue, "Task message queue must not be null");
+			this.taskMessageQueue = taskMessageQueue;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum timeout for automatic task polling. When a task-enabled tool
+		 * is called without task metadata, the server creates a task internally and polls
+		 * until completion. This timeout prevents indefinite polling.
+		 *
+		 * <p>
+		 * If not set, defaults to 30 minutes.
+		 *
+		 * <p>
+		 * <strong>Note:</strong> This is an experimental feature that may change in
+		 * future releases.
+		 * @param automaticPollingTimeout The maximum polling timeout. Must not be null or
+		 * negative.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if automaticPollingTimeout is null or negative
+		 */
+		public SyncSpecification<S> automaticPollingTimeout(Duration automaticPollingTimeout) {
+			Assert.notNull(automaticPollingTimeout, "Automatic polling timeout must not be null");
+			Assert.isTrue(!automaticPollingTimeout.isNegative(), "Automatic polling timeout must not be negative");
+			this.automaticPollingTimeout = automaticPollingTimeout;
+			return this;
+		}
+
+		/**
 		 * Adds a single tool with its implementation handler to the server. This is a
 		 * convenience method for registering individual tools without creating a
 		 * {@link McpServerFeatures.SyncToolSpecification} explicitly.
@@ -1104,8 +1370,75 @@ public interface McpServer {
 			ToolNameValidator.validate(toolName, this.strictToolNameValidation);
 		}
 
+		/**
+		 * Adds multiple task-aware tools with their handlers to the server using a List.
+		 * Task-aware tools support long-running operations via task-augmented execution
+		 * (SEP-1686).
+		 *
+		 * <p>
+		 * <strong>Note:</strong> This is an experimental feature that may change in
+		 * future releases.
+		 * @param taskToolSpecifications The list of task-aware tool specifications to
+		 * add. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if taskToolSpecifications is null
+		 * @see #taskTools(TaskAwareSyncToolSpecification...)
+		 */
+		public SyncSpecification<S> taskTools(List<TaskAwareSyncToolSpecification> taskToolSpecifications) {
+			Assert.notNull(taskToolSpecifications, "Task tool specifications list must not be null");
+
+			for (var taskTool : taskToolSpecifications) {
+				assertNoDuplicateTool(taskTool.tool().name());
+				this.taskTools.add(taskTool);
+			}
+			return this;
+		}
+
+		/**
+		 * Adds multiple task-aware tools with their handlers to the server using varargs.
+		 * Task-aware tools support long-running operations via task-augmented execution
+		 * (SEP-1686).
+		 *
+		 * <p>
+		 * <strong>Note:</strong> This is an experimental feature that may change in
+		 * future releases.
+		 *
+		 * <p>
+		 * Example usage:
+		 *
+		 * <pre>{@code
+		 * .taskTools(
+		 *     TaskAwareSyncToolSpecification.builder()
+		 *         .name("long-computation")
+		 *         .description("A long-running computation")
+		 *         .createTaskHandler((args, extra) -> {
+		 *             McpSchema.Task task = extra.createTask();
+		 *             externalApi.startJob(task.taskId(), args);
+		 *             return McpSchema.CreateTaskResult.builder().task(task).build();
+		 *         })
+		 *         .build()
+		 * )
+		 * }</pre>
+		 * @param taskToolSpecifications The task-aware tool specifications to add. Must
+		 * not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if taskToolSpecifications is null
+		 */
+		public SyncSpecification<S> taskTools(TaskAwareSyncToolSpecification... taskToolSpecifications) {
+			Assert.notNull(taskToolSpecifications, "Task tool specifications must not be null");
+
+			for (var taskTool : taskToolSpecifications) {
+				assertNoDuplicateTool(taskTool.tool().name());
+				this.taskTools.add(taskTool);
+			}
+			return this;
+		}
+
 		private void assertNoDuplicateTool(String toolName) {
 			if (this.tools.stream().anyMatch(toolSpec -> toolSpec.tool().name().equals(toolName))) {
+				throw new IllegalArgumentException("Tool with name '" + toolName + "' is already registered.");
+			}
+			if (this.taskTools.stream().anyMatch(taskToolSpec -> taskToolSpec.tool().name().equals(toolName))) {
 				throw new IllegalArgumentException("Tool with name '" + toolName + "' is already registered.");
 			}
 		}

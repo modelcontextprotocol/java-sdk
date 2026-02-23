@@ -18,6 +18,8 @@ import org.slf4j.LoggerFactory;
 import io.modelcontextprotocol.json.TypeRef;
 
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.experimental.tasks.TaskMessageQueue;
+import io.modelcontextprotocol.experimental.tasks.TaskStore;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpNotificationHandler;
 import io.modelcontextprotocol.server.McpRequestHandler;
@@ -62,6 +64,12 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	private volatile McpSchema.LoggingLevel minLoggingLevel = McpSchema.LoggingLevel.INFO;
 
+	/** Optional task message queue for side-channeling support. */
+	private final TaskMessageQueue taskMessageQueue;
+
+	/** Optional task store for side-channeling support. */
+	private final TaskStore<?> taskStore;
+
 	/**
 	 * Create an instance of the streamable session.
 	 * @param id session ID
@@ -76,6 +84,25 @@ public class McpStreamableServerSession implements McpLoggableSession {
 			McpSchema.Implementation clientInfo, Duration requestTimeout,
 			Map<String, McpRequestHandler<?>> requestHandlers,
 			Map<String, McpNotificationHandler> notificationHandlers) {
+		this(id, clientCapabilities, clientInfo, requestTimeout, requestHandlers, notificationHandlers, null, null);
+	}
+
+	/**
+	 * Create an instance of the streamable session with task infrastructure.
+	 * @param id session ID
+	 * @param clientCapabilities client capabilities
+	 * @param clientInfo client info
+	 * @param requestTimeout timeout to use for requests
+	 * @param requestHandlers the map of MCP request handlers keyed by method name
+	 * @param notificationHandlers the map of MCP notification handlers keyed by method
+	 * name
+	 * @param taskMessageQueue optional task message queue for side-channeling support
+	 * @param taskStore optional task store for side-channeling support
+	 */
+	public McpStreamableServerSession(String id, McpSchema.ClientCapabilities clientCapabilities,
+			McpSchema.Implementation clientInfo, Duration requestTimeout,
+			Map<String, McpRequestHandler<?>> requestHandlers, Map<String, McpNotificationHandler> notificationHandlers,
+			TaskMessageQueue taskMessageQueue, TaskStore<?> taskStore) {
 		this.id = id;
 		this.missingMcpTransportSession = new MissingMcpTransportSession(id);
 		this.listeningStreamRef = new AtomicReference<>(this.missingMcpTransportSession);
@@ -84,6 +111,8 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		this.requestTimeout = requestTimeout;
 		this.requestHandlers = requestHandlers;
 		this.notificationHandlers = notificationHandlers;
+		this.taskMessageQueue = taskMessageQueue;
+		this.taskStore = taskStore;
 	}
 
 	@Override
@@ -175,7 +204,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 			}
 			return requestHandler
 				.handle(new McpAsyncServerExchange(this.id, stream, clientCapabilities.get(), clientInfo.get(),
-						transportContext), jsonrpcRequest.params())
+						transportContext, this.taskMessageQueue, this.taskStore), jsonrpcRequest.params())
 				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), result,
 						null))
 				.onErrorResume(e -> {
@@ -207,8 +236,10 @@ public class McpStreamableServerSession implements McpLoggableSession {
 				return Mono.empty();
 			}
 			McpLoggableSession listeningStream = this.listeningStreamRef.get();
-			return notificationHandler.handle(new McpAsyncServerExchange(this.id, listeningStream,
-					this.clientCapabilities.get(), this.clientInfo.get(), transportContext), notification.params());
+			return notificationHandler.handle(
+					new McpAsyncServerExchange(this.id, listeningStream, this.clientCapabilities.get(),
+							this.clientInfo.get(), transportContext, this.taskMessageQueue, this.taskStore),
+					notification.params());
 		});
 
 	}
