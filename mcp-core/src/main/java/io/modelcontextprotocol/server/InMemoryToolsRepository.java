@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 import io.modelcontextprotocol.spec.McpSchema;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 /**
@@ -21,6 +23,8 @@ import reactor.core.publisher.Mono;
  * </p>
  */
 public class InMemoryToolsRepository implements ToolsRepository {
+
+	private static final Logger logger = LoggerFactory.getLogger(InMemoryToolsRepository.class);
 
 	private final ConcurrentHashMap<String, McpServerFeatures.AsyncToolSpecification> tools = new ConcurrentHashMap<>();
 
@@ -66,12 +70,15 @@ public class InMemoryToolsRepository implements ToolsRepository {
 	@Override
 	public void addTool(McpServerFeatures.AsyncToolSpecification tool) {
 		// Last-write-wins policy
-		tools.put(tool.tool().name(), tool);
+		var previous = tools.put(tool.tool().name(), tool);
+		if (previous != null) {
+			logger.warn("Replace existing Tool with name '{}'", tool.tool().name());
+		}
 	}
 
 	@Override
-	public void removeTool(String name) {
-		tools.remove(name);
+	public boolean removeTool(String name) {
+		return tools.remove(name) != null;
 	}
 
 }

@@ -509,10 +509,15 @@ public class McpAsyncServer {
 		}
 
 		return Mono.defer(() -> {
-			this.toolsRepository.removeTool(toolName);
-			logger.debug("Requested tool removal: {}", toolName);
-			if (this.serverCapabilities.tools().listChanged()) {
-				return notifyToolsListChanged();
+			boolean removed = this.toolsRepository.removeTool(toolName);
+			if (removed) {
+				logger.debug("Removed tool handler: {}", toolName);
+				if (this.serverCapabilities.tools().listChanged()) {
+					return notifyToolsListChanged();
+				}
+			}
+			else {
+				logger.warn("Ignore as a Tool with name '{}' not found", toolName);
 			}
 			return Mono.empty();
 		});
@@ -548,8 +553,10 @@ public class McpAsyncServer {
 					});
 
 			return this.toolsRepository.resolveToolForCall(callToolRequest.name(), exchange)
-				.switchIfEmpty(Mono
-					.error(McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND).message("Tool not found").build()))
+				.switchIfEmpty(Mono.error(McpError.builder(McpSchema.ErrorCodes.INVALID_PARAMS)
+					.message("Unknown tool: " + callToolRequest.name())
+					.data("Tool not found: " + callToolRequest.name())
+					.build()))
 				.flatMap(spec -> spec.callHandler().apply(exchange, callToolRequest));
 		};
 	}

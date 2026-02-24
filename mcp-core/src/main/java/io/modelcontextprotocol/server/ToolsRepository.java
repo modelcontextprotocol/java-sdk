@@ -55,7 +55,9 @@ public interface ToolsRepository {
 	/**
 	 * Remove a tool from the repository at runtime by name.
 	 * @param name The name of the tool to remove
+	 * @return {@code true} if a tool was removed, {@code false} if no matching tool
+	 * existed
 	 */
-	void removeTool(String name);
+	boolean removeTool(String name);
 
 }

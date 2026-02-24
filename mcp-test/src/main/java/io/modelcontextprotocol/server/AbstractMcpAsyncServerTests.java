@@ -300,8 +300,8 @@ public abstract class AbstractMcpAsyncServerTests {
 			}
 
 			@Override
-			public void removeTool(String name) {
-				tools.remove(name);
+			public boolean removeTool(String name) {
+				return tools.remove(name) != null;
 			}
 		};
 
@@ -351,7 +351,8 @@ public abstract class AbstractMcpAsyncServerTests {
 			}
 
 			@Override
-			public void removeTool(String name) {
+			public boolean removeTool(String name) {
+				return false;
 			}
 		};
 
@@ -362,7 +363,7 @@ public abstract class AbstractMcpAsyncServerTests {
 
 		// First call should have null cursor (first page)
 		StepVerifier.create(mcpAsyncServer.listTools().collectList()).assertNext(tools -> {
-			assertThat(receivedCursors).containsExactly(null);
+			assertThat(receivedCursors).containsExactly((String) null);
 		}).verifyComplete();
 
 		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();

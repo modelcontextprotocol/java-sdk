@@ -241,9 +241,9 @@ public interface McpServer {
 		 */
 		@Override
 		public McpAsyncServer build() {
-			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools, null,
-					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
-					this.instructions);
+			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
+					this.toolsRepository, this.resources, this.resourceTemplates, this.prompts, this.completions,
+					this.rootsChangeHandlers, this.instructions);
 
 			var jsonSchemaValidator = (this.jsonSchemaValidator != null) ? this.jsonSchemaValidator
 					: McpJsonDefaults.getSchemaValidator();
@@ -269,9 +269,9 @@ public interface McpServer {
 		 */
 		@Override
 		public McpAsyncServer build() {
-			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools, null,
-					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
-					this.instructions);
+			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
+					this.toolsRepository, this.resources, this.resourceTemplates, this.prompts, this.completions,
+					this.rootsChangeHandlers, this.instructions);
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
 					: McpJsonDefaults.getSchemaValidator();
 			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
