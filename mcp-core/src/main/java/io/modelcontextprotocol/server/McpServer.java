@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.server;
 
 import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -13,10 +14,13 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
-import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
+
+import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.spec.InMemoryMcpEventStore;
+import io.modelcontextprotocol.spec.McpEventStore;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
@@ -243,7 +247,7 @@ public interface McpServer {
 					: McpJsonDefaults.getSchemaValidator();
 
 			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator);
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, this.eventStore);
 		}
 
 	}
@@ -269,7 +273,7 @@ public interface McpServer {
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
 					: McpJsonDefaults.getSchemaValidator();
 			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator);
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, this.eventStore);
 		}
 
 	}
@@ -292,6 +296,8 @@ public interface McpServer {
 		String instructions;
 
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
+
+		McpEventStore eventStore = new InMemoryMcpEventStore(1000, Duration.of(1, ChronoUnit.HOURS));
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -777,6 +783,12 @@ public interface McpServer {
 			return this;
 		}
 
+		public AsyncSpecification<S> eventStore(McpEventStore eventStore) {
+			Assert.notNull(eventStore, "EventStore must not be null");
+			this.eventStore = eventStore;
+			return this;
+		}
+
 		/**
 		 * Sets the JSON schema validator to use for validating tool and resource schemas.
 		 * This ensures that the server's tools and resources conform to the expected
@@ -818,7 +830,8 @@ public interface McpServer {
 			var asyncServer = new McpAsyncServer(transportProvider,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, requestTimeout,
 					uriTemplateManagerFactory,
-					jsonSchemaValidator != null ? jsonSchemaValidator : McpJsonDefaults.getSchemaValidator());
+					jsonSchemaValidator != null ? jsonSchemaValidator : McpJsonDefaults.getSchemaValidator(),
+					this.eventStore);
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -849,7 +862,7 @@ public interface McpServer {
 					: McpJsonDefaults.getSchemaValidator();
 			var asyncServer = new McpAsyncServer(transportProvider,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator);
+					this.uriTemplateManagerFactory, jsonSchemaValidator, this.eventStore);
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -871,6 +884,8 @@ public interface McpServer {
 		String instructions;
 
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
+
+		McpEventStore eventStore = new InMemoryMcpEventStore(1000, Duration.of(1, ChronoUnit.HOURS));
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
