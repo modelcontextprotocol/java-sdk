@@ -2,7 +2,7 @@
 name: Bug report
 about: Create a bug report to help us improve the project
 title: ''
-labels: 'type: bug, status: waiting-for-triage'
+labels: status/waiting for triage
 assignees: ''
 
 ---
