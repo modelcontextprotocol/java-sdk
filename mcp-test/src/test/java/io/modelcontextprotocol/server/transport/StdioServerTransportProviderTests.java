@@ -220,4 +220,47 @@ class StdioServerTransportProviderTests {
 		verify(mockSession).closeGracefully();
 	}
 
+	@Test
+	void shouldHandleConcurrentMessages() throws Exception {
+		java.io.PipedOutputStream pipedOut = new java.io.PipedOutputStream();
+		java.io.PipedInputStream pipedIn = new java.io.PipedInputStream(pipedOut);
+
+		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getMapper(), pipedIn, outputStream);
+
+		McpServerSession.Factory realSessionFactory = transport -> {
+			McpServerSession session = mock(McpServerSession.class);
+			when(session.handle(any())).thenAnswer(invocation -> {
+				McpSchema.JSONRPCMessage incomingMessage = invocation.getArgument(0);
+				// Simulate async tool call processing with a delay
+				return Mono.delay(java.time.Duration.ofMillis(50))
+					.then(transport.sendMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
+							((McpSchema.JSONRPCRequest) incomingMessage).id(), Map.of("result", "ok"), null)));
+			});
+			when(session.closeGracefully()).thenReturn(Mono.empty());
+			return session;
+		};
+
+		// Set session factory
+		transportProvider.setSessionFactory(realSessionFactory);
+
+		String jsonMessage1 = "{\"jsonrpc\":\"2.0\",\"method\":\"test1\",\"params\":{},\"id\":1}\n";
+		String jsonMessage2 = "{\"jsonrpc\":\"2.0\",\"method\":\"test2\",\"params\":{},\"id\":2}\n";
+		pipedOut.write(jsonMessage1.getBytes(StandardCharsets.UTF_8));
+		pipedOut.write(jsonMessage2.getBytes(StandardCharsets.UTF_8));
+		pipedOut.flush();
+
+		// Verify both concurrent responses complete without error
+		StepVerifier
+			.create(Mono.delay(java.time.Duration.ofSeconds(2))
+				.then(Mono.fromCallable(() -> outputStream.toString(StandardCharsets.UTF_8))))
+			.assertNext(output -> {
+				assertThat(output).contains("\"id\":1");
+				assertThat(output).contains("\"id\":2");
+			})
+			.verifyComplete();
+
+		pipedOut.close();
+	}
+
 }

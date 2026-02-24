@@ -147,12 +147,8 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
 
 			return Mono.zip(inboundReady.asMono(), outboundReady.asMono()).then(Mono.defer(() -> {
-				if (outboundSink.tryEmitNext(message).isSuccess()) {
-					return Mono.empty();
-				}
-				else {
-					return Mono.error(new RuntimeException("Failed to enqueue message"));
-				}
+				outboundSink.emitNext(message, Sinks.EmitFailureHandler.busyLooping(java.time.Duration.ofSeconds(1)));
+				return Mono.<Void>empty();
 			}));
 		}
 
