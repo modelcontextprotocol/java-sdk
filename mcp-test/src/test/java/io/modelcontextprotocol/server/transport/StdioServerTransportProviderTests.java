@@ -4,15 +4,26 @@
 
 package io.modelcontextprotocol.server.transport;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.spec.McpError;
@@ -23,7 +34,10 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -221,21 +235,73 @@ class StdioServerTransportProviderTests {
 	}
 
 	@Test
+	@Timeout(15)
 	void shouldHandleConcurrentMessages() throws Exception {
-		java.io.PipedOutputStream pipedOut = new java.io.PipedOutputStream();
-		java.io.PipedInputStream pipedIn = new java.io.PipedInputStream(pipedOut);
+		int messageCount = 100;
+		int workerCount = 32;
+		PipedOutputStream pipedRequestOut = new PipedOutputStream();
+		PipedInputStream pipedRequestIn = new PipedInputStream(pipedRequestOut);
+		PipedInputStream pipedResponseIn = new PipedInputStream();
+		PipedOutputStream pipedResponseOut = new PipedOutputStream(pipedResponseIn);
 
-		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getMapper(), pipedIn, outputStream);
+		CountDownLatch inFlightReached = new CountDownLatch(workerCount);
+		CountDownLatch startSignal = new CountDownLatch(1);
+		CompletableFuture<Void> responsesDone = new CompletableFuture<>();
+		Set<Integer> responseIds = ConcurrentHashMap.newKeySet();
+		AtomicInteger inFlight = new AtomicInteger();
+		AtomicInteger maxInFlight = new AtomicInteger();
+		ExecutorService swarmExecutor = Executors.newFixedThreadPool(workerCount);
+		Scheduler swarmScheduler = Schedulers.fromExecutorService(swarmExecutor);
+		Consumer<Throwable> fail = t -> {
+			responsesDone.completeExceptionally(t);
+			startSignal.countDown();
+		};
+
+		Thread responseReader = new Thread(() -> {
+			try (BufferedReader reader = new BufferedReader(
+					new InputStreamReader(pipedResponseIn, StandardCharsets.UTF_8))) {
+				for (int received = 0; received < messageCount; received++) {
+					String line = reader.readLine();
+					if (line == null) {
+						throw new AssertionError("Stream closed before all responses were received");
+					}
+					McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(McpJsonDefaults.getMapper(),
+							line);
+					if (!(message instanceof McpSchema.JSONRPCResponse response)) {
+						throw new AssertionError("Expected JSONRPCResponse");
+					}
+					if (!(response.id() instanceof Number idNumber)) {
+						throw new AssertionError("Expected numeric response id");
+					}
+					responseIds.add(idNumber.intValue());
+				}
+				responsesDone.complete(null);
+			}
+			catch (Throwable t) {
+				fail.accept(t);
+			}
+		});
+		responseReader.start();
+
+		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getMapper(), pipedRequestIn,
+				pipedResponseOut);
 
 		McpServerSession.Factory realSessionFactory = transport -> {
 			McpServerSession session = mock(McpServerSession.class);
 			when(session.handle(any())).thenAnswer(invocation -> {
-				McpSchema.JSONRPCMessage incomingMessage = invocation.getArgument(0);
-				// Simulate async tool call processing with a delay
-				return Mono.delay(java.time.Duration.ofMillis(50))
-					.then(transport.sendMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
-							((McpSchema.JSONRPCRequest) incomingMessage).id(), Map.of("result", "ok"), null)));
+				McpSchema.JSONRPCRequest incomingMessage = invocation.getArgument(0);
+				return Mono.fromCallable(() -> {
+					inFlightReached.countDown();
+					startSignal.await();
+					return incomingMessage.id();
+				}).subscribeOn(swarmScheduler).flatMap(id -> {
+					int currentInFlight = inFlight.incrementAndGet();
+					maxInFlight.accumulateAndGet(currentInFlight, Math::max);
+					return transport
+						.sendMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, id,
+								Map.of("result", "ok"), null))
+						.doFinally(signalType -> inFlight.decrementAndGet());
+				}).doOnError(fail);
 			});
 			when(session.closeGracefully()).thenReturn(Mono.empty());
 			return session;
@@ -244,23 +310,37 @@ class StdioServerTransportProviderTests {
 		// Set session factory
 		transportProvider.setSessionFactory(realSessionFactory);
 
-		String jsonMessage1 = "{\"jsonrpc\":\"2.0\",\"method\":\"test1\",\"params\":{},\"id\":1}\n";
-		String jsonMessage2 = "{\"jsonrpc\":\"2.0\",\"method\":\"test2\",\"params\":{},\"id\":2}\n";
-		pipedOut.write(jsonMessage1.getBytes(StandardCharsets.UTF_8));
-		pipedOut.write(jsonMessage2.getBytes(StandardCharsets.UTF_8));
-		pipedOut.flush();
+		try {
+			for (int i = 1; i <= messageCount; i++) {
+				String jsonMessage = "{\"jsonrpc\":\"2.0\",\"method\":\"test" + i + "\",\"params\":{},\"id\":" + i
+						+ "}\n";
+				pipedRequestOut.write(jsonMessage.getBytes(StandardCharsets.UTF_8));
+			}
+			pipedRequestOut.flush();
+			inFlightReached.await();
+			startSignal.countDown();
+			responsesDone.get();
 
-		// Verify both concurrent responses complete without error
-		StepVerifier
-			.create(Mono.delay(java.time.Duration.ofSeconds(2))
-				.then(Mono.fromCallable(() -> outputStream.toString(StandardCharsets.UTF_8))))
-			.assertNext(output -> {
-				assertThat(output).contains("\"id\":1");
-				assertThat(output).contains("\"id\":2");
-			})
-			.verifyComplete();
+			// Verify that all messages were recevied
+			assertThat(responseIds).hasSize(messageCount);
+			// Verify that concurrency happened
+			assertThat(maxInFlight.get()).isGreaterThan(1);
+			// Verify that every responseId exists
+			for (int i = 1; i <= messageCount; i++) {
+				assertThat(responseIds).contains(i);
+			}
+		}
+		finally {
+			startSignal.countDown();
+			swarmScheduler.dispose();
+			swarmExecutor.shutdownNow();
+			pipedRequestOut.close();
+			pipedResponseOut.close();
+			pipedResponseIn.close();
+			responseReader.join(TimeUnit.SECONDS.toMillis(2));
 
-		pipedOut.close();
+			assertThat(responseReader.isAlive()).isFalse();
+		}
 	}
 
 }
