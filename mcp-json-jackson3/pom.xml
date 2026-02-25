@@ -42,6 +42,8 @@
 								Import-Package:         io.modelcontextprotocol.json,io.modelcontextprotocol.json.schema, \
 								                        *;
 								Service-Component: 		OSGI-INF/io.modelcontextprotocol.json.jackson3.JacksonMcpJsonMapperSupplier.xml,OSGI-INF/io.modelcontextprotocol.json.schema.jackson3.JacksonJsonSchemaValidatorSupplier.xml
+								Export-Package:         io.modelcontextprotocol.json.jackson3;version="${project.version}";-noimport:=true, \
+								                        io.modelcontextprotocol.json.schema.jackson3;version="${project.version}";-noimport:=true
 								-noimportjava:          true;
 								-nouses:                true;
 								-removeheaders:         Private-Package
