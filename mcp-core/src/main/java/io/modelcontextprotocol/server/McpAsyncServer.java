@@ -25,9 +25,9 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.CompleteResult.CompleteCompletion;
 import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
-import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
+import io.modelcontextprotocol.spec.McpSchema.ResourcesUpdatedNotification;
 import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpServerSession;
@@ -108,6 +108,8 @@ public class McpAsyncServer {
 	private final ConcurrentHashMap<String, McpServerFeatures.AsyncResourceSpecification> resources = new ConcurrentHashMap<>();
 
 	private final ConcurrentHashMap<String, McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates = new ConcurrentHashMap<>();
+
+	private final Map<String, McpSchema.SubscribeRequest> resourceSubscriptions = new ConcurrentHashMap<>();
 
 	private final ConcurrentHashMap<String, McpServerFeatures.AsyncPromptSpecification> prompts = new ConcurrentHashMap<>();
 
@@ -215,6 +217,11 @@ public class McpAsyncServer {
 			requestHandlers.put(McpSchema.METHOD_RESOURCES_LIST, resourcesListRequestHandler());
 			requestHandlers.put(McpSchema.METHOD_RESOURCES_READ, resourcesReadRequestHandler());
 			requestHandlers.put(McpSchema.METHOD_RESOURCES_TEMPLATES_LIST, resourceTemplateListRequestHandler());
+
+			if (this.serverCapabilities.resources().subscribe()) {
+				requestHandlers.put(McpSchema.METHOD_RESOURCES_SUBSCRIBE, resourcesSubscribeHandler());
+				requestHandlers.put(McpSchema.METHOD_RESOURCES_UNSUBSCRIBE, resourcesUnsubscribeHandler());
+			}
 		}
 
 		// Add prompts API handlers if provider exists
@@ -560,15 +567,26 @@ public class McpAsyncServer {
 		}
 
 		return Mono.defer(() -> {
-			var previous = this.resources.put(resourceSpecification.resource().uri(), resourceSpecification);
+			var resourceUri = resourceSpecification.resource().uri();
+
+			var previous = this.resources.put(resourceUri, resourceSpecification);
 			if (previous != null) {
-				logger.warn("Replace existing Resource with URI '{}'", resourceSpecification.resource().uri());
+				logger.warn("Replace existing Resource with URI '{}'", resourceUri);
 			}
 			else {
-				logger.debug("Added resource handler: {}", resourceSpecification.resource().uri());
+				logger.debug("Added resource handler: {}", resourceUri);
+			}
+
+			if (this.serverCapabilities.resources().subscribe()
+					&& this.resourceSubscriptions.containsKey(resourceUri)) {
+				Mono<Void> updated = this.notifyResourcesUpdated(new ResourcesUpdatedNotification(resourceUri));
+				if (this.serverCapabilities.resources().listChanged()) {
+					return updated.then(this.notifyResourcesListChanged());
+				}
+				return updated;
 			}
 			if (this.serverCapabilities.resources().listChanged()) {
-				return notifyResourcesListChanged();
+				return this.notifyResourcesListChanged();
 			}
 			return Mono.empty();
 		});
@@ -600,8 +618,9 @@ public class McpAsyncServer {
 			McpServerFeatures.AsyncResourceSpecification removed = this.resources.remove(resourceUri);
 			if (removed != null) {
 				logger.debug("Removed resource handler: {}", resourceUri);
+
 				if (this.serverCapabilities.resources().listChanged()) {
-					return notifyResourcesListChanged();
+					return this.notifyResourcesListChanged();
 				}
 				return Mono.empty();
 			}
@@ -731,6 +750,33 @@ public class McpAsyncServer {
 						.map(spec -> spec.readHandler().apply(ex, resourceRequest))
 						.orElseGet(() -> Mono.error(RESOURCE_NOT_FOUND.apply(resourceUri)));
 				});
+		};
+	}
+
+	private McpRequestHandler<Object> resourcesSubscribeHandler() {
+		return (ex, params) -> {
+			McpSchema.SubscribeRequest resourceSubscribeRequest = jsonMapper.convertValue(params, new TypeRef<>() {
+			});
+
+			var resourceUri = resourceSubscribeRequest.uri();
+
+			this.resourceSubscriptions.put(resourceUri, resourceSubscribeRequest);
+
+			return Mono.just(Map.of());
+		};
+	}
+
+	private McpRequestHandler<Object> resourcesUnsubscribeHandler() {
+
+		return (ex, params) -> {
+			McpSchema.SubscribeRequest resourceSubscribeRequest = jsonMapper.convertValue(params, new TypeRef<>() {
+			});
+
+			var resourceUri = resourceSubscribeRequest.uri();
+
+			this.resourceSubscriptions.remove(resourceUri);
+
+			return Mono.just(Map.of());
 		};
 	}
 
