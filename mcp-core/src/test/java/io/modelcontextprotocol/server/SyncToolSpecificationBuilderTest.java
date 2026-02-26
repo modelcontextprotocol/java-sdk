@@ -51,7 +51,6 @@ class SyncToolSpecificationBuilderTest {
 		assertThat(specification).isNotNull();
 		assertThat(specification.tool()).isEqualTo(tool);
 		assertThat(specification.callHandler()).isNotNull();
-		assertThat(specification.call()).isNull(); // deprecated field should be null
 	}
 
 	@Test
@@ -140,7 +139,8 @@ class SyncToolSpecificationBuilderTest {
 		void defaultShouldThrowOnInvalidName() {
 			Tool invalidTool = Tool.builder().name("invalid tool name").build();
 
-			assertThatThrownBy(() -> McpServer.sync(transportProvider).tool(invalidTool, (exchange, args) -> null))
+			assertThatThrownBy(
+					() -> McpServer.sync(transportProvider).toolCall(invalidTool, (exchange, request) -> null))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("invalid characters");
 		}
@@ -150,7 +150,7 @@ class SyncToolSpecificationBuilderTest {
 			System.setProperty(ToolNameValidator.STRICT_VALIDATION_PROPERTY, "false");
 			Tool invalidTool = Tool.builder().name("invalid tool name").build();
 
-			assertThatCode(() -> McpServer.sync(transportProvider).tool(invalidTool, (exchange, args) -> null))
+			assertThatCode(() -> McpServer.sync(transportProvider).toolCall(invalidTool, (exchange, request) -> null))
 				.doesNotThrowAnyException();
 			assertThat(logAppender.list).hasSize(1);
 		}
@@ -161,7 +161,7 @@ class SyncToolSpecificationBuilderTest {
 
 			assertThatCode(() -> McpServer.sync(transportProvider)
 				.strictToolNameValidation(false)
-				.tool(invalidTool, (exchange, args) -> null)).doesNotThrowAnyException();
+				.toolCall(invalidTool, (exchange, request) -> null)).doesNotThrowAnyException();
 			assertThat(logAppender.list).hasSize(1);
 		}
 
@@ -172,7 +172,7 @@ class SyncToolSpecificationBuilderTest {
 
 			assertThatThrownBy(() -> McpServer.sync(transportProvider)
 				.strictToolNameValidation(true)
-				.tool(invalidTool, (exchange, args) -> null)).isInstanceOf(IllegalArgumentException.class)
+				.toolCall(invalidTool, (exchange, request) -> null)).isInstanceOf(IllegalArgumentException.class)
 				.hasMessageContaining("invalid characters");
 		}
 

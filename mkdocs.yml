@@ -39,18 +39,18 @@ theme:
     - content.tabs.link
 
 nav:
-  - Getting Started:
-    - Overview: index.md
+  - Documentation:
+    - Overview: overview.md
     - Quickstart: quickstart.md
-  - MCP Components:
-    - MCP Client: client.md
-    - MCP Server: server.md
+    - MCP Components:
+      - MCP Client: client.md
+      - MCP Server: server.md
   - Contributing:
     - Contributing Guide: contribute.md
     - Documentation: development.md
-  - Blog:
-    - blog/index.md
   - API Reference: https://javadoc.io/doc/io.modelcontextprotocol.sdk/mcp-core/latest
+  - News:
+    - blog/index.md
 
 markdown_extensions:
   - admonition

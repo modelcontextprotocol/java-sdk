@@ -41,9 +41,6 @@ public final class McpSchema {
 	private McpSchema() {
 	}
 
-	@Deprecated
-	public static final String LATEST_PROTOCOL_VERSION = ProtocolVersions.MCP_2025_11_25;
-
 	public static final String JSONRPC_VERSION = "2.0";
 
 	public static final String FIRST_PAGE = null;
@@ -797,35 +794,6 @@ public final class McpSchema {
 		@JsonProperty("size") Long size,
 		@JsonProperty("annotations") Annotations annotations,
 		@JsonProperty("_meta") Map<String, Object> meta) implements ResourceContent { // @formatter:on
-
-		/**
-		 * @deprecated Only exists for backwards-compatibility purposes. Use
-		 * {@link Resource#builder()} instead.
-		 */
-		@Deprecated
-		public Resource(String uri, String name, String title, String description, String mimeType, Long size,
-				Annotations annotations) {
-			this(uri, name, title, description, mimeType, size, annotations, null);
-		}
-
-		/**
-		 * @deprecated Only exists for backwards-compatibility purposes. Use
-		 * {@link Resource#builder()} instead.
-		 */
-		@Deprecated
-		public Resource(String uri, String name, String description, String mimeType, Long size,
-				Annotations annotations) {
-			this(uri, name, null, description, mimeType, size, annotations, null);
-		}
-
-		/**
-		 * @deprecated Only exists for backwards-compatibility purposes. Use
-		 * {@link Resource#builder()} instead.
-		 */
-		@Deprecated
-		public Resource(String uri, String name, String description, String mimeType, Annotations annotations) {
-			this(uri, name, null, description, mimeType, null, annotations, null);
-		}
 
 		public static Builder builder() {
 			return new Builder();
@@ -1591,36 +1559,6 @@ public final class McpSchema {
 		@JsonProperty("isError") Boolean isError,
 		@JsonProperty("structuredContent") Object structuredContent,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
-
-		/**
-		 * @deprecated use the builder instead.
-		 */
-		@Deprecated
-		public CallToolResult(List<Content> content, Boolean isError) {
-			this(content, isError, (Object) null, null);
-		}
-
-		/**
-		 * @deprecated use the builder instead.
-		 */
-		@Deprecated
-		public CallToolResult(List<Content> content, Boolean isError, Map<String, Object> structuredContent) {
-			this(content, isError, structuredContent, null);
-		}
-
-		/**
-		 * Creates a new instance of {@link CallToolResult} with a string containing the
-		 * tool result.
-		 * @param content The content of the tool result. This will be mapped to a
-		 * one-sized list with a {@link TextContent} element.
-		 * @param isError If true, indicates that the tool execution failed and the
-		 * content contains error information. If false or absent, indicates successful
-		 * execution.
-		 */
-		@Deprecated
-		public CallToolResult(String content, Boolean isError) {
-			this(List.of(new TextContent(content)), isError, null);
-		}
 
 		/**
 		 * Creates a builder for {@link CallToolResult}.
@@ -2619,33 +2557,6 @@ public final class McpSchema {
 		public TextContent(String content) {
 			this(null, content, null);
 		}
-
-		/**
-		 * @deprecated Only exists for backwards-compatibility purposes. Use
-		 * {@link TextContent#TextContent(Annotations, String)} instead.
-		 */
-		@Deprecated
-		public TextContent(List<Role> audience, Double priority, String content) {
-			this(audience != null || priority != null ? new Annotations(audience, priority) : null, content, null);
-		}
-
-		/**
-		 * @deprecated Only exists for backwards-compatibility purposes. Use
-		 * {@link TextContent#annotations()} instead.
-		 */
-		@Deprecated
-		public List<Role> audience() {
-			return annotations == null ? null : annotations.audience();
-		}
-
-		/**
-		 * @deprecated Only exists for backwards-compatibility purposes. Use
-		 * {@link TextContent#annotations()} instead.
-		 */
-		@Deprecated
-		public Double priority() {
-			return annotations == null ? null : annotations.priority();
-		}
 	}
 
 	/**
@@ -2667,34 +2578,6 @@ public final class McpSchema {
 
 		public ImageContent(Annotations annotations, String data, String mimeType) {
 			this(annotations, data, mimeType, null);
-		}
-
-		/**
-		 * @deprecated Only exists for backwards-compatibility purposes. Use
-		 * {@link ImageContent#ImageContent(Annotations, String, String)} instead.
-		 */
-		@Deprecated
-		public ImageContent(List<Role> audience, Double priority, String data, String mimeType) {
-			this(audience != null || priority != null ? new Annotations(audience, priority) : null, data, mimeType,
-					null);
-		}
-
-		/**
-		 * @deprecated Only exists for backwards-compatibility purposes. Use
-		 * {@link ImageContent#annotations()} instead.
-		 */
-		@Deprecated
-		public List<Role> audience() {
-			return annotations == null ? null : annotations.audience();
-		}
-
-		/**
-		 * @deprecated Only exists for backwards-compatibility purposes. Use
-		 * {@link ImageContent#annotations()} instead.
-		 */
-		@Deprecated
-		public Double priority() {
-			return annotations == null ? null : annotations.priority();
 		}
 	}
 
@@ -2741,34 +2624,6 @@ public final class McpSchema {
 		// backwards compatibility constructor
 		public EmbeddedResource(Annotations annotations, ResourceContents resource) {
 			this(annotations, resource, null);
-		}
-
-		/**
-		 * @deprecated Only exists for backwards-compatibility purposes. Use
-		 * {@link EmbeddedResource#EmbeddedResource(Annotations, ResourceContents)}
-		 * instead.
-		 */
-		@Deprecated
-		public EmbeddedResource(List<Role> audience, Double priority, ResourceContents resource) {
-			this(audience != null || priority != null ? new Annotations(audience, priority) : null, resource, null);
-		}
-
-		/**
-		 * @deprecated Only exists for backwards-compatibility purposes. Use
-		 * {@link EmbeddedResource#annotations()} instead.
-		 */
-		@Deprecated
-		public List<Role> audience() {
-			return annotations == null ? null : annotations.audience();
-		}
-
-		/**
-		 * @deprecated Only exists for backwards-compatibility purposes. Use
-		 * {@link EmbeddedResource#annotations()} instead.
-		 */
-		@Deprecated
-		public Double priority() {
-			return annotations == null ? null : annotations.priority();
 		}
 	}
 

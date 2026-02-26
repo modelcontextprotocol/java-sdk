@@ -185,7 +185,7 @@ class StdioServerTransportProviderTests {
 		// Send notification before setting session factory
 		StepVerifier.create(transportProvider.notifyClients("testNotification", Map.of("key", "value")))
 			.verifyErrorSatisfies(error -> {
-				assertThat(error).isInstanceOf(McpError.class);
+				assertThat(error).isInstanceOf(IllegalStateException.class);
 			});
 	}
 

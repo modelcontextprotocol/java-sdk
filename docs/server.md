@@ -21,7 +21,8 @@ The MCP Server is a foundational component in the Model Context Protocol (MCP) a
 !!! tip
     The core `io.modelcontextprotocol.sdk:mcp` module provides STDIO, SSE, and Streamable HTTP server transport implementations without requiring external web frameworks.
 
-    Spring-specific transport implementations are available as **optional** dependencies `io.modelcontextprotocol.sdk:mcp-spring-webflux`, `io.modelcontextprotocol.sdk:mcp-spring-webmvc` for [Spring Framework](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html) users.
+    Spring-specific transport implementations (`mcp-spring-webflux`, `mcp-spring-webmvc`) are now part of [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`) and are no longer shipped by this SDK.
+    See the [MCP Server Boot Starter](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-server-boot-starter-docs.html) documentation for Spring-based server setup.
 
 The server supports both synchronous and asynchronous APIs, allowing for flexible integration in different application contexts.
 
@@ -104,25 +105,27 @@ The transport layer in the MCP SDK is responsible for handling the communication
 It provides different implementations to support various communication protocols and patterns.
 The SDK includes several built-in transport provider implementations:
 
-=== "STDIO"
+### STDIO
 
-    Create process-based transport using stdin/stdout:
+Create process-based transport using stdin/stdout:
 
-    ```java
-    StdioServerTransportProvider transportProvider =
-        new StdioServerTransportProvider(new ObjectMapper());
-    ```
+```java
+StdioServerTransportProvider transportProvider =
+    new StdioServerTransportProvider(new ObjectMapper());
+```
 
-    Provides bidirectional JSON-RPC message handling over standard input/output streams with non-blocking message processing, serialization/deserialization, and graceful shutdown support.
+Provides bidirectional JSON-RPC message handling over standard input/output streams with non-blocking message processing, serialization/deserialization, and graceful shutdown support.
 
-    Key features:
+Key features:
 
-    - Bidirectional communication through stdin/stdout
-    - Process-based integration support
-    - Simple setup and configuration
-    - Lightweight implementation
+- Bidirectional communication through stdin/stdout
+- Process-based integration support
+- Simple setup and configuration
+- Lightweight implementation
 
-=== "Streamable HTTP (Servlet)"
+### Streamable HTTP
+
+=== "Streamable HTTP Servlet"
 
     Creates a Servlet-based Streamable HTTP server transport. Included in the core `mcp` module:
 
@@ -165,9 +168,9 @@ The SDK includes several built-in transport provider implementations:
     - Security validation support
     - Graceful shutdown support
 
-=== "Streamable HTTP (WebFlux)"
+=== "Streamable HTTP WebFlux (external)"
 
-    Creates WebFlux-based Streamable HTTP server transport. Requires the `mcp-spring-webflux` dependency:
+    Creates WebFlux-based Streamable HTTP server transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     @Configuration
@@ -195,9 +198,9 @@ The SDK includes several built-in transport provider implementations:
     - Configurable keep-alive intervals
     - Security validation support
 
-=== "Streamable HTTP (WebMvc)"
+=== "Streamable HTTP WebMvc (external)"
 
-    Creates WebMvc-based Streamable HTTP server transport. Requires the `mcp-spring-webmvc` dependency:
+    Creates WebMvc-based Streamable HTTP server transport. Requires the `mcp-spring-webmvc` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     @Configuration
@@ -219,61 +222,9 @@ The SDK includes several built-in transport provider implementations:
     }
     ```
 
-=== "SSE (WebFlux)"
+### SSE HTTP (Legacy)
 
-    Creates WebFlux-based SSE server transport. Requires the `mcp-spring-webflux` dependency:
-
-    ```java
-    @Configuration
-    class McpConfig {
-        @Bean
-        WebFluxSseServerTransportProvider webFluxSseServerTransportProvider(ObjectMapper mapper) {
-            return new WebFluxSseServerTransportProvider(mapper, "/mcp/message");
-        }
-
-        @Bean
-        RouterFunction<?> mcpRouterFunction(WebFluxSseServerTransportProvider transportProvider) {
-            return transportProvider.getRouterFunction();
-        }
-    }
-    ```
-
-    Implements the MCP HTTP with SSE transport specification, providing:
-
-    - Reactive HTTP streaming with WebFlux
-    - Concurrent client connections through SSE endpoints
-    - Message routing and session management
-    - Graceful shutdown capabilities
-
-=== "SSE (WebMvc)"
-
-    Creates WebMvc-based SSE server transport. Requires the `mcp-spring-webmvc` dependency:
-
-    ```java
-    @Configuration
-    @EnableWebMvc
-    class McpConfig {
-        @Bean
-        WebMvcSseServerTransportProvider webMvcSseServerTransportProvider(ObjectMapper mapper) {
-            return new WebMvcSseServerTransportProvider(mapper, "/mcp/message");
-        }
-
-        @Bean
-        RouterFunction<ServerResponse> mcpRouterFunction(
-                WebMvcSseServerTransportProvider transportProvider) {
-            return transportProvider.getRouterFunction();
-        }
-    }
-    ```
-
-    Implements the MCP HTTP with SSE transport specification, providing:
-
-    - Server-side event streaming
-    - Integration with Spring WebMVC
-    - Support for traditional web applications
-    - Synchronous operation handling
-
-=== "SSE (Servlet)"
+=== "SSE Servlet"
 
     Creates a Servlet-based SSE server transport. Included in the core `mcp` module.
     The `HttpServletSseServerTransportProvider` can be used with any Servlet container.
@@ -306,6 +257,61 @@ The SDK includes several built-in transport provider implementations:
         - Message endpoint (configurable) for client-to-server requests
     - Error handling and response formatting
     - Graceful shutdown support
+
+=== "SSE WebFlux (external)"
+
+    Creates WebFlux-based SSE server transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+
+    ```java
+    @Configuration
+    class McpConfig {
+        @Bean
+        WebFluxSseServerTransportProvider webFluxSseServerTransportProvider(ObjectMapper mapper) {
+            return new WebFluxSseServerTransportProvider(mapper, "/mcp/message");
+        }
+
+        @Bean
+        RouterFunction<?> mcpRouterFunction(WebFluxSseServerTransportProvider transportProvider) {
+            return transportProvider.getRouterFunction();
+        }
+    }
+    ```
+
+    Implements the MCP HTTP with SSE transport specification, providing:
+
+    - Reactive HTTP streaming with WebFlux
+    - Concurrent client connections through SSE endpoints
+    - Message routing and session management
+    - Graceful shutdown capabilities
+
+=== "SSE WebMvc (external)"
+
+    Creates WebMvc-based SSE server transport. Requires the `mcp-spring-webmvc` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+
+    ```java
+    @Configuration
+    @EnableWebMvc
+    class McpConfig {
+        @Bean
+        WebMvcSseServerTransportProvider webMvcSseServerTransportProvider(ObjectMapper mapper) {
+            return new WebMvcSseServerTransportProvider(mapper, "/mcp/message");
+        }
+
+        @Bean
+        RouterFunction<ServerResponse> mcpRouterFunction(
+                WebMvcSseServerTransportProvider transportProvider) {
+            return transportProvider.getRouterFunction();
+        }
+    }
+    ```
+
+    Implements the MCP HTTP with SSE transport specification, providing:
+
+    - Server-side event streaming
+    - Integration with Spring WebMVC
+    - Support for traditional web applications
+    - Synchronous operation handling
+
 
 ## Server Capabilities
 
