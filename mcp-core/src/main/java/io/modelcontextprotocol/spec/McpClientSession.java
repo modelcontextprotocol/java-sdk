@@ -130,7 +130,11 @@ public class McpClientSession implements McpSession {
 		this.pendingResponses.clear();
 	}
 
-	private void handle(McpSchema.JSONRPCMessage message) {
+	/**
+	 * An extension point for handling incoming JSON-RPC messages.
+	 * @param message The incoming JSON-RPC message
+	 */
+	protected void handle(McpSchema.JSONRPCMessage message) {
 		if (message instanceof McpSchema.JSONRPCResponse response) {
 			logger.debug("Received response: {}", response);
 			if (response.id() != null) {
@@ -183,7 +187,7 @@ public class McpClientSession implements McpSession {
 	 * @param request The incoming JSON-RPC request
 	 * @return A Mono containing the JSON-RPC response
 	 */
-	private Mono<McpSchema.JSONRPCResponse> handleIncomingRequest(McpSchema.JSONRPCRequest request) {
+	protected Mono<McpSchema.JSONRPCResponse> handleIncomingRequest(McpSchema.JSONRPCRequest request) {
 		return Mono.defer(() -> {
 			var handler = this.requestHandlers.get(request.method());
 			if (handler == null) {
@@ -216,7 +220,7 @@ public class McpClientSession implements McpSession {
 	 * @param notification The incoming JSON-RPC notification
 	 * @return A Mono that completes when the notification is processed
 	 */
-	private Mono<Void> handleIncomingNotification(McpSchema.JSONRPCNotification notification) {
+	protected Mono<Void> handleIncomingNotification(McpSchema.JSONRPCNotification notification) {
 		return Mono.defer(() -> {
 			var handler = notificationHandlers.get(notification.method());
 			if (handler == null) {
