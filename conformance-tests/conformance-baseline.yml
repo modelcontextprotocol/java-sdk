@@ -3,9 +3,6 @@
 # See: https://github.com/modelcontextprotocol/conformance/blob/main/SDK_INTEGRATION.md
 
 server:
-  # Resource subscription not implemented in SDK
-  - resources-subscribe
-  - resources-unsubscribe
 
 client:
   # SSE retry field handling not implemented
