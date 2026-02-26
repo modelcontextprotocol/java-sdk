@@ -6,6 +6,7 @@ package io.modelcontextprotocol;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.function.BiConsumer;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
@@ -25,6 +26,10 @@ public class MockMcpServerTransport implements McpServerTransport {
 
 	private final BiConsumer<MockMcpServerTransport, McpSchema.JSONRPCMessage> interceptor;
 
+	private volatile String awaitedResponseId;
+
+	private volatile CountDownLatch responseLatch;
+
 	public MockMcpServerTransport() {
 		this((t, msg) -> {
 		});
@@ -34,10 +39,29 @@ public class MockMcpServerTransport implements McpServerTransport {
 		this.interceptor = interceptor;
 	}
 
+	/**
+	 * Register a latch to count down when the server sends a response with the given
+	 * request ID. Useful for awaiting handler completion after
+	 * {@link MockMcpServerTransportProvider#simulateIncomingMessage}.
+	 */
+	public void setInterceptorForNextResponse(String requestId, CountDownLatch latch) {
+		this.awaitedResponseId = requestId;
+		this.responseLatch = latch;
+	}
+
 	@Override
 	public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
 		sent.add(message);
 		interceptor.accept(this, message);
+		if (message instanceof McpSchema.JSONRPCResponse r && r.id() != null
+				&& r.id().toString().equals(awaitedResponseId)) {
+			CountDownLatch latch = responseLatch;
+			if (latch != null) {
+				awaitedResponseId = null;
+				responseLatch = null;
+				latch.countDown();
+			}
+		}
 		return Mono.empty();
 	}
 

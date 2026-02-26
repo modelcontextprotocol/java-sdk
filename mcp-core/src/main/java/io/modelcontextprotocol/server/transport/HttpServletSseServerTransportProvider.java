@@ -228,6 +228,24 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			.then();
 	}
 
+	@Override
+	public Mono<Void> notifyClient(String sessionId, String method, Object params) {
+		return Mono.defer(() -> {
+			// Need to iterate in O(n) because the transport session id
+			// is different from the server-logical session id
+			McpServerSession session = sessions.values()
+				.stream()
+				.filter(s -> sessionId.equals(s.getId()))
+				.findFirst()
+				.orElse(null);
+			if (session == null) {
+				logger.debug("Session {} not found", sessionId);
+				return Mono.empty();
+			}
+			return session.sendNotification(method, params);
+		});
+	}
+
 	/**
 	 * Handles GET requests to establish SSE connections.
 	 * <p>

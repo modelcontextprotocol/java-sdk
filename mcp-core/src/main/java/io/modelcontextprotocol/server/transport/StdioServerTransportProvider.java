@@ -98,10 +98,24 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	@Override
 	public Mono<Void> notifyClients(String method, Object params) {
 		if (this.session == null) {
-			return Mono.error(new IllegalStateException("No session to close"));
+			return Mono.error(new IllegalStateException("No session to notify"));
 		}
 		return this.session.sendNotification(method, params)
 			.doOnError(e -> logger.error("Failed to send notification: {}", e.getMessage()));
+	}
+
+	@Override
+	public Mono<Void> notifyClient(String sessionId, String method, Object params) {
+		return Mono.defer(() -> {
+			if (this.session == null) {
+				return Mono.error(new IllegalStateException("No session to notify"));
+			}
+			if (!this.session.getId().equals(sessionId)) {
+				return Mono.error(new IllegalStateException("Existing session id " + this.session.getId()
+						+ " doesn't match the notification target: " + sessionId));
+			}
+			return this.session.sendNotification(method, params);
+		});
 	}
 
 	@Override
