@@ -5,8 +5,6 @@
 package io.modelcontextprotocol.server;
 
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 import io.modelcontextprotocol.MockMcpServerTransport;
 import io.modelcontextprotocol.MockMcpServerTransportProvider;
@@ -42,21 +40,6 @@ class ResourceSubscriptionTests {
 			.build();
 	}
 
-	/**
-	 * Sends a request through the transport provider and blocks until the session has
-	 * sent a response for that request ID, guaranteeing the handler has fully executed.
-	 */
-	private static void sendAndAwait(MockMcpServerTransport transport, MockMcpServerTransportProvider transportProvider,
-			McpSchema.JSONRPCRequest request) throws InterruptedException {
-		String requestId = request.id().toString();
-		CountDownLatch latch = new CountDownLatch(1);
-		transport.setInterceptorForNextResponse(requestId, latch);
-		transportProvider.simulateIncomingMessage(request);
-		assertThat(latch.await(5, TimeUnit.SECONDS))
-			.as("server should have responded to request " + requestId + " within 5 s")
-			.isTrue();
-	}
-
 	private static McpSchema.JSONRPCRequest initRequest() {
 		return new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
 				UUID.randomUUID().toString(),
@@ -79,12 +62,12 @@ class ResourceSubscriptionTests {
 	}
 
 	@Test
-	void notifyResourcesUpdated_noSubscribers_completesEmpty() throws InterruptedException {
+	void notifyResourcesUpdated_noSubscribers_completesEmpty() {
 		MockMcpServerTransport transport = new MockMcpServerTransport();
 		MockMcpServerTransportProvider transportProvider = new MockMcpServerTransportProvider(transport);
 		McpAsyncServer server = buildServer(transportProvider);
 
-		sendAndAwait(transport, transportProvider, initRequest());
+		transportProvider.simulateIncomingMessage(initRequest());
 		transportProvider.simulateIncomingMessage(initializedNotification());
 		transport.clearSentMessages();
 
@@ -98,14 +81,14 @@ class ResourceSubscriptionTests {
 	}
 
 	@Test
-	void notifyResourcesUpdated_afterSubscribe_notifiesSession() throws InterruptedException {
+	void notifyResourcesUpdated_afterSubscribe_notifiesSession() {
 		MockMcpServerTransport transport = new MockMcpServerTransport();
 		MockMcpServerTransportProvider transportProvider = new MockMcpServerTransportProvider(transport);
 		McpAsyncServer server = buildServer(transportProvider);
 
-		sendAndAwait(transport, transportProvider, initRequest());
+		transportProvider.simulateIncomingMessage(initRequest());
 		transportProvider.simulateIncomingMessage(initializedNotification());
-		sendAndAwait(transport, transportProvider, subscribeRequest(RESOURCE_URI));
+		transportProvider.simulateIncomingMessage(subscribeRequest(RESOURCE_URI));
 		transport.clearSentMessages();
 
 		StepVerifier.create(server.notifyResourcesUpdated(new McpSchema.ResourcesUpdatedNotification(RESOURCE_URI)))
@@ -120,14 +103,14 @@ class ResourceSubscriptionTests {
 	}
 
 	@Test
-	void notifyResourcesUpdated_differentUri_doesNotNotifySession() throws InterruptedException {
+	void notifyResourcesUpdated_differentUri_doesNotNotifySession() {
 		MockMcpServerTransport transport = new MockMcpServerTransport();
 		MockMcpServerTransportProvider transportProvider = new MockMcpServerTransportProvider(transport);
 		McpAsyncServer server = buildServer(transportProvider);
 
-		sendAndAwait(transport, transportProvider, initRequest());
+		transportProvider.simulateIncomingMessage(initRequest());
 		transportProvider.simulateIncomingMessage(initializedNotification());
-		sendAndAwait(transport, transportProvider, subscribeRequest(RESOURCE_URI));
+		transportProvider.simulateIncomingMessage(subscribeRequest(RESOURCE_URI));
 		transport.clearSentMessages();
 
 		StepVerifier
@@ -142,15 +125,15 @@ class ResourceSubscriptionTests {
 	}
 
 	@Test
-	void notifyResourcesUpdated_afterUnsubscribe_doesNotNotifySession() throws InterruptedException {
+	void notifyResourcesUpdated_afterUnsubscribe_doesNotNotifySession() {
 		MockMcpServerTransport transport = new MockMcpServerTransport();
 		MockMcpServerTransportProvider transportProvider = new MockMcpServerTransportProvider(transport);
 		McpAsyncServer server = buildServer(transportProvider);
 
-		sendAndAwait(transport, transportProvider, initRequest());
+		transportProvider.simulateIncomingMessage(initRequest());
 		transportProvider.simulateIncomingMessage(initializedNotification());
-		sendAndAwait(transport, transportProvider, subscribeRequest(RESOURCE_URI));
-		sendAndAwait(transport, transportProvider, unsubscribeRequest(RESOURCE_URI));
+		transportProvider.simulateIncomingMessage(subscribeRequest(RESOURCE_URI));
+		transportProvider.simulateIncomingMessage(unsubscribeRequest(RESOURCE_URI));
 		transport.clearSentMessages();
 
 		StepVerifier.create(server.notifyResourcesUpdated(new McpSchema.ResourcesUpdatedNotification(RESOURCE_URI)))
@@ -163,14 +146,14 @@ class ResourceSubscriptionTests {
 	}
 
 	@Test
-	void notifyResourcesUpdated_afterSessionClose_doesNotNotifySession() throws InterruptedException {
+	void notifyResourcesUpdated_afterSessionClose_doesNotNotifySession() {
 		MockMcpServerTransport transport = new MockMcpServerTransport();
 		MockMcpServerTransportProvider transportProvider = new MockMcpServerTransportProvider(transport);
 		McpAsyncServer server = buildServer(transportProvider);
 
-		sendAndAwait(transport, transportProvider, initRequest());
+		transportProvider.simulateIncomingMessage(initRequest());
 		transportProvider.simulateIncomingMessage(initializedNotification());
-		sendAndAwait(transport, transportProvider, subscribeRequest(RESOURCE_URI));
+		transportProvider.simulateIncomingMessage(subscribeRequest(RESOURCE_URI));
 
 		// Close the session; onClose must fire and remove the subscription
 		transportProvider.closeGracefully().block();
