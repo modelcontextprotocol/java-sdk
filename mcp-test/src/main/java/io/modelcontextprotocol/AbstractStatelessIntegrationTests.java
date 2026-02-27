@@ -82,7 +82,10 @@ public abstract class AbstractStatelessIntegrationTests {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
-		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
+		var callResponse = McpSchema.CallToolResult.builder()
+			.content(List.of(new McpSchema.TextContent("CALL RESPONSE")))
+			.isError(false)
+			.build();
 		McpStatelessServerFeatures.SyncToolSpecification tool1 = McpStatelessServerFeatures.SyncToolSpecification
 			.builder()
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
@@ -170,7 +173,10 @@ public abstract class AbstractStatelessIntegrationTests {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
-		var callResponse = new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("CALL RESPONSE")), null);
+		var callResponse = McpSchema.CallToolResult.builder()
+			.content(List.of(new McpSchema.TextContent("CALL RESPONSE")))
+			.isError(false)
+			.build();
 		McpStatelessServerFeatures.SyncToolSpecification tool1 = McpStatelessServerFeatures.SyncToolSpecification
 			.builder()
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())

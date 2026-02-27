@@ -25,7 +25,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          
+
+      - name: Jackson 2 Integration Tests
+        run: mvn -pl mcp-test -am -Pjackson2 test
+
       - name: Build and Test
         run: mvn clean verify
 
