@@ -19,11 +19,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Unit tests for resource subscription logic in {@link McpAsyncServer}. Uses
  * {@link MockMcpServerTransportProvider} to drive sessions directly without a real
  * network stack.
- *
- * <p>
- * Each test creates a transport with a response-interceptor latch so that
- * {@code simulateIncomingMessage} (fire-and-forget) can be reliably awaited before
- * asserting subscription state.
  */
 class ResourceSubscriptionTests {
 

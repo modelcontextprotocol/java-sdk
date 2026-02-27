@@ -232,7 +232,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	public Mono<Void> notifyClient(String sessionId, String method, Object params) {
 		return Mono.defer(() -> {
 			// Need to iterate in O(n) because the transport session id
-			// is different from the server-logical session id
+			// is different from the server-logical session id (in streamable http this
+			// design issue was solved)
 			McpServerSession session = sessions.values()
 				.stream()
 				.filter(s -> sessionId.equals(s.getId()))
