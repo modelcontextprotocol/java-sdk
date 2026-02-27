@@ -54,7 +54,7 @@ cd conformance-tests/client-jdk-http-client
 
 This creates an executable JAR at:
 ```
-target/client-jdk-http-client-0.18.0-SNAPSHOT.jar
+target/client-jdk-http-client-1.0.0-SNAPSHOT.jar
 ```
 
 ## Running Tests
@@ -65,19 +65,19 @@ Run a single scenario:
 
 ```bash
 npx @modelcontextprotocol/conformance client \
-  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-0.18.0-SNAPSHOT.jar" \
+  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-1.0.0-SNAPSHOT.jar" \
   --scenario initialize
 
 npx @modelcontextprotocol/conformance client \
-  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-0.18.0-SNAPSHOT.jar" \
+  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-1.0.0-SNAPSHOT.jar" \
   --scenario tools_call
 
 npx @modelcontextprotocol/conformance client \
-  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-0.18.0-SNAPSHOT.jar" \
+  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-1.0.0-SNAPSHOT.jar" \
   --scenario elicitation-sep1034-client-defaults
 
 npx @modelcontextprotocol/conformance client \
-  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-0.18.0-SNAPSHOT.jar" \
+  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-1.0.0-SNAPSHOT.jar" \
   --scenario sse-retry
 ```
 
@@ -85,7 +85,7 @@ Run with verbose output:
 
 ```bash
 npx @modelcontextprotocol/conformance client \
-  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-0.18.0-SNAPSHOT.jar" \
+  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-1.0.0-SNAPSHOT.jar" \
   --scenario initialize \
   --verbose
 ```
@@ -96,7 +96,7 @@ You can also run the client manually if you have a test server:
 
 ```bash
 export MCP_CONFORMANCE_SCENARIO=initialize
-java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-0.18.0-SNAPSHOT.jar http://localhost:3000/mcp
+java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-1.0.0-SNAPSHOT.jar http://localhost:3000/mcp
 ```
 
 ## Test Results

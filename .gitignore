@@ -57,6 +57,9 @@ node_modules/
 package-lock.json
 package.json
 
+### MkDocs ###
+site/
+
 ### Other ###
 .antlr/
 .profiler/

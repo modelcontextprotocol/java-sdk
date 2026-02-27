@@ -6,12 +6,13 @@ server:
   # Resource subscription not implemented in SDK
   - resources-subscribe
   - resources-unsubscribe
-  
-  # DNS rebinding protection missing Host/Origin validation
-  - dns-rebinding-protection
 
 client:
   # SSE retry field handling not implemented
   # - Client does not parse or respect retry: field timing
   # - Client does not send Last-Event-ID header
   - sse-retry
+  # CIMD not implemented yet
+  - auth/basic-cimd
+  # Scope step up beyond initial authorization request not implemented
+  - auth/scope-step-up

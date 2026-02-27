@@ -32,8 +32,8 @@ The server has been validated against the official [MCP conformance test suite](
 ✅ **SSE Transport** (2/2)
 - Multiple streams support
 
-⚠️ **Security** (1/2)
-- ⚠️ DNS rebinding protection (SDK limitation)
+✅ **Security** (2/2)
+- ✅ DNS rebinding protection
 
 ## Features
 
