@@ -1,5 +1,8 @@
 package io.modelcontextprotocol.spec;
 
+import java.util.Comparator;
+import java.util.List;
+
 public interface ProtocolVersions {
 
 	/**
@@ -25,5 +28,9 @@ public interface ProtocolVersions {
 	 * https://modelcontextprotocol.io/specification/2025-11-25
 	 */
 	String MCP_2025_11_25 = "2025-11-25";
+
+	List<String> ALL = List.of(MCP_2024_11_05, MCP_2025_03_26, MCP_2025_06_18, MCP_2025_11_25);
+
+	String LATEST = ALL.stream().max(Comparator.naturalOrder()).orElseThrow();
 
 }
