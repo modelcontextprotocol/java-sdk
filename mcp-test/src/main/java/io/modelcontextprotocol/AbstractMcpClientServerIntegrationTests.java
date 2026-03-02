@@ -1746,6 +1746,95 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		}
 	}
 
+	// ---------------------------------------
+	// Resource Subscription Tests
+	// ---------------------------------------
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testResourceSubscription(String clientType) throws InterruptedException {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		String resourceUri = "test://subscribable-resource";
+		var receivedContents = new AtomicReference<List<McpSchema.ResourceContents>>();
+		var latch = new CountDownLatch(1);
+
+		McpServerFeatures.SyncResourceSpecification resourceSpec = new McpServerFeatures.SyncResourceSpecification(
+				McpSchema.Resource.builder()
+					.uri(resourceUri)
+					.name("Subscribable Resource")
+					.mimeType("text/plain")
+					.build(),
+				(exchange, req) -> new McpSchema.ReadResourceResult(
+						List.of(new McpSchema.TextResourceContents(resourceUri, "text/plain", "initial content"))));
+
+		McpSyncServer mcpServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(McpSchema.ServerCapabilities.builder().resources(true, false).build())
+			.resources(resourceSpec)
+			.build();
+
+		try (var mcpClient = clientBuilder.resourcesUpdateConsumer(contents -> {
+			receivedContents.set(contents);
+			latch.countDown();
+		}).build()) {
+
+			mcpClient.initialize();
+
+			mcpClient.subscribeResource(new McpSchema.SubscribeRequest(resourceUri));
+
+			mcpServer.notifyResourcesUpdated(new McpSchema.ResourcesUpdatedNotification(resourceUri));
+
+			assertThat(latch.await(5, TimeUnit.SECONDS))
+				.as("client should receive the resources/updated notification within 5 seconds")
+				.isTrue();
+			assertThat(receivedContents.get()).isNotEmpty();
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testResourceSubscription_afterUnsubscribe_noNotification(String clientType) throws InterruptedException {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		String resourceUri = "test://subscribable-resource-unsub";
+		var notificationCount = new java.util.concurrent.atomic.AtomicInteger(0);
+
+		McpServerFeatures.SyncResourceSpecification resourceSpec = new McpServerFeatures.SyncResourceSpecification(
+				McpSchema.Resource.builder()
+					.uri(resourceUri)
+					.name("Subscribable Resource")
+					.mimeType("text/plain")
+					.build(),
+				(exchange, req) -> new McpSchema.ReadResourceResult(
+						List.of(new McpSchema.TextResourceContents(resourceUri, "text/plain", "content"))));
+
+		McpSyncServer mcpServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(McpSchema.ServerCapabilities.builder().resources(true, false).build())
+			.resources(resourceSpec)
+			.build();
+
+		try (var mcpClient = clientBuilder.resourcesUpdateConsumer(contents -> notificationCount.incrementAndGet())
+			.build()) {
+
+			mcpClient.initialize();
+
+			mcpClient.subscribeResource(new McpSchema.SubscribeRequest(resourceUri));
+			mcpClient.unsubscribeResource(new McpSchema.UnsubscribeRequest(resourceUri));
+
+			mcpServer.notifyResourcesUpdated(new McpSchema.ResourcesUpdatedNotification(resourceUri));
+
+			assertThat(notificationCount.get()).as("no notification should be received after unsubscribing").isZero();
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
 	private double evaluateExpression(String expression) {
 		// Simple expression evaluator for testing
 		return switch (expression) {

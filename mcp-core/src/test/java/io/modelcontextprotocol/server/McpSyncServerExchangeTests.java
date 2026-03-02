@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
@@ -54,7 +55,8 @@ class McpSyncServerExchangeTests {
 
 		clientInfo = new McpSchema.Implementation("test-client", "1.0.0");
 
-		asyncExchange = new McpAsyncServerExchange(mockSession, clientCapabilities, clientInfo);
+		asyncExchange = new McpAsyncServerExchange("testSessionId", mockSession, clientCapabilities, clientInfo,
+				McpTransportContext.EMPTY);
 		exchange = new McpSyncServerExchange(asyncExchange);
 	}
 
@@ -212,7 +214,7 @@ class McpSyncServerExchangeTests {
 
 	@Test
 	void testLoggingNotificationWithNullMessage() {
-		assertThatThrownBy(() -> exchange.loggingNotification(null)).isInstanceOf(McpError.class)
+		assertThatThrownBy(() -> exchange.loggingNotification(null)).isInstanceOf(IllegalStateException.class)
 			.hasMessage("Logging message must not be null");
 	}
 
@@ -294,8 +296,8 @@ class McpSyncServerExchangeTests {
 	@Test
 	void testCreateElicitationWithNullCapabilities() {
 		// Given - Create exchange with null capabilities
-		McpAsyncServerExchange asyncExchangeWithNullCapabilities = new McpAsyncServerExchange(mockSession, null,
-				clientInfo);
+		McpAsyncServerExchange asyncExchangeWithNullCapabilities = new McpAsyncServerExchange("testSessionId",
+				mockSession, null, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithNullCapabilities = new McpSyncServerExchange(
 				asyncExchangeWithNullCapabilities);
 
@@ -304,7 +306,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		assertThatThrownBy(() -> exchangeWithNullCapabilities.createElicitation(elicitRequest))
-			.isInstanceOf(McpError.class)
+			.isInstanceOf(IllegalStateException.class)
 			.hasMessage("Client must be initialized. Call the initialize method first!");
 
 		// Verify that sendRequest was never called due to null capabilities
@@ -318,8 +320,8 @@ class McpSyncServerExchangeTests {
 			.roots(true)
 			.build();
 
-		McpAsyncServerExchange asyncExchangeWithoutElicitation = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithoutElicitation, clientInfo);
+		McpAsyncServerExchange asyncExchangeWithoutElicitation = new McpAsyncServerExchange("testSessionId",
+				mockSession, capabilitiesWithoutElicitation, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithoutElicitation = new McpSyncServerExchange(asyncExchangeWithoutElicitation);
 
 		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
@@ -327,7 +329,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		assertThatThrownBy(() -> exchangeWithoutElicitation.createElicitation(elicitRequest))
-			.isInstanceOf(McpError.class)
+			.isInstanceOf(IllegalStateException.class)
 			.hasMessage("Client must be configured with elicitation capabilities");
 
 		// Verify that sendRequest was never called due to missing elicitation
@@ -342,8 +344,8 @@ class McpSyncServerExchangeTests {
 			.elicitation()
 			.build();
 
-		McpAsyncServerExchange asyncExchangeWithElicitation = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithElicitation, clientInfo);
+		McpAsyncServerExchange asyncExchangeWithElicitation = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithElicitation = new McpSyncServerExchange(asyncExchangeWithElicitation);
 
 		// Create a complex elicit request with schema
@@ -386,8 +388,8 @@ class McpSyncServerExchangeTests {
 			.elicitation()
 			.build();
 
-		McpAsyncServerExchange asyncExchangeWithElicitation = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithElicitation, clientInfo);
+		McpAsyncServerExchange asyncExchangeWithElicitation = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithElicitation = new McpSyncServerExchange(asyncExchangeWithElicitation);
 
 		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
@@ -414,8 +416,8 @@ class McpSyncServerExchangeTests {
 			.elicitation()
 			.build();
 
-		McpAsyncServerExchange asyncExchangeWithElicitation = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithElicitation, clientInfo);
+		McpAsyncServerExchange asyncExchangeWithElicitation = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithElicitation = new McpSyncServerExchange(asyncExchangeWithElicitation);
 
 		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
@@ -442,8 +444,8 @@ class McpSyncServerExchangeTests {
 			.elicitation()
 			.build();
 
-		McpAsyncServerExchange asyncExchangeWithElicitation = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithElicitation, clientInfo);
+		McpAsyncServerExchange asyncExchangeWithElicitation = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithElicitation = new McpSyncServerExchange(asyncExchangeWithElicitation);
 
 		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
@@ -465,8 +467,8 @@ class McpSyncServerExchangeTests {
 	@Test
 	void testCreateMessageWithNullCapabilities() {
 
-		McpAsyncServerExchange asyncExchangeWithNullCapabilities = new McpAsyncServerExchange(mockSession, null,
-				clientInfo);
+		McpAsyncServerExchange asyncExchangeWithNullCapabilities = new McpAsyncServerExchange("testSessionId",
+				mockSession, null, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithNullCapabilities = new McpSyncServerExchange(
 				asyncExchangeWithNullCapabilities);
 
@@ -476,7 +478,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		assertThatThrownBy(() -> exchangeWithNullCapabilities.createMessage(createMessageRequest))
-			.isInstanceOf(McpError.class)
+			.isInstanceOf(IllegalStateException.class)
 			.hasMessage("Client must be initialized. Call the initialize method first!");
 
 		// Verify that sendRequest was never called due to null capabilities
@@ -491,8 +493,8 @@ class McpSyncServerExchangeTests {
 			.roots(true)
 			.build();
 
-		McpAsyncServerExchange asyncExchangeWithoutSampling = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithoutSampling, clientInfo);
+		McpAsyncServerExchange asyncExchangeWithoutSampling = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithoutSampling, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithoutSampling = new McpSyncServerExchange(asyncExchangeWithoutSampling);
 
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
@@ -501,7 +503,7 @@ class McpSyncServerExchangeTests {
 			.build();
 
 		assertThatThrownBy(() -> exchangeWithoutSampling.createMessage(createMessageRequest))
-			.isInstanceOf(McpError.class)
+			.isInstanceOf(IllegalStateException.class)
 			.hasMessage("Client must be configured with sampling capabilities");
 
 		// Verify that sendRequest was never called due to missing sampling capabilities
@@ -516,8 +518,8 @@ class McpSyncServerExchangeTests {
 			.sampling()
 			.build();
 
-		McpAsyncServerExchange asyncExchangeWithSampling = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithSampling, clientInfo);
+		McpAsyncServerExchange asyncExchangeWithSampling = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithSampling, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithSampling = new McpSyncServerExchange(asyncExchangeWithSampling);
 
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
@@ -553,8 +555,8 @@ class McpSyncServerExchangeTests {
 			.sampling()
 			.build();
 
-		McpAsyncServerExchange asyncExchangeWithSampling = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithSampling, clientInfo);
+		McpAsyncServerExchange asyncExchangeWithSampling = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithSampling, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithSampling = new McpSyncServerExchange(asyncExchangeWithSampling);
 
 		// Create request with image content
@@ -589,8 +591,8 @@ class McpSyncServerExchangeTests {
 			.sampling()
 			.build();
 
-		McpAsyncServerExchange asyncExchangeWithSampling = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithSampling, clientInfo);
+		McpAsyncServerExchange asyncExchangeWithSampling = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithSampling, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithSampling = new McpSyncServerExchange(asyncExchangeWithSampling);
 
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
@@ -614,8 +616,8 @@ class McpSyncServerExchangeTests {
 			.sampling()
 			.build();
 
-		McpAsyncServerExchange asyncExchangeWithSampling = new McpAsyncServerExchange(mockSession,
-				capabilitiesWithSampling, clientInfo);
+		McpAsyncServerExchange asyncExchangeWithSampling = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithSampling, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithSampling = new McpSyncServerExchange(asyncExchangeWithSampling);
 
 		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
@@ -662,7 +664,7 @@ class McpSyncServerExchangeTests {
 	@Test
 	void testPingWithMcpError() {
 		// Given - Mock an MCP-specific error during ping
-		McpError mcpError = new McpError("Server unavailable");
+		McpError mcpError = McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR).message("Server unavailable").build();
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_PING), eq(null), any(TypeRef.class)))
 			.thenReturn(Mono.error(mcpError));
 

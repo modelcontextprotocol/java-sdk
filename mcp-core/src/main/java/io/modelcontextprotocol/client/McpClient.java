@@ -4,17 +4,9 @@
 
 package io.modelcontextprotocol.client;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
-
-import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
@@ -27,6 +19,15 @@ import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpTransport;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Factory class for creating Model Context Protocol (MCP) clients. MCP is a protocol that
@@ -75,6 +76,7 @@ import reactor.core.publisher.Mono;
  *     .resourcesChangeConsumer(resources -> Mono.fromRunnable(() -> System.out.println("Resources updated: " + resources)))
  *     .promptsChangeConsumer(prompts -> Mono.fromRunnable(() -> System.out.println("Prompts updated: " + prompts)))
  *     .loggingConsumer(message -> Mono.fromRunnable(() -> System.out.println("Log message: " + message)))
+ *     .resourcesUpdateConsumer(resourceContents -> Mono.fromRunnable(() -> System.out.println("Resources contents updated: " + resourceContents)))
  *     .build();
  * }</pre>
  *
@@ -347,6 +349,22 @@ public interface McpClient {
 		}
 
 		/**
+		 * Adds a consumer to be notified when a specific resource is updated. This allows
+		 * the client to react to changes in individual resources, such as updates to
+		 * their content or metadata.
+		 * @param resourcesUpdateConsumer A consumer function that processes the updated
+		 * resource and returns a Mono indicating the completion of the processing. Must
+		 * not be null.
+		 * @return This builder instance for method chaining.
+		 * @throws IllegalArgumentException If the resourcesUpdateConsumer is null.
+		 */
+		public SyncSpec resourcesUpdateConsumer(Consumer<List<McpSchema.ResourceContents>> resourcesUpdateConsumer) {
+			Assert.notNull(resourcesUpdateConsumer, "Resources update consumer must not be null");
+			this.resourcesUpdateConsumers.add(resourcesUpdateConsumer);
+			return this;
+		}
+
+		/**
 		 * Adds a consumer to be notified when the available prompts change. This allows
 		 * the client to react to changes in the server's prompt templates, such as new
 		 * templates being added or existing ones being modified.
@@ -475,7 +493,7 @@ public interface McpClient {
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
 			return new McpSyncClient(new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout,
-					jsonSchemaValidator != null ? jsonSchemaValidator : JsonSchemaValidator.getDefault(),
+					jsonSchemaValidator != null ? jsonSchemaValidator : McpJsonDefaults.getSchemaValidator(),
 					asyncFeatures), this.contextProvider);
 		}
 
@@ -809,7 +827,7 @@ public interface McpClient {
 		 */
 		public McpAsyncClient build() {
 			var jsonSchemaValidator = (this.jsonSchemaValidator != null) ? this.jsonSchemaValidator
-					: JsonSchemaValidator.getDefault();
+					: McpJsonDefaults.getSchemaValidator();
 			return new McpAsyncClient(this.transport, this.requestTimeout, this.initializationTimeout,
 					jsonSchemaValidator,
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
