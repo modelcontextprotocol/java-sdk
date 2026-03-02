@@ -72,8 +72,7 @@ Uses the `client-spring-http-client` module with Spring Security OAuth2 and the 
 ### Server
 ```bash
 # Start server
-cd conformance-tests/server-servlet
-../../mvnw compile exec:java -Dexec.mainClass="io.modelcontextprotocol.conformance.server.ConformanceServlet"
+./mvnw compile -pl conformance-tests/server-servlet -am exec:java
 
 # Run tests (in another terminal)
 npx @modelcontextprotocol/conformance server --url http://localhost:8080/mcp --suite active
@@ -88,7 +87,7 @@ cd conformance-tests/client-jdk-http-client
 # Run all scenarios
 for scenario in initialize tools_call elicitation-sep1034-client-defaults sse-retry; do
   npx @modelcontextprotocol/conformance client \
-    --command "java -jar target/client-jdk-http-client-1.0.0-SNAPSHOT.jar" \
+    --command "java -jar target/client-jdk-http-client-1.1.0-SNAPSHOT.jar" \
     --scenario $scenario
 done
 ```
@@ -105,7 +104,7 @@ cd conformance-tests/client-spring-http-client
 # Run auth suite
 npx @modelcontextprotocol/conformance@0.1.15 client \
   --spec-version 2025-11-25 \
-  --command "java -jar target/client-spring-http-client-0.18.0-SNAPSHOT.jar" \
+  --command "java -jar target/client-spring-http-client-1.1.0-SNAPSHOT.jar" \
   --suite auth
 ```
 
