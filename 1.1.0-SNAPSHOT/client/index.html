@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../images/favicon.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.2">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.3">
     
     
       
@@ -773,6 +773,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#resource-subscriptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resource Subscriptions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#prompt-system" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1480,6 +1491,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#resource-subscriptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resource Subscriptions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#prompt-system" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1918,30 +1940,70 @@ Supported logging levels (in order of increasing severity): DEBUG (0), INFO (1),
 </div>
 </div>
 </div>
-<h3 id="prompt-system">Prompt System<a class="headerlink" href="#prompt-system" title="Permanent link">&para;</a></h3>
-<p>The prompt system enables interaction with server-side prompt templates. These templates can be discovered and executed with custom parameters, allowing for dynamic text generation based on predefined patterns.</p>
+<h3 id="resource-subscriptions">Resource Subscriptions<a class="headerlink" href="#resource-subscriptions" title="Permanent link">&para;</a></h3>
+<p>When the server advertises <code>resources.subscribe</code> support, clients can subscribe to individual resources and receive a callback whenever the server pushes a <code>notifications/resources/updated</code> notification for that URI. The SDK automatically re-reads the resource on notification and delivers the updated contents to the registered consumer.</p>
+<p>Register a consumer on the client builder, then subscribe/unsubscribe at any time:</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="6:2"><input checked="checked" id="__tabbed_6_1" name="__tabbed_6" type="radio" /><input id="__tabbed_6_2" name="__tabbed_6" type="radio" /><div class="tabbed-labels"><label for="__tabbed_6_1">Sync API</label><label for="__tabbed_6_2">Async API</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="c1">// List available prompt templates</span>
-</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="n">ListPromptsResult</span><span class="w"> </span><span class="n">prompts</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">client</span><span class="p">.</span><span class="na">listPrompts</span><span class="p">();</span>
-</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>
-</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="c1">// Get a prompt with parameters</span>
-</span><span id="__span-19-5"><a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a><span class="n">GetPromptResult</span><span class="w"> </span><span class="n">prompt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">client</span><span class="p">.</span><span class="na">getPrompt</span><span class="p">(</span>
-</span><span id="__span-19-6"><a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a><span class="w">    </span><span class="k">new</span><span class="w"> </span><span class="n">GetPromptRequest</span><span class="p">(</span><span class="s">&quot;greeting&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">Map</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">&quot;name&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;World&quot;</span><span class="p">))</span>
-</span><span id="__span-19-7"><a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="n">McpSyncClient</span><span class="w"> </span><span class="n">client</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">McpClient</span><span class="p">.</span><span class="na">sync</span><span class="p">(</span><span class="n">transport</span><span class="p">)</span>
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="w">    </span><span class="p">.</span><span class="na">resourcesUpdateConsumer</span><span class="p">(</span><span class="n">contents</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="w">        </span><span class="c1">// called with the updated resource contents after each notification</span>
+</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="w">        </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="s">&quot;Resource updated: &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">contents</span><span class="p">);</span>
+</span><span id="__span-19-5"><a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a><span class="w">    </span><span class="p">})</span>
+</span><span id="__span-19-6"><a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
+</span><span id="__span-19-7"><a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a>
+</span><span id="__span-19-8"><a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a><span class="n">client</span><span class="p">.</span><span class="na">initialize</span><span class="p">();</span>
+</span><span id="__span-19-9"><a id="__codelineno-19-9" name="__codelineno-19-9" href="#__codelineno-19-9"></a>
+</span><span id="__span-19-10"><a id="__codelineno-19-10" name="__codelineno-19-10" href="#__codelineno-19-10"></a><span class="c1">// Subscribe to a specific resource URI</span>
+</span><span id="__span-19-11"><a id="__codelineno-19-11" name="__codelineno-19-11" href="#__codelineno-19-11"></a><span class="n">client</span><span class="p">.</span><span class="na">subscribeResource</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">McpSchema</span><span class="p">.</span><span class="na">SubscribeRequest</span><span class="p">(</span><span class="s">&quot;custom://resource&quot;</span><span class="p">));</span>
+</span><span id="__span-19-12"><a id="__codelineno-19-12" name="__codelineno-19-12" href="#__codelineno-19-12"></a>
+</span><span id="__span-19-13"><a id="__codelineno-19-13" name="__codelineno-19-13" href="#__codelineno-19-13"></a><span class="c1">// ... later, stop receiving updates</span>
+</span><span id="__span-19-14"><a id="__codelineno-19-14" name="__codelineno-19-14" href="#__codelineno-19-14"></a><span class="n">client</span><span class="p">.</span><span class="na">unsubscribeResource</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">McpSchema</span><span class="p">.</span><span class="na">UnsubscribeRequest</span><span class="p">(</span><span class="s">&quot;custom://resource&quot;</span><span class="p">));</span>
 </span></code></pre></div>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="c1">// List available prompt templates asynchronously</span>
-</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="n">client</span><span class="p">.</span><span class="na">listPrompts</span><span class="p">()</span>
-</span><span id="__span-20-3"><a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="w">    </span><span class="p">.</span><span class="na">doOnNext</span><span class="p">(</span><span class="n">prompts</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">prompts</span><span class="p">.</span><span class="na">prompts</span><span class="p">().</span><span class="na">forEach</span><span class="p">(</span><span class="n">prompt</span><span class="w"> </span><span class="o">-&gt;</span>
-</span><span id="__span-20-4"><a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="w">        </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">prompt</span><span class="p">.</span><span class="na">name</span><span class="p">())))</span>
-</span><span id="__span-20-5"><a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a><span class="w">    </span><span class="p">.</span><span class="na">subscribe</span><span class="p">();</span>
+<div class="highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="n">McpAsyncClient</span><span class="w"> </span><span class="n">client</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">McpClient</span><span class="p">.</span><span class="na">async</span><span class="p">(</span><span class="n">transport</span><span class="p">)</span>
+</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="w">    </span><span class="p">.</span><span class="na">resourcesUpdateConsumer</span><span class="p">(</span><span class="n">contents</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Mono</span><span class="p">.</span><span class="na">fromRunnable</span><span class="p">(()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-20-3"><a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="w">        </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="s">&quot;Resource updated: &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">contents</span><span class="p">);</span>
+</span><span id="__span-20-4"><a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="w">    </span><span class="p">}))</span>
+</span><span id="__span-20-5"><a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
 </span><span id="__span-20-6"><a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a>
-</span><span id="__span-20-7"><a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a><span class="c1">// Get a prompt asynchronously</span>
-</span><span id="__span-20-8"><a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a><span class="n">client</span><span class="p">.</span><span class="na">getPrompt</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">GetPromptRequest</span><span class="p">(</span><span class="s">&quot;greeting&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">Map</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">&quot;name&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;World&quot;</span><span class="p">)))</span>
+</span><span id="__span-20-7"><a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a><span class="n">client</span><span class="p">.</span><span class="na">initialize</span><span class="p">()</span>
+</span><span id="__span-20-8"><a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a><span class="w">    </span><span class="p">.</span><span class="na">then</span><span class="p">(</span><span class="n">client</span><span class="p">.</span><span class="na">subscribeResource</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">McpSchema</span><span class="p">.</span><span class="na">SubscribeRequest</span><span class="p">(</span><span class="s">&quot;custom://resource&quot;</span><span class="p">)))</span>
 </span><span id="__span-20-9"><a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a><span class="w">    </span><span class="p">.</span><span class="na">subscribe</span><span class="p">();</span>
+</span><span id="__span-20-10"><a id="__codelineno-20-10" name="__codelineno-20-10" href="#__codelineno-20-10"></a>
+</span><span id="__span-20-11"><a id="__codelineno-20-11" name="__codelineno-20-11" href="#__codelineno-20-11"></a><span class="c1">// ... later, stop receiving updates</span>
+</span><span id="__span-20-12"><a id="__codelineno-20-12" name="__codelineno-20-12" href="#__codelineno-20-12"></a><span class="n">client</span><span class="p">.</span><span class="na">unsubscribeResource</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">McpSchema</span><span class="p">.</span><span class="na">UnsubscribeRequest</span><span class="p">(</span><span class="s">&quot;custom://resource&quot;</span><span class="p">))</span>
+</span><span id="__span-20-13"><a id="__codelineno-20-13" name="__codelineno-20-13" href="#__codelineno-20-13"></a><span class="w">    </span><span class="p">.</span><span class="na">subscribe</span><span class="p">();</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<h3 id="prompt-system">Prompt System<a class="headerlink" href="#prompt-system" title="Permanent link">&para;</a></h3>
+<p>The prompt system enables interaction with server-side prompt templates. These templates can be discovered and executed with custom parameters, allowing for dynamic text generation based on predefined patterns.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="7:2"><input checked="checked" id="__tabbed_7_1" name="__tabbed_7" type="radio" /><input id="__tabbed_7_2" name="__tabbed_7" type="radio" /><div class="tabbed-labels"><label for="__tabbed_7_1">Sync API</label><label for="__tabbed_7_2">Async API</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="c1">// List available prompt templates</span>
+</span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="n">ListPromptsResult</span><span class="w"> </span><span class="n">prompts</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">client</span><span class="p">.</span><span class="na">listPrompts</span><span class="p">();</span>
+</span><span id="__span-21-3"><a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>
+</span><span id="__span-21-4"><a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a><span class="c1">// Get a prompt with parameters</span>
+</span><span id="__span-21-5"><a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a><span class="n">GetPromptResult</span><span class="w"> </span><span class="n">prompt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">client</span><span class="p">.</span><span class="na">getPrompt</span><span class="p">(</span>
+</span><span id="__span-21-6"><a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="w">    </span><span class="k">new</span><span class="w"> </span><span class="n">GetPromptRequest</span><span class="p">(</span><span class="s">&quot;greeting&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">Map</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">&quot;name&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;World&quot;</span><span class="p">))</span>
+</span><span id="__span-21-7"><a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a><span class="p">);</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="c1">// List available prompt templates asynchronously</span>
+</span><span id="__span-22-2"><a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="n">client</span><span class="p">.</span><span class="na">listPrompts</span><span class="p">()</span>
+</span><span id="__span-22-3"><a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="w">    </span><span class="p">.</span><span class="na">doOnNext</span><span class="p">(</span><span class="n">prompts</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">prompts</span><span class="p">.</span><span class="na">prompts</span><span class="p">().</span><span class="na">forEach</span><span class="p">(</span><span class="n">prompt</span><span class="w"> </span><span class="o">-&gt;</span>
+</span><span id="__span-22-4"><a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="w">        </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">prompt</span><span class="p">.</span><span class="na">name</span><span class="p">())))</span>
+</span><span id="__span-22-5"><a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a><span class="w">    </span><span class="p">.</span><span class="na">subscribe</span><span class="p">();</span>
+</span><span id="__span-22-6"><a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a>
+</span><span id="__span-22-7"><a id="__codelineno-22-7" name="__codelineno-22-7" href="#__codelineno-22-7"></a><span class="c1">// Get a prompt asynchronously</span>
+</span><span id="__span-22-8"><a id="__codelineno-22-8" name="__codelineno-22-8" href="#__codelineno-22-8"></a><span class="n">client</span><span class="p">.</span><span class="na">getPrompt</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">GetPromptRequest</span><span class="p">(</span><span class="s">&quot;greeting&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">Map</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">&quot;name&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;World&quot;</span><span class="p">)))</span>
+</span><span id="__span-22-9"><a id="__codelineno-22-9" name="__codelineno-22-9" href="#__codelineno-22-9"></a><span class="w">    </span><span class="p">.</span><span class="na">subscribe</span><span class="p">();</span>
 </span></code></pre></div>
 </div>
 </div>
