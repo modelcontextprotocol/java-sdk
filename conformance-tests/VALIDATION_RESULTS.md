@@ -2,26 +2,21 @@
 
 ## Summary
 
-**Server Tests:** 37/40 passed (92.5%)
+**Server Tests:** 40/40 passed (100%)
 **Client Tests:** 3/4 scenarios passed (9/10 checks passed)
 **Auth Tests:** 12/14 scenarios fully passing (178 passed, 1 failed, 1 warning, 85.7% scenarios, 98.9% checks)
 
 ## Server Test Results
 
-### Passing (37/40)
+### Passing (40/40)
 
 - **Lifecycle & Utilities (4/4):** initialize, ping, logging-set-level, completion-complete
 - **Tools (11/11):** All scenarios including progress notifications ✨
 - **Elicitation (10/10):** SEP-1034 defaults (5 checks), SEP-1330 enums (5 checks)
-- **Resources (4/6):** list, read-text, read-binary, templates-read
+- **Resources (6/6):** list, read-text, read-binary, templates-read, subscribe, unsubscribe
 - **Prompts (4/4):** list, simple, with-args, embedded-resource, with-image
 - **SSE Transport (2/2):** Multiple streams
 - **Security (2/2):** Localhost validation passes, DNS rebinding protection
-
-### Failing (3/40)
-
-1. **resources-subscribe** - Not implemented in SDK
-2. **resources-unsubscribe** - Not implemented in SDK
 
 ## Client Test Results
 
@@ -68,18 +63,16 @@ Uses the `client-spring-http-client` module with Spring Security OAuth2 and the 
 
 ## Known Limitations
 
-1. **Resource Subscriptions:** SDK doesn't implement `resources/subscribe` and `resources/unsubscribe` handlers
-2. **Client SSE Retry:** Client doesn't parse or respect the `retry:` field, reconnects immediately, and doesn't send Last-Event-ID header
-3. **Auth Scope Step-Up:** Client does not fully handle scope step-up challenges where the server requests additional scopes after initial authorization
-4. **Auth Basic CIMD:** Minor conformance warning in the basic Client-Initiated Metadata Discovery flow
+1. **Client SSE Retry:** Client doesn't parse or respect the `retry:` field, reconnects immediately, and doesn't send Last-Event-ID header
+2. **Auth Scope Step-Up:** Client does not fully handle scope step-up challenges where the server requests additional scopes after initial authorization
+3. **Auth Basic CIMD:** Minor conformance warning in the basic Client-Initiated Metadata Discovery flow
 
 ## Running Tests
 
 ### Server
 ```bash
 # Start server
-cd conformance-tests/server-servlet
-../../mvnw compile exec:java -Dexec.mainClass="io.modelcontextprotocol.conformance.server.ConformanceServlet"
+./mvnw compile -pl conformance-tests/server-servlet -am exec:java
 
 # Run tests (in another terminal)
 npx @modelcontextprotocol/conformance server --url http://localhost:8080/mcp --suite active
@@ -94,7 +87,7 @@ cd conformance-tests/client-jdk-http-client
 # Run all scenarios
 for scenario in initialize tools_call elicitation-sep1034-client-defaults sse-retry; do
   npx @modelcontextprotocol/conformance client \
-    --command "java -jar target/client-jdk-http-client-1.0.0-SNAPSHOT.jar" \
+    --command "java -jar target/client-jdk-http-client-1.1.0-SNAPSHOT.jar" \
     --scenario $scenario
 done
 ```
@@ -111,7 +104,7 @@ cd conformance-tests/client-spring-http-client
 # Run auth suite
 npx @modelcontextprotocol/conformance@0.1.15 client \
   --spec-version 2025-11-25 \
-  --command "java -jar target/client-spring-http-client-0.18.0-SNAPSHOT.jar" \
+  --command "java -jar target/client-spring-http-client-1.1.0-SNAPSHOT.jar" \
   --suite auth
 ```
 
@@ -119,6 +112,5 @@ npx @modelcontextprotocol/conformance@0.1.15 client \
 
 ### High Priority
 1. Fix client SSE retry field handling in `HttpClientStreamableHttpTransport`
-2. Implement resource subscription handlers in `McpStatelessAsyncServer`
-3. Implement CIMD
-4. Implement scope step up
+2. Implement CIMD
+3. Implement scope step up

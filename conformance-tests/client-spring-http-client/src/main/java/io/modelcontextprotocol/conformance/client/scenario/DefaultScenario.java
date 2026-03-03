@@ -29,8 +29,7 @@ import static io.modelcontextprotocol.conformance.client.ConformanceSpringClient
 
 public class DefaultScenario implements Scenario {
 
-	private static final Logger log = LoggerFactory
-		.getLogger(DefaultScenario.class);
+	private static final Logger log = LoggerFactory.getLogger(DefaultScenario.class);
 
 	private final ServletWebServerApplicationContext serverCtx;
 
@@ -39,8 +38,8 @@ public class DefaultScenario implements Scenario {
 	private McpSyncClient client;
 
 	public DefaultScenario(McpClientRegistrationRepository clientRegistrationRepository,
-						   ServletWebServerApplicationContext serverCtx,
-						   OAuth2AuthorizedClientRepository oAuth2AuthorizedClientRepository) {
+			ServletWebServerApplicationContext serverCtx,
+			OAuth2AuthorizedClientRepository oAuth2AuthorizedClientRepository) {
 		this.serverCtx = serverCtx;
 		this.authorizedClientManager = new DefaultOAuth2AuthorizedClientManager(clientRegistrationRepository,
 				oAuth2AuthorizedClientRepository);

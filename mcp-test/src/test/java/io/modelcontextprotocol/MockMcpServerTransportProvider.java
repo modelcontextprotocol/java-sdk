@@ -39,6 +39,14 @@ public class MockMcpServerTransportProvider implements McpServerTransportProvide
 	}
 
 	@Override
+	public Mono<Void> notifyClient(String sessionId, String method, Object params) {
+		if (session != null && session.getId().equals(sessionId)) {
+			return session.sendNotification(method, params);
+		}
+		return Mono.empty();
+	}
+
+	@Override
 	public Mono<Void> closeGracefully() {
 		return session.closeGracefully();
 	}

@@ -6,6 +6,7 @@ package io.modelcontextprotocol;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.function.BiConsumer;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;

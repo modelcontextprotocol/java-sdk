@@ -7,6 +7,7 @@ package io.modelcontextprotocol.spec;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -65,9 +66,36 @@ public class McpServerSession implements McpLoggableSession {
 
 	private volatile McpSchema.LoggingLevel minLoggingLevel = McpSchema.LoggingLevel.INFO;
 
+	private final Supplier<Mono<Void>> onClose;
+
 	/**
 	 * Creates a new server session with the given parameters and the transport to use.
 	 * @param id session id
+	 * @param requestTimeout duration to wait for request responses before timing out
+	 * @param transport the transport to use
+	 * @param initHandler called when a
+	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
+	 * server
+	 * @param requestHandlers map of request handlers to use
+	 * @param notificationHandlers map of notification handlers to use
+	 * @param onClose supplier of a reactive callback invoked when the session is closed
+	 */
+	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
+			McpInitRequestHandler initHandler, Map<String, McpRequestHandler<?>> requestHandlers,
+			Map<String, McpNotificationHandler> notificationHandlers, Supplier<Mono<Void>> onClose) {
+		this.id = id;
+		this.requestTimeout = requestTimeout;
+		this.transport = transport;
+		this.initRequestHandler = initHandler;
+		this.requestHandlers = requestHandlers;
+		this.notificationHandlers = notificationHandlers;
+		this.onClose = onClose;
+	}
+
+	/**
+	 * Creates a new server session with the given parameters and the transport to use.
+	 * @param id session id
+	 * @param requestTimeout duration to wait for request responses before timing out
 	 * @param transport the transport to use
 	 * @param initHandler called when a
 	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
@@ -78,12 +106,7 @@ public class McpServerSession implements McpLoggableSession {
 	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
 			McpInitRequestHandler initHandler, Map<String, McpRequestHandler<?>> requestHandlers,
 			Map<String, McpNotificationHandler> notificationHandlers) {
-		this.id = id;
-		this.requestTimeout = requestTimeout;
-		this.transport = transport;
-		this.initRequestHandler = initHandler;
-		this.requestHandlers = requestHandlers;
-		this.notificationHandlers = notificationHandlers;
+		this(id, requestTimeout, transport, initHandler, requestHandlers, notificationHandlers, Mono::empty);
 	}
 
 	/**
@@ -318,12 +341,13 @@ public class McpServerSession implements McpLoggableSession {
 	@Override
 	public Mono<Void> closeGracefully() {
 		// TODO: clear pendingResponses and emit errors?
-		return this.transport.closeGracefully();
+		return this.onClose.get().onErrorComplete().then(this.transport.closeGracefully());
 	}
 
 	@Override
 	public void close() {
 		// TODO: clear pendingResponses and emit errors?
+		this.onClose.get().onErrorComplete().subscribe();
 		this.transport.close();
 	}
 

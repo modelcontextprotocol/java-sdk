@@ -65,6 +65,7 @@
 				<version>3.1.0</version>
 				<configuration>
 					<mainClass>io.modelcontextprotocol.conformance.server.ConformanceServlet</mainClass>
+					<skip>false</skip>
 				</configuration>
 			</plugin>
 		</plugins>
