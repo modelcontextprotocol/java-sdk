@@ -10,6 +10,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
@@ -21,6 +22,7 @@ import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import org.slf4j.Logger;
@@ -81,6 +83,11 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	}
 
 	@Override
+	public List<String> protocolVersions() {
+		return List.of(ProtocolVersions.MCP_2024_11_05);
+	}
+
+	@Override
 	public void setSessionFactory(McpServerSession.Factory sessionFactory) {
 		// Create a single session for the stdio connection
 		var transport = new StdioMcpSessionTransport();
@@ -131,10 +138,10 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 		private final AtomicBoolean isStarted = new AtomicBoolean(false);
 
 		/** Scheduler for handling inbound messages */
-		private final Scheduler inboundScheduler;
+		private Scheduler inboundScheduler;
 
 		/** Scheduler for handling outbound messages */
-		private final Scheduler outboundScheduler;
+		private Scheduler outboundScheduler;
 
 		private final Sinks.One<Void> outboundReady = Sinks.one();
 
@@ -205,7 +212,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 			if (isStarted.compareAndSet(false, true)) {
 				this.inboundScheduler.schedule(() -> {
 					inboundReady.tryEmitValue(null);
-					BufferedReader reader;
+					BufferedReader reader = null;
 					try {
 						reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
 						while (!isClosing.get()) {
