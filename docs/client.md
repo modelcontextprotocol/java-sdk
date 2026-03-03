@@ -408,6 +408,49 @@ Resources represent server-side data sources that clients can access using URI t
         .subscribe();
     ```
 
+### Resource Subscriptions
+
+When the server advertises `resources.subscribe` support, clients can subscribe to individual resources and receive a callback whenever the server pushes a `notifications/resources/updated` notification for that URI. The SDK automatically re-reads the resource on notification and delivers the updated contents to the registered consumer.
+
+Register a consumer on the client builder, then subscribe/unsubscribe at any time:
+
+=== "Sync API"
+
+    ```java
+    McpSyncClient client = McpClient.sync(transport)
+        .resourcesUpdateConsumer(contents -> {
+            // called with the updated resource contents after each notification
+            System.out.println("Resource updated: " + contents);
+        })
+        .build();
+
+    client.initialize();
+
+    // Subscribe to a specific resource URI
+    client.subscribeResource(new McpSchema.SubscribeRequest("custom://resource"));
+
+    // ... later, stop receiving updates
+    client.unsubscribeResource(new McpSchema.UnsubscribeRequest("custom://resource"));
+    ```
+
+=== "Async API"
+
+    ```java
+    McpAsyncClient client = McpClient.async(transport)
+        .resourcesUpdateConsumer(contents -> Mono.fromRunnable(() -> {
+            System.out.println("Resource updated: " + contents);
+        }))
+        .build();
+
+    client.initialize()
+        .then(client.subscribeResource(new McpSchema.SubscribeRequest("custom://resource")))
+        .subscribe();
+
+    // ... later, stop receiving updates
+    client.unsubscribeResource(new McpSchema.UnsubscribeRequest("custom://resource"))
+        .subscribe();
+    ```
+
 ### Prompt System
 
 The prompt system enables interaction with server-side prompt templates. These templates can be discovered and executed with custom parameters, allowing for dynamic text generation based on predefined patterns.
