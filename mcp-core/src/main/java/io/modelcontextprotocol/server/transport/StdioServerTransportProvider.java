@@ -84,7 +84,8 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 
 	@Override
 	public List<String> protocolVersions() {
-		return List.of(ProtocolVersions.MCP_2024_11_05);
+		return List.of(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26,
+				ProtocolVersions.MCP_2025_06_18, ProtocolVersions.MCP_2025_11_25);
 	}
 
 	@Override
