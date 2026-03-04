@@ -772,6 +772,53 @@ public class McpSchemaTests {
 	}
 
 	@Test
+	void testJsonSchemaWithMissingOptionalFields() throws Exception {
+		// Simulate a minimal schema from a Python MCP server that omits
+		// required, additionalProperties, $defs, and definitions
+		String schemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"query": {
+							"type": "string"
+						}
+					}
+				}
+				""";
+
+		McpSchema.JsonSchema schema = JSON_MAPPER.readValue(schemaJson, McpSchema.JsonSchema.class);
+
+		// Verify null collection fields are replaced with empty defaults
+		assertThat(schema.required()).isNotNull().isEmpty();
+		assertThat(schema.properties()).isNotNull().containsKey("query");
+		assertThat(schema.additionalProperties()).isNull();
+		assertThat(schema.defs()).isNotNull().isEmpty();
+		assertThat(schema.definitions()).isNotNull().isEmpty();
+
+		// Verify serialization round-trip succeeds without errors
+		String serialized = JSON_MAPPER.writeValueAsString(schema);
+		McpSchema.JsonSchema deserialized = JSON_MAPPER.readValue(serialized, McpSchema.JsonSchema.class);
+
+		assertThat(deserialized.type()).isEqualTo("object");
+		assertThat(deserialized.required()).isNotNull().isEmpty();
+		assertThat(deserialized.defs()).isNotNull().isEmpty();
+		assertThat(deserialized.definitions()).isNotNull().isEmpty();
+	}
+
+	@Test
+	void testJsonSchemaConstructorDefaultsForNullCollections() {
+		// Directly construct with null collection fields
+		McpSchema.JsonSchema schema = new McpSchema.JsonSchema("object", null, null, null, null, null);
+
+		assertThat(schema.type()).isEqualTo("object");
+		assertThat(schema.properties()).isNotNull().isEmpty();
+		assertThat(schema.required()).isNotNull().isEmpty();
+		assertThat(schema.additionalProperties()).isNull();
+		assertThat(schema.defs()).isNotNull().isEmpty();
+		assertThat(schema.definitions()).isNotNull().isEmpty();
+	}
+
+	@Test
 	void testTool() throws Exception {
 		String schemaJson = """
 				{
