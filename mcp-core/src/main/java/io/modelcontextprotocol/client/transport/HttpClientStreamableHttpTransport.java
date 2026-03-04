@@ -99,6 +99,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private static final String APPLICATION_JSON = "application/json";
 
+	private static final String APPLICATION_JSON_UTF8 = "application/json; charset=utf-8";
+
 	private static final String TEXT_EVENT_STREAM = "text/event-stream";
 
 	public static int NOT_FOUND = 404;
@@ -454,7 +456,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 				var builder = requestBuilder.uri(uri)
 					.header(HttpHeaders.ACCEPT, APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
-					.header(HttpHeaders.CONTENT_TYPE, APPLICATION_JSON)
+					.header(HttpHeaders.CONTENT_TYPE, APPLICATION_JSON_UTF8)
 					.header(HttpHeaders.CACHE_CONTROL, "no-cache")
 					.header(HttpHeaders.PROTOCOL_VERSION,
 							ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
