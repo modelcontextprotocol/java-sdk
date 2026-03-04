@@ -3,9 +3,10 @@
  */
 package io.modelcontextprotocol.json.schema.jackson2;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,21 +32,40 @@ public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 
 	private static final Logger logger = LoggerFactory.getLogger(DefaultJsonSchemaValidator.class);
 
+	/**
+	 * Default maximum number of cached JSON schemas.
+	 */
+	public static final int DEFAULT_MAX_CACHE_SIZE = 1024;
+
 	private final ObjectMapper objectMapper;
 
 	private final SchemaRegistry schemaFactory;
 
-	// TODO: Implement a strategy to purge the cache (TTL, size limit, etc.)
-	private final ConcurrentHashMap<String, Schema> schemaCache;
+	private final Map<String, Schema> schemaCache;
 
 	public DefaultJsonSchemaValidator() {
-		this(new ObjectMapper());
+		this(new ObjectMapper(), DEFAULT_MAX_CACHE_SIZE);
 	}
 
 	public DefaultJsonSchemaValidator(ObjectMapper objectMapper) {
+		this(objectMapper, DEFAULT_MAX_CACHE_SIZE);
+	}
+
+	/**
+	 * Creates a new {@link DefaultJsonSchemaValidator} with the given {@link ObjectMapper}
+	 * and maximum cache size.
+	 * @param objectMapper the object mapper to use for JSON processing
+	 * @param maxCacheSize the maximum number of schemas to cache (LRU)
+	 */
+	public DefaultJsonSchemaValidator(ObjectMapper objectMapper, int maxCacheSize) {
 		this.objectMapper = objectMapper;
 		this.schemaFactory = SchemaRegistry.withDialect(Dialects.getDraft202012());
-		this.schemaCache = new ConcurrentHashMap<>();
+		this.schemaCache = Collections.synchronizedMap(new LinkedHashMap<String, Schema>(maxCacheSize, 0.75f, true) {
+			@Override
+			protected boolean removeEldestEntry(Map.Entry<String, Schema> eldest) {
+				return size() > maxCacheSize;
+			}
+		});
 	}
 
 	@Override
@@ -140,9 +160,15 @@ public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 			// Use the (optional) "$id" field as the cache key if present
 			return "" + schema.get("$id");
 		}
-		// Fall back to schema's hash code as a simple cache key
-		// For more sophisticated caching, could use content-based hashing
-		return String.valueOf(schema.hashCode());
+		try {
+			// Use the stable JSON representation as the cache key to avoid hash
+			// collisions and map order issues
+			return this.objectMapper.writeValueAsString(schema);
+		}
+		catch (JsonProcessingException e) {
+			// Fall back to schema's hash code if serialization fails
+			return String.valueOf(schema.hashCode());
+		}
 	}
 
 	/**
