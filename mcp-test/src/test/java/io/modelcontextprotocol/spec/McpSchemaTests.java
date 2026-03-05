@@ -1760,4 +1760,75 @@ public class McpSchemaTests {
 					{"progressToken":"progress-token-789","progress":0.25}"""));
 	}
 
+	// Capability sub-records: unknown fields should be silently ignored (#766)
+
+	@Test
+	void testSamplingIgnoresUnknownFields() throws Exception {
+		McpSchema.ClientCapabilities.Sampling sampling = JSON_MAPPER.readValue("""
+				{"futureField": true}""", McpSchema.ClientCapabilities.Sampling.class);
+		assertThat(sampling).isNotNull();
+	}
+
+	@Test
+	void testElicitationIgnoresUnknownFields() throws Exception {
+		McpSchema.ClientCapabilities.Elicitation elicitation = JSON_MAPPER.readValue("""
+				{"form": {}, "url": {}, "futureField": "value"}""", McpSchema.ClientCapabilities.Elicitation.class);
+		assertThat(elicitation).isNotNull();
+	}
+
+	@Test
+	void testElicitationFormIgnoresUnknownFields() throws Exception {
+		McpSchema.ClientCapabilities.Elicitation.Form form = JSON_MAPPER.readValue("""
+				{"futureField": 42}""", McpSchema.ClientCapabilities.Elicitation.Form.class);
+		assertThat(form).isNotNull();
+	}
+
+	@Test
+	void testElicitationUrlIgnoresUnknownFields() throws Exception {
+		McpSchema.ClientCapabilities.Elicitation.Url url = JSON_MAPPER.readValue("""
+				{"futureField": "value"}""", McpSchema.ClientCapabilities.Elicitation.Url.class);
+		assertThat(url).isNotNull();
+	}
+
+	@Test
+	void testCompletionCapabilitiesIgnoresUnknownFields() throws Exception {
+		McpSchema.ServerCapabilities.CompletionCapabilities completions = JSON_MAPPER.readValue("""
+				{"futureField": true}""", McpSchema.ServerCapabilities.CompletionCapabilities.class);
+		assertThat(completions).isNotNull();
+	}
+
+	@Test
+	void testLoggingCapabilitiesIgnoresUnknownFields() throws Exception {
+		McpSchema.ServerCapabilities.LoggingCapabilities logging = JSON_MAPPER.readValue("""
+				{"futureField": "value"}""", McpSchema.ServerCapabilities.LoggingCapabilities.class);
+		assertThat(logging).isNotNull();
+	}
+
+	@Test
+	void testPromptCapabilitiesIgnoresUnknownFields() throws Exception {
+		McpSchema.ServerCapabilities.PromptCapabilities prompts = JSON_MAPPER.readValue("""
+				{"listChanged": true, "futureField": "value"}""",
+				McpSchema.ServerCapabilities.PromptCapabilities.class);
+		assertThat(prompts).isNotNull();
+		assertThat(prompts.listChanged()).isTrue();
+	}
+
+	@Test
+	void testResourceCapabilitiesIgnoresUnknownFields() throws Exception {
+		McpSchema.ServerCapabilities.ResourceCapabilities resources = JSON_MAPPER.readValue("""
+				{"subscribe": true, "listChanged": false, "futureField": 123}""",
+				McpSchema.ServerCapabilities.ResourceCapabilities.class);
+		assertThat(resources).isNotNull();
+		assertThat(resources.subscribe()).isTrue();
+		assertThat(resources.listChanged()).isFalse();
+	}
+
+	@Test
+	void testToolCapabilitiesIgnoresUnknownFields() throws Exception {
+		McpSchema.ServerCapabilities.ToolCapabilities tools = JSON_MAPPER.readValue("""
+				{"listChanged": true, "futureField": "value"}""", McpSchema.ServerCapabilities.ToolCapabilities.class);
+		assertThat(tools).isNotNull();
+		assertThat(tools.listChanged()).isTrue();
+	}
+
 }
