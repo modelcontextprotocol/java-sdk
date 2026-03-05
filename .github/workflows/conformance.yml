@@ -3,7 +3,7 @@ name: Conformance Tests
 on:
   pull_request: {}
   push:
-    branches: [main]
+    branches: [0.18.x]
   workflow_dispatch:
 
 jobs:
