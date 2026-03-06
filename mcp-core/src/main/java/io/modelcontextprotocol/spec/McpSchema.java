@@ -1312,11 +1312,23 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record JsonSchema( // @formatter:off
 		@JsonProperty("type") String type,
-		@JsonProperty("properties") Map<String, Object> properties,
-		@JsonProperty("required") List<String> required,
+		@JsonProperty("properties") @JsonInclude(JsonInclude.Include.NON_EMPTY) Map<String, Object> properties,
+		@JsonProperty("required") @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> required,
 		@JsonProperty("additionalProperties") Boolean additionalProperties,
-		@JsonProperty("$defs") Map<String, Object> defs,
-		@JsonProperty("definitions") Map<String, Object> definitions) { // @formatter:on
+		@JsonProperty("$defs") @JsonInclude(JsonInclude.Include.NON_EMPTY) Map<String, Object> defs,
+		@JsonProperty("definitions") @JsonInclude(JsonInclude.Include.NON_EMPTY) Map<String, Object> definitions) { // @formatter:on
+
+		/**
+		 * Compact constructor that replaces null collection fields with empty defaults so
+		 * that callers never encounter unexpected nulls when the server omits optional
+		 * schema fields during deserialization.
+		 */
+		public JsonSchema {
+			required = required != null ? required : List.of();
+			properties = properties != null ? properties : Map.of();
+			defs = defs != null ? defs : Map.of();
+			definitions = definitions != null ? definitions : Map.of();
+		}
 	}
 
 	/**
