@@ -18,9 +18,10 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -105,7 +106,7 @@ class StdioServerTransportProviderTests {
 
 		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getMapper(), stream, System.out);
 		// Set up a real session to capture the message
-		AtomicReference<McpSchema.JSONRPCMessage> capturedMessage = new AtomicReference<>();
+		AtomicReference<JSONRPCMessage> capturedMessage = new AtomicReference<>();
 		CountDownLatch messageLatch = new CountDownLatch(1);
 
 		McpServerSession.Factory realSessionFactory = transport -> {
@@ -130,8 +131,8 @@ class StdioServerTransportProviderTests {
 			return Mono.just(capturedMessage.get());
 		})).assertNext(message -> {
 			assertThat(message).isNotNull();
-			assertThat(message).isInstanceOf(McpSchema.JSONRPCRequest.class);
-			McpSchema.JSONRPCRequest request = (McpSchema.JSONRPCRequest) message;
+			assertThat(message).isInstanceOf(JSONRPCRequest.class);
+			JSONRPCRequest request = (JSONRPCRequest) message;
 			assertThat(request.method()).isEqualTo("test");
 			assertThat(request.id()).isEqualTo(1);
 		}).verifyComplete();

@@ -28,6 +28,8 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.spec.ProtocolVersions;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
 import reactor.test.StepVerifier;
 
 /**
@@ -334,12 +336,11 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 		StepVerifier.create(transport.closeGracefully()).verifyComplete();
 	}
 
-	private McpSchema.JSONRPCRequest createTestRequestMessage() {
+	private JSONRPCRequest createTestRequestMessage() {
 		var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_03_26,
 				McpSchema.ClientCapabilities.builder().roots(true).build(),
 				new McpSchema.Implementation("Test Client", "1.0.0"));
-		return new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE, "test-id",
-				initializeRequest);
+		return new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE, "test-id", initializeRequest);
 	}
 
 }

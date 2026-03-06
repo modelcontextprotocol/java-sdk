@@ -10,6 +10,11 @@ import java.util.function.Function;
 
 import io.modelcontextprotocol.MockMcpClientTransport;
 import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCNotification;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCResponse;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,14 +59,14 @@ class McpClientSessionTests {
 		Mono<String> responseMono = session.sendRequest(TEST_METHOD, testParam, responseType);
 		// Verify response handling
 		StepVerifier.create(responseMono).then(() -> {
-			McpSchema.JSONRPCRequest request = transport.getLastSentMessageAsRequest();
+			JSONRPCRequest request = transport.getLastSentMessageAsRequest();
 			transport.simulateIncomingMessage(
-					new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), responseData, null));
+					new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, request.id(), responseData, null));
 		}).consumeNextWith(response -> {
 			// Verify the request was sent
-			McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessageAsRequest();
-			assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCRequest.class);
-			McpSchema.JSONRPCRequest request = (McpSchema.JSONRPCRequest) sentMessage;
+			JSONRPCMessage sentMessage = transport.getLastSentMessageAsRequest();
+			assertThat(sentMessage).isInstanceOf(JSONRPCRequest.class);
+			JSONRPCRequest request = (JSONRPCRequest) sentMessage;
 			assertThat(request.method()).isEqualTo(TEST_METHOD);
 			assertThat(request.params()).isEqualTo(testParam);
 			assertThat(response).isEqualTo(responseData);
@@ -81,12 +86,11 @@ class McpClientSessionTests {
 
 		// Verify error handling
 		StepVerifier.create(responseMono).then(() -> {
-			McpSchema.JSONRPCRequest request = transport.getLastSentMessageAsRequest();
+			JSONRPCRequest request = transport.getLastSentMessageAsRequest();
 			// Simulate error response
-			McpSchema.JSONRPCResponse.JSONRPCError error = new McpSchema.JSONRPCResponse.JSONRPCError(
-					McpSchema.ErrorCodes.METHOD_NOT_FOUND, "Method not found", null);
-			transport.simulateIncomingMessage(
-					new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null, error));
+			JSONRPCResponse.JSONRPCError error = new JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
+					"Method not found", null);
+			transport.simulateIncomingMessage(new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, request.id(), null, error));
 		}).expectError(McpError.class).verify();
 
 		session.close();
@@ -121,9 +125,9 @@ class McpClientSessionTests {
 
 		// Verify notification was sent
 		StepVerifier.create(notificationMono).consumeSubscriptionWith(response -> {
-			McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
-			assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCNotification.class);
-			McpSchema.JSONRPCNotification notification = (McpSchema.JSONRPCNotification) sentMessage;
+			JSONRPCMessage sentMessage = transport.getLastSentMessage();
+			assertThat(sentMessage).isInstanceOf(JSONRPCNotification.class);
+			JSONRPCNotification notification = (JSONRPCNotification) sentMessage;
 			assertThat(notification.method()).isEqualTo(TEST_NOTIFICATION);
 			assertThat(notification.params()).isEqualTo(params);
 		}).verifyComplete();
@@ -140,14 +144,13 @@ class McpClientSessionTests {
 		var session = new McpClientSession(TIMEOUT, transport, requestHandlers, Map.of(), Function.identity());
 
 		// Simulate incoming request
-		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, ECHO_METHOD,
-				"test-id", echoMessage);
+		JSONRPCRequest request = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, ECHO_METHOD, "test-id", echoMessage);
 		transport.simulateIncomingMessage(request);
 
 		// Verify response
-		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
-		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
-		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
+		JSONRPCMessage sentMessage = transport.getLastSentMessage();
+		assertThat(sentMessage).isInstanceOf(JSONRPCResponse.class);
+		JSONRPCResponse response = (JSONRPCResponse) sentMessage;
 		assertThat(response.result()).isEqualTo(echoMessage);
 		assertThat(response.error()).isNull();
 
@@ -166,8 +169,8 @@ class McpClientSessionTests {
 		// Simulate incoming notification from the server
 		Map<String, Object> notificationParams = Map.of("status", "ready");
 
-		McpSchema.JSONRPCNotification notification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
-				TEST_NOTIFICATION, notificationParams);
+		JSONRPCNotification notification = new JSONRPCNotification(JSONRPC.JSONRPC_VERSION, TEST_NOTIFICATION,
+				notificationParams);
 
 		transport.simulateIncomingMessage(notification);
 
@@ -186,14 +189,13 @@ class McpClientSessionTests {
 				Function.identity());
 
 		// Simulate incoming request for unknown method
-		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, "unknown.method",
-				"test-id", null);
+		JSONRPCRequest request = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, "unknown.method", "test-id", null);
 		transport.simulateIncomingMessage(request);
 
 		// Verify error response
-		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
-		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
-		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
+		JSONRPCMessage sentMessage = transport.getLastSentMessage();
+		assertThat(sentMessage).isInstanceOf(JSONRPCResponse.class);
+		JSONRPCResponse response = (JSONRPCResponse) sentMessage;
 		assertThat(response.error()).isNotNull();
 		assertThat(response.error().code()).isEqualTo(McpSchema.ErrorCodes.METHOD_NOT_FOUND);
 
@@ -214,14 +216,13 @@ class McpClientSessionTests {
 				Function.identity());
 
 		// Simulate incoming request that will trigger the error
-		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, testMethod,
-				"test-id", null);
+		JSONRPCRequest request = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, testMethod, "test-id", null);
 		transport.simulateIncomingMessage(request);
 
 		// Verify: The response should contain the custom error from McpError
-		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
-		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
-		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
+		JSONRPCMessage sentMessage = transport.getLastSentMessage();
+		assertThat(sentMessage).isInstanceOf(JSONRPCResponse.class);
+		JSONRPCResponse response = (JSONRPCResponse) sentMessage;
 		assertThat(response.error()).isNotNull();
 		assertThat(response.error().code()).isEqualTo(123);
 		assertThat(response.error().message()).isEqualTo("Custom error message");
@@ -242,15 +243,14 @@ class McpClientSessionTests {
 				Function.identity());
 
 		// Simulate incoming request that will trigger the error
-		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, testMethod,
-				"test-id", null);
+		JSONRPCRequest request = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, testMethod, "test-id", null);
 		transport.simulateIncomingMessage(request);
 
 		// Verify: The response should contain INTERNAL_ERROR with aggregated exception
 		// messages in data field
-		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
-		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
-		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
+		JSONRPCMessage sentMessage = transport.getLastSentMessage();
+		assertThat(sentMessage).isInstanceOf(JSONRPCResponse.class);
+		JSONRPCResponse response = (JSONRPCResponse) sentMessage;
 		assertThat(response.error()).isNotNull();
 		assertThat(response.error().code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
 		assertThat(response.error().message()).isEqualTo("Something went wrong");
@@ -276,15 +276,14 @@ class McpClientSessionTests {
 				Function.identity());
 
 		// Simulate incoming request that will trigger the error
-		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, testMethod,
-				"test-id", null);
+		JSONRPCRequest request = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, testMethod, "test-id", null);
 		transport.simulateIncomingMessage(request);
 
 		// Verify: The response should contain INTERNAL_ERROR with full exception chain
 		// in data field
-		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
-		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
-		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
+		JSONRPCMessage sentMessage = transport.getLastSentMessage();
+		assertThat(sentMessage).isInstanceOf(JSONRPCResponse.class);
+		JSONRPCResponse response = (JSONRPCResponse) sentMessage;
 		assertThat(response.error()).isNotNull();
 		assertThat(response.error().code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
 		assertThat(response.error().message()).isEqualTo("Top level message");

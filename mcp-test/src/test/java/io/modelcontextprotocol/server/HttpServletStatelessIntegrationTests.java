@@ -18,18 +18,22 @@ import io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransp
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.CompleteRequest;
 import io.modelcontextprotocol.spec.McpSchema.CompleteResult;
 import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
-import io.modelcontextprotocol.spec.McpSchema.Prompt;
-import io.modelcontextprotocol.spec.McpSchema.PromptArgument;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCResponse;
+import io.modelcontextprotocol.spec.schema.prompt.Prompt;
+import io.modelcontextprotocol.spec.schema.prompt.PromptArgument;
 import io.modelcontextprotocol.spec.ProtocolVersions;
+import io.modelcontextprotocol.spec.schema.tool.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolResult;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
 import net.javacrumbs.jsonunit.core.Option;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
@@ -143,7 +147,7 @@ class HttpServletStatelessIntegrationTests {
 
 			assertThat(mcpClient.listTools().tools()).contains(tool1.tool());
 
-			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+			CallToolResult response = mcpClient.callTool(new CallToolRequest("tool1", Map.of()));
 
 			assertThat(response).isNotNull();
 			assertThat(response).isEqualTo(callResponse);
@@ -270,7 +274,7 @@ class HttpServletStatelessIntegrationTests {
 
 			// Call tool with valid structured output
 			CallToolResult response = mcpClient
-				.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3")));
+				.callTool(new CallToolRequest("calculator", Map.of("expression", "2 + 3")));
 
 			assertThat(response).isNotNull();
 			assertThat(response.isError()).isFalse();
@@ -337,7 +341,7 @@ class HttpServletStatelessIntegrationTests {
 			assertThat(mcpClient.initialize()).isNotNull();
 
 			// Call tool with valid structured output of type array
-			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("getMembers", Map.of()));
+			CallToolResult response = mcpClient.callTool(new CallToolRequest("getMembers", Map.of()));
 
 			assertThat(response).isNotNull();
 			assertThat(response.isError()).isFalse();
@@ -401,7 +405,7 @@ class HttpServletStatelessIntegrationTests {
 
 			// Call tool with valid structured output
 			CallToolResult response = mcpClient
-				.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3")));
+				.callTool(new CallToolRequest("calculator", Map.of("expression", "2 + 3")));
 
 			assertThat(response).isNotNull();
 			assertThat(response.isError()).isTrue();
@@ -453,7 +457,7 @@ class HttpServletStatelessIntegrationTests {
 
 			// Call tool with invalid structured output
 			CallToolResult response = mcpClient
-				.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3")));
+				.callTool(new CallToolRequest("calculator", Map.of("expression", "2 + 3")));
 
 			assertThat(response).isNotNull();
 			assertThat(response.isError()).isTrue();
@@ -502,7 +506,7 @@ class HttpServletStatelessIntegrationTests {
 
 			// Call tool that should return structured content but doesn't
 			CallToolResult response = mcpClient
-				.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3")));
+				.callTool(new CallToolRequest("calculator", Map.of("expression", "2 + 3")));
 
 			assertThat(response).isNotNull();
 			assertThat(response.isError()).isTrue();
@@ -571,8 +575,7 @@ class HttpServletStatelessIntegrationTests {
 			// Note: outputSchema might be null in sync server, but validation still works
 
 			// Call dynamically added tool
-			CallToolResult response = mcpClient
-				.callTool(new McpSchema.CallToolRequest("dynamic-tool", Map.of("count", 3)));
+			CallToolResult response = mcpClient.callTool(new CallToolRequest("dynamic-tool", Map.of("count", 3)));
 
 			assertThat(response).isNotNull();
 			assertThat(response.isError()).isFalse();
@@ -609,9 +612,9 @@ class HttpServletStatelessIntegrationTests {
 
 		mcpServer.addTool(toolSpec);
 
-		McpSchema.CallToolRequest callToolRequest = new McpSchema.CallToolRequest("test", Map.of());
-		McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_TOOLS_CALL, "test", callToolRequest);
+		CallToolRequest callToolRequest = new CallToolRequest("test", Map.of());
+		JSONRPCRequest jsonrpcRequest = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, McpSchema.METHOD_TOOLS_CALL, "test",
+				callToolRequest);
 
 		MockHttpServletRequest request = new MockHttpServletRequest("POST", CUSTOM_MESSAGE_ENDPOINT);
 		MockHttpServletResponse response = new MockHttpServletResponse();
@@ -628,8 +631,8 @@ class HttpServletStatelessIntegrationTests {
 
 		mcpStatelessServerTransport.service(request, response);
 
-		McpSchema.JSONRPCResponse jsonrpcResponse = JSON_MAPPER.readValue(response.getContentAsByteArray(),
-				McpSchema.JSONRPCResponse.class);
+		JSONRPCResponse jsonrpcResponse = JSON_MAPPER.readValue(response.getContentAsByteArray(),
+				JSONRPCResponse.class);
 
 		assertThat(jsonrpcResponse).isNotNull();
 		assertThat(jsonrpcResponse.error()).isNotNull();

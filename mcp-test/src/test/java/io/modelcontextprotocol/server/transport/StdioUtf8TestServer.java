@@ -12,8 +12,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
-import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
 import reactor.core.publisher.Mono;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -53,8 +54,8 @@ public class StdioUtf8TestServer {
 		McpServerSession.Factory sessionFactory = transport -> {
 			McpServerSession session = mock(McpServerSession.class);
 			when(session.handle(any())).thenAnswer(invocation -> {
-				McpSchema.JSONRPCMessage msg = invocation.getArgument(0);
-				if (msg instanceof McpSchema.JSONRPCRequest request) {
+				JSONRPCMessage msg = invocation.getArgument(0);
+				if (msg instanceof JSONRPCRequest request) {
 					Map<String, Object> params = (Map<String, Object>) request.params();
 					receivedMessage.append(params.get("message"));
 				}

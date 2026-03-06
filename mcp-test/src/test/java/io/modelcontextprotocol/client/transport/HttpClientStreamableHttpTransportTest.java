@@ -9,6 +9,9 @@ import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequ
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.ProtocolVersions;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
+
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Map;
@@ -82,8 +85,8 @@ class HttpClientStreamableHttpTransportTest {
 			var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_11_25,
 					McpSchema.ClientCapabilities.builder().roots(true).build(),
 					new McpSchema.Implementation("MCP Client", "0.3.1"));
-			var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
-					"test-id", initializeRequest);
+			var testMessage = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE, "test-id",
+					initializeRequest);
 
 			StepVerifier
 				.create(t.sendMessage(testMessage).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)))
@@ -112,8 +115,8 @@ class HttpClientStreamableHttpTransportTest {
 			var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_11_25,
 					McpSchema.ClientCapabilities.builder().roots(true).build(),
 					new McpSchema.Implementation("MCP Client", "0.3.1"));
-			var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
-					"test-id", initializeRequest);
+			var testMessage = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE, "test-id",
+					initializeRequest);
 
 			StepVerifier
 				.create(t.sendMessage(testMessage).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)))
@@ -135,8 +138,8 @@ class HttpClientStreamableHttpTransportTest {
 		var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_11_25,
 				McpSchema.ClientCapabilities.builder().roots(true).build(),
 				new McpSchema.Implementation("MCP Client", "0.3.1"));
-		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
-				"test-id", initializeRequest);
+		var testMessage = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE, "test-id",
+				initializeRequest);
 
 		StepVerifier.create(transport.sendMessage(testMessage))
 			.expectErrorMessage("MCP session has been closed")
@@ -150,8 +153,8 @@ class HttpClientStreamableHttpTransportTest {
 		var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_11_25,
 				McpSchema.ClientCapabilities.builder().roots(true).build(),
 				new McpSchema.Implementation("MCP Client", "0.3.1"));
-		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
-				"test-id", initializeRequest);
+		var testMessage = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE, "test-id",
+				initializeRequest);
 
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 		StepVerifier.create(transport.closeGracefully()).verifyComplete();

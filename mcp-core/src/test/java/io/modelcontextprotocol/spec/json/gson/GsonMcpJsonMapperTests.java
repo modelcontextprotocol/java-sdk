@@ -1,6 +1,9 @@
 package io.modelcontextprotocol.spec.json.gson;
 
-import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.schema.tool.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
 import io.modelcontextprotocol.json.TypeRef;
 import org.junit.jupiter.api.Test;
 
@@ -83,10 +86,10 @@ class GsonMcpJsonMapperTests {
 				}
 				""";
 
-		var msg = McpSchema.deserializeJsonRpcMessage(mapper, json);
-		assertTrue(msg instanceof McpSchema.JSONRPCRequest);
+		var msg = JSONRPC.deserializeJsonRpcMessage(mapper, json);
+		assertTrue(msg instanceof JSONRPCRequest);
 
-		var req = (McpSchema.JSONRPCRequest) msg;
+		var req = (JSONRPCRequest) msg;
 		assertEquals("2.0", req.jsonrpc());
 		assertEquals("ping", req.method());
 		assertNotNull(req.id());
@@ -105,7 +108,7 @@ class GsonMcpJsonMapperTests {
 		var gsonMapper = new GsonMcpJsonMapper();
 
 		// Tool builder parsing of input/output schema strings
-		var tool = McpSchema.Tool.builder().name("echo").description("Echo tool").inputSchema(gsonMapper, """
+		var tool = Tool.builder().name("echo").description("Echo tool").inputSchema(gsonMapper, """
 				{
 				  "type": "object",
 				  "properties": { "x": { "type": "integer" } },
@@ -123,7 +126,7 @@ class GsonMcpJsonMapperTests {
 		assertTrue(tool.outputSchema().containsKey("properties"));
 
 		// CallToolRequest builder parsing of JSON arguments string
-		var call = McpSchema.CallToolRequest.builder().name("echo").arguments(gsonMapper, "{\"x\": 123}").build();
+		var call = CallToolRequest.builder().name("echo").arguments(gsonMapper, "{\"x\": 123}").build();
 
 		assertEquals("echo", call.name());
 		assertNotNull(call.arguments());

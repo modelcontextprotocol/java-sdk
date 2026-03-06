@@ -13,9 +13,19 @@ import org.slf4j.LoggerFactory;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
-import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
-import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
+import io.modelcontextprotocol.spec.schema.prompt.GetPromptRequest;
+import io.modelcontextprotocol.spec.schema.prompt.GetPromptResult;
+import io.modelcontextprotocol.spec.schema.prompt.ListPromptsResult;
+import io.modelcontextprotocol.spec.schema.resource.ListResourceTemplatesResult;
+import io.modelcontextprotocol.spec.schema.resource.ListResourcesResult;
+import io.modelcontextprotocol.spec.schema.resource.ReadResourceRequest;
+import io.modelcontextprotocol.spec.schema.resource.ReadResourceResult;
+import io.modelcontextprotocol.spec.schema.resource.Resource;
+import io.modelcontextprotocol.spec.schema.resource.SubscribeRequest;
+import io.modelcontextprotocol.spec.schema.resource.UnsubscribeRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolResult;
+import io.modelcontextprotocol.spec.schema.tool.ListToolsResult;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
 
@@ -232,7 +242,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * (text, images, or embedded resources) representing the tool's output - isError:
 	 * Boolean indicating if the execution failed (true) or succeeded (false/absent)
 	 */
-	public McpSchema.CallToolResult callTool(McpSchema.CallToolRequest callToolRequest) {
+	public CallToolResult callTool(CallToolRequest callToolRequest) {
 		return withProvidedContext(this.delegate.callTool(callToolRequest)).block();
 
 	}
@@ -243,7 +253,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * each with a name, description, and input schema - nextCursor: Optional cursor for
 	 * pagination if more tools are available
 	 */
-	public McpSchema.ListToolsResult listTools() {
+	public ListToolsResult listTools() {
 		return withProvidedContext(this.delegate.listTools()).block();
 	}
 
@@ -254,7 +264,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * with a name, description, and input schema - nextCursor: Optional cursor for
 	 * pagination if more tools are available
 	 */
-	public McpSchema.ListToolsResult listTools(String cursor) {
+	public ListToolsResult listTools(String cursor) {
 		return withProvidedContext(this.delegate.listTools(cursor)).block();
 
 	}
@@ -267,7 +277,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * Retrieves the list of all resources provided by the server.
 	 * @return The list of all resources result
 	 */
-	public McpSchema.ListResourcesResult listResources() {
+	public ListResourcesResult listResources() {
 		return withProvidedContext(this.delegate.listResources()).block();
 
 	}
@@ -277,7 +287,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * @param cursor Optional pagination cursor from a previous list request
 	 * @return The list of resources result
 	 */
-	public McpSchema.ListResourcesResult listResources(String cursor) {
+	public ListResourcesResult listResources(String cursor) {
 		return withProvidedContext(this.delegate.listResources(cursor)).block();
 
 	}
@@ -287,7 +297,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * @param resource the resource to read
 	 * @return the resource content.
 	 */
-	public McpSchema.ReadResourceResult readResource(McpSchema.Resource resource) {
+	public ReadResourceResult readResource(Resource resource) {
 		return withProvidedContext(this.delegate.readResource(resource)).block();
 
 	}
@@ -297,7 +307,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * @param readResourceRequest the read resource request.
 	 * @return the resource content.
 	 */
-	public McpSchema.ReadResourceResult readResource(McpSchema.ReadResourceRequest readResourceRequest) {
+	public ReadResourceResult readResource(ReadResourceRequest readResourceRequest) {
 		return withProvidedContext(this.delegate.readResource(readResourceRequest)).block();
 
 	}
@@ -306,7 +316,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * Retrieves the list of all resource templates provided by the server.
 	 * @return The list of all resource templates result.
 	 */
-	public McpSchema.ListResourceTemplatesResult listResourceTemplates() {
+	public ListResourceTemplatesResult listResourceTemplates() {
 		return withProvidedContext(this.delegate.listResourceTemplates()).block();
 
 	}
@@ -319,7 +329,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * @param cursor Optional pagination cursor from a previous list request
 	 * @return The list of resource templates result.
 	 */
-	public McpSchema.ListResourceTemplatesResult listResourceTemplates(String cursor) {
+	public ListResourceTemplatesResult listResourceTemplates(String cursor) {
 		return withProvidedContext(this.delegate.listResourceTemplates(cursor)).block();
 
 	}
@@ -333,7 +343,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * @param subscribeRequest the subscribe request contains the uri of the resource to
 	 * subscribe to.
 	 */
-	public void subscribeResource(McpSchema.SubscribeRequest subscribeRequest) {
+	public void subscribeResource(SubscribeRequest subscribeRequest) {
 		withProvidedContext(this.delegate.subscribeResource(subscribeRequest)).block();
 
 	}
@@ -343,7 +353,7 @@ public class McpSyncClient implements AutoCloseable {
 	 * @param unsubscribeRequest the unsubscribe request contains the uri of the resource
 	 * to unsubscribe from.
 	 */
-	public void unsubscribeResource(McpSchema.UnsubscribeRequest unsubscribeRequest) {
+	public void unsubscribeResource(UnsubscribeRequest unsubscribeRequest) {
 		withProvidedContext(this.delegate.unsubscribeResource(unsubscribeRequest)).block();
 
 	}

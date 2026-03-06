@@ -23,18 +23,32 @@ import io.modelcontextprotocol.spec.DefaultMcpStreamableServerSessionFactory;
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.CompleteResult.CompleteCompletion;
+import io.modelcontextprotocol.spec.schema.prompt.GetPromptRequest;
+import io.modelcontextprotocol.spec.schema.prompt.GetPromptResult;
+import io.modelcontextprotocol.spec.schema.prompt.ListPromptsResult;
+import io.modelcontextprotocol.spec.schema.prompt.Prompt;
+import io.modelcontextprotocol.spec.schema.resource.ListResourceTemplatesResult;
+import io.modelcontextprotocol.spec.schema.resource.ListResourcesResult;
+import io.modelcontextprotocol.spec.schema.resource.ReadResourceRequest;
+import io.modelcontextprotocol.spec.schema.resource.ReadResourceResult;
+import io.modelcontextprotocol.spec.schema.resource.Resource;
+import io.modelcontextprotocol.spec.schema.resource.ResourceTemplate;
+import io.modelcontextprotocol.spec.schema.resource.SubscribeRequest;
+import io.modelcontextprotocol.spec.schema.resource.UnsubscribeRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolResult;
+import io.modelcontextprotocol.spec.schema.tool.ListToolsResult;
 import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
 import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpServerTransportProviderBase;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DefaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
@@ -359,9 +373,9 @@ public class McpAsyncServer {
 	}
 
 	private static class StructuredOutputCallToolHandler
-			implements BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> {
+			implements BiFunction<McpAsyncServerExchange, CallToolRequest, Mono<CallToolResult>> {
 
-		private final BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> delegateCallToolResult;
+		private final BiFunction<McpAsyncServerExchange, CallToolRequest, Mono<CallToolResult>> delegateCallToolResult;
 
 		private final JsonSchemaValidator jsonSchemaValidator;
 
@@ -369,7 +383,7 @@ public class McpAsyncServer {
 
 		public StructuredOutputCallToolHandler(JsonSchemaValidator jsonSchemaValidator,
 				Map<String, Object> outputSchema,
-				BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> delegateHandler) {
+				BiFunction<McpAsyncServerExchange, CallToolRequest, Mono<CallToolResult>> delegateHandler) {
 
 			Assert.notNull(jsonSchemaValidator, "JsonSchemaValidator must not be null");
 			Assert.notNull(delegateHandler, "Delegate call tool result handler must not be null");
@@ -380,7 +394,7 @@ public class McpAsyncServer {
 		}
 
 		@Override
-		public Mono<CallToolResult> apply(McpAsyncServerExchange exchange, McpSchema.CallToolRequest request) {
+		public Mono<CallToolResult> apply(McpAsyncServerExchange exchange, CallToolRequest request) {
 
 			return this.delegateCallToolResult.apply(exchange, request).map(result -> {
 
@@ -518,19 +532,18 @@ public class McpAsyncServer {
 		return this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_TOOLS_LIST_CHANGED, null);
 	}
 
-	private McpRequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
+	private McpRequestHandler<ListToolsResult> toolsListRequestHandler() {
 		return (exchange, params) -> {
 			List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList();
 
-			return Mono.just(new McpSchema.ListToolsResult(tools, null));
+			return Mono.just(new ListToolsResult(tools, null));
 		};
 	}
 
 	private McpRequestHandler<CallToolResult> toolsCallRequestHandler() {
 		return (exchange, params) -> {
-			McpSchema.CallToolRequest callToolRequest = jsonMapper.convertValue(params,
-					new TypeRef<McpSchema.CallToolRequest>() {
-					});
+			CallToolRequest callToolRequest = jsonMapper.convertValue(params, new TypeRef<CallToolRequest>() {
+			});
 
 			Optional<McpServerFeatures.AsyncToolSpecification> toolSpecification = this.tools.stream()
 				.filter(tr -> callToolRequest.name().equals(tr.tool().name()))
@@ -585,7 +598,7 @@ public class McpAsyncServer {
 	 * List all registered resources.
 	 * @return A Flux stream of all registered resources
 	 */
-	public Flux<McpSchema.Resource> listResources() {
+	public Flux<Resource> listResources() {
 		return Flux.fromIterable(this.resources.values()).map(McpServerFeatures.AsyncResourceSpecification::resource);
 	}
 
@@ -654,7 +667,7 @@ public class McpAsyncServer {
 	 * List all registered resource templates.
 	 * @return A Flux stream of all registered resource templates
 	 */
-	public Flux<McpSchema.ResourceTemplate> listResourceTemplates() {
+	public Flux<ResourceTemplate> listResourceTemplates() {
 		return Flux.fromIterable(this.resourceTemplates.values())
 			.map(McpServerFeatures.AsyncResourceTemplateSpecification::resourceTemplate);
 	}
@@ -729,9 +742,8 @@ public class McpAsyncServer {
 
 	private McpRequestHandler<Object> resourcesSubscribeRequestHandler() {
 		return (exchange, params) -> Mono.defer(() -> {
-			McpSchema.SubscribeRequest subscribeRequest = jsonMapper.convertValue(params,
-					new TypeRef<McpSchema.SubscribeRequest>() {
-					});
+			SubscribeRequest subscribeRequest = jsonMapper.convertValue(params, new TypeRef<SubscribeRequest>() {
+			});
 			String uri = subscribeRequest.uri();
 			String sessionId = exchange.sessionId();
 			this.resourceSubscriptions.computeIfAbsent(uri, k -> Collections.newSetFromMap(new ConcurrentHashMap<>()))
@@ -744,9 +756,8 @@ public class McpAsyncServer {
 
 	private McpRequestHandler<Object> resourcesUnsubscribeRequestHandler() {
 		return (exchange, params) -> Mono.defer(() -> {
-			McpSchema.UnsubscribeRequest unsubscribeRequest = jsonMapper.convertValue(params,
-					new TypeRef<McpSchema.UnsubscribeRequest>() {
-					});
+			UnsubscribeRequest unsubscribeRequest = jsonMapper.convertValue(params, new TypeRef<UnsubscribeRequest>() {
+			});
 			String uri = unsubscribeRequest.uri();
 			String sessionId = exchange.sessionId();
 			Set<String> sessions = this.resourceSubscriptions.get(uri);
@@ -761,29 +772,29 @@ public class McpAsyncServer {
 		});
 	}
 
-	private McpRequestHandler<McpSchema.ListResourcesResult> resourcesListRequestHandler() {
+	private McpRequestHandler<ListResourcesResult> resourcesListRequestHandler() {
 		return (exchange, params) -> {
 			var resourceList = this.resources.values()
 				.stream()
 				.map(McpServerFeatures.AsyncResourceSpecification::resource)
 				.toList();
-			return Mono.just(new McpSchema.ListResourcesResult(resourceList, null));
+			return Mono.just(new ListResourcesResult(resourceList, null));
 		};
 	}
 
-	private McpRequestHandler<McpSchema.ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
+	private McpRequestHandler<ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
 		return (exchange, params) -> {
 			var resourceList = this.resourceTemplates.values()
 				.stream()
 				.map(McpServerFeatures.AsyncResourceTemplateSpecification::resourceTemplate)
 				.toList();
-			return Mono.just(new McpSchema.ListResourceTemplatesResult(resourceList, null));
+			return Mono.just(new ListResourceTemplatesResult(resourceList, null));
 		};
 	}
 
-	private McpRequestHandler<McpSchema.ReadResourceResult> resourcesReadRequestHandler() {
+	private McpRequestHandler<ReadResourceResult> resourcesReadRequestHandler() {
 		return (ex, params) -> {
-			McpSchema.ReadResourceRequest resourceRequest = jsonMapper.convertValue(params, new TypeRef<>() {
+			ReadResourceRequest resourceRequest = jsonMapper.convertValue(params, new TypeRef<>() {
 			});
 
 			var resourceUri = resourceRequest.uri();
@@ -855,7 +866,7 @@ public class McpAsyncServer {
 	 * List all registered prompts.
 	 * @return A Flux stream of all registered prompts
 	 */
-	public Flux<McpSchema.Prompt> listPrompts() {
+	public Flux<Prompt> listPrompts() {
 		return Flux.fromIterable(this.prompts.values()).map(McpServerFeatures.AsyncPromptSpecification::prompt);
 	}
 
@@ -897,7 +908,7 @@ public class McpAsyncServer {
 		return this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED, null);
 	}
 
-	private McpRequestHandler<McpSchema.ListPromptsResult> promptsListRequestHandler() {
+	private McpRequestHandler<ListPromptsResult> promptsListRequestHandler() {
 		return (exchange, params) -> {
 			// TODO: Implement pagination
 			// McpSchema.PaginatedRequest request = objectMapper.convertValue(params,
@@ -909,15 +920,14 @@ public class McpAsyncServer {
 				.map(McpServerFeatures.AsyncPromptSpecification::prompt)
 				.toList();
 
-			return Mono.just(new McpSchema.ListPromptsResult(promptList, null));
+			return Mono.just(new ListPromptsResult(promptList, null));
 		};
 	}
 
-	private McpRequestHandler<McpSchema.GetPromptResult> promptsGetRequestHandler() {
+	private McpRequestHandler<GetPromptResult> promptsGetRequestHandler() {
 		return (exchange, params) -> {
-			McpSchema.GetPromptRequest promptRequest = jsonMapper.convertValue(params,
-					new TypeRef<McpSchema.GetPromptRequest>() {
-					});
+			GetPromptRequest promptRequest = jsonMapper.convertValue(params, new TypeRef<GetPromptRequest>() {
+			});
 
 			// Implement prompt retrieval logic here
 			McpServerFeatures.AsyncPromptSpecification specification = this.prompts.get(promptRequest.name());

@@ -28,13 +28,13 @@ import io.modelcontextprotocol.spec.McpSchema.CompleteRequest;
 import io.modelcontextprotocol.spec.McpSchema.CompleteResult;
 import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
-import io.modelcontextprotocol.spec.McpSchema.Prompt;
-import io.modelcontextprotocol.spec.McpSchema.PromptArgument;
-import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
-import io.modelcontextprotocol.spec.McpSchema.Resource;
 import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
+import io.modelcontextprotocol.spec.schema.prompt.Prompt;
+import io.modelcontextprotocol.spec.schema.prompt.PromptArgument;
+import io.modelcontextprotocol.spec.schema.resource.ReadResourceResult;
+import io.modelcontextprotocol.spec.schema.resource.Resource;
 import io.modelcontextprotocol.spec.McpError;
 
 /**
@@ -144,7 +144,7 @@ class McpCompletionTests {
 					new CompleteResult.CompleteCompletion(List.of("no-context-completion"), 1, false));
 		};
 
-		McpSchema.Prompt prompt = new Prompt("test-prompt", "this is a test prompt",
+		Prompt prompt = new Prompt("test-prompt", "this is a test prompt",
 				List.of(new PromptArgument("arg", "string", false)));
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
@@ -204,7 +204,7 @@ class McpCompletionTests {
 			return new CompleteResult(new CompleteResult.CompleteCompletion(List.of(), 0, false));
 		};
 
-		McpSchema.Resource resource = Resource.builder()
+		Resource resource = Resource.builder()
 			.uri("db://{database}/{table}")
 			.name("Database Table")
 			.description("Resource representing a table in a database")
@@ -281,7 +281,7 @@ class McpCompletionTests {
 			return new CompleteResult(new CompleteResult.CompleteCompletion(List.of(), 0, false));
 		};
 
-		McpSchema.Resource resource = Resource.builder()
+		Resource resource = Resource.builder()
 			.uri("db://{database}/{table}")
 			.name("Database Table")
 			.description("Resource representing a table in a database")

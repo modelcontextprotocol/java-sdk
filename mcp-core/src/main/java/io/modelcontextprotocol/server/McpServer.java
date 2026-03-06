@@ -18,10 +18,12 @@ import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
+import io.modelcontextprotocol.spec.schema.tool.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolResult;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DefaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
@@ -450,12 +452,12 @@ public interface McpServer {
 		 * @param callHandler The function that implements the tool's logic. Must not be
 		 * null. The function's first argument is an {@link McpAsyncServerExchange} upon
 		 * which the server can interact with the connected client. The second argument is
-		 * the {@link McpSchema.CallToolRequest} object containing the tool call
+		 * the {@link CallToolRequest} object containing the tool call
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
-		public AsyncSpecification<S> toolCall(McpSchema.Tool tool,
-				BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<CallToolResult>> callHandler) {
+		public AsyncSpecification<S> toolCall(Tool tool,
+				BiFunction<McpAsyncServerExchange, CallToolRequest, Mono<CallToolResult>> callHandler) {
 
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(callHandler, "Handler must not be null");
@@ -1037,8 +1039,8 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
-		public SyncSpecification<S> toolCall(McpSchema.Tool tool,
-				BiFunction<McpSyncServerExchange, McpSchema.CallToolRequest, McpSchema.CallToolResult> handler) {
+		public SyncSpecification<S> toolCall(Tool tool,
+				BiFunction<McpSyncServerExchange, CallToolRequest, CallToolResult> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
 			validateToolName(tool.name());
@@ -1559,12 +1561,12 @@ public interface McpServer {
 		 * @param callHandler The function that implements the tool's logic. Must not be
 		 * null. The function's first argument is an {@link McpAsyncServerExchange} upon
 		 * which the server can interact with the connected client. The second argument is
-		 * the {@link McpSchema.CallToolRequest} object containing the tool call
+		 * the {@link CallToolRequest} object containing the tool call
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
-		public StatelessAsyncSpecification toolCall(McpSchema.Tool tool,
-				BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<CallToolResult>> callHandler) {
+		public StatelessAsyncSpecification toolCall(Tool tool,
+				BiFunction<McpTransportContext, CallToolRequest, Mono<CallToolResult>> callHandler) {
 
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(callHandler, "Handler must not be null");
@@ -2042,12 +2044,12 @@ public interface McpServer {
 		 * @param callHandler The function that implements the tool's logic. Must not be
 		 * null. The function's first argument is an {@link McpSyncServerExchange} upon
 		 * which the server can interact with the connected client. The second argument is
-		 * the {@link McpSchema.CallToolRequest} object containing the tool call
+		 * the {@link CallToolRequest} object containing the tool call
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
-		public StatelessSyncSpecification toolCall(McpSchema.Tool tool,
-				BiFunction<McpTransportContext, McpSchema.CallToolRequest, CallToolResult> callHandler) {
+		public StatelessSyncSpecification toolCall(Tool tool,
+				BiFunction<McpTransportContext, CallToolRequest, CallToolResult> callHandler) {
 
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(callHandler, "Handler must not be null");

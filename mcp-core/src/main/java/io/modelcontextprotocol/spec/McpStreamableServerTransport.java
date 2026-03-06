@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.spec;
 
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
 import reactor.core.publisher.Mono;
 
 /**
@@ -19,6 +20,6 @@ public interface McpStreamableServerTransport extends McpServerTransport {
 	 * @param messageId message id for SSE events
 	 * @return Mono which completes when done
 	 */
-	Mono<Void> sendMessage(McpSchema.JSONRPCMessage message, String messageId);
+	Mono<Void> sendMessage(JSONRPCMessage message, String messageId);
 
 }

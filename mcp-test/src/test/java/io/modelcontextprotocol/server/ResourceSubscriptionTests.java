@@ -10,6 +10,12 @@ import io.modelcontextprotocol.MockMcpServerTransport;
 import io.modelcontextprotocol.MockMcpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.ProtocolVersions;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCNotification;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
+import io.modelcontextprotocol.spec.schema.resource.SubscribeRequest;
+import io.modelcontextprotocol.spec.schema.resource.UnsubscribeRequest;
 import org.junit.jupiter.api.Test;
 import reactor.test.StepVerifier;
 
@@ -35,25 +41,23 @@ class ResourceSubscriptionTests {
 			.build();
 	}
 
-	private static McpSchema.JSONRPCRequest initRequest() {
-		return new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
-				UUID.randomUUID().toString(),
+	private static JSONRPCRequest initRequest() {
+		return new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE, UUID.randomUUID().toString(),
 				new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_11_25, null, CLIENT_INFO));
 	}
 
-	private static McpSchema.JSONRPCNotification initializedNotification() {
-		return new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_NOTIFICATION_INITIALIZED,
-				null);
+	private static JSONRPCNotification initializedNotification() {
+		return new JSONRPCNotification(JSONRPC.JSONRPC_VERSION, McpSchema.METHOD_NOTIFICATION_INITIALIZED, null);
 	}
 
-	private static McpSchema.JSONRPCRequest subscribeRequest(String uri) {
-		return new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_RESOURCES_SUBSCRIBE,
-				UUID.randomUUID().toString(), new McpSchema.SubscribeRequest(uri));
+	private static JSONRPCRequest subscribeRequest(String uri) {
+		return new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, McpSchema.METHOD_RESOURCES_SUBSCRIBE,
+				UUID.randomUUID().toString(), new SubscribeRequest(uri));
 	}
 
-	private static McpSchema.JSONRPCRequest unsubscribeRequest(String uri) {
-		return new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_RESOURCES_UNSUBSCRIBE,
-				UUID.randomUUID().toString(), new McpSchema.UnsubscribeRequest(uri));
+	private static JSONRPCRequest unsubscribeRequest(String uri) {
+		return new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, McpSchema.METHOD_RESOURCES_UNSUBSCRIBE,
+				UUID.randomUUID().toString(), new UnsubscribeRequest(uri));
 	}
 
 	@Test
@@ -89,9 +93,9 @@ class ResourceSubscriptionTests {
 		StepVerifier.create(server.notifyResourcesUpdated(new McpSchema.ResourcesUpdatedNotification(RESOURCE_URI)))
 			.verifyComplete();
 
-		McpSchema.JSONRPCMessage sent = transport.getLastSentMessage();
-		assertThat(sent).isInstanceOf(McpSchema.JSONRPCNotification.class);
-		McpSchema.JSONRPCNotification notification = (McpSchema.JSONRPCNotification) sent;
+		JSONRPCMessage sent = transport.getLastSentMessage();
+		assertThat(sent).isInstanceOf(JSONRPCNotification.class);
+		JSONRPCNotification notification = (JSONRPCNotification) sent;
 		assertThat(notification.method()).isEqualTo(McpSchema.METHOD_NOTIFICATION_RESOURCES_UPDATED);
 
 		server.closeGracefully().block();

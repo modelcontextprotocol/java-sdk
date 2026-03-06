@@ -1,0 +1,304 @@
+---
+# OpenRewrite migration recipes for the MCP Java SDK 1.1 release.
+#
+# These recipes automate migrating user code that depended on the nested types
+# inside McpSchema (pre-1.1) to the new top-level classes introduced in 1.1.
+#
+# Usage (Maven):
+#
+#   mvn org.openrewrite.maven:rewrite-maven-plugin:run \
+#       -Drewrite.recipeArtifactCoordinates=io.modelcontextprotocol.sdk:mcp-migrate:LATEST \
+#       -Drewrite.activeRecipes=io.modelcontextprotocol.sdk.migrations.McpSchemaMigration
+#
+# Usage (Gradle):
+#
+#   rewrite {
+#     activeRecipe("io.modelcontextprotocol.sdk.migrations.McpSchemaMigration")
+#     setRecipeArtifactCoordinates("io.modelcontextprotocol.sdk:mcp-migrate:LATEST")
+#   }
+
+type: specs.openrewrite.org/v1beta/recipe
+name: io.modelcontextprotocol.sdk.migrations.McpSchemaMigration
+displayName: Migrate McpSchema nested types to top-level package classes (MCP SDK 1.1)
+description: >
+  In MCP SDK 1.1 the large McpSchema class was decomposed. All domain types that
+  were previously defined as nested classes/records inside McpSchema were extracted
+  into dedicated top-level classes in feature-specific sub-packages under
+  io.modelcontextprotocol.spec. This recipe updates all import statements and
+  type references so that user code compiles against the new structure.
+tags:
+  - mcp
+  - migration
+  - breaking-change
+recipeList:
+  - io.modelcontextprotocol.sdk.migrations.MigrateJsonRpcTypes
+  - io.modelcontextprotocol.sdk.migrations.MigrateResourceTypes
+  - io.modelcontextprotocol.sdk.migrations.MigratePromptTypes
+  - io.modelcontextprotocol.sdk.migrations.MigrateToolTypes
+  - io.modelcontextprotocol.sdk.migrations.MigrateSamplingTypes
+  - io.modelcontextprotocol.sdk.migrations.MigrateElicitTypes
+  - io.modelcontextprotocol.sdk.migrations.MigrateStaticMembers
+
+---
+# ---------------------------------------------------------------------------
+# JSON-RPC types
+# Previously:  McpSchema.JSONRPCMessage / JSONRPCRequest / JSONRPCNotification
+#              / JSONRPCResponse / JSONRPCResponse.JSONRPCError
+# Now:         io.modelcontextprotocol.spec.jsonrpc.*
+# ---------------------------------------------------------------------------
+type: specs.openrewrite.org/v1beta/recipe
+name: io.modelcontextprotocol.sdk.migrations.MigrateJsonRpcTypes
+displayName: Migrate McpSchema JSON-RPC nested types to io.modelcontextprotocol.spec.jsonrpc
+description: >
+  Moves JSONRPCMessage, JSONRPCRequest, JSONRPCNotification, JSONRPCResponse,
+  and the nested JSONRPCError from McpSchema to the
+  io.modelcontextprotocol.spec.jsonrpc package.
+tags:
+  - mcp
+  - migration
+recipeList:
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.JSONRPCNotification
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.jsonrpc.JSONRPCNotification
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.jsonrpc.JSONRPCResponse
+  # JSONRPCError is still nested inside JSONRPCResponse – only the outer class moved.
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse.JSONRPCError
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.jsonrpc.JSONRPCResponse.JSONRPCError
+
+---
+# ---------------------------------------------------------------------------
+# Resource types
+# Previously:  McpSchema.Resource / ResourceTemplate / ResourceContent /
+#              ResourceContents / TextResourceContents / BlobResourceContents /
+#              ListResourcesResult / ListResourceTemplatesResult /
+#              ReadResourceRequest / ReadResourceResult /
+#              SubscribeRequest / UnsubscribeRequest /
+#              Annotated / Identifier
+# Now:         io.modelcontextprotocol.spec.schema.resource.*
+# ---------------------------------------------------------------------------
+type: specs.openrewrite.org/v1beta/recipe
+name: io.modelcontextprotocol.sdk.migrations.MigrateResourceTypes
+displayName: Migrate McpSchema resource nested types to io.modelcontextprotocol.spec.schema.resource
+description: >
+  Moves all resource-related types from McpSchema into the
+  io.modelcontextprotocol.spec.schema.resource package.
+tags:
+  - mcp
+  - migration
+recipeList:
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.Annotated
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.resource.Annotated
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.Identifier
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.resource.Identifier
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.ResourceContent
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.resource.ResourceContent
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.ResourceContents
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.resource.ResourceContents
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.TextResourceContents
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.resource.TextResourceContents
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.BlobResourceContents
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.resource.BlobResourceContents
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.Resource
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.resource.Resource
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.ResourceTemplate
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.resource.ResourceTemplate
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.ListResourcesResult
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.resource.ListResourcesResult
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.ListResourceTemplatesResult
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.resource.ListResourceTemplatesResult
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.ReadResourceRequest
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.resource.ReadResourceRequest
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.ReadResourceResult
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.resource.ReadResourceResult
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.SubscribeRequest
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.resource.SubscribeRequest
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.UnsubscribeRequest
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.resource.UnsubscribeRequest
+
+---
+# ---------------------------------------------------------------------------
+# Prompt types
+# Previously:  McpSchema.Prompt / PromptArgument / PromptMessage /
+#              ListPromptsResult / GetPromptRequest / GetPromptResult
+# Now:         io.modelcontextprotocol.spec.schema.prompt.*
+# ---------------------------------------------------------------------------
+type: specs.openrewrite.org/v1beta/recipe
+name: io.modelcontextprotocol.sdk.migrations.MigratePromptTypes
+displayName: Migrate McpSchema prompt nested types to io.modelcontextprotocol.spec.schema.prompt
+description: >
+  Moves all prompt-related types from McpSchema into the
+  io.modelcontextprotocol.spec.schema.prompt package.
+tags:
+  - mcp
+  - migration
+recipeList:
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.Prompt
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.prompt.Prompt
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.PromptArgument
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.prompt.PromptArgument
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.PromptMessage
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.prompt.PromptMessage
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.ListPromptsResult
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.prompt.ListPromptsResult
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.GetPromptRequest
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.prompt.GetPromptRequest
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.GetPromptResult
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.prompt.GetPromptResult
+
+---
+# ---------------------------------------------------------------------------
+# Tool types
+# Previously:  McpSchema.Tool / JsonSchema / ToolAnnotations /
+#              ListToolsResult / CallToolRequest / CallToolResult
+# Now:         io.modelcontextprotocol.spec.schema.tool.*
+# ---------------------------------------------------------------------------
+type: specs.openrewrite.org/v1beta/recipe
+name: io.modelcontextprotocol.sdk.migrations.MigrateToolTypes
+displayName: Migrate McpSchema tool nested types to io.modelcontextprotocol.spec.schema.tool
+description: >
+  Moves all tool-related types from McpSchema into the
+  io.modelcontextprotocol.spec.schema.tool package.
+tags:
+  - mcp
+  - migration
+recipeList:
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.JsonSchema
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.tool.JsonSchema
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.ToolAnnotations
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.tool.ToolAnnotations
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.Tool
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.tool.Tool
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.ListToolsResult
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.tool.ListToolsResult
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.CallToolRequest
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.tool.CallToolRequest
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.CallToolResult
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.tool.CallToolResult
+
+---
+# ---------------------------------------------------------------------------
+# Sampling types
+# Previously:  McpSchema.SamplingMessage / ModelPreferences / ModelHint /
+#              CreateMessageRequest / CreateMessageRequest.ContextInclusionStrategy /
+#              CreateMessageResult
+# Now:         io.modelcontextprotocol.spec.schema.sample.*
+# ---------------------------------------------------------------------------
+type: specs.openrewrite.org/v1beta/recipe
+name: io.modelcontextprotocol.sdk.migrations.MigrateSamplingTypes
+displayName: Migrate McpSchema sampling nested types to io.modelcontextprotocol.spec.schema.sample
+description: >
+  Moves all sampling / LLM-interaction types from McpSchema into the
+  io.modelcontextprotocol.spec.schema.sample package.
+tags:
+  - mcp
+  - migration
+recipeList:
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.SamplingMessage
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.sample.SamplingMessage
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.ModelPreferences
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.sample.ModelPreferences
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.ModelHint
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.sample.ModelHint
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.sample.CreateMessageRequest
+  # ContextInclusionStrategy is still nested inside CreateMessageRequest – outer class moved.
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest.ContextInclusionStrategy
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.sample.CreateMessageRequest.ContextInclusionStrategy
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.CreateMessageResult
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.sample.CreateMessageResult
+
+---
+# ---------------------------------------------------------------------------
+# Elicitation types
+# Previously:  McpSchema.ElicitRequest / ElicitResult
+# Now:         io.modelcontextprotocol.spec.schema.elicit.*
+# ---------------------------------------------------------------------------
+type: specs.openrewrite.org/v1beta/recipe
+name: io.modelcontextprotocol.sdk.migrations.MigrateElicitTypes
+displayName: Migrate McpSchema elicitation nested types to io.modelcontextprotocol.spec.schema.elicit
+description: >
+  Moves ElicitRequest and ElicitResult from McpSchema into the
+  io.modelcontextprotocol.spec.schema.elicit package.
+tags:
+  - mcp
+  - migration
+recipeList:
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.ElicitRequest
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.elicit.ElicitRequest
+  - org.openrewrite.java.ChangeType:
+      oldFullyQualifiedTypeName: io.modelcontextprotocol.spec.McpSchema.ElicitResult
+      newFullyQualifiedTypeName: io.modelcontextprotocol.spec.schema.elicit.ElicitResult
+
+---
+# ---------------------------------------------------------------------------
+# Static member migrations
+#
+# McpSchema.JSONRPC_VERSION          -> JSONRPC.JSONRPC_VERSION
+# McpSchema.deserializeJsonRpcMessage -> JSONRPC.deserializeJsonRpcMessage
+# ---------------------------------------------------------------------------
+type: specs.openrewrite.org/v1beta/recipe
+name: io.modelcontextprotocol.sdk.migrations.MigrateStaticMembers
+displayName: Migrate McpSchema static members to JSONRPC utility class
+description: >
+  The JSONRPC_VERSION string constant and the deserializeJsonRpcMessage utility
+  method were moved from McpSchema to the new JSONRPC utility class in the
+  io.modelcontextprotocol.spec.jsonrpc package.
+tags:
+  - mcp
+  - migration
+recipeList:
+  # Constant: McpSchema.JSONRPC_VERSION -> JSONRPC.JSONRPC_VERSION
+  - org.openrewrite.java.ReplaceConstantWithAnotherConstant:
+      owningType: io.modelcontextprotocol.spec.McpSchema
+      constantName: JSONRPC_VERSION
+      newOwningType: io.modelcontextprotocol.spec.jsonrpc.JSONRPC
+      newConstantName: JSONRPC_VERSION
+
+  # Static method: McpSchema.deserializeJsonRpcMessage(...) -> JSONRPC.deserializeJsonRpcMessage(...)
+  - org.openrewrite.java.ChangeMethodTargetToStatic:
+      methodPattern: >-
+        io.modelcontextprotocol.spec.McpSchema deserializeJsonRpcMessage(
+        io.modelcontextprotocol.json.McpJsonMapper, String)
+      fullyQualifiedTargetTypeName: io.modelcontextprotocol.spec.jsonrpc.JSONRPC

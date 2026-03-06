@@ -11,6 +11,8 @@ import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransport;
 import io.modelcontextprotocol.spec.McpTransportSessionClosedException;
+import io.modelcontextprotocol.spec.schema.tool.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -195,7 +197,7 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 	@Test
 	void testCallTool() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
-			AtomicReference<List<McpSchema.Tool>> tools = new AtomicReference<>();
+			AtomicReference<List<Tool>> tools = new AtomicReference<>();
 			StepVerifier.create(mcpAsyncClient.initialize()).expectNextCount(1).verifyComplete();
 			StepVerifier.create(mcpAsyncClient.listTools())
 				.consumeNextWith(list -> tools.set(list.tools()))
@@ -205,7 +207,7 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 
 			String name = tools.get().get(0).name();
 			// Assuming this is the echo tool
-			McpSchema.CallToolRequest request = new McpSchema.CallToolRequest(name, Map.of("message", "hello"));
+			CallToolRequest request = new CallToolRequest(name, Map.of("message", "hello"));
 			StepVerifier.create(mcpAsyncClient.callTool(request)).expectError().verify();
 
 			reconnect();

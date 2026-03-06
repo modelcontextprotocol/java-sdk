@@ -17,9 +17,8 @@ import java.util.function.Function;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
-
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -136,7 +135,7 @@ class HttpClientSseClientTransportTests {
 	@Test
 	void testMessageProcessing() {
 		// Create a test message
-		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
+		JSONRPCRequest testMessage = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, "test-method", "test-id",
 				Map.of("key", "value"));
 
 		// Simulate receiving the message
@@ -167,7 +166,7 @@ class HttpClientSseClientTransportTests {
 				""");
 
 		// Create and send a request message
-		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
+		JSONRPCRequest testMessage = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, "test-method", "test-id",
 				Map.of("key", "value"));
 
 		// Verify message handling
@@ -191,7 +190,7 @@ class HttpClientSseClientTransportTests {
 				""");
 
 		// Create and send a request message
-		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
+		JSONRPCRequest testMessage = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, "test-method", "test-id",
 				Map.of("key", "value"));
 
 		// Verify message handling
@@ -221,7 +220,7 @@ class HttpClientSseClientTransportTests {
 		StepVerifier.create(transport.closeGracefully()).verifyComplete();
 
 		// Create a test message
-		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
+		JSONRPCRequest testMessage = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, "test-method", "test-id",
 				Map.of("key", "value"));
 
 		// Verify message is not processed after shutdown
@@ -266,10 +265,10 @@ class HttpClientSseClientTransportTests {
 				""");
 
 		// Create and send corresponding messages
-		JSONRPCRequest message1 = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "method1", "id1",
+		JSONRPCRequest message1 = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, "method1", "id1",
 				Map.of("key", "value1"));
 
-		JSONRPCRequest message2 = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "method2", "id2",
+		JSONRPCRequest message2 = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, "method2", "id2",
 				Map.of("key", "value2"));
 
 		// Verify both messages are processed
@@ -414,8 +413,7 @@ class HttpClientSseClientTransportTests {
 		clearInvocations(mockCustomizer);
 
 		// Send test message
-		var testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
-				Map.of("key", "value"));
+		var testMessage = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, "test-method", "test-id", Map.of("key", "value"));
 
 		// Subscribe to messages and verify
 		StepVerifier
@@ -457,8 +455,7 @@ class HttpClientSseClientTransportTests {
 		clearInvocations(mockCustomizer);
 
 		// Send test message
-		var testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
-				Map.of("key", "value"));
+		var testMessage = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, "test-method", "test-id", Map.of("key", "value"));
 
 		// Subscribe to messages and verify
 		StepVerifier

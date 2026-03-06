@@ -16,6 +16,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
+
 /**
  * An implementation of {@link McpTransportStream} using Project Reactor types.
  *
@@ -63,8 +65,8 @@ public class DefaultMcpTransportStream<CONNECTION> implements McpTransportStream
 	}
 
 	@Override
-	public Publisher<McpSchema.JSONRPCMessage> consumeSseStream(
-			Publisher<Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>>> eventStream) {
+	public Publisher<JSONRPCMessage> consumeSseStream(
+			Publisher<Tuple2<Optional<String>, Iterable<JSONRPCMessage>>> eventStream) {
 
 		// @formatter:off
 		return Flux.deferContextual(ctx -> Flux.from(eventStream)

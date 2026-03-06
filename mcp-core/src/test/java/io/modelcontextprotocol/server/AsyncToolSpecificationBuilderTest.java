@@ -10,12 +10,11 @@ import java.util.Map;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.schema.tool.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolResult;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
 import io.modelcontextprotocol.util.ToolNameValidator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,11 +40,7 @@ class AsyncToolSpecificationBuilderTest {
 	@Test
 	void builderShouldCreateValidAsyncToolSpecification() {
 
-		Tool tool = McpSchema.Tool.builder()
-			.name("test-tool")
-			.title("A test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool tool = Tool.builder().name("test-tool").title("A test tool").inputSchema(EMPTY_JSON_SCHEMA).build();
 
 		McpServerFeatures.AsyncToolSpecification specification = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(tool)
@@ -68,11 +63,7 @@ class AsyncToolSpecificationBuilderTest {
 
 	@Test
 	void builderShouldThrowExceptionWhenCallToolIsNull() {
-		Tool tool = McpSchema.Tool.builder()
-			.name("test-tool")
-			.title("A test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool tool = Tool.builder().name("test-tool").title("A test tool").inputSchema(EMPTY_JSON_SCHEMA).build();
 
 		assertThatThrownBy(() -> McpServerFeatures.AsyncToolSpecification.builder().tool(tool).build())
 			.isInstanceOf(IllegalArgumentException.class)
@@ -81,11 +72,7 @@ class AsyncToolSpecificationBuilderTest {
 
 	@Test
 	void builderShouldAllowMethodChaining() {
-		Tool tool = McpSchema.Tool.builder()
-			.name("test-tool")
-			.title("A test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool tool = Tool.builder().name("test-tool").title("A test tool").inputSchema(EMPTY_JSON_SCHEMA).build();
 		McpServerFeatures.AsyncToolSpecification.Builder builder = McpServerFeatures.AsyncToolSpecification.builder();
 
 		// Then - verify method chaining returns the same builder instance
@@ -97,11 +84,7 @@ class AsyncToolSpecificationBuilderTest {
 
 	@Test
 	void builtSpecificationShouldExecuteCallToolCorrectly() {
-		Tool tool = McpSchema.Tool.builder()
-			.name("calculator")
-			.title("Simple calculator")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool tool = Tool.builder().name("calculator").title("Simple calculator").inputSchema(EMPTY_JSON_SCHEMA).build();
 		String expectedResult = "42";
 
 		McpServerFeatures.AsyncToolSpecification specification = McpServerFeatures.AsyncToolSpecification.builder()
@@ -124,11 +107,7 @@ class AsyncToolSpecificationBuilderTest {
 
 	@Test
 	void fromSyncShouldConvertSyncToolSpecificationCorrectly() {
-		Tool tool = McpSchema.Tool.builder()
-			.name("sync-tool")
-			.title("A sync tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool tool = Tool.builder().name("sync-tool").title("A sync tool").inputSchema(EMPTY_JSON_SCHEMA).build();
 		String expectedResult = "sync result";
 
 		// Create a sync tool specification
