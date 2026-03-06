@@ -53,7 +53,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
 
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
@@ -403,6 +402,8 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.addContent(new McpSchema.TextContent("CALL RESPONSE"))
 			.build();
 
+		AtomicReference<McpSchema.ElicitResult> elicitResultRef = new AtomicReference<>();
+
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(Map.of()).build())
 			.callHandler((exchange, request) -> {
@@ -413,13 +414,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 							Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
 					.build();
 
-				StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
-					assertThat(result).isNotNull();
-					assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
-					assertThat(result.content().get("message")).isEqualTo("Test message");
-				}).verifyComplete();
-
-				return Mono.just(callResponse);
+				return exchange.createElicitation(elicitationRequest)
+					.doOnNext(elicitResultRef::set)
+					.thenReturn(callResponse);
 			})
 			.build();
 
@@ -437,6 +434,11 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 			assertThat(response).isNotNull();
 			assertThat(response).isEqualTo(callResponse);
+			assertWith(elicitResultRef.get(), result -> {
+				assertThat(result).isNotNull();
+				assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+				assertThat(result.content().get("message")).isEqualTo("Test message");
+			});
 		}
 		finally {
 			mcpServer.closeGracefully().block();
@@ -1731,6 +1733,95 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 				.isObject()
 				.isEqualTo(json("""
 						{"count":3,"message":"Dynamic execution"}"""));
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	// ---------------------------------------
+	// Resource Subscription Tests
+	// ---------------------------------------
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testResourceSubscription(String clientType) throws InterruptedException {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		String resourceUri = "test://subscribable-resource";
+		var receivedContents = new AtomicReference<List<McpSchema.ResourceContents>>();
+		var latch = new CountDownLatch(1);
+
+		McpServerFeatures.SyncResourceSpecification resourceSpec = new McpServerFeatures.SyncResourceSpecification(
+				McpSchema.Resource.builder()
+					.uri(resourceUri)
+					.name("Subscribable Resource")
+					.mimeType("text/plain")
+					.build(),
+				(exchange, req) -> new McpSchema.ReadResourceResult(
+						List.of(new McpSchema.TextResourceContents(resourceUri, "text/plain", "initial content"))));
+
+		McpSyncServer mcpServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(McpSchema.ServerCapabilities.builder().resources(true, false).build())
+			.resources(resourceSpec)
+			.build();
+
+		try (var mcpClient = clientBuilder.resourcesUpdateConsumer(contents -> {
+			receivedContents.set(contents);
+			latch.countDown();
+		}).build()) {
+
+			mcpClient.initialize();
+
+			mcpClient.subscribeResource(new McpSchema.SubscribeRequest(resourceUri));
+
+			mcpServer.notifyResourcesUpdated(new McpSchema.ResourcesUpdatedNotification(resourceUri));
+
+			assertThat(latch.await(5, TimeUnit.SECONDS))
+				.as("client should receive the resources/updated notification within 5 seconds")
+				.isTrue();
+			assertThat(receivedContents.get()).isNotEmpty();
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testResourceSubscription_afterUnsubscribe_noNotification(String clientType) throws InterruptedException {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		String resourceUri = "test://subscribable-resource-unsub";
+		var notificationCount = new java.util.concurrent.atomic.AtomicInteger(0);
+
+		McpServerFeatures.SyncResourceSpecification resourceSpec = new McpServerFeatures.SyncResourceSpecification(
+				McpSchema.Resource.builder()
+					.uri(resourceUri)
+					.name("Subscribable Resource")
+					.mimeType("text/plain")
+					.build(),
+				(exchange, req) -> new McpSchema.ReadResourceResult(
+						List.of(new McpSchema.TextResourceContents(resourceUri, "text/plain", "content"))));
+
+		McpSyncServer mcpServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(McpSchema.ServerCapabilities.builder().resources(true, false).build())
+			.resources(resourceSpec)
+			.build();
+
+		try (var mcpClient = clientBuilder.resourcesUpdateConsumer(contents -> notificationCount.incrementAndGet())
+			.build()) {
+
+			mcpClient.initialize();
+
+			mcpClient.subscribeResource(new McpSchema.SubscribeRequest(resourceUri));
+			mcpClient.unsubscribeResource(new McpSchema.UnsubscribeRequest(resourceUri));
+
+			mcpServer.notifyResourcesUpdated(new McpSchema.ResourcesUpdatedNotification(resourceUri));
+
+			assertThat(notificationCount.get()).as("no notification should be received after unsubscribing").isZero();
 		}
 		finally {
 			mcpServer.closeGracefully();

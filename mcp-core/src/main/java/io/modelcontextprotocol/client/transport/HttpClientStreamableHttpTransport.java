@@ -25,6 +25,7 @@ import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEven
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.ClosedMcpTransportSession;
@@ -295,12 +296,23 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 								if (statusCode >= 200 && statusCode < 300) {
 
 									if (MESSAGE_EVENT_TYPE.equals(responseEvent.sseEvent().event())) {
+										String data = responseEvent.sseEvent().data();
+										// Per 2025-11-25 spec (SEP-1699), servers may
+										// send SSE events
+										// with empty data to prime the client for
+										// reconnection.
+										// Skip these events as they contain no JSON-RPC
+										// message.
+										if (data == null || data.isBlank()) {
+											logger.debug("Skipping SSE event with empty data (stream primer)");
+											return Flux.empty();
+										}
 										try {
 											// We don't support batching ATM and probably
 											// won't since the next version considers
 											// removing it.
-											McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(
-													this.jsonMapper, responseEvent.sseEvent().data());
+											McpSchema.JSONRPCMessage message = McpSchema
+												.deserializeJsonRpcMessage(this.jsonMapper, data);
 
 											Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> idWithMessages = Tuples
 												.of(Optional.ofNullable(responseEvent.sseEvent().id()),
@@ -503,13 +515,22 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					else if (contentType.contains(TEXT_EVENT_STREAM)) {
 						return Flux.just(((ResponseSubscribers.SseResponseEvent) responseEvent).sseEvent())
 							.flatMap(sseEvent -> {
+								String data = sseEvent.data();
+								// Per 2025-11-25 spec (SEP-1699), servers may send SSE
+								// events
+								// with empty data to prime the client for reconnection.
+								// Skip these events as they contain no JSON-RPC message.
+								if (data == null || data.isBlank()) {
+									logger.debug("Skipping SSE event with empty data (stream primer)");
+									return Flux.empty();
+								}
 								try {
 									// We don't support batching ATM and probably
 									// won't
 									// since the
 									// next version considers removing it.
 									McpSchema.JSONRPCMessage message = McpSchema
-										.deserializeJsonRpcMessage(this.jsonMapper, sseEvent.data());
+										.deserializeJsonRpcMessage(this.jsonMapper, data);
 
 									Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> idWithMessages = Tuples
 										.of(Optional.ofNullable(sseEvent.id()), List.of(message));
@@ -641,7 +662,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		private Duration connectTimeout = Duration.ofSeconds(10);
 
 		private List<String> supportedProtocolVersions = List.of(ProtocolVersions.MCP_2024_11_05,
-				ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18);
+				ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18, ProtocolVersions.MCP_2025_11_25);
 
 		/**
 		 * Creates a new builder with the specified base URI.
@@ -822,7 +843,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 */
 		public HttpClientStreamableHttpTransport build() {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
-			return new HttpClientStreamableHttpTransport(jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+			return new HttpClientStreamableHttpTransport(jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
 					httpClient, requestBuilder, baseUri, endpoint, resumableStreams, openConnectionOnStartup,
 					httpRequestCustomizer, supportedProtocolVersions);
 		}

@@ -1,1 +1,1 @@
-io.modelcontextprotocol.json.schema.jackson.JacksonJsonSchemaValidatorSupplier
+io.modelcontextprotocol.json.schema.jackson2.JacksonJsonSchemaValidatorSupplier
