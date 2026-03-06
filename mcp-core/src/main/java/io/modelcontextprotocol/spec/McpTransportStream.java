@@ -9,6 +9,8 @@ import reactor.util.function.Tuple2;
 
 import java.util.Optional;
 
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
+
 /**
  * A representation of a stream at the transport layer of the MCP protocol. In particular,
  * it is currently used in the Streamable HTTP implementation to potentially be able to
@@ -40,10 +42,10 @@ public interface McpTransportStream<CONNECTION> {
 	 * @param eventStream a {@link Publisher} of tuples (pairs) of an optional identifier
 	 * associated with a collection of messages
 	 * @return a flattened {@link Publisher} of
-	 * {@link io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage JSON-RPC messages}
-	 * with the identifier stripped away
+	 * {@link io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage JSON-RPC messages} with
+	 * the identifier stripped away
 	 */
-	Publisher<McpSchema.JSONRPCMessage> consumeSseStream(
-			Publisher<Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>>> eventStream);
+	Publisher<JSONRPCMessage> consumeSseStream(
+			Publisher<Tuple2<Optional<String>, Iterable<JSONRPCMessage>>> eventStream);
 
 }

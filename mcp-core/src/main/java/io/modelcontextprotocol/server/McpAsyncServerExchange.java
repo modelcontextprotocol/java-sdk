@@ -14,6 +14,10 @@ import io.modelcontextprotocol.spec.McpLoggableSession;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
+import io.modelcontextprotocol.spec.schema.elicit.ElicitRequest;
+import io.modelcontextprotocol.spec.schema.elicit.ElicitResult;
+import io.modelcontextprotocol.spec.schema.sample.CreateMessageRequest;
+import io.modelcontextprotocol.spec.schema.sample.CreateMessageResult;
 import io.modelcontextprotocol.spec.McpSession;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
@@ -37,13 +41,13 @@ public class McpAsyncServerExchange {
 
 	private final McpTransportContext transportContext;
 
-	private static final TypeRef<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeRef<>() {
+	private static final TypeRef<CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeRef<>() {
 	};
 
 	private static final TypeRef<McpSchema.ListRootsResult> LIST_ROOTS_RESULT_TYPE_REF = new TypeRef<>() {
 	};
 
-	private static final TypeRef<McpSchema.ElicitResult> ELICITATION_RESULT_TYPE_REF = new TypeRef<>() {
+	private static final TypeRef<ElicitResult> ELICITATION_RESULT_TYPE_REF = new TypeRef<>() {
 	};
 
 	public static final TypeRef<Object> OBJECT_TYPE_REF = new TypeRef<>() {
@@ -112,13 +116,13 @@ public class McpAsyncServerExchange {
 	 * include context from MCP servers in their prompts.
 	 * @param createMessageRequest The request to create a new message
 	 * @return A Mono that completes when the message has been created
-	 * @see McpSchema.CreateMessageRequest
-	 * @see McpSchema.CreateMessageResult
+	 * @see CreateMessageRequest
+	 * @see CreateMessageResult
 	 * @see <a href=
 	 * "https://spec.modelcontextprotocol.io/specification/client/sampling/">Sampling
 	 * Specification</a>
 	 */
-	public Mono<McpSchema.CreateMessageResult> createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
+	public Mono<CreateMessageResult> createMessage(CreateMessageRequest createMessageRequest) {
 		if (this.clientCapabilities == null) {
 			return Mono
 				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
@@ -138,13 +142,13 @@ public class McpAsyncServerExchange {
 	 * structured data from users with optional JSON schemas to validate responses.
 	 * @param elicitRequest The request to create a new elicitation
 	 * @return A Mono that completes when the elicitation has been resolved.
-	 * @see McpSchema.ElicitRequest
-	 * @see McpSchema.ElicitResult
+	 * @see ElicitRequest
+	 * @see ElicitResult
 	 * @see <a href=
 	 * "https://spec.modelcontextprotocol.io/specification/client/elicitation/">Elicitation
 	 * Specification</a>
 	 */
-	public Mono<McpSchema.ElicitResult> createElicitation(McpSchema.ElicitRequest elicitRequest) {
+	public Mono<ElicitResult> createElicitation(ElicitRequest elicitRequest) {
 		if (this.clientCapabilities == null) {
 			return Mono
 				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));

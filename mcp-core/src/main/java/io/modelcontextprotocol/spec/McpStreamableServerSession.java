@@ -22,6 +22,11 @@ import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpNotificationHandler;
 import io.modelcontextprotocol.server.McpRequestHandler;
 import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCNotification;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCResponse;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -168,7 +173,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	// TODO: keep track of history by keeping a map from eventId to stream and then
 	// iterate over the events using the lastEventId
-	public Flux<McpSchema.JSONRPCMessage> replay(Object lastEventId) {
+	public Flux<JSONRPCMessage> replay(Object lastEventId) {
 		return Flux.empty();
 	}
 
@@ -178,7 +183,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	 * @param transport the SSE transport stream to send messages to
 	 * @return Mono which completes once the processing is done
 	 */
-	public Mono<Void> responseStream(McpSchema.JSONRPCRequest jsonrpcRequest, McpStreamableServerTransport transport) {
+	public Mono<Void> responseStream(JSONRPCRequest jsonrpcRequest, McpStreamableServerTransport transport) {
 		return Mono.deferContextual(ctx -> {
 			McpTransportContext transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 
@@ -190,24 +195,22 @@ public class McpStreamableServerSession implements McpLoggableSession {
 			// (sink)
 			if (requestHandler == null) {
 				MethodNotFoundError error = getMethodNotFoundError(jsonrpcRequest.method());
-				return transport
-					.sendMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), null,
-							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
-									error.message(), error.data())));
+				return transport.sendMessage(new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, jsonrpcRequest.id(), null,
+						new JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND, error.message(),
+								error.data())));
 			}
 			return requestHandler
 				.handle(new McpAsyncServerExchange(this.id, stream, clientCapabilities.get(), clientInfo.get(),
 						transportContext), jsonrpcRequest.params())
-				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), result,
-						null))
+				.map(result -> new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, jsonrpcRequest.id(), result, null))
 				.onErrorResume(e -> {
-					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (e instanceof McpError mcpError
+					JSONRPCResponse.JSONRPCError jsonRpcError = (e instanceof McpError mcpError
 							&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
-									: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+									: new JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 											e.getMessage(), McpError.aggregateExceptionMessages(e));
 
-					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(),
-							null, jsonRpcError);
+					var errorResponse = new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, jsonrpcRequest.id(), null,
+							jsonRpcError);
 					return Mono.just(errorResponse);
 				})
 				.flatMap(transport::sendMessage)
@@ -220,7 +223,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	 * @param notification MCP notification
 	 * @return Mono which completes upon succesful handling
 	 */
-	public Mono<Void> accept(McpSchema.JSONRPCNotification notification) {
+	public Mono<Void> accept(JSONRPCNotification notification) {
 		return Mono.deferContextual(ctx -> {
 			McpTransportContext transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 			McpNotificationHandler notificationHandler = this.notificationHandlers.get(notification.method());
@@ -240,7 +243,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	 * @param response MCP response to the server-initiated request
 	 * @return Mono which completes upon successful processing
 	 */
-	public Mono<Void> accept(McpSchema.JSONRPCResponse response) {
+	public Mono<Void> accept(JSONRPCResponse response) {
 		return Mono.defer(() -> {
 			logger.debug("Received response: {}", response);
 
@@ -342,7 +345,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	 */
 	public final class McpStreamableServerSessionStream implements McpLoggableSession {
 
-		private final ConcurrentHashMap<Object, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
+		private final ConcurrentHashMap<Object, MonoSink<JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
 
 		private final McpStreamableServerTransport transport;
 
@@ -379,10 +382,10 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 			McpStreamableServerSession.this.requestIdToStream.put(requestId, this);
 
-			return Mono.<McpSchema.JSONRPCResponse>create(sink -> {
+			return Mono.<JSONRPCResponse>create(sink -> {
 				this.pendingResponses.put(requestId, sink);
-				McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-						method, requestId, requestParams);
+				JSONRPCRequest jsonrpcRequest = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, method, requestId,
+						requestParams);
 				String messageId = this.uuidGenerator.get();
 				// TODO: store message in history
 				this.transport.sendMessage(jsonrpcRequest, messageId).subscribe(v -> {
@@ -407,8 +410,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 		@Override
 		public Mono<Void> sendNotification(String method, Object params) {
-			McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(
-					McpSchema.JSONRPC_VERSION, method, params);
+			JSONRPCNotification jsonrpcNotification = new JSONRPCNotification(JSONRPC.JSONRPC_VERSION, method, params);
 			String messageId = this.uuidGenerator.get();
 			// TODO: store message in history
 			return this.transport.sendMessage(jsonrpcNotification, messageId);

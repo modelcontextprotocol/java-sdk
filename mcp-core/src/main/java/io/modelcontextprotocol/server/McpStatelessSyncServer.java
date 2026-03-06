@@ -5,6 +5,10 @@
 package io.modelcontextprotocol.server;
 
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
+import io.modelcontextprotocol.spec.schema.prompt.Prompt;
+import io.modelcontextprotocol.spec.schema.resource.Resource;
+import io.modelcontextprotocol.spec.schema.resource.ResourceTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -78,7 +82,7 @@ public class McpStatelessSyncServer {
 	 * List all registered tools.
 	 * @return A list of all registered tools
 	 */
-	public List<McpSchema.Tool> listTools() {
+	public List<Tool> listTools() {
 		return this.asyncServer.listTools().collectList().block();
 	}
 
@@ -105,7 +109,7 @@ public class McpStatelessSyncServer {
 	 * List all registered resources.
 	 * @return A list of all registered resources
 	 */
-	public List<McpSchema.Resource> listResources() {
+	public List<Resource> listResources() {
 		return this.asyncServer.listResources().collectList().block();
 	}
 
@@ -133,7 +137,7 @@ public class McpStatelessSyncServer {
 	 * List all registered resource templates.
 	 * @return A list of all registered resource templates
 	 */
-	public List<McpSchema.ResourceTemplate> listResourceTemplates() {
+	public List<ResourceTemplate> listResourceTemplates() {
 		return this.asyncServer.listResourceTemplates().collectList().block();
 	}
 
@@ -160,7 +164,7 @@ public class McpStatelessSyncServer {
 	 * List all registered prompts.
 	 * @return A list of all registered prompts
 	 */
-	public List<McpSchema.Prompt> listPrompts() {
+	public List<Prompt> listPrompts() {
 		return this.asyncServer.listPrompts().collectList().block();
 	}
 

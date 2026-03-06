@@ -16,6 +16,15 @@ import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.ProtocolVersions;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCResponse;
+import io.modelcontextprotocol.spec.schema.tool.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolResult;
+import io.modelcontextprotocol.spec.schema.tool.JsonSchema;
+import io.modelcontextprotocol.spec.schema.tool.ListToolsResult;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -44,8 +53,8 @@ class McpAsyncClientTests {
 		Map<String, Object> inputSchemaMap = Map.of("type", "object", "properties",
 				Map.of("expression", Map.of("type", "string")), "required", List.of("expression"));
 
-		McpSchema.JsonSchema inputSchema = new McpSchema.JsonSchema("object", inputSchemaMap, null, null, null, null);
-		McpSchema.Tool.Builder toolBuilder = McpSchema.Tool.builder()
+		JsonSchema inputSchema = new JsonSchema("object", inputSchemaMap, null, null, null, null);
+		Tool.Builder toolBuilder = Tool.builder()
 			.name("calculator")
 			.description("Performs mathematical calculations")
 			.inputSchema(inputSchema);
@@ -57,24 +66,23 @@ class McpAsyncClientTests {
 			toolBuilder.outputSchema(outputSchema);
 		}
 
-		McpSchema.Tool calculatorTool = toolBuilder.build();
-		McpSchema.ListToolsResult mockToolsResult = new McpSchema.ListToolsResult(List.of(calculatorTool), null);
+		Tool calculatorTool = toolBuilder.build();
+		ListToolsResult mockToolsResult = new ListToolsResult(List.of(calculatorTool), null);
 
 		// Create call tool result - valid or invalid based on parameter
 		Map<String, Object> structuredContent = invalidOutput ? Map.of("result", "5", "operation", "add")
 				: Map.of("result", 5, "operation", "add");
 
-		McpSchema.CallToolResult mockCallToolResult = McpSchema.CallToolResult.builder()
+		CallToolResult mockCallToolResult = CallToolResult.builder()
 			.addTextContent("Calculation result")
 			.structuredContent(structuredContent)
 			.build();
 
 		return new McpClientTransport() {
-			Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler;
+			Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler;
 
 			@Override
-			public Mono<Void> connect(
-					Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
+			public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
 				this.handler = handler;
 				return Mono.empty();
 			}
@@ -85,23 +93,20 @@ class McpAsyncClientTests {
 			}
 
 			@Override
-			public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
-				if (!(message instanceof McpSchema.JSONRPCRequest request)) {
+			public Mono<Void> sendMessage(JSONRPCMessage message) {
+				if (!(message instanceof JSONRPCRequest request)) {
 					return Mono.empty();
 				}
 
-				McpSchema.JSONRPCResponse response;
+				JSONRPCResponse response;
 				if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
-					response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), MOCK_INIT_RESULT,
-							null);
+					response = new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, request.id(), MOCK_INIT_RESULT, null);
 				}
 				else if (McpSchema.METHOD_TOOLS_LIST.equals(request.method())) {
-					response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), mockToolsResult,
-							null);
+					response = new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, request.id(), mockToolsResult, null);
 				}
 				else if (McpSchema.METHOD_TOOLS_CALL.equals(request.method())) {
-					response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-							mockCallToolResult, null);
+					response = new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, request.id(), mockCallToolResult, null);
 				}
 				else {
 					return Mono.empty();
@@ -125,13 +130,12 @@ class McpAsyncClientTests {
 	@Test
 	void validateContextPassedToTransportConnect() {
 		McpClientTransport transport = new McpClientTransport() {
-			Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler;
+			Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler;
 
 			final AtomicReference<String> contextValue = new AtomicReference<>();
 
 			@Override
-			public Mono<Void> connect(
-					Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
+			public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
 				return Mono.deferContextual(ctx -> {
 					this.handler = handler;
 					if (ctx.hasKey(CONTEXT_KEY)) {
@@ -147,17 +151,17 @@ class McpAsyncClientTests {
 			}
 
 			@Override
-			public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+			public Mono<Void> sendMessage(JSONRPCMessage message) {
 				if (!"hello".equals(this.contextValue.get())) {
 					return Mono.error(new RuntimeException("Context value not propagated via #connect method"));
 				}
 				// We're only interested in handling the init request to provide an init
 				// response
-				if (!(message instanceof McpSchema.JSONRPCRequest)) {
+				if (!(message instanceof JSONRPCRequest)) {
 					return Mono.empty();
 				}
-				McpSchema.JSONRPCResponse initResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
-						((McpSchema.JSONRPCRequest) message).id(), MOCK_INIT_RESULT, null);
+				JSONRPCResponse initResponse = new JSONRPCResponse(JSONRPC.JSONRPC_VERSION,
+						((JSONRPCRequest) message).id(), MOCK_INIT_RESULT, null);
 				return handler.apply(Mono.just(initResponse)).then();
 			}
 
@@ -186,7 +190,7 @@ class McpAsyncClientTests {
 
 		StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
 
-		StepVerifier.create(client.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3"))))
+		StepVerifier.create(client.callTool(new CallToolRequest("calculator", Map.of("expression", "2 + 3"))))
 			.expectNextMatches(response -> {
 				assertThat(response).isNotNull();
 				assertThat(response.isError()).isFalse();
@@ -208,7 +212,7 @@ class McpAsyncClientTests {
 
 		StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
 
-		StepVerifier.create(client.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3"))))
+		StepVerifier.create(client.callTool(new CallToolRequest("calculator", Map.of("expression", "2 + 3"))))
 			.expectNextMatches(response -> {
 				assertThat(response).isNotNull();
 				assertThat(response.isError()).isFalse();
@@ -230,7 +234,7 @@ class McpAsyncClientTests {
 
 		StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
 
-		StepVerifier.create(client.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3"))))
+		StepVerifier.create(client.callTool(new CallToolRequest("calculator", Map.of("expression", "2 + 3"))))
 			.expectErrorMatches(ex -> ex instanceof IllegalArgumentException
 					&& ex.getMessage().contains("Tool call result validation failed"))
 			.verify();
@@ -240,19 +244,15 @@ class McpAsyncClientTests {
 
 	@Test
 	void testListToolsWithEmptyCursor() {
-		McpSchema.Tool addTool = McpSchema.Tool.builder().name("add").description("calculate add").build();
-		McpSchema.Tool subtractTool = McpSchema.Tool.builder()
-			.name("subtract")
-			.description("calculate subtract")
-			.build();
-		McpSchema.ListToolsResult mockToolsResult = new McpSchema.ListToolsResult(List.of(addTool, subtractTool), "");
+		Tool addTool = Tool.builder().name("add").description("calculate add").build();
+		Tool subtractTool = Tool.builder().name("subtract").description("calculate subtract").build();
+		ListToolsResult mockToolsResult = new ListToolsResult(List.of(addTool, subtractTool), "");
 
 		McpClientTransport transport = new McpClientTransport() {
-			Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler;
+			Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler;
 
 			@Override
-			public Mono<Void> connect(
-					Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
+			public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
 				return Mono.deferContextual(ctx -> {
 					this.handler = handler;
 					return Mono.empty();
@@ -265,19 +265,17 @@ class McpAsyncClientTests {
 			}
 
 			@Override
-			public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
-				if (!(message instanceof McpSchema.JSONRPCRequest request)) {
+			public Mono<Void> sendMessage(JSONRPCMessage message) {
+				if (!(message instanceof JSONRPCRequest request)) {
 					return Mono.empty();
 				}
 
-				McpSchema.JSONRPCResponse response;
+				JSONRPCResponse response;
 				if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
-					response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), MOCK_INIT_RESULT,
-							null);
+					response = new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, request.id(), MOCK_INIT_RESULT, null);
 				}
 				else if (McpSchema.METHOD_TOOLS_LIST.equals(request.method())) {
-					response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), mockToolsResult,
-							null);
+					response = new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, request.id(), mockToolsResult, null);
 				}
 				else {
 					return Mono.empty();
@@ -299,11 +297,11 @@ class McpAsyncClientTests {
 
 		McpAsyncClient client = McpClient.async(transport).enableCallToolSchemaCaching(true).build();
 
-		Mono<McpSchema.ListToolsResult> mono = client.listTools();
-		McpSchema.ListToolsResult toolsResult = mono.block();
+		Mono<ListToolsResult> mono = client.listTools();
+		ListToolsResult toolsResult = mono.block();
 		assertThat(toolsResult).isNotNull();
 
-		Set<String> names = toolsResult.tools().stream().map(McpSchema.Tool::name).collect(Collectors.toSet());
+		Set<String> names = toolsResult.tools().stream().map(Tool::name).collect(Collectors.toSet());
 		assertThat(names).containsExactlyInAnyOrder("subtract", "add");
 	}
 

@@ -11,6 +11,9 @@ import io.modelcontextprotocol.MockMcpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCResponse;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
@@ -41,12 +44,12 @@ class McpClientProtocolVersionTests {
 			String protocolVersion = transport.protocolVersions().get(transport.protocolVersions().size() - 1);
 
 			StepVerifier.create(initializeResultMono).then(() -> {
-				McpSchema.JSONRPCRequest request = transport.getLastSentMessageAsRequest();
+				JSONRPCRequest request = transport.getLastSentMessageAsRequest();
 				assertThat(request.params()).isInstanceOf(McpSchema.InitializeRequest.class);
 				McpSchema.InitializeRequest initRequest = (McpSchema.InitializeRequest) request.params();
 				assertThat(initRequest.protocolVersion()).isEqualTo(transport.protocolVersions().get(0));
 
-				transport.simulateIncomingMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
+				transport.simulateIncomingMessage(new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, request.id(),
 						new McpSchema.InitializeResult(protocolVersion, ServerCapabilities.builder().build(),
 								new McpSchema.Implementation("test-server", "1.0.0"), null),
 						null));
@@ -75,12 +78,12 @@ class McpClientProtocolVersionTests {
 			Mono<InitializeResult> initializeResultMono = client.initialize();
 
 			StepVerifier.create(initializeResultMono).then(() -> {
-				McpSchema.JSONRPCRequest request = transport.getLastSentMessageAsRequest();
+				JSONRPCRequest request = transport.getLastSentMessageAsRequest();
 				assertThat(request.params()).isInstanceOf(McpSchema.InitializeRequest.class);
 				McpSchema.InitializeRequest initRequest = (McpSchema.InitializeRequest) request.params();
 				assertThat(initRequest.protocolVersion()).isIn(List.of(oldVersion, ProtocolVersions.MCP_2025_11_25));
 
-				transport.simulateIncomingMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
+				transport.simulateIncomingMessage(new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, request.id(),
 						new McpSchema.InitializeResult(oldVersion, ServerCapabilities.builder().build(),
 								new McpSchema.Implementation("test-server", "1.0.0"), null),
 						null));
@@ -106,10 +109,10 @@ class McpClientProtocolVersionTests {
 			Mono<InitializeResult> initializeResultMono = client.initialize();
 
 			StepVerifier.create(initializeResultMono).then(() -> {
-				McpSchema.JSONRPCRequest request = transport.getLastSentMessageAsRequest();
+				JSONRPCRequest request = transport.getLastSentMessageAsRequest();
 				assertThat(request.params()).isInstanceOf(McpSchema.InitializeRequest.class);
 
-				transport.simulateIncomingMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
+				transport.simulateIncomingMessage(new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, request.id(),
 						new McpSchema.InitializeResult(unsupportedVersion, ServerCapabilities.builder().build(),
 								new McpSchema.Implementation("test-server", "1.0.0"), null),
 						null));
@@ -138,11 +141,11 @@ class McpClientProtocolVersionTests {
 			Mono<InitializeResult> initializeResultMono = client.initialize();
 
 			StepVerifier.create(initializeResultMono).then(() -> {
-				McpSchema.JSONRPCRequest request = transport.getLastSentMessageAsRequest();
+				JSONRPCRequest request = transport.getLastSentMessageAsRequest();
 				McpSchema.InitializeRequest initRequest = (McpSchema.InitializeRequest) request.params();
 				assertThat(initRequest.protocolVersion()).isEqualTo(latestVersion);
 
-				transport.simulateIncomingMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
+				transport.simulateIncomingMessage(new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, request.id(),
 						new McpSchema.InitializeResult(latestVersion, ServerCapabilities.builder().build(),
 								new McpSchema.Implementation("test-server", "1.0.0"), null),
 						null));

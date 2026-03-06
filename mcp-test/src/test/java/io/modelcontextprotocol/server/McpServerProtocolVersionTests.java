@@ -11,6 +11,10 @@ import io.modelcontextprotocol.MockMcpServerTransport;
 import io.modelcontextprotocol.MockMcpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.ProtocolVersions;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCResponse;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,8 +28,8 @@ class McpServerProtocolVersionTests {
 
 	private static final McpSchema.Implementation CLIENT_INFO = new McpSchema.Implementation("test-client", "1.0.0");
 
-	private McpSchema.JSONRPCRequest jsonRpcInitializeRequest(String requestId, String protocolVersion) {
-		return new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE, requestId,
+	private JSONRPCRequest jsonRpcInitializeRequest(String requestId, String protocolVersion) {
+		return new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE, requestId,
 				new McpSchema.InitializeRequest(protocolVersion, null, CLIENT_INFO));
 	}
 
@@ -39,9 +43,9 @@ class McpServerProtocolVersionTests {
 
 		transportProvider.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, ProtocolVersions.MCP_2025_11_25));
 
-		McpSchema.JSONRPCMessage response = serverTransport.getLastSentMessage();
-		assertThat(response).isInstanceOf(McpSchema.JSONRPCResponse.class);
-		McpSchema.JSONRPCResponse jsonResponse = (McpSchema.JSONRPCResponse) response;
+		JSONRPCMessage response = serverTransport.getLastSentMessage();
+		assertThat(response).isInstanceOf(JSONRPCResponse.class);
+		JSONRPCResponse jsonResponse = (JSONRPCResponse) response;
 		assertThat(jsonResponse.id()).isEqualTo(requestId);
 		assertThat(jsonResponse.result()).isInstanceOf(McpSchema.InitializeResult.class);
 		McpSchema.InitializeResult result = (McpSchema.InitializeResult) jsonResponse.result();
@@ -66,9 +70,9 @@ class McpServerProtocolVersionTests {
 
 		transportProvider.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, oldVersion));
 
-		McpSchema.JSONRPCMessage response = serverTransport.getLastSentMessage();
-		assertThat(response).isInstanceOf(McpSchema.JSONRPCResponse.class);
-		McpSchema.JSONRPCResponse jsonResponse = (McpSchema.JSONRPCResponse) response;
+		JSONRPCMessage response = serverTransport.getLastSentMessage();
+		assertThat(response).isInstanceOf(JSONRPCResponse.class);
+		JSONRPCResponse jsonResponse = (JSONRPCResponse) response;
 		assertThat(jsonResponse.id()).isEqualTo(requestId);
 		assertThat(jsonResponse.result()).isInstanceOf(McpSchema.InitializeResult.class);
 		McpSchema.InitializeResult result = (McpSchema.InitializeResult) jsonResponse.result();
@@ -89,9 +93,9 @@ class McpServerProtocolVersionTests {
 
 		transportProvider.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, unsupportedVersion));
 
-		McpSchema.JSONRPCMessage response = serverTransport.getLastSentMessage();
-		assertThat(response).isInstanceOf(McpSchema.JSONRPCResponse.class);
-		McpSchema.JSONRPCResponse jsonResponse = (McpSchema.JSONRPCResponse) response;
+		JSONRPCMessage response = serverTransport.getLastSentMessage();
+		assertThat(response).isInstanceOf(JSONRPCResponse.class);
+		JSONRPCResponse jsonResponse = (JSONRPCResponse) response;
 		assertThat(jsonResponse.id()).isEqualTo(requestId);
 		assertThat(jsonResponse.result()).isInstanceOf(McpSchema.InitializeResult.class);
 		McpSchema.InitializeResult result = (McpSchema.InitializeResult) jsonResponse.result();
@@ -117,9 +121,9 @@ class McpServerProtocolVersionTests {
 		String requestId = UUID.randomUUID().toString();
 		transportProvider.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, latestVersion));
 
-		McpSchema.JSONRPCMessage response = serverTransport.getLastSentMessage();
-		assertThat(response).isInstanceOf(McpSchema.JSONRPCResponse.class);
-		McpSchema.JSONRPCResponse jsonResponse = (McpSchema.JSONRPCResponse) response;
+		JSONRPCMessage response = serverTransport.getLastSentMessage();
+		assertThat(response).isInstanceOf(JSONRPCResponse.class);
+		JSONRPCResponse jsonResponse = (JSONRPCResponse) response;
 		assertThat(jsonResponse.id()).isEqualTo(requestId);
 		assertThat(jsonResponse.result()).isInstanceOf(McpSchema.InitializeResult.class);
 		McpSchema.InitializeResult result = (McpSchema.InitializeResult) jsonResponse.result();

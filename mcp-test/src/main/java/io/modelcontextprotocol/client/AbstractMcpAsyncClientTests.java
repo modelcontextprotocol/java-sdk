@@ -26,28 +26,28 @@ import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-
+import io.modelcontextprotocol.spec.schema.sample.CreateMessageRequest;
+import io.modelcontextprotocol.spec.schema.sample.CreateMessageResult;
+import io.modelcontextprotocol.spec.schema.elicit.ElicitResult;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.BlobResourceContents;
-import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
-import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
-import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
-import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
-import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
-import io.modelcontextprotocol.spec.McpSchema.Prompt;
-import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
-import io.modelcontextprotocol.spec.McpSchema.Resource;
-import io.modelcontextprotocol.spec.McpSchema.ResourceContents;
+import io.modelcontextprotocol.spec.schema.elicit.ElicitRequest;
 import io.modelcontextprotocol.spec.McpSchema.Root;
-import io.modelcontextprotocol.spec.McpSchema.SubscribeRequest;
-import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
-import io.modelcontextprotocol.spec.McpSchema.UnsubscribeRequest;
+import io.modelcontextprotocol.spec.schema.prompt.GetPromptRequest;
+import io.modelcontextprotocol.spec.schema.prompt.Prompt;
+import io.modelcontextprotocol.spec.schema.resource.BlobResourceContents;
+import io.modelcontextprotocol.spec.schema.resource.ReadResourceResult;
+import io.modelcontextprotocol.spec.schema.resource.Resource;
+import io.modelcontextprotocol.spec.schema.resource.ResourceContents;
+import io.modelcontextprotocol.spec.schema.resource.ResourceTemplate;
+import io.modelcontextprotocol.spec.schema.resource.SubscribeRequest;
+import io.modelcontextprotocol.spec.schema.resource.TextResourceContents;
+import io.modelcontextprotocol.spec.schema.resource.UnsubscribeRequest;
 import io.modelcontextprotocol.spec.McpTransport;
+import io.modelcontextprotocol.spec.schema.tool.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
@@ -243,7 +243,7 @@ public abstract class AbstractMcpAsyncClientTests {
 
 		withClient(transport, mcpAsyncClient -> {
 			StepVerifier.create(mcpAsyncClient.initialize()
-				.then(mcpAsyncClient.callTool(new McpSchema.CallToolRequest("annotatedMessage",
+				.then(mcpAsyncClient.callTool(new CallToolRequest("annotatedMessage",
 						Map.of("messageType", messageType, "includeImage", true)))))
 				.consumeNextWith(result -> {
 					assertThat(result).isNotNull();
@@ -504,14 +504,11 @@ public abstract class AbstractMcpAsyncClientTests {
 	void testReadResource() {
 		AtomicInteger resourceCount = new AtomicInteger();
 		withClient(createMcpTransport(), client -> {
-			Flux<McpSchema.ReadResourceResult> resources = client.initialize()
-				.then(client.listResources(null))
-				.flatMapMany(r -> {
-					List<Resource> l = r.resources();
-					resourceCount.set(l.size());
-					return Flux.fromIterable(l);
-				})
-				.flatMap(r -> client.readResource(r));
+			Flux<ReadResourceResult> resources = client.initialize().then(client.listResources(null)).flatMapMany(r -> {
+				List<Resource> l = r.resources();
+				resourceCount.set(l.size());
+				return Flux.fromIterable(l);
+			}).flatMap(r -> client.readResource(r));
 
 			StepVerifier.create(resources)
 				.recordWith(ArrayList::new)
@@ -603,7 +600,7 @@ public abstract class AbstractMcpAsyncClientTests {
 					assertThat(result.resourceTemplates()).isNotNull();
 					// Verify that the returned list is immutable
 					assertThatThrownBy(() -> result.resourceTemplates()
-						.add(new McpSchema.ResourceTemplate("test://template", "test", "test", null, null, null)))
+						.add(new ResourceTemplate("test://template", "test", "test", null, null, null)))
 						.isInstanceOf(UnsupportedOperationException.class);
 				})
 				.verifyComplete();
@@ -757,14 +754,14 @@ public abstract class AbstractMcpAsyncClientTests {
 				receivedMessage.set(messageText.text());
 				receivedMaxTokens.set(request.maxTokens());
 
-				return Mono
-					.just(new McpSchema.CreateMessageResult(McpSchema.Role.USER, new McpSchema.TextContent(response),
-							"modelId", McpSchema.CreateMessageResult.StopReason.END_TURN));
+				return Mono.just(new CreateMessageResult(McpSchema.Role.USER, new McpSchema.TextContent(response),
+						"modelId", CreateMessageResult.StopReason.END_TURN));
 			}), client -> {
 				StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
 
-				StepVerifier.create(client.callTool(
-						new McpSchema.CallToolRequest("sampleLLM", Map.of("prompt", message, "maxTokens", maxTokens))))
+				StepVerifier
+					.create(client
+						.callTool(new CallToolRequest("sampleLLM", Map.of("prompt", message, "maxTokens", maxTokens))))
 					.consumeNextWith(result -> {
 						// Verify tool response to ensure our sampling response was passed
 						// through

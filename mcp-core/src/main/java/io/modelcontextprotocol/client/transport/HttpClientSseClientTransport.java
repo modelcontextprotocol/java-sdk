@@ -27,10 +27,10 @@ import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.ProtocolVersions;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
 import reactor.core.Disposable;
@@ -362,7 +362,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 								}
 							}
 							else if (MESSAGE_EVENT_TYPE.equals(responseEvent.sseEvent().event())) {
-								JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper,
+								JSONRPCMessage message = JSONRPC.deserializeJsonRpcMessage(jsonMapper,
 										responseEvent.sseEvent().data());
 								sink.success();
 								return Flux.just(message);
@@ -376,8 +376,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 							sink.error(new McpTransportException("Error processing SSE event", e));
 						}
 					}
-					return Flux.<McpSchema.JSONRPCMessage>error(
-							new RuntimeException("Failed to send message: " + responseEvent));
+					return Flux.<JSONRPCMessage>error(new RuntimeException("Failed to send message: " + responseEvent));
 
 				})
 				.flatMap(jsonRpcMessage -> handler.apply(Mono.just(jsonRpcMessage)))

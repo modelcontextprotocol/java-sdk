@@ -10,13 +10,17 @@ import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
-import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
-import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
-import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.Implementation;
 import io.modelcontextprotocol.spec.McpSchema.Root;
+import io.modelcontextprotocol.spec.schema.elicit.ElicitRequest;
+import io.modelcontextprotocol.spec.schema.elicit.ElicitResult;
+import io.modelcontextprotocol.spec.schema.prompt.Prompt;
+import io.modelcontextprotocol.spec.schema.resource.Resource;
+import io.modelcontextprotocol.spec.schema.resource.ResourceContents;
+import io.modelcontextprotocol.spec.schema.sample.CreateMessageRequest;
+import io.modelcontextprotocol.spec.schema.sample.CreateMessageResult;
 import io.modelcontextprotocol.spec.McpTransport;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
 
@@ -173,13 +177,13 @@ public interface McpClient {
 
 		private final Map<String, Root> roots = new HashMap<>();
 
-		private final List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers = new ArrayList<>();
+		private final List<Consumer<List<Tool>>> toolsChangeConsumers = new ArrayList<>();
 
-		private final List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers = new ArrayList<>();
+		private final List<Consumer<List<Resource>>> resourcesChangeConsumers = new ArrayList<>();
 
-		private final List<Consumer<List<McpSchema.ResourceContents>>> resourcesUpdateConsumers = new ArrayList<>();
+		private final List<Consumer<List<ResourceContents>>> resourcesUpdateConsumers = new ArrayList<>();
 
-		private final List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers = new ArrayList<>();
+		private final List<Consumer<List<Prompt>>> promptsChangeConsumers = new ArrayList<>();
 
 		private final List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers = new ArrayList<>();
 
@@ -327,7 +331,7 @@ public interface McpClient {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if toolsChangeConsumer is null
 		 */
-		public SyncSpec toolsChangeConsumer(Consumer<List<McpSchema.Tool>> toolsChangeConsumer) {
+		public SyncSpec toolsChangeConsumer(Consumer<List<Tool>> toolsChangeConsumer) {
 			Assert.notNull(toolsChangeConsumer, "Tools change consumer must not be null");
 			this.toolsChangeConsumers.add(toolsChangeConsumer);
 			return this;
@@ -342,7 +346,7 @@ public interface McpClient {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourcesChangeConsumer is null
 		 */
-		public SyncSpec resourcesChangeConsumer(Consumer<List<McpSchema.Resource>> resourcesChangeConsumer) {
+		public SyncSpec resourcesChangeConsumer(Consumer<List<Resource>> resourcesChangeConsumer) {
 			Assert.notNull(resourcesChangeConsumer, "Resources change consumer must not be null");
 			this.resourcesChangeConsumers.add(resourcesChangeConsumer);
 			return this;
@@ -358,7 +362,7 @@ public interface McpClient {
 		 * @return This builder instance for method chaining.
 		 * @throws IllegalArgumentException If the resourcesUpdateConsumer is null.
 		 */
-		public SyncSpec resourcesUpdateConsumer(Consumer<List<McpSchema.ResourceContents>> resourcesUpdateConsumer) {
+		public SyncSpec resourcesUpdateConsumer(Consumer<List<ResourceContents>> resourcesUpdateConsumer) {
 			Assert.notNull(resourcesUpdateConsumer, "Resources update consumer must not be null");
 			this.resourcesUpdateConsumers.add(resourcesUpdateConsumer);
 			return this;
@@ -373,7 +377,7 @@ public interface McpClient {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if promptsChangeConsumer is null
 		 */
-		public SyncSpec promptsChangeConsumer(Consumer<List<McpSchema.Prompt>> promptsChangeConsumer) {
+		public SyncSpec promptsChangeConsumer(Consumer<List<Prompt>> promptsChangeConsumer) {
 			Assert.notNull(promptsChangeConsumer, "Prompts change consumer must not be null");
 			this.promptsChangeConsumers.add(promptsChangeConsumer);
 			return this;
@@ -529,13 +533,13 @@ public interface McpClient {
 
 		private final Map<String, Root> roots = new HashMap<>();
 
-		private final List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers = new ArrayList<>();
+		private final List<Function<List<Tool>, Mono<Void>>> toolsChangeConsumers = new ArrayList<>();
 
-		private final List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers = new ArrayList<>();
+		private final List<Function<List<Resource>, Mono<Void>>> resourcesChangeConsumers = new ArrayList<>();
 
-		private final List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers = new ArrayList<>();
+		private final List<Function<List<ResourceContents>, Mono<Void>>> resourcesUpdateConsumers = new ArrayList<>();
 
-		private final List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers = new ArrayList<>();
+		private final List<Function<List<Prompt>, Mono<Void>>> promptsChangeConsumers = new ArrayList<>();
 
 		private final List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers = new ArrayList<>();
 
@@ -681,7 +685,7 @@ public interface McpClient {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if toolsChangeConsumer is null
 		 */
-		public AsyncSpec toolsChangeConsumer(Function<List<McpSchema.Tool>, Mono<Void>> toolsChangeConsumer) {
+		public AsyncSpec toolsChangeConsumer(Function<List<Tool>, Mono<Void>> toolsChangeConsumer) {
 			Assert.notNull(toolsChangeConsumer, "Tools change consumer must not be null");
 			this.toolsChangeConsumers.add(toolsChangeConsumer);
 			return this;
@@ -696,8 +700,7 @@ public interface McpClient {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourcesChangeConsumer is null
 		 */
-		public AsyncSpec resourcesChangeConsumer(
-				Function<List<McpSchema.Resource>, Mono<Void>> resourcesChangeConsumer) {
+		public AsyncSpec resourcesChangeConsumer(Function<List<Resource>, Mono<Void>> resourcesChangeConsumer) {
 			Assert.notNull(resourcesChangeConsumer, "Resources change consumer must not be null");
 			this.resourcesChangeConsumers.add(resourcesChangeConsumer);
 			return this;
@@ -713,8 +716,7 @@ public interface McpClient {
 		 * @return This builder instance for method chaining.
 		 * @throws IllegalArgumentException If the resourcesUpdateConsumer is null.
 		 */
-		public AsyncSpec resourcesUpdateConsumer(
-				Function<List<McpSchema.ResourceContents>, Mono<Void>> resourcesUpdateConsumer) {
+		public AsyncSpec resourcesUpdateConsumer(Function<List<ResourceContents>, Mono<Void>> resourcesUpdateConsumer) {
 			Assert.notNull(resourcesUpdateConsumer, "Resources update consumer must not be null");
 			this.resourcesUpdateConsumers.add(resourcesUpdateConsumer);
 			return this;
@@ -729,7 +731,7 @@ public interface McpClient {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if promptsChangeConsumer is null
 		 */
-		public AsyncSpec promptsChangeConsumer(Function<List<McpSchema.Prompt>, Mono<Void>> promptsChangeConsumer) {
+		public AsyncSpec promptsChangeConsumer(Function<List<Prompt>, Mono<Void>> promptsChangeConsumer) {
 			Assert.notNull(promptsChangeConsumer, "Prompts change consumer must not be null");
 			this.promptsChangeConsumers.add(promptsChangeConsumer);
 			return this;

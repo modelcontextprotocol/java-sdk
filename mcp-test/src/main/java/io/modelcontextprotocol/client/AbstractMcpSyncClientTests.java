@@ -27,25 +27,25 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import io.modelcontextprotocol.spec.schema.sample.CreateMessageResult;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.BlobResourceContents;
-import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.ListResourceTemplatesResult;
-import io.modelcontextprotocol.spec.McpSchema.ListResourcesResult;
-import io.modelcontextprotocol.spec.McpSchema.ListToolsResult;
-import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
-import io.modelcontextprotocol.spec.McpSchema.Resource;
-import io.modelcontextprotocol.spec.McpSchema.ResourceContents;
 import io.modelcontextprotocol.spec.McpSchema.Root;
-import io.modelcontextprotocol.spec.McpSchema.SubscribeRequest;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
-import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
-import io.modelcontextprotocol.spec.McpSchema.UnsubscribeRequest;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
+import io.modelcontextprotocol.spec.schema.resource.BlobResourceContents;
+import io.modelcontextprotocol.spec.schema.resource.ListResourceTemplatesResult;
+import io.modelcontextprotocol.spec.schema.resource.ListResourcesResult;
+import io.modelcontextprotocol.spec.schema.resource.ReadResourceResult;
+import io.modelcontextprotocol.spec.schema.resource.Resource;
+import io.modelcontextprotocol.spec.schema.resource.ResourceContents;
+import io.modelcontextprotocol.spec.schema.resource.SubscribeRequest;
+import io.modelcontextprotocol.spec.schema.resource.TextResourceContents;
+import io.modelcontextprotocol.spec.schema.resource.UnsubscribeRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolResult;
+import io.modelcontextprotocol.spec.schema.tool.ListToolsResult;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
@@ -246,8 +246,8 @@ public abstract class AbstractMcpSyncClientTests {
 		withClient(transport, client -> {
 			client.initialize();
 
-			McpSchema.CallToolResult result = client.callTool(new McpSchema.CallToolRequest("annotatedMessage",
-					Map.of("messageType", messageType, "includeImage", true)));
+			CallToolResult result = client.callTool(
+					new CallToolRequest("annotatedMessage", Map.of("messageType", messageType, "includeImage", true)));
 
 			assertThat(result).isNotNull();
 			assertThat(result.isError()).isNotEqualTo(true);
@@ -610,13 +610,13 @@ public abstract class AbstractMcpSyncClientTests {
 				receivedMessage.set(messageText.text());
 				receivedMaxTokens.set(request.maxTokens());
 
-				return new McpSchema.CreateMessageResult(McpSchema.Role.USER, new McpSchema.TextContent(response),
-						"modelId", McpSchema.CreateMessageResult.StopReason.END_TURN);
+				return new CreateMessageResult(McpSchema.Role.USER, new McpSchema.TextContent(response), "modelId",
+						CreateMessageResult.StopReason.END_TURN);
 			}), client -> {
 				client.initialize();
 
-				McpSchema.CallToolResult result = client.callTool(
-						new McpSchema.CallToolRequest("sampleLLM", Map.of("prompt", message, "maxTokens", maxTokens)));
+				CallToolResult result = client
+					.callTool(new CallToolRequest("sampleLLM", Map.of("prompt", message, "maxTokens", maxTokens)));
 
 				// Verify tool response to ensure our sampling response was passed through
 				assertThat(result.content()).hasAtLeastOneElementOfType(McpSchema.TextContent.class);

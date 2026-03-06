@@ -6,6 +6,11 @@ import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
+import io.modelcontextprotocol.spec.schema.elicit.ElicitResult;
+import io.modelcontextprotocol.spec.schema.tool.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolResult;
+import io.modelcontextprotocol.spec.schema.tool.ListToolsResult;
 
 /**
  * MCP Conformance Test Client - JDK HTTP Client Implementation
@@ -120,7 +125,7 @@ public class ConformanceJdkClientMcpClient {
 				}
 
 				// Return accept action with the defaults applied
-				return new McpSchema.ElicitResult(McpSchema.ElicitResult.Action.ACCEPT, content, null);
+				return new ElicitResult(ElicitResult.Action.ACCEPT, content, null);
 			})
 			.build();
 	}
@@ -161,20 +166,19 @@ public class ConformanceJdkClientMcpClient {
 			System.out.println("Successfully connected to MCP server");
 
 			// List available tools
-			McpSchema.ListToolsResult toolsResult = client.listTools();
+			ListToolsResult toolsResult = client.listTools();
 			System.out.println("Successfully listed tools");
 
 			// Call the add_numbers tool if it exists
 			if (toolsResult != null && toolsResult.tools() != null) {
-				for (McpSchema.Tool tool : toolsResult.tools()) {
+				for (Tool tool : toolsResult.tools()) {
 					if ("add_numbers".equals(tool.name())) {
 						// Call the add_numbers tool with test arguments
 						var arguments = new java.util.HashMap<String, Object>();
 						arguments.put("a", 5);
 						arguments.put("b", 3);
 
-						McpSchema.CallToolResult result = client
-							.callTool(new McpSchema.CallToolRequest("add_numbers", arguments));
+						CallToolResult result = client.callTool(new CallToolRequest("add_numbers", arguments));
 
 						System.out.println("Successfully called add_numbers tool");
 						if (result != null && result.content() != null) {
@@ -208,18 +212,18 @@ public class ConformanceJdkClientMcpClient {
 			System.out.println("Successfully connected to MCP server");
 
 			// List available tools
-			McpSchema.ListToolsResult toolsResult = client.listTools();
+			ListToolsResult toolsResult = client.listTools();
 			System.out.println("Successfully listed tools");
 
 			// Call the test_client_elicitation_defaults tool if it exists
 			if (toolsResult != null && toolsResult.tools() != null) {
-				for (McpSchema.Tool tool : toolsResult.tools()) {
+				for (Tool tool : toolsResult.tools()) {
 					if ("test_client_elicitation_defaults".equals(tool.name())) {
 						// Call the tool which will trigger an elicitation request
 						var arguments = new java.util.HashMap<String, Object>();
 
-						McpSchema.CallToolResult result = client
-							.callTool(new McpSchema.CallToolRequest("test_client_elicitation_defaults", arguments));
+						CallToolResult result = client
+							.callTool(new CallToolRequest("test_client_elicitation_defaults", arguments));
 
 						System.out.println("Successfully called test_client_elicitation_defaults tool");
 						if (result != null && result.content() != null) {
@@ -253,19 +257,18 @@ public class ConformanceJdkClientMcpClient {
 			System.out.println("Successfully connected to MCP server");
 
 			// List available tools
-			McpSchema.ListToolsResult toolsResult = client.listTools();
+			ListToolsResult toolsResult = client.listTools();
 			System.out.println("Successfully listed tools");
 
 			// Call the test_reconnection tool if it exists
 			if (toolsResult != null && toolsResult.tools() != null) {
-				for (McpSchema.Tool tool : toolsResult.tools()) {
+				for (Tool tool : toolsResult.tools()) {
 					if ("test_reconnection".equals(tool.name())) {
 						// Call the tool which will trigger SSE stream closure and
 						// reconnection
 						var arguments = new java.util.HashMap<String, Object>();
 
-						McpSchema.CallToolResult result = client
-							.callTool(new McpSchema.CallToolRequest("test_reconnection", arguments));
+						CallToolResult result = client.callTool(new CallToolRequest("test_reconnection", arguments));
 
 						System.out.println("Successfully called test_reconnection tool");
 						if (result != null && result.content() != null) {

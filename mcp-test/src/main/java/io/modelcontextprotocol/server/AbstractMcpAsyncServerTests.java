@@ -8,15 +8,16 @@ import java.time.Duration;
 import java.util.List;
 
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
-import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
-import io.modelcontextprotocol.spec.McpSchema.Prompt;
-import io.modelcontextprotocol.spec.McpSchema.PromptMessage;
-import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
-import io.modelcontextprotocol.spec.McpSchema.Resource;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
+import io.modelcontextprotocol.spec.schema.prompt.GetPromptResult;
+import io.modelcontextprotocol.spec.schema.prompt.Prompt;
+import io.modelcontextprotocol.spec.schema.prompt.PromptMessage;
+import io.modelcontextprotocol.spec.schema.resource.ReadResourceResult;
+import io.modelcontextprotocol.spec.schema.resource.Resource;
+import io.modelcontextprotocol.spec.schema.resource.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.schema.tool.CallToolResult;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -97,11 +98,7 @@ public abstract class AbstractMcpAsyncServerTests {
 	// ---------------------------------------
 	@Test
 	void testAddToolCall() {
-		Tool newTool = McpSchema.Tool.builder()
-			.name("new-tool")
-			.title("New test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool newTool = Tool.builder().name("new-tool").title("New test tool").inputSchema(EMPTY_JSON_SCHEMA).build();
 
 		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
@@ -118,7 +115,7 @@ public abstract class AbstractMcpAsyncServerTests {
 
 	@Test
 	void testAddDuplicateToolCall() {
-		Tool duplicateTool = McpSchema.Tool.builder()
+		Tool duplicateTool = Tool.builder()
 			.name(TEST_TOOL_NAME)
 			.title("Duplicate tool")
 			.inputSchema(EMPTY_JSON_SCHEMA)
@@ -142,7 +139,7 @@ public abstract class AbstractMcpAsyncServerTests {
 
 	@Test
 	void testDuplicateToolCallDuringBuilding() {
-		Tool duplicateTool = McpSchema.Tool.builder()
+		Tool duplicateTool = Tool.builder()
 			.name("duplicate-build-toolcall")
 			.title("Duplicate toolcall during building")
 			.inputSchema(EMPTY_JSON_SCHEMA)
@@ -162,7 +159,7 @@ public abstract class AbstractMcpAsyncServerTests {
 
 	@Test
 	void testDuplicateToolsInBatchListRegistration() {
-		Tool duplicateTool = McpSchema.Tool.builder()
+		Tool duplicateTool = Tool.builder()
 			.name("batch-list-tool")
 			.title("Duplicate tool in batch list")
 			.inputSchema(EMPTY_JSON_SCHEMA)
@@ -190,7 +187,7 @@ public abstract class AbstractMcpAsyncServerTests {
 
 	@Test
 	void testDuplicateToolsInBatchVarargsRegistration() {
-		Tool duplicateTool = McpSchema.Tool.builder()
+		Tool duplicateTool = Tool.builder()
 			.name("batch-varargs-tool")
 			.title("Duplicate tool in batch varargs")
 			.inputSchema(EMPTY_JSON_SCHEMA)
@@ -215,11 +212,7 @@ public abstract class AbstractMcpAsyncServerTests {
 
 	@Test
 	void testRemoveTool() {
-		Tool too = McpSchema.Tool.builder()
-			.name(TEST_TOOL_NAME)
-			.title("Duplicate tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool too = Tool.builder().name(TEST_TOOL_NAME).title("Duplicate tool").inputSchema(EMPTY_JSON_SCHEMA).build();
 
 		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
@@ -246,11 +239,7 @@ public abstract class AbstractMcpAsyncServerTests {
 
 	@Test
 	void testNotifyToolsListChanged() {
-		Tool too = McpSchema.Tool.builder()
-			.name(TEST_TOOL_NAME)
-			.title("Duplicate tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool too = Tool.builder().name(TEST_TOOL_NAME).title("Duplicate tool").inputSchema(EMPTY_JSON_SCHEMA).build();
 
 		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
@@ -425,7 +414,7 @@ public abstract class AbstractMcpAsyncServerTests {
 			.capabilities(ServerCapabilities.builder().resources(true, false).build())
 			.build();
 
-		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
+		ResourceTemplate template = ResourceTemplate.builder()
 			.uriTemplate("test://template/{id}")
 			.name("test-template")
 			.description("Test resource template")
@@ -445,7 +434,7 @@ public abstract class AbstractMcpAsyncServerTests {
 		// Create a server without resource capabilities
 		McpAsyncServer serverWithoutResources = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
 
-		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
+		ResourceTemplate template = ResourceTemplate.builder()
 			.uriTemplate("test://template/{id}")
 			.name("test-template")
 			.description("Test resource template")
@@ -463,7 +452,7 @@ public abstract class AbstractMcpAsyncServerTests {
 
 	@Test
 	void testRemoveResourceTemplate() {
-		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
+		ResourceTemplate template = ResourceTemplate.builder()
 			.uriTemplate("test://template/{id}")
 			.name("test-template")
 			.description("Test resource template")
@@ -508,7 +497,7 @@ public abstract class AbstractMcpAsyncServerTests {
 
 	@Test
 	void testListResourceTemplates() {
-		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
+		ResourceTemplate template = ResourceTemplate.builder()
 			.uriTemplate("test://template/{id}")
 			.name("test-template")
 			.description("Test resource template")

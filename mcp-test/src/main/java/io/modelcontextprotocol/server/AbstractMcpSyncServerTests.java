@@ -7,15 +7,16 @@ package io.modelcontextprotocol.server;
 import java.util.List;
 
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
-import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
-import io.modelcontextprotocol.spec.McpSchema.Prompt;
-import io.modelcontextprotocol.spec.McpSchema.PromptMessage;
-import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
-import io.modelcontextprotocol.spec.McpSchema.Resource;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
+import io.modelcontextprotocol.spec.schema.prompt.GetPromptResult;
+import io.modelcontextprotocol.spec.schema.prompt.Prompt;
+import io.modelcontextprotocol.spec.schema.prompt.PromptMessage;
+import io.modelcontextprotocol.spec.schema.resource.ReadResourceResult;
+import io.modelcontextprotocol.spec.schema.resource.Resource;
+import io.modelcontextprotocol.spec.schema.resource.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.schema.tool.CallToolResult;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -105,11 +106,7 @@ public abstract class AbstractMcpSyncServerTests {
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.build();
 
-		Tool newTool = McpSchema.Tool.builder()
-			.name("new-tool")
-			.title("New test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool newTool = Tool.builder().name("new-tool").title("New test tool").inputSchema(EMPTY_JSON_SCHEMA).build();
 
 		assertThatCode(() -> mcpSyncServer.addTool(McpServerFeatures.SyncToolSpecification.builder()
 			.tool(newTool)
@@ -121,7 +118,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testAddDuplicateToolCall() {
-		Tool duplicateTool = McpSchema.Tool.builder()
+		Tool duplicateTool = Tool.builder()
 			.name(TEST_TOOL_NAME)
 			.title("Duplicate tool")
 			.inputSchema(EMPTY_JSON_SCHEMA)
@@ -143,7 +140,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testDuplicateToolCallDuringBuilding() {
-		Tool duplicateTool = McpSchema.Tool.builder()
+		Tool duplicateTool = Tool.builder()
 			.name("duplicate-build-toolcall")
 			.title("Duplicate toolcall during building")
 			.inputSchema(EMPTY_JSON_SCHEMA)
@@ -161,7 +158,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testDuplicateToolsInBatchListRegistration() {
-		Tool duplicateTool = McpSchema.Tool.builder()
+		Tool duplicateTool = Tool.builder()
 			.name("batch-list-tool")
 			.title("Duplicate tool in batch list")
 			.inputSchema(EMPTY_JSON_SCHEMA)
@@ -188,7 +185,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testDuplicateToolsInBatchVarargsRegistration() {
-		Tool duplicateTool = McpSchema.Tool.builder()
+		Tool duplicateTool = Tool.builder()
 			.name("batch-varargs-tool")
 			.title("Duplicate tool in batch varargs")
 			.inputSchema(EMPTY_JSON_SCHEMA)
@@ -212,11 +209,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testRemoveTool() {
-		Tool tool = McpSchema.Tool.builder()
-			.name(TEST_TOOL_NAME)
-			.title("Test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool tool = Tool.builder().name(TEST_TOOL_NAME).title("Test tool").inputSchema(EMPTY_JSON_SCHEMA).build();
 
 		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
@@ -351,7 +344,7 @@ public abstract class AbstractMcpSyncServerTests {
 				resource, (exchange, req) -> new ReadResourceResult(List.of()));
 
 		mcpSyncServer.addResource(specification);
-		List<McpSchema.Resource> resources = mcpSyncServer.listResources();
+		List<Resource> resources = mcpSyncServer.listResources();
 
 		assertThat(resources).hasSize(1);
 		assertThat(resources.get(0).uri()).isEqualTo(TEST_RESOURCE_URI);
@@ -404,7 +397,7 @@ public abstract class AbstractMcpSyncServerTests {
 			.capabilities(ServerCapabilities.builder().resources(true, false).build())
 			.build();
 
-		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
+		ResourceTemplate template = ResourceTemplate.builder()
 			.uriTemplate("test://template/{id}")
 			.name("test-template")
 			.description("Test resource template")
@@ -424,7 +417,7 @@ public abstract class AbstractMcpSyncServerTests {
 		// Create a server without resource capabilities
 		var serverWithoutResources = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0").build();
 
-		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
+		ResourceTemplate template = ResourceTemplate.builder()
 			.uriTemplate("test://template/{id}")
 			.name("test-template")
 			.description("Test resource template")
@@ -441,7 +434,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testRemoveResourceTemplate() {
-		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
+		ResourceTemplate template = ResourceTemplate.builder()
 			.uriTemplate("test://template/{id}")
 			.name("test-template")
 			.description("Test resource template")
@@ -485,7 +478,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testListResourceTemplates() {
-		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
+		ResourceTemplate template = ResourceTemplate.builder()
 			.uriTemplate("test://template/{id}")
 			.name("test-template")
 			.description("Test resource template")
@@ -500,7 +493,7 @@ public abstract class AbstractMcpSyncServerTests {
 			.resourceTemplates(specification)
 			.build();
 
-		List<McpSchema.ResourceTemplate> templates = mcpSyncServer.listResourceTemplates();
+		List<ResourceTemplate> templates = mcpSyncServer.listResourceTemplates();
 
 		assertThat(templates).isNotNull();
 

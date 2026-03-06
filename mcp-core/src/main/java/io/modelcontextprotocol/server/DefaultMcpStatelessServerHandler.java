@@ -4,14 +4,18 @@
 
 package io.modelcontextprotocol.server;
 
+import java.util.Map;
+
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCNotification;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
-
-import java.util.Map;
 
 class DefaultMcpStatelessServerHandler implements McpStatelessServerHandler {
 
@@ -28,8 +32,7 @@ class DefaultMcpStatelessServerHandler implements McpStatelessServerHandler {
 	}
 
 	@Override
-	public Mono<McpSchema.JSONRPCResponse> handleRequest(McpTransportContext transportContext,
-			McpSchema.JSONRPCRequest request) {
+	public Mono<JSONRPCResponse> handleRequest(McpTransportContext transportContext, JSONRPCRequest request) {
 		McpStatelessRequestHandler<?> requestHandler = this.requestHandlers.get(request.method());
 		if (requestHandler == null) {
 			return Mono.error(McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND)
@@ -37,23 +40,21 @@ class DefaultMcpStatelessServerHandler implements McpStatelessServerHandler {
 				.build());
 		}
 		return requestHandler.handle(transportContext, request.params())
-			.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
+			.map(result -> new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, request.id(), result, null))
 			.onErrorResume(t -> {
-				McpSchema.JSONRPCResponse.JSONRPCError error;
+				JSONRPCResponse.JSONRPCError error;
 				if (t instanceof McpError mcpError && mcpError.getJsonRpcError() != null) {
 					error = mcpError.getJsonRpcError();
 				}
 				else {
-					error = new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-							t.getMessage(), null);
+					error = new JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR, t.getMessage(), null);
 				}
-				return Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null, error));
+				return Mono.just(new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, request.id(), null, error));
 			});
 	}
 
 	@Override
-	public Mono<Void> handleNotification(McpTransportContext transportContext,
-			McpSchema.JSONRPCNotification notification) {
+	public Mono<Void> handleNotification(McpTransportContext transportContext, JSONRPCNotification notification) {
 		McpStatelessNotificationHandler notificationHandler = this.notificationHandlers.get(notification.method());
 		if (notificationHandler == null) {
 			logger.warn("Missing handler for notification type: {}", notification.method());

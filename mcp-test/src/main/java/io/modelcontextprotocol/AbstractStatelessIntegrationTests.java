@@ -21,11 +21,12 @@ import io.modelcontextprotocol.server.McpStatelessServerFeatures;
 import io.modelcontextprotocol.server.McpStatelessSyncServer;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
+import io.modelcontextprotocol.spec.schema.tool.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolResult;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
 import net.javacrumbs.jsonunit.core.Option;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -82,7 +83,7 @@ public abstract class AbstractStatelessIntegrationTests {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
-		var callResponse = McpSchema.CallToolResult.builder()
+		var callResponse = CallToolResult.builder()
 			.content(List.of(new McpSchema.TextContent("CALL RESPONSE")))
 			.isError(false)
 			.build();
@@ -120,7 +121,7 @@ public abstract class AbstractStatelessIntegrationTests {
 
 			assertThat(mcpClient.listTools().tools()).contains(tool1.tool());
 
-			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+			CallToolResult response = mcpClient.callTool(new CallToolRequest("tool1", Map.of()));
 
 			assertThat(response).isNotNull().isEqualTo(callResponse);
 		}
@@ -159,7 +160,7 @@ public abstract class AbstractStatelessIntegrationTests {
 			// the offending tool
 			// instead of getting back a timeout.
 			assertThatExceptionOfType(McpError.class)
-				.isThrownBy(() -> mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of())))
+				.isThrownBy(() -> mcpClient.callTool(new CallToolRequest("tool1", Map.of())))
 				.withMessageContaining("Timeout on blocking read");
 		}
 		finally {
@@ -173,7 +174,7 @@ public abstract class AbstractStatelessIntegrationTests {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
-		var callResponse = McpSchema.CallToolResult.builder()
+		var callResponse = CallToolResult.builder()
 			.content(List.of(new McpSchema.TextContent("CALL RESPONSE")))
 			.isError(false)
 			.build();
@@ -320,7 +321,7 @@ public abstract class AbstractStatelessIntegrationTests {
 
 			// Call tool with valid structured output
 			CallToolResult response = mcpClient
-				.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3")));
+				.callTool(new CallToolRequest("calculator", Map.of("expression", "2 + 3")));
 
 			assertThat(response).isNotNull();
 			assertThat(response.isError()).isFalse();
@@ -389,7 +390,7 @@ public abstract class AbstractStatelessIntegrationTests {
 			assertThat(mcpClient.initialize()).isNotNull();
 
 			// Call tool with valid structured output of type array
-			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("getMembers", Map.of()));
+			CallToolResult response = mcpClient.callTool(new CallToolRequest("getMembers", Map.of()));
 
 			assertThat(response).isNotNull();
 			assertThat(response.isError()).isFalse();
@@ -452,7 +453,7 @@ public abstract class AbstractStatelessIntegrationTests {
 
 			// Call tool with valid structured output
 			CallToolResult response = mcpClient
-				.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3")));
+				.callTool(new CallToolRequest("calculator", Map.of("expression", "2 + 3")));
 
 			assertThat(response).isNotNull();
 			assertThat(response.isError()).isTrue();
@@ -507,7 +508,7 @@ public abstract class AbstractStatelessIntegrationTests {
 
 			// Call tool with invalid structured output
 			CallToolResult response = mcpClient
-				.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3")));
+				.callTool(new CallToolRequest("calculator", Map.of("expression", "2 + 3")));
 
 			assertThat(response).isNotNull();
 			assertThat(response.isError()).isTrue();
@@ -557,7 +558,7 @@ public abstract class AbstractStatelessIntegrationTests {
 
 			// Call tool that should return structured content but doesn't
 			CallToolResult response = mcpClient
-				.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3")));
+				.callTool(new CallToolRequest("calculator", Map.of("expression", "2 + 3")));
 
 			assertThat(response).isNotNull();
 			assertThat(response.isError()).isTrue();
@@ -628,8 +629,7 @@ public abstract class AbstractStatelessIntegrationTests {
 			// Note: outputSchema might be null in sync server, but validation still works
 
 			// Call dynamically added tool
-			CallToolResult response = mcpClient
-				.callTool(new McpSchema.CallToolRequest("dynamic-tool", Map.of("count", 3)));
+			CallToolResult response = mcpClient.callTool(new CallToolRequest("dynamic-tool", Map.of("count", 3)));
 
 			assertThat(response).isNotNull();
 			assertThat(response.isError()).isFalse();

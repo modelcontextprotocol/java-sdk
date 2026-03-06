@@ -17,12 +17,12 @@ import java.util.function.Function;
 
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.ProtocolVersions;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import org.slf4j.Logger;
@@ -158,7 +158,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 		}
 
 		@Override
-		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+		public Mono<Void> sendMessage(JSONRPCMessage message) {
 
 			return Mono.zip(inboundReady.asMono(), outboundReady.asMono()).then(Mono.defer(() -> {
 				if (outboundSink.tryEmitNext(message).isSuccess()) {
@@ -225,8 +225,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 								logger.debug("Received JSON message: {}", line);
 
 								try {
-									McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper,
-											line);
+									JSONRPCMessage message = JSONRPC.deserializeJsonRpcMessage(jsonMapper, line);
 									if (!this.inboundSink.tryEmitNext(message).isSuccess()) {
 										// logIfNotClosing("Failed to enqueue message");
 										break;

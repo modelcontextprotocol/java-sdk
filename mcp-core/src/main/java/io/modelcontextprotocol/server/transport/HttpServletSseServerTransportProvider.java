@@ -25,6 +25,8 @@ import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.ProtocolVersions;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.KeepAliveScheduler;
 import jakarta.servlet.AsyncContext;
@@ -395,7 +397,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			}
 
 			final McpTransportContext transportContext = this.contextExtractor.extract(request);
-			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body.toString());
+			JSONRPCMessage message = JSONRPC.deserializeJsonRpcMessage(jsonMapper, body.toString());
 
 			// Process the message through the session's handle method
 			// Block for Servlet compatibility
@@ -505,7 +507,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		 * @return A Mono that completes when the message has been sent
 		 */
 		@Override
-		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+		public Mono<Void> sendMessage(JSONRPCMessage message) {
 			return Mono.fromRunnable(() -> {
 				try {
 					String jsonText = jsonMapper.writeValueAsString(message);

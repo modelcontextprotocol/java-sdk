@@ -12,7 +12,16 @@ import java.util.function.BiFunction;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolResult;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
+import io.modelcontextprotocol.spec.schema.prompt.GetPromptRequest;
+import io.modelcontextprotocol.spec.schema.prompt.GetPromptResult;
+import io.modelcontextprotocol.spec.schema.prompt.Prompt;
+import io.modelcontextprotocol.spec.schema.resource.ReadResourceRequest;
+import io.modelcontextprotocol.spec.schema.resource.ReadResourceResult;
+import io.modelcontextprotocol.spec.schema.resource.Resource;
+import io.modelcontextprotocol.spec.schema.resource.ResourceTemplate;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
 import reactor.core.publisher.Mono;
@@ -196,8 +205,8 @@ public class McpStatelessServerFeatures {
 	 * @param callHandler The function that implements the tool's logic, receiving a
 	 * {@link CallToolRequest} and returning the result.
 	 */
-	public record AsyncToolSpecification(McpSchema.Tool tool,
-			BiFunction<McpTransportContext, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler) {
+	public record AsyncToolSpecification(Tool tool,
+			BiFunction<McpTransportContext, CallToolRequest, Mono<CallToolResult>> callHandler) {
 
 		static AsyncToolSpecification fromSync(SyncToolSpecification syncToolSpec) {
 			return fromSync(syncToolSpec, false);
@@ -210,8 +219,7 @@ public class McpStatelessServerFeatures {
 				return null;
 			}
 
-			BiFunction<McpTransportContext, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler = (ctx,
-					req) -> {
+			BiFunction<McpTransportContext, CallToolRequest, Mono<CallToolResult>> callHandler = (ctx, req) -> {
 				var toolResult = Mono.fromCallable(() -> syncToolSpec.callHandler().apply(ctx, req));
 				return immediate ? toolResult : toolResult.subscribeOn(Schedulers.boundedElastic());
 			};
@@ -224,9 +232,9 @@ public class McpStatelessServerFeatures {
 		 */
 		public static class Builder {
 
-			private McpSchema.Tool tool;
+			private Tool tool;
 
-			private BiFunction<McpTransportContext, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler;
+			private BiFunction<McpTransportContext, CallToolRequest, Mono<CallToolResult>> callHandler;
 
 			/**
 			 * Sets the tool definition.
@@ -234,7 +242,7 @@ public class McpStatelessServerFeatures {
 			 * schema
 			 * @return this builder instance
 			 */
-			public Builder tool(McpSchema.Tool tool) {
+			public Builder tool(Tool tool) {
 				this.tool = tool;
 				return this;
 			}
@@ -245,7 +253,7 @@ public class McpStatelessServerFeatures {
 			 * @return this builder instance
 			 */
 			public Builder callHandler(
-					BiFunction<McpTransportContext, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler) {
+					BiFunction<McpTransportContext, CallToolRequest, Mono<CallToolResult>> callHandler) {
 				this.callHandler = callHandler;
 				return this;
 			}
@@ -286,10 +294,10 @@ public class McpStatelessServerFeatures {
 	 *
 	 * @param resource The resource definition including name, description, and MIME type
 	 * @param readHandler The function that handles resource read requests. The function's
-	 * argument is a {@link McpSchema.ReadResourceRequest}.
+	 * argument is a {@link ReadResourceRequest}.
 	 */
-	public record AsyncResourceSpecification(McpSchema.Resource resource,
-			BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
+	public record AsyncResourceSpecification(Resource resource,
+			BiFunction<McpTransportContext, ReadResourceRequest, Mono<ReadResourceResult>> readHandler) {
 
 		static AsyncResourceSpecification fromSync(SyncResourceSpecification resource, boolean immediateExecution) {
 			// FIXME: This is temporary, proper validation should be implemented
@@ -323,12 +331,11 @@ public class McpStatelessServerFeatures {
 	 * description, and parameter schema
 	 * @param readHandler The function that handles resource read requests. The function's
 	 * first argument is an {@link McpTransportContext} upon which the server can interact
-	 * with the connected client. The second arguments is a
-	 * {@link McpSchema.ReadResourceRequest}. {@link McpSchema.ResourceTemplate}
-	 * {@link McpSchema.ReadResourceResult}
+	 * with the connected client. The second arguments is a {@link ReadResourceRequest}.
+	 * {@link ResourceTemplate} {@link ReadResourceResult}
 	 */
-	public record AsyncResourceTemplateSpecification(McpSchema.ResourceTemplate resourceTemplate,
-			BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
+	public record AsyncResourceTemplateSpecification(ResourceTemplate resourceTemplate,
+			BiFunction<McpTransportContext, ReadResourceRequest, Mono<ReadResourceResult>> readHandler) {
 
 		static AsyncResourceTemplateSpecification fromSync(SyncResourceTemplateSpecification resource,
 				boolean immediateExecution) {
@@ -356,11 +363,10 @@ public class McpStatelessServerFeatures {
 	 *
 	 * @param prompt The prompt definition including name and description
 	 * @param promptHandler The function that processes prompt requests and returns
-	 * formatted templates. The function's argument is a
-	 * {@link McpSchema.GetPromptRequest}.
+	 * formatted templates. The function's argument is a {@link GetPromptRequest}.
 	 */
-	public record AsyncPromptSpecification(McpSchema.Prompt prompt,
-			BiFunction<McpTransportContext, McpSchema.GetPromptRequest, Mono<McpSchema.GetPromptResult>> promptHandler) {
+	public record AsyncPromptSpecification(Prompt prompt,
+			BiFunction<McpTransportContext, GetPromptRequest, Mono<GetPromptResult>> promptHandler) {
 
 		static AsyncPromptSpecification fromSync(SyncPromptSpecification prompt, boolean immediateExecution) {
 			// FIXME: This is temporary, proper validation should be implemented
@@ -421,8 +427,8 @@ public class McpStatelessServerFeatures {
 	 * @param callHandler The function that implements the tool's logic, receiving a
 	 * {@link CallToolRequest} and returning results.
 	 */
-	public record SyncToolSpecification(McpSchema.Tool tool,
-			BiFunction<McpTransportContext, CallToolRequest, McpSchema.CallToolResult> callHandler) {
+	public record SyncToolSpecification(Tool tool,
+			BiFunction<McpTransportContext, CallToolRequest, CallToolResult> callHandler) {
 
 		public static Builder builder() {
 			return new Builder();
@@ -433,9 +439,9 @@ public class McpStatelessServerFeatures {
 		 */
 		public static class Builder {
 
-			private McpSchema.Tool tool;
+			private Tool tool;
 
-			private BiFunction<McpTransportContext, CallToolRequest, McpSchema.CallToolResult> callHandler;
+			private BiFunction<McpTransportContext, CallToolRequest, CallToolResult> callHandler;
 
 			/**
 			 * Sets the tool definition.
@@ -443,7 +449,7 @@ public class McpStatelessServerFeatures {
 			 * schema
 			 * @return this builder instance
 			 */
-			public Builder tool(McpSchema.Tool tool) {
+			public Builder tool(Tool tool) {
 				this.tool = tool;
 				return this;
 			}
@@ -453,8 +459,7 @@ public class McpStatelessServerFeatures {
 			 * @param callHandler The function that implements the tool's logic
 			 * @return this builder instance
 			 */
-			public Builder callHandler(
-					BiFunction<McpTransportContext, CallToolRequest, McpSchema.CallToolResult> callHandler) {
+			public Builder callHandler(BiFunction<McpTransportContext, CallToolRequest, CallToolResult> callHandler) {
 				this.callHandler = callHandler;
 				return this;
 			}
@@ -487,10 +492,10 @@ public class McpStatelessServerFeatures {
 	 *
 	 * @param resource The resource definition including name, description, and MIME type
 	 * @param readHandler The function that handles resource read requests. The function's
-	 * argument is a {@link McpSchema.ReadResourceRequest}.
+	 * argument is a {@link ReadResourceRequest}.
 	 */
-	public record SyncResourceSpecification(McpSchema.Resource resource,
-			BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
+	public record SyncResourceSpecification(Resource resource,
+			BiFunction<McpTransportContext, ReadResourceRequest, ReadResourceResult> readHandler) {
 	}
 
 	/**
@@ -513,12 +518,11 @@ public class McpStatelessServerFeatures {
 	 * description, and parameter schema
 	 * @param readHandler The function that handles resource read requests. The function's
 	 * first argument is an {@link McpTransportContext} upon which the server can interact
-	 * with the connected client. The second arguments is a
-	 * {@link McpSchema.ReadResourceRequest}. {@link McpSchema.ResourceTemplate}
-	 * {@link McpSchema.ReadResourceResult}
+	 * with the connected client. The second arguments is a {@link ReadResourceRequest}.
+	 * {@link ResourceTemplate} {@link ReadResourceResult}
 	 */
-	public record SyncResourceTemplateSpecification(McpSchema.ResourceTemplate resourceTemplate,
-			BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
+	public record SyncResourceTemplateSpecification(ResourceTemplate resourceTemplate,
+			BiFunction<McpTransportContext, ReadResourceRequest, ReadResourceResult> readHandler) {
 	}
 
 	/**
@@ -534,11 +538,10 @@ public class McpStatelessServerFeatures {
 	 *
 	 * @param prompt The prompt definition including name and description
 	 * @param promptHandler The function that processes prompt requests and returns
-	 * formatted templates. The function's argument is a
-	 * {@link McpSchema.GetPromptRequest}.
+	 * formatted templates. The function's argument is a {@link GetPromptRequest}.
 	 */
-	public record SyncPromptSpecification(McpSchema.Prompt prompt,
-			BiFunction<McpTransportContext, McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler) {
+	public record SyncPromptSpecification(Prompt prompt,
+			BiFunction<McpTransportContext, GetPromptRequest, GetPromptResult> promptHandler) {
 	}
 
 	/**

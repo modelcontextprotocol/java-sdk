@@ -5,7 +5,9 @@
 package io.modelcontextprotocol.server;
 
 import io.modelcontextprotocol.common.McpTransportContext;
-import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCNotification;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCResponse;
 import reactor.core.publisher.Mono;
 
 /**
@@ -23,8 +25,7 @@ public interface McpStatelessServerHandler {
 	 * @param request the request JSON object
 	 * @return Mono containing the JSON response
 	 */
-	Mono<McpSchema.JSONRPCResponse> handleRequest(McpTransportContext transportContext,
-			McpSchema.JSONRPCRequest request);
+	Mono<JSONRPCResponse> handleRequest(McpTransportContext transportContext, JSONRPCRequest request);
 
 	/**
 	 * Handle the notification.
@@ -33,6 +34,6 @@ public interface McpStatelessServerHandler {
 	 * @param notification the notification JSON object
 	 * @return Mono that completes once handling is finished
 	 */
-	Mono<Void> handleNotification(McpTransportContext transportContext, McpSchema.JSONRPCNotification notification);
+	Mono<Void> handleNotification(McpTransportContext transportContext, JSONRPCNotification notification);
 
 }

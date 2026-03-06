@@ -33,12 +33,14 @@ import io.modelcontextprotocol.spec.DefaultMcpTransportSession;
 import io.modelcontextprotocol.spec.DefaultMcpTransportStream;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.McpTransportSession;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.spec.McpTransportStream;
 import io.modelcontextprotocol.spec.ProtocolVersions;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCNotification;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
 import org.reactivestreams.Publisher;
@@ -121,7 +123,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private final AtomicReference<McpTransportSession<Disposable>> activeSession = new AtomicReference<>();
 
-	private final AtomicReference<Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>>> handler = new AtomicReference<>();
+	private final AtomicReference<Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>>> handler = new AtomicReference<>();
 
 	private final AtomicReference<Consumer<Throwable>> exceptionHandler = new AtomicReference<>();
 
@@ -159,7 +161,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	}
 
 	@Override
-	public Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
+	public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
 		return Mono.deferContextual(ctx -> {
 			this.handler.set(handler);
 			if (this.openConnectionOnStartup) {
@@ -311,10 +313,10 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 											// We don't support batching ATM and probably
 											// won't since the next version considers
 											// removing it.
-											McpSchema.JSONRPCMessage message = McpSchema
-												.deserializeJsonRpcMessage(this.jsonMapper, data);
+											JSONRPCMessage message = JSONRPC.deserializeJsonRpcMessage(this.jsonMapper,
+													data);
 
-											Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> idWithMessages = Tuples
+											Tuple2<Optional<String>, Iterable<JSONRPCMessage>> idWithMessages = Tuples
 												.of(Optional.ofNullable(responseEvent.sseEvent().id()),
 														List.of(message));
 
@@ -327,7 +329,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 										}
 										catch (IOException ioException) {
-											return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
+											return Flux.<JSONRPCMessage>error(new McpTransportException(
 													"Error parsing JSON-RPC message: " + responseEvent, ioException));
 										}
 									}
@@ -352,9 +354,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 										String sessionIdRepresentation = sessionIdOrPlaceholder(transportSession);
 										McpTransportSessionNotFoundException exception = new McpTransportSessionNotFoundException(
 												"Session not found for session ID: " + sessionIdRepresentation);
-										return Flux.<McpSchema.JSONRPCMessage>error(exception);
+										return Flux.<JSONRPCMessage>error(exception);
 									}
-									return Flux.<McpSchema.JSONRPCMessage>error(
+									return Flux.<JSONRPCMessage>error(
 											new McpTransportException("Server Not Found. Status code:" + statusCode
 													+ ", response-event:" + responseEvent));
 								}
@@ -366,19 +368,19 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 										String sessionIdRepresentation = sessionIdOrPlaceholder(transportSession);
 										McpTransportSessionNotFoundException exception = new McpTransportSessionNotFoundException(
 												"Session not found for session ID: " + sessionIdRepresentation);
-										return Flux.<McpSchema.JSONRPCMessage>error(exception);
+										return Flux.<JSONRPCMessage>error(exception);
 									}
-									return Flux.<McpSchema.JSONRPCMessage>error(
-											new McpTransportException("Bad Request. Status code:" + statusCode
-													+ ", response-event:" + responseEvent));
+									return Flux
+										.<JSONRPCMessage>error(new McpTransportException("Bad Request. Status code:"
+												+ statusCode + ", response-event:" + responseEvent));
 
 								}
 
-								return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
+								return Flux.<JSONRPCMessage>error(new McpTransportException(
 										"Received unrecognized SSE event type: " + responseEvent.sseEvent().event()));
-							}).<McpSchema
-									.JSONRPCMessage>flatMap(
-											jsonrpcMessage -> this.handler.get().apply(Mono.just(jsonrpcMessage)))
+							})
+							.<JSONRPCMessage>flatMap(
+									jsonrpcMessage -> this.handler.get().apply(Mono.just(jsonrpcMessage)))
 							.onErrorMap(CompletionException.class, t -> t.getCause())
 							.onErrorComplete(t -> {
 								this.handleException(t);
@@ -425,7 +427,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	}
 
-	public String toString(McpSchema.JSONRPCMessage message) {
+	public String toString(JSONRPCMessage message) {
 		try {
 			return this.jsonMapper.writeValueAsString(message);
 		}
@@ -434,7 +436,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		}
 	}
 
-	public Mono<Void> sendMessage(McpSchema.JSONRPCMessage sentMessage) {
+	public Mono<Void> sendMessage(JSONRPCMessage sentMessage) {
 		return Mono.create(deliveredSink -> {
 			logger.debug("Sending message {}", sentMessage);
 
@@ -529,10 +531,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 									// won't
 									// since the
 									// next version considers removing it.
-									McpSchema.JSONRPCMessage message = McpSchema
-										.deserializeJsonRpcMessage(this.jsonMapper, data);
+									JSONRPCMessage message = JSONRPC.deserializeJsonRpcMessage(this.jsonMapper, data);
 
-									Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> idWithMessages = Tuples
+									Tuple2<Optional<String>, Iterable<JSONRPCMessage>> idWithMessages = Tuples
 										.of(Optional.ofNullable(sseEvent.id()), List.of(message));
 
 									McpTransportStream<Disposable> sessionStream = new DefaultMcpTransportStream<>(
@@ -545,7 +546,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 									return Flux.from(sessionStream.consumeSseStream(Flux.just(idWithMessages)));
 								}
 								catch (IOException ioException) {
-									return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
+									return Flux.<JSONRPCMessage>error(new McpTransportException(
 											"Error parsing JSON-RPC message: " + responseEvent, ioException));
 								}
 							});
@@ -553,14 +554,14 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					else if (contentType.contains(APPLICATION_JSON)) {
 						deliveredSink.success();
 						String data = ((ResponseSubscribers.AggregateResponseEvent) responseEvent).data();
-						if (sentMessage instanceof McpSchema.JSONRPCNotification) {
+						if (sentMessage instanceof JSONRPCNotification) {
 							logger.warn("Notification: {} received non-compliant response: {}", sentMessage,
 									Utils.hasText(data) ? data : "[empty]");
 							return Mono.empty();
 						}
 
 						try {
-							return Mono.just(McpSchema.deserializeJsonRpcMessage(jsonMapper, data));
+							return Mono.just(JSONRPC.deserializeJsonRpcMessage(jsonMapper, data));
 						}
 						catch (IOException e) {
 							return Mono.error(new McpTransportException(
@@ -570,8 +571,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					logger.warn("Unknown media type {} returned for POST in session {}", contentType,
 							sessionRepresentation);
 
-					return Flux.<McpSchema.JSONRPCMessage>error(
-							new RuntimeException("Unknown media type returned: " + contentType));
+					return Flux
+						.<JSONRPCMessage>error(new RuntimeException("Unknown media type returned: " + contentType));
 				}
 				else if (statusCode == NOT_FOUND) {
 					if (transportSession != null && transportSession.sessionId().isPresent()) {
@@ -580,9 +581,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						logger.debug("Session not found for session ID: {}", transportSession.sessionId().get());
 						McpTransportSessionNotFoundException exception = new McpTransportSessionNotFoundException(
 								"Session not found for session ID: " + sessionRepresentation);
-						return Flux.<McpSchema.JSONRPCMessage>error(exception);
+						return Flux.<JSONRPCMessage>error(exception);
 					}
-					return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
+					return Flux.<JSONRPCMessage>error(new McpTransportException(
 							"Server Not Found. Status code:" + statusCode + ", response-event:" + responseEvent));
 				}
 				else if (statusCode == BAD_REQUEST) {
@@ -596,14 +597,13 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						// response is 404, we consider it a session not found error.
 						McpTransportSessionNotFoundException exception = new McpTransportSessionNotFoundException(
 								"Session not found for session ID: " + sessionRepresentation);
-						return Flux.<McpSchema.JSONRPCMessage>error(exception);
+						return Flux.<JSONRPCMessage>error(exception);
 					}
-					return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
+					return Flux.<JSONRPCMessage>error(new McpTransportException(
 							"Bad Request. Status code:" + statusCode + ", response-event:" + responseEvent));
 				}
 
-				return Flux.<McpSchema.JSONRPCMessage>error(
-						new RuntimeException("Failed to send message: " + responseEvent));
+				return Flux.<JSONRPCMessage>error(new RuntimeException("Failed to send message: " + responseEvent));
 			})
 				.flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage)))
 				.onErrorMap(CompletionException.class, t -> t.getCause())

@@ -18,8 +18,8 @@ import java.util.function.Function;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -250,7 +250,7 @@ public class StdioClientTransport implements McpClientTransport {
 				String line;
 				while (!isClosing && (line = processReader.readLine()) != null) {
 					try {
-						JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.jsonMapper, line);
+						JSONRPCMessage message = JSONRPC.deserializeJsonRpcMessage(this.jsonMapper, line);
 						if (!this.inboundSink.tryEmitNext(message).isSuccess()) {
 							if (!isClosing) {
 								logger.error("Failed to enqueue inbound message: {}", message);

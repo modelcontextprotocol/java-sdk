@@ -19,6 +19,9 @@ import io.modelcontextprotocol.server.transport.McpTestRequestRecordingServletFi
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.ProtocolVersions;
+import io.modelcontextprotocol.spec.schema.tool.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolResult;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
@@ -41,13 +44,13 @@ class HttpClientStreamableHttpVersionNegotiationIntegrationTests {
 				req -> McpTransportContext.create(Map.of("protocol-version", req.getHeader("MCP-protocol-version"))))
 		.build();
 
-	private final McpSchema.Tool toolSpec = McpSchema.Tool.builder()
+	private final Tool toolSpec = Tool.builder()
 		.name("test-tool")
 		.description("return the protocol version used")
 		.build();
 
-	private final BiFunction<McpSyncServerExchange, McpSchema.CallToolRequest, McpSchema.CallToolResult> toolHandler = (
-			exchange, request) -> McpSchema.CallToolResult.builder()
+	private final BiFunction<McpSyncServerExchange, CallToolRequest, CallToolResult> toolHandler = (exchange,
+			request) -> CallToolResult.builder()
 				.addTextContent(exchange.transportContext().get("protocol-version").toString())
 				.isError(false)
 				.build();
@@ -70,7 +73,7 @@ class HttpClientStreamableHttpVersionNegotiationIntegrationTests {
 			.build();
 
 		client.initialize();
-		McpSchema.CallToolResult response = client.callTool(new McpSchema.CallToolRequest("test-tool", Map.of()));
+		CallToolResult response = client.callTool(new CallToolRequest("test-tool", Map.of()));
 
 		var calls = requestRecordingFilter.getCalls();
 
@@ -100,7 +103,7 @@ class HttpClientStreamableHttpVersionNegotiationIntegrationTests {
 		var client = McpClient.sync(transport).build();
 
 		client.initialize();
-		McpSchema.CallToolResult response = client.callTool(new McpSchema.CallToolRequest("test-tool", Map.of()));
+		CallToolResult response = client.callTool(new CallToolRequest("test-tool", Map.of()));
 
 		var calls = requestRecordingFilter.getCalls();
 		// Initialize tells the server the Client's latest supported version
