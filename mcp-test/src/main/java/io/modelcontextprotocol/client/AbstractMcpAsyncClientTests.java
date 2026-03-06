@@ -610,22 +610,17 @@ public abstract class AbstractMcpAsyncClientTests {
 		});
 	}
 
-	// @Test
+	@Test
 	void testResourceSubscription() {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
-			StepVerifier.create(mcpAsyncClient.listResources()).consumeNextWith(resources -> {
-				if (!resources.resources().isEmpty()) {
-					Resource firstResource = resources.resources().get(0);
-
-					// Test subscribe
-					StepVerifier.create(mcpAsyncClient.subscribeResource(new SubscribeRequest(firstResource.uri())))
-						.verifyComplete();
-
-					// Test unsubscribe
-					StepVerifier.create(mcpAsyncClient.unsubscribeResource(new UnsubscribeRequest(firstResource.uri())))
-						.verifyComplete();
+			StepVerifier.create(mcpAsyncClient.listResources().flatMap(resources -> {
+				if (resources.resources().isEmpty()) {
+					return Mono.empty();
 				}
-			}).verifyComplete();
+				Resource firstResource = resources.resources().get(0);
+				return mcpAsyncClient.subscribeResource(new SubscribeRequest(firstResource.uri()))
+					.then(mcpAsyncClient.unsubscribeResource(new UnsubscribeRequest(firstResource.uri())));
+			})).verifyComplete();
 		});
 	}
 

@@ -53,7 +53,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
 
 import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
@@ -404,6 +403,8 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.addContent(new McpSchema.TextContent("CALL RESPONSE"))
 			.build();
 
+		AtomicReference<McpSchema.ElicitResult> elicitResultRef = new AtomicReference<>();
+
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
 			.callHandler((exchange, request) -> {
@@ -414,13 +415,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 							Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
 					.build();
 
-				StepVerifier.create(exchange.createElicitation(elicitationRequest)).consumeNextWith(result -> {
-					assertThat(result).isNotNull();
-					assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
-					assertThat(result.content().get("message")).isEqualTo("Test message");
-				}).verifyComplete();
-
-				return Mono.just(callResponse);
+				return exchange.createElicitation(elicitationRequest)
+					.doOnNext(elicitResultRef::set)
+					.thenReturn(callResponse);
 			})
 			.build();
 
@@ -438,6 +435,11 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 			assertThat(response).isNotNull();
 			assertThat(response).isEqualTo(callResponse);
+			assertWith(elicitResultRef.get(), result -> {
+				assertThat(result).isNotNull();
+				assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+				assertThat(result.content().get("message")).isEqualTo("Test message");
+			});
 		}
 		finally {
 			mcpServer.closeGracefully().block();
