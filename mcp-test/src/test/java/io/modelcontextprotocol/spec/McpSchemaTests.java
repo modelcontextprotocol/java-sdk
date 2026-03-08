@@ -21,7 +21,6 @@ import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Test;
 
-
 import io.modelcontextprotocol.json.TypeRef;
 import net.javacrumbs.jsonunit.core.Option;
 
