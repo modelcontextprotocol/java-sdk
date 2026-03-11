@@ -22,6 +22,7 @@ import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEven
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.HttpHeaders;
@@ -185,19 +186,6 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		}
 
 		/**
-		 * Creates a new builder with the specified base URI.
-		 * @param baseUri the base URI of the MCP server
-		 * @deprecated Use {@link HttpClientSseClientTransport#builder(String)} instead.
-		 * This constructor is deprecated and will be removed or made {@code protected} or
-		 * {@code private} in a future release.
-		 */
-		@Deprecated(forRemoval = true)
-		public Builder(String baseUri) {
-			Assert.hasText(baseUri, "baseUri must not be empty");
-			this.baseUri = baseUri;
-		}
-
-		/**
 		 * Sets the base URI.
 		 * @param baseUri the base URI
 		 * @return this builder
@@ -327,7 +315,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		public HttpClientSseClientTransport build() {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
 			return new HttpClientSseClientTransport(httpClient, requestBuilder, baseUri, sseEndpoint,
-					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, httpRequestCustomizer);
+					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, httpRequestCustomizer);
 		}
 
 	}

@@ -4,7 +4,7 @@ This module contains a comprehensive MCP (Model Context Protocol) server impleme
 
 ## Conformance Test Results
 
-**Status: 37 out of 40 tests passing (92.5%)**
+**Status: 40 out of 40 tests passing (100%)**
 
 The server has been validated against the official [MCP conformance test suite](https://github.com/modelcontextprotocol/conformance). See [VALIDATION_RESULTS.md](../VALIDATION_RESULTS.md) for detailed results.
 
@@ -22,9 +22,8 @@ The server has been validated against the official [MCP conformance test suite](
 - SEP-1034: Default values for all primitive types
 - SEP-1330: All enum schema variants
 
-✅ **Resources** (4/6)
-- List, read text/binary, templates
-- ⚠️ Subscribe/unsubscribe (SDK limitation)
+✅ **Resources** (6/6)
+- List, read text/binary, templates, subscribe, unsubscribe
 
 ✅ **Prompts** (4/4)
 - Simple, parameterized, embedded resources, images
@@ -32,8 +31,8 @@ The server has been validated against the official [MCP conformance test suite](
 ✅ **SSE Transport** (2/2)
 - Multiple streams support
 
-⚠️ **Security** (1/2)
-- ⚠️ DNS rebinding protection (SDK limitation)
+✅ **Security** (2/2)
+- ✅ DNS rebinding protection
 
 ## Features
 
@@ -191,12 +190,7 @@ curl -X POST http://localhost:8080/mcp \
 
 ## Known Limitations
 
-See [VALIDATION_RESULTS.md](../VALIDATION_RESULTS.md) for details on:
-
-1. **Resource Subscriptions** - Not implemented in Java SDK
-2. **DNS Rebinding Protection** - Missing Host/Origin validation
-
-These are SDK-level limitations that require fixes in the core framework.
+See [VALIDATION_RESULTS.md](../VALIDATION_RESULTS.md) for details on remaining client-side limitations.
 
 ## References
 
