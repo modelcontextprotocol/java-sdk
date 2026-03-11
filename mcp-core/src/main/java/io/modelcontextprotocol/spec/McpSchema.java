@@ -274,6 +274,7 @@ public final class McpSchema {
 		 * from MCP servers in their prompts.
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record Sampling() {
 		}
 
@@ -301,12 +302,14 @@ public final class McpSchema {
 		 * @param url support for out-of-band URL-based elicitation
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record Elicitation(@JsonProperty("form") Form form, @JsonProperty("url") Url url) {
 
 			/**
 			 * Marker record indicating support for form-based elicitation mode.
 			 */
 			@JsonInclude(JsonInclude.Include.NON_ABSENT)
+			@JsonIgnoreProperties(ignoreUnknown = true)
 			public record Form() {
 			}
 
@@ -314,6 +317,7 @@ public final class McpSchema {
 			 * Marker record indicating support for URL-based elicitation mode.
 			 */
 			@JsonInclude(JsonInclude.Include.NON_ABSENT)
+			@JsonIgnoreProperties(ignoreUnknown = true)
 			public record Url() {
 			}
 
@@ -412,6 +416,7 @@ public final class McpSchema {
 		 * Present if the server supports argument autocompletion suggestions.
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record CompletionCapabilities() {
 		}
 
@@ -419,6 +424,7 @@ public final class McpSchema {
 		 * Present if the server supports sending log messages to the client.
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record LoggingCapabilities() {
 		}
 
@@ -429,6 +435,7 @@ public final class McpSchema {
 		 * the prompt list
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record PromptCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
 		}
 
@@ -440,6 +447,7 @@ public final class McpSchema {
 		 * the resource list
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record ResourceCapabilities(@JsonProperty("subscribe") Boolean subscribe,
 				@JsonProperty("listChanged") Boolean listChanged) {
 		}
@@ -451,6 +459,7 @@ public final class McpSchema {
 		 * the tool list
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record ToolCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
 		}
 
@@ -882,6 +891,8 @@ public final class McpSchema {
 		 * @param name The name of the argument
 		 * @param value The value of the argument to use for completion matching
 		 */
+		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record CompleteArgument(@JsonProperty("name") String name, @JsonProperty("value") String value) {
 		}
 
@@ -890,6 +901,8 @@ public final class McpSchema {
 		 *
 		 * @param arguments Previously-resolved variables in a URI template or prompt
 		 */
+		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record CompleteContext(@JsonProperty("arguments") Map<String, String> arguments) {
 		}
 	}
@@ -921,6 +934,7 @@ public final class McpSchema {
 		 * those provided in the current response, even if the exact total is unknown
 		 */
 		@JsonInclude(JsonInclude.Include.ALWAYS)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record CompleteCompletion( // @formatter:off
 				@JsonProperty("values") List<String> values,
 				@JsonProperty("total") Integer total,
