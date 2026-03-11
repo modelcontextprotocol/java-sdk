@@ -12,7 +12,16 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolResult;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
+import io.modelcontextprotocol.spec.schema.prompt.GetPromptRequest;
+import io.modelcontextprotocol.spec.schema.prompt.GetPromptResult;
+import io.modelcontextprotocol.spec.schema.prompt.Prompt;
+import io.modelcontextprotocol.spec.schema.resource.ReadResourceRequest;
+import io.modelcontextprotocol.spec.schema.resource.ReadResourceResult;
+import io.modelcontextprotocol.spec.schema.resource.Resource;
+import io.modelcontextprotocol.spec.schema.resource.ResourceTemplate;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
 import reactor.core.publisher.Mono;
@@ -217,13 +226,13 @@ public class McpServerFeatures {
 	 * @param call Deprecated. Use the {@link AsyncToolSpecification#callHandler} instead.
 	 * @param callHandler The function that implements the tool's logic, receiving a
 	 * {@link McpAsyncServerExchange} and a
-	 * {@link io.modelcontextprotocol.spec.McpSchema.CallToolRequest} and returning
+	 * {@link io.modelcontextprotocol.spec.schema.tool.CallToolRequest} and returning
 	 * results. The function's first argument is an {@link McpAsyncServerExchange} upon
 	 * which the server can interact with the connected client. The second arguments is a
 	 * map of tool arguments.
 	 */
-	public record AsyncToolSpecification(McpSchema.Tool tool,
-			BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler) {
+	public record AsyncToolSpecification(Tool tool,
+			BiFunction<McpAsyncServerExchange, CallToolRequest, Mono<CallToolResult>> callHandler) {
 
 		static AsyncToolSpecification fromSync(SyncToolSpecification syncToolSpec) {
 			return fromSync(syncToolSpec, false);
@@ -236,8 +245,7 @@ public class McpServerFeatures {
 				return null;
 			}
 
-			BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler = (
-					exchange, req) -> {
+			BiFunction<McpAsyncServerExchange, CallToolRequest, Mono<CallToolResult>> callHandler = (exchange, req) -> {
 				var toolResult = Mono
 					.fromCallable(() -> syncToolSpec.callHandler().apply(new McpSyncServerExchange(exchange), req));
 				return immediate ? toolResult : toolResult.subscribeOn(Schedulers.boundedElastic());
@@ -251,9 +259,9 @@ public class McpServerFeatures {
 		 */
 		public static class Builder {
 
-			private McpSchema.Tool tool;
+			private Tool tool;
 
-			private BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler;
+			private BiFunction<McpAsyncServerExchange, CallToolRequest, Mono<CallToolResult>> callHandler;
 
 			/**
 			 * Sets the tool definition.
@@ -261,7 +269,7 @@ public class McpServerFeatures {
 			 * schema
 			 * @return this builder instance
 			 */
-			public Builder tool(McpSchema.Tool tool) {
+			public Builder tool(Tool tool) {
 				this.tool = tool;
 				return this;
 			}
@@ -272,7 +280,7 @@ public class McpServerFeatures {
 			 * @return this builder instance
 			 */
 			public Builder callHandler(
-					BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler) {
+					BiFunction<McpAsyncServerExchange, CallToolRequest, Mono<CallToolResult>> callHandler) {
 				this.callHandler = callHandler;
 				return this;
 			}
@@ -331,10 +339,10 @@ public class McpServerFeatures {
 	 * @param readHandler The function that handles resource read requests. The function's
 	 * first argument is an {@link McpAsyncServerExchange} upon which the server can
 	 * interact with the connected client. The second arguments is a
-	 * {@link io.modelcontextprotocol.spec.McpSchema.ReadResourceRequest}.
+	 * {@link io.modelcontextprotocol.spec.schema.resource.ReadResourceRequest}.
 	 */
-	public record AsyncResourceSpecification(McpSchema.Resource resource,
-			BiFunction<McpAsyncServerExchange, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
+	public record AsyncResourceSpecification(Resource resource,
+			BiFunction<McpAsyncServerExchange, ReadResourceRequest, Mono<ReadResourceResult>> readHandler) {
 
 		static AsyncResourceSpecification fromSync(SyncResourceSpecification resource, boolean immediateExecution) {
 			// FIXME: This is temporary, proper validation should be implemented
@@ -370,11 +378,10 @@ public class McpServerFeatures {
 	 * @param readHandler The function that handles resource read requests. The function's
 	 * first argument is an {@link McpSyncServerExchange} upon which the server can
 	 * interact with the connected client. The second arguments is a
-	 * {@link McpSchema.ReadResourceRequest}. {@link McpSchema.ResourceTemplate}
-	 * {@link McpSchema.ReadResourceResult}
+	 * {@link ReadResourceRequest}. {@link ResourceTemplate} {@link ReadResourceResult}
 	 */
-	public record AsyncResourceTemplateSpecification(McpSchema.ResourceTemplate resourceTemplate,
-			BiFunction<McpAsyncServerExchange, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
+	public record AsyncResourceTemplateSpecification(ResourceTemplate resourceTemplate,
+			BiFunction<McpAsyncServerExchange, ReadResourceRequest, Mono<ReadResourceResult>> readHandler) {
 
 		static AsyncResourceTemplateSpecification fromSync(SyncResourceTemplateSpecification resource,
 				boolean immediateExecution) {
@@ -419,10 +426,10 @@ public class McpServerFeatures {
 	 * formatted templates. The function's first argument is an
 	 * {@link McpAsyncServerExchange} upon which the server can interact with the
 	 * connected client. The second arguments is a
-	 * {@link io.modelcontextprotocol.spec.McpSchema.GetPromptRequest}.
+	 * {@link io.modelcontextprotocol.spec.schema.prompt.GetPromptRequest}.
 	 */
-	public record AsyncPromptSpecification(McpSchema.Prompt prompt,
-			BiFunction<McpAsyncServerExchange, McpSchema.GetPromptRequest, Mono<McpSchema.GetPromptResult>> promptHandler) {
+	public record AsyncPromptSpecification(Prompt prompt,
+			BiFunction<McpAsyncServerExchange, GetPromptRequest, Mono<GetPromptResult>> promptHandler) {
 
 		static AsyncPromptSpecification fromSync(SyncPromptSpecification prompt, boolean immediateExecution) {
 			// FIXME: This is temporary, proper validation should be implemented
@@ -507,22 +514,22 @@ public class McpServerFeatures {
 	 * @param tool The tool definition including name, description, and parameter schema
 	 * @param callHandler The function that implements the tool's logic, receiving a
 	 * {@link McpSyncServerExchange} and a
-	 * {@link io.modelcontextprotocol.spec.McpSchema.CallToolRequest} and returning
+	 * {@link io.modelcontextprotocol.spec.schema.tool.CallToolRequest} and returning
 	 * results. The function's first argument is an {@link McpSyncServerExchange} upon
 	 * which the server can interact with the client. The second argument is a request
 	 * object containing the arguments passed to the tool.
 	 */
-	public record SyncToolSpecification(McpSchema.Tool tool,
-			BiFunction<McpSyncServerExchange, CallToolRequest, McpSchema.CallToolResult> callHandler) {
+	public record SyncToolSpecification(Tool tool,
+			BiFunction<McpSyncServerExchange, CallToolRequest, CallToolResult> callHandler) {
 
 		/**
 		 * Builder for creating SyncToolSpecification instances.
 		 */
 		public static class Builder {
 
-			private McpSchema.Tool tool;
+			private Tool tool;
 
-			private BiFunction<McpSyncServerExchange, CallToolRequest, McpSchema.CallToolResult> callHandler;
+			private BiFunction<McpSyncServerExchange, CallToolRequest, CallToolResult> callHandler;
 
 			/**
 			 * Sets the tool definition.
@@ -530,7 +537,7 @@ public class McpServerFeatures {
 			 * schema
 			 * @return this builder instance
 			 */
-			public Builder tool(McpSchema.Tool tool) {
+			public Builder tool(Tool tool) {
 				this.tool = tool;
 				return this;
 			}
@@ -540,8 +547,7 @@ public class McpServerFeatures {
 			 * @param callHandler The function that implements the tool's logic
 			 * @return this builder instance
 			 */
-			public Builder callHandler(
-					BiFunction<McpSyncServerExchange, CallToolRequest, McpSchema.CallToolResult> callHandler) {
+			public Builder callHandler(BiFunction<McpSyncServerExchange, CallToolRequest, CallToolResult> callHandler) {
 				this.callHandler = callHandler;
 				return this;
 			}
@@ -602,10 +608,10 @@ public class McpServerFeatures {
 	 * @param readHandler The function that handles resource read requests. The function's
 	 * first argument is an {@link McpSyncServerExchange} upon which the server can
 	 * interact with the connected client. The second arguments is a
-	 * {@link io.modelcontextprotocol.spec.McpSchema.ReadResourceRequest}.
+	 * {@link io.modelcontextprotocol.spec.schema.resource.ReadResourceRequest}.
 	 */
-	public record SyncResourceSpecification(McpSchema.Resource resource,
-			BiFunction<McpSyncServerExchange, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
+	public record SyncResourceSpecification(Resource resource,
+			BiFunction<McpSyncServerExchange, ReadResourceRequest, ReadResourceResult> readHandler) {
 	}
 
 	/**
@@ -629,11 +635,10 @@ public class McpServerFeatures {
 	 * @param readHandler The function that handles resource read requests. The function's
 	 * first argument is an {@link McpSyncServerExchange} upon which the server can
 	 * interact with the connected client. The second arguments is a
-	 * {@link McpSchema.ReadResourceRequest}. {@link McpSchema.ResourceTemplate}
-	 * {@link McpSchema.ReadResourceResult}
+	 * {@link ReadResourceRequest}. {@link ResourceTemplate} {@link ReadResourceResult}
 	 */
-	public record SyncResourceTemplateSpecification(McpSchema.ResourceTemplate resourceTemplate,
-			BiFunction<McpSyncServerExchange, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
+	public record SyncResourceTemplateSpecification(ResourceTemplate resourceTemplate,
+			BiFunction<McpSyncServerExchange, ReadResourceRequest, ReadResourceResult> readHandler) {
 	}
 
 	/**
@@ -665,10 +670,10 @@ public class McpServerFeatures {
 	 * formatted templates. The function's first argument is an
 	 * {@link McpSyncServerExchange} upon which the server can interact with the connected
 	 * client. The second arguments is a
-	 * {@link io.modelcontextprotocol.spec.McpSchema.GetPromptRequest}.
+	 * {@link io.modelcontextprotocol.spec.schema.prompt.GetPromptRequest}.
 	 */
-	public record SyncPromptSpecification(McpSchema.Prompt prompt,
-			BiFunction<McpSyncServerExchange, McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler) {
+	public record SyncPromptSpecification(Prompt prompt,
+			BiFunction<McpSyncServerExchange, GetPromptRequest, GetPromptResult> promptHandler) {
 	}
 
 	/**

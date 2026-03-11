@@ -13,6 +13,11 @@ import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
+import io.modelcontextprotocol.spec.schema.elicit.ElicitRequest;
+import io.modelcontextprotocol.spec.schema.elicit.ElicitResult;
+import io.modelcontextprotocol.spec.schema.sample.CreateMessageRequest;
+import io.modelcontextprotocol.spec.schema.sample.CreateMessageResult;
+import io.modelcontextprotocol.spec.schema.sample.SamplingMessage;
 import io.modelcontextprotocol.json.TypeRef;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -301,9 +306,7 @@ class McpSyncServerExchangeTests {
 		McpSyncServerExchange exchangeWithNullCapabilities = new McpSyncServerExchange(
 				asyncExchangeWithNullCapabilities);
 
-		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
-			.message("Please provide your name")
-			.build();
+		ElicitRequest elicitRequest = ElicitRequest.builder().message("Please provide your name").build();
 
 		assertThatThrownBy(() -> exchangeWithNullCapabilities.createElicitation(elicitRequest))
 			.isInstanceOf(IllegalStateException.class)
@@ -324,9 +327,7 @@ class McpSyncServerExchangeTests {
 				mockSession, capabilitiesWithoutElicitation, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithoutElicitation = new McpSyncServerExchange(asyncExchangeWithoutElicitation);
 
-		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
-			.message("Please provide your name")
-			.build();
+		ElicitRequest elicitRequest = ElicitRequest.builder().message("Please provide your name").build();
 
 		assertThatThrownBy(() -> exchangeWithoutElicitation.createElicitation(elicitRequest))
 			.isInstanceOf(IllegalStateException.class)
@@ -355,7 +356,7 @@ class McpSyncServerExchangeTests {
 				java.util.Map.of("type", "number")));
 		requestedSchema.put("required", java.util.List.of("name"));
 
-		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
+		ElicitRequest elicitRequest = ElicitRequest.builder()
 			.message("Please provide your personal information")
 			.requestedSchema(requestedSchema)
 			.build();
@@ -364,18 +365,18 @@ class McpSyncServerExchangeTests {
 		responseContent.put("name", "John Doe");
 		responseContent.put("age", 30);
 
-		McpSchema.ElicitResult expectedResult = McpSchema.ElicitResult.builder()
-			.message(McpSchema.ElicitResult.Action.ACCEPT)
+		ElicitResult expectedResult = ElicitResult.builder()
+			.message(ElicitResult.Action.ACCEPT)
 			.content(responseContent)
 			.build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitRequest), any(TypeRef.class)))
 			.thenReturn(Mono.just(expectedResult));
 
-		McpSchema.ElicitResult result = exchangeWithElicitation.createElicitation(elicitRequest);
+		ElicitResult result = exchangeWithElicitation.createElicitation(elicitRequest);
 
 		assertThat(result).isEqualTo(expectedResult);
-		assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+		assertThat(result.action()).isEqualTo(ElicitResult.Action.ACCEPT);
 		assertThat(result.content()).isNotNull();
 		assertThat(result.content().get("name")).isEqualTo("John Doe");
 		assertThat(result.content().get("age")).isEqualTo(30);
@@ -392,21 +393,17 @@ class McpSyncServerExchangeTests {
 				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithElicitation = new McpSyncServerExchange(asyncExchangeWithElicitation);
 
-		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
-			.message("Please provide sensitive information")
-			.build();
+		ElicitRequest elicitRequest = ElicitRequest.builder().message("Please provide sensitive information").build();
 
-		McpSchema.ElicitResult expectedResult = McpSchema.ElicitResult.builder()
-			.message(McpSchema.ElicitResult.Action.DECLINE)
-			.build();
+		ElicitResult expectedResult = ElicitResult.builder().message(ElicitResult.Action.DECLINE).build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitRequest), any(TypeRef.class)))
 			.thenReturn(Mono.just(expectedResult));
 
-		McpSchema.ElicitResult result = exchangeWithElicitation.createElicitation(elicitRequest);
+		ElicitResult result = exchangeWithElicitation.createElicitation(elicitRequest);
 
 		assertThat(result).isEqualTo(expectedResult);
-		assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.DECLINE);
+		assertThat(result.action()).isEqualTo(ElicitResult.Action.DECLINE);
 	}
 
 	@Test
@@ -420,21 +417,17 @@ class McpSyncServerExchangeTests {
 				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithElicitation = new McpSyncServerExchange(asyncExchangeWithElicitation);
 
-		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
-			.message("Please provide your information")
-			.build();
+		ElicitRequest elicitRequest = ElicitRequest.builder().message("Please provide your information").build();
 
-		McpSchema.ElicitResult expectedResult = McpSchema.ElicitResult.builder()
-			.message(McpSchema.ElicitResult.Action.CANCEL)
-			.build();
+		ElicitResult expectedResult = ElicitResult.builder().message(ElicitResult.Action.CANCEL).build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitRequest), any(TypeRef.class)))
 			.thenReturn(Mono.just(expectedResult));
 
-		McpSchema.ElicitResult result = exchangeWithElicitation.createElicitation(elicitRequest);
+		ElicitResult result = exchangeWithElicitation.createElicitation(elicitRequest);
 
 		assertThat(result).isEqualTo(expectedResult);
-		assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.CANCEL);
+		assertThat(result.action()).isEqualTo(ElicitResult.Action.CANCEL);
 	}
 
 	@Test
@@ -448,9 +441,7 @@ class McpSyncServerExchangeTests {
 				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithElicitation = new McpSyncServerExchange(asyncExchangeWithElicitation);
 
-		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
-			.message("Please provide your name")
-			.build();
+		ElicitRequest elicitRequest = ElicitRequest.builder().message("Please provide your name").build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitRequest), any(TypeRef.class)))
 			.thenReturn(Mono.error(new RuntimeException("Session communication error")));
@@ -472,9 +463,9 @@ class McpSyncServerExchangeTests {
 		McpSyncServerExchange exchangeWithNullCapabilities = new McpSyncServerExchange(
 				asyncExchangeWithNullCapabilities);
 
-		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
-			.messages(Arrays
-				.asList(new McpSchema.SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("Hello, world!"))))
+		CreateMessageRequest createMessageRequest = CreateMessageRequest.builder()
+			.messages(
+					Arrays.asList(new SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("Hello, world!"))))
 			.build();
 
 		assertThatThrownBy(() -> exchangeWithNullCapabilities.createMessage(createMessageRequest))
@@ -497,9 +488,9 @@ class McpSyncServerExchangeTests {
 				capabilitiesWithoutSampling, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithoutSampling = new McpSyncServerExchange(asyncExchangeWithoutSampling);
 
-		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
-			.messages(Arrays
-				.asList(new McpSchema.SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("Hello, world!"))))
+		CreateMessageRequest createMessageRequest = CreateMessageRequest.builder()
+			.messages(
+					Arrays.asList(new SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("Hello, world!"))))
 			.build();
 
 		assertThatThrownBy(() -> exchangeWithoutSampling.createMessage(createMessageRequest))
@@ -522,30 +513,30 @@ class McpSyncServerExchangeTests {
 				capabilitiesWithSampling, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithSampling = new McpSyncServerExchange(asyncExchangeWithSampling);
 
-		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
-			.messages(Arrays
-				.asList(new McpSchema.SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("Hello, world!"))))
+		CreateMessageRequest createMessageRequest = CreateMessageRequest.builder()
+			.messages(
+					Arrays.asList(new SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("Hello, world!"))))
 			.build();
 
-		McpSchema.CreateMessageResult expectedResult = McpSchema.CreateMessageResult.builder()
+		CreateMessageResult expectedResult = CreateMessageResult.builder()
 			.role(McpSchema.Role.ASSISTANT)
 			.content(new McpSchema.TextContent("Hello! How can I help you today?"))
 			.model("gpt-4")
-			.stopReason(McpSchema.CreateMessageResult.StopReason.END_TURN)
+			.stopReason(CreateMessageResult.StopReason.END_TURN)
 			.build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE), eq(createMessageRequest),
 				any(TypeRef.class)))
 			.thenReturn(Mono.just(expectedResult));
 
-		McpSchema.CreateMessageResult result = exchangeWithSampling.createMessage(createMessageRequest);
+		CreateMessageResult result = exchangeWithSampling.createMessage(createMessageRequest);
 
 		assertThat(result).isEqualTo(expectedResult);
 		assertThat(result.role()).isEqualTo(McpSchema.Role.ASSISTANT);
 		assertThat(result.content()).isInstanceOf(McpSchema.TextContent.class);
 		assertThat(((McpSchema.TextContent) result.content()).text()).isEqualTo("Hello! How can I help you today?");
 		assertThat(result.model()).isEqualTo("gpt-4");
-		assertThat(result.stopReason()).isEqualTo(McpSchema.CreateMessageResult.StopReason.END_TURN);
+		assertThat(result.stopReason()).isEqualTo(CreateMessageResult.StopReason.END_TURN);
 	}
 
 	@Test
@@ -560,24 +551,24 @@ class McpSyncServerExchangeTests {
 		McpSyncServerExchange exchangeWithSampling = new McpSyncServerExchange(asyncExchangeWithSampling);
 
 		// Create request with image content
-		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
-			.messages(Arrays.asList(new McpSchema.SamplingMessage(McpSchema.Role.USER,
+		CreateMessageRequest createMessageRequest = CreateMessageRequest.builder()
+			.messages(Arrays.asList(new SamplingMessage(McpSchema.Role.USER,
 					new McpSchema.ImageContent(null, "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD...",
 							"image/jpeg"))))
 			.build();
 
-		McpSchema.CreateMessageResult expectedResult = McpSchema.CreateMessageResult.builder()
+		CreateMessageResult expectedResult = CreateMessageResult.builder()
 			.role(McpSchema.Role.ASSISTANT)
 			.content(new McpSchema.TextContent("I can see an image. It appears to be a photograph."))
 			.model("gpt-4-vision")
-			.stopReason(McpSchema.CreateMessageResult.StopReason.END_TURN)
+			.stopReason(CreateMessageResult.StopReason.END_TURN)
 			.build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE), eq(createMessageRequest),
 				any(TypeRef.class)))
 			.thenReturn(Mono.just(expectedResult));
 
-		McpSchema.CreateMessageResult result = exchangeWithSampling.createMessage(createMessageRequest);
+		CreateMessageResult result = exchangeWithSampling.createMessage(createMessageRequest);
 
 		assertThat(result).isEqualTo(expectedResult);
 		assertThat(result.role()).isEqualTo(McpSchema.Role.ASSISTANT);
@@ -595,9 +586,8 @@ class McpSyncServerExchangeTests {
 				capabilitiesWithSampling, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithSampling = new McpSyncServerExchange(asyncExchangeWithSampling);
 
-		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
-			.messages(Arrays
-				.asList(new McpSchema.SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("Hello"))))
+		CreateMessageRequest createMessageRequest = CreateMessageRequest.builder()
+			.messages(Arrays.asList(new SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("Hello"))))
 			.build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE), eq(createMessageRequest),
@@ -620,24 +610,24 @@ class McpSyncServerExchangeTests {
 				capabilitiesWithSampling, clientInfo, McpTransportContext.EMPTY);
 		McpSyncServerExchange exchangeWithSampling = new McpSyncServerExchange(asyncExchangeWithSampling);
 
-		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
-			.messages(Arrays.asList(new McpSchema.SamplingMessage(McpSchema.Role.USER,
-					new McpSchema.TextContent("What files are available?"))))
-			.includeContext(McpSchema.CreateMessageRequest.ContextInclusionStrategy.ALL_SERVERS)
+		CreateMessageRequest createMessageRequest = CreateMessageRequest.builder()
+			.messages(Arrays.asList(
+					new SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("What files are available?"))))
+			.includeContext(CreateMessageRequest.ContextInclusionStrategy.ALL_SERVERS)
 			.build();
 
-		McpSchema.CreateMessageResult expectedResult = McpSchema.CreateMessageResult.builder()
+		CreateMessageResult expectedResult = CreateMessageResult.builder()
 			.role(McpSchema.Role.ASSISTANT)
 			.content(new McpSchema.TextContent("Based on the available context, I can see several files..."))
 			.model("gpt-4")
-			.stopReason(McpSchema.CreateMessageResult.StopReason.END_TURN)
+			.stopReason(CreateMessageResult.StopReason.END_TURN)
 			.build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE), eq(createMessageRequest),
 				any(TypeRef.class)))
 			.thenReturn(Mono.just(expectedResult));
 
-		McpSchema.CreateMessageResult result = exchangeWithSampling.createMessage(createMessageRequest);
+		CreateMessageResult result = exchangeWithSampling.createMessage(createMessageRequest);
 
 		assertThat(result).isEqualTo(expectedResult);
 		assertThat(((McpSchema.TextContent) result.content()).text()).contains("context");

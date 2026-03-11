@@ -17,6 +17,11 @@ import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpInitRequestHandler;
 import io.modelcontextprotocol.server.McpNotificationHandler;
 import io.modelcontextprotocol.server.McpRequestHandler;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCNotification;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCResponse;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
@@ -33,7 +38,7 @@ public class McpServerSession implements McpLoggableSession {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpServerSession.class);
 
-	private final ConcurrentHashMap<Object, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<Object, MonoSink<JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
 
 	private final String id;
 
@@ -151,10 +156,10 @@ public class McpServerSession implements McpLoggableSession {
 	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeRef<T> typeRef) {
 		String requestId = this.generateRequestId();
 
-		return Mono.<McpSchema.JSONRPCResponse>create(sink -> {
+		return Mono.<JSONRPCResponse>create(sink -> {
 			this.pendingResponses.put(requestId, sink);
-			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, method,
-					requestId, requestParams);
+			JSONRPCRequest jsonrpcRequest = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, method, requestId,
+					requestParams);
 			this.transport.sendMessage(jsonrpcRequest).subscribe(v -> {
 			}, error -> {
 				this.pendingResponses.remove(requestId);
@@ -177,8 +182,7 @@ public class McpServerSession implements McpLoggableSession {
 
 	@Override
 	public Mono<Void> sendNotification(String method, Object params) {
-		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
-				method, params);
+		JSONRPCNotification jsonrpcNotification = new JSONRPCNotification(JSONRPC.JSONRPC_VERSION, method, params);
 		return this.transport.sendMessage(jsonrpcNotification);
 	}
 
@@ -192,13 +196,13 @@ public class McpServerSession implements McpLoggableSession {
 	 * @param message the incoming JSON-RPC message
 	 * @return a Mono that completes when the message is processed
 	 */
-	public Mono<Void> handle(McpSchema.JSONRPCMessage message) {
+	public Mono<Void> handle(JSONRPCMessage message) {
 		return Mono.deferContextual(ctx -> {
 			McpTransportContext transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 
 			// TODO handle errors for communication to without initialization happening
 			// first
-			if (message instanceof McpSchema.JSONRPCResponse response) {
+			if (message instanceof JSONRPCResponse response) {
 				logger.debug("Received response: {}", response);
 				if (response.id() != null) {
 					var sink = pendingResponses.remove(response.id());
@@ -216,20 +220,19 @@ public class McpServerSession implements McpLoggableSession {
 				}
 				return Mono.empty();
 			}
-			else if (message instanceof McpSchema.JSONRPCRequest request) {
+			else if (message instanceof JSONRPCRequest request) {
 				logger.debug("Received request: {}", request);
 				return handleIncomingRequest(request, transportContext).onErrorResume(error -> {
-					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (error instanceof McpError mcpError
+					JSONRPCResponse.JSONRPCError jsonRpcError = (error instanceof McpError mcpError
 							&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
-									: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+									: new JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 											error.getMessage(), McpError.aggregateExceptionMessages(error));
-					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
-							jsonRpcError);
+					var errorResponse = new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, request.id(), null, jsonRpcError);
 					// TODO: Should the error go to SSE or back as POST return?
 					return this.transport.sendMessage(errorResponse).then(Mono.empty());
 				}).flatMap(this.transport::sendMessage);
 			}
-			else if (message instanceof McpSchema.JSONRPCNotification notification) {
+			else if (message instanceof JSONRPCNotification notification) {
 				// TODO handle errors for communication to without initialization
 				// happening first
 				logger.debug("Received notification: {}", notification);
@@ -250,8 +253,7 @@ public class McpServerSession implements McpLoggableSession {
 	 * @param transportContext
 	 * @return A Mono containing the JSON-RPC response
 	 */
-	private Mono<McpSchema.JSONRPCResponse> handleIncomingRequest(McpSchema.JSONRPCRequest request,
-			McpTransportContext transportContext) {
+	private Mono<JSONRPCResponse> handleIncomingRequest(JSONRPCRequest request, McpTransportContext transportContext) {
 		return Mono.defer(() -> {
 			Mono<?> resultMono;
 			if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
@@ -270,24 +272,22 @@ public class McpServerSession implements McpLoggableSession {
 				var handler = this.requestHandlers.get(request.method());
 				if (handler == null) {
 					MethodNotFoundError error = getMethodNotFoundError(request.method());
-					return Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
-							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
-									error.message(), error.data())));
+					return Mono.just(new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, request.id(), null,
+							new JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND, error.message(),
+									error.data())));
 				}
 
 				resultMono = this.exchangeSink.asMono()
 					.flatMap(exchange -> handler.handle(copyExchange(exchange, transportContext), request.params()));
 			}
-			return resultMono
-				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
+			return resultMono.map(result -> new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, request.id(), result, null))
 				.onErrorResume(error -> {
-					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (error instanceof McpError mcpError
+					JSONRPCResponse.JSONRPCError jsonRpcError = (error instanceof McpError mcpError
 							&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
 									// TODO: add error message through the data field
-									: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+									: new JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 											error.getMessage(), McpError.aggregateExceptionMessages(error));
-					return Mono.just(
-							new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null, jsonRpcError));
+					return Mono.just(new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, request.id(), null, jsonRpcError));
 				});
 		});
 	}
@@ -298,7 +298,7 @@ public class McpServerSession implements McpLoggableSession {
 	 * @param transportContext
 	 * @return A Mono that completes when the notification is processed
 	 */
-	private Mono<Void> handleIncomingNotification(McpSchema.JSONRPCNotification notification,
+	private Mono<Void> handleIncomingNotification(JSONRPCNotification notification,
 			McpTransportContext transportContext) {
 		return Mono.defer(() -> {
 			if (McpSchema.METHOD_NOTIFICATION_INITIALIZED.equals(notification.method())) {

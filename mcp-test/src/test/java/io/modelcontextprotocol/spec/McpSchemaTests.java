@@ -4,12 +4,6 @@
 
 package io.modelcontextprotocol.spec;
 
-import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
@@ -17,11 +11,45 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCNotification;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCResponse;
+import io.modelcontextprotocol.spec.schema.elicit.ElicitRequest;
+import io.modelcontextprotocol.spec.schema.elicit.ElicitResult;
+import io.modelcontextprotocol.spec.schema.prompt.GetPromptRequest;
+import io.modelcontextprotocol.spec.schema.prompt.GetPromptResult;
+import io.modelcontextprotocol.spec.schema.prompt.ListPromptsResult;
+import io.modelcontextprotocol.spec.schema.prompt.Prompt;
+import io.modelcontextprotocol.spec.schema.prompt.PromptArgument;
+import io.modelcontextprotocol.spec.schema.prompt.PromptMessage;
+import io.modelcontextprotocol.spec.schema.resource.BlobResourceContents;
+import io.modelcontextprotocol.spec.schema.resource.ListResourceTemplatesResult;
+import io.modelcontextprotocol.spec.schema.resource.ListResourcesResult;
+import io.modelcontextprotocol.spec.schema.resource.ReadResourceRequest;
+import io.modelcontextprotocol.spec.schema.resource.ReadResourceResult;
+import io.modelcontextprotocol.spec.schema.resource.Resource;
+import io.modelcontextprotocol.spec.schema.resource.ResourceTemplate;
+import io.modelcontextprotocol.spec.schema.resource.TextResourceContents;
+import io.modelcontextprotocol.spec.schema.sample.CreateMessageRequest;
+import io.modelcontextprotocol.spec.schema.sample.CreateMessageResult;
+import io.modelcontextprotocol.spec.schema.sample.ModelHint;
+import io.modelcontextprotocol.spec.schema.sample.ModelPreferences;
+import io.modelcontextprotocol.spec.schema.sample.SamplingMessage;
+import io.modelcontextprotocol.spec.schema.tool.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolResult;
+import io.modelcontextprotocol.spec.schema.tool.JsonSchema;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
+import io.modelcontextprotocol.spec.schema.tool.ToolAnnotations;
+import net.javacrumbs.jsonunit.core.Option;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Test;
 
-import net.javacrumbs.jsonunit.core.Option;
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * @author Christian Tzolov
@@ -121,10 +149,9 @@ public class McpSchemaTests {
 	@Test
 	void testCreateMessageRequestWithMeta() throws Exception {
 		McpSchema.TextContent content = new McpSchema.TextContent("User message");
-		McpSchema.SamplingMessage message = new McpSchema.SamplingMessage(McpSchema.Role.USER, content);
-		McpSchema.ModelHint hint = new McpSchema.ModelHint("gpt-4");
-		McpSchema.ModelPreferences preferences = new McpSchema.ModelPreferences(Collections.singletonList(hint), 0.3,
-				0.7, 0.9);
+		SamplingMessage message = new SamplingMessage(McpSchema.Role.USER, content);
+		ModelHint hint = new ModelHint("gpt-4");
+		ModelPreferences preferences = new ModelPreferences(Collections.singletonList(hint), 0.3, 0.7, 0.9);
 
 		Map<String, Object> metadata = new HashMap<>();
 		metadata.put("session", "test-session");
@@ -132,11 +159,11 @@ public class McpSchemaTests {
 		Map<String, Object> meta = new HashMap<>();
 		meta.put("progressToken", "create-message-token-456");
 
-		McpSchema.CreateMessageRequest request = McpSchema.CreateMessageRequest.builder()
+		CreateMessageRequest request = CreateMessageRequest.builder()
 			.messages(Collections.singletonList(message))
 			.modelPreferences(preferences)
 			.systemPrompt("You are a helpful assistant")
-			.includeContext(McpSchema.CreateMessageRequest.ContextInclusionStrategy.THIS_SERVER)
+			.includeContext(CreateMessageRequest.ContextInclusionStrategy.THIS_SERVER)
 			.temperature(0.7)
 			.maxTokens(1000)
 			.stopSequences(Arrays.asList("STOP", "END"))
@@ -157,8 +184,8 @@ public class McpSchemaTests {
 
 	@Test
 	void testEmbeddedResource() throws Exception {
-		McpSchema.TextResourceContents resourceContents = new McpSchema.TextResourceContents("resource://test",
-				"text/plain", "Sample resource content");
+		TextResourceContents resourceContents = new TextResourceContents("resource://test", "text/plain",
+				"Sample resource content");
 
 		McpSchema.EmbeddedResource test = new McpSchema.EmbeddedResource(null, resourceContents);
 
@@ -188,8 +215,8 @@ public class McpSchemaTests {
 
 	@Test
 	void testEmbeddedResourceWithBlobContents() throws Exception {
-		McpSchema.BlobResourceContents resourceContents = new McpSchema.BlobResourceContents("resource://test",
-				"application/octet-stream", "base64encodedblob");
+		BlobResourceContents resourceContents = new BlobResourceContents("resource://test", "application/octet-stream",
+				"base64encodedblob");
 
 		McpSchema.EmbeddedResource test = new McpSchema.EmbeddedResource(null, resourceContents);
 
@@ -213,9 +240,8 @@ public class McpSchemaTests {
 		assertThat(embeddedResource.resource()).isNotNull();
 		assertThat(embeddedResource.resource().uri()).isEqualTo("resource://test");
 		assertThat(embeddedResource.resource().mimeType()).isEqualTo("application/octet-stream");
-		assertThat(((McpSchema.BlobResourceContents) embeddedResource.resource()).blob())
-			.isEqualTo("base64encodedblob");
-		assertThat(((McpSchema.BlobResourceContents) embeddedResource.resource()).meta()).containsKey("metaKey");
+		assertThat(((BlobResourceContents) embeddedResource.resource()).blob()).isEqualTo("base64encodedblob");
+		assertThat(((BlobResourceContents) embeddedResource.resource()).meta()).containsKey("metaKey");
 	}
 
 	@Test
@@ -255,8 +281,7 @@ public class McpSchemaTests {
 		Map<String, Object> params = new HashMap<>();
 		params.put("key", "value");
 
-		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, "method_name", 1,
-				params);
+		JSONRPCRequest request = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, "method_name", 1, params);
 
 		String value = JSON_MAPPER.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -271,8 +296,8 @@ public class McpSchemaTests {
 		Map<String, Object> params = new HashMap<>();
 		params.put("key", "value");
 
-		McpSchema.JSONRPCNotification notification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
-				"notification_method", params);
+		JSONRPCNotification notification = new JSONRPCNotification(JSONRPC.JSONRPC_VERSION, "notification_method",
+				params);
 
 		String value = JSON_MAPPER.writeValueAsString(notification);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -287,7 +312,7 @@ public class McpSchemaTests {
 		Map<String, Object> result = new HashMap<>();
 		result.put("result_key", "result_value");
 
-		McpSchema.JSONRPCResponse response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, 1, result, null);
+		JSONRPCResponse response = new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, 1, result, null);
 
 		String value = JSON_MAPPER.writeValueAsString(response);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -299,10 +324,10 @@ public class McpSchemaTests {
 
 	@Test
 	void testJSONRPCResponseWithError() throws Exception {
-		McpSchema.JSONRPCResponse.JSONRPCError error = new McpSchema.JSONRPCResponse.JSONRPCError(
-				McpSchema.ErrorCodes.INVALID_REQUEST, "Invalid request", null);
+		JSONRPCResponse.JSONRPCError error = new JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INVALID_REQUEST,
+				"Invalid request", null);
 
-		McpSchema.JSONRPCResponse response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, 1, null, error);
+		JSONRPCResponse response = new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, 1, null, error);
 
 		String value = JSON_MAPPER.writeValueAsString(response);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -366,7 +391,7 @@ public class McpSchemaTests {
 		McpSchema.Annotations annotations = new McpSchema.Annotations(
 				Arrays.asList(McpSchema.Role.USER, McpSchema.Role.ASSISTANT), 0.8);
 
-		McpSchema.Resource resource = McpSchema.Resource.builder()
+		Resource resource = Resource.builder()
 			.uri("resource://test")
 			.name("Test Resource")
 			.description("A test resource")
@@ -388,7 +413,7 @@ public class McpSchemaTests {
 		McpSchema.Annotations annotations = new McpSchema.Annotations(
 				Arrays.asList(McpSchema.Role.USER, McpSchema.Role.ASSISTANT), 0.8);
 
-		McpSchema.Resource resource = McpSchema.Resource.builder()
+		Resource resource = Resource.builder()
 			.uri("resource://test")
 			.name("Test Resource")
 			.description("A test resource")
@@ -412,7 +437,7 @@ public class McpSchemaTests {
 		McpSchema.Annotations annotations = new McpSchema.Annotations(
 				Arrays.asList(McpSchema.Role.USER, McpSchema.Role.ASSISTANT), 0.8);
 
-		McpSchema.Resource.Builder resourceBuilder = McpSchema.Resource.builder()
+		Resource.Builder resourceBuilder = Resource.builder()
 			.name("Test Resource")
 			.description("A test resource")
 			.mimeType("text/plain")
@@ -427,7 +452,7 @@ public class McpSchemaTests {
 		McpSchema.Annotations annotations = new McpSchema.Annotations(
 				Arrays.asList(McpSchema.Role.USER, McpSchema.Role.ASSISTANT), 0.8);
 
-		McpSchema.Resource.Builder resourceBuilder = McpSchema.Resource.builder()
+		Resource.Builder resourceBuilder = Resource.builder()
 			.uri("resource://test")
 			.description("A test resource")
 			.mimeType("text/plain")
@@ -442,8 +467,8 @@ public class McpSchemaTests {
 		McpSchema.Annotations annotations = new McpSchema.Annotations(Arrays.asList(McpSchema.Role.USER), 0.5);
 		Map<String, Object> meta = Map.of("metaKey", "metaValue");
 
-		McpSchema.ResourceTemplate template = new McpSchema.ResourceTemplate("resource://{param}/test", "Test Template",
-				"Test Template", "A test resource template", "text/plain", annotations, meta);
+		ResourceTemplate template = new ResourceTemplate("resource://{param}/test", "Test Template", "Test Template",
+				"A test resource template", "text/plain", annotations, meta);
 
 		String value = JSON_MAPPER.writeValueAsString(template);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -456,14 +481,14 @@ public class McpSchemaTests {
 
 	@Test
 	void testListResourcesResult() throws Exception {
-		McpSchema.Resource resource1 = McpSchema.Resource.builder()
+		Resource resource1 = Resource.builder()
 			.uri("resource://test1")
 			.name("Test Resource 1")
 			.description("First test resource")
 			.mimeType("text/plain")
 			.build();
 
-		McpSchema.Resource resource2 = McpSchema.Resource.builder()
+		Resource resource2 = Resource.builder()
 			.uri("resource://test2")
 			.name("Test Resource 2")
 			.description("Second test resource")
@@ -472,8 +497,7 @@ public class McpSchemaTests {
 
 		Map<String, Object> meta = Map.of("metaKey", "metaValue");
 
-		McpSchema.ListResourcesResult result = new McpSchema.ListResourcesResult(Arrays.asList(resource1, resource2),
-				"next-cursor", meta);
+		ListResourcesResult result = new ListResourcesResult(Arrays.asList(resource1, resource2), "next-cursor", meta);
 
 		String value = JSON_MAPPER.writeValueAsString(result);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -486,14 +510,14 @@ public class McpSchemaTests {
 
 	@Test
 	void testListResourceTemplatesResult() throws Exception {
-		McpSchema.ResourceTemplate template1 = new McpSchema.ResourceTemplate("resource://{param}/test1",
-				"Test Template 1", "Test Template 1", "First test template", "text/plain", null);
+		ResourceTemplate template1 = new ResourceTemplate("resource://{param}/test1", "Test Template 1",
+				"Test Template 1", "First test template", "text/plain", null);
 
-		McpSchema.ResourceTemplate template2 = new McpSchema.ResourceTemplate("resource://{param}/test2",
-				"Test Template 2", "Test Template 2", "Second test template", "application/json", null);
+		ResourceTemplate template2 = new ResourceTemplate("resource://{param}/test2", "Test Template 2",
+				"Test Template 2", "Second test template", "application/json", null);
 
-		McpSchema.ListResourceTemplatesResult result = new McpSchema.ListResourceTemplatesResult(
-				Arrays.asList(template1, template2), "next-cursor");
+		ListResourceTemplatesResult result = new ListResourceTemplatesResult(Arrays.asList(template1, template2),
+				"next-cursor");
 
 		String value = JSON_MAPPER.writeValueAsString(result);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -506,8 +530,7 @@ public class McpSchemaTests {
 
 	@Test
 	void testReadResourceRequest() throws Exception {
-		McpSchema.ReadResourceRequest request = new McpSchema.ReadResourceRequest("resource://test",
-				Map.of("metaKey", "metaValue"));
+		ReadResourceRequest request = new ReadResourceRequest("resource://test", Map.of("metaKey", "metaValue"));
 
 		String value = JSON_MAPPER.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -522,7 +545,7 @@ public class McpSchemaTests {
 		Map<String, Object> meta = new HashMap<>();
 		meta.put("progressToken", "read-resource-token-123");
 
-		McpSchema.ReadResourceRequest request = new McpSchema.ReadResourceRequest("resource://test", meta);
+		ReadResourceRequest request = new ReadResourceRequest("resource://test", meta);
 
 		String value = JSON_MAPPER.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -538,9 +561,8 @@ public class McpSchemaTests {
 
 	@Test
 	void testReadResourceRequestDeserialization() throws Exception {
-		McpSchema.ReadResourceRequest request = JSON_MAPPER.readValue("""
-				{"uri":"resource://test","_meta":{"progressToken":"test-token"}}""",
-				McpSchema.ReadResourceRequest.class);
+		ReadResourceRequest request = JSON_MAPPER.readValue("""
+				{"uri":"resource://test","_meta":{"progressToken":"test-token"}}""", ReadResourceRequest.class);
 
 		assertThat(request.uri()).isEqualTo("resource://test");
 		assertThat(request.meta()).containsEntry("progressToken", "test-token");
@@ -549,13 +571,13 @@ public class McpSchemaTests {
 
 	@Test
 	void testReadResourceResult() throws Exception {
-		McpSchema.TextResourceContents contents1 = new McpSchema.TextResourceContents("resource://test1", "text/plain",
+		TextResourceContents contents1 = new TextResourceContents("resource://test1", "text/plain",
 				"Sample text content");
 
-		McpSchema.BlobResourceContents contents2 = new McpSchema.BlobResourceContents("resource://test2",
-				"application/octet-stream", "base64encodedblob");
+		BlobResourceContents contents2 = new BlobResourceContents("resource://test2", "application/octet-stream",
+				"base64encodedblob");
 
-		McpSchema.ReadResourceResult result = new McpSchema.ReadResourceResult(Arrays.asList(contents1, contents2),
+		ReadResourceResult result = new ReadResourceResult(Arrays.asList(contents1, contents2),
 				Map.of("metaKey", "metaValue"));
 
 		String value = JSON_MAPPER.writeValueAsString(result);
@@ -571,13 +593,12 @@ public class McpSchemaTests {
 
 	@Test
 	void testPrompt() throws Exception {
-		McpSchema.PromptArgument arg1 = new McpSchema.PromptArgument("arg1", "First argument", "First argument", true);
+		PromptArgument arg1 = new PromptArgument("arg1", "First argument", "First argument", true);
 
-		McpSchema.PromptArgument arg2 = new McpSchema.PromptArgument("arg2", "Second argument", "Second argument",
-				false);
+		PromptArgument arg2 = new PromptArgument("arg2", "Second argument", "Second argument", false);
 
-		McpSchema.Prompt prompt = new McpSchema.Prompt("test-prompt", "Test Prompt", "A test prompt",
-				Arrays.asList(arg1, arg2), Map.of("metaKey", "metaValue"));
+		Prompt prompt = new Prompt("test-prompt", "Test Prompt", "A test prompt", Arrays.asList(arg1, arg2),
+				Map.of("metaKey", "metaValue"));
 
 		String value = JSON_MAPPER.writeValueAsString(prompt);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -592,7 +613,7 @@ public class McpSchemaTests {
 	void testPromptMessage() throws Exception {
 		McpSchema.TextContent content = new McpSchema.TextContent("Hello, world!");
 
-		McpSchema.PromptMessage message = new McpSchema.PromptMessage(McpSchema.Role.USER, content);
+		PromptMessage message = new PromptMessage(McpSchema.Role.USER, content);
 
 		String value = JSON_MAPPER.writeValueAsString(message);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -604,16 +625,13 @@ public class McpSchemaTests {
 
 	@Test
 	void testListPromptsResult() throws Exception {
-		McpSchema.PromptArgument arg = new McpSchema.PromptArgument("arg", "Argument", "An argument", true);
+		PromptArgument arg = new PromptArgument("arg", "Argument", "An argument", true);
 
-		McpSchema.Prompt prompt1 = new McpSchema.Prompt("prompt1", "First prompt", "First prompt",
-				Collections.singletonList(arg));
+		Prompt prompt1 = new Prompt("prompt1", "First prompt", "First prompt", Collections.singletonList(arg));
 
-		McpSchema.Prompt prompt2 = new McpSchema.Prompt("prompt2", "Second prompt", "Second prompt",
-				Collections.emptyList());
+		Prompt prompt2 = new Prompt("prompt2", "Second prompt", "Second prompt", Collections.emptyList());
 
-		McpSchema.ListPromptsResult result = new McpSchema.ListPromptsResult(Arrays.asList(prompt1, prompt2),
-				"next-cursor");
+		ListPromptsResult result = new ListPromptsResult(Arrays.asList(prompt1, prompt2), "next-cursor");
 
 		String value = JSON_MAPPER.writeValueAsString(result);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -630,10 +648,10 @@ public class McpSchemaTests {
 		arguments.put("arg1", "value1");
 		arguments.put("arg2", 42);
 
-		McpSchema.GetPromptRequest request = new McpSchema.GetPromptRequest("test-prompt", arguments);
+		GetPromptRequest request = new GetPromptRequest("test-prompt", arguments);
 
 		assertThat(JSON_MAPPER.readValue("""
-				{"name":"test-prompt","arguments":{"arg1":"value1","arg2":42}}""", McpSchema.GetPromptRequest.class))
+				{"name":"test-prompt","arguments":{"arg1":"value1","arg2":42}}""", GetPromptRequest.class))
 			.isEqualTo(request);
 	}
 
@@ -646,7 +664,7 @@ public class McpSchemaTests {
 		Map<String, Object> meta = new HashMap<>();
 		meta.put("progressToken", "token123");
 
-		McpSchema.GetPromptRequest request = new McpSchema.GetPromptRequest("test-prompt", arguments, meta);
+		GetPromptRequest request = new GetPromptRequest("test-prompt", arguments, meta);
 
 		String value = JSON_MAPPER.writeValueAsString(request);
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
@@ -666,12 +684,11 @@ public class McpSchemaTests {
 		McpSchema.TextContent content1 = new McpSchema.TextContent("System message");
 		McpSchema.TextContent content2 = new McpSchema.TextContent("User message");
 
-		McpSchema.PromptMessage message1 = new McpSchema.PromptMessage(McpSchema.Role.ASSISTANT, content1);
+		PromptMessage message1 = new PromptMessage(McpSchema.Role.ASSISTANT, content1);
 
-		McpSchema.PromptMessage message2 = new McpSchema.PromptMessage(McpSchema.Role.USER, content2);
+		PromptMessage message2 = new PromptMessage(McpSchema.Role.USER, content2);
 
-		McpSchema.GetPromptResult result = new McpSchema.GetPromptResult("A test prompt result",
-				Arrays.asList(message1, message2));
+		GetPromptResult result = new GetPromptResult("A test prompt result", Arrays.asList(message1, message2));
 
 		String value = JSON_MAPPER.writeValueAsString(result);
 
@@ -713,13 +730,13 @@ public class McpSchemaTests {
 				""";
 
 		// Deserialize the original string to a JsonSchema object
-		McpSchema.JsonSchema schema = JSON_MAPPER.readValue(schemaJson, McpSchema.JsonSchema.class);
+		JsonSchema schema = JSON_MAPPER.readValue(schemaJson, JsonSchema.class);
 
 		// Serialize the object back to a string
 		String serialized = JSON_MAPPER.writeValueAsString(schema);
 
 		// Deserialize again
-		McpSchema.JsonSchema deserialized = JSON_MAPPER.readValue(serialized, McpSchema.JsonSchema.class);
+		JsonSchema deserialized = JSON_MAPPER.readValue(serialized, JsonSchema.class);
 
 		// Serialize one more time and compare with the first serialization
 		String serializedAgain = JSON_MAPPER.writeValueAsString(deserialized);
@@ -756,13 +773,13 @@ public class McpSchemaTests {
 				""";
 
 		// Deserialize the original string to a JsonSchema object
-		McpSchema.JsonSchema schema = JSON_MAPPER.readValue(schemaJson, McpSchema.JsonSchema.class);
+		JsonSchema schema = JSON_MAPPER.readValue(schemaJson, JsonSchema.class);
 
 		// Serialize the object back to a string
 		String serialized = JSON_MAPPER.writeValueAsString(schema);
 
 		// Deserialize again
-		McpSchema.JsonSchema deserialized = JSON_MAPPER.readValue(serialized, McpSchema.JsonSchema.class);
+		JsonSchema deserialized = JSON_MAPPER.readValue(serialized, JsonSchema.class);
 
 		// Serialize one more time and compare with the first serialization
 		String serializedAgain = JSON_MAPPER.writeValueAsString(deserialized);
@@ -788,7 +805,7 @@ public class McpSchemaTests {
 				}
 				""";
 
-		McpSchema.Tool tool = McpSchema.Tool.builder()
+		Tool tool = Tool.builder()
 			.name("test-tool")
 			.description("A test tool")
 			.inputSchema(JSON_MAPPER, schemaJson)
@@ -826,7 +843,7 @@ public class McpSchemaTests {
 				}
 				""";
 
-		McpSchema.Tool tool = McpSchema.Tool.builder()
+		Tool tool = Tool.builder()
 			.name("addressTool")
 			.title("Handles addresses")
 			.inputSchema(JSON_MAPPER, complexSchemaJson)
@@ -836,7 +853,7 @@ public class McpSchemaTests {
 		String serialized = JSON_MAPPER.writeValueAsString(tool);
 
 		// Deserialize back to a Tool object
-		McpSchema.Tool deserializedTool = JSON_MAPPER.readValue(serialized, McpSchema.Tool.class);
+		Tool deserializedTool = JSON_MAPPER.readValue(serialized, Tool.class);
 
 		// Serialize again and compare with first serialization
 		String serializedAgain = JSON_MAPPER.writeValueAsString(deserializedTool);
@@ -866,10 +883,10 @@ public class McpSchemaTests {
 				}
 				""";
 
-		McpSchema.JsonSchema schema = JSON_MAPPER.readValue(schemaJson, McpSchema.JsonSchema.class);
+		JsonSchema schema = JSON_MAPPER.readValue(schemaJson, JsonSchema.class);
 		Map<String, Object> meta = Map.of("metaKey", "metaValue");
 
-		McpSchema.Tool tool = McpSchema.Tool.builder()
+		Tool tool = Tool.builder()
 			.name("addressTool")
 			.title("addressTool")
 			.description("Handles addresses")
@@ -898,10 +915,9 @@ public class McpSchemaTests {
 					"required": ["name"]
 				}
 				""";
-		McpSchema.ToolAnnotations annotations = new McpSchema.ToolAnnotations("A test tool", false, false, false, false,
-				false);
+		ToolAnnotations annotations = new ToolAnnotations("A test tool", false, false, false, false, false);
 
-		McpSchema.Tool tool = McpSchema.Tool.builder()
+		Tool tool = Tool.builder()
 			.name("test-tool")
 			.description("A test tool")
 			.inputSchema(JSON_MAPPER, schemaJson)
@@ -969,7 +985,7 @@ public class McpSchemaTests {
 				}
 				""";
 
-		McpSchema.Tool tool = McpSchema.Tool.builder()
+		Tool tool = Tool.builder()
 			.name("test-tool")
 			.description("A test tool")
 			.inputSchema(JSON_MAPPER, inputSchemaJson)
@@ -1033,10 +1049,9 @@ public class McpSchemaTests {
 				}
 				""";
 
-		McpSchema.ToolAnnotations annotations = new McpSchema.ToolAnnotations("A test tool with output", true, false,
-				true, false, true);
+		ToolAnnotations annotations = new ToolAnnotations("A test tool with output", true, false, true, false, true);
 
-		McpSchema.Tool tool = McpSchema.Tool.builder()
+		Tool tool = Tool.builder()
 			.name("test-tool")
 			.description("A test tool")
 			.inputSchema(JSON_MAPPER, inputSchemaJson)
@@ -1108,7 +1123,7 @@ public class McpSchemaTests {
 				}
 				""";
 
-		McpSchema.Tool tool = JSON_MAPPER.readValue(toolJson, McpSchema.Tool.class);
+		Tool tool = JSON_MAPPER.readValue(toolJson, Tool.class);
 
 		assertThat(tool).isNotNull();
 		assertThat(tool.name()).isEqualTo("test-tool");
@@ -1142,7 +1157,7 @@ public class McpSchemaTests {
 				}
 				""";
 
-		McpSchema.Tool tool = JSON_MAPPER.readValue(toolJson, McpSchema.Tool.class);
+		Tool tool = JSON_MAPPER.readValue(toolJson, Tool.class);
 
 		assertThat(tool).isNotNull();
 		assertThat(tool.name()).isEqualTo("test-tool");
@@ -1158,7 +1173,7 @@ public class McpSchemaTests {
 		arguments.put("name", "test");
 		arguments.put("value", 42);
 
-		McpSchema.CallToolRequest request = new McpSchema.CallToolRequest("test-tool", arguments);
+		CallToolRequest request = new CallToolRequest("test-tool", arguments);
 
 		String value = JSON_MAPPER.writeValueAsString(request);
 
@@ -1172,7 +1187,7 @@ public class McpSchemaTests {
 	@Test
 	void testCallToolRequestJsonArguments() throws Exception {
 
-		McpSchema.CallToolRequest request = new McpSchema.CallToolRequest(JSON_MAPPER, "test-tool", """
+		CallToolRequest request = new CallToolRequest(JSON_MAPPER, "test-tool", """
 				{
 					"name": "test",
 					"value": 42
@@ -1191,7 +1206,7 @@ public class McpSchemaTests {
 	@Test
 	void testCallToolRequestWithMeta() throws Exception {
 
-		McpSchema.CallToolRequest request = McpSchema.CallToolRequest.builder()
+		CallToolRequest request = CallToolRequest.builder()
 			.name("test-tool")
 			.arguments(Map.of("name", "test", "value", 42))
 			.progressToken("tool-progress-123")
@@ -1215,16 +1230,12 @@ public class McpSchemaTests {
 		Map<String, Object> meta = new HashMap<>();
 		meta.put("progressToken", "json-builder-789");
 
-		McpSchema.CallToolRequest request = McpSchema.CallToolRequest.builder()
-			.name("test-tool")
-			.arguments(JSON_MAPPER, """
-					{
-						"name": "test",
-						"value": 42
-					}
-					""")
-			.meta(meta)
-			.build();
+		CallToolRequest request = CallToolRequest.builder().name("test-tool").arguments(JSON_MAPPER, """
+				{
+					"name": "test",
+					"value": 42
+				}
+				""").meta(meta).build();
 
 		String value = JSON_MAPPER.writeValueAsString(request);
 
@@ -1245,7 +1256,7 @@ public class McpSchemaTests {
 		Map<String, Object> arguments = new HashMap<>();
 		arguments.put("name", "test");
 
-		McpSchema.CallToolRequest.Builder builder = McpSchema.CallToolRequest.builder().arguments(arguments);
+		CallToolRequest.Builder builder = CallToolRequest.builder().arguments(arguments);
 
 		assertThatThrownBy(builder::build).isInstanceOf(IllegalArgumentException.class)
 			.hasMessageContaining("name must not be empty");
@@ -1255,9 +1266,7 @@ public class McpSchemaTests {
 	void testCallToolResult() throws Exception {
 		McpSchema.TextContent content = new McpSchema.TextContent("Tool execution result");
 
-		McpSchema.CallToolResult result = McpSchema.CallToolResult.builder()
-			.content(Collections.singletonList(content))
-			.build();
+		CallToolResult result = CallToolResult.builder().content(Collections.singletonList(content)).build();
 
 		String value = JSON_MAPPER.writeValueAsString(result);
 
@@ -1270,10 +1279,7 @@ public class McpSchemaTests {
 
 	@Test
 	void testCallToolResultBuilder() throws Exception {
-		McpSchema.CallToolResult result = McpSchema.CallToolResult.builder()
-			.addTextContent("Tool execution result")
-			.isError(false)
-			.build();
+		CallToolResult result = CallToolResult.builder().addTextContent("Tool execution result").isError(false).build();
 
 		String value = JSON_MAPPER.writeValueAsString(result);
 
@@ -1289,7 +1295,7 @@ public class McpSchemaTests {
 		McpSchema.TextContent textContent = new McpSchema.TextContent("Text result");
 		McpSchema.ImageContent imageContent = new McpSchema.ImageContent(null, "base64data", "image/png");
 
-		McpSchema.CallToolResult result = McpSchema.CallToolResult.builder()
+		CallToolResult result = CallToolResult.builder()
 			.addContent(textContent)
 			.addContent(imageContent)
 			.isError(false)
@@ -1311,7 +1317,7 @@ public class McpSchemaTests {
 		McpSchema.ImageContent imageContent = new McpSchema.ImageContent(null, "base64data", "image/png");
 		List<McpSchema.Content> contents = Arrays.asList(textContent, imageContent);
 
-		McpSchema.CallToolResult result = McpSchema.CallToolResult.builder().content(contents).isError(true).build();
+		CallToolResult result = CallToolResult.builder().content(contents).isError(true).build();
 
 		String value = JSON_MAPPER.writeValueAsString(result);
 
@@ -1325,7 +1331,7 @@ public class McpSchemaTests {
 
 	@Test
 	void testCallToolResultBuilderWithErrorResult() throws Exception {
-		McpSchema.CallToolResult result = McpSchema.CallToolResult.builder()
+		CallToolResult result = CallToolResult.builder()
 			.addTextContent("Error: Operation failed")
 			.isError(true)
 			.build();
@@ -1345,21 +1351,20 @@ public class McpSchemaTests {
 	void testCreateMessageRequest() throws Exception {
 		McpSchema.TextContent content = new McpSchema.TextContent("User message");
 
-		McpSchema.SamplingMessage message = new McpSchema.SamplingMessage(McpSchema.Role.USER, content);
+		SamplingMessage message = new SamplingMessage(McpSchema.Role.USER, content);
 
-		McpSchema.ModelHint hint = new McpSchema.ModelHint("gpt-4");
+		ModelHint hint = new ModelHint("gpt-4");
 
-		McpSchema.ModelPreferences preferences = new McpSchema.ModelPreferences(Collections.singletonList(hint), 0.3,
-				0.7, 0.9);
+		ModelPreferences preferences = new ModelPreferences(Collections.singletonList(hint), 0.3, 0.7, 0.9);
 
 		Map<String, Object> metadata = new HashMap<>();
 		metadata.put("session", "test-session");
 
-		McpSchema.CreateMessageRequest request = McpSchema.CreateMessageRequest.builder()
+		CreateMessageRequest request = CreateMessageRequest.builder()
 			.messages(Collections.singletonList(message))
 			.modelPreferences(preferences)
 			.systemPrompt("You are a helpful assistant")
-			.includeContext(McpSchema.CreateMessageRequest.ContextInclusionStrategy.THIS_SERVER)
+			.includeContext(CreateMessageRequest.ContextInclusionStrategy.THIS_SERVER)
 			.temperature(0.7)
 			.maxTokens(1000)
 			.stopSequences(Arrays.asList("STOP", "END"))
@@ -1380,11 +1385,11 @@ public class McpSchemaTests {
 	void testCreateMessageResult() throws Exception {
 		McpSchema.TextContent content = new McpSchema.TextContent("Assistant response");
 
-		McpSchema.CreateMessageResult result = McpSchema.CreateMessageResult.builder()
+		CreateMessageResult result = CreateMessageResult.builder()
 			.role(McpSchema.Role.ASSISTANT)
 			.content(content)
 			.model("gpt-4")
-			.stopReason(McpSchema.CreateMessageResult.StopReason.END_TURN)
+			.stopReason(CreateMessageResult.StopReason.END_TURN)
 			.build();
 
 		String value = JSON_MAPPER.writeValueAsString(result);
@@ -1402,14 +1407,14 @@ public class McpSchemaTests {
 		String input = """
 				{"role":"assistant","content":{"type":"text","text":"Assistant response"},"model":"gpt-4","stopReason":"arbitrary value"}""";
 
-		McpSchema.CreateMessageResult value = JSON_MAPPER.readValue(input, McpSchema.CreateMessageResult.class);
+		CreateMessageResult value = JSON_MAPPER.readValue(input, CreateMessageResult.class);
 
 		McpSchema.TextContent expectedContent = new McpSchema.TextContent("Assistant response");
-		McpSchema.CreateMessageResult expected = McpSchema.CreateMessageResult.builder()
+		CreateMessageResult expected = CreateMessageResult.builder()
 			.role(McpSchema.Role.ASSISTANT)
 			.content(expectedContent)
 			.model("gpt-4")
-			.stopReason(McpSchema.CreateMessageResult.StopReason.UNKNOWN)
+			.stopReason(CreateMessageResult.StopReason.UNKNOWN)
 			.build();
 		assertThat(value).isEqualTo(expected);
 	}
@@ -1418,7 +1423,7 @@ public class McpSchemaTests {
 
 	@Test
 	void testCreateElicitationRequest() throws Exception {
-		McpSchema.ElicitRequest request = McpSchema.ElicitRequest.builder()
+		ElicitRequest request = ElicitRequest.builder()
 			.requestedSchema(Map.of("type", "object", "required", List.of("a"), "properties",
 					Map.of("foo", Map.of("type", "string"))))
 			.build();
@@ -1434,9 +1439,9 @@ public class McpSchemaTests {
 
 	@Test
 	void testCreateElicitationResult() throws Exception {
-		McpSchema.ElicitResult result = McpSchema.ElicitResult.builder()
+		ElicitResult result = ElicitResult.builder()
 			.content(Map.of("foo", "bar"))
-			.message(McpSchema.ElicitResult.Action.ACCEPT)
+			.message(ElicitResult.Action.ACCEPT)
 			.build();
 
 		String value = JSON_MAPPER.writeValueAsString(result);
@@ -1456,7 +1461,7 @@ public class McpSchemaTests {
 		Map<String, Object> meta = new HashMap<>();
 		meta.put("progressToken", "elicit-token-789");
 
-		McpSchema.ElicitRequest request = McpSchema.ElicitRequest.builder()
+		ElicitRequest request = ElicitRequest.builder()
 			.message("Please provide your name")
 			.requestedSchema(requestedSchema)
 			.meta(meta)

@@ -28,6 +28,11 @@ import io.modelcontextprotocol.spec.McpStreamableServerSession;
 import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.ProtocolVersions;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCNotification;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCResponse;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
@@ -436,10 +441,10 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				body.append(line);
 			}
 
-			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body.toString());
+			JSONRPCMessage message = JSONRPC.deserializeJsonRpcMessage(jsonMapper, body.toString());
 
 			// Handle initialization request
-			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest
+			if (message instanceof JSONRPCRequest jsonrpcRequest
 					&& jsonrpcRequest.method().equals(McpSchema.METHOD_INITIALIZE)) {
 				if (!badRequestErrors.isEmpty()) {
 					String combinedMessage = String.join("; ", badRequestErrors);
@@ -463,8 +468,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 					response.setHeader(HttpHeaders.MCP_SESSION_ID, init.session().getId());
 					response.setStatus(HttpServletResponse.SC_OK);
 
-					String jsonResponse = jsonMapper.writeValueAsString(new McpSchema.JSONRPCResponse(
-							McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), initResult, null));
+					String jsonResponse = jsonMapper.writeValueAsString(
+							new JSONRPCResponse(JSONRPC.JSONRPC_VERSION, jsonrpcRequest.id(), initResult, null));
 
 					PrintWriter writer = response.getWriter();
 					writer.write(jsonResponse);
@@ -504,19 +509,19 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				return;
 			}
 
-			if (message instanceof McpSchema.JSONRPCResponse jsonrpcResponse) {
+			if (message instanceof JSONRPCResponse jsonrpcResponse) {
 				session.accept(jsonrpcResponse)
 					.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
 					.block();
 				response.setStatus(HttpServletResponse.SC_ACCEPTED);
 			}
-			else if (message instanceof McpSchema.JSONRPCNotification jsonrpcNotification) {
+			else if (message instanceof JSONRPCNotification jsonrpcNotification) {
 				session.accept(jsonrpcNotification)
 					.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
 					.block();
 				response.setStatus(HttpServletResponse.SC_ACCEPTED);
 			}
-			else if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
+			else if (message instanceof JSONRPCRequest jsonrpcRequest) {
 				// For streaming responses, we need to return SSE
 				response.setContentType(TEXT_EVENT_STREAM);
 				response.setCharacterEncoding(UTF_8);
@@ -724,7 +729,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		 * @return A Mono that completes when the message has been sent
 		 */
 		@Override
-		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+		public Mono<Void> sendMessage(JSONRPCMessage message) {
 			return sendMessage(message, null);
 		}
 
@@ -736,7 +741,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		 * @return A Mono that completes when the message has been sent
 		 */
 		@Override
-		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message, String messageId) {
+		public Mono<Void> sendMessage(JSONRPCMessage message, String messageId) {
 			return Mono.fromRunnable(() -> {
 				if (this.closed) {
 					logger.debug("Attempted to send message to closed session: {}", this.sessionId);

@@ -7,6 +7,10 @@ package io.modelcontextprotocol.server;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
+import io.modelcontextprotocol.spec.schema.elicit.ElicitRequest;
+import io.modelcontextprotocol.spec.schema.elicit.ElicitResult;
+import io.modelcontextprotocol.spec.schema.sample.CreateMessageRequest;
+import io.modelcontextprotocol.spec.schema.sample.CreateMessageResult;
 
 /**
  * Represents a synchronous exchange with a Model Context Protocol (MCP) client. The
@@ -72,13 +76,13 @@ public class McpSyncServerExchange {
 	 * include context from MCP servers in their prompts.
 	 * @param createMessageRequest The request to create a new message
 	 * @return A result containing the details of the sampling response
-	 * @see McpSchema.CreateMessageRequest
-	 * @see McpSchema.CreateMessageResult
+	 * @see CreateMessageRequest
+	 * @see CreateMessageResult
 	 * @see <a href=
 	 * "https://spec.modelcontextprotocol.io/specification/client/sampling/">Sampling
 	 * Specification</a>
 	 */
-	public McpSchema.CreateMessageResult createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
+	public CreateMessageResult createMessage(CreateMessageRequest createMessageRequest) {
 		return this.exchange.createMessage(createMessageRequest).block();
 	}
 
@@ -90,13 +94,13 @@ public class McpSyncServerExchange {
 	 * structured data from users with optional JSON schemas to validate responses.
 	 * @param elicitRequest The request to create a new elicitation
 	 * @return A result containing the elicitation response.
-	 * @see McpSchema.ElicitRequest
-	 * @see McpSchema.ElicitResult
+	 * @see ElicitRequest
+	 * @see ElicitResult
 	 * @see <a href=
 	 * "https://spec.modelcontextprotocol.io/specification/client/elicitation/">Elicitation
 	 * Specification</a>
 	 */
-	public McpSchema.ElicitResult createElicitation(McpSchema.ElicitRequest elicitRequest) {
+	public ElicitResult createElicitation(ElicitRequest elicitRequest) {
 		return this.exchange.createElicitation(elicitRequest).block();
 	}
 

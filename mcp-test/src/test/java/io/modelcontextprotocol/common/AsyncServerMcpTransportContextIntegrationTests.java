@@ -23,6 +23,9 @@ import io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransp
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.schema.tool.CallToolRequest;
+import io.modelcontextprotocol.spec.schema.tool.CallToolResult;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
 import jakarta.servlet.Servlet;
 import jakarta.servlet.http.HttpServletRequest;
 import org.apache.catalina.LifecycleException;
@@ -125,20 +128,20 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 			.build())
 		.build();
 
-	private final McpSchema.Tool tool = McpSchema.Tool.builder()
+	private final Tool tool = Tool.builder()
 		.name("test-tool")
 		.description("return the value of the x-test header from call tool request")
 		.build();
 
-	private final BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> asyncStatelessHandler = (
+	private final BiFunction<McpTransportContext, CallToolRequest, Mono<CallToolResult>> asyncStatelessHandler = (
 			transportContext, request) -> {
-		return Mono.just(McpSchema.CallToolResult.builder()
+		return Mono.just(CallToolResult.builder()
 			.addTextContent(transportContext.get("server-side-header-value").toString())
 			.isError(false)
 			.build());
 	};
 
-	private final BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> asyncStatefulHandler = (
+	private final BiFunction<McpAsyncServerExchange, CallToolRequest, Mono<CallToolResult>> asyncStatefulHandler = (
 			exchange, request) -> {
 		return asyncStatelessHandler.apply(exchange.transportContext(), request);
 	};
@@ -178,7 +181,7 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 
 		// Test tool call with context
 		StepVerifier
-			.create(asyncStreamableClient.callTool(new McpSchema.CallToolRequest("test-tool", Map.of()))
+			.create(asyncStreamableClient.callTool(new CallToolRequest("test-tool", Map.of()))
 				.contextWrite(ctx -> ctx.put(McpTransportContext.KEY,
 						McpTransportContext.create(Map.of("client-side-header-value", "some important value")))))
 			.assertNext(response -> {
@@ -212,7 +215,7 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 
 		// Test tool call with context
 		StepVerifier
-			.create(asyncStreamableClient.callTool(new McpSchema.CallToolRequest("test-tool", Map.of()))
+			.create(asyncStreamableClient.callTool(new CallToolRequest("test-tool", Map.of()))
 				.contextWrite(ctx -> ctx.put(McpTransportContext.KEY,
 						McpTransportContext.create(Map.of("client-side-header-value", "some important value")))))
 			.assertNext(response -> {
@@ -246,7 +249,7 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 
 		// Test tool call with context
 		StepVerifier
-			.create(asyncSseClient.callTool(new McpSchema.CallToolRequest("test-tool", Map.of()))
+			.create(asyncSseClient.callTool(new CallToolRequest("test-tool", Map.of()))
 				.contextWrite(ctx -> ctx.put(McpTransportContext.KEY,
 						McpTransportContext.create(Map.of("client-side-header-value", "some important value")))))
 			.assertNext(response -> {

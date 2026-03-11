@@ -22,6 +22,11 @@ import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCNotification;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCResponse;
 import io.modelcontextprotocol.util.Assert;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
@@ -161,12 +166,11 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 				body.append(line);
 			}
 
-			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body.toString());
+			JSONRPCMessage message = JSONRPC.deserializeJsonRpcMessage(jsonMapper, body.toString());
 
-			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
+			if (message instanceof JSONRPCRequest jsonrpcRequest) {
 				try {
-					McpSchema.JSONRPCResponse jsonrpcResponse = this.mcpHandler
-						.handleRequest(transportContext, jsonrpcRequest)
+					JSONRPCResponse jsonrpcResponse = this.mcpHandler.handleRequest(transportContext, jsonrpcRequest)
 						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
 						.block();
 
@@ -187,7 +191,7 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 								.build());
 				}
 			}
-			else if (message instanceof McpSchema.JSONRPCNotification jsonrpcNotification) {
+			else if (message instanceof JSONRPCNotification jsonrpcNotification) {
 				try {
 					this.mcpHandler.handleNotification(transportContext, jsonrpcNotification)
 						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))

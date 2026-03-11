@@ -26,6 +26,8 @@ import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequ
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.ProtocolVersions;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPC;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCRequest;
 import reactor.test.StepVerifier;
 
 /**
@@ -79,8 +81,8 @@ public class HttpClientStreamableHttpTransportEmptyJsonResponseTest {
 		var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_03_26,
 				McpSchema.ClientCapabilities.builder().roots(true).build(),
 				new McpSchema.Implementation("MCP Client", "0.3.1"));
-		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
-				"test-id", initializeRequest);
+		var testMessage = new JSONRPCRequest(JSONRPC.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE, "test-id",
+				initializeRequest);
 
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 

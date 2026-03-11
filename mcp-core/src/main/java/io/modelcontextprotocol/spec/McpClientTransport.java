@@ -7,6 +7,7 @@ package io.modelcontextprotocol.spec;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCMessage;
 import reactor.core.publisher.Mono;
 
 /**
@@ -29,7 +30,7 @@ public interface McpClientTransport extends McpTransport {
 	 * {@link Mono} simply means the client can now be used. An error can be retried
 	 * according to the application requirements.
 	 */
-	Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler);
+	Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler);
 
 	/**
 	 * Sets the exception handler for exceptions raised on the transport layer.

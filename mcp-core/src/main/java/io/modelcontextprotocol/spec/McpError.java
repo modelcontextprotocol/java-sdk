@@ -4,7 +4,7 @@
 
 package io.modelcontextprotocol.spec;
 
-import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse.JSONRPCError;
+import io.modelcontextprotocol.spec.jsonrpc.JSONRPCResponse.JSONRPCError;
 import io.modelcontextprotocol.util.Assert;
 
 import java.util.Map;

@@ -7,7 +7,10 @@ package io.modelcontextprotocol.server;
 import java.util.List;
 
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
+import io.modelcontextprotocol.spec.schema.prompt.Prompt;
+import io.modelcontextprotocol.spec.schema.resource.Resource;
+import io.modelcontextprotocol.spec.schema.resource.ResourceTemplate;
+import io.modelcontextprotocol.spec.schema.tool.Tool;
 import io.modelcontextprotocol.util.Assert;
 
 /**
@@ -93,7 +96,7 @@ public class McpSyncServer {
 	 * List all registered tools.
 	 * @return A list of all registered tools
 	 */
-	public List<McpSchema.Tool> listTools() {
+	public List<Tool> listTools() {
 		return this.asyncServer.listTools().collectList().block();
 	}
 
@@ -120,7 +123,7 @@ public class McpSyncServer {
 	 * List all registered resources.
 	 * @return A list of all registered resources
 	 */
-	public List<McpSchema.Resource> listResources() {
+	public List<Resource> listResources() {
 		return this.asyncServer.listResources().collectList().block();
 	}
 
@@ -147,7 +150,7 @@ public class McpSyncServer {
 	 * List all registered resource templates.
 	 * @return A list of all registered resource templates
 	 */
-	public List<McpSchema.ResourceTemplate> listResourceTemplates() {
+	public List<ResourceTemplate> listResourceTemplates() {
 		return this.asyncServer.listResourceTemplates().collectList().block();
 	}
 
@@ -174,7 +177,7 @@ public class McpSyncServer {
 	 * List all registered prompts.
 	 * @return A list of all registered prompts
 	 */
-	public List<McpSchema.Prompt> listPrompts() {
+	public List<Prompt> listPrompts() {
 		return this.asyncServer.listPrompts().collectList().block();
 	}
 
