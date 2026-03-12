@@ -9,13 +9,16 @@ import java.net.InetSocketAddress;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 import com.sun.net.httpserver.HttpServer;
+import io.modelcontextprotocol.client.transport.customizer.McpHttpClientAuthorizationErrorHandler;
 import io.modelcontextprotocol.common.McpTransportContext;
+import org.reactivestreams.Publisher;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpClientTransport;
@@ -430,6 +433,47 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 			}
 
 			@Test
+			void retryAtMostOnce() {
+				serverResponseStatus.set(401);
+				var authTransport = HttpClientStreamableHttpTransport.builder(HOST)
+					.authorizationErrorHandler((responseInfo, context) -> Mono.just(true))
+					.build();
+				StepVerifier.create(authTransport.sendMessage(createTestRequestMessage()))
+					.expectErrorMatches(authorizationError(401))
+					.verify();
+				// initial request + 1 retry (maxRetries default is 1)
+				assertThat(processedMessagesCount.get()).isEqualTo(2);
+
+				StepVerifier.create(authTransport.closeGracefully()).verifyComplete();
+			}
+
+			@Test
+			void customMaxRetries() {
+				serverResponseStatus.set(401);
+				var authTransport = HttpClientStreamableHttpTransport.builder(HOST)
+					.authorizationErrorHandler(new McpHttpClientAuthorizationErrorHandler() {
+						@Override
+						public Publisher<Boolean> handle(HttpResponse.ResponseInfo responseInfo,
+								McpTransportContext context) {
+							return Mono.just(true);
+						}
+
+						@Override
+						public int maxRetries() {
+							return 3;
+						}
+					})
+					.build();
+				StepVerifier.create(authTransport.sendMessage(createTestRequestMessage()))
+					.expectErrorMatches(authorizationError(401))
+					.verify();
+				// initial request + 3 retries
+				assertThat(processedMessagesCount.get()).isEqualTo(4);
+
+				StepVerifier.create(authTransport.closeGracefully()).verifyComplete();
+			}
+
+			@Test
 			void noRetry() {
 				serverResponseStatus.set(401);
 
@@ -510,8 +554,8 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 				assertThat(capturedResponseInfo.get().statusCode()).isEqualTo(httpStatus);
 				assertThat(capturedContext.get()).isNotNull();
 				assertThat(capturedException.get()).hasMessage("Authorization error connecting to SSE stream")
-					.asInstanceOf(type(McpHttpClientTransportException.class))
-					.extracting(McpHttpClientTransportException::getResponseInfo)
+					.asInstanceOf(type(McpHttpClientTransportAuthorizationException.class))
+					.extracting(McpHttpClientTransportAuthorizationException::getResponseInfo)
 					.extracting(HttpResponse.ResponseInfo::statusCode)
 					.isEqualTo(httpStatus);
 
@@ -531,7 +575,7 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 				Awaitility.await()
 					.atMost(Duration.ofSeconds(1))
 					.untilAsserted(() -> assertThat(processedSseConnectCount.get()).isEqualTo(1));
-				assertThat(capturedException.get()).isInstanceOf(McpHttpClientTransportException.class);
+				assertThat(capturedException.get()).isInstanceOf(McpHttpClientTransportAuthorizationException.class);
 
 				StepVerifier.create(authTransport.closeGracefully()).verifyComplete();
 			}
@@ -550,12 +594,77 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 				authTransport.setExceptionHandler(capturedException::set);
 
 				var messages = new ArrayList<McpSchema.JSONRPCMessage>();
+				var messageHandlerClosed = new AtomicBoolean(false);
+				StepVerifier
+					.create(authTransport
+						.connect(msg -> msg.doOnNext(messages::add).doFinally(s -> messageHandlerClosed.set(true))))
+					.verifyComplete();
+				Awaitility.await()
+					.atMost(Duration.ofSeconds(1))
+					.untilAsserted(() -> assertThat(messageHandlerClosed).isTrue());
+				assertThat(processedSseConnectCount.get()).isEqualTo(2);
+				assertThat(messages).hasSize(1);
+				assertThat(capturedException.get()).isNull();
+				assertThat(messageHandlerClosed.get()).isTrue();
+
+				StepVerifier.create(authTransport.closeGracefully()).verifyComplete();
+			}
+
+			@Test
+			void retryAtMostOnce() {
+				serverSseResponseStatus.set(401);
+				AtomicReference<Throwable> capturedException = new AtomicReference<>();
+				var authTransport = HttpClientStreamableHttpTransport.builder(HOST)
+					.openConnectionOnStartup(true)
+					.authorizationErrorHandler((responseInfo, context) -> {
+						return Mono.just(true);
+					})
+					.build();
+				authTransport.setExceptionHandler(capturedException::set);
+
+				var messages = new ArrayList<McpSchema.JSONRPCMessage>();
 				StepVerifier.create(authTransport.connect(msg -> msg.doOnNext(messages::add))).verifyComplete();
 				Awaitility.await()
 					.atMost(Duration.ofSeconds(1))
-					.untilAsserted(() -> assertThat(processedSseConnectCount.get()).isEqualTo(2));
-				assertThat(messages).hasSize(1);
-				assertThat(capturedException.get()).isNull();
+					.untilAsserted(() -> assertThat(capturedException.get()).isNotNull());
+				// initial request + 1 retry (maxRetries default is 1)
+				assertThat(processedSseConnectCount.get()).isEqualTo(2);
+				assertThat(messages).isEmpty();
+				assertThat(capturedException.get()).isInstanceOf(McpHttpClientTransportAuthorizationException.class);
+
+				StepVerifier.create(authTransport.closeGracefully()).verifyComplete();
+			}
+
+			@Test
+			void customMaxRetries() {
+				serverSseResponseStatus.set(401);
+				AtomicReference<Throwable> capturedException = new AtomicReference<>();
+				var authTransport = HttpClientStreamableHttpTransport.builder(HOST)
+					.openConnectionOnStartup(true)
+					.authorizationErrorHandler(new McpHttpClientAuthorizationErrorHandler() {
+						@Override
+						public Publisher<Boolean> handle(HttpResponse.ResponseInfo responseInfo,
+								McpTransportContext context) {
+							return Mono.just(true);
+						}
+
+						@Override
+						public int maxRetries() {
+							return 3;
+						}
+					})
+					.build();
+				authTransport.setExceptionHandler(capturedException::set);
+
+				var messages = new ArrayList<McpSchema.JSONRPCMessage>();
+				StepVerifier.create(authTransport.connect(msg -> msg.doOnNext(messages::add))).verifyComplete();
+				Awaitility.await()
+					.atMost(Duration.ofSeconds(1))
+					.untilAsserted(() -> assertThat(capturedException.get()).isNotNull());
+				// initial request + 3 retries
+				assertThat(processedSseConnectCount.get()).isEqualTo(4);
+				assertThat(messages).isEmpty();
+				assertThat(capturedException.get()).isInstanceOf(McpHttpClientTransportAuthorizationException.class);
 
 				StepVerifier.create(authTransport.closeGracefully()).verifyComplete();
 			}
@@ -580,7 +689,7 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 					.atMost(Duration.ofSeconds(1))
 					.untilAsserted(() -> assertThat(processedSseConnectCount.get()).isEqualTo(1));
 				assertThat(messages).isEmpty();
-				assertThat(capturedException.get()).isInstanceOf(McpHttpClientTransportException.class);
+				assertThat(capturedException.get()).isInstanceOf(McpHttpClientTransportAuthorizationException.class);
 
 				StepVerifier.create(authTransport.closeGracefully()).verifyComplete();
 			}
@@ -601,7 +710,7 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 					.atMost(Duration.ofSeconds(1))
 					.untilAsserted(() -> assertThat(processedSseConnectCount.get()).isEqualTo(1));
 				assertThat(messages).isEmpty();
-				assertThat(capturedException.get()).isInstanceOf(McpHttpClientTransportException.class);
+				assertThat(capturedException.get()).isInstanceOf(McpHttpClientTransportAuthorizationException.class);
 
 				StepVerifier.create(authTransport.closeGracefully()).verifyComplete();
 			}
@@ -632,9 +741,10 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 		}
 
 		private static Predicate<Throwable> authorizationError(int httpStatus) {
-			return throwable -> throwable instanceof McpHttpClientTransportException
+			return throwable -> throwable instanceof McpHttpClientTransportAuthorizationException
 					&& throwable.getMessage().contains("Authorization error")
-					&& ((McpHttpClientTransportException) throwable).getResponseInfo().statusCode() == httpStatus;
+					&& ((McpHttpClientTransportAuthorizationException) throwable).getResponseInfo()
+						.statusCode() == httpStatus;
 		}
 
 	}

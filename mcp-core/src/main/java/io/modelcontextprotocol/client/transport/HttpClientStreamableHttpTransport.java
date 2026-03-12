@@ -51,6 +51,7 @@ import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple2;
 import reactor.util.function.Tuples;
+import reactor.util.retry.Retry;
 
 /**
  * An implementation of the Streamable HTTP protocol as defined by the
@@ -291,26 +292,17 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					})).flatMap(responseEvent -> {
 						int statusCode = responseEvent.responseInfo().statusCode();
 						if (statusCode == 401 || statusCode == 403) {
-							logger.debug("Authorization error in sendMessage with code {}", statusCode);
-							return Mono.deferContextual(innerCtx -> {
-								var transportContext = innerCtx.getOrDefault(McpTransportContext.KEY,
-										McpTransportContext.EMPTY);
-								return Mono.from(this.authorizationErrorHandler.onAuthorizationError(
-										responseEvent.responseInfo(), transportContext, Mono.defer(() -> {
-											logger.debug("Authorization error handled, retrying original request");
-											return this.reconnect(stream).then();
-										}),
-										Mono.error(new McpHttpClientTransportException(
-												"Authorization error connecting to SSE stream",
-												responseEvent.responseInfo()))))
-									.then(Mono.empty());
-							});
+							logger.debug("Authorization error in reconnect with code {}", statusCode);
+							return Mono.<McpSchema.JSONRPCMessage>error(
+									new McpHttpClientTransportAuthorizationException(
+											"Authorization error connecting to SSE stream",
+											responseEvent.responseInfo()));
 						}
 
 						if (!(responseEvent instanceof ResponseSubscribers.SseResponseEvent sseResponseEvent)) {
-							return Flux.<McpSchema.JSONRPCMessage>error(new McpHttpClientTransportException(
-									"Unrecognized server error when connecting to SSE stream",
-									responseEvent.responseInfo()));
+							return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
+									"Unrecognized server error when connecting to SSE stream, status code: "
+											+ statusCode));
 						}
 						else if (statusCode >= 200 && statusCode < 300) {
 							if (MESSAGE_EVENT_TYPE.equals(sseResponseEvent.sseEvent().event())) {
@@ -389,6 +381,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
 								"Received unrecognized SSE event type: " + sseResponseEvent.sseEvent().event()));
 					})
+					.retryWhen(authorizationErrorRetrySpec())
 					.flatMap(jsonrpcMessage -> this.handler.get().apply(Mono.just(jsonrpcMessage)))
 					.onErrorMap(CompletionException.class, t -> t.getCause())
 					.onErrorComplete(t -> {
@@ -409,6 +402,25 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			return Mono.just(connection);
 		});
 
+	}
+
+	private Retry authorizationErrorRetrySpec() {
+		return Retry.from(companion -> companion.flatMap(retrySignal -> {
+			if (!(retrySignal.failure() instanceof McpHttpClientTransportAuthorizationException authException)) {
+				return Mono.error(retrySignal.failure());
+			}
+			if (retrySignal.totalRetriesInARow() >= this.authorizationErrorHandler.maxRetries()) {
+				return Mono.error(retrySignal.failure());
+			}
+			return Mono.deferContextual(ctx -> {
+				var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
+				return Mono
+					.from(this.authorizationErrorHandler.handle(authException.getResponseInfo(), transportContext))
+					.switchIfEmpty(Mono.just(false))
+					.flatMap(shouldRetry -> shouldRetry ? Mono.just(retrySignal.totalRetries())
+							: Mono.error(retrySignal.failure()));
+			});
+		}));
 	}
 
 	private BodyHandler<Void> toSendMessageBodySubscriber(FluxSink<ResponseEvent> sink) {
@@ -492,17 +504,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				int statusCode = responseEvent.responseInfo().statusCode();
 				if (statusCode == 401 || statusCode == 403) {
 					logger.debug("Authorization error in sendMessage with code {}", statusCode);
-					return Mono.deferContextual(ctx -> {
-						var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
-						return Mono.from(this.authorizationErrorHandler
-							.onAuthorizationError(responseEvent.responseInfo(), transportContext, Mono.defer(() -> {
-								logger.debug("Authorization error handled, retrying original request");
-								return this.sendMessage(sentMessage);
-							}), Mono.error(new McpHttpClientTransportException(
-									"Authorization error when sending message", responseEvent.responseInfo()))))
-							.doOnSuccess(s -> deliveredSink.success())
-							.then(Mono.empty());
-					});
+					return Mono.<McpSchema.JSONRPCMessage>error(new McpHttpClientTransportAuthorizationException(
+							"Authorization error when sending message", responseEvent.responseInfo()));
 				}
 
 				if (transportSession.markInitialized(
@@ -630,6 +633,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				return Flux.<McpSchema.JSONRPCMessage>error(
 						new RuntimeException("Failed to send message: " + responseEvent));
 			})
+				.retryWhen(authorizationErrorRetrySpec())
 				.flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage)))
 				.onErrorMap(CompletionException.class, t -> t.getCause())
 				.onErrorComplete(t -> {
