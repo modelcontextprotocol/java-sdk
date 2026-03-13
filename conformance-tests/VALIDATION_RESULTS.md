@@ -3,7 +3,7 @@
 ## Summary
 
 **Server Tests:** 40/40 passed (100%)
-**Client Tests:** 3/4 scenarios passed (9/10 checks passed)
+**Client Tests:** 4/4 scenarios passed (8/8 checks passed, 2 warnings)
 **Auth Tests:** 12/14 scenarios fully passing (178 passed, 1 failed, 1 warning, 85.7% scenarios, 98.9% checks)
 
 ## Server Test Results
@@ -20,20 +20,17 @@
 
 ## Client Test Results
 
-### Passing (3/4 scenarios, 9/10 checks)
+### Passing (4/4 scenarios, 8/8 checks)
 
 - **initialize (1/1):** Protocol negotiation, clientInfo, capabilities
 - **tools_call (1/1):** Tool discovery and invocation
 - **elicitation-sep1034-client-defaults (5/5):** Default values for string, integer, number, enum, boolean
-
-### Partially Passing (1/4 scenarios, 1/2 checks)
-
-- **sse-retry (1/2 + 1 warning):**
+- **sse-retry (1/1 + 2 warnings):**
   - ✅ Reconnects after stream closure
-  - ❌ Does not respect retry timing
+  - ⚠️ Does not respect retry timing (MUST requirement)
   - ⚠️ Does not send Last-Event-ID header (SHOULD requirement)
 
-**Issue:** Client treats `retry:` SSE field as invalid instead of parsing it for reconnection timing.
+**Note:** Client treats `retry:` SSE field as invalid instead of parsing it for reconnection timing.
 
 ## Auth Test Results (Spring HTTP Client)
 
@@ -87,7 +84,7 @@ cd conformance-tests/client-jdk-http-client
 # Run all scenarios
 for scenario in initialize tools_call elicitation-sep1034-client-defaults sse-retry; do
   npx @modelcontextprotocol/conformance client \
-    --command "java -jar target/client-jdk-http-client-1.1.0-SNAPSHOT.jar" \
+    --command "java -jar target/client-jdk-http-client-2.0.0-SNAPSHOT.jar" \
     --scenario $scenario
 done
 ```
@@ -104,7 +101,7 @@ cd conformance-tests/client-spring-http-client
 # Run auth suite
 npx @modelcontextprotocol/conformance@0.1.15 client \
   --spec-version 2025-11-25 \
-  --command "java -jar target/client-spring-http-client-1.1.0-SNAPSHOT.jar" \
+  --command "java -jar target/client-spring-http-client-2.0.0-SNAPSHOT.jar" \
   --suite auth
 ```
 

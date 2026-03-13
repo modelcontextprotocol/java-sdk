@@ -40,7 +40,7 @@ Currently implemented scenarios:
   - ⚠️ Lists available tools from the server
   - ⚠️ Calls the `test_reconnection` tool which triggers SSE stream closure
   - ✅ Client reconnects after stream closure (PASSING)
-  - ❌ Client does not respect retry timing (FAILING)
+  - ⚠️ Client does not respect retry timing (WARNING - MUST requirement)
   - ⚠️ Client does not send Last-Event-ID header (WARNING - SHOULD requirement)
 
 ## Building
@@ -54,7 +54,7 @@ cd conformance-tests/client-jdk-http-client
 
 This creates an executable JAR at:
 ```
-target/client-jdk-http-client-1.1.0-SNAPSHOT.jar
+target/client-jdk-http-client-2.0.0-SNAPSHOT.jar
 ```
 
 ## Running Tests
@@ -65,19 +65,19 @@ Run a single scenario:
 
 ```bash
 npx @modelcontextprotocol/conformance client \
-  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-1.1.0-SNAPSHOT.jar" \
+  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-2.0.0-SNAPSHOT.jar" \
   --scenario initialize
 
 npx @modelcontextprotocol/conformance client \
-  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-1.1.0-SNAPSHOT.jar" \
+  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-2.0.0-SNAPSHOT.jar" \
   --scenario tools_call
 
 npx @modelcontextprotocol/conformance client \
-  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-1.1.0-SNAPSHOT.jar" \
+  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-2.0.0-SNAPSHOT.jar" \
   --scenario elicitation-sep1034-client-defaults
 
 npx @modelcontextprotocol/conformance client \
-  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-1.1.0-SNAPSHOT.jar" \
+  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-2.0.0-SNAPSHOT.jar" \
   --scenario sse-retry
 ```
 
@@ -85,7 +85,7 @@ Run with verbose output:
 
 ```bash
 npx @modelcontextprotocol/conformance client \
-  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-1.1.0-SNAPSHOT.jar" \
+  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-2.0.0-SNAPSHOT.jar" \
   --scenario initialize \
   --verbose
 ```
@@ -96,18 +96,18 @@ You can also run the client manually if you have a test server:
 
 ```bash
 export MCP_CONFORMANCE_SCENARIO=initialize
-java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-1.1.0-SNAPSHOT.jar http://localhost:3000/mcp
+java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-2.0.0-SNAPSHOT.jar http://localhost:3000/mcp
 ```
 
 ## Test Results
 
 The conformance framework generates test results showing:
 
-**Current Status (3/4 scenarios passing):**
+**Current Status (4/4 scenarios passing):**
 - ✅ initialize: 1/1 checks passed
 - ✅ tools_call: 1/1 checks passed
 - ✅ elicitation-sep1034-client-defaults: 5/5 checks passed
-- ⚠️ sse-retry: 1/2 checks passed, 1 warning
+- ⚠️ sse-retry: 1/1 checks passed, 2 warnings
 
 Test result files are generated in `results/<scenario>-<timestamp>/`:
 - `checks.json`: Array of conformance check results with pass/fail status
@@ -116,7 +116,7 @@ Test result files are generated in `results/<scenario>-<timestamp>/`:
 
 ### Known Issue: SSE Retry Handling
 
-The `sse-retry` scenario currently fails because:
+The `sse-retry` scenario passes but has 2 warnings:
 1. The client treats the SSE `retry:` field as invalid instead of parsing it
 2. The client does not implement retry timing (reconnects immediately)
 3. The client does not send the Last-Event-ID header on reconnection
