@@ -38,6 +38,7 @@ import io.modelcontextprotocol.spec.McpSchema.PaginatedRequest;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
+import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -317,9 +318,17 @@ public class McpAsyncClient {
 		};
 
 		this.initializer = new LifecycleInitializer(clientCapabilities, clientInfo, transport.protocolVersions(),
-				initializationTimeout, ctx -> new McpClientSession(requestTimeout, transport, requestHandlers,
-						notificationHandlers, con -> con.contextWrite(ctx)),
-				postInitializationHook);
+				initializationTimeout, ctx -> {
+					Function<? super Mono<Void>, ? extends Publisher<Void>> connectHook;
+					if (features.connectHook() != null) {
+						connectHook = con -> features.connectHook().apply(con.contextWrite(ctx));
+					}
+					else {
+						connectHook = con -> con.contextWrite(ctx);
+					}
+					return new McpClientSession(requestTimeout, transport, requestHandlers, notificationHandlers,
+							connectHook);
+				}, postInitializationHook);
 
 		this.transport.setExceptionHandler(this.initializer::handleException);
 	}

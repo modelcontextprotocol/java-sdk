@@ -18,6 +18,7 @@ import io.modelcontextprotocol.spec.McpSchema.Implementation;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpTransport;
 import io.modelcontextprotocol.util.Assert;
+import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
@@ -194,6 +195,8 @@ public interface McpClient {
 		private JsonSchemaValidator jsonSchemaValidator;
 
 		private boolean enableCallToolSchemaCaching = false; // Default to false
+
+		private Function<? super Mono<Void>, ? extends Publisher<Void>> connectHook;
 
 		private SyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
@@ -480,6 +483,17 @@ public interface McpClient {
 		}
 
 		/**
+		 * Allows to add a reactive hook to the connection lifecycle. This hook can be
+		 * used to intercept connection events, add retry logic, or handle errors.
+		 * @param connectHook the connection hook.
+		 * @return this builder instance for method chaining
+		 */
+		public SyncSpec connectHook(Function<? super Mono<Void>, ? extends Publisher<Void>> connectHook) {
+			this.connectHook = connectHook;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpSyncClient} with the provided configurations or
 		 * sensible defaults.
 		 * @return a new instance of {@link McpSyncClient}.
@@ -488,7 +502,7 @@ public interface McpClient {
 			McpClientFeatures.Sync syncFeatures = new McpClientFeatures.Sync(this.clientInfo, this.capabilities,
 					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 					this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers, this.samplingHandler,
-					this.elicitationHandler, this.enableCallToolSchemaCaching);
+					this.elicitationHandler, this.enableCallToolSchemaCaching, this.connectHook);
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
@@ -548,6 +562,8 @@ public interface McpClient {
 		private JsonSchemaValidator jsonSchemaValidator;
 
 		private boolean enableCallToolSchemaCaching = false; // Default to false
+
+		private Function<? super Mono<Void>, ? extends Publisher<Void>> connectHook;
 
 		private AsyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
@@ -821,6 +837,17 @@ public interface McpClient {
 		}
 
 		/**
+		 * Allows to add a reactive hook to the connection lifecycle. This hook can be
+		 * used to intercept connection events, add retry logic, or handle errors.
+		 * @param connectHook the connection hook.
+		 * @return this builder instance for method chaining
+		 */
+		public AsyncSpec connectHook(Function<? super Mono<Void>, ? extends Publisher<Void>> connectHook) {
+			this.connectHook = connectHook;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpAsyncClient} with the provided configurations
 		 * or sensible defaults.
 		 * @return a new instance of {@link McpAsyncClient}.
@@ -833,7 +860,8 @@ public interface McpClient {
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
 							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 							this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
-							this.samplingHandler, this.elicitationHandler, this.enableCallToolSchemaCaching));
+							this.samplingHandler, this.elicitationHandler, this.enableCallToolSchemaCaching,
+							this.connectHook));
 		}
 
 	}
