@@ -87,7 +87,7 @@ cd conformance-tests/client-jdk-http-client
 # Run all scenarios
 for scenario in initialize tools_call elicitation-sep1034-client-defaults sse-retry; do
   npx @modelcontextprotocol/conformance client \
-    --command "java -jar target/client-jdk-http-client-1.1.0-SNAPSHOT.jar" \
+    --command "java -jar target/client-jdk-http-client-1.1.1-SNAPSHOT.jar" \
     --scenario $scenario
 done
 ```
@@ -104,7 +104,7 @@ cd conformance-tests/client-spring-http-client
 # Run auth suite
 npx @modelcontextprotocol/conformance@0.1.15 client \
   --spec-version 2025-11-25 \
-  --command "java -jar target/client-spring-http-client-1.1.0-SNAPSHOT.jar" \
+  --command "java -jar target/client-spring-http-client-1.1.1-SNAPSHOT.jar" \
   --suite auth
 ```
 

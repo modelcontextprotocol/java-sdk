@@ -27,7 +27,7 @@ Once we catch up on the most recent MCP specification revision we aim to fully s
 
 ### v1.x Development
 
-The Java SDK is currently in active development as v1.x, following a recent stable 1.0.0 release. The SDK provides:
+The Java SDK is currently in active development as v1.x, following a recent stable 1.1.0 release. The SDK provides:
 
 - MCP protocol implementation
 - Synchronous and asynchronous programming models
