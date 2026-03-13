@@ -4,7 +4,10 @@
 
 package io.modelcontextprotocol.util;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.net.URI;
+import java.net.http.HttpClient;
 import java.util.Collection;
 import java.util.Map;
 
@@ -17,6 +20,40 @@ import reactor.util.annotation.Nullable;
  */
 
 public final class Utils {
+
+	/**
+	 * Closes the given {@link HttpClient} if it implements {@link AutoCloseable} (as it
+	 * does in JDK 21+), or tries to close it using reflection for older JDKs.
+	 * @param httpClient the HTTP client to close
+	 */
+	public static void closeHttpClient(HttpClient httpClient) {
+		if (httpClient == null) {
+			return;
+		}
+
+		if (httpClient instanceof AutoCloseable autoCloseable) {
+			try {
+				autoCloseable.close();
+			}
+			catch (Exception e) {
+				// ignore
+			}
+			return;
+		}
+
+		// Fallback for JDK < 21 using reflection to access internal 'stop' method.
+		try {
+			Field implField = httpClient.getClass().getDeclaredField("impl");
+			implField.setAccessible(true);
+			Object impl = implField.get(httpClient);
+			Method stopMethod = impl.getClass().getDeclaredMethod("stop");
+			stopMethod.setAccessible(true);
+			stopMethod.invoke(impl);
+		}
+		catch (Exception e) {
+			// Fallback if reflection fails
+		}
+	}
 
 	/**
 	 * Check whether the given {@code String} contains actual <em>text</em>.
