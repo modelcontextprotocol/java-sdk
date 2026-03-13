@@ -3,6 +3,9 @@ name: Release to Maven Central
 on:
   workflow_dispatch:
 
+env:
+  MAVEN_ARGS: --no-transfer-progress
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -27,14 +30,14 @@ jobs:
           node-version: '20'
 
       - name: Jackson 2 Integration Tests
-        run: mvn -pl mcp-test -am -Pjackson2 test
+        run: ./mvnw -pl mcp-test -am -Pjackson2 test
 
       - name: Build and Test
-        run: mvn clean verify
+        run: ./mvnw clean verify
 
       - name: Publish to Maven Central
         run: |
-          mvn --batch-mode \
+          ./mvnw --batch-mode \
             -Prelease \
             -Pjavadoc \
             deploy

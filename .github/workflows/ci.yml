@@ -3,6 +3,9 @@ name: CI
 on:
   pull_request: {}
 
+env:
+  MAVEN_ARGS: --no-transfer-progress
+
 jobs:
   build:
     name: Build and Test
@@ -19,7 +22,7 @@ jobs:
           cache: 'maven'
 
       - name: Build
-        run: mvn verify
+        run: ./mvnw verify
 
   jackson2-tests:
     name: Jackson 2 Integration Tests
@@ -36,4 +39,4 @@ jobs:
           cache: 'maven'
 
       - name: Jackson 2 Integration Tests
-        run: mvn -pl mcp-test -am -Pjackson2 test
+        run: ./mvnw -pl mcp-test -am -Pjackson2 test
