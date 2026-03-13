@@ -13,8 +13,8 @@
 
 	<scm>
 		<url>https://github.com/modelcontextprotocol/java-sdk</url>
-		<connection>git://github.com/modelcontextprotocol/java-sdk.git</connection>
-		<developerConnection>git@github.com:modelcontextprotocol/java-sdk.git</developerConnection>
+		<connection>scm:git:git://github.com/modelcontextprotocol/java-sdk.git</connection>
+		<developerConnection>scm:git:ssh://git@github.com/modelcontextprotocol/java-sdk.git</developerConnection>
 	</scm>
 
 	<name>Java SDK MCP Parent</name>
@@ -57,7 +57,7 @@
 		<java.version>17</java.version>
 		<maven.compiler.source>17</maven.compiler.source>
 		<maven.compiler.target>17</maven.compiler.target>
-		<surefireArgLine/>
+		<surefireArgLine />
 
 		<assert4j.version>3.27.6</assert4j.version>
 		<junit.version>6.0.2</junit.version>
@@ -105,11 +105,11 @@
 	<modules>
 		<module>mcp-bom</module>
 		<module>mcp</module>
-        <module>mcp-core</module>
-        <module>mcp-json-jackson2</module>
-        <module>mcp-json-jackson3</module>
+		<module>mcp-core</module>
+		<module>mcp-json-jackson2</module>
+		<module>mcp-json-jackson3</module>
 		<module>mcp-test</module>
-        <module>conformance-tests</module>
+		<module>conformance-tests</module>
 	</modules>
 
 	<build>
@@ -329,9 +329,9 @@
 						<extensions>true</extensions>
 						<configuration>
 							<publishingServerId>central</publishingServerId>
-                            <excludeArtifacts>
-                                mcp-parent,conformance-tests,client-jdk-http-client,client-spring-http-client,server-servlet
-                            </excludeArtifacts>							
+							<excludeArtifacts>
+								mcp-parent,conformance-tests,client-jdk-http-client,client-spring-http-client,server-servlet
+							</excludeArtifacts>
 							<autoPublish>true</autoPublish>
 						</configuration>
 					</plugin>

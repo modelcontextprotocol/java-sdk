@@ -16,13 +16,13 @@
     <name>Java SDK MCP BOM</name>
     <description>Java SDK MCP Bill of Materials</description>
 
-	<url>https://github.com/modelcontextprotocol/java-sdk</url>
+    <url>https://github.com/modelcontextprotocol/java-sdk</url>
 
-	<scm>
-		<url>https://github.com/modelcontextprotocol/java-sdk</url>
-		<connection>git://github.com/modelcontextprotocol/java-sdk.git</connection>
-		<developerConnection>git@github.com:modelcontextprotocol/java-sdk.git</developerConnection>
-	</scm>
+    <scm>
+        <url>https://github.com/modelcontextprotocol/java-sdk</url>
+        <connection>scm:git:git://github.com/modelcontextprotocol/java-sdk.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/modelcontextprotocol/java-sdk.git</developerConnection>
+    </scm>
 
     <dependencyManagement>
         <dependencies>
