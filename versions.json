@@ -1,19 +1,7 @@
 [
   {
-    "version": "v1.0.0",
-    "title": "v1.0.0",
-    "aliases": [
-      "latest"
-    ]
-  },
-  {
     "version": "1.1.0-SNAPSHOT",
     "title": "1.1.0-SNAPSHOT",
-    "aliases": []
-  },  
-  {
-    "version": "v0.18.1",
-    "title": "v0.18.1",
     "aliases": []
   },
   {
@@ -22,5 +10,22 @@
     "aliases": [
       "latest-snapshot"
     ]
+  },
+  {
+    "version": "v1.1.0",
+    "title": "v1.1.0",
+    "aliases": [
+      "latest"
+    ]
+  },
+  {
+    "version": "v1.0.0",
+    "title": "v1.0.0",
+    "aliases": []
+  },
+  {
+    "version": "v0.18.1",
+    "title": "v0.18.1",
+    "aliases": []
   }
 ]
