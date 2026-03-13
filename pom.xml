@@ -105,6 +105,7 @@
 	<modules>
 		<module>mcp-bom</module>
 		<module>mcp</module>
+		<module>mcp-inmemory-transport</module>
         <module>mcp-core</module>
         <module>mcp-json-jackson2</module>
         <module>mcp-json-jackson3</module>
@@ -186,7 +187,7 @@
 				<artifactId>maven-surefire-plugin</artifactId>
 				<version>${maven-surefire-plugin.version}</version>
 				<configuration>
-					<argLine>${surefireArgLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
+					<argLine>${surefireArgLine}</argLine>
 					<useFile>false</useFile>
 					<trimStackTrace>false</trimStackTrace>
 
