@@ -2345,6 +2345,9 @@ public final class McpSchema {
 	// ---------------------------
 	// Autocomplete
 	// ---------------------------
+	@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
+	@JsonSubTypes({ @JsonSubTypes.Type(value = PromptReference.class, name = PromptReference.TYPE),
+			@JsonSubTypes.Type(value = ResourceReference.class, name = ResourceReference.TYPE), })
 	public sealed interface CompleteReference permits PromptReference, ResourceReference {
 
 		String type();
