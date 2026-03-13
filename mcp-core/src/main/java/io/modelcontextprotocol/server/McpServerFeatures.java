@@ -45,19 +45,11 @@ public class McpServerFeatures {
 			Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
 			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
-			String instructions) {
+			String instructions,
+			BiFunction<McpAsyncServerExchange, McpSchema.CancelledNotification, Mono<Void>> cancellationConsumer) {
 
 		/**
-		 * Create an instance and validate the arguments.
-		 * @param serverInfo The server implementation details
-		 * @param serverCapabilities The server capabilities
-		 * @param tools The list of tool specifications
-		 * @param resources The map of resource specifications
-		 * @param resourceTemplates The map of resource templates
-		 * @param prompts The map of prompt specifications
-		 * @param rootsChangeConsumers The list of consumers that will be notified when
-		 * the roots list changes
-		 * @param instructions The server instructions text
+		 * Backwards-compatible constructor without cancellationConsumer.
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
@@ -66,6 +58,21 @@ public class McpServerFeatures {
 				Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
 				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
 				String instructions) {
+			this(serverInfo, serverCapabilities, tools, resources, resourceTemplates, prompts, completions,
+					rootsChangeConsumers, instructions, null);
+		}
+
+		/**
+		 * Create an instance and validate the arguments.
+		 */
+		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
+				List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
+				Map<String, McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
+				Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
+				Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
+				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
+				String instructions,
+				BiFunction<McpAsyncServerExchange, McpSchema.CancelledNotification, Mono<Void>> cancellationConsumer) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -89,6 +96,7 @@ public class McpServerFeatures {
 			this.completions = (completions != null) ? completions : Map.of();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : List.of();
 			this.instructions = instructions;
+			this.cancellationConsumer = cancellationConsumer;
 		}
 
 		/**

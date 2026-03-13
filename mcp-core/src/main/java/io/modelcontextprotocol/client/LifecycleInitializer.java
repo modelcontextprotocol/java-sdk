@@ -177,6 +177,8 @@ class LifecycleInitializer {
 		 */
 		private final AtomicReference<McpClientSession> mcpClientSession;
 
+		private final AtomicReference<Object> initializeRequestId = new AtomicReference<>();
+
 		private DefaultInitialization() {
 			this.initSink = Sinks.one();
 			this.result = new AtomicReference<>();
@@ -233,6 +235,16 @@ class LifecycleInitializer {
 
 	public boolean isInitialized() {
 		return this.currentInitializationResult() != null;
+	}
+
+	/**
+	 * Returns the request ID of the initialize request, if one has been issued. Used to
+	 * prevent cancellation of the initialize request per spec.
+	 * @return the initialize request ID, or null
+	 */
+	public Object getInitializeRequestId() {
+		DefaultInitialization current = this.initializationRef.get();
+		return current != null ? current.initializeRequestId.get() : null;
 	}
 
 	public McpSchema.InitializeResult currentInitializationResult() {
@@ -305,8 +317,11 @@ class LifecycleInitializer {
 		McpSchema.InitializeRequest initializeRequest = new McpSchema.InitializeRequest(latestVersion,
 				this.clientCapabilities, this.clientInfo);
 
-		Mono<McpSchema.InitializeResult> result = mcpClientSession.sendRequest(McpSchema.METHOD_INITIALIZE,
-				initializeRequest, McpAsyncClient.INITIALIZE_RESULT_TYPE_REF);
+		McpClientSession.RequestMono<McpSchema.InitializeResult> requestMono = mcpClientSession.sendRequestWithId(
+				McpSchema.METHOD_INITIALIZE, initializeRequest, McpAsyncClient.INITIALIZE_RESULT_TYPE_REF);
+		initialization.initializeRequestId.set(requestMono.requestId());
+
+		Mono<McpSchema.InitializeResult> result = requestMono.response();
 
 		return result.flatMap(initializeResult -> {
 			logger.info("Server response with Protocol: {}, Capabilities: {}, Info: {} and Instructions {}",
