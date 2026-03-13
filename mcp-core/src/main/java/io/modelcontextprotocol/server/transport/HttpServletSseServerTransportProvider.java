@@ -287,6 +287,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		response.setHeader("Cache-Control", "no-cache");
 		response.setHeader("Connection", "keep-alive");
 		response.setHeader("Access-Control-Allow-Origin", "*");
+		response.setHeader("X-Accel-Buffering", "no");
 
 		String sessionId = UUID.randomUUID().toString();
 		AsyncContext asyncContext = request.startAsync();
