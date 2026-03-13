@@ -237,10 +237,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		return Mono.defer(() -> {
 			logger.debug("Graceful close triggered");
 			McpTransportSession<Disposable> currentSession = this.activeSession.getAndUpdate(this::createClosedSession);
-			if (currentSession != null) {
-				return Mono.from(currentSession.closeGracefully());
-			}
-			return Mono.empty();
+			Mono<Void> closeSessionMono = (currentSession != null) ? Mono.from(currentSession.closeGracefully())
+					: Mono.empty();
+			return closeSessionMono.doFinally(signalType -> Utils.closeHttpClient(this.httpClient));
 		});
 	}
 
