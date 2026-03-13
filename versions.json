@@ -5,23 +5,11 @@
     "aliases": []
   },
   {
-    "version": "0.18.2-SNAPSHOT",
-    "title": "0.18.2-SNAPSHOT",
-    "aliases": [
-      "latest-snapshot"
-    ]
-  },
-  {
     "version": "v1.1.0",
     "title": "v1.1.0",
     "aliases": [
       "latest"
     ]
-  },
-  {
-    "version": "v1.0.0",
-    "title": "v1.0.0",
-    "aliases": []
   },
   {
     "version": "v0.18.1",
