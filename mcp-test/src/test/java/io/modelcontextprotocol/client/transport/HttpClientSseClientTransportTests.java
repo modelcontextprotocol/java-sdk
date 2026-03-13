@@ -245,6 +245,27 @@ class HttpClientSseClientTransportTests {
 	}
 
 	@Test
+	void testSendMessageFailsWhenSseConnectionFails() {
+		// Create transport that connects to a non-existent host
+		HttpClientSseClientTransport failingTransport = HttpClientSseClientTransport.builder("http://non-existent-host")
+			.connectTimeout(Duration.ofSeconds(2))
+			.build();
+
+		// Attempt to connect (will fail)
+		failingTransport.connect(Function.identity()).subscribe();
+
+		// Create a test message
+		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
+				Map.of("key", "value"));
+
+		// Verify sendMessage fails with an error rather than hanging forever
+		StepVerifier.create(failingTransport.sendMessage(testMessage)).expectError().verify(Duration.ofSeconds(10));
+
+		// Clean up
+		failingTransport.closeGracefully().block();
+	}
+
+	@Test
 	void testMultipleMessageProcessing() {
 		// Simulate receiving multiple messages in sequence
 		transport.simulateMessageEvent("""

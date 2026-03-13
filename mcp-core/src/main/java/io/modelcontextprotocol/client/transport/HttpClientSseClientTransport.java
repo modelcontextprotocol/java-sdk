@@ -11,6 +11,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -386,9 +387,13 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 						logger.warn("SSE stream observed an error", t);
 						sink.error(t);
 					}
+					this.messageEndpointSink.tryEmitError(t);
 					return true;
 				})
 				.doFinally(s -> {
+					this.messageEndpointSink
+						.tryEmitError(new CancellationException("SSE stream ended before receiving the endpoint event"));
+
 					Disposable ref = this.sseSubscription.getAndSet(null);
 					if (ref != null && !ref.isDisposed()) {
 						ref.dispose();
