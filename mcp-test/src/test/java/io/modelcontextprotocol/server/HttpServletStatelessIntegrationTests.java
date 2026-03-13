@@ -639,6 +639,64 @@ class HttpServletStatelessIntegrationTests {
 		mcpServer.close();
 	}
 
+	@Test
+	void testInitializedNotificationCallReturnsAccepted() throws Exception {
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().build())
+			.build();
+
+		McpSchema.JSONRPCNotification notification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
+				McpSchema.METHOD_NOTIFICATION_INITIALIZED, null);
+
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", CUSTOM_MESSAGE_ENDPOINT);
+		MockHttpServletResponse response = new MockHttpServletResponse();
+
+		byte[] content = JSON_MAPPER.writeValueAsBytes(notification);
+		request.setContent(content);
+		request.addHeader("Content-Type", "application/json");
+		request.addHeader("Content-Length", Integer.toString(content.length));
+		request.addHeader("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM);
+		request.addHeader("Cache-Control", "no-cache");
+		request.addHeader(HttpHeaders.PROTOCOL_VERSION, ProtocolVersions.MCP_2025_03_26);
+
+		mcpStatelessServerTransport.service(request, response);
+
+		assertThat(response.getStatus()).isEqualTo(202);
+		assertThat(response.getContentAsByteArray()).isEmpty();
+
+		mcpServer.close();
+	}
+
+	@Test
+	void testRootsListChangedNotificationCallReturnsAccepted() throws Exception {
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().build())
+			.build();
+
+		McpSchema.JSONRPCNotification notification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
+				McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED, null);
+
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", CUSTOM_MESSAGE_ENDPOINT);
+		MockHttpServletResponse response = new MockHttpServletResponse();
+
+		byte[] content = JSON_MAPPER.writeValueAsBytes(notification);
+		request.setContent(content);
+		request.addHeader("Content-Type", "application/json");
+		request.addHeader("Content-Length", Integer.toString(content.length));
+		request.addHeader("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM);
+		request.addHeader("Cache-Control", "no-cache");
+		request.addHeader(HttpHeaders.PROTOCOL_VERSION, ProtocolVersions.MCP_2025_03_26);
+
+		mcpStatelessServerTransport.service(request, response);
+
+		assertThat(response.getStatus()).isEqualTo(202);
+		assertThat(response.getContentAsByteArray()).isEmpty();
+
+		mcpServer.close();
+	}
+
 	private double evaluateExpression(String expression) {
 		// Simple expression evaluator for testing
 		return switch (expression) {
