@@ -21,7 +21,7 @@
 	<scm>
 		<url>https://github.com/modelcontextprotocol/java-sdk</url>
 		<connection>git://github.com/modelcontextprotocol/java-sdk.git</connection>
-		<developerConnection>git@github.com/modelcontextprotocol/java-sdk.git</developerConnection>
+		<developerConnection>git@github.com:modelcontextprotocol/java-sdk.git</developerConnection>
 	</scm>
 
     <dependencyManagement>
@@ -44,6 +44,13 @@
             <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-json-jackson2</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- MCP JSON Jackson -->
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-json-jackson3</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

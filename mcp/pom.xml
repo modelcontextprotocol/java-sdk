@@ -17,7 +17,7 @@
 	<scm>
 		<url>https://github.com/modelcontextprotocol/java-sdk</url>
 		<connection>git://github.com/modelcontextprotocol/java-sdk.git</connection>
-		<developerConnection>git@github.com/modelcontextprotocol/java-sdk.git</developerConnection>
+		<developerConnection>git@github.com:modelcontextprotocol/java-sdk.git</developerConnection>
 	</scm>
 
 	<dependencies>

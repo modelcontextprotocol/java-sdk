@@ -14,7 +14,7 @@
 	<scm>
 		<url>https://github.com/modelcontextprotocol/java-sdk</url>
 		<connection>git://github.com/modelcontextprotocol/java-sdk.git</connection>
-		<developerConnection>git@github.com/modelcontextprotocol/java-sdk.git</developerConnection>
+		<developerConnection>git@github.com:modelcontextprotocol/java-sdk.git</developerConnection>
 	</scm>
 
 	<name>Java SDK MCP Parent</name>
@@ -29,7 +29,7 @@
 	<licenses>
 		<license>
 			<name>MIT License</name>
-			<url>http://www.opensource.org/licenses/mit-license.php</url>
+			<url>https://www.opensource.org/licenses/mit-license.php</url>
 		</license>
 	</licenses>
 
