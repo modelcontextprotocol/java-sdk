@@ -80,7 +80,7 @@ public class ConformanceJdkClientMcpClient {
 		HttpClientStreamableHttpTransport transport = HttpClientStreamableHttpTransport.builder(serverUrl).build();
 
 		return McpClient.sync(transport)
-			.clientInfo(new McpSchema.Implementation("test-client", "1.0.0"))
+			.clientInfo(new McpSchema.Implementation("test-client", "2.0.0"))
 			.requestTimeout(Duration.ofSeconds(30))
 			.build();
 	}
@@ -97,7 +97,7 @@ public class ConformanceJdkClientMcpClient {
 		var capabilities = McpSchema.ClientCapabilities.builder().elicitation().build();
 
 		return McpClient.sync(transport)
-			.clientInfo(new McpSchema.Implementation("test-client", "1.0.0"))
+			.clientInfo(new McpSchema.Implementation("test-client", "2.0.0"))
 			.requestTimeout(Duration.ofSeconds(30))
 			.capabilities(capabilities)
 			.elicitation(request -> {

@@ -58,7 +58,7 @@ public class DefaultScenario implements Scenario {
 
 		this.client = McpClient.sync(transport)
 			.transportContextProvider(new AuthenticationMcpTransportContextProvider())
-			.clientInfo(new McpSchema.Implementation("test-client", "1.0.0"))
+			.clientInfo(new McpSchema.Implementation("test-client", "2.0.0"))
 			.requestTimeout(Duration.ofSeconds(30))
 			.build();
 

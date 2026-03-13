@@ -31,7 +31,7 @@ The server supports both synchronous and asynchronous APIs, allowing for flexibl
     ```java
     // Create a server with custom configuration
     McpSyncServer syncServer = McpServer.sync(transportProvider)
-        .serverInfo("my-server", "1.0.0")
+        .serverInfo("my-server", "2.0.0")
         .capabilities(ServerCapabilities.builder()
             .resources(false, true)  // Resource support: subscribe=false, listChanged=true
             .tools(true)             // Enable tool support with list changes
@@ -55,7 +55,7 @@ The server supports both synchronous and asynchronous APIs, allowing for flexibl
     ```java
     // Create an async server with custom configuration
     McpAsyncServer asyncServer = McpServer.async(transportProvider)
-        .serverInfo("my-server", "1.0.0")
+        .serverInfo("my-server", "2.0.0")
         .capabilities(ServerCapabilities.builder()
             .resources(false, true)  // Resource support: subscribe=false, listChanged=true
             .tools(true)             // Enable tool support with list changes
@@ -446,7 +446,7 @@ Enable subscription support in the server capabilities:
 
 ```java
 McpSyncServer server = McpServer.sync(transportProvider)
-    .serverInfo("my-server", "1.0.0")
+    .serverInfo("my-server", "2.0.0")
     .capabilities(ServerCapabilities.builder()
         .resources(true, false)  // subscribe=true, listChanged=false
         .build())
@@ -587,7 +587,7 @@ Once connected to a compatible client, the server can request language model gen
     ```java
     // Create a server
     McpSyncServer server = McpServer.sync(transportProvider)
-        .serverInfo("my-server", "1.0.0")
+        .serverInfo("my-server", "2.0.0")
         .build();
 
     // Define a tool that uses sampling
@@ -641,7 +641,7 @@ Once connected to a compatible client, the server can request language model gen
     ```java
     // Create a server
     McpAsyncServer server = McpServer.async(transportProvider)
-        .serverInfo("my-server", "1.0.0")
+        .serverInfo("my-server", "2.0.0")
         .build();
 
     // Define a tool that uses sampling
@@ -766,7 +766,7 @@ var tool = new McpServerFeatures.AsyncToolSpecification(
     });
 
 var mcpServer = McpServer.async(mcpServerTransportProvider)
-  .serverInfo("test-server", "1.0.0")
+  .serverInfo("test-server", "2.0.0")
   .capabilities(
     ServerCapabilities.builder()
       .logging() // Enable logging support
