@@ -254,9 +254,9 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		 * @param requestCustomizer the consumer to customize the HTTP request builder
 		 * @return this builder
 		 * @deprecated Use
-		 * {@link #httpRequestCustomizer(McpSyncHttpClientRequestCustomizer)} or
-		 * {@link #asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer)} which
-		 * run on every request and support dynamic headers.
+		 * {@link #requestBuilder(HttpRequest.Builder)} for stable headers, or
+		 * {@link #httpRequestCustomizer(McpSyncHttpClientRequestCustomizer)} /
+		 * {@link #asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer)} for dynamic per-request customization.
 		 */
 		@Deprecated
 		public Builder customizeRequest(final Consumer<HttpRequest.Builder> requestCustomizer) {
