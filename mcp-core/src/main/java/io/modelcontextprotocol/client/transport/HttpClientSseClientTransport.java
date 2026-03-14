@@ -242,15 +242,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 
 		/**
 		 * Applies the given consumer to the shared {@link HttpRequest.Builder} <b>once,
-		 * at build time</b>. Any headers set here (e.g., {@code Authorization}) are
-		 * frozen into the template and copied to every subsequent request via
-		 * {@code requestBuilder.copy()}. They <b>cannot be updated</b> after the
-		 * transport is built.
-		 * <p>
-		 * For dynamic, per-request customization (e.g., OAuth token refresh), use
-		 * {@link #httpRequestCustomizer(McpSyncHttpClientRequestCustomizer)} or
-		 * {@link #asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer)}
-		 * instead.
+		 * at build time</b>. Any headers set here are frozen into the template and
+		 * <b>cannot be updated</b> after the transport is built.
 		 * @param requestCustomizer the consumer to customize the HTTP request builder
 		 * @return this builder
 		 * @deprecated Use
