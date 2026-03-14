@@ -11,7 +11,6 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
@@ -151,10 +150,8 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 			this.outboundSink = Sinks.many().unicast().onBackpressureBuffer();
 
 			// Use bounded schedulers for better resource management
-			this.inboundScheduler = Schedulers.fromExecutorService(Executors.newSingleThreadExecutor(),
-					"stdio-inbound");
-			this.outboundScheduler = Schedulers.fromExecutorService(Executors.newSingleThreadExecutor(),
-					"stdio-outbound");
+			this.inboundScheduler = Schedulers.newSingle("stdio-inbound", true);
+			this.outboundScheduler = Schedulers.newSingle("stdio-outbound", true);
 		}
 
 		@Override
