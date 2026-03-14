@@ -6,18 +6,20 @@
 	<parent>
 		<groupId>io.modelcontextprotocol.sdk</groupId>
 		<artifactId>mcp-parent</artifactId>
-		<version>1.1.0-SNAPSHOT</version>
+		<version>2.0.0-SNAPSHOT</version>
 	</parent>
 	<artifactId>mcp-json-jackson2</artifactId>
 	<packaging>jar</packaging>
 	<name>Java MCP SDK JSON Jackson 2</name>
 	<description>Java MCP SDK JSON implementation based on Jackson 2</description>
 	<url>https://github.com/modelcontextprotocol/java-sdk</url>
+
 	<scm>
 		<url>https://github.com/modelcontextprotocol/java-sdk</url>
-		<connection>git://github.com/modelcontextprotocol/java-sdk.git</connection>
-		<developerConnection>git@github.com/modelcontextprotocol/java-sdk.git</developerConnection>
+		<connection>scm:git:git://github.com/modelcontextprotocol/java-sdk.git</connection>
+		<developerConnection>scm:git:ssh://git@github.com/modelcontextprotocol/java-sdk.git</developerConnection>
 	</scm>
+
 	<build>
 		<plugins>
 			<plugin>
@@ -62,21 +64,21 @@
 		</plugins>
 	</build>
 	<dependencies>
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <version>${jackson2.version}</version>
-        </dependency>
-        <dependency>
-        	<groupId>io.modelcontextprotocol.sdk</groupId>
-        	<artifactId>mcp-core</artifactId>
-        	<version>1.1.0-SNAPSHOT</version>
-        </dependency>
-        <dependency>
-            <groupId>com.networknt</groupId>
-            <artifactId>json-schema-validator</artifactId>
-            <version>${json-schema-validator-jackson2.version}</version>
-        </dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+			<version>${jackson2.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.modelcontextprotocol.sdk</groupId>
+			<artifactId>mcp-core</artifactId>
+			<version>2.0.0-SNAPSHOT</version>
+		</dependency>
+		<dependency>
+			<groupId>com.networknt</groupId>
+			<artifactId>json-schema-validator</artifactId>
+			<version>${json-schema-validator-jackson2.version}</version>
+		</dependency>
 
 		<dependency>
 			<groupId>org.assertj</groupId>

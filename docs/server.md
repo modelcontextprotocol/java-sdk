@@ -33,7 +33,7 @@ The server supports both synchronous and asynchronous APIs, allowing for flexibl
     McpSyncServer syncServer = McpServer.sync(transportProvider)
         .serverInfo("my-server", "1.0.0")
         .capabilities(ServerCapabilities.builder()
-            .resources(false, true)  // Enable resource support with list changes
+            .resources(false, true)  // Resource support: subscribe=false, listChanged=true
             .tools(true)             // Enable tool support with list changes
             .prompts(true)           // Enable prompt support with list changes
             .completions()           // Enable completions support
@@ -57,7 +57,7 @@ The server supports both synchronous and asynchronous APIs, allowing for flexibl
     McpAsyncServer asyncServer = McpServer.async(transportProvider)
         .serverInfo("my-server", "1.0.0")
         .capabilities(ServerCapabilities.builder()
-            .resources(false, true)  // Enable resource support with list changes
+            .resources(false, true)  // Resource support: subscribe=false, listChanged=true
             .tools(true)             // Enable tool support with list changes
             .prompts(true)           // Enable prompt support with list changes
             .completions()           // Enable completions support
@@ -319,7 +319,7 @@ The server can be configured with various capabilities:
 
 ```java
 var capabilities = ServerCapabilities.builder()
-    .resources(false, true)  // Resource support (subscribe, listChanged)
+    .resources(true, true)   // Resource support: subscribe=true, listChanged=true
     .tools(true)             // Tool support with list changes notifications
     .prompts(true)           // Prompt support with list changes notifications
     .completions()           // Enable completions support
@@ -437,6 +437,42 @@ Resources provide context to AI models by exposing data such as: File contents, 
         }
     );
     ```
+
+### Resource Subscriptions
+
+When the `subscribe` capability is enabled, clients can subscribe to specific resources and receive targeted `notifications/resources/updated` notifications when those resources change. Only sessions that have explicitly subscribed to a given URI receive the notification — not every connected client.
+
+Enable subscription support in the server capabilities:
+
+```java
+McpSyncServer server = McpServer.sync(transportProvider)
+    .serverInfo("my-server", "1.0.0")
+    .capabilities(ServerCapabilities.builder()
+        .resources(true, false)  // subscribe=true, listChanged=false
+        .build())
+    .resources(myResourceSpec)
+    .build();
+```
+
+When a subscribed resource changes, notify only the interested sessions:
+
+=== "Sync"
+
+    ```java
+    server.notifyResourcesUpdated(
+        new McpSchema.ResourcesUpdatedNotification("custom://resource")
+    );
+    ```
+
+=== "Async"
+
+    ```java
+    server.notifyResourcesUpdated(
+        new McpSchema.ResourcesUpdatedNotification("custom://resource")
+    ).subscribe();
+    ```
+
+If no sessions are subscribed to the given URI the call completes immediately without sending any messages. Subscription state is automatically cleaned up when a client session closes.
 
 ### Resource Template Specification
 
