@@ -12,6 +12,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
@@ -159,22 +160,22 @@ public final class EnterpriseAuth {
 	public static Mono<String> requestJwtAuthorizationGrant(RequestJwtAuthGrantOptions options, HttpClient httpClient) {
 		return Mono.defer(() -> {
 			List<String> params = new ArrayList<>();
-			params.add(encode("grant_type") + "=" + encode(GRANT_TYPE_TOKEN_EXCHANGE));
-			params.add(encode("subject_token") + "=" + encode(options.getIdToken()));
-			params.add(encode("subject_token_type") + "=" + encode(TOKEN_TYPE_ID_TOKEN));
-			params.add(encode("requested_token_type") + "=" + encode(TOKEN_TYPE_ID_JAG));
-			params.add(encode("client_id") + "=" + encode(options.getClientId()));
+			params.add(encodeParam("grant_type", GRANT_TYPE_TOKEN_EXCHANGE));
+			params.add(encodeParam("subject_token", options.getIdToken()));
+			params.add(encodeParam("subject_token_type", TOKEN_TYPE_ID_TOKEN));
+			params.add(encodeParam("requested_token_type", TOKEN_TYPE_ID_JAG));
+			params.add(encodeParam("client_id", options.getClientId()));
 			if (options.getClientSecret() != null) {
-				params.add(encode("client_secret") + "=" + encode(options.getClientSecret()));
+				params.add(encodeParam("client_secret", options.getClientSecret()));
 			}
 			if (options.getAudience() != null) {
-				params.add(encode("audience") + "=" + encode(options.getAudience()));
+				params.add(encodeParam("audience", options.getAudience()));
 			}
 			if (options.getResource() != null) {
-				params.add(encode("resource") + "=" + encode(options.getResource()));
+				params.add(encodeParam("resource", options.getResource()));
 			}
 			if (options.getScope() != null) {
-				params.add(encode("scope") + "=" + encode(options.getScope()));
+				params.add(encodeParam("scope", options.getScope()));
 			}
 			String body = String.join("&", params);
 			logger.debug("Requesting JAG token exchange at {}", options.getTokenEndpoint());
@@ -195,20 +196,8 @@ public final class EnterpriseAuth {
 						JagTokenExchangeResponse.class);
 
 				// Validate per RFC 8693 §2.2.1
-				if (!TOKEN_TYPE_ID_JAG.equalsIgnoreCase(tokenResponse.getIssuedTokenType())) {
-					return Mono.error(new EnterpriseAuthException("Unexpected issued_token_type in JAG response: "
-							+ tokenResponse.getIssuedTokenType() + " (expected " + TOKEN_TYPE_ID_JAG + ")"));
-				}
-				if (!"N_A".equalsIgnoreCase(tokenResponse.getTokenType())) {
-					return Mono.error(new EnterpriseAuthException("Unexpected token_type in JAG response: "
-							+ tokenResponse.getTokenType() + " (expected N_A per RFC 8693 §2.2.1)"));
-				}
-				if (tokenResponse.getAccessToken() == null || tokenResponse.getAccessToken().isBlank()) {
-					return Mono
-						.error(new EnterpriseAuthException("JAG token exchange response is missing access_token"));
-				}
-				logger.debug("JAG token exchange successful");
-				return Mono.just(tokenResponse.getAccessToken());
+				return validateJAGTokenExchangeResponse(tokenResponse)
+					.doOnNext(token -> logger.debug("JAG token exchange successful"));
 			}
 			catch (EnterpriseAuthException e) {
 				return Mono.error(e);
@@ -234,6 +223,8 @@ public final class EnterpriseAuth {
 	public static Mono<String> discoverAndRequestJwtAuthorizationGrant(DiscoverAndRequestJwtAuthGrantOptions options,
 			HttpClient httpClient) {
 		Mono<String> tokenEndpointMono;
+		// If the caller already discovered (or otherwise knows) the IdP token endpoint,
+		// skip RFC 8414 metadata discovery and use the pre-configured value directly.
 		if (options.getIdpTokenEndpoint() != null) {
 			tokenEndpointMono = Mono.just(options.getIdpTokenEndpoint());
 		}
@@ -283,21 +274,25 @@ public final class EnterpriseAuth {
 			HttpClient httpClient) {
 		return Mono.defer(() -> {
 			List<String> params = new ArrayList<>();
-			params.add(encode("grant_type") + "=" + encode(GRANT_TYPE_JWT_BEARER));
-			params.add(encode("assertion") + "=" + encode(options.getAssertion()));
-			params.add(encode("client_id") + "=" + encode(options.getClientId()));
-			if (options.getClientSecret() != null) {
-				params.add(encode("client_secret") + "=" + encode(options.getClientSecret()));
-			}
+			params.add(encodeParam("grant_type", GRANT_TYPE_JWT_BEARER));
+			params.add(encodeParam("assertion", options.getAssertion()));
 			if (options.getScope() != null) {
-				params.add(encode("scope") + "=" + encode(options.getScope()));
+				params.add(encodeParam("scope", options.getScope()));
 			}
 			String body = String.join("&", params);
+			// Use client_secret_basic (RFC 6749 §2.3.1): send credentials in the
+			// Authorization header rather than the request body. This matches the
+			// token_endpoint_auth_method declared by the provider and is required by
+			// SEP-990 conformance tests.
+			String secret = options.getClientSecret() != null ? options.getClientSecret() : "";
+			String credentials = Base64.getEncoder()
+				.encodeToString((options.getClientId() + ":" + secret).getBytes(StandardCharsets.UTF_8));
 			logger.debug("Exchanging JWT bearer grant at {}", options.getTokenEndpoint());
 			HttpRequest request = HttpRequest.newBuilder(URI.create(options.getTokenEndpoint()))
 				.POST(HttpRequest.BodyPublishers.ofString(body))
 				.header("Content-Type", "application/x-www-form-urlencoded")
 				.header("Accept", "application/json")
+				.header("Authorization", "Basic " + credentials)
 				.build();
 			return Mono.fromFuture(() -> httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()));
 		}).flatMap(response -> {
@@ -318,6 +313,14 @@ public final class EnterpriseAuth {
 				if (tokenResponse.getExpiresIn() != null) {
 					tokenResponse.setExpiresAt(Instant.now().plusSeconds(tokenResponse.getExpiresIn()));
 				}
+				// RFC 7523 (JWT Bearer Grant) is a stateless grant: the client presents a
+				// signed JWT assertion directly to obtain an access token, with no
+				// authorization code or refresh token involved. If the AS returns a
+				// refresh_token anyway, it is intentionally ignored — using it would
+				// allow the client to obtain new access tokens without re-validating the
+				// enterprise identity via the IdP, bypassing IdP session and revocation
+				// policies. When the access token expires, repeat the full enterprise
+				// auth flow to obtain a fresh token.
 				logger.debug("JWT bearer grant exchange successful; expires_in={}", tokenResponse.getExpiresIn());
 				return Mono.just(tokenResponse);
 			}
@@ -333,6 +336,39 @@ public final class EnterpriseAuth {
 	// -----------------------------------------------------------------------
 	// Internal helpers
 	// -----------------------------------------------------------------------
+
+	/**
+	 * Validates the RFC 8693 token exchange response for a JAG request.
+	 * @param tokenResponse the parsed response
+	 * @return a {@link Mono} emitting the {@code access_token} value, or an error of type
+	 * {@link EnterpriseAuthException} if any validation check fails
+	 */
+	/**
+	 * Validates the RFC 8693 token exchange response for a JAG request.
+	 * <p>
+	 * Validates {@code issued_token_type} and the presence of {@code access_token}.
+	 * {@code token_type} is intentionally not validated: per RFC 8693 §2.2.1 it is
+	 * informational when the issued token is not an access token, and per RFC 6749 §5.1
+	 * it is case-insensitive — strict {@code N_A} checking would reject conformant IdPs
+	 * that omit or capitalise the field differently.
+	 */
+	private static Mono<String> validateJAGTokenExchangeResponse(JagTokenExchangeResponse tokenResponse) {
+		if (!TOKEN_TYPE_ID_JAG.equalsIgnoreCase(tokenResponse.getIssuedTokenType())) {
+			return Mono.error(new EnterpriseAuthException("Unexpected issued_token_type in JAG response: "
+					+ tokenResponse.getIssuedTokenType() + " (expected " + TOKEN_TYPE_ID_JAG + ")"));
+		}
+		if (tokenResponse.getAccessToken() == null || tokenResponse.getAccessToken().isBlank()) {
+			return Mono.error(new EnterpriseAuthException("JAG token exchange response is missing access_token"));
+		}
+		return Mono.just(tokenResponse.getAccessToken());
+	}
+
+	/**
+	 * URL-encodes a form parameter key-value pair as {@code key=value}.
+	 */
+	private static String encodeParam(String key, String value) {
+		return encode(key) + "=" + encode(value);
+	}
 
 	private static String encode(String value) {
 		return URLEncoder.encode(value, StandardCharsets.UTF_8);

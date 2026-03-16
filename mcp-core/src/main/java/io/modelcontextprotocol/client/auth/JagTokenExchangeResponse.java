@@ -13,14 +13,15 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * Returned by the enterprise IdP when exchanging an ID Token for a JWT Authorization
  * Grant (ID-JAG) during Enterprise Managed Authorization (SEP-990).
  * <p>
- * The three key fields are:
+ * The key fields are:
  * <ul>
  * <li>{@code access_token} — the issued JAG (despite the name, not an OAuth access
  * token)</li>
  * <li>{@code issued_token_type} — must be
  * {@code urn:ietf:params:oauth:token-type:id-jag}</li>
- * <li>{@code token_type} — must be {@code N_A} (case-insensitive, per RFC 8693
- * §2.2.1)</li>
+ * <li>{@code token_type} — informational; per RFC 8693 §2.2.1 it SHOULD be {@code N_A}
+ * when the issued token is not an access token, but this is not strictly enforced as some
+ * conformant IdPs may omit or vary the casing</li>
  * </ul>
  *
  * @author MCP SDK Contributors

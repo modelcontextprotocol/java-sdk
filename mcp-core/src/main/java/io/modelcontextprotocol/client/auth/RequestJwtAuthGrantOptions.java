@@ -38,8 +38,8 @@ public class RequestJwtAuthGrantOptions {
 	/** The {@code scope} parameter for the token exchange request (optional). */
 	private final String scope;
 
-	private RequestJwtAuthGrantOptions(Builder builder) {
-		this.tokenEndpoint = Objects.requireNonNull(builder.tokenEndpoint, "tokenEndpoint must not be null");
+	protected RequestJwtAuthGrantOptions(Builder builder) {
+		this.tokenEndpoint = builder.tokenEndpoint;
 		this.idToken = Objects.requireNonNull(builder.idToken, "idToken must not be null");
 		this.clientId = Objects.requireNonNull(builder.clientId, "clientId must not be null");
 		this.clientSecret = builder.clientSecret;
@@ -80,7 +80,7 @@ public class RequestJwtAuthGrantOptions {
 		return new Builder();
 	}
 
-	public static final class Builder {
+	public static class Builder {
 
 		private String tokenEndpoint;
 
@@ -96,7 +96,7 @@ public class RequestJwtAuthGrantOptions {
 
 		private String scope;
 
-		private Builder() {
+		protected Builder() {
 		}
 
 		public Builder tokenEndpoint(String tokenEndpoint) {
@@ -135,6 +135,7 @@ public class RequestJwtAuthGrantOptions {
 		}
 
 		public RequestJwtAuthGrantOptions build() {
+			Objects.requireNonNull(tokenEndpoint, "tokenEndpoint must not be null");
 			return new RequestJwtAuthGrantOptions(this);
 		}
 

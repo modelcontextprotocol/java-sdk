@@ -196,7 +196,9 @@ class EnterpriseAuthTest {
 	}
 
 	@Test
-	void requestJwtAuthorizationGrant_wrongTokenType_emitsError() {
+	void requestJwtAuthorizationGrant_nonStandardTokenType_succeeds() {
+		// token_type is informational per RFC 8693 §2.2.1; non-N_A values must not be
+		// rejected so that conformant IdPs that omit or vary the field are accepted.
 		server.createContext("/token", exchange -> sendJson(exchange, 200, """
 				{
 				  "access_token": "tok",
@@ -211,8 +213,8 @@ class EnterpriseAuthTest {
 			.build();
 
 		StepVerifier.create(EnterpriseAuth.requestJwtAuthorizationGrant(options, httpClient))
-			.expectErrorMatches(e -> e instanceof EnterpriseAuthException && e.getMessage().contains("token_type"))
-			.verify();
+			.expectNext("tok")
+			.verifyComplete();
 	}
 
 	@Test
@@ -289,7 +291,15 @@ class EnterpriseAuthTest {
 			String body = new String(exchange.getRequestBody().readAllBytes());
 			assertThat(body).contains("grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer");
 			assertThat(body).contains("assertion=my-jag");
-			assertThat(body).contains("client_id=cid");
+			// client credentials must be sent via Basic auth header
+			// (client_secret_basic),
+			// not in the request body (client_secret_post)
+			assertThat(body).doesNotContain("client_id");
+			String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
+			assertThat(authHeader).isNotNull();
+			assertThat(authHeader).startsWith("Basic ");
+			String decoded = new String(java.util.Base64.getDecoder().decode(authHeader.substring(6)));
+			assertThat(decoded).isEqualTo("cid:");
 
 			sendJson(exchange, 200, """
 					{
@@ -496,6 +506,86 @@ class EnterpriseAuthTest {
 					McpTransportContext.EMPTY)))
 			.expectErrorMatches(e -> e instanceof RuntimeException && e.getMessage().contains("IdP unreachable"))
 			.verify();
+	}
+
+	@Test
+	void enterpriseAuthProvider_nearlyExpiredToken_fetchesNewToken() {
+		// expires_in=0 means the token expires immediately; with the 30-second
+		// TOKEN_EXPIRY_BUFFER it is considered expired on every call, forcing a re-fetch.
+		int[] callCount = { 0 };
+
+		server.createContext("/.well-known/oauth-authorization-server", exchange -> sendJson(exchange, 200,
+				"{\"issuer\":\"" + baseUrl + "\",\"token_endpoint\":\"" + baseUrl + "/mcp-token\"}"));
+		server.createContext("/mcp-token", exchange -> {
+			callCount[0]++;
+			sendJson(exchange, 200, """
+					{
+					  "access_token": "expiring-token",
+					  "token_type": "Bearer",
+					  "expires_in": 0
+					}""");
+		});
+
+		EnterpriseAuthProviderOptions options = EnterpriseAuthProviderOptions.builder()
+			.clientId("client-id")
+			.assertionCallback(ctx -> Mono.just("jag"))
+			.build();
+
+		EnterpriseAuthProvider provider = new EnterpriseAuthProvider(options, httpClient);
+		URI endpoint = URI.create(baseUrl + "/mcp");
+
+		// First request — fetches a token that expires within the buffer window
+		Mono.from(
+				provider.customize(HttpRequest.newBuilder(endpoint), "GET", endpoint, null, McpTransportContext.EMPTY))
+			.block();
+		assertThat(callCount[0]).isEqualTo(1);
+
+		// Second request — cached token is already within the expiry buffer, must
+		// re-fetch
+		Mono.from(
+				provider.customize(HttpRequest.newBuilder(endpoint), "GET", endpoint, null, McpTransportContext.EMPTY))
+			.block();
+		assertThat(callCount[0]).isEqualTo(2);
+	}
+
+	@Test
+	void enterpriseAuthProvider_tokenWithoutExpiresIn_usesCache() {
+		// When the server omits expires_in the token has no expiry and is kept in cache
+		// indefinitely (until invalidated).
+		int[] callCount = { 0 };
+
+		server.createContext("/.well-known/oauth-authorization-server", exchange -> sendJson(exchange, 200,
+				"{\"issuer\":\"" + baseUrl + "\",\"token_endpoint\":\"" + baseUrl + "/mcp-token\"}"));
+		server.createContext("/mcp-token", exchange -> {
+			callCount[0]++;
+			sendJson(exchange, 200, """
+					{
+					  "access_token": "no-expiry-token",
+					  "token_type": "Bearer"
+					}""");
+		});
+
+		EnterpriseAuthProviderOptions options = EnterpriseAuthProviderOptions.builder()
+			.clientId("client-id")
+			.assertionCallback(ctx -> Mono.just("jag"))
+			.build();
+
+		EnterpriseAuthProvider provider = new EnterpriseAuthProvider(options, httpClient);
+		URI endpoint = URI.create(baseUrl + "/mcp");
+
+		// First request fetches and caches the token
+		Mono.from(
+				provider.customize(HttpRequest.newBuilder(endpoint), "GET", endpoint, null, McpTransportContext.EMPTY))
+			.block();
+		// Subsequent requests must reuse the cached token without re-fetching
+		Mono.from(
+				provider.customize(HttpRequest.newBuilder(endpoint), "GET", endpoint, null, McpTransportContext.EMPTY))
+			.block();
+		Mono.from(
+				provider.customize(HttpRequest.newBuilder(endpoint), "GET", endpoint, null, McpTransportContext.EMPTY))
+			.block();
+
+		assertThat(callCount[0]).isEqualTo(1);
 	}
 
 	// -----------------------------------------------------------------------

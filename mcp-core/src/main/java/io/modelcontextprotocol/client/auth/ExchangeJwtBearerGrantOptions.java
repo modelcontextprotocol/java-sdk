@@ -13,6 +13,12 @@ import java.util.Objects;
  * Posts an RFC 7523 JWT Bearer grant exchange to the MCP authorization server's token
  * endpoint, exchanging the JAG (JWT Authorization Grant / ID-JAG) for a standard OAuth
  * 2.0 access token that can be used to call the MCP server.
+ * <p>
+ * Client credentials are sent using {@code client_secret_basic} (RFC 6749 §2.3.1): the
+ * {@code client_id} and {@code client_secret} are Base64-encoded and sent in the
+ * {@code Authorization: Basic} header. This matches the
+ * {@code token_endpoint_auth_method} declared by {@code EnterpriseAuthProvider} and is
+ * required by SEP-990 conformance tests.
  *
  * @author MCP SDK Contributors
  * @see <a href="https://datatracker.ietf.org/doc/html/rfc7523">RFC 7523</a>

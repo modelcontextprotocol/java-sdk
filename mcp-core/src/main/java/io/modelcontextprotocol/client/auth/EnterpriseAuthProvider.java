@@ -26,8 +26,8 @@ import reactor.core.publisher.Mono;
  * directly with any HTTP transport. On each request it:
  * <ol>
  * <li>Checks an in-memory access token cache.</li>
- * <li>If the cache is empty or the token is expired (within a 30-second buffer), it
- * performs the full enterprise auth flow:
+ * <li>If the cache is empty or the token is expired (within the
+ * {@code TOKEN_EXPIRY_BUFFER}), it performs the full enterprise auth flow:
  * <ol type="a">
  * <li>Discovers the MCP authorization server metadata via RFC 8414.</li>
  * <li>Invokes the {@link EnterpriseAuthProviderOptions#getAssertionCallback() assertion
@@ -54,6 +54,7 @@ import reactor.core.publisher.Mono;
  *                     .idpUrl(ctx.getAuthorizationServerUrl().toString())
  *                     .idToken(myIdTokenSupplier.get())
  *                     .clientId("idp-client-id")
+ *                     .clientSecret("idp-client-secret")
  *                     .build(),
  *                 httpClient);
  *         })
@@ -77,7 +78,7 @@ public class EnterpriseAuthProvider implements McpAsyncHttpClientRequestCustomiz
 	 * Proactive refresh buffer: treat a token as expired this many seconds before its
 	 * actual expiry to avoid using a token that expires mid-flight.
 	 */
-	private static final Duration EXPIRY_BUFFER = Duration.ofSeconds(30);
+	private static final Duration TOKEN_EXPIRY_BUFFER = Duration.ofSeconds(30);
 
 	private final EnterpriseAuthProviderOptions options;
 
@@ -152,7 +153,7 @@ public class EnterpriseAuthProvider implements McpAsyncHttpClientRequestCustomiz
 		if (expiresAt == null) {
 			return false;
 		}
-		return Instant.now().isAfter(expiresAt.minus(EXPIRY_BUFFER));
+		return Instant.now().isAfter(expiresAt.minus(TOKEN_EXPIRY_BUFFER));
 	}
 
 	private Mono<JwtBearerAccessTokenResponse> fetchNewToken(URI endpoint) {
@@ -180,6 +181,13 @@ public class EnterpriseAuthProvider implements McpAsyncHttpClientRequestCustomiz
 					authServerUri);
 
 			return options.getAssertionCallback().apply(assertionContext).flatMap(assertion -> {
+				// Note: the ID-JAG obtained from the assertionCallback is used
+				// immediately
+				// for a single access-token exchange and is not cached. If the access
+				// token
+				// is short-lived, caching the ID-JAG at the callback level can reduce IdP
+				// round-trips, as the JAG may still be valid when the access token
+				// expires.
 				ExchangeJwtBearerGrantOptions exchangeOptions = ExchangeJwtBearerGrantOptions.builder()
 					.tokenEndpoint(metadata.getTokenEndpoint())
 					.assertion(assertion)
