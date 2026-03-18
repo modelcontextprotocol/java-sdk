@@ -2,8 +2,15 @@ package io.modelcontextprotocol.conformance.client;
 
 import java.time.Duration;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
+import io.modelcontextprotocol.client.auth.DiscoverAndRequestJwtAuthGrantOptions;
+import io.modelcontextprotocol.client.auth.EnterpriseAuth;
+import io.modelcontextprotocol.client.auth.EnterpriseAuthProvider;
+import io.modelcontextprotocol.client.auth.EnterpriseAuthProviderOptions;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 
@@ -53,6 +60,9 @@ public class ConformanceJdkClientMcpClient {
 				case "sse-retry":
 					runSSERetryScenario(serverUrl);
 					break;
+				case "auth/cross-app-access-complete-flow":
+					runCrossAppAccessCompleteFlowScenario(serverUrl);
+					break;
 				default:
 					System.err.println("Unknown scenario: " + scenario);
 					System.err.println("Available scenarios:");
@@ -60,6 +70,7 @@ public class ConformanceJdkClientMcpClient {
 					System.err.println("  - tools_call");
 					System.err.println("  - elicitation-sep1034-client-defaults");
 					System.err.println("  - sse-retry");
+					System.err.println("  - auth/cross-app-access-complete-flow");
 					System.exit(1);
 			}
 			System.exit(0);
@@ -281,6 +292,84 @@ public class ConformanceJdkClientMcpClient {
 			client.close();
 			System.out.println("Connection closed successfully");
 		}
+	}
+
+	/**
+	 * Cross-App Access scenario: Tests SEP-990 Enterprise Managed Authorization flow.
+	 * <p>
+	 * Reads context from {@code MCP_CONFORMANCE_CONTEXT} (JSON) containing:
+	 * {@code client_id}, {@code client_secret}, {@code idp_client_id},
+	 * {@code idp_id_token}, {@code idp_issuer}, {@code idp_token_endpoint}.
+	 * <p>
+	 * Uses {@link EnterpriseAuthProvider} with an assertion callback that performs RFC
+	 * 8693 token exchange at the IdP, then exchanges the ID-JAG for an access token at
+	 * the MCP authorization server via RFC 7523 JWT Bearer grant.
+	 * @param serverUrl the URL of the MCP server
+	 * @throws Exception if any error occurs during execution
+	 */
+	private static void runCrossAppAccessCompleteFlowScenario(String serverUrl) throws Exception {
+		String contextEnv = System.getenv("MCP_CONFORMANCE_CONTEXT");
+		if (contextEnv == null || contextEnv.isEmpty()) {
+			System.err.println("Error: MCP_CONFORMANCE_CONTEXT environment variable is not set");
+			System.exit(1);
+		}
+
+		CrossAppAccessContext ctx = new ObjectMapper().readValue(contextEnv, CrossAppAccessContext.class);
+
+		java.net.http.HttpClient httpClient = java.net.http.HttpClient.newHttpClient();
+
+		EnterpriseAuthProviderOptions options = EnterpriseAuthProviderOptions.builder()
+			.clientId(ctx.clientId())
+			.clientSecret(ctx.clientSecret())
+			.assertionCallback(assertionCtx -> {
+				// RFC 8693 token exchange at the IdP: ID Token → ID-JAG
+				DiscoverAndRequestJwtAuthGrantOptions jagOptions = DiscoverAndRequestJwtAuthGrantOptions
+					.builder()
+					.idpUrl(ctx.idpIssuer())
+					.idpTokenEndpoint(ctx.idpTokenEndpoint())
+					.idToken(ctx.idpIdToken())
+					.clientId(ctx.idpClientId())
+					.audience(assertionCtx.getAuthorizationServerUrl().toString())
+					.resource(assertionCtx.getResourceUrl().toString())
+					.build();
+				return EnterpriseAuth.discoverAndRequestJwtAuthorizationGrant(jagOptions, httpClient);
+			})
+			.build();
+
+		EnterpriseAuthProvider provider = new EnterpriseAuthProvider(options, httpClient);
+
+		HttpClientStreamableHttpTransport transport = HttpClientStreamableHttpTransport.builder(serverUrl)
+			.httpRequestCustomizer(provider)
+			.build();
+
+		McpSyncClient client = McpClient.sync(transport)
+			.clientInfo(new McpSchema.Implementation("test-client", "1.0.0"))
+			.requestTimeout(Duration.ofSeconds(30))
+			.build();
+
+		try {
+			client.initialize();
+			System.out.println("Successfully connected to MCP server");
+
+			client.listTools();
+			System.out.println("Successfully listed tools");
+		}
+		finally {
+			client.close();
+			System.out.println("Connection closed successfully");
+		}
+	}
+
+	/**
+	 * Context provided by the conformance suite for the cross-app-access-complete-flow
+	 * scenario via the {@code MCP_CONFORMANCE_CONTEXT} environment variable.
+	 */
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	private record CrossAppAccessContext(@JsonProperty("client_id") String clientId,
+			@JsonProperty("client_secret") String clientSecret,
+			@JsonProperty("idp_client_id") String idpClientId,
+			@JsonProperty("idp_id_token") String idpIdToken, @JsonProperty("idp_issuer") String idpIssuer,
+			@JsonProperty("idp_token_endpoint") String idpTokenEndpoint) {
 	}
 
 }
