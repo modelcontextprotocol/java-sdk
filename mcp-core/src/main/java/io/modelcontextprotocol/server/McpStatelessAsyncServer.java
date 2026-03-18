@@ -21,6 +21,7 @@ import io.modelcontextprotocol.spec.McpStatelessServerTransport;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DefaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
+import io.modelcontextprotocol.util.ToolInputValidator;
 import io.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -77,9 +78,12 @@ public class McpStatelessAsyncServer {
 
 	private final JsonSchemaValidator jsonSchemaValidator;
 
+	private final boolean validateToolInputs;
+
 	McpStatelessAsyncServer(McpStatelessServerTransport mcpTransport, McpJsonMapper jsonMapper,
 			McpStatelessServerFeatures.Async features, Duration requestTimeout,
-			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
+			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
+			boolean validateToolInputs) {
 		this.mcpTransportProvider = mcpTransport;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
@@ -92,6 +96,7 @@ public class McpStatelessAsyncServer {
 		this.completions.putAll(features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
+		this.validateToolInputs = validateToolInputs;
 
 		Map<String, McpStatelessRequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -407,6 +412,13 @@ public class McpStatelessAsyncServer {
 					.message("Unknown tool: invalid_tool_name")
 					.data("Tool not found: " + callToolRequest.name())
 					.build());
+			}
+
+			McpSchema.Tool tool = toolSpecification.get().tool();
+			CallToolResult validationError = ToolInputValidator.validate(tool, callToolRequest.arguments(),
+					this.validateToolInputs, this.jsonMapper, this.jsonSchemaValidator);
+			if (validationError != null) {
+				return Mono.just(validationError);
 			}
 
 			return toolSpecification.get().callHandler().apply(ctx, callToolRequest);
