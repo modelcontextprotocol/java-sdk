@@ -24,8 +24,8 @@ public class DefaultConfiguration {
 
 	@Bean
 	DefaultScenario defaultScenario(McpClientRegistrationRepository clientRegistrationRepository,
-									ServletWebServerApplicationContext serverCtx,
-									OAuth2AuthorizedClientRepository oAuth2AuthorizedClientRepository) {
+			ServletWebServerApplicationContext serverCtx,
+			OAuth2AuthorizedClientRepository oAuth2AuthorizedClientRepository) {
 		return new DefaultScenario(clientRegistrationRepository, serverCtx, oAuth2AuthorizedClientRepository);
 	}
 

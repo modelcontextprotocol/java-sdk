@@ -206,6 +206,18 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		});
 	}
 
+	@Override
+	public Mono<Void> notifyClient(String sessionId, String method, Object params) {
+		return Mono.defer(() -> {
+			McpStreamableServerSession session = this.sessions.get(sessionId);
+			if (session == null) {
+				logger.debug("Session {} not found", sessionId);
+				return Mono.empty();
+			}
+			return session.sendNotification(method, params);
+		});
+	}
+
 	/**
 	 * Initiates a graceful shutdown of the transport.
 	 * @return A Mono that completes when all cleanup operations are finished
