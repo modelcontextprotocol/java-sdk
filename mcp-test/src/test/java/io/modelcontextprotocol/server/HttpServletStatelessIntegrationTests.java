@@ -639,6 +639,44 @@ class HttpServletStatelessIntegrationTests {
 		mcpServer.close();
 	}
 
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient" })
+	void testToolCallWithUnicodeArguments(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// String containing multi-byte UTF-8 characters: em dash, Chinese, emoji
+		String unicodeInput = "Test \u2014 em dash, \u5929\u6c14\u9884\u62a5, \ud83d\ude00";
+
+		var echoTool = new McpStatelessServerFeatures.SyncToolSpecification(
+				Tool.builder().name("echo").description("Echoes input").inputSchema(EMPTY_JSON_SCHEMA).build(),
+				(transportContext, request) -> {
+					String text = (String) request.arguments().get("text");
+					return CallToolResult.builder().content(List.of(new TextContent(text))).build();
+				});
+
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(echoTool)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CallToolResult response = mcpClient
+				.callTool(new McpSchema.CallToolRequest("echo", Map.of("text", unicodeInput)));
+
+			assertThat(response).isNotNull();
+			assertThat(response.content()).hasSize(1);
+			assertThat(response.content().get(0)).isInstanceOf(TextContent.class);
+			assertThat(((TextContent) response.content().get(0)).text()).isEqualTo(unicodeInput);
+		}
+		finally {
+			mcpServer.close();
+		}
+	}
+
 	private double evaluateExpression(String expression) {
 		// Simple expression evaluator for testing
 		return switch (expression) {
