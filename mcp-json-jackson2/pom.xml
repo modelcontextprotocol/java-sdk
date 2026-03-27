@@ -6,7 +6,7 @@
 	<parent>
 		<groupId>io.modelcontextprotocol.sdk</groupId>
 		<artifactId>mcp-parent</artifactId>
-		<version>1.1.1-SNAPSHOT</version>
+		<version>1.1.1</version>
 	</parent>
 	<artifactId>mcp-json-jackson2</artifactId>
 	<packaging>jar</packaging>
@@ -72,7 +72,7 @@
 		<dependency>
 			<groupId>io.modelcontextprotocol.sdk</groupId>
 			<artifactId>mcp-core</artifactId>
-			<version>1.1.1-SNAPSHOT</version>
+			<version>1.1.1</version>
 		</dependency>
 		<dependency>
 			<groupId>com.networknt</groupId>
