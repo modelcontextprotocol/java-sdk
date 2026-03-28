@@ -182,7 +182,6 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		return Mono.deferContextual(ctx -> {
 			McpTransportContext transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 
-			McpStreamableServerSessionStream stream = new McpStreamableServerSessionStream(transport);
 			McpRequestHandler<?> requestHandler = McpStreamableServerSession.this.requestHandlers
 				.get(jsonrpcRequest.method());
 			// TODO: delegate to stream, which upon successful response should close
@@ -195,9 +194,19 @@ public class McpStreamableServerSession implements McpLoggableSession {
 							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
 									error.message(), error.data())));
 			}
+			// Use McpStreamableServerSession.this as the session for the exchange so that
+			// server-initiated requests (e.g. sampling/createMessage, elicitation) are
+			// routed via the GET SSE listening stream (listeningStreamRef) instead of
+			// the POST SSE response stream. The POST SSE response stream's underlying
+			// Tomcat OutputBuffer is in "suspended" async mode while the request handler
+			// is running, so writes to it are buffered and never flushed to the network
+			// until the handler completes — causing a deadlock when the handler blocks
+			// waiting for the client's sampling response. The GET SSE stream's consumer
+			// has already exited by the time requests arrive, so its buffer is not
+			// suspended and writes are immediately visible to the client.
 			return requestHandler
-				.handle(new McpAsyncServerExchange(this.id, stream, clientCapabilities.get(), clientInfo.get(),
-						transportContext), jsonrpcRequest.params())
+				.handle(new McpAsyncServerExchange(this.id, McpStreamableServerSession.this,
+						clientCapabilities.get(), clientInfo.get(), transportContext), jsonrpcRequest.params())
 				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), result,
 						null))
 				.onErrorResume(e -> {
