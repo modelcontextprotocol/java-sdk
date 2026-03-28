@@ -795,3 +795,43 @@ Supported logging levels (in order of increasing severity): DEBUG (0), INFO (1),
 ## Error Handling
 
 The SDK provides comprehensive error handling through the McpError class, covering protocol compatibility, transport communication, JSON-RPC messaging, tool execution, resource management, prompt handling, timeouts, and connection issues. This unified error handling approach ensures consistent and reliable error management across both synchronous and asynchronous operations.
+
+### Error Handling in Tool Implementations
+
+#### Two Tiers of Errors
+
+MCP distinguishes between two categories of errors in tool execution:
+
+**1. Tool-Level Errors (Recoverable by the LLM)**
+
+Use `CallToolResult` with `isError(true)` for validation failures, missing arguments, or domain errors the LLM can act on and retry.
+
+```java
+// Example: missing required argument
+if (lastName == null || lastName.isBlank()) {
+    return CallToolResult.builder()
+        .content(List.of(new McpSchema.TextContent("Missing required argument: last_name")))
+        .isError(true)
+        .build();
+}
+```
+
+The LLM receives this as part of the normal tool response and can self-correct in a subsequent interaction.
+
+**2. Protocol-Level Errors (Unrecoverable)**
+
+Uncaught exceptions from a tool handler are mapped to a JSON-RPC error response. Use this only for truly unexpected failures (e.g., infrastructure errors), not for input validation.
+
+```java
+// This propagates as a JSON-RPC error — use sparingly
+throw new McpError(McpSchema.ErrorCodes.INTERNAL_ERROR, "Unexpected failure");
+```
+
+#### Decision Guide
+
+| Situation                          | Approach                              |
+|------------------------------------|---------------------------------------|
+| Missing / invalid argument         | `CallToolResult` with `isError=true`  |
+| Domain validation failure          | `CallToolResult` with `isError=true`  |
+| Infrastructure / unexpected error  | Throw `McpError` or let it propagate  |
+| Partial success with a warning     | `CallToolResult` with warning in text |
