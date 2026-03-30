@@ -40,6 +40,32 @@ To run the tests you have to pre-install `Docker` and `npx`.
 ```bash
 ./mvnw test
 ```
+### Conformance Tests
+
+The SDK is validated against the [MCP conformance test suite](https://github.com/modelcontextprotocol/conformance).
+Full details and instructions are in [`conformance-tests/VALIDATION_RESULTS.md`](conformance-tests/VALIDATION_RESULTS.md).
+
+**Latest results:**
+
+| Suite         | Result                                         |
+|---------------|------------------------------------------------|
+| Server        | ✅ 40/40 passed (100%)                          |
+| Client        | ⚠️ 3/4 scenarios, 9/10 checks passed      |
+| Auth (Spring) | ⚠️  12/14 scenarios fully passing (98.9% checks) |
+
+To run the conformance tests locally you need `npx` installed.
+
+```bash
+# Server conformance
+./mvnw compile -pl conformance-tests/server-servlet -am exec:java
+npx @modelcontextprotocol/conformance server --url http://localhost:8080/mcp --suite active
+
+# Client conformance
+./mvnw clean package -DskipTests -pl conformance-tests/client-jdk-http-client -am
+npx @modelcontextprotocol/conformance client \
+  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-1.1.0-SNAPSHOT.jar" \
+  --scenario initialize
+```
 
 ## Contributing
 
