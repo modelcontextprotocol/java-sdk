@@ -161,3 +161,34 @@ The following dependencies are available and managed by the BOM:
     - `org.springframework.ai:mcp-spring-webmvc` - WebMVC-based SSE and Streamable HTTP transport implementation for servlet-based applications.
 - **Testing Dependencies**
     - `io.modelcontextprotocol.sdk:mcp-test` - Testing utilities and support for MCP-based applications.
+
+## Optional CI hardening for downstream servers
+
+If your downstream repository already builds a runnable server jar in CI, a
+manual workflow like the following can be used as an optional hardening check:
+
+```yaml
+name: Optional MCP hardening
+
+on:
+  workflow_dispatch:
+
+jobs:
+  hardening:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: ./mvnw -q -DskipTests package
+      - uses: aak204/MCP-Trust-Kit@v0.4.0
+        with:
+          cmd: java -jar target/your-server.jar
+          sarif-out: mcp-trust.sarif
+```
+
+This is an optional example for downstream server repositories only. If you
+already use code scanning, the generated SARIF can be uploaded in a separate
+step.
