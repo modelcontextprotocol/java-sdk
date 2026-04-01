@@ -15,9 +15,9 @@ For comprehensive guides and SDK API documentation
 
 - [Features](https://modelcontextprotocol.github.io/java-sdk/#features) - Overview the features provided by the Java MCP SDK
 - [Architecture](https://modelcontextprotocol.github.io/java-sdk/#architecture) - Java MCP SDK architecture overview.
-- [Java Dependencies / BOM](https://modelcontextprotocol.github.io/java-sdk/quickstart/#dependencies) - Java dependencies and BOM.
-- [Java MCP Client](https://modelcontextprotocol.github.io/java-sdk/client/) - Learn how to use the MCP client to interact with MCP servers.
-- [Java MCP Server](https://modelcontextprotocol.github.io/java-sdk/server/) - Learn how to implement and configure a MCP servers.
+- [Java Dependencies / BOM](https://java.sdk.modelcontextprotocol.io/latest/quickstart/#dependencies) - Java dependencies and BOM.
+- [Java MCP Client](https://java.sdk.modelcontextprotocol.io/latest/client/) - Learn how to use the MCP client to interact with MCP servers.
+- [Java MCP Server](https://java.sdk.modelcontextprotocol.io/latest/server/) - Learn how to implement and configure a MCP servers.
 
 #### Spring AI MCP documentation
 [Spring AI MCP](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) extends the MCP Java SDK with Spring Boot integration, providing both [client](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-client-boot-starter-docs.html) and [server](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-server-boot-starter-docs.html) starters. 
