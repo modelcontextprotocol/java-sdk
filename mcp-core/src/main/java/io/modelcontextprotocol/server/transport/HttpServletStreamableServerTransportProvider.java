@@ -315,7 +315,6 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			response.setCharacterEncoding(UTF_8);
 			response.setHeader("Cache-Control", "no-cache");
 			response.setHeader("Connection", "keep-alive");
-			response.setHeader("Access-Control-Allow-Origin", "*");
 
 			AsyncContext asyncContext = request.startAsync();
 			asyncContext.setTimeout(0);
@@ -522,7 +521,6 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				response.setCharacterEncoding(UTF_8);
 				response.setHeader("Cache-Control", "no-cache");
 				response.setHeader("Connection", "keep-alive");
-				response.setHeader("Access-Control-Allow-Origin", "*");
 
 				AsyncContext asyncContext = request.startAsync();
 				asyncContext.setTimeout(0);
