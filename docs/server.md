@@ -831,7 +831,6 @@ throw new McpError(McpSchema.ErrorCodes.INTERNAL_ERROR, "Unexpected failure");
 
 | Situation                          | Approach                              |
 |------------------------------------|---------------------------------------|
-| Missing / invalid argument         | `CallToolResult` with `isError=true`  |
 | Domain validation failure          | `CallToolResult` with `isError=true`  |
 | Infrastructure / unexpected error  | Throw `McpError` or let it propagate  |
 | Partial success with a warning     | `CallToolResult` with warning in text |
