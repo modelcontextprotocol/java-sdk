@@ -820,7 +820,7 @@ The LLM receives this as part of the normal tool response and can self-correct i
 
 **2. Protocol-Level Errors (Unrecoverable)**
 
-Uncaught exceptions from a tool handler are mapped to a JSON-RPC error response. Use this only for truly unexpected failures (e.g., infrastructure errors), not for input validation.
+Uncaught exceptions from a tool handler are mapped to a JSON-RPC error response. Use this only for truly unexpected failures (e.g., infrastructure errors such as DB timeout), not for input validation.
 
 ```java
 // This propagates as a JSON-RPC error — use sparingly
