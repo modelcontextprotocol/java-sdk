@@ -42,16 +42,16 @@ To run the tests you have to pre-install `Docker` and `npx`.
 ```
 ### Conformance Tests
 
-The SDK is validated against the [MCP conformance test suite](https://github.com/modelcontextprotocol/conformance).
+The SDK is validated against the [MCP conformance test suite](https://github.com/modelcontextprotocol/conformance) at 0.1.15 version.
 Full details and instructions are in [`conformance-tests/VALIDATION_RESULTS.md`](conformance-tests/VALIDATION_RESULTS.md).
 
 **Latest results:**
 
-| Suite         | Result                                         |
-|---------------|------------------------------------------------|
-| Server        | ✅ 40/40 passed (100%)                          |
-| Client        | ⚠️ 3/4 scenarios, 9/10 checks passed      |
-| Auth (Spring) | ⚠️  12/14 scenarios fully passing (98.9% checks) |
+| Suite         | Result                                              |
+|---------------|-----------------------------------------------------|
+| Server        | ✅ 40/40 passed (100%)                              |
+| Client        | 🟡 3/4 scenarios, 9/10 checks passed                |
+| Auth (Spring) | 🟡 12/14 scenarios fully passing (98.9% checks)     |
 
 To run the conformance tests locally you need `npx` installed.
 
@@ -62,9 +62,18 @@ npx @modelcontextprotocol/conformance server --url http://localhost:8080/mcp --s
 
 # Client conformance
 ./mvnw clean package -DskipTests -pl conformance-tests/client-jdk-http-client -am
-npx @modelcontextprotocol/conformance client \
-  --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-1.1.0-SNAPSHOT.jar" \
-  --scenario initialize
+for scenario in initialize tools_call elicitation-sep1034-client-defaults sse-retry; do
+  npx @modelcontextprotocol/conformance client \
+    --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-2.0.0-SNAPSHOT.jar" \
+    --scenario $scenario
+done
+
+# Auth conformance (Spring HTTP Client)
+./mvnw clean package -DskipTests -pl conformance-tests/client-spring-http-client -am
+npx @modelcontextprotocol/conformance@0.1.15 client \
+  --spec-version 2025-11-25 \
+  --command "java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.0-SNAPSHOT.jar" \
+  --suite auth
 ```
 
 ## Contributing
