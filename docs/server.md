@@ -807,10 +807,10 @@ MCP distinguishes between two categories of errors in tool execution:
 Use `CallToolResult` with `isError(true)` for validation failures, missing arguments, or domain errors the LLM can act on and retry.
 
 ```java
-// Example: missing required argument
-if (lastName == null || lastName.isBlank()) {
-    return CallToolResult.builder()
-        .content(List.of(new McpSchema.TextContent("Missing required argument: last_name")))
+// Example: Domain validation failure (e.g., invalid email format)
+if (!emailAddress.matches("^[A-Za-z0-9+_.-]+@(.+)$")) {
+        return CallToolResult.builder()
+        .content(List.of(new McpSchema.TextContent("Invalid argument: 'email' must be a valid email address.")))
         .isError(true)
         .build();
 }
