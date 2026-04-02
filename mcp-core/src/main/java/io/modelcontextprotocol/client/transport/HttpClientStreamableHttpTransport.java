@@ -464,6 +464,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
 			final McpTransportSession<Disposable> transportSession = this.activeSession.get();
 
+			// https://github.com/modelcontextprotocol/java-sdk/issues/889
+			Object requestId = (sentMessage instanceof McpSchema.JSONRPCRequest req) ? req.id() : null;
+
 			var uri = Utils.resolveUri(this.baseUri, this.endpoint);
 			String jsonBody = this.toString(sentMessage);
 
@@ -636,12 +639,19 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				.retryWhen(authorizationErrorRetrySpec())
 				.flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage)))
 				.onErrorMap(CompletionException.class, t -> t.getCause())
-				.onErrorComplete(t -> {
-					// handle the error first
+				.onErrorResume(t -> {
 					this.handleException(t);
-					// inform the caller of sendMessage
 					deliveredSink.error(t);
-					return true;
+					if (requestId != null) {
+						// Emit synthetic error so pending response is resolved
+						logger.warn("Body-level error for request {}, emitting synthetic error response", requestId, t);
+						McpSchema.JSONRPCResponse errorResponse = new McpSchema.JSONRPCResponse(
+								McpSchema.JSONRPC_VERSION, requestId, null,
+								new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+										"Transport error during response streaming: " + t.getMessage(), null));
+						return this.handler.get().apply(Mono.just(errorResponse));
+					}
+					return Flux.empty();
 				})
 				.doFinally(s -> {
 					logger.debug("SendMessage finally: {}", s);
