@@ -291,6 +291,9 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 			final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
 			final McpTransportSession<Disposable> transportSession = this.activeSession.get();
 
+			// https://github.com/modelcontextprotocol/java-sdk/issues/889
+			Object requestId = (message instanceof McpSchema.JSONRPCRequest req) ? req.id() : null;
+
 			Disposable connection = Flux.deferContextual(ctx -> webClient.post()
 				.uri(this.endpoint)
 				.accept(MediaType.APPLICATION_JSON, MediaType.TEXT_EVENT_STREAM)
@@ -356,23 +359,25 @@ public class WebClientStreamableHttpTransport implements McpClientTransport {
 						}
 						return this.extractError(response, sessionRepresentation);
 					}
-				}))
-				.flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage)))
-				.onErrorComplete(t -> {
-					// handle the error first
+				})).flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage))).onErrorResume(t -> {
 					this.handleException(t);
-					// inform the caller of sendMessage
 					sink.error(t);
-					return true;
-				})
-				.doFinally(s -> {
+					if (requestId != null) {
+						// Emit synthetic error so pending response is resolved
+						logger.warn("Body-level error for request {}, emitting synthetic error response", requestId, t);
+						McpSchema.JSONRPCResponse errorResponse = new McpSchema.JSONRPCResponse(
+								McpSchema.JSONRPC_VERSION, requestId, null,
+								new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+										"Transport error during response streaming: " + t.getMessage(), null));
+						return this.handler.get().apply(Mono.just(errorResponse));
+					}
+					return Flux.empty();
+				}).doFinally(s -> {
 					Disposable ref = disposableRef.getAndSet(null);
 					if (ref != null) {
 						transportSession.removeConnection(ref);
 					}
-				})
-				.contextWrite(sink.contextView())
-				.subscribe();
+				}).contextWrite(sink.contextView()).subscribe();
 			disposableRef.set(connection);
 			transportSession.addConnection(connection);
 		});
