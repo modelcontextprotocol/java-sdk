@@ -738,24 +738,6 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		}
 
 		/**
-		 * Applies the given consumer to the shared {@link HttpRequest.Builder} <b>once,
-		 * at build time</b>. Any headers set here are frozen into the template and
-		 * <b>cannot be updated</b> after the transport is built.
-		 * @param requestCustomizer the consumer to customize the HTTP request builder
-		 * @return this builder
-		 * @deprecated Use {@link #requestBuilder(HttpRequest.Builder)} for stable
-		 * headers, or {@link #httpRequestCustomizer(McpSyncHttpClientRequestCustomizer)}
-		 * / {@link #asyncHttpRequestCustomizer(McpAsyncHttpClientRequestCustomizer)} for
-		 * dynamic per-request customization.
-		 */
-		@Deprecated
-		public Builder customizeRequest(final Consumer<HttpRequest.Builder> requestCustomizer) {
-			Assert.notNull(requestCustomizer, "requestCustomizer must not be null");
-			requestCustomizer.accept(requestBuilder);
-			return this;
-		}
-
-		/**
 		 * Configure a custom {@link McpJsonMapper} implementation to use.
 		 * @param jsonMapper instance to use
 		 * @return the builder instance
