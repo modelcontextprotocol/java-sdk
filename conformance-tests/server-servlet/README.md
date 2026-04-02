@@ -142,7 +142,7 @@ curl -X POST http://localhost:8080/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: text/event-stream" \
   -H "mcp-session-id: test-session-123" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0.0"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test-client","version":"2.0.0"}}}'
 ```
 
 ## Architecture

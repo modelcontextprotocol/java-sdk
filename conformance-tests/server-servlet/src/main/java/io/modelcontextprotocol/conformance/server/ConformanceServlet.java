@@ -75,7 +75,7 @@ public class ConformanceServlet {
 
 		// Build server with all conformance test features
 		var mcpServer = McpServer.sync(transportProvider)
-			.serverInfo("mcp-conformance-server", "1.0.0")
+			.serverInfo("mcp-conformance-server", "2.0.0")
 			.capabilities(ServerCapabilities.builder()
 				.completions()
 				.resources(true, false)
