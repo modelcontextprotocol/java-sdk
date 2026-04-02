@@ -298,6 +298,10 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 											"Authorization error connecting to SSE stream",
 											responseEvent.responseInfo()));
 						}
+						else if (statusCode == METHOD_NOT_ALLOWED) {
+							logger.debug("The server does not support SSE streams, using request-response mode.");
+							return Flux.empty();
+						}
 
 						if (!(responseEvent instanceof ResponseSubscribers.SseResponseEvent sseResponseEvent)) {
 							return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
@@ -343,10 +347,6 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 								logger.debug("Received SSE event with type: {}", sseResponseEvent.sseEvent());
 								return Flux.empty();
 							}
-						}
-						else if (statusCode == METHOD_NOT_ALLOWED) { // NotAllowed
-							logger.debug("The server does not support SSE streams, using request-response mode.");
-							return Flux.empty();
 						}
 						else if (statusCode == NOT_FOUND) {
 
