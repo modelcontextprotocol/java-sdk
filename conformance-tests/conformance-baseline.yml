@@ -9,5 +9,3 @@ client:
   - sse-retry
   # CIMD not implemented yet
   - auth/basic-cimd
-  # Scope step up beyond initial authorization request not implemented
-  - auth/scope-step-up
