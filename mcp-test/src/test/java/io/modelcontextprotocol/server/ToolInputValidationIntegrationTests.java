@@ -39,7 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * errors are returned as Tool Execution Errors (isError=true) rather than Protocol
  * Errors, per MCP specification.
  *
- * @author Alireza Khoram
+ * @author Andrei Shakirin
  */
 @Timeout(15)
 class ToolInputValidationIntegrationTests extends AbstractMcpClientServerIntegrationTests {
