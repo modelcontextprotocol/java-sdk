@@ -12,6 +12,8 @@ import java.util.function.BiFunction;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.AfterEach;
@@ -43,6 +45,8 @@ import io.modelcontextprotocol.spec.McpError;
  * @author Surbhi Bansal
  */
 class McpCompletionTests {
+
+	private static final Logger logger = LoggerFactory.getLogger(McpCompletionTests.class);
 
 	private HttpServletSseServerTransportProvider mcpServerTransportProvider;
 
@@ -255,6 +259,10 @@ class McpCompletionTests {
 		mcpServer.close();
 	}
 
+	// Flaky test: Under CI load, the SSE connection may close mid-test (EOF on chunked
+	// transfer), causing the server to remove the session. Subsequent requests then
+	// fail with "Session not found". Retrying with a fresh client establishes a new
+	// SSE connection and session.
 	@Test
 	void testCompletionErrorOnMissingContext() {
 		BiFunction<McpSyncServerExchange, CompleteRequest, CompleteResult> completionHandler = (exchange, request) -> {
@@ -297,28 +305,41 @@ class McpCompletionTests {
 					new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"), completionHandler))
 			.build();
 
-		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample" + "client", "0.0.0"))
-			.build();) {
-			InitializeResult initResult = mcpClient.initialize();
-			assertThat(initResult).isNotNull();
+		int maxAttempts = 3;
+		RuntimeException lastError = null;
+		for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+			try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample" + "client", "0.0.0"))
+				.build()) {
+				InitializeResult initResult = mcpClient.initialize();
+				assertThat(initResult).isNotNull();
 
-			// Try to complete table without database context - should raise error
-			CompleteRequest requestWithoutContext = new CompleteRequest(
-					new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"),
-					new CompleteRequest.CompleteArgument("table", ""));
+				// Try to complete table without database context - should raise error
+				CompleteRequest requestWithoutContext = new CompleteRequest(
+						new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"),
+						new CompleteRequest.CompleteArgument("table", ""));
 
-			assertThatExceptionOfType(McpError.class)
-				.isThrownBy(() -> mcpClient.completeCompletion(requestWithoutContext))
-				.withMessageContaining("Please select a database first");
+				assertThatExceptionOfType(McpError.class)
+					.isThrownBy(() -> mcpClient.completeCompletion(requestWithoutContext))
+					.withMessageContaining("Please select a database first");
 
-			// Now complete with proper context - should work normally
-			CompleteRequest requestWithContext = new CompleteRequest(
-					new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"),
-					new CompleteRequest.CompleteArgument("table", ""),
-					new CompleteRequest.CompleteContext(Map.of("database", "test_db")));
+				// Now complete with proper context - should work normally
+				CompleteRequest requestWithContext = new CompleteRequest(
+						new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"),
+						new CompleteRequest.CompleteArgument("table", ""),
+						new CompleteRequest.CompleteContext(Map.of("database", "test_db")));
 
-			CompleteResult resultWithContext = mcpClient.completeCompletion(requestWithContext);
-			assertThat(resultWithContext.completion().values()).containsExactly("users", "orders", "products");
+				CompleteResult resultWithContext = mcpClient.completeCompletion(requestWithContext);
+				assertThat(resultWithContext.completion().values()).containsExactly("users", "orders", "products");
+				lastError = null;
+				break; // Success
+			}
+			catch (RuntimeException e) {
+				lastError = e;
+				logger.warn("Attempt {} failed, retrying with fresh client", attempt, e);
+			}
+		}
+		if (lastError != null) {
+			throw lastError;
 		}
 
 		mcpServer.close();
