@@ -89,7 +89,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	 * HTTP client for sending messages to the server. Uses HTTP POST over the message
 	 * endpoint
 	 */
-	private final HttpClient httpClient;
+	private final OwnedHttpClient ownedHttpClient;
 
 	/** HTTP request builder for building requests to send messages to the server */
 	private final HttpRequest.Builder requestBuilder;
@@ -139,7 +139,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			boolean openConnectionOnStartup, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer,
 			McpHttpClientAuthorizationErrorHandler authorizationErrorHandler, List<String> supportedProtocolVersions) {
 		this.jsonMapper = jsonMapper;
-		this.httpClient = httpClient;
+		this.ownedHttpClient = OwnedHttpClient.create(httpClient);
 		this.requestBuilder = requestBuilder;
 		this.baseUri = URI.create(baseUri);
 		this.endpoint = endpoint;
@@ -153,6 +153,10 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			.sorted(Comparator.reverseOrder())
 			.findFirst()
 			.get();
+	}
+
+	private HttpClient httpClient() {
+		return this.ownedHttpClient.currentClientOrThrow();
 	}
 
 	@Override
@@ -209,7 +213,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "DELETE", uri, null, transportContext));
 		}).flatMap(requestBuilder -> {
 			var request = requestBuilder.build();
-			return Mono.fromFuture(() -> this.httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()));
+			return Mono.fromFuture(() -> this.httpClient().sendAsync(request, HttpResponse.BodyHandlers.ofString()));
 		}).then();
 	}
 
@@ -237,10 +241,10 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		return Mono.defer(() -> {
 			logger.debug("Graceful close triggered");
 			McpTransportSession<Disposable> currentSession = this.activeSession.getAndUpdate(this::createClosedSession);
-			if (currentSession != null) {
-				return Mono.from(currentSession.closeGracefully());
-			}
-			return Mono.empty();
+			Mono<Void> sessionClose = currentSession != null ? Mono.from(currentSession.closeGracefully())
+					: Mono.empty();
+			return sessionClose.onErrorResume(error -> this.ownedHttpClient.releaseAfterClose().then(Mono.error(error)))
+				.then(this.ownedHttpClient.releaseAfterClose());
 		});
 	}
 
@@ -280,7 +284,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				var transportContext = connectionCtx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 				return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
 			})
-				.flatMapMany(requestBuilder -> Flux.<ResponseEvent>create(sseSink -> this.httpClient
+				.flatMapMany(requestBuilder -> Flux.<ResponseEvent>create(sseSink -> this.httpClient()
 					.sendAsync(requestBuilder.build(), this.toSendMessageBodySubscriber(sseSink))
 					.whenComplete((response, throwable) -> {
 						if (throwable != null) {
@@ -489,7 +493,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			}).flatMapMany(requestBuilder -> Flux.<ResponseEvent>create(responseEventSink -> {
 
 				// Create the async request with proper body subscriber selection
-				Mono.fromFuture(this.httpClient
+				Mono.fromFuture(this.httpClient()
 					.sendAsync(requestBuilder.build(), this.toSendMessageBodySubscriber(responseEventSink))
 					.whenComplete((response, throwable) -> {
 						if (throwable != null) {
