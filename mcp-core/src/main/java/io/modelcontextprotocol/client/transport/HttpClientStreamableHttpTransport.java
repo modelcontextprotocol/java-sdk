@@ -477,7 +477,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 				var builder = requestBuilder.uri(uri)
 					.header(HttpHeaders.ACCEPT, APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
-					.header(HttpHeaders.CONTENT_TYPE, APPLICATION_JSON)
+					.header(HttpHeaders.CONTENT_TYPE, APPLICATION_JSON + "; charset=UTF-8")
 					.header(HttpHeaders.CACHE_CONTROL, "no-cache")
 					.header(HttpHeaders.PROTOCOL_VERSION,
 							ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
