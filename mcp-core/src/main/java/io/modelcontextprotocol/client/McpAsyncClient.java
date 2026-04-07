@@ -303,7 +303,7 @@ public class McpAsyncClient {
 				return Mono.empty();
 			}
 
-			return this.listToolsInternal(init, McpSchema.FIRST_PAGE).doOnNext(listToolsResult -> {
+			return this.listToolsInternal(init, McpSchema.FIRST_PAGE, null).doOnNext(listToolsResult -> {
 				listToolsResult.tools()
 					.forEach(tool -> logger.debug("Tool {} schema: {}", tool.name(), tool.outputSchema()));
 				if (enableCallToolSchemaCaching && listToolsResult.tools() != null) {
@@ -645,16 +645,27 @@ public class McpAsyncClient {
 	 * @return A Mono that emits the list of tools result
 	 */
 	public Mono<McpSchema.ListToolsResult> listTools(String cursor) {
-		return this.initializer.withInitialization("listing tools", init -> this.listToolsInternal(init, cursor));
+		return this.initializer.withInitialization("listing tools", init -> this.listToolsInternal(init, cursor, null));
 	}
 
-	private Mono<McpSchema.ListToolsResult> listToolsInternal(Initialization init, String cursor) {
+	/**
+	 * Retrieves a paginated list of tools with optional metadata.
+	 * @param cursor Optional pagination cursor from a previous list request
+	 * @param meta Optional metadata to include in the request (_meta field)
+	 * @return A Mono that emits the list of tools result
+	 */
+	public Mono<McpSchema.ListToolsResult> listTools(String cursor, java.util.Map<String, Object> meta) {
+		return this.initializer.withInitialization("listing tools", init -> this.listToolsInternal(init, cursor, meta));
+	}
+
+	private Mono<McpSchema.ListToolsResult> listToolsInternal(Initialization init, String cursor,
+			java.util.Map<String, Object> meta) {
 
 		if (init.initializeResult().capabilities().tools() == null) {
 			return Mono.error(new IllegalStateException("Server does not provide tools capability"));
 		}
 		return init.mcpSession()
-			.sendRequest(McpSchema.METHOD_TOOLS_LIST, new McpSchema.PaginatedRequest(cursor),
+			.sendRequest(McpSchema.METHOD_TOOLS_LIST, new McpSchema.PaginatedRequest(cursor, meta),
 					LIST_TOOLS_RESULT_TYPE_REF)
 			.doOnNext(result -> {
 				// Validate tool names (warn only)

@@ -259,6 +259,16 @@ public class McpSyncClient implements AutoCloseable {
 
 	}
 
+	/**
+	 * Retrieves a paginated list of tools with optional metadata.
+	 * @param cursor Optional pagination cursor from a previous list request
+	 * @param meta Optional metadata to include in the request (_meta field)
+	 * @return The list of tools result
+	 */
+	public McpSchema.ListToolsResult listTools(String cursor, java.util.Map<String, Object> meta) {
+		return withProvidedContext(this.delegate.listTools(cursor, meta)).block();
+	}
+
 	// --------------------------
 	// Resources
 	// --------------------------

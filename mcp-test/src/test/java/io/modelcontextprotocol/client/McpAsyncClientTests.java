@@ -307,4 +307,143 @@ class McpAsyncClientTests {
 		assertThat(names).containsExactlyInAnyOrder("subtract", "add");
 	}
 
+	@Test
+	void testListToolsWithCursorAndMeta() {
+		McpSchema.Tool addTool = McpSchema.Tool.builder().name("add").description("calculate add").build();
+		McpSchema.ListToolsResult mockToolsResult = new McpSchema.ListToolsResult(List.of(addTool), null);
+
+		// Use array to capture from anonymous class
+		McpSchema.PaginatedRequest[] capturedRequest = new McpSchema.PaginatedRequest[1];
+
+		McpClientTransport transport = new McpClientTransport() {
+			Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler;
+
+			@Override
+			public Mono<Void> connect(
+					Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
+				return Mono.deferContextual(ctx -> {
+					this.handler = handler;
+					return Mono.empty();
+				});
+			}
+
+			@Override
+			public Mono<Void> closeGracefully() {
+				return Mono.empty();
+			}
+
+			@Override
+			public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+				if (!(message instanceof McpSchema.JSONRPCRequest request)) {
+					return Mono.empty();
+				}
+
+				McpSchema.JSONRPCResponse response;
+				if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
+					response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), MOCK_INIT_RESULT,
+							null);
+				}
+				else if (McpSchema.METHOD_TOOLS_LIST.equals(request.method())) {
+					capturedRequest[0] = JSON_MAPPER.convertValue(request.params(), McpSchema.PaginatedRequest.class);
+					response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), mockToolsResult,
+							null);
+				}
+				else {
+					return Mono.empty();
+				}
+
+				return handler.apply(Mono.just(response)).then();
+			}
+
+			@Override
+			public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+				return JSON_MAPPER.convertValue(data, new TypeRef<>() {
+					@Override
+					public java.lang.reflect.Type getType() {
+						return typeRef.getType();
+					}
+				});
+			}
+		};
+
+		McpAsyncClient client = McpClient.async(transport).build();
+
+		Map<String, Object> meta = Map.of("customKey", "customValue");
+		McpSchema.ListToolsResult toolsResult = client.listTools("cursor-1", meta).block();
+		assertThat(toolsResult).isNotNull();
+		assertThat(toolsResult.tools()).hasSize(1);
+		assertThat(capturedRequest[0]).isNotNull();
+		assertThat(capturedRequest[0].cursor()).isEqualTo("cursor-1");
+		assertThat(capturedRequest[0].meta()).containsEntry("customKey", "customValue");
+	}
+
+	@Test
+	void testSyncListToolsWithCursorAndMeta() {
+		McpSchema.Tool addTool = McpSchema.Tool.builder().name("add").description("calculate add").build();
+		McpSchema.ListToolsResult mockToolsResult = new McpSchema.ListToolsResult(List.of(addTool), null);
+
+		McpSchema.PaginatedRequest[] capturedRequest = new McpSchema.PaginatedRequest[1];
+
+		McpClientTransport transport = new McpClientTransport() {
+			Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler;
+
+			@Override
+			public Mono<Void> connect(
+					Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
+				return Mono.deferContextual(ctx -> {
+					this.handler = handler;
+					return Mono.empty();
+				});
+			}
+
+			@Override
+			public Mono<Void> closeGracefully() {
+				return Mono.empty();
+			}
+
+			@Override
+			public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+				if (!(message instanceof McpSchema.JSONRPCRequest request)) {
+					return Mono.empty();
+				}
+
+				McpSchema.JSONRPCResponse response;
+				if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
+					response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), MOCK_INIT_RESULT,
+							null);
+				}
+				else if (McpSchema.METHOD_TOOLS_LIST.equals(request.method())) {
+					capturedRequest[0] = JSON_MAPPER.convertValue(request.params(), McpSchema.PaginatedRequest.class);
+					response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), mockToolsResult,
+							null);
+				}
+				else {
+					return Mono.empty();
+				}
+
+				return handler.apply(Mono.just(response)).then();
+			}
+
+			@Override
+			public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+				return JSON_MAPPER.convertValue(data, new TypeRef<>() {
+					@Override
+					public java.lang.reflect.Type getType() {
+						return typeRef.getType();
+					}
+				});
+			}
+		};
+
+		McpSyncClient client = McpClient.sync(transport).build();
+
+		Map<String, Object> meta = Map.of("requestId", "test-123");
+		McpSchema.ListToolsResult toolsResult = client.listTools("cursor-1", meta);
+		assertThat(toolsResult).isNotNull();
+		assertThat(toolsResult.tools()).hasSize(1);
+		assertThat(capturedRequest[0]).isNotNull();
+		assertThat(capturedRequest[0].cursor()).isEqualTo("cursor-1");
+		assertThat(capturedRequest[0].meta()).containsEntry("requestId", "test-123");
+	}
+
 }

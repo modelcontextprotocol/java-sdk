@@ -155,6 +155,19 @@ public abstract class AbstractMcpSyncClientTests {
 	}
 
 	@Test
+	void testListToolsWithMeta() {
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			java.util.Map<String, Object> meta = java.util.Map.of("requestId", "test-123");
+			ListToolsResult tools = mcpSyncClient.listTools(McpSchema.FIRST_PAGE, meta);
+
+			assertThat(tools).isNotNull().satisfies(result -> {
+				assertThat(result.tools()).isNotNull().isNotEmpty();
+			});
+		});
+	}
+
+	@Test
 	void testListAllTools() {
 		withClient(createMcpTransport(), mcpSyncClient -> {
 			mcpSyncClient.initialize();
