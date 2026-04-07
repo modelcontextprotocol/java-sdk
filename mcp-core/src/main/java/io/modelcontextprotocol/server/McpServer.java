@@ -25,7 +25,6 @@ import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DefaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
-import io.modelcontextprotocol.util.ToolInputValidator;
 import io.modelcontextprotocol.util.ToolNameValidator;
 import reactor.core.publisher.Mono;
 
@@ -294,7 +293,7 @@ public interface McpServer {
 
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
 
-		boolean validateToolInputs = ToolInputValidator.isEnabledByDefault();
+		boolean validateToolInputs = true;
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -888,7 +887,7 @@ public interface McpServer {
 
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
 
-		boolean validateToolInputs = ToolInputValidator.isEnabledByDefault();
+		boolean validateToolInputs = true;
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -1431,7 +1430,7 @@ public interface McpServer {
 
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
 
-		boolean validateToolInputs = ToolInputValidator.isEnabledByDefault();
+		boolean validateToolInputs = true;
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -1929,7 +1928,7 @@ public interface McpServer {
 
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
 
-		boolean validateToolInputs = ToolInputValidator.isEnabledByDefault();
+		boolean validateToolInputs = true;
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be

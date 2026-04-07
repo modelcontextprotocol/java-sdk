@@ -24,21 +24,7 @@ public final class ToolInputValidator {
 
 	private static final Logger logger = LoggerFactory.getLogger(ToolInputValidator.class);
 
-	/**
-	 * System property to disable tool input validation. Set to "false" to disable.
-	 * Default is true (validation enabled).
-	 */
-	public static final String VALIDATE_TOOL_INPUTS_PROPERTY = "io.modelcontextprotocol.validateToolInputs";
-
 	private ToolInputValidator() {
-	}
-
-	/**
-	 * Returns whether validation is enabled by default based on system property.
-	 * @return true if validation is enabled (default), false if disabled
-	 */
-	public static boolean isEnabledByDefault() {
-		return !"false".equalsIgnoreCase(System.getProperty(VALIDATE_TOOL_INPUTS_PROPERTY));
 	}
 
 	/**
