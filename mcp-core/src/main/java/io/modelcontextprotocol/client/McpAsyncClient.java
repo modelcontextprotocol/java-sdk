@@ -736,12 +736,31 @@ public class McpAsyncClient {
 	 * @see #readResource(McpSchema.Resource)
 	 */
 	public Mono<McpSchema.ListResourcesResult> listResources(String cursor) {
+		return this.listResourcesInternal(cursor, null);
+	}
+
+	/**
+	 * Retrieves a paginated list of resources provided by the server. Resources represent
+	 * any kind of UTF-8 encoded data that an MCP server makes available to clients, such
+	 * as database records, API responses, log files, and more.
+	 * @param cursor Optional pagination cursor from a previous list request
+	 * @param meta Optional metadata to include in the request (_meta field)
+	 * @return A Mono that completes with the list of resources result.
+	 * @see McpSchema.ListResourcesResult
+	 * @see #readResource(McpSchema.Resource)
+	 */
+	public Mono<McpSchema.ListResourcesResult> listResources(String cursor, java.util.Map<String, Object> meta) {
+		return this.listResourcesInternal(cursor, meta);
+	}
+
+	private Mono<McpSchema.ListResourcesResult> listResourcesInternal(String cursor,
+			java.util.Map<String, Object> meta) {
 		return this.initializer.withInitialization("listing resources", init -> {
 			if (init.initializeResult().capabilities().resources() == null) {
 				return Mono.error(new IllegalStateException("Server does not provide the resources capability"));
 			}
 			return init.mcpSession()
-				.sendRequest(McpSchema.METHOD_RESOURCES_LIST, new McpSchema.PaginatedRequest(cursor),
+				.sendRequest(McpSchema.METHOD_RESOURCES_LIST, new McpSchema.PaginatedRequest(cursor, meta),
 						LIST_RESOURCES_RESULT_TYPE_REF);
 		});
 	}
@@ -806,12 +825,31 @@ public class McpAsyncClient {
 	 * @see McpSchema.ListResourceTemplatesResult
 	 */
 	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates(String cursor) {
+		return this.listResourceTemplatesInternal(cursor, null);
+	}
+
+	/**
+	 * Retrieves a paginated list of resource templates provided by the server. Resource
+	 * templates allow servers to expose parameterized resources using URI templates,
+	 * enabling dynamic resource access based on variable parameters.
+	 * @param cursor Optional pagination cursor from a previous list request
+	 * @param meta Optional metadata to include in the request (_meta field)
+	 * @return A Mono that completes with the list of resource templates result.
+	 * @see McpSchema.ListResourceTemplatesResult
+	 */
+	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates(String cursor,
+			java.util.Map<String, Object> meta) {
+		return this.listResourceTemplatesInternal(cursor, meta);
+	}
+
+	private Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplatesInternal(String cursor,
+			java.util.Map<String, Object> meta) {
 		return this.initializer.withInitialization("listing resource templates", init -> {
 			if (init.initializeResult().capabilities().resources() == null) {
 				return Mono.error(new IllegalStateException("Server does not provide the resources capability"));
 			}
 			return init.mcpSession()
-				.sendRequest(McpSchema.METHOD_RESOURCES_TEMPLATES_LIST, new McpSchema.PaginatedRequest(cursor),
+				.sendRequest(McpSchema.METHOD_RESOURCES_TEMPLATES_LIST, new McpSchema.PaginatedRequest(cursor, meta),
 						LIST_RESOURCE_TEMPLATES_RESULT_TYPE_REF);
 		});
 	}
@@ -906,8 +944,26 @@ public class McpAsyncClient {
 	 * @see #getPrompt(GetPromptRequest)
 	 */
 	public Mono<ListPromptsResult> listPrompts(String cursor) {
-		return this.initializer.withInitialization("listing prompts", init -> init.mcpSession()
-			.sendRequest(McpSchema.METHOD_PROMPT_LIST, new PaginatedRequest(cursor), LIST_PROMPTS_RESULT_TYPE_REF));
+		return this.listPromptsInternal(cursor, null);
+	}
+
+	/**
+	 * Retrieves a paginated list of prompts with optional metadata.
+	 * @param cursor Optional pagination cursor from a previous list request
+	 * @param meta Optional metadata to include in the request (_meta field)
+	 * @return A Mono that completes with the list of prompts result.
+	 * @see McpSchema.ListPromptsResult
+	 * @see #getPrompt(GetPromptRequest)
+	 */
+	public Mono<ListPromptsResult> listPrompts(String cursor, java.util.Map<String, Object> meta) {
+		return this.listPromptsInternal(cursor, meta);
+	}
+
+	private Mono<ListPromptsResult> listPromptsInternal(String cursor, java.util.Map<String, Object> meta) {
+		return this.initializer.withInitialization("listing prompts",
+				init -> init.mcpSession()
+					.sendRequest(McpSchema.METHOD_PROMPT_LIST, new PaginatedRequest(cursor, meta),
+							LIST_PROMPTS_RESULT_TYPE_REF));
 	}
 
 	/**
