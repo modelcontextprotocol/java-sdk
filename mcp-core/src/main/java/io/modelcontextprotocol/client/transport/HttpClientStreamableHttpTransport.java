@@ -112,6 +112,29 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	public static int BAD_REQUEST = 400;
 
+	/**
+	 * Determines whether an SSE event should be treated as a "message" event carrying a
+	 * JSON-RPC payload.
+	 *
+	 * <p>
+	 * Per the <a href=
+	 * "https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation">
+	 * SSE specification (WHATWG HTML Living Standard §9.2.6)</a>, an event with no
+	 * explicit {@code event:} field MUST be dispatched as a {@code message} event by
+	 * default. This method applies that rule by treating {@code null} or empty event
+	 * names as equivalent to {@link #MESSAGE_EVENT_TYPE}.
+	 *
+	 * <p>
+	 * This alignment ensures interoperability with MCP servers that emit bare
+	 * {@code data:} frames without an accompanying {@code event:} line, which are valid
+	 * per the SSE spec.
+	 * @param eventName the SSE event name, which may be {@code null} or empty
+	 * @return {@code true} if the event should be parsed as a JSON-RPC message
+	 */
+	static boolean isMessageEvent(String eventName) {
+		return eventName == null || eventName.isEmpty() || MESSAGE_EVENT_TYPE.equals(eventName);
+	}
+
 	private final McpJsonMapper jsonMapper;
 
 	private final URI baseUri;
@@ -311,7 +334,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 											+ statusCode));
 						}
 						else if (statusCode >= 200 && statusCode < 300) {
-							if (MESSAGE_EVENT_TYPE.equals(sseResponseEvent.sseEvent().event())) {
+							if (isMessageEvent(sseResponseEvent.sseEvent().event())) {
 								String data = sseResponseEvent.sseEvent().data();
 								// Per 2025-11-25 spec (SEP-1699), servers may
 								// send SSE events
