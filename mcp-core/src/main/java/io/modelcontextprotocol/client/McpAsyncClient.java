@@ -654,12 +654,12 @@ public class McpAsyncClient {
 	 * @param meta Optional metadata to include in the request (_meta field)
 	 * @return A Mono that emits the list of tools result
 	 */
-	public Mono<McpSchema.ListToolsResult> listTools(String cursor, java.util.Map<String, Object> meta) {
+	public Mono<McpSchema.ListToolsResult> listTools(String cursor, Map<String, Object> meta) {
 		return this.initializer.withInitialization("listing tools", init -> this.listToolsInternal(init, cursor, meta));
 	}
 
 	private Mono<McpSchema.ListToolsResult> listToolsInternal(Initialization init, String cursor,
-			java.util.Map<String, Object> meta) {
+			Map<String, Object> meta) {
 
 		if (init.initializeResult().capabilities().tools() == null) {
 			return Mono.error(new IllegalStateException("Server does not provide tools capability"));
@@ -749,12 +749,11 @@ public class McpAsyncClient {
 	 * @see McpSchema.ListResourcesResult
 	 * @see #readResource(McpSchema.Resource)
 	 */
-	public Mono<McpSchema.ListResourcesResult> listResources(String cursor, java.util.Map<String, Object> meta) {
+	public Mono<McpSchema.ListResourcesResult> listResources(String cursor, Map<String, Object> meta) {
 		return this.listResourcesInternal(cursor, meta);
 	}
 
-	private Mono<McpSchema.ListResourcesResult> listResourcesInternal(String cursor,
-			java.util.Map<String, Object> meta) {
+	private Mono<McpSchema.ListResourcesResult> listResourcesInternal(String cursor, Map<String, Object> meta) {
 		return this.initializer.withInitialization("listing resources", init -> {
 			if (init.initializeResult().capabilities().resources() == null) {
 				return Mono.error(new IllegalStateException("Server does not provide the resources capability"));
@@ -837,13 +836,12 @@ public class McpAsyncClient {
 	 * @return A Mono that completes with the list of resource templates result.
 	 * @see McpSchema.ListResourceTemplatesResult
 	 */
-	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates(String cursor,
-			java.util.Map<String, Object> meta) {
+	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates(String cursor, Map<String, Object> meta) {
 		return this.listResourceTemplatesInternal(cursor, meta);
 	}
 
 	private Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplatesInternal(String cursor,
-			java.util.Map<String, Object> meta) {
+			Map<String, Object> meta) {
 		return this.initializer.withInitialization("listing resource templates", init -> {
 			if (init.initializeResult().capabilities().resources() == null) {
 				return Mono.error(new IllegalStateException("Server does not provide the resources capability"));
@@ -955,11 +953,11 @@ public class McpAsyncClient {
 	 * @see McpSchema.ListPromptsResult
 	 * @see #getPrompt(GetPromptRequest)
 	 */
-	public Mono<ListPromptsResult> listPrompts(String cursor, java.util.Map<String, Object> meta) {
+	public Mono<ListPromptsResult> listPrompts(String cursor, Map<String, Object> meta) {
 		return this.listPromptsInternal(cursor, meta);
 	}
 
-	private Mono<ListPromptsResult> listPromptsInternal(String cursor, java.util.Map<String, Object> meta) {
+	private Mono<ListPromptsResult> listPromptsInternal(String cursor, Map<String, Object> meta) {
 		return this.initializer.withInitialization("listing prompts",
 				init -> init.mcpSession()
 					.sendRequest(McpSchema.METHOD_PROMPT_LIST, new PaginatedRequest(cursor, meta),

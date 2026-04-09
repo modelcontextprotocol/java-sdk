@@ -158,7 +158,7 @@ public abstract class AbstractMcpSyncClientTests {
 	void testListToolsWithMeta() {
 		withClient(createMcpTransport(), mcpSyncClient -> {
 			mcpSyncClient.initialize();
-			java.util.Map<String, Object> meta = java.util.Map.of("requestId", "test-123");
+			Map<String, Object> meta = java.util.Map.of("requestId", "test-123");
 			ListToolsResult tools = mcpSyncClient.listTools(McpSchema.FIRST_PAGE, meta);
 
 			assertThat(tools).isNotNull().satisfies(result -> {
@@ -695,7 +695,7 @@ public abstract class AbstractMcpSyncClientTests {
 	void testListResourcesWithMeta() {
 		withClient(createMcpTransport(), mcpSyncClient -> {
 			mcpSyncClient.initialize();
-			java.util.Map<String, Object> meta = java.util.Map.of("requestId", "test-123");
+			Map<String, Object> meta = java.util.Map.of("requestId", "test-123");
 			ListResourcesResult resources = mcpSyncClient.listResources(McpSchema.FIRST_PAGE, meta);
 
 			assertThat(resources).isNotNull().satisfies(result -> {
@@ -708,7 +708,7 @@ public abstract class AbstractMcpSyncClientTests {
 	void testListResourceTemplatesWithMeta() {
 		withClient(createMcpTransport(), mcpSyncClient -> {
 			mcpSyncClient.initialize();
-			java.util.Map<String, Object> meta = java.util.Map.of("requestId", "test-123");
+			Map<String, Object> meta = java.util.Map.of("requestId", "test-123");
 			ListResourceTemplatesResult result = mcpSyncClient.listResourceTemplates(McpSchema.FIRST_PAGE, meta);
 
 			assertThat(result).isNotNull().satisfies(r -> {
@@ -721,7 +721,7 @@ public abstract class AbstractMcpSyncClientTests {
 	void testListPromptsWithMeta() {
 		withClient(createMcpTransport(), mcpSyncClient -> {
 			mcpSyncClient.initialize();
-			java.util.Map<String, Object> meta = java.util.Map.of("requestId", "test-123");
+			Map<String, Object> meta = java.util.Map.of("requestId", "test-123");
 			McpSchema.ListPromptsResult result = mcpSyncClient.listPrompts(McpSchema.FIRST_PAGE, meta);
 
 			assertThat(result).isNotNull().satisfies(r -> {
