@@ -155,6 +155,19 @@ public abstract class AbstractMcpSyncClientTests {
 	}
 
 	@Test
+	void testListToolsWithMeta() {
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			java.util.Map<String, Object> meta = java.util.Map.of("requestId", "test-123");
+			ListToolsResult tools = mcpSyncClient.listTools(McpSchema.FIRST_PAGE, meta);
+
+			assertThat(tools).isNotNull().satisfies(result -> {
+				assertThat(result.tools()).isNotNull().isNotEmpty();
+			});
+		});
+	}
+
+	@Test
 	void testListAllTools() {
 		withClient(createMcpTransport(), mcpSyncClient -> {
 			mcpSyncClient.initialize();
@@ -675,6 +688,45 @@ public abstract class AbstractMcpSyncClientTests {
 
 			assertThat(receivedNotifications).isNotEmpty();
 			assertThat(receivedNotifications.get(0).progressToken()).isEqualTo("test-token");
+		});
+	}
+
+	@Test
+	void testListResourcesWithMeta() {
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			java.util.Map<String, Object> meta = java.util.Map.of("requestId", "test-123");
+			ListResourcesResult resources = mcpSyncClient.listResources(McpSchema.FIRST_PAGE, meta);
+
+			assertThat(resources).isNotNull().satisfies(result -> {
+				assertThat(result.resources()).isNotNull();
+			});
+		});
+	}
+
+	@Test
+	void testListResourceTemplatesWithMeta() {
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			java.util.Map<String, Object> meta = java.util.Map.of("requestId", "test-123");
+			ListResourceTemplatesResult result = mcpSyncClient.listResourceTemplates(McpSchema.FIRST_PAGE, meta);
+
+			assertThat(result).isNotNull().satisfies(r -> {
+				assertThat(r.resourceTemplates()).isNotNull();
+			});
+		});
+	}
+
+	@Test
+	void testListPromptsWithMeta() {
+		withClient(createMcpTransport(), mcpSyncClient -> {
+			mcpSyncClient.initialize();
+			java.util.Map<String, Object> meta = java.util.Map.of("requestId", "test-123");
+			McpSchema.ListPromptsResult result = mcpSyncClient.listPrompts(McpSchema.FIRST_PAGE, meta);
+
+			assertThat(result).isNotNull().satisfies(r -> {
+				assertThat(r.prompts()).isNotNull();
+			});
 		});
 	}
 

@@ -259,6 +259,18 @@ public class McpSyncClient implements AutoCloseable {
 
 	}
 
+	/**
+	 * Retrieves a paginated list of tools provided by the server.
+	 * @param cursor Optional pagination cursor from a previous list request
+	 * @param meta Optional metadata to include in the request (_meta field)
+	 * @return The list of tools result containing: - tools: List of available tools, each
+	 * with a name, description, and input schema - nextCursor: Optional cursor for
+	 * pagination if more tools are available
+	 */
+	public McpSchema.ListToolsResult listTools(String cursor, java.util.Map<String, Object> meta) {
+		return withProvidedContext(this.delegate.listTools(cursor, meta)).block();
+	}
+
 	// --------------------------
 	// Resources
 	// --------------------------
@@ -279,6 +291,17 @@ public class McpSyncClient implements AutoCloseable {
 	 */
 	public McpSchema.ListResourcesResult listResources(String cursor) {
 		return withProvidedContext(this.delegate.listResources(cursor)).block();
+
+	}
+
+	/**
+	 * Retrieves a paginated list of resources with optional metadata.
+	 * @param cursor Optional pagination cursor from a previous list request
+	 * @param meta Optional metadata to include in the request (_meta field)
+	 * @return The list of resources result
+	 */
+	public McpSchema.ListResourcesResult listResources(String cursor, java.util.Map<String, Object> meta) {
+		return withProvidedContext(this.delegate.listResources(cursor, meta)).block();
 
 	}
 
@@ -325,6 +348,21 @@ public class McpSyncClient implements AutoCloseable {
 	}
 
 	/**
+	 * Resource templates allow servers to expose parameterized resources using URI
+	 * templates. Arguments may be auto-completed through the completion API.
+	 *
+	 * Retrieves a paginated list of resource templates provided by the server.
+	 * @param cursor Optional pagination cursor from a previous list request
+	 * @param meta Optional metadata to include in the request (_meta field)
+	 * @return The list of resource templates result.
+	 */
+	public McpSchema.ListResourceTemplatesResult listResourceTemplates(String cursor,
+			java.util.Map<String, Object> meta) {
+		return withProvidedContext(this.delegate.listResourceTemplates(cursor, meta)).block();
+
+	}
+
+	/**
 	 * Subscriptions. The protocol supports optional subscriptions to resource changes.
 	 * Clients can subscribe to specific resources and receive notifications when they
 	 * change.
@@ -367,6 +405,17 @@ public class McpSyncClient implements AutoCloseable {
 	 */
 	public ListPromptsResult listPrompts(String cursor) {
 		return withProvidedContext(this.delegate.listPrompts(cursor)).block();
+
+	}
+
+	/**
+	 * Retrieves a paginated list of prompts provided by the server.
+	 * @param cursor Optional pagination cursor from a previous list request
+	 * @param meta Optional metadata to include in the request (_meta field)
+	 * @return The list of prompts result.
+	 */
+	public ListPromptsResult listPrompts(String cursor, java.util.Map<String, Object> meta) {
+		return withProvidedContext(this.delegate.listPrompts(cursor, meta)).block();
 
 	}
 
