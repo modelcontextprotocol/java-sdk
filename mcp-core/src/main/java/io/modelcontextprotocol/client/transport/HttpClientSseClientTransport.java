@@ -33,6 +33,7 @@ import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
+import reactor.adapter.JdkFlowAdapter;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -92,7 +93,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 * HTTP client for sending messages to the server. Uses HTTP POST over the message
 	 * endpoint
 	 */
-	private final OwnedHttpClient ownedHttpClient;
+	private final HttpClient httpClient;
 
 	/** HTTP request builder for building requests to send messages to the server */
 	private final HttpRequest.Builder requestBuilder;
@@ -140,13 +141,9 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		this.baseUri = URI.create(baseUri);
 		this.sseEndpoint = sseEndpoint;
 		this.jsonMapper = jsonMapper;
-		this.ownedHttpClient = OwnedHttpClient.create(httpClient);
+		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
 		this.httpRequestCustomizer = httpRequestCustomizer;
-	}
-
-	private HttpClient httpClient() {
-		return this.ownedHttpClient.currentClientOrThrow();
 	}
 
 	@Override
@@ -327,13 +324,29 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
 		}).flatMap(requestBuilder -> Mono.create(sink -> {
-			Disposable connection = Flux.<ResponseEvent>create(sseSink -> this.httpClient()
-				.sendAsync(requestBuilder.build(),
-						responseInfo -> ResponseSubscribers.sseToBodySubscriber(responseInfo, sseSink))
-				.exceptionallyCompose(e -> {
-					sseSink.error(e);
-					return CompletableFuture.failedFuture(e);
-				}))
+			Disposable connection = Mono
+				.fromFuture(() -> this.httpClient
+					.sendAsync(requestBuilder.build(), HttpResponse.BodyHandlers.ofPublisher()))
+				.flatMapMany(response -> {
+					HttpResponse.ResponseInfo responseInfo = new HttpResponse.ResponseInfo() {
+						@Override
+						public int statusCode() {
+							return response.statusCode();
+						}
+
+						@Override
+						public java.net.http.HttpHeaders headers() {
+							return response.headers();
+						}
+
+						@Override
+						public HttpClient.Version version() {
+							return response.version();
+						}
+					};
+					Flux<String> lines = ResponseSubscribers.decodeLines(response.body());
+					return ResponseSubscribers.decodeSseResponse(responseInfo, lines);
+				})
 				.map(responseEvent -> (ResponseSubscribers.SseResponseEvent) responseEvent)
 				.flatMap(responseEvent -> {
 					if (isClosing) {
@@ -456,7 +469,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", requestUri, body, transportContext));
 		}).flatMap(customizedBuilder -> {
 			var request = customizedBuilder.build();
-			return Mono.fromFuture(this.httpClient().sendAsync(request, HttpResponse.BodyHandlers.ofString()));
+			return Mono.fromFuture(this.httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()));
 		});
 	}
 
@@ -476,7 +489,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			if (subscription != null && !subscription.isDisposed()) {
 				subscription.dispose();
 			}
-		}).then(this.ownedHttpClient.releaseAfterClose());
+		});
 	}
 
 	/**
