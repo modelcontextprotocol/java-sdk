@@ -1299,6 +1299,29 @@ public final class McpSchema {
 	}
 
 	/**
+	 * A JSON Schema object that describes the expected structure of arguments or output.
+	 *
+	 * @param type The type of the schema (e.g., "object")
+	 * @param properties The properties of the schema object
+	 * @param required List of required property names
+	 * @param additionalProperties Whether additional properties are allowed
+	 * @param defs Schema definitions using the newer $defs keyword
+	 * @param definitions Schema definitions using the legacy definitions keyword
+	 * @deprecated use {@link Map} instead.
+	 */
+	@Deprecated
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record JsonSchema( // @formatter:off
+		@JsonProperty("type") String type,
+		@JsonProperty("properties") Map<String, Object> properties,
+		@JsonProperty("required") List<String> required,
+		@JsonProperty("additionalProperties") Boolean additionalProperties,
+		@JsonProperty("$defs") Map<String, Object> defs,
+		@JsonProperty("definitions") Map<String, Object> definitions) { // @formatter:on
+	}
+
+	/**
 	 * Additional properties describing a Tool to clients.
 	 *
 	 * NOTE: all properties in ToolAnnotations are **hints**. They are not guaranteed to
@@ -1380,6 +1403,27 @@ public final class McpSchema {
 			public Builder description(String description) {
 				this.description = description;
 				return this;
+			}
+
+			/**
+			 * @deprecated use {@link #inputSchema(Map)} instead.
+			 */
+			@Deprecated
+			public Builder inputSchema(JsonSchema inputSchema) {
+				Map<String, Object> schema = new HashMap<>();
+				if (inputSchema.type() != null)
+					schema.put("type", inputSchema.type());
+				if (inputSchema.properties() != null)
+					schema.put("properties", inputSchema.properties());
+				if (inputSchema.required() != null)
+					schema.put("required", inputSchema.required());
+				if (inputSchema.additionalProperties() != null)
+					schema.put("additionalProperties", inputSchema.additionalProperties());
+				if (inputSchema.defs() != null)
+					schema.put("$defs", inputSchema.defs());
+				if (inputSchema.definitions() != null)
+					schema.put("definitions", inputSchema.definitions());
+				return inputSchema(schema);
 			}
 
 			public Builder inputSchema(Map<String, Object> inputSchema) {

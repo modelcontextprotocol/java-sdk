@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol.server;
 
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
+
 import java.util.List;
 import java.util.Map;
 
@@ -37,7 +39,7 @@ class SyncToolSpecificationBuilderTest {
 	@Test
 	void builderShouldCreateValidSyncToolSpecification() {
 
-		Tool tool = Tool.builder().name("test-tool").title("A test tool").inputSchema(Map.of()).build();
+		Tool tool = Tool.builder().name("test-tool").title("A test tool").inputSchema(EMPTY_JSON_SCHEMA).build();
 
 		McpServerFeatures.SyncToolSpecification specification = McpServerFeatures.SyncToolSpecification.builder()
 			.tool(tool)
@@ -61,7 +63,7 @@ class SyncToolSpecificationBuilderTest {
 
 	@Test
 	void builderShouldThrowExceptionWhenCallToolIsNull() {
-		Tool tool = Tool.builder().name("test-tool").description("A test tool").inputSchema(Map.of()).build();
+		Tool tool = Tool.builder().name("test-tool").description("A test tool").inputSchema(EMPTY_JSON_SCHEMA).build();
 
 		assertThatThrownBy(() -> McpServerFeatures.SyncToolSpecification.builder().tool(tool).build())
 			.isInstanceOf(IllegalArgumentException.class)
@@ -70,7 +72,7 @@ class SyncToolSpecificationBuilderTest {
 
 	@Test
 	void builderShouldAllowMethodChaining() {
-		Tool tool = Tool.builder().name("test-tool").description("A test tool").inputSchema(Map.of()).build();
+		Tool tool = Tool.builder().name("test-tool").description("A test tool").inputSchema(EMPTY_JSON_SCHEMA).build();
 		McpServerFeatures.SyncToolSpecification.Builder builder = McpServerFeatures.SyncToolSpecification.builder();
 
 		// Then - verify method chaining returns the same builder instance
@@ -82,7 +84,11 @@ class SyncToolSpecificationBuilderTest {
 
 	@Test
 	void builtSpecificationShouldExecuteCallToolCorrectly() {
-		Tool tool = Tool.builder().name("calculator").description("Simple calculator").inputSchema(Map.of()).build();
+		Tool tool = Tool.builder()
+			.name("calculator")
+			.description("Simple calculator")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
 		String expectedResult = "42";
 
 		McpServerFeatures.SyncToolSpecification specification = McpServerFeatures.SyncToolSpecification.builder()

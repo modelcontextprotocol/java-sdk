@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol.server;
 
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
+
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -118,7 +120,7 @@ class HttpServletStatelessIntegrationTests {
 			.isError(false)
 			.build();
 		McpStatelessServerFeatures.SyncToolSpecification tool1 = new McpStatelessServerFeatures.SyncToolSpecification(
-				Tool.builder().name("tool1").title("tool1 description").inputSchema(Map.of()).build(),
+				Tool.builder().name("tool1").title("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build(),
 				(transportContext, request) -> {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()

@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol.server;
 
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
+
 import java.util.List;
 import java.util.Map;
 
@@ -105,7 +107,11 @@ public abstract class AbstractMcpSyncServerTests {
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.build();
 
-		Tool newTool = McpSchema.Tool.builder().name("new-tool").title("New test tool").inputSchema(Map.of()).build();
+		Tool newTool = McpSchema.Tool.builder()
+			.name("new-tool")
+			.title("New test tool")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
 
 		assertThatCode(() -> mcpSyncServer.addTool(McpServerFeatures.SyncToolSpecification.builder()
 			.tool(newTool)
@@ -120,7 +126,7 @@ public abstract class AbstractMcpSyncServerTests {
 		Tool duplicateTool = McpSchema.Tool.builder()
 			.name(TEST_TOOL_NAME)
 			.title("Duplicate tool")
-			.inputSchema(Map.of())
+			.inputSchema(EMPTY_JSON_SCHEMA)
 			.build();
 
 		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
@@ -142,7 +148,7 @@ public abstract class AbstractMcpSyncServerTests {
 		Tool duplicateTool = McpSchema.Tool.builder()
 			.name("duplicate-build-toolcall")
 			.title("Duplicate toolcall during building")
-			.inputSchema(Map.of())
+			.inputSchema(EMPTY_JSON_SCHEMA)
 			.build();
 
 		assertThatThrownBy(() -> prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
@@ -160,7 +166,7 @@ public abstract class AbstractMcpSyncServerTests {
 		Tool duplicateTool = McpSchema.Tool.builder()
 			.name("batch-list-tool")
 			.title("Duplicate tool in batch list")
-			.inputSchema(Map.of())
+			.inputSchema(EMPTY_JSON_SCHEMA)
 			.build();
 		List<McpServerFeatures.SyncToolSpecification> specs = List.of(
 				McpServerFeatures.SyncToolSpecification.builder()
@@ -187,7 +193,7 @@ public abstract class AbstractMcpSyncServerTests {
 		Tool duplicateTool = McpSchema.Tool.builder()
 			.name("batch-varargs-tool")
 			.title("Duplicate tool in batch varargs")
-			.inputSchema(Map.of())
+			.inputSchema(EMPTY_JSON_SCHEMA)
 			.build();
 
 		assertThatThrownBy(() -> prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
@@ -208,7 +214,11 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testRemoveTool() {
-		Tool tool = McpSchema.Tool.builder().name(TEST_TOOL_NAME).title("Test tool").inputSchema(Map.of()).build();
+		Tool tool = McpSchema.Tool.builder()
+			.name(TEST_TOOL_NAME)
+			.title("Test tool")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
 
 		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
