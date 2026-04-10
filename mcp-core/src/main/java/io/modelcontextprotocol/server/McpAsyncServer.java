@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server;
@@ -13,7 +13,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
@@ -104,7 +103,7 @@ public class McpAsyncServer {
 
 	private final String instructions;
 
-	private final CopyOnWriteArrayList<McpServerFeatures.AsyncToolSpecification> tools = new CopyOnWriteArrayList<>();
+	private final ToolsRepository toolsRepository;
 
 	private final ConcurrentHashMap<String, McpServerFeatures.AsyncResourceSpecification> resources = new ConcurrentHashMap<>();
 
@@ -135,7 +134,8 @@ public class McpAsyncServer {
 		this.serverInfo = features.serverInfo();
 		this.serverCapabilities = features.serverCapabilities().mutate().logging().build();
 		this.instructions = features.instructions();
-		this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, features.tools()));
+		this.toolsRepository = initializeToolsRepository(features.toolsRepository(), jsonSchemaValidator,
+				features.tools());
 		this.resources.putAll(features.resources());
 		this.resourceTemplates.putAll(features.resourceTemplates());
 		this.prompts.putAll(features.prompts());
@@ -155,6 +155,27 @@ public class McpAsyncServer {
 		});
 	}
 
+	/**
+	 * Initialize the tools repository, wrapping tools with structured output handling.
+	 */
+	private ToolsRepository initializeToolsRepository(ToolsRepository providedRepository,
+			JsonSchemaValidator jsonSchemaValidator, List<McpServerFeatures.AsyncToolSpecification> initialTools) {
+		if (providedRepository != null) {
+			// Add initial tools to the provided repository with structured output
+			// handling
+			if (initialTools != null) {
+				for (McpServerFeatures.AsyncToolSpecification tool : initialTools) {
+					providedRepository.addTool(withStructuredOutputHandling(jsonSchemaValidator, tool));
+				}
+			}
+			return providedRepository;
+		}
+		// Create default in-memory repository with wrapped tools
+		List<McpServerFeatures.AsyncToolSpecification> wrappedTools = withStructuredOutputHandling(jsonSchemaValidator,
+				initialTools);
+		return new InMemoryToolsRepository(wrappedTools);
+	}
+
 	McpAsyncServer(McpStreamableServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
@@ -163,7 +184,8 @@ public class McpAsyncServer {
 		this.serverInfo = features.serverInfo();
 		this.serverCapabilities = features.serverCapabilities().mutate().logging().build();
 		this.instructions = features.instructions();
-		this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, features.tools()));
+		this.toolsRepository = initializeToolsRepository(features.toolsRepository(), jsonSchemaValidator,
+				features.tools());
 		this.resources.putAll(features.resources());
 		this.resourceTemplates.putAll(features.resourceTemplates());
 		this.prompts.putAll(features.prompts());
@@ -343,12 +365,7 @@ public class McpAsyncServer {
 		var wrappedToolSpecification = withStructuredOutputHandling(this.jsonSchemaValidator, toolSpecification);
 
 		return Mono.defer(() -> {
-			// Remove tools with duplicate tool names first
-			if (this.tools.removeIf(th -> th.tool().name().equals(wrappedToolSpecification.tool().name()))) {
-				logger.warn("Replace existing Tool with name '{}'", wrappedToolSpecification.tool().name());
-			}
-
-			this.tools.add(wrappedToolSpecification);
+			this.toolsRepository.addTool(wrappedToolSpecification);
 			logger.debug("Added tool handler: {}", wrappedToolSpecification.tool().name());
 
 			if (this.serverCapabilities.tools().listChanged()) {
@@ -478,7 +495,11 @@ public class McpAsyncServer {
 	 * @return A Flux stream of all registered tools
 	 */
 	public Flux<Tool> listTools() {
-		return Flux.fromIterable(this.tools).map(McpServerFeatures.AsyncToolSpecification::tool);
+		// Note: This method returns all tools without exchange context.
+		// For context-aware listing, use toolsRepository.listTools(exchange, cursor)
+		// directly.
+		return Flux.defer(
+				() -> toolsRepository.listTools(null, null).flatMapMany(result -> Flux.fromIterable(result.tools())));
 	}
 
 	/**
@@ -495,8 +516,8 @@ public class McpAsyncServer {
 		}
 
 		return Mono.defer(() -> {
-			if (this.tools.removeIf(toolSpecification -> toolSpecification.tool().name().equals(toolName))) {
-
+			boolean removed = this.toolsRepository.removeTool(toolName);
+			if (removed) {
 				logger.debug("Removed tool handler: {}", toolName);
 				if (this.serverCapabilities.tools().listChanged()) {
 					return notifyToolsListChanged();
@@ -505,7 +526,6 @@ public class McpAsyncServer {
 			else {
 				logger.warn("Ignore as a Tool with name '{}' not found", toolName);
 			}
-
 			return Mono.empty();
 		});
 	}
@@ -520,9 +540,16 @@ public class McpAsyncServer {
 
 	private McpRequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
 		return (exchange, params) -> {
-			List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList();
-
-			return Mono.just(new McpSchema.ListToolsResult(tools, null));
+			// Extract cursor from params if present
+			String cursor = null;
+			if (params != null) {
+				McpSchema.PaginatedRequest paginatedRequest = jsonMapper.convertValue(params,
+						new TypeRef<McpSchema.PaginatedRequest>() {
+						});
+				cursor = paginatedRequest.cursor();
+			}
+			return this.toolsRepository.listTools(exchange, cursor)
+				.map(result -> new McpSchema.ListToolsResult(result.tools(), result.nextCursor()));
 		};
 	}
 
@@ -532,18 +559,12 @@ public class McpAsyncServer {
 					new TypeRef<McpSchema.CallToolRequest>() {
 					});
 
-			Optional<McpServerFeatures.AsyncToolSpecification> toolSpecification = this.tools.stream()
-				.filter(tr -> callToolRequest.name().equals(tr.tool().name()))
-				.findAny();
-
-			if (toolSpecification.isEmpty()) {
-				return Mono.error(McpError.builder(McpSchema.ErrorCodes.INVALID_PARAMS)
-					.message("Unknown tool: invalid_tool_name")
+			return this.toolsRepository.resolveToolForCall(callToolRequest.name(), exchange)
+				.switchIfEmpty(Mono.error(McpError.builder(McpSchema.ErrorCodes.INVALID_PARAMS)
+					.message("Unknown tool: " + callToolRequest.name())
 					.data("Tool not found: " + callToolRequest.name())
-					.build());
-			}
-
-			return toolSpecification.get().callHandler().apply(exchange, callToolRequest);
+					.build()))
+				.flatMap(spec -> spec.callHandler().apply(exchange, callToolRequest));
 		};
 	}
 
