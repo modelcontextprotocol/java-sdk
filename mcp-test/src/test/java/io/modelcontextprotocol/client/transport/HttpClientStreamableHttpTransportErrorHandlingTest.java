@@ -18,7 +18,6 @@ import java.util.function.Predicate;
 import com.sun.net.httpserver.HttpServer;
 import io.modelcontextprotocol.client.transport.customizer.McpHttpClientAuthorizationErrorHandler;
 import io.modelcontextprotocol.common.McpTransportContext;
-import org.reactivestreams.Publisher;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpClientTransport;
@@ -34,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -365,6 +365,26 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 
 		// This should trigger reconnect which will fail
 		// The error should be handled internally and passed to exception handler
+
+		StepVerifier.create(transport.closeGracefully()).verifyComplete();
+	}
+
+	@Test
+	void test405OnConnectReturnsEmptyFlux() {
+		serverSseResponseStatus.set(405);
+		AtomicReference<Throwable> capturedException = new AtomicReference<>();
+		var transport = HttpClientStreamableHttpTransport.builder(HOST).openConnectionOnStartup(true).build();
+		transport.setExceptionHandler(capturedException::set);
+
+		var messages = new ArrayList<McpSchema.JSONRPCMessage>();
+		StepVerifier.create(transport.connect(msg -> msg.doOnNext(messages::add))).verifyComplete();
+
+		Awaitility.await()
+			.atMost(Duration.ofSeconds(1))
+			.untilAsserted(() -> assertThat(processedSseConnectCount.get()).isEqualTo(1));
+
+		assertThat(messages).isEmpty();
+		assertThat(capturedException.get()).isNull();
 
 		StepVerifier.create(transport.closeGracefully()).verifyComplete();
 	}

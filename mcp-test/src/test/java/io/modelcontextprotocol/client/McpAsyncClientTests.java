@@ -238,72 +238,159 @@ class McpAsyncClientTests {
 	}
 
 	@Test
-	void testListToolsWithEmptyCursor() {
-		McpSchema.Tool addTool = McpSchema.Tool.builder().name("add").description("calculate add").build();
-		McpSchema.Tool subtractTool = McpSchema.Tool.builder()
-			.name("subtract")
-			.description("calculate subtract")
-			.build();
-		McpSchema.ListToolsResult mockToolsResult = new McpSchema.ListToolsResult(List.of(addTool, subtractTool), "");
+	void testListToolsWithCursorAndMeta() {
+		var transport = new TestMcpClientTransport();
+		McpAsyncClient client = McpClient.async(transport).build();
 
-		McpClientTransport transport = new McpClientTransport() {
-			Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler;
+		Map<String, Object> meta = Map.of("customKey", "customValue");
+		McpSchema.ListToolsResult result = client.listTools("cursor-1", meta).block();
+		assertThat(result).isNotNull();
+		assertThat(result.tools()).hasSize(1);
+		assertThat(transport.getCapturedRequest()).isNotNull();
+		assertThat(transport.getCapturedRequest().cursor()).isEqualTo("cursor-1");
+		assertThat(transport.getCapturedRequest().meta()).containsEntry("customKey", "customValue");
+	}
 
-			@Override
-			public Mono<Void> connect(
-					Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
-				return Mono.deferContextual(ctx -> {
-					this.handler = handler;
-					return Mono.empty();
-				});
-			}
+	@Test
+	void testListResourcesWithCursorAndMeta() {
+		var transport = new TestMcpClientTransport();
+		McpAsyncClient client = McpClient.async(transport).build();
 
-			@Override
-			public Mono<Void> closeGracefully() {
+		Map<String, Object> meta = Map.of("customKey", "customValue");
+		McpSchema.ListResourcesResult result = client.listResources("cursor-1", meta).block();
+		assertThat(result).isNotNull();
+		assertThat(result.resources()).hasSize(1);
+		assertThat(transport.getCapturedRequest()).isNotNull();
+		assertThat(transport.getCapturedRequest().cursor()).isEqualTo("cursor-1");
+		assertThat(transport.getCapturedRequest().meta()).containsEntry("customKey", "customValue");
+	}
+
+	@Test
+	void testListResourceTemplatesWithCursorAndMeta() {
+		var transport = new TestMcpClientTransport();
+		McpAsyncClient client = McpClient.async(transport).build();
+
+		Map<String, Object> meta = Map.of("customKey", "customValue");
+		McpSchema.ListResourceTemplatesResult result = client.listResourceTemplates("cursor-1", meta).block();
+		assertThat(result).isNotNull();
+		assertThat(result.resourceTemplates()).hasSize(1);
+		assertThat(transport.getCapturedRequest()).isNotNull();
+		assertThat(transport.getCapturedRequest().cursor()).isEqualTo("cursor-1");
+		assertThat(transport.getCapturedRequest().meta()).containsEntry("customKey", "customValue");
+	}
+
+	@Test
+	void testListPromptsWithCursorAndMeta() {
+		var transport = new TestMcpClientTransport();
+		McpAsyncClient client = McpClient.async(transport).build();
+
+		Map<String, Object> meta = Map.of("customKey", "customValue");
+		McpSchema.ListPromptsResult result = client.listPrompts("cursor-1", meta).block();
+		assertThat(result).isNotNull();
+		assertThat(result.prompts()).hasSize(1);
+		assertThat(transport.getCapturedRequest()).isNotNull();
+		assertThat(transport.getCapturedRequest().cursor()).isEqualTo("cursor-1");
+		assertThat(transport.getCapturedRequest().meta()).containsEntry("customKey", "customValue");
+
+	}
+
+	static class TestMcpClientTransport implements McpClientTransport {
+
+		private Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler;
+
+		private McpSchema.PaginatedRequest capturedRequest = null;
+
+		@Override
+		public Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
+			return Mono.deferContextual(ctx -> {
+				this.handler = handler;
+				return Mono.empty();
+			});
+		}
+
+		@Override
+		public Mono<Void> closeGracefully() {
+			return Mono.empty();
+		}
+
+		@Override
+		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+			if (!(message instanceof McpSchema.JSONRPCRequest request)) {
 				return Mono.empty();
 			}
+			McpSchema.JSONRPCResponse response;
+			if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
+				McpSchema.ServerCapabilities caps = McpSchema.ServerCapabilities.builder()
+					.prompts(false)
+					.resources(false, false)
+					.tools(false)
+					.build();
 
-			@Override
-			public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
-				if (!(message instanceof McpSchema.JSONRPCRequest request)) {
-					return Mono.empty();
-				}
+				McpSchema.InitializeResult initResult = new McpSchema.InitializeResult(ProtocolVersions.MCP_2024_11_05,
+						caps, MOCK_SERVER_INFO, null);
 
-				McpSchema.JSONRPCResponse response;
-				if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
-					response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), MOCK_INIT_RESULT,
-							null);
-				}
-				else if (McpSchema.METHOD_TOOLS_LIST.equals(request.method())) {
-					response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), mockToolsResult,
-							null);
-				}
-				else {
-					return Mono.empty();
-				}
-
-				return handler.apply(Mono.just(response)).then();
+				response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), initResult, null);
 			}
+			else if (McpSchema.METHOD_PROMPT_LIST.equals(request.method())) {
+				capturedRequest = JSON_MAPPER.convertValue(request.params(), McpSchema.PaginatedRequest.class);
 
-			@Override
-			public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
-				return JSON_MAPPER.convertValue(data, new TypeRef<>() {
-					@Override
-					public java.lang.reflect.Type getType() {
-						return typeRef.getType();
-					}
-				});
+				McpSchema.Prompt mockPrompt = new McpSchema.Prompt("test-prompt", "A test prompt", List.of());
+				McpSchema.ListPromptsResult mockPromptResult = new McpSchema.ListPromptsResult(List.of(mockPrompt),
+						null);
+				response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), mockPromptResult,
+						null);
 			}
-		};
+			else if (McpSchema.METHOD_RESOURCES_TEMPLATES_LIST.equals(request.method())) {
+				capturedRequest = JSON_MAPPER.convertValue(request.params(), McpSchema.PaginatedRequest.class);
 
-		McpAsyncClient client = McpClient.async(transport).enableCallToolSchemaCaching(true).build();
+				McpSchema.ResourceTemplate mockTemplate = new McpSchema.ResourceTemplate("file:///{name}", "template",
+						null, null, null);
+				McpSchema.ListResourceTemplatesResult mockResourceTemplateResult = new McpSchema.ListResourceTemplatesResult(
+						List.of(mockTemplate), null);
+				response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
+						mockResourceTemplateResult, null);
+			}
+			else if (McpSchema.METHOD_RESOURCES_LIST.equals(request.method())) {
+				capturedRequest = JSON_MAPPER.convertValue(request.params(), McpSchema.PaginatedRequest.class);
 
-		Mono<McpSchema.ListToolsResult> mono = client.listTools();
-		McpSchema.ListToolsResult toolsResult = mono.block();
-		assertThat(toolsResult).isNotNull();
+				McpSchema.Resource mockResource = McpSchema.Resource.builder()
+					.uri("file:///test.txt")
+					.name("test.txt")
+					.build();
+				McpSchema.ListResourcesResult mockResourceResult = new McpSchema.ListResourcesResult(
+						List.of(mockResource), null);
 
-		Set<String> names = toolsResult.tools().stream().map(McpSchema.Tool::name).collect(Collectors.toSet());
-		assertThat(names).containsExactlyInAnyOrder("subtract", "add");
+				response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), mockResourceResult,
+						null);
+			}
+			else if (McpSchema.METHOD_TOOLS_LIST.equals(request.method())) {
+				capturedRequest = JSON_MAPPER.convertValue(request.params(), McpSchema.PaginatedRequest.class);
+
+				McpSchema.Tool addTool = McpSchema.Tool.builder().name("add").description("calculate add").build();
+				McpSchema.ListToolsResult mockToolsResult = new McpSchema.ListToolsResult(List.of(addTool), null);
+				response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), mockToolsResult,
+						null);
+			}
+			else {
+				return Mono.empty();
+			}
+			return handler.apply(Mono.just(response)).then();
+		}
+
+		@Override
+		public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+			return JSON_MAPPER.convertValue(data, new TypeRef<>() {
+				@Override
+				public java.lang.reflect.Type getType() {
+					return typeRef.getType();
+				}
+			});
+		}
+
+		public McpSchema.PaginatedRequest getCapturedRequest() {
+			return capturedRequest;
+		}
+
 	}
 
 }

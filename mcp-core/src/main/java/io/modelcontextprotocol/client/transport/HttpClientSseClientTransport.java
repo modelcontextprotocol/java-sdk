@@ -241,17 +241,6 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		}
 
 		/**
-		 * Customizes the HTTP client builder.
-		 * @param requestCustomizer the consumer to customize the HTTP request builder
-		 * @return this builder
-		 */
-		public Builder customizeRequest(final Consumer<HttpRequest.Builder> requestCustomizer) {
-			Assert.notNull(requestCustomizer, "requestCustomizer must not be null");
-			requestCustomizer.accept(requestBuilder);
-			return this;
-		}
-
-		/**
 		 * Sets the JSON mapper implementation to use for serialization/deserialization.
 		 * @param jsonMapper the JSON mapper
 		 * @return this builder
@@ -456,7 +445,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		return Mono.deferContextual(ctx -> {
 			var builder = this.requestBuilder.copy()
 				.uri(requestUri)
-				.header(HttpHeaders.CONTENT_TYPE, "application/json")
+				.header(HttpHeaders.CONTENT_TYPE, "application/json; charset=utf-8")
 				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
 				.POST(HttpRequest.BodyPublishers.ofString(body));
 			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);

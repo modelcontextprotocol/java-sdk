@@ -15,9 +15,9 @@ For comprehensive guides and SDK API documentation
 
 - [Features](https://modelcontextprotocol.github.io/java-sdk/#features) - Overview the features provided by the Java MCP SDK
 - [Architecture](https://modelcontextprotocol.github.io/java-sdk/#architecture) - Java MCP SDK architecture overview.
-- [Java Dependencies / BOM](https://modelcontextprotocol.github.io/java-sdk/quickstart/#dependencies) - Java dependencies and BOM.
-- [Java MCP Client](https://modelcontextprotocol.github.io/java-sdk/client/) - Learn how to use the MCP client to interact with MCP servers.
-- [Java MCP Server](https://modelcontextprotocol.github.io/java-sdk/server/) - Learn how to implement and configure a MCP servers.
+- [Java Dependencies / BOM](https://java.sdk.modelcontextprotocol.io/latest/quickstart/#dependencies) - Java dependencies and BOM.
+- [Java MCP Client](https://java.sdk.modelcontextprotocol.io/latest/client/) - Learn how to use the MCP client to interact with MCP servers.
+- [Java MCP Server](https://java.sdk.modelcontextprotocol.io/latest/server/) - Learn how to implement and configure a MCP servers.
 
 #### Spring AI MCP documentation
 [Spring AI MCP](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) extends the MCP Java SDK with Spring Boot integration, providing both [client](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-client-boot-starter-docs.html) and [server](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-server-boot-starter-docs.html) starters. 
@@ -39,6 +39,41 @@ To run the tests you have to pre-install `Docker` and `npx`.
 
 ```bash
 ./mvnw test
+```
+### Conformance Tests
+
+The SDK is validated against the [MCP conformance test suite](https://github.com/modelcontextprotocol/conformance) at 0.1.15 version.
+Full details and instructions are in [`conformance-tests/VALIDATION_RESULTS.md`](conformance-tests/VALIDATION_RESULTS.md).
+
+**Latest results:**
+
+| Suite         | Result                                              |
+|---------------|-----------------------------------------------------|
+| Server        | ✅ 40/40 passed (100%)                              |
+| Client        | 🟡 3/4 scenarios, 9/10 checks passed                |
+| Auth (Spring) | 🟡 12/14 scenarios fully passing (98.9% checks)     |
+
+To run the conformance tests locally you need `npx` installed.
+
+```bash
+# Server conformance
+./mvnw compile -pl conformance-tests/server-servlet -am exec:java
+npx @modelcontextprotocol/conformance server --url http://localhost:8080/mcp --suite active
+
+# Client conformance
+./mvnw clean package -DskipTests -pl conformance-tests/client-jdk-http-client -am
+for scenario in initialize tools_call elicitation-sep1034-client-defaults sse-retry; do
+  npx @modelcontextprotocol/conformance client \
+    --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-2.0.0-SNAPSHOT.jar" \
+    --scenario $scenario
+done
+
+# Auth conformance (Spring HTTP Client)
+./mvnw clean package -DskipTests -pl conformance-tests/client-spring-http-client -am
+npx @modelcontextprotocol/conformance@0.1.15 client \
+  --spec-version 2025-11-25 \
+  --command "java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.0-SNAPSHOT.jar" \
+  --suite auth
 ```
 
 ## Contributing
