@@ -7,11 +7,8 @@ package io.modelcontextprotocol.util;
 import java.util.List;
 import java.util.Map;
 
-import io.modelcontextprotocol.json.McpJsonMapper;
-import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator.ValidationResponse;
-import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
@@ -26,15 +23,15 @@ import static org.mockito.Mockito.when;
 
 /**
  * Tests for {@link ToolInputValidator}.
+ *
+ * @author Andrei Shakirin
  */
 class ToolInputValidatorTests {
 
-	private final McpJsonMapper jsonMapper = mock(McpJsonMapper.class);
-
 	private final JsonSchemaValidator validator = mock(JsonSchemaValidator.class);
 
-	private final McpSchema.JsonSchema inputSchema = new McpSchema.JsonSchema("object",
-			Map.of("name", Map.of("type", "string")), List.of("name"), null, null, null);
+	private final Map<String, Object> inputSchema = Map.of("type", "object", "properties",
+			Map.of("name", Map.of("type", "string")), "required", List.of("name"));
 
 	private final Tool toolWithSchema = Tool.builder()
 		.name("test-tool")
@@ -46,8 +43,7 @@ class ToolInputValidatorTests {
 
 	@Test
 	void validate_whenDisabled_returnsNull() {
-		CallToolResult result = ToolInputValidator.validate(toolWithSchema, Map.of("name", "test"), false, jsonMapper,
-				validator);
+		CallToolResult result = ToolInputValidator.validate(toolWithSchema, Map.of("name", "test"), false, validator);
 
 		assertThat(result).isNull();
 		verify(validator, never()).validate(any(), any());
@@ -55,8 +51,7 @@ class ToolInputValidatorTests {
 
 	@Test
 	void validate_whenNoSchema_returnsNull() {
-		CallToolResult result = ToolInputValidator.validate(toolWithoutSchema, Map.of("name", "test"), true, jsonMapper,
-				validator);
+		CallToolResult result = ToolInputValidator.validate(toolWithoutSchema, Map.of("name", "test"), true, validator);
 
 		assertThat(result).isNull();
 		verify(validator, never()).validate(any(), any());
@@ -64,44 +59,37 @@ class ToolInputValidatorTests {
 
 	@Test
 	void validate_whenNoValidator_returnsNull() {
-		CallToolResult result = ToolInputValidator.validate(toolWithSchema, Map.of("name", "test"), true, jsonMapper,
-				null);
+		CallToolResult result = ToolInputValidator.validate(toolWithSchema, Map.of("name", "test"), true, null);
 
 		assertThat(result).isNull();
 	}
 
 	@Test
-	@SuppressWarnings("unchecked")
 	void validate_withValidInput_returnsNull() {
-		when(jsonMapper.convertValue(any(), any(TypeRef.class))).thenReturn(Map.of("type", "object"));
 		when(validator.validate(any(), any())).thenReturn(ValidationResponse.asValid(null));
 
-		CallToolResult result = ToolInputValidator.validate(toolWithSchema, Map.of("name", "test"), true, jsonMapper,
-				validator);
+		CallToolResult result = ToolInputValidator.validate(toolWithSchema, Map.of("name", "test"), true, validator);
 
 		assertThat(result).isNull();
 	}
 
 	@Test
-	@SuppressWarnings("unchecked")
 	void validate_withInvalidInput_returnsErrorResult() {
-		when(jsonMapper.convertValue(any(), any(TypeRef.class))).thenReturn(Map.of("type", "object"));
 		when(validator.validate(any(), any())).thenReturn(ValidationResponse.asInvalid("missing required: 'name'"));
 
-		CallToolResult result = ToolInputValidator.validate(toolWithSchema, Map.of(), true, jsonMapper, validator);
+		CallToolResult result = ToolInputValidator.validate(toolWithSchema, Map.of(), true, validator);
 
 		assertThat(result).isNotNull();
 		assertThat(result.isError()).isTrue();
 		assertThat(((TextContent) result.content().get(0)).text()).contains("missing required: 'name'");
+		verify(validator).validate(any(), any());
 	}
 
 	@Test
-	@SuppressWarnings("unchecked")
 	void validate_withNullArguments_usesEmptyMap() {
-		when(jsonMapper.convertValue(any(), any(TypeRef.class))).thenReturn(Map.of("type", "object"));
 		when(validator.validate(any(), any())).thenReturn(ValidationResponse.asValid(null));
 
-		CallToolResult result = ToolInputValidator.validate(toolWithSchema, null, true, jsonMapper, validator);
+		CallToolResult result = ToolInputValidator.validate(toolWithSchema, null, true, validator);
 
 		assertThat(result).isNull();
 		verify(validator).validate(any(), any());

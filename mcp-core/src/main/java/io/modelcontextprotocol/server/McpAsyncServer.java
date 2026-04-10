@@ -529,7 +529,7 @@ public class McpAsyncServer {
 
 			McpSchema.Tool tool = toolSpecification.get().tool();
 			CallToolResult validationError = ToolInputValidator.validate(tool, callToolRequest.arguments(),
-					this.validateToolInputs, this.jsonMapper, this.jsonSchemaValidator);
+					this.validateToolInputs, this.jsonSchemaValidator);
 			if (validationError != null) {
 				return Mono.just(validationError);
 			}

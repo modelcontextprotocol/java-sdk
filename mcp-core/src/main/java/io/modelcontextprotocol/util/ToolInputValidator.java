@@ -7,8 +7,6 @@ package io.modelcontextprotocol.util;
 import java.util.List;
 import java.util.Map;
 
-import io.modelcontextprotocol.json.McpJsonMapper;
-import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -32,21 +30,17 @@ public final class ToolInputValidator {
 	 * @param tool the tool definition containing the input schema
 	 * @param arguments the arguments to validate
 	 * @param validateToolInputs whether validation is enabled
-	 * @param jsonMapper the JSON mapper for schema conversion
 	 * @param validator the JSON schema validator (may be null)
 	 * @return CallToolResult with isError=true if validation fails, null if valid or
 	 * validation skipped
 	 */
 	public static CallToolResult validate(McpSchema.Tool tool, Map<String, Object> arguments,
-			boolean validateToolInputs, McpJsonMapper jsonMapper, JsonSchemaValidator validator) {
+			boolean validateToolInputs, JsonSchemaValidator validator) {
 		if (!validateToolInputs || tool.inputSchema() == null || validator == null) {
 			return null;
 		}
-		Map<String, Object> inputSchema = jsonMapper.convertValue(tool.inputSchema(),
-				new TypeRef<Map<String, Object>>() {
-				});
 		Map<String, Object> args = arguments != null ? arguments : Map.of();
-		var validation = validator.validate(inputSchema, args);
+		var validation = validator.validate(tool.inputSchema(), args);
 		if (!validation.valid()) {
 			logger.warn("Tool '{}' input validation failed: {}", tool.name(), validation.errorMessage());
 			return CallToolResult.builder()
