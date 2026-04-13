@@ -424,10 +424,9 @@ public interface McpServer {
 		}
 
 		/**
-		 * Sets whether to validate tool inputs against the tool's input schema. When set,
-		 * this takes priority over the system property
-		 * {@code io.modelcontextprotocol.validateToolInputs}.
-		 * @param validate true to validate inputs and return error on validation failure
+		 * Sets whether to validate tool inputs against the tool's input schema.
+		 * @param validate true to validate inputs and return error on validation failure,
+		 * false to skip validation. Defaults to true.
 		 * @return This builder instance for method chaining
 		 */
 		public AsyncSpecification<S> validateToolInputs(boolean validate) {
@@ -1022,10 +1021,9 @@ public interface McpServer {
 		}
 
 		/**
-		 * Sets whether to validate tool inputs against the tool's input schema. When set,
-		 * this takes priority over the system property
-		 * {@code io.modelcontextprotocol.validateToolInputs}.
-		 * @param validate true to validate inputs and return error on validation failure
+		 * Sets whether to validate tool inputs against the tool's input schema.
+		 * @param validate true to validate inputs and return error on validation failure,
+		 * false to skip validation. Defaults to true.
 		 * @return This builder instance for method chaining
 		 */
 		public SyncSpecification<S> validateToolInputs(boolean validate) {
@@ -1562,10 +1560,9 @@ public interface McpServer {
 		}
 
 		/**
-		 * Sets whether to validate tool inputs against the tool's input schema. When set,
-		 * this takes priority over the system property
-		 * {@code io.modelcontextprotocol.validateToolInputs}.
-		 * @param validate true to validate inputs and return error on validation failure
+		 * Sets whether to validate tool inputs against the tool's input schema.
+		 * @param validate true to validate inputs and return error on validation failure,
+		 * false to skip validation. Defaults to true.
 		 * @return This builder instance for method chaining
 		 */
 		public StatelessAsyncSpecification validateToolInputs(boolean validate) {
@@ -2060,10 +2057,9 @@ public interface McpServer {
 		}
 
 		/**
-		 * Sets whether to validate tool inputs against the tool's input schema. When set,
-		 * this takes priority over the system property
-		 * {@code io.modelcontextprotocol.validateToolInputs}.
-		 * @param validate true to validate inputs and return error on validation failure
+		 * Sets whether to validate tool inputs against the tool's input schema.
+		 * @param validate true to validate inputs and return error on validation failure,
+		 * false to skip validation. Defaults to true.
 		 * @return This builder instance for method chaining
 		 */
 		public StatelessSyncSpecification validateToolInputs(boolean validate) {

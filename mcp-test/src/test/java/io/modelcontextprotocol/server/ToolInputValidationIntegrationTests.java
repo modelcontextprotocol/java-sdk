@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
-import io.modelcontextprotocol.AbstractMcpClientServerIntegrationTests;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -42,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Andrei Shakirin
  */
 @Timeout(15)
-class ToolInputValidationIntegrationTests extends AbstractMcpClientServerIntegrationTests {
+class ToolInputValidationIntegrationTests {
 
 	private static final int PORT = TomcatTestUtil.findAvailablePort();
 
@@ -61,10 +60,6 @@ class ToolInputValidationIntegrationTests extends AbstractMcpClientServerIntegra
 
 	private Tomcat tomcat;
 
-	static Stream<Arguments> clientsForTesting() {
-		return Stream.of(Arguments.of("httpclient"));
-	}
-
 	static Stream<Arguments> validInputTestCases() {
 		return Stream.of(
 				// serverType, validationEnabled, inputArgs, expectedOutput
@@ -82,6 +77,10 @@ class ToolInputValidationIntegrationTests extends AbstractMcpClientServerIntegra
 																						// value
 	}
 
+	private final McpClient.SyncSpec clientBuilder = McpClient
+		.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT).endpoint(MESSAGE_ENDPOINT).build())
+		.requestTimeout(Duration.ofSeconds(10));
+
 	@BeforeEach
 	public void before() {
 		mcpServerTransportProvider = HttpServletStreamableServerTransportProvider.builder()
@@ -97,20 +96,12 @@ class ToolInputValidationIntegrationTests extends AbstractMcpClientServerIntegra
 		catch (Exception e) {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
-
-		clientBuilders
-			.put("httpclient",
-					McpClient.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
-						.endpoint(MESSAGE_ENDPOINT)
-						.build()).requestTimeout(Duration.ofSeconds(10)));
 	}
 
-	@Override
 	protected McpServer.AsyncSpecification<?> prepareAsyncServerBuilder() {
 		return McpServer.async(this.mcpServerTransportProvider);
 	}
 
-	@Override
 	protected McpServer.SyncSpecification<?> prepareSyncServerBuilder() {
 		return McpServer.sync(this.mcpServerTransportProvider);
 	}
@@ -129,10 +120,6 @@ class ToolInputValidationIntegrationTests extends AbstractMcpClientServerIntegra
 				throw new RuntimeException("Failed to stop Tomcat", e);
 			}
 		}
-	}
-
-	@Override
-	protected void prepareClients(int port, String mcpEndpoint) {
 	}
 
 	private McpServerFeatures.SyncToolSpecification createSyncTool() {
@@ -173,7 +160,6 @@ class ToolInputValidationIntegrationTests extends AbstractMcpClientServerIntegra
 	@MethodSource("validInputTestCases")
 	void validInput_shouldSucceed(String serverType, boolean validationEnabled, Map<String, Object> input,
 			String expectedOutput) {
-		var clientBuilder = clientBuilders.get("httpclient");
 		Object server = createServer(serverType, validationEnabled);
 
 		try (var client = clientBuilder.clientInfo(new McpSchema.Implementation("test-client", "1.0.0")).build()) {
@@ -192,7 +178,6 @@ class ToolInputValidationIntegrationTests extends AbstractMcpClientServerIntegra
 	@MethodSource("invalidInputTestCases")
 	void invalidInput_withDefaultValidation_shouldReturnToolError(String serverType, Map<String, Object> input,
 			String expectedErrorSubstring) {
-		var clientBuilder = clientBuilders.get("httpclient");
 		Object server = createServerWithDefaultValidation(serverType);
 
 		try (var client = clientBuilder.clientInfo(new McpSchema.Implementation("test-client", "1.0.0")).build()) {
@@ -212,7 +197,6 @@ class ToolInputValidationIntegrationTests extends AbstractMcpClientServerIntegra
 	@MethodSource("invalidInputTestCases")
 	void invalidInput_withValidationDisabled_shouldSucceed(String serverType, Map<String, Object> input,
 			String ignored) {
-		var clientBuilder = clientBuilders.get("httpclient");
 		Object server = createServer(serverType, false);
 
 		try (var client = clientBuilder.clientInfo(new McpSchema.Implementation("test-client", "1.0.0")).build()) {
