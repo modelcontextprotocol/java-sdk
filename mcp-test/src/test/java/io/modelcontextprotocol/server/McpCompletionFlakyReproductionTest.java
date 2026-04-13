@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2026-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server;
@@ -31,11 +31,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Reproduces the flaky McpCompletionTests.testCompletionErrorOnMissingContext failure.
- *
  * Root cause: completion handler throws McpError → server sends error via SSE → SSE write
  * fails (connection broken under load) → session removed → next request gets 404.
- *
  * Simulated by abruptly closing the TCP socket inside the handler before throwing.
+ *
+ * @author Andrei Shakirin
  */
 class McpCompletionFlakyReproductionTest {
 
@@ -70,7 +70,7 @@ class McpCompletionFlakyReproductionTest {
 	}
 
 	@Test
-	void reproduceRaceConditionWithArtificialDelay() throws Exception {
+	void reproduceRaceConditionWithArtificialDelay() {
 		var ref = new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}");
 		var resource = McpSchema.Resource.builder().uri("db://{database}/{table}").name("Database Table").build();
 
