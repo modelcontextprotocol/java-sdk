@@ -161,7 +161,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 * @param contextExtractor The extractor for transport context from the request.
 	 * @param securityValidator The security validator for validating HTTP requests.
 	 */
-	private HttpServletSseServerTransportProvider(McpJsonMapper jsonMapper, String baseUrl, String messageEndpoint,
+	protected HttpServletSseServerTransportProvider(McpJsonMapper jsonMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval,
 			McpTransportContextExtractor<HttpServletRequest> contextExtractor,
 			ServerTransportSecurityValidator securityValidator) {

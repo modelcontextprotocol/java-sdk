@@ -139,7 +139,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * @param securityValidator The security validator for validating HTTP requests.
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
-	private HttpServletStreamableServerTransportProvider(McpJsonMapper jsonMapper, String mcpEndpoint,
+	protected HttpServletStreamableServerTransportProvider(McpJsonMapper jsonMapper, String mcpEndpoint,
 			boolean disallowDelete, McpTransportContextExtractor<HttpServletRequest> contextExtractor,
 			Duration keepAliveInterval, ServerTransportSecurityValidator securityValidator) {
 		Assert.notNull(jsonMapper, "JsonMapper must not be null");
