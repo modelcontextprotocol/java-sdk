@@ -133,8 +133,18 @@ public class McpStatelessAsyncServer {
 
 		this.protocolVersions = new ArrayList<>(mcpTransport.protocolVersions());
 
-		McpStatelessServerHandler handler = new DefaultMcpStatelessServerHandler(requestHandlers, Map.of());
+		Map<String, McpStatelessNotificationHandler> notificationHandlers = prepareNotificationHandlers();
+		McpStatelessServerHandler handler = new DefaultMcpStatelessServerHandler(requestHandlers, notificationHandlers);
 		mcpTransport.setMcpHandler(handler);
+	}
+
+	private Map<String, McpStatelessNotificationHandler> prepareNotificationHandlers() {
+		Map<String, McpStatelessNotificationHandler> notificationHandlers = new HashMap<>();
+
+		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_INITIALIZED, (exchange, params) -> Mono.empty());
+		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED, (exchange, params) -> Mono.empty());
+
+		return notificationHandlers;
 	}
 
 	// ---------------------------------------
