@@ -1,0 +1,9 @@
+# Local environment example for development
+# Copy values to your runtime environment and fill secrets locally.
+
+OPENAI_API_KEY=
+DASHSCOPE_API_KEY=
+ANTHROPIC_API_KEY=
+OLLAMA_BASE_URL=http://localhost:11434
+SPRING_PROFILES_ACTIVE=dev
+LOG_LEVEL=INFO
