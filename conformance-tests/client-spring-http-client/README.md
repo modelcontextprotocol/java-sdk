@@ -43,6 +43,8 @@ The client is a Spring Boot application that reads test scenarios from environme
 - **MCP_CONFORMANCE_CONTEXT**: Environment variable with JSON context (used by `auth/pre-registration`)
 - **Server URL**: Passed as the last command-line argument
 
+For a quick starting point, see [`../.env.example`](../.env.example) and export the variables you need before launching the client.
+
 ### Scenario Routing
 
 The application uses Spring's conditional configuration to select the appropriate scenario at startup:
