@@ -202,6 +202,11 @@ MCP supports both clients (applications consuming MCP servers) and servers (appl
 
 * **How it fits the SDK**: This keeps server-side security ecosystem-neutral, while ensuring applications can plug in their preferred authorization strategy.
 
+* **Common auth and header propagation patterns**:
+    * Authenticate inbound MCP requests in the server transport or surrounding framework (for example Servlet security filters, Spring Security, or another HTTP security layer).
+    * When an MCP client needs to call an upstream MCP server on behalf of a user or tenant, propagate only the headers your application owns, such as `Authorization`, trace IDs, or tenant metadata, using the HTTP transport customization hooks described in the client transport docs.
+    * Keep application-specific identity mapping in your framework layer rather than assuming the SDK will infer which inbound headers should become outbound headers automatically.
+
 ### Project Structure of the SDK
 
 The SDK is organized into modules to separate concerns and allow adopters to bring in only what they need:
