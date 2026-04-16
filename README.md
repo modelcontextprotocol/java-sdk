@@ -25,6 +25,15 @@ The [MCP Annotations](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/ap
 The [MCP Security](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-security.html) - provides comprehensive OAuth 2.0 and API key-based security support for Model Context Protocol implementations in Spring AI.
 Bootstrap your AI applications with MCP support using [Spring Initializer](https://start.spring.io).
 
+#### Using with Spring Boot
+
+If you are approaching the SDK from a Spring Boot application, the shortest path is usually:
+
+1. Start with the dependency and BOM guidance in [`docs/quickstart.md`](docs/quickstart.md).
+2. Choose the [MCP Client Boot Starter](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-client-boot-starter-docs.html) or [MCP Server Boot Starter](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-server-boot-starter-docs.html) based on whether your application consumes or exposes MCP endpoints.
+3. Add [MCP Annotations](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-annotations-overview.html) if you want annotation-based handler wiring.
+4. Add [MCP Security](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-security.html) when you need OAuth 2.0 or API key-based protection in a Spring deployment.
+
 ## Development
 
 ### Building from Source
