@@ -13,6 +13,8 @@ The client reads test scenarios from environment variables and accepts the serve
 - **MCP_CONFORMANCE_SCENARIO**: Environment variable specifying which test scenario to run
 - **Server URL**: Passed as the last command-line argument
 
+For a quick starting point, see [`../.env.example`](../.env.example) and export the variables you need before launching the client.
+
 ## Supported Scenarios
 
 Currently implemented scenarios:
