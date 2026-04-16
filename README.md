@@ -25,6 +25,15 @@ The [MCP Annotations](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/ap
 The [MCP Security](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-security.html) - provides comprehensive OAuth 2.0 and API key-based security support for Model Context Protocol implementations in Spring AI.
 Bootstrap your AI applications with MCP support using [Spring Initializer](https://start.spring.io).
 
+#### Transport quickstart matrix
+
+| Transport | Side | Best for | Start here |
+|---|---|---|---|
+| STDIO | Client + Server | Local tools, CLI-style integrations, process-based communication | [`docs/client.md#stdio`](docs/client.md#stdio), [`docs/server.md#stdio`](docs/server.md#stdio) |
+| Streamable HTTP | Client + Server | Modern bidirectional HTTP deployments | [`docs/client.md#streamable-http`](docs/client.md#streamable-http), [`docs/server.md#streamable-http`](docs/server.md#streamable-http) |
+| SSE HTTP (legacy) | Client + Server | Existing SSE-based integrations and compatibility paths | [`docs/client.md#sse-http-legacy`](docs/client.md#sse-http-legacy), [`docs/server.md#sse-http-legacy`](docs/server.md#sse-http-legacy) |
+| Spring WebFlux / WebMvc | Client + Server | Spring Boot applications that want framework-native transport integration | [Spring AI MCP overview](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) |
+
 ## Development
 
 ### Building from Source

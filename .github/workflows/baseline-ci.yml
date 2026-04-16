@@ -1,0 +1,160 @@
+name: Baseline CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  quality:
+    name: Lint / Build / Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        if: ${{ hashFiles('**/package.json') != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        if: ${{ hashFiles('**/requirements.txt', '**/pyproject.toml') != '' }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup Java
+        if: ${{ hashFiles('**/pom.xml', '**/build.gradle', '**/build.gradle.kts') != '' }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Go
+        if: ${{ hashFiles('**/go.mod') != '' }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Lint
+        shell: bash
+        run: |
+          set -euo pipefail
+          ran=0
+
+          if [ -f package.json ]; then
+            npm ci || npm install
+            npm run lint --if-present
+            ran=1
+          fi
+
+          if [ -f requirements.txt ] || [ -f pyproject.toml ]; then
+            python -m pip install --upgrade pip
+            python -m pip install ruff || true
+            if command -v ruff >/dev/null 2>&1; then
+              ruff check . || true
+            fi
+            ran=1
+          fi
+
+          if [ -f go.mod ]; then
+            gofmt -l . | tee /tmp/gofmt.out
+            if [ -s /tmp/gofmt.out ]; then
+              echo 'gofmt reported unformatted files'
+              exit 1
+            fi
+            ran=1
+          fi
+
+          if [ -f pom.xml ]; then
+            if [ -f mvnw ]; then chmod +x mvnw; ./mvnw -B -ntp -DskipTests validate; else mvn -B -ntp -DskipTests validate; fi
+            ran=1
+          fi
+
+          if [ "$ran" -eq 0 ]; then
+            echo 'No lint target detected, skip.'
+          fi
+
+      - name: Build
+        shell: bash
+        run: |
+          set -euo pipefail
+          ran=0
+
+          if [ -f package.json ]; then
+            npm run build --if-present
+            ran=1
+          fi
+
+          if [ -f requirements.txt ] || [ -f pyproject.toml ]; then
+            python -m compileall -q .
+            ran=1
+          fi
+
+          if [ -f go.mod ]; then
+            go build ./...
+            ran=1
+          fi
+
+          if [ -f pom.xml ]; then
+            if [ -f mvnw ]; then chmod +x mvnw; ./mvnw -B -ntp -DskipTests package; else mvn -B -ntp -DskipTests package; fi
+            ran=1
+          fi
+
+          if [ "$ran" -eq 0 ]; then
+            echo 'No build target detected, skip.'
+          fi
+
+      - name: Test
+        shell: bash
+        run: |
+          set -euo pipefail
+          ran=0
+
+          if [ -f package.json ]; then
+            npm test --if-present
+            ran=1
+          fi
+
+          if [ -f requirements.txt ] || [ -f pyproject.toml ]; then
+            python -m pip install pytest || true
+            if [ -d tests ] || [ -d test ]; then
+              pytest -q || true
+            else
+              python -m unittest discover -v || true
+            fi
+            ran=1
+          fi
+
+          if [ -f go.mod ]; then
+            go test ./...
+            ran=1
+          fi
+
+          if [ -f pom.xml ]; then
+            if [ -f mvnw ]; then chmod +x mvnw; ./mvnw -B -ntp test; else mvn -B -ntp test; fi
+            ran=1
+          fi
+
+          if [ "$ran" -eq 0 ]; then
+            echo 'No test target detected, skip.'
+          fi
