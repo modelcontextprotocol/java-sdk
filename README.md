@@ -76,6 +76,31 @@ npx @modelcontextprotocol/conformance@0.1.15 client \
   --suite auth
 ```
 
+### Local client/server smoke test
+
+If you only want to validate a minimal local round-trip before running the full conformance suite:
+
+1. Start the sample servlet-based server transport:
+
+   ```bash
+   ./mvnw compile -pl conformance-tests/server-servlet -am exec:java
+   ```
+
+2. Build the JDK HTTP client test module in a second terminal:
+
+   ```bash
+   ./mvnw clean package -DskipTests -pl conformance-tests/client-jdk-http-client -am
+   ```
+
+3. Export a simple scenario and run the client against the local server:
+
+   ```bash
+   export MCP_CONFORMANCE_SCENARIO=initialize
+   java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-2.0.0-SNAPSHOT.jar http://localhost:8080/mcp
+   ```
+
+4. If the handshake works, continue with the richer conformance scenarios above.
+
 ## Contributing
 
 Contributions are welcome!
