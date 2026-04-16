@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.conformance.client;
 
 import io.modelcontextprotocol.conformance.client.scenario.Scenario;
+import io.modelcontextprotocol.spec.McpSchema;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,6 +25,17 @@ class McpClientController {
 	@GetMapping("/initialize-mcp-client")
 	public String execute() {
 		this.scenario.getMcpClient().initialize();
+		return "OK";
+	}
+
+	@GetMapping("/tools-list")
+	public String toolsList() {
+		return "OK";
+	}
+
+	@GetMapping("/tools-call")
+	public String toolsCall() {
+		this.scenario.getMcpClient().callTool(McpSchema.CallToolRequest.builder().name("test-tool").build());
 		return "OK";
 	}
 

@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol;
 
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -23,6 +25,7 @@ import java.util.stream.Collectors;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
@@ -47,6 +50,7 @@ import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
+import io.modelcontextprotocol.util.McpJsonMapperUtils;
 import io.modelcontextprotocol.util.Utils;
 import net.javacrumbs.jsonunit.core.Option;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -54,7 +58,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 
-import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -946,6 +949,62 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			assertThat(transportContextIsEmpty.get()).isFalse();
 			assertThat(responseBodyIsNullOrBlank.get()).isFalse();
 			assertThat(response).isNotNull().isEqualTo(expectedCallResponse);
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testToolWithNonAsciiCharacters(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		String inputSchema = """
+					{
+						"type": "object",
+						"properties": {
+							"username": { "type": "string" }
+						},
+						"required": ["username"]
+					}
+				""";
+
+		McpServerFeatures.SyncToolSpecification nonAsciiTool = McpServerFeatures.SyncToolSpecification.builder()
+			.tool(Tool.builder()
+				.name("greeter")
+				.description("打招呼")
+				.inputSchema(McpJsonDefaults.getMapper(), inputSchema)
+				.build())
+			.callHandler((exchange, request) -> {
+				String username = (String) request.arguments().get("username");
+				return McpSchema.CallToolResult.builder()
+					.addContent(new McpSchema.TextContent("Hello " + username))
+					.build();
+			})
+			.build();
+
+		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(nonAsciiTool)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var tools = mcpClient.listTools().tools();
+			assertThat(tools).hasSize(1);
+			assertThat(tools.get(0).name()).isEqualTo("greeter");
+			assertThat(tools.get(0).description()).isEqualTo("打招呼");
+
+			CallToolResult response = mcpClient
+				.callTool(new McpSchema.CallToolRequest("greeter", Map.of("username", "测试用户")));
+
+			assertThat(response).isNotNull();
+			assertThat(response.isError()).isFalse();
+			assertThat(response.content()).hasSize(1);
+			assertThat(((McpSchema.TextContent) response.content().get(0)).text()).isEqualTo("Hello 测试用户");
 		}
 		finally {
 			mcpServer.closeGracefully();

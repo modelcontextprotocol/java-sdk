@@ -8,8 +8,11 @@ import java.util.Optional;
 
 import io.modelcontextprotocol.conformance.client.scenario.Scenario;
 import org.springaicommunity.mcp.security.client.sync.oauth2.metadata.McpMetadataDiscoveryService;
+import org.springaicommunity.mcp.security.client.sync.oauth2.registration.DefaultMcpOAuth2ClientManager;
 import org.springaicommunity.mcp.security.client.sync.oauth2.registration.DynamicClientRegistrationService;
 import org.springaicommunity.mcp.security.client.sync.oauth2.registration.InMemoryMcpClientRegistrationRepository;
+import org.springaicommunity.mcp.security.client.sync.oauth2.registration.McpClientRegistrationRepository;
+import org.springaicommunity.mcp.security.client.sync.oauth2.registration.McpOAuth2ClientManager;
 
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -49,8 +52,15 @@ public class ConformanceSpringClientApplication {
 	}
 
 	@Bean
-	InMemoryMcpClientRegistrationRepository clientRegistrationRepository(McpMetadataDiscoveryService discovery) {
-		return new InMemoryMcpClientRegistrationRepository(new DynamicClientRegistrationService(), discovery);
+	McpClientRegistrationRepository clientRegistrationRepository() {
+		return new InMemoryMcpClientRegistrationRepository();
+	}
+
+	@Bean
+	McpOAuth2ClientManager mcpOAuth2ClientManager(McpClientRegistrationRepository mcpClientRegistrationRepository,
+			McpMetadataDiscoveryService mcpMetadataDiscoveryService) {
+		return new DefaultMcpOAuth2ClientManager(mcpClientRegistrationRepository,
+				new DynamicClientRegistrationService(), mcpMetadataDiscoveryService);
 	}
 
 	@Bean

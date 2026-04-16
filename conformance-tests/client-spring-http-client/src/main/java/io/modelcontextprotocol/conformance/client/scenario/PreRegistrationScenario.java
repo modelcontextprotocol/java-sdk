@@ -87,7 +87,7 @@ public class PreRegistrationScenario implements Scenario {
 			.clientSecret(oauthCredentials.clientSecret())
 			.authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
 			.build();
-		clientRegistrationRepository.addPreRegisteredClient(registration,
+		clientRegistrationRepository.addClientRegistration(registration,
 				metadata.protectedResourceMetadata().resource());
 	}
 

@@ -4,7 +4,7 @@
 
 **Server Tests:** 40/40 passed (100%)
 **Client Tests:** 3/4 scenarios passed (9/10 checks passed)
-**Auth Tests:** 12/14 scenarios fully passing (178 passed, 1 failed, 1 warning, 85.7% scenarios, 98.9% checks)
+**Auth Tests:** 14/15 scenarios fully passing (196 passed, 0 failed, 1 warning, 93.3% scenarios, 99.5% checks)
 
 ## Server Test Results
 
@@ -37,35 +37,35 @@
 
 ## Auth Test Results (Spring HTTP Client)
 
-**Status: 178 passed, 1 failed, 1 warning across 14 scenarios**
+**Status: 196 passed, 0 failed, 1 warning across 15 scenarios**
 
 Uses the `client-spring-http-client` module with Spring Security OAuth2 and the [mcp-client-security](https://github.com/springaicommunity/mcp-client-security) library.
 
-### Fully Passing (12/14 scenarios)
+### Fully Passing (14/15 scenarios)
 
-- **auth/metadata-default (12/12):** Default metadata discovery
-- **auth/metadata-var1 (12/12):** Metadata discovery variant 1
-- **auth/metadata-var2 (12/12):** Metadata discovery variant 2
-- **auth/metadata-var3 (12/12):** Metadata discovery variant 3
-- **auth/scope-from-www-authenticate (13/13):** Scope extraction from WWW-Authenticate header
-- **auth/scope-from-scopes-supported (13/13):** Scope extraction from scopes_supported
-- **auth/scope-omitted-when-undefined (13/13):** Scope omitted when not defined
+- **auth/metadata-default (13/13):** Default metadata discovery
+- **auth/metadata-var1 (13/13):** Metadata discovery variant 1
+- **auth/metadata-var2 (13/13):** Metadata discovery variant 2
+- **auth/metadata-var3 (13/13):** Metadata discovery variant 3
+- **auth/scope-from-www-authenticate (14/14):** Scope extraction from WWW-Authenticate header
+- **auth/scope-from-scopes-supported (14/14):** Scope extraction from scopes_supported
+- **auth/scope-omitted-when-undefined (14/14):** Scope omitted when not defined
+- **auth/scope-step-up (16/16):** Scope step-up challenge
 - **auth/scope-retry-limit (11/11):** Scope retry limit handling
-- **auth/token-endpoint-auth-basic (17/17):** Token endpoint with HTTP Basic auth
-- **auth/token-endpoint-auth-post (17/17):** Token endpoint with POST body auth
-- **auth/token-endpoint-auth-none (17/17):** Token endpoint with no client auth
+- **auth/token-endpoint-auth-basic (18/18):** Token endpoint with HTTP Basic auth
+- **auth/token-endpoint-auth-post (18/18):** Token endpoint with POST body auth
+- **auth/token-endpoint-auth-none (18/18):** Token endpoint with no client auth
+- **auth/resource-mismatch (2/2):** Resource mismatch handling
 - **auth/pre-registration (6/6):** Pre-registered client credentials flow
 
-### Partially Passing (2/14 scenarios)
+### Partially Passing (1/15 scenarios)
 
-- **auth/basic-cimd (12/12 + 1 warning):** Basic Client-Initiated Metadata Discovery — all checks pass, minor warning
-- **auth/scope-step-up (11/12):** Scope step-up challenge — 1 failure, client does not fully handle scope escalation after initial authorization
+- **auth/basic-cimd (13/13 + 1 warning):** Basic Client-Initiated Metadata Discovery — all checks pass, minor warning
 
 ## Known Limitations
 
 1. **Client SSE Retry:** Client doesn't parse or respect the `retry:` field, reconnects immediately, and doesn't send Last-Event-ID header
-2. **Auth Scope Step-Up:** Client does not fully handle scope step-up challenges where the server requests additional scopes after initial authorization
-3. **Auth Basic CIMD:** Minor conformance warning in the basic Client-Initiated Metadata Discovery flow
+2. **Auth Basic CIMD:** Minor conformance warning in the basic Client-Initiated Metadata Discovery flow
 
 ## Running Tests
 
@@ -113,4 +113,3 @@ npx @modelcontextprotocol/conformance@0.1.15 client \
 ### High Priority
 1. Fix client SSE retry field handling in `HttpClientStreamableHttpTransport`
 2. Implement CIMD
-3. Implement scope step up

@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol.server;
 
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
+
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -48,7 +50,6 @@ import org.springframework.web.client.RestClient;
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.APPLICATION_JSON;
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.TEXT_EVENT_STREAM;
 import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
-import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;

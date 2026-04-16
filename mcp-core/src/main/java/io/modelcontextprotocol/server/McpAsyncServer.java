@@ -38,6 +38,7 @@ import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DefaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
+import io.modelcontextprotocol.util.ToolInputValidator;
 import io.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -98,6 +99,8 @@ public class McpAsyncServer {
 
 	private final JsonSchemaValidator jsonSchemaValidator;
 
+	private final boolean validateToolInputs;
+
 	private final McpSchema.ServerCapabilities serverCapabilities;
 
 	private final McpSchema.Implementation serverInfo;
@@ -129,7 +132,8 @@ public class McpAsyncServer {
 	 */
 	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
-			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
+			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
+			boolean validateToolInputs) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
@@ -142,6 +146,7 @@ public class McpAsyncServer {
 		this.completions.putAll(features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
+		this.validateToolInputs = validateToolInputs;
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
@@ -157,7 +162,8 @@ public class McpAsyncServer {
 
 	McpAsyncServer(McpStreamableServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
-			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
+			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
+			boolean validateToolInputs) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
@@ -170,6 +176,7 @@ public class McpAsyncServer {
 		this.completions.putAll(features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
+		this.validateToolInputs = validateToolInputs;
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
@@ -541,6 +548,13 @@ public class McpAsyncServer {
 					.message("Unknown tool: invalid_tool_name")
 					.data("Tool not found: " + callToolRequest.name())
 					.build());
+			}
+
+			McpSchema.Tool tool = toolSpecification.get().tool();
+			CallToolResult validationError = ToolInputValidator.validate(tool, callToolRequest.arguments(),
+					this.validateToolInputs, this.jsonSchemaValidator);
+			if (validationError != null) {
+				return Mono.just(validationError);
 			}
 
 			return toolSpecification.get().callHandler().apply(exchange, callToolRequest);
