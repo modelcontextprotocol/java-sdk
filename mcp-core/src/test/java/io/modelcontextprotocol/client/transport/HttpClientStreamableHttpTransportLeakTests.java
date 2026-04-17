@@ -21,7 +21,8 @@ class HttpClientStreamableHttpTransportLeakTests {
 	@Test
 	void closeDoesNotRetainOwnedHttpClientWhenClosedTransportRemainsReachable() throws Exception {
 		try (LoopbackMcpHttpServer server = LoopbackMcpHttpServer.start()) {
-			List<HttpClientStreamableHttpTransport> retainedClosedTransports = new ArrayList<>();
+			// List<HttpClientStreamableHttpTransport> retainedClosedTransports = new
+			// ArrayList<>();
 			int selectorThreadsBefore = HttpClientLeakTestSupport.selectorManagerThreadCount();
 			Function<reactor.core.publisher.Mono<McpSchema.JSONRPCMessage>, reactor.core.publisher.Mono<McpSchema.JSONRPCMessage>> handler = Function
 				.identity();
@@ -38,7 +39,7 @@ class HttpClientStreamableHttpTransportLeakTests {
 					.verifyComplete();
 				HttpClientLeakTestSupport.pauseForSelectorStartup();
 				StepVerifier.create(transport.closeGracefully()).verifyComplete();
-				retainedClosedTransports.add(transport);
+				// retainedClosedTransports.add(transport);
 			}
 
 			int selectorThreadsAfter = HttpClientLeakTestSupport.forceGcUntilStable();
