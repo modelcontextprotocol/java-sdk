@@ -4,8 +4,12 @@ on:
   push:
     branches: [ "main" ]
 
+env:
+  MAVEN_ARGS: --no-transfer-progress
+
 jobs:
   build:
+    if: ${{ github.repository_owner == 'modelcontextprotocol' }}
     name: Build branch
     runs-on: ubuntu-latest
     steps:
@@ -30,10 +34,10 @@ jobs:
           node-version: '20'
 
       - name: Generate Java docs
-        run: mvn -Pjavadoc -B javadoc:aggregate
+        run: ./mvnw -Pjavadoc -B javadoc:aggregate
 
       - name: Jackson 2 Integration Tests
-        run: mvn -pl mcp-test -am -Pjackson2 test
+        run: ./mvnw -pl mcp-test -am -Pjackson2 test
 
       - name: Build with Maven and deploy to Sonatype snapshot repository
         env:
@@ -41,7 +45,7 @@ jobs:
           MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
         run: |
-          mvn -Pjavadoc -Prelease --batch-mode --update-snapshots deploy
+          ./mvnw -Pjavadoc -Prelease --batch-mode --update-snapshots deploy
 
       - name: Capture project version
-        run: echo PROJECT_VERSION=$(mvn help:evaluate -Dexpression=project.version --quiet -DforceStdout) >> $GITHUB_ENV
+        run: echo PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version --quiet -DforceStdout) >> $GITHUB_ENV

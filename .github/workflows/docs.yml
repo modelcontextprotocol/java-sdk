@@ -15,8 +15,12 @@ on:
 permissions:
   contents: write
 
+env:
+  MAVEN_ARGS: --no-transfer-progress
+
 jobs:
   deploy:
+    if: ${{ github.repository_owner == 'modelcontextprotocol' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,7 +41,7 @@ jobs:
       - name: Deploy docs (push to main)
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
-          PROJECT_VERSION=$(mvn help:evaluate -Dexpression=project.version --quiet -DforceStdout)
+          PROJECT_VERSION=$(./mvnw help:evaluate -Dexpression=project.version --quiet -DforceStdout)
           if [[ "${PROJECT_VERSION}" == *-SNAPSHOT ]]; then
             ALIAS="latest-snapshot"
           else
