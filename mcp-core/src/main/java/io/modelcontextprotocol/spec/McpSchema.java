@@ -1,12 +1,11 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.spec;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +33,7 @@ import org.slf4j.LoggerFactory;
  * @author Luca Chang
  * @author Surbhi Bansal
  * @author Anurag Pant
+ * @author Dariusz Jędrzejczyk
  */
 public final class McpSchema {
 
@@ -1177,10 +1177,6 @@ public final class McpSchema {
 		public Prompt(String name, String title, String description, List<PromptArgument> arguments) {
 			this(name, title, description, arguments, null);
 		}
-
-		public static Prompt withDefaults(String name, String description, List<PromptArgument> arguments) {
-			return new Prompt(name, null, description, arguments != null ? arguments : new ArrayList<>(), null);
-		}
 	}
 
 	/**
@@ -2317,9 +2313,13 @@ public final class McpSchema {
 		}
 	}
 
+	/**
+	 * Severity levels for MCP log messages, ordered from least to most severe. The
+	 * numeric {@link #level()} can be used to compare severities. Deserialization is
+	 * case-insensitive and returns {@code null} for unrecognized values.
+	 */
 	public enum LoggingLevel {
 
-	// @formatter:off
 		@JsonProperty("debug") DEBUG(0),
 		@JsonProperty("info") INFO(1),
 		@JsonProperty("notice") NOTICE(2),
@@ -2328,7 +2328,6 @@ public final class McpSchema {
 		@JsonProperty("critical") CRITICAL(5),
 		@JsonProperty("alert") ALERT(6),
 		@JsonProperty("emergency") EMERGENCY(7);
-		// @formatter:on
 
 		private final int level;
 
@@ -2372,6 +2371,12 @@ public final class McpSchema {
 	// ---------------------------
 	// Autocomplete
 	// ---------------------------
+
+	/**
+	 * A reference to a prompt or resource that can be used as input for completion
+	 * requests. Implementations are identified by a {@code "type"} discriminator field
+	 * whose value maps to a concrete subtype via {@code @JsonSubTypes}.
+	 */
 	@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type",
 			visible = true)
 	@JsonSubTypes({ @JsonSubTypes.Type(value = PromptReference.class, name = PromptReference.TYPE),
@@ -2546,6 +2551,11 @@ public final class McpSchema {
 	// ---------------------------
 	// Content Types
 	// ---------------------------
+
+	/**
+	 * A polymorphic content value that can appear in messages and tool results. The
+	 * concrete type is determined by the {@code "type"} JSON property.
+	 */
 	@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
 	@JsonSubTypes({ @JsonSubTypes.Type(value = TextContent.class, name = "text"),
 			@JsonSubTypes.Type(value = ImageContent.class, name = "image"),
