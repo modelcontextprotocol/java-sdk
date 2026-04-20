@@ -110,6 +110,7 @@
 		<module>mcp-json-jackson3</module>
 		<module>mcp-test</module>
 		<module>conformance-tests</module>
+		<module>mcp-inmemory-transport</module>
 	</modules>
 
 	<build>
