@@ -39,12 +39,12 @@ class SyncToolSpecificationBuilderTest {
 	@Test
 	void builderShouldCreateValidSyncToolSpecification() {
 
-		Tool tool = Tool.builder().name("test-tool").title("A test tool").inputSchema(EMPTY_JSON_SCHEMA).build();
+		Tool tool = Tool.builder("test-tool", EMPTY_JSON_SCHEMA).title("A test tool").build();
 
 		McpServerFeatures.SyncToolSpecification specification = McpServerFeatures.SyncToolSpecification.builder()
 			.tool(tool)
 			.callHandler((exchange, request) -> CallToolResult.builder()
-				.content(List.of(new TextContent("Test result")))
+				.content(List.of(TextContent.builder("Test result").build()))
 				.isError(false)
 				.build())
 			.build();
@@ -63,7 +63,7 @@ class SyncToolSpecificationBuilderTest {
 
 	@Test
 	void builderShouldThrowExceptionWhenCallToolIsNull() {
-		Tool tool = Tool.builder().name("test-tool").description("A test tool").inputSchema(EMPTY_JSON_SCHEMA).build();
+		Tool tool = Tool.builder("test-tool", EMPTY_JSON_SCHEMA).description("A test tool").build();
 
 		assertThatThrownBy(() -> McpServerFeatures.SyncToolSpecification.builder().tool(tool).build())
 			.isInstanceOf(IllegalArgumentException.class)
@@ -72,7 +72,7 @@ class SyncToolSpecificationBuilderTest {
 
 	@Test
 	void builderShouldAllowMethodChaining() {
-		Tool tool = Tool.builder().name("test-tool").description("A test tool").inputSchema(EMPTY_JSON_SCHEMA).build();
+		Tool tool = Tool.builder("test-tool", EMPTY_JSON_SCHEMA).description("A test tool").build();
 		McpServerFeatures.SyncToolSpecification.Builder builder = McpServerFeatures.SyncToolSpecification.builder();
 
 		// Then - verify method chaining returns the same builder instance
@@ -84,11 +84,7 @@ class SyncToolSpecificationBuilderTest {
 
 	@Test
 	void builtSpecificationShouldExecuteCallToolCorrectly() {
-		Tool tool = Tool.builder()
-			.name("calculator")
-			.description("Simple calculator")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool tool = Tool.builder("calculator", EMPTY_JSON_SCHEMA).description("Simple calculator").build();
 		String expectedResult = "42";
 
 		McpServerFeatures.SyncToolSpecification specification = McpServerFeatures.SyncToolSpecification.builder()
@@ -96,13 +92,13 @@ class SyncToolSpecificationBuilderTest {
 			.callHandler((exchange, request) -> {
 				// Simple test implementation
 				return CallToolResult.builder()
-					.content(List.of(new TextContent(expectedResult)))
+					.content(List.of(TextContent.builder(expectedResult).build()))
 					.isError(false)
 					.build();
 			})
 			.build();
 
-		CallToolRequest request = new CallToolRequest("calculator", Map.of());
+		CallToolRequest request = CallToolRequest.builder("calculator").build();
 		CallToolResult result = specification.callHandler().apply(null, request);
 
 		assertThat(result).isNotNull();
@@ -138,7 +134,7 @@ class SyncToolSpecificationBuilderTest {
 
 		@Test
 		void defaultShouldThrowOnInvalidName() {
-			Tool invalidTool = Tool.builder().name("invalid tool name").build();
+			Tool invalidTool = Tool.builder("invalid tool name", EMPTY_JSON_SCHEMA).build();
 
 			assertThatThrownBy(
 					() -> McpServer.sync(transportProvider).toolCall(invalidTool, (exchange, request) -> null))
@@ -149,7 +145,7 @@ class SyncToolSpecificationBuilderTest {
 		@Test
 		void lenientDefaultShouldLogOnInvalidName() {
 			System.setProperty(ToolNameValidator.STRICT_VALIDATION_PROPERTY, "false");
-			Tool invalidTool = Tool.builder().name("invalid tool name").build();
+			Tool invalidTool = Tool.builder("invalid tool name", EMPTY_JSON_SCHEMA).build();
 
 			assertThatCode(() -> McpServer.sync(transportProvider).toolCall(invalidTool, (exchange, request) -> null))
 				.doesNotThrowAnyException();
@@ -158,7 +154,7 @@ class SyncToolSpecificationBuilderTest {
 
 		@Test
 		void lenientConfigurationShouldLogOnInvalidName() {
-			Tool invalidTool = Tool.builder().name("invalid tool name").build();
+			Tool invalidTool = Tool.builder("invalid tool name", EMPTY_JSON_SCHEMA).build();
 
 			assertThatCode(() -> McpServer.sync(transportProvider)
 				.strictToolNameValidation(false)
@@ -169,7 +165,7 @@ class SyncToolSpecificationBuilderTest {
 		@Test
 		void serverConfigurationShouldOverrideDefault() {
 			System.setProperty(ToolNameValidator.STRICT_VALIDATION_PROPERTY, "false");
-			Tool invalidTool = Tool.builder().name("invalid tool name").build();
+			Tool invalidTool = Tool.builder("invalid tool name", EMPTY_JSON_SCHEMA).build();
 
 			assertThatThrownBy(() -> McpServer.sync(transportProvider)
 				.strictToolNameValidation(true)

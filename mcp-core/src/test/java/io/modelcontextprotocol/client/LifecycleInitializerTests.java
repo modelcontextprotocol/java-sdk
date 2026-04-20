@@ -44,13 +44,16 @@ class LifecycleInitializerTests {
 	private static final McpSchema.ClientCapabilities CLIENT_CAPABILITIES = McpSchema.ClientCapabilities.builder()
 		.build();
 
-	private static final McpSchema.Implementation CLIENT_INFO = new McpSchema.Implementation("test-client", "1.0.0");
+	private static final McpSchema.Implementation CLIENT_INFO = McpSchema.Implementation.builder("test-client", "1.0.0")
+		.build();
 
 	private static final List<String> PROTOCOL_VERSIONS = List.of("1.0.0", "2.0.0");
 
-	private static final McpSchema.InitializeResult MOCK_INIT_RESULT = new McpSchema.InitializeResult("2.0.0",
-			McpSchema.ServerCapabilities.builder().build(), new McpSchema.Implementation("test-server", "1.0.0"),
-			"Test instructions");
+	private static final McpSchema.InitializeResult MOCK_INIT_RESULT = McpSchema.InitializeResult
+		.builder("2.0.0", McpSchema.ServerCapabilities.builder().build(),
+				McpSchema.Implementation.builder("test-server", "1.0.0").build())
+		.instructions("Test instructions")
+		.build();
 
 	@Mock
 	private McpClientSession mockClientSession;
@@ -148,10 +151,12 @@ class LifecycleInitializerTests {
 
 	@Test
 	void shouldFailForUnsupportedProtocolVersion() {
-		McpSchema.InitializeResult unsupportedResult = new McpSchema.InitializeResult("999.0.0", // Unsupported
-																									// version
-				McpSchema.ServerCapabilities.builder().build(), new McpSchema.Implementation("test-server", "1.0.0"),
-				"Test instructions");
+		McpSchema.InitializeResult unsupportedResult = McpSchema.InitializeResult.builder("999.0.0", // Unsupported
+																										// version
+				McpSchema.ServerCapabilities.builder().build(),
+				McpSchema.Implementation.builder("test-server", "1.0.0").build())
+			.instructions("Test instructions")
+			.build();
 
 		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any()))
 			.thenReturn(Mono.just(unsupportedResult));
@@ -342,8 +347,11 @@ class LifecycleInitializerTests {
 
 		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenAnswer(invocation -> {
 			capturedRequest.set((McpSchema.InitializeRequest) invocation.getArgument(1));
-			return Mono.just(new McpSchema.InitializeResult("4.0.0", McpSchema.ServerCapabilities.builder().build(),
-					new McpSchema.Implementation("test-server", "1.0.0"), "Test instructions"));
+			return Mono.just(McpSchema.InitializeResult
+				.builder("4.0.0", McpSchema.ServerCapabilities.builder().build(),
+						McpSchema.Implementation.builder("test-server", "1.0.0").build())
+				.instructions("Test instructions")
+				.build());
 		});
 
 		StepVerifier.create(initializer.withInitialization("test", init -> Mono.just(init.initializeResult())))

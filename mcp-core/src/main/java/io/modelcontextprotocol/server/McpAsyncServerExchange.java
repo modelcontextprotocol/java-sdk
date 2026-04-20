@@ -166,13 +166,13 @@ public class McpAsyncServerExchange {
 		return this.listRoots(McpSchema.FIRST_PAGE)
 			.expand(result -> (result.nextCursor() != null) ?
 					this.listRoots(result.nextCursor()) : Mono.empty())
-			.reduce(new McpSchema.ListRootsResult(new ArrayList<>(), null),
+			.reduce(McpSchema.ListRootsResult.builder(new ArrayList<>()).build(),
 				(allRootsResult, result) -> {
 					allRootsResult.roots().addAll(result.roots());
 					return allRootsResult;
 				})
-			.map(result -> new McpSchema.ListRootsResult(Collections.unmodifiableList(result.roots()),
-					result.nextCursor()));
+			.map(result -> McpSchema.ListRootsResult.builder(Collections.unmodifiableList(result.roots()))
+					.nextCursor(result.nextCursor()).build());
 		// @formatter:on
 	}
 

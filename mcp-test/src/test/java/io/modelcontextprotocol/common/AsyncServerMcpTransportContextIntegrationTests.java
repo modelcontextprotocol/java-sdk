@@ -125,8 +125,7 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 			.build())
 		.build();
 
-	private final McpSchema.Tool tool = McpSchema.Tool.builder()
-		.name("test-tool")
+	private final McpSchema.Tool tool = McpSchema.Tool.builder("test-tool")
 		.description("return the value of the x-test header from call tool request")
 		.build();
 
@@ -178,7 +177,8 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 
 		// Test tool call with context
 		StepVerifier
-			.create(asyncStreamableClient.callTool(new McpSchema.CallToolRequest("test-tool", Map.of()))
+			.create(asyncStreamableClient
+				.callTool(McpSchema.CallToolRequest.builder("test-tool").arguments(Map.of()).build())
 				.contextWrite(ctx -> ctx.put(McpTransportContext.KEY,
 						McpTransportContext.create(Map.of("client-side-header-value", "some important value")))))
 			.assertNext(response -> {
@@ -212,7 +212,8 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 
 		// Test tool call with context
 		StepVerifier
-			.create(asyncStreamableClient.callTool(new McpSchema.CallToolRequest("test-tool", Map.of()))
+			.create(asyncStreamableClient
+				.callTool(McpSchema.CallToolRequest.builder("test-tool").arguments(Map.of()).build())
 				.contextWrite(ctx -> ctx.put(McpTransportContext.KEY,
 						McpTransportContext.create(Map.of("client-side-header-value", "some important value")))))
 			.assertNext(response -> {
@@ -246,7 +247,7 @@ public class AsyncServerMcpTransportContextIntegrationTests {
 
 		// Test tool call with context
 		StepVerifier
-			.create(asyncSseClient.callTool(new McpSchema.CallToolRequest("test-tool", Map.of()))
+			.create(asyncSseClient.callTool(McpSchema.CallToolRequest.builder("test-tool").arguments(Map.of()).build())
 				.contextWrite(ctx -> ctx.put(McpTransportContext.KEY,
 						McpTransportContext.create(Map.of("client-side-header-value", "some important value")))))
 			.assertNext(response -> {

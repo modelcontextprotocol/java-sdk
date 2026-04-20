@@ -153,8 +153,7 @@ public class McpServerSession implements McpLoggableSession {
 
 		return Mono.<McpSchema.JSONRPCResponse>create(sink -> {
 			this.pendingResponses.put(requestId, sink);
-			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, method,
-					requestId, requestParams);
+			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(method, requestId, requestParams);
 			this.transport.sendMessage(jsonrpcRequest).subscribe(v -> {
 			}, error -> {
 				this.pendingResponses.remove(requestId);
@@ -177,8 +176,7 @@ public class McpServerSession implements McpLoggableSession {
 
 	@Override
 	public Mono<Void> sendNotification(String method, Object params) {
-		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
-				method, params);
+		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(method, params);
 		return this.transport.sendMessage(jsonrpcNotification);
 	}
 
@@ -223,8 +221,7 @@ public class McpServerSession implements McpLoggableSession {
 							&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
 									: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 											error.getMessage(), McpError.aggregateExceptionMessages(error));
-					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
-							jsonRpcError);
+					var errorResponse = McpSchema.JSONRPCResponse.error(request.id(), jsonRpcError);
 					// TODO: Should the error go to SSE or back as POST return?
 					return this.transport.sendMessage(errorResponse).then(Mono.empty());
 				}).flatMap(this.transport::sendMessage);
@@ -270,24 +267,21 @@ public class McpServerSession implements McpLoggableSession {
 				var handler = this.requestHandlers.get(request.method());
 				if (handler == null) {
 					MethodNotFoundError error = getMethodNotFoundError(request.method());
-					return Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
-							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
-									error.message(), error.data())));
+					return Mono
+						.just(McpSchema.JSONRPCResponse.error(request.id(), new McpSchema.JSONRPCResponse.JSONRPCError(
+								McpSchema.ErrorCodes.METHOD_NOT_FOUND, error.message(), error.data())));
 				}
 
 				resultMono = this.exchangeSink.asMono()
 					.flatMap(exchange -> handler.handle(copyExchange(exchange, transportContext), request.params()));
 			}
-			return resultMono
-				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
+			return resultMono.map(result -> McpSchema.JSONRPCResponse.result(request.id(), result))
 				.onErrorResume(error -> {
 					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (error instanceof McpError mcpError
 							&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
-									// TODO: add error message through the data field
 									: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 											error.getMessage(), McpError.aggregateExceptionMessages(error));
-					return Mono.just(
-							new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null, jsonRpcError));
+					return Mono.just(McpSchema.JSONRPCResponse.error(request.id(), jsonRpcError));
 				});
 		});
 	}
