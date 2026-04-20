@@ -284,7 +284,7 @@ public class McpStatelessAsyncServer {
 					String content = "Response missing structured content which is expected when calling tool with non-empty outputSchema";
 					logger.warn(content);
 					return CallToolResult.builder()
-						.content(List.of(new McpSchema.TextContent(content)))
+						.content(List.of(McpSchema.TextContent.builder(content).build()))
 						.isError(true)
 						.build();
 				}
@@ -295,7 +295,7 @@ public class McpStatelessAsyncServer {
 				if (!validation.valid()) {
 					logger.warn("Tool call result validation failed: {}", validation.errorMessage());
 					return CallToolResult.builder()
-						.content(List.of(new McpSchema.TextContent(validation.errorMessage())))
+						.content(List.of(McpSchema.TextContent.builder(validation.errorMessage()).build()))
 						.isError(true)
 						.build();
 				}
@@ -308,7 +308,7 @@ public class McpStatelessAsyncServer {
 					// https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content
 
 					return CallToolResult.builder()
-						.content(List.of(new McpSchema.TextContent(validation.jsonStructuredOutput())))
+						.content(List.of(McpSchema.TextContent.builder(validation.jsonStructuredOutput()).build()))
 						.isError(result.isError())
 						.structuredContent(result.structuredContent())
 						.build();
@@ -393,7 +393,7 @@ public class McpStatelessAsyncServer {
 			List<Tool> tools = this.tools.stream()
 				.map(McpStatelessServerFeatures.AsyncToolSpecification::tool)
 				.toList();
-			return Mono.just(new McpSchema.ListToolsResult(tools, null));
+			return Mono.just(McpSchema.ListToolsResult.builder(tools).build());
 		};
 	}
 
@@ -557,7 +557,7 @@ public class McpStatelessAsyncServer {
 				.stream()
 				.map(McpStatelessServerFeatures.AsyncResourceSpecification::resource)
 				.toList();
-			return Mono.just(new McpSchema.ListResourcesResult(resourceList, null));
+			return Mono.just(McpSchema.ListResourcesResult.builder(resourceList).build());
 		};
 	}
 
@@ -567,7 +567,7 @@ public class McpStatelessAsyncServer {
 				.stream()
 				.map(AsyncResourceTemplateSpecification::resourceTemplate)
 				.toList();
-			return Mono.just(new McpSchema.ListResourceTemplatesResult(resourceList, null));
+			return Mono.just(McpSchema.ListResourceTemplatesResult.builder(resourceList).build());
 		};
 	}
 
@@ -687,7 +687,7 @@ public class McpStatelessAsyncServer {
 				.map(McpStatelessServerFeatures.AsyncPromptSpecification::prompt)
 				.toList();
 
-			return Mono.just(new McpSchema.ListPromptsResult(promptList, null));
+			return Mono.just(McpSchema.ListPromptsResult.builder(promptList).build());
 		};
 	}
 

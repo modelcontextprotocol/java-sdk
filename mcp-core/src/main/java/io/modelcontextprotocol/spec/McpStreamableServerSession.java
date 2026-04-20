@@ -190,24 +190,21 @@ public class McpStreamableServerSession implements McpLoggableSession {
 			// (sink)
 			if (requestHandler == null) {
 				MethodNotFoundError error = getMethodNotFoundError(jsonrpcRequest.method());
-				return transport
-					.sendMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), null,
-							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
-									error.message(), error.data())));
+				return transport.sendMessage(
+						McpSchema.JSONRPCResponse.error(jsonrpcRequest.id(), new McpSchema.JSONRPCResponse.JSONRPCError(
+								McpSchema.ErrorCodes.METHOD_NOT_FOUND, error.message(), error.data())));
 			}
 			return requestHandler
 				.handle(new McpAsyncServerExchange(this.id, stream, clientCapabilities.get(), clientInfo.get(),
 						transportContext), jsonrpcRequest.params())
-				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), result,
-						null))
+				.map(result -> McpSchema.JSONRPCResponse.result(jsonrpcRequest.id(), result))
 				.onErrorResume(e -> {
 					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (e instanceof McpError mcpError
 							&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
 									: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 											e.getMessage(), McpError.aggregateExceptionMessages(e));
 
-					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(),
-							null, jsonRpcError);
+					var errorResponse = McpSchema.JSONRPCResponse.error(jsonrpcRequest.id(), jsonRpcError);
 					return Mono.just(errorResponse);
 				})
 				.flatMap(transport::sendMessage)
@@ -381,8 +378,8 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 			return Mono.<McpSchema.JSONRPCResponse>create(sink -> {
 				this.pendingResponses.put(requestId, sink);
-				McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-						method, requestId, requestParams);
+				McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(method, requestId,
+						requestParams);
 				String messageId = this.uuidGenerator.get();
 				// TODO: store message in history
 				this.transport.sendMessage(jsonrpcRequest, messageId).subscribe(v -> {
@@ -407,8 +404,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 		@Override
 		public Mono<Void> sendNotification(String method, Object params) {
-			McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(
-					McpSchema.JSONRPC_VERSION, method, params);
+			McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(method, params);
 			String messageId = this.uuidGenerator.get();
 			// TODO: store message in history
 			return this.transport.sendMessage(jsonrpcNotification, messageId);

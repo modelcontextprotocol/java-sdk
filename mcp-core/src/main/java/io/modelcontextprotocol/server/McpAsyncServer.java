@@ -414,7 +414,7 @@ public class McpAsyncServer {
 					String content = "Response missing structured content which is expected when calling tool with non-empty outputSchema";
 					logger.warn(content);
 					return CallToolResult.builder()
-						.content(List.of(new McpSchema.TextContent(content)))
+						.content(List.of(McpSchema.TextContent.builder(content).build()))
 						.isError(true)
 						.build();
 				}
@@ -425,7 +425,7 @@ public class McpAsyncServer {
 				if (!validation.valid()) {
 					logger.warn("Tool call result validation failed: {}", validation.errorMessage());
 					return CallToolResult.builder()
-						.content(List.of(new McpSchema.TextContent(validation.errorMessage())))
+						.content(List.of(McpSchema.TextContent.builder(validation.errorMessage()).build()))
 						.isError(true)
 						.build();
 				}
@@ -438,7 +438,7 @@ public class McpAsyncServer {
 					// https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content
 
 					return CallToolResult.builder()
-						.content(List.of(new McpSchema.TextContent(validation.jsonStructuredOutput())))
+						.content(List.of(McpSchema.TextContent.builder(validation.jsonStructuredOutput()).build()))
 						.isError(result.isError())
 						.structuredContent(result.structuredContent())
 						.build();
@@ -529,7 +529,7 @@ public class McpAsyncServer {
 		return (exchange, params) -> {
 			List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList();
 
-			return Mono.just(new McpSchema.ListToolsResult(tools, null));
+			return Mono.just(McpSchema.ListToolsResult.builder(tools).build());
 		};
 	}
 
@@ -781,7 +781,7 @@ public class McpAsyncServer {
 				.stream()
 				.map(McpServerFeatures.AsyncResourceSpecification::resource)
 				.toList();
-			return Mono.just(new McpSchema.ListResourcesResult(resourceList, null));
+			return Mono.just(McpSchema.ListResourcesResult.builder(resourceList).build());
 		};
 	}
 
@@ -791,7 +791,7 @@ public class McpAsyncServer {
 				.stream()
 				.map(McpServerFeatures.AsyncResourceTemplateSpecification::resourceTemplate)
 				.toList();
-			return Mono.just(new McpSchema.ListResourceTemplatesResult(resourceList, null));
+			return Mono.just(McpSchema.ListResourceTemplatesResult.builder(resourceList).build());
 		};
 	}
 
@@ -923,7 +923,7 @@ public class McpAsyncServer {
 				.map(McpServerFeatures.AsyncPromptSpecification::prompt)
 				.toList();
 
-			return Mono.just(new McpSchema.ListPromptsResult(promptList, null));
+			return Mono.just(McpSchema.ListPromptsResult.builder(promptList).build());
 		};
 	}
 

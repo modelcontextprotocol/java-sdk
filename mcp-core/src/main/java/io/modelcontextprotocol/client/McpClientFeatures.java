@@ -106,7 +106,8 @@ class McpClientFeatures {
 					: new McpSchema.ClientCapabilities(null,
 							!Utils.isEmpty(roots) ? new McpSchema.ClientCapabilities.RootCapabilities(false) : null,
 							samplingHandler != null ? new McpSchema.ClientCapabilities.Sampling() : null,
-							elicitationHandler != null ? new McpSchema.ClientCapabilities.Elicitation() : null);
+							elicitationHandler != null ? McpSchema.ClientCapabilities.Elicitation.builder().build()
+									: null);
 			this.roots = roots != null ? new ConcurrentHashMap<>(roots) : new ConcurrentHashMap<>();
 
 			this.toolsChangeConsumers = toolsChangeConsumers != null ? toolsChangeConsumers : List.of();
@@ -256,7 +257,8 @@ class McpClientFeatures {
 					: new McpSchema.ClientCapabilities(null,
 							!Utils.isEmpty(roots) ? new McpSchema.ClientCapabilities.RootCapabilities(false) : null,
 							samplingHandler != null ? new McpSchema.ClientCapabilities.Sampling() : null,
-							elicitationHandler != null ? new McpSchema.ClientCapabilities.Elicitation() : null);
+							elicitationHandler != null ? McpSchema.ClientCapabilities.Elicitation.builder().build()
+									: null);
 			this.roots = roots != null ? new HashMap<>(roots) : new HashMap<>();
 
 			this.toolsChangeConsumers = toolsChangeConsumers != null ? toolsChangeConsumers : List.of();

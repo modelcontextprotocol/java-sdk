@@ -24,9 +24,11 @@ class ResourceSubscriptionTests {
 
 	private static final String RESOURCE_URI = "test://resource/1";
 
-	private static final McpSchema.Implementation SERVER_INFO = new McpSchema.Implementation("test-server", "1.0.0");
+	private static final McpSchema.Implementation SERVER_INFO = McpSchema.Implementation.builder("test-server", "1.0.0")
+		.build();
 
-	private static final McpSchema.Implementation CLIENT_INFO = new McpSchema.Implementation("test-client", "1.0.0");
+	private static final McpSchema.Implementation CLIENT_INFO = McpSchema.Implementation.builder("test-client", "1.0.0")
+		.build();
 
 	private static McpAsyncServer buildServer(MockMcpServerTransportProvider transportProvider) {
 		return McpServer.async(transportProvider)
@@ -36,24 +38,25 @@ class ResourceSubscriptionTests {
 	}
 
 	private static McpSchema.JSONRPCRequest initRequest() {
-		return new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
-				UUID.randomUUID().toString(),
-				new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_11_25, null, CLIENT_INFO));
+		return new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, UUID.randomUUID().toString(),
+				McpSchema.InitializeRequest
+					.builder(ProtocolVersions.MCP_2025_11_25, McpSchema.ClientCapabilities.builder().build(),
+							CLIENT_INFO)
+					.build());
 	}
 
 	private static McpSchema.JSONRPCNotification initializedNotification() {
-		return new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_NOTIFICATION_INITIALIZED,
-				null);
+		return new McpSchema.JSONRPCNotification(McpSchema.METHOD_NOTIFICATION_INITIALIZED);
 	}
 
 	private static McpSchema.JSONRPCRequest subscribeRequest(String uri) {
-		return new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_RESOURCES_SUBSCRIBE,
-				UUID.randomUUID().toString(), new McpSchema.SubscribeRequest(uri));
+		return new McpSchema.JSONRPCRequest(McpSchema.METHOD_RESOURCES_SUBSCRIBE, UUID.randomUUID().toString(),
+				McpSchema.SubscribeRequest.builder(uri).build());
 	}
 
 	private static McpSchema.JSONRPCRequest unsubscribeRequest(String uri) {
-		return new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_RESOURCES_UNSUBSCRIBE,
-				UUID.randomUUID().toString(), new McpSchema.UnsubscribeRequest(uri));
+		return new McpSchema.JSONRPCRequest(McpSchema.METHOD_RESOURCES_UNSUBSCRIBE, UUID.randomUUID().toString(),
+				McpSchema.UnsubscribeRequest.builder(uri).build());
 	}
 
 	@Test

@@ -14,6 +14,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -125,8 +127,7 @@ class HttpClientSseClientTransportTests {
 
 	@Test
 	void testErrorOnBogusMessage() {
-		// bogus message
-		JSONRPCRequest bogusMessage = new JSONRPCRequest(null, null, "test-id", Map.of("key", "value"));
+		var bogusMessage = new BogusJsonRpcMessage("test-id", Map.of("key", "value"));
 
 		StepVerifier.create(transport.sendMessage(bogusMessage))
 			.verifyErrorMessage(
@@ -136,8 +137,7 @@ class HttpClientSseClientTransportTests {
 	@Test
 	void testMessageProcessing() {
 		// Create a test message
-		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
-				Map.of("key", "value"));
+		JSONRPCRequest testMessage = new McpSchema.JSONRPCRequest("test-method", "test-id", Map.of("key", "value"));
 
 		// Simulate receiving the message
 		transport.simulateMessageEvent("""
@@ -167,8 +167,7 @@ class HttpClientSseClientTransportTests {
 				""");
 
 		// Create and send a request message
-		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
-				Map.of("key", "value"));
+		JSONRPCRequest testMessage = new McpSchema.JSONRPCRequest("test-method", "test-id", Map.of("key", "value"));
 
 		// Verify message handling
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
@@ -191,8 +190,7 @@ class HttpClientSseClientTransportTests {
 				""");
 
 		// Create and send a request message
-		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
-				Map.of("key", "value"));
+		JSONRPCRequest testMessage = new McpSchema.JSONRPCRequest("test-method", "test-id", Map.of("key", "value"));
 
 		// Verify message handling
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
@@ -221,8 +219,7 @@ class HttpClientSseClientTransportTests {
 		StepVerifier.create(transport.closeGracefully()).verifyComplete();
 
 		// Create a test message
-		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
-				Map.of("key", "value"));
+		JSONRPCRequest testMessage = new McpSchema.JSONRPCRequest("test-method", "test-id", Map.of("key", "value"));
 
 		// Verify message is not processed after shutdown
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
@@ -266,11 +263,9 @@ class HttpClientSseClientTransportTests {
 				""");
 
 		// Create and send corresponding messages
-		JSONRPCRequest message1 = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "method1", "id1",
-				Map.of("key", "value1"));
+		JSONRPCRequest message1 = new McpSchema.JSONRPCRequest("method1", "id1", Map.of("key", "value1"));
 
-		JSONRPCRequest message2 = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "method2", "id2",
-				Map.of("key", "value2"));
+		JSONRPCRequest message2 = new McpSchema.JSONRPCRequest("method2", "id2", Map.of("key", "value2"));
 
 		// Verify both messages are processed
 		StepVerifier.create(transport.sendMessage(message1).then(transport.sendMessage(message2))).verifyComplete();
@@ -354,8 +349,7 @@ class HttpClientSseClientTransportTests {
 		clearInvocations(mockCustomizer);
 
 		// Send test message
-		var testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
-				Map.of("key", "value"));
+		var testMessage = new McpSchema.JSONRPCRequest("test-method", "test-id", Map.of("key", "value"));
 
 		// Subscribe to messages and verify
 		StepVerifier
@@ -397,8 +391,7 @@ class HttpClientSseClientTransportTests {
 		clearInvocations(mockCustomizer);
 
 		// Send test message
-		var testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
-				Map.of("key", "value"));
+		var testMessage = new McpSchema.JSONRPCRequest("test-method", "test-id", Map.of("key", "value"));
 
 		// Subscribe to messages and verify
 		StepVerifier
@@ -415,6 +408,32 @@ class HttpClientSseClientTransportTests {
 
 		// Clean up
 		customizedTransport.closeGracefully().block();
+	}
+
+	/**
+	 * A minimal {@link McpSchema.JSONRPCMessage} that serializes only the supplied
+	 * fields, intentionally omitting {@code jsonrpc} and {@code method} to produce a
+	 * bogus wire payload for error-handling tests.
+	 */
+	private static class BogusJsonRpcMessage implements McpSchema.JSONRPCMessage {
+
+		@JsonProperty("id")
+		private final String id;
+
+		@JsonProperty("params")
+		private final Map<String, Object> params;
+
+		BogusJsonRpcMessage(String id, Map<String, Object> params) {
+			this.id = id;
+			this.params = params;
+		}
+
+		@Override
+		@JsonIgnore
+		public String jsonrpc() {
+			return null;
+		}
+
 	}
 
 }
