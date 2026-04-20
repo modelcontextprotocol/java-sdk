@@ -21,11 +21,13 @@ class InMemoryTransportTest {
 	public void createSyncMCPServer() {
 		var serverProvider = new InMemoryServerTransportProvider(transport);
 		McpServer.sync(serverProvider)
-			.toolCall(McpSchema.Tool.builder()
-				.name("test-tool")
-				.description("a test tool")
-				.inputSchema(new McpSchema.JsonSchema("object", Map.of(), List.of(), true, null, null))
-				.build(), (exchange, request) -> McpSchema.CallToolResult.builder().addTextContent("test-result").build())
+			.toolCall(
+					McpSchema.Tool.builder()
+						.name("test-tool")
+						.description("a test tool")
+						.inputSchema(new McpSchema.JsonSchema("object", Map.of(), List.of(), true, null, null))
+						.build(),
+					(exchange, request) -> McpSchema.CallToolResult.builder().addTextContent("test-result").build())
 			.build();
 
 	}
