@@ -1,17 +1,17 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.spec;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
  * @author Luca Chang
  * @author Surbhi Bansal
  * @author Anurag Pant
+ * @author Dariusz Jędrzejczyk
  */
 public final class McpSchema {
 
@@ -160,9 +161,7 @@ public final class McpSchema {
 
 	}
 
-	public sealed interface Request extends Meta
-			permits InitializeRequest, CallToolRequest, CreateMessageRequest, ElicitRequest, CompleteRequest,
-			GetPromptRequest, ReadResourceRequest, SubscribeRequest, UnsubscribeRequest, PaginatedRequest {
+	public interface Request extends Meta {
 
 		default Object progressToken() {
 			if (meta() != null && meta().containsKey("progressToken")) {
@@ -173,14 +172,11 @@ public final class McpSchema {
 
 	}
 
-	public sealed interface Result extends Meta permits InitializeResult, ListResourcesResult,
-			ListResourceTemplatesResult, ReadResourceResult, ListPromptsResult, GetPromptResult, ListToolsResult,
-			CallToolResult, CreateMessageResult, ElicitResult, CompleteResult, ListRootsResult {
+	public interface Result extends Meta {
 
 	}
 
-	public sealed interface Notification extends Meta
-			permits ProgressNotification, LoggingMessageNotification, ResourcesUpdatedNotification {
+	public interface Notification extends Meta {
 
 	}
 
@@ -199,7 +195,6 @@ public final class McpSchema {
 	 */
 	public static JSONRPCMessage deserializeJsonRpcMessage(McpJsonMapper jsonMapper, String jsonText)
 			throws IOException {
-
 		logger.debug("Received JSON message: {}", jsonText);
 
 		var map = jsonMapper.readValue(jsonText, MAP_TYPE_REF);
@@ -221,7 +216,7 @@ public final class McpSchema {
 	// ---------------------------
 	// JSON-RPC Message Types
 	// ---------------------------
-	public sealed interface JSONRPCMessage permits JSONRPCRequest, JSONRPCNotification, JSONRPCResponse {
+	public interface JSONRPCMessage {
 
 		String jsonrpc();
 
@@ -237,7 +232,6 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	// @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
 	public record JSONRPCRequest( // @formatter:off
 		@JsonProperty("jsonrpc") String jsonrpc,
 		@JsonProperty("method") String method,
@@ -265,8 +259,6 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	// TODO: batching support
-	// @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
 	public record JSONRPCNotification( // @formatter:off
 		@JsonProperty("jsonrpc") String jsonrpc,
 		@JsonProperty("method") String method,
@@ -283,8 +275,6 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	// TODO: batching support
-	// @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
 	public record JSONRPCResponse( // @formatter:off
 		@JsonProperty("jsonrpc") String jsonrpc,
 		@JsonProperty("id") Object id,
@@ -404,6 +394,7 @@ public final class McpSchema {
 		 * from MCP servers in their prompts.
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record Sampling() {
 		}
 
@@ -431,12 +422,14 @@ public final class McpSchema {
 		 * @param url support for out-of-band URL-based elicitation
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record Elicitation(@JsonProperty("form") Form form, @JsonProperty("url") Url url) {
 
 			/**
 			 * Marker record indicating support for form-based elicitation mode.
 			 */
 			@JsonInclude(JsonInclude.Include.NON_ABSENT)
+			@JsonIgnoreProperties(ignoreUnknown = true)
 			public record Form() {
 			}
 
@@ -444,6 +437,7 @@ public final class McpSchema {
 			 * Marker record indicating support for URL-based elicitation mode.
 			 */
 			@JsonInclude(JsonInclude.Include.NON_ABSENT)
+			@JsonIgnoreProperties(ignoreUnknown = true)
 			public record Url() {
 			}
 
@@ -542,6 +536,7 @@ public final class McpSchema {
 		 * Present if the server supports argument autocompletion suggestions.
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record CompletionCapabilities() {
 		}
 
@@ -549,6 +544,7 @@ public final class McpSchema {
 		 * Present if the server supports sending log messages to the client.
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record LoggingCapabilities() {
 		}
 
@@ -559,6 +555,7 @@ public final class McpSchema {
 		 * the prompt list
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record PromptCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
 		}
 
@@ -570,6 +567,7 @@ public final class McpSchema {
 		 * the resource list
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record ResourceCapabilities(@JsonProperty("subscribe") Boolean subscribe,
 				@JsonProperty("listChanged") Boolean listChanged) {
 		}
@@ -581,6 +579,7 @@ public final class McpSchema {
 		 * the tool list
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record ToolCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
 		}
 
@@ -1089,7 +1088,7 @@ public final class McpSchema {
 	@JsonTypeInfo(use = JsonTypeInfo.Id.DEDUCTION)
 	@JsonSubTypes({ @JsonSubTypes.Type(value = TextResourceContents.class),
 			@JsonSubTypes.Type(value = BlobResourceContents.class) })
-	public sealed interface ResourceContents extends Meta permits TextResourceContents, BlobResourceContents {
+	public interface ResourceContents extends Meta {
 
 		/**
 		 * The URI of this resource.
@@ -1172,11 +1171,11 @@ public final class McpSchema {
 		@JsonProperty("_meta") Map<String, Object> meta) implements Identifier { // @formatter:on
 
 		public Prompt(String name, String description, List<PromptArgument> arguments) {
-			this(name, null, description, arguments != null ? arguments : new ArrayList<>());
+			this(name, null, description, arguments, null);
 		}
 
 		public Prompt(String name, String title, String description, List<PromptArgument> arguments) {
-			this(name, title, description, arguments != null ? arguments : new ArrayList<>(), null);
+			this(name, title, description, arguments, null);
 		}
 	}
 
@@ -1848,7 +1847,7 @@ public final class McpSchema {
 		// @formatter:off
 			@JsonProperty("none") NONE,
 			@JsonProperty("thisServer") THIS_SERVER,
-			@JsonProperty("allServers")ALL_SERVERS
+			@JsonProperty("allServers") ALL_SERVERS
 		} // @formatter:on
 
 		public static Builder builder() {
@@ -1960,28 +1959,36 @@ public final class McpSchema {
 		public enum StopReason {
 
 		// @formatter:off
+
 			@JsonProperty("endTurn") END_TURN("endTurn"),
 			@JsonProperty("stopSequence") STOP_SEQUENCE("stopSequence"),
 			@JsonProperty("maxTokens") MAX_TOKENS("maxTokens"),
-			@JsonProperty("unknown") UNKNOWN("unknown");
-			// @formatter:on
+			@JsonProperty("unknown") UNKNOWN("unknown"); // @formatter:on
 
 			private final String value;
+
+			private static final Map<String, StopReason> BY_VALUE;
+
+			static {
+				Map<String, StopReason> m = new HashMap<>();
+				for (StopReason r : values()) {
+					m.put(r.value, r);
+				}
+				BY_VALUE = Map.copyOf(m);
+			}
 
 			StopReason(String value) {
 				this.value = value;
 			}
 
 			@JsonCreator
-			private static StopReason of(String value) {
-				return Arrays.stream(StopReason.values())
-					.filter(stopReason -> stopReason.value.equals(value))
-					.findFirst()
-					.orElse(StopReason.UNKNOWN);
+			public static StopReason of(String value) {
+				return BY_VALUE.getOrDefault(value, UNKNOWN);
 			}
 
 		}
 
+		// backwards compatibility constructor
 		public CreateMessageResult(Role role, Content content, String model, StopReason stopReason) {
 			this(role, content, model, stopReason, null);
 		}
@@ -2123,9 +2130,11 @@ public final class McpSchema {
 		public enum Action {
 
 		// @formatter:off
+
 			@JsonProperty("accept") ACCEPT,
 			@JsonProperty("decline") DECLINE,
 			@JsonProperty("cancel") CANCEL
+
 		} // @formatter:on
 
 		// backwards compatibility constructor
@@ -2319,9 +2328,15 @@ public final class McpSchema {
 		}
 	}
 
+	/**
+	 * Severity levels for MCP log messages, ordered from least to most severe. The
+	 * numeric {@link #level()} can be used to compare severities. Deserialization is
+	 * case-insensitive and returns {@code null} for unrecognized values.
+	 */
 	public enum LoggingLevel {
 
 	// @formatter:off
+
 		@JsonProperty("debug") DEBUG(0),
 		@JsonProperty("info") INFO(1),
 		@JsonProperty("notice") NOTICE(2),
@@ -2334,12 +2349,27 @@ public final class McpSchema {
 
 		private final int level;
 
+		private static final Map<String, LoggingLevel> BY_NAME;
+
+		static {
+			Map<String, LoggingLevel> m = new HashMap<>();
+			for (LoggingLevel l : values()) {
+				m.put(l.name().toLowerCase(), l);
+			}
+			BY_NAME = Map.copyOf(m);
+		}
+
 		LoggingLevel(int level) {
 			this.level = level;
 		}
 
 		public int level() {
 			return level;
+		}
+
+		@JsonCreator
+		public static LoggingLevel fromValue(String value) {
+			return value == null ? null : BY_NAME.get(value.toLowerCase());
 		}
 
 	}
@@ -2359,7 +2389,17 @@ public final class McpSchema {
 	// ---------------------------
 	// Autocomplete
 	// ---------------------------
-	public sealed interface CompleteReference permits PromptReference, ResourceReference {
+
+	/**
+	 * A reference to a prompt or resource that can be used as input for completion
+	 * requests. Implementations are identified by a {@code "type"} discriminator field
+	 * whose value maps to a concrete subtype via {@code @JsonSubTypes}.
+	 */
+	@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type",
+			visible = true)
+	@JsonSubTypes({ @JsonSubTypes.Type(value = PromptReference.class, name = PromptReference.TYPE),
+			@JsonSubTypes.Type(value = ResourceReference.class, name = ResourceReference.TYPE) })
+	public interface CompleteReference {
 
 		String type();
 
@@ -2471,6 +2511,8 @@ public final class McpSchema {
 		 * @param name The name of the argument
 		 * @param value The value of the argument to use for completion matching
 		 */
+		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record CompleteArgument(@JsonProperty("name") String name, @JsonProperty("value") String value) {
 		}
 
@@ -2479,6 +2521,8 @@ public final class McpSchema {
 		 *
 		 * @param arguments Previously-resolved variables in a URI template or prompt
 		 */
+		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record CompleteContext(@JsonProperty("arguments") Map<String, String> arguments) {
 		}
 	}
@@ -2509,26 +2553,36 @@ public final class McpSchema {
 		 * @param hasMore Indicates whether there are additional completion options beyond
 		 * those provided in the current response, even if the exact total is unknown
 		 */
-		@JsonInclude(JsonInclude.Include.ALWAYS)
+		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record CompleteCompletion( // @formatter:off
 				@JsonProperty("values") List<String> values,
 				@JsonProperty("total") Integer total,
 				@JsonProperty("hasMore") Boolean hasMore) { // @formatter:on
+
+			public CompleteCompletion {
+				Assert.notNull(values, "values must not be null");
+			}
 		}
 	}
 
 	// ---------------------------
 	// Content Types
 	// ---------------------------
+
+	/**
+	 * A polymorphic content value that can appear in messages and tool results. The
+	 * concrete type is determined by the {@code "type"} JSON property.
+	 */
 	@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
 	@JsonSubTypes({ @JsonSubTypes.Type(value = TextContent.class, name = "text"),
 			@JsonSubTypes.Type(value = ImageContent.class, name = "image"),
 			@JsonSubTypes.Type(value = AudioContent.class, name = "audio"),
 			@JsonSubTypes.Type(value = EmbeddedResource.class, name = "resource"),
 			@JsonSubTypes.Type(value = ResourceLink.class, name = "resource_link") })
-	public sealed interface Content extends Meta
-			permits TextContent, ImageContent, AudioContent, EmbeddedResource, ResourceLink {
+	public interface Content extends Meta {
 
+		@JsonIgnore
 		default String type() {
 			if (this instanceof TextContent) {
 				return "text";

@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server;
@@ -971,7 +971,8 @@ public class McpAsyncServer {
 	private McpRequestHandler<McpSchema.CompleteResult> completionCompleteRequestHandler() {
 		return (exchange, params) -> {
 
-			McpSchema.CompleteRequest request = parseCompletionParams(params);
+			McpSchema.CompleteRequest request = jsonMapper.convertValue(params, new TypeRef<>() {
+			});
 
 			if (request.ref() == null) {
 				return Mono.error(
@@ -1070,50 +1071,6 @@ public class McpAsyncServer {
 
 			return Mono.defer(() -> specification.completionHandler().apply(exchange, request));
 		};
-	}
-
-	/**
-	 * Parses the raw JSON-RPC request parameters into a {@link McpSchema.CompleteRequest}
-	 * object.
-	 * <p>
-	 * This method manually extracts the `ref` and `argument` fields from the input map,
-	 * determines the correct reference type (either prompt or resource), and constructs a
-	 * fully-typed {@code CompleteRequest} instance.
-	 * @param object the raw request parameters, expected to be a Map containing "ref" and
-	 * "argument" entries.
-	 * @return a {@link McpSchema.CompleteRequest} representing the structured completion
-	 * request.
-	 * @throws IllegalArgumentException if the "ref" type is not recognized.
-	 */
-	@SuppressWarnings("unchecked")
-	private McpSchema.CompleteRequest parseCompletionParams(Object object) {
-		Map<String, Object> params = (Map<String, Object>) object;
-		Map<String, Object> refMap = (Map<String, Object>) params.get("ref");
-		Map<String, Object> argMap = (Map<String, Object>) params.get("argument");
-		Map<String, Object> contextMap = (Map<String, Object>) params.get("context");
-		Map<String, Object> meta = (Map<String, Object>) params.get("_meta");
-
-		String refType = (String) refMap.get("type");
-
-		McpSchema.CompleteReference ref = switch (refType) {
-			case PromptReference.TYPE -> new McpSchema.PromptReference(refType, (String) refMap.get("name"),
-					refMap.get("title") != null ? (String) refMap.get("title") : null);
-			case ResourceReference.TYPE -> new McpSchema.ResourceReference(refType, (String) refMap.get("uri"));
-			default -> throw new IllegalArgumentException("Invalid ref type: " + refType);
-		};
-
-		String argName = (String) argMap.get("name");
-		String argValue = (String) argMap.get("value");
-		McpSchema.CompleteRequest.CompleteArgument argument = new McpSchema.CompleteRequest.CompleteArgument(argName,
-				argValue);
-
-		McpSchema.CompleteRequest.CompleteContext context = null;
-		if (contextMap != null) {
-			Map<String, String> arguments = (Map<String, String>) contextMap.get("arguments");
-			context = new McpSchema.CompleteRequest.CompleteContext(arguments);
-		}
-
-		return new McpSchema.CompleteRequest(ref, argument, meta, context);
 	}
 
 	/**
