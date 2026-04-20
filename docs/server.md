@@ -21,7 +21,8 @@ The MCP Server is a foundational component in the Model Context Protocol (MCP) a
 !!! tip
     The core `io.modelcontextprotocol.sdk:mcp` module provides STDIO, SSE, and Streamable HTTP server transport implementations without requiring external web frameworks.
 
-    Spring-specific transport implementations are available as **optional** dependencies `io.modelcontextprotocol.sdk:mcp-spring-webflux`, `io.modelcontextprotocol.sdk:mcp-spring-webmvc` for [Spring Framework](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html) users.
+    Spring-specific transport implementations (`mcp-spring-webflux`, `mcp-spring-webmvc`) are now part of [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`) and are no longer shipped by this SDK.
+    See the [MCP Server Boot Starter](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-server-boot-starter-docs.html) documentation for Spring-based server setup.
 
 The server supports both synchronous and asynchronous APIs, allowing for flexible integration in different application contexts.
 
@@ -32,7 +33,7 @@ The server supports both synchronous and asynchronous APIs, allowing for flexibl
     McpSyncServer syncServer = McpServer.sync(transportProvider)
         .serverInfo("my-server", "1.0.0")
         .capabilities(ServerCapabilities.builder()
-            .resources(false, true)  // Enable resource support with list changes
+            .resources(false, true)  // Resource support: subscribe=false, listChanged=true
             .tools(true)             // Enable tool support with list changes
             .prompts(true)           // Enable prompt support with list changes
             .completions()           // Enable completions support
@@ -56,7 +57,7 @@ The server supports both synchronous and asynchronous APIs, allowing for flexibl
     McpAsyncServer asyncServer = McpServer.async(transportProvider)
         .serverInfo("my-server", "1.0.0")
         .capabilities(ServerCapabilities.builder()
-            .resources(false, true)  // Enable resource support with list changes
+            .resources(false, true)  // Resource support: subscribe=false, listChanged=true
             .tools(true)             // Enable tool support with list changes
             .prompts(true)           // Enable prompt support with list changes
             .completions()           // Enable completions support
@@ -104,25 +105,27 @@ The transport layer in the MCP SDK is responsible for handling the communication
 It provides different implementations to support various communication protocols and patterns.
 The SDK includes several built-in transport provider implementations:
 
-=== "STDIO"
+### STDIO
 
-    Create process-based transport using stdin/stdout:
+Create process-based transport using stdin/stdout:
 
-    ```java
-    StdioServerTransportProvider transportProvider =
-        new StdioServerTransportProvider(new ObjectMapper());
-    ```
+```java
+StdioServerTransportProvider transportProvider =
+    new StdioServerTransportProvider(new ObjectMapper());
+```
 
-    Provides bidirectional JSON-RPC message handling over standard input/output streams with non-blocking message processing, serialization/deserialization, and graceful shutdown support.
+Provides bidirectional JSON-RPC message handling over standard input/output streams with non-blocking message processing, serialization/deserialization, and graceful shutdown support.
 
-    Key features:
+Key features:
 
-    - Bidirectional communication through stdin/stdout
-    - Process-based integration support
-    - Simple setup and configuration
-    - Lightweight implementation
+- Bidirectional communication through stdin/stdout
+- Process-based integration support
+- Simple setup and configuration
+- Lightweight implementation
 
-=== "Streamable HTTP (Servlet)"
+### Streamable HTTP
+
+=== "Streamable HTTP Servlet"
 
     Creates a Servlet-based Streamable HTTP server transport. Included in the core `mcp` module:
 
@@ -165,9 +168,9 @@ The SDK includes several built-in transport provider implementations:
     - Security validation support
     - Graceful shutdown support
 
-=== "Streamable HTTP (WebFlux)"
+=== "Streamable HTTP WebFlux (external)"
 
-    Creates WebFlux-based Streamable HTTP server transport. Requires the `mcp-spring-webflux` dependency:
+    Creates WebFlux-based Streamable HTTP server transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     @Configuration
@@ -195,9 +198,9 @@ The SDK includes several built-in transport provider implementations:
     - Configurable keep-alive intervals
     - Security validation support
 
-=== "Streamable HTTP (WebMvc)"
+=== "Streamable HTTP WebMvc (external)"
 
-    Creates WebMvc-based Streamable HTTP server transport. Requires the `mcp-spring-webmvc` dependency:
+    Creates WebMvc-based Streamable HTTP server transport. Requires the `mcp-spring-webmvc` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
 
     ```java
     @Configuration
@@ -219,61 +222,9 @@ The SDK includes several built-in transport provider implementations:
     }
     ```
 
-=== "SSE (WebFlux)"
+### SSE HTTP (Legacy)
 
-    Creates WebFlux-based SSE server transport. Requires the `mcp-spring-webflux` dependency:
-
-    ```java
-    @Configuration
-    class McpConfig {
-        @Bean
-        WebFluxSseServerTransportProvider webFluxSseServerTransportProvider(ObjectMapper mapper) {
-            return new WebFluxSseServerTransportProvider(mapper, "/mcp/message");
-        }
-
-        @Bean
-        RouterFunction<?> mcpRouterFunction(WebFluxSseServerTransportProvider transportProvider) {
-            return transportProvider.getRouterFunction();
-        }
-    }
-    ```
-
-    Implements the MCP HTTP with SSE transport specification, providing:
-
-    - Reactive HTTP streaming with WebFlux
-    - Concurrent client connections through SSE endpoints
-    - Message routing and session management
-    - Graceful shutdown capabilities
-
-=== "SSE (WebMvc)"
-
-    Creates WebMvc-based SSE server transport. Requires the `mcp-spring-webmvc` dependency:
-
-    ```java
-    @Configuration
-    @EnableWebMvc
-    class McpConfig {
-        @Bean
-        WebMvcSseServerTransportProvider webMvcSseServerTransportProvider(ObjectMapper mapper) {
-            return new WebMvcSseServerTransportProvider(mapper, "/mcp/message");
-        }
-
-        @Bean
-        RouterFunction<ServerResponse> mcpRouterFunction(
-                WebMvcSseServerTransportProvider transportProvider) {
-            return transportProvider.getRouterFunction();
-        }
-    }
-    ```
-
-    Implements the MCP HTTP with SSE transport specification, providing:
-
-    - Server-side event streaming
-    - Integration with Spring WebMVC
-    - Support for traditional web applications
-    - Synchronous operation handling
-
-=== "SSE (Servlet)"
+=== "SSE Servlet"
 
     Creates a Servlet-based SSE server transport. Included in the core `mcp` module.
     The `HttpServletSseServerTransportProvider` can be used with any Servlet container.
@@ -307,13 +258,68 @@ The SDK includes several built-in transport provider implementations:
     - Error handling and response formatting
     - Graceful shutdown support
 
+=== "SSE WebFlux (external)"
+
+    Creates WebFlux-based SSE server transport. Requires the `mcp-spring-webflux` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+
+    ```java
+    @Configuration
+    class McpConfig {
+        @Bean
+        WebFluxSseServerTransportProvider webFluxSseServerTransportProvider(ObjectMapper mapper) {
+            return new WebFluxSseServerTransportProvider(mapper, "/mcp/message");
+        }
+
+        @Bean
+        RouterFunction<?> mcpRouterFunction(WebFluxSseServerTransportProvider transportProvider) {
+            return transportProvider.getRouterFunction();
+        }
+    }
+    ```
+
+    Implements the MCP HTTP with SSE transport specification, providing:
+
+    - Reactive HTTP streaming with WebFlux
+    - Concurrent client connections through SSE endpoints
+    - Message routing and session management
+    - Graceful shutdown capabilities
+
+=== "SSE WebMvc (external)"
+
+    Creates WebMvc-based SSE server transport. Requires the `mcp-spring-webmvc` dependency from [Spring AI](https://docs.spring.io/spring-ai/reference/2.0-SNAPSHOT/api/mcp/mcp-overview.html) 2.0+ (group `org.springframework.ai`):
+
+    ```java
+    @Configuration
+    @EnableWebMvc
+    class McpConfig {
+        @Bean
+        WebMvcSseServerTransportProvider webMvcSseServerTransportProvider(ObjectMapper mapper) {
+            return new WebMvcSseServerTransportProvider(mapper, "/mcp/message");
+        }
+
+        @Bean
+        RouterFunction<ServerResponse> mcpRouterFunction(
+                WebMvcSseServerTransportProvider transportProvider) {
+            return transportProvider.getRouterFunction();
+        }
+    }
+    ```
+
+    Implements the MCP HTTP with SSE transport specification, providing:
+
+    - Server-side event streaming
+    - Integration with Spring WebMVC
+    - Support for traditional web applications
+    - Synchronous operation handling
+
+
 ## Server Capabilities
 
 The server can be configured with various capabilities:
 
 ```java
 var capabilities = ServerCapabilities.builder()
-    .resources(false, true)  // Resource support (subscribe, listChanged)
+    .resources(true, true)   // Resource support: subscribe=true, listChanged=true
     .tools(true)             // Tool support with list changes notifications
     .prompts(true)           // Prompt support with list changes notifications
     .completions()           // Enable completions support
@@ -431,6 +437,42 @@ Resources provide context to AI models by exposing data such as: File contents, 
         }
     );
     ```
+
+### Resource Subscriptions
+
+When the `subscribe` capability is enabled, clients can subscribe to specific resources and receive targeted `notifications/resources/updated` notifications when those resources change. Only sessions that have explicitly subscribed to a given URI receive the notification — not every connected client.
+
+Enable subscription support in the server capabilities:
+
+```java
+McpSyncServer server = McpServer.sync(transportProvider)
+    .serverInfo("my-server", "1.0.0")
+    .capabilities(ServerCapabilities.builder()
+        .resources(true, false)  // subscribe=true, listChanged=false
+        .build())
+    .resources(myResourceSpec)
+    .build();
+```
+
+When a subscribed resource changes, notify only the interested sessions:
+
+=== "Sync"
+
+    ```java
+    server.notifyResourcesUpdated(
+        new McpSchema.ResourcesUpdatedNotification("custom://resource")
+    );
+    ```
+
+=== "Async"
+
+    ```java
+    server.notifyResourcesUpdated(
+        new McpSchema.ResourcesUpdatedNotification("custom://resource")
+    ).subscribe();
+    ```
+
+If no sessions are subscribed to the given URI the call completes immediately without sending any messages. Subscription state is automatically cleaned up when a client session closes.
 
 ### Resource Template Specification
 
@@ -753,3 +795,42 @@ Supported logging levels (in order of increasing severity): DEBUG (0), INFO (1),
 ## Error Handling
 
 The SDK provides comprehensive error handling through the McpError class, covering protocol compatibility, transport communication, JSON-RPC messaging, tool execution, resource management, prompt handling, timeouts, and connection issues. This unified error handling approach ensures consistent and reliable error management across both synchronous and asynchronous operations.
+
+### Error Handling in Tool Implementations
+
+#### Two Tiers of Errors
+
+MCP distinguishes between two categories of errors in tool execution:
+
+**1. Tool-Level Errors (Recoverable by the LLM)**
+
+Use `CallToolResult` with `isError(true)` for validation failures, missing arguments, or domain errors the LLM can act on and retry.
+
+```java
+// Example: Domain validation failure (e.g., invalid email format)
+if (!emailAddress.matches("^[A-Za-z0-9+_.-]+@(.+)$")) {
+        return CallToolResult.builder()
+        .content(List.of(new McpSchema.TextContent("Invalid argument: 'email' must be a valid email address.")))
+        .isError(true)
+        .build();
+}
+```
+
+The LLM receives this as part of the normal tool response and can self-correct in a subsequent interaction.
+
+**2. Protocol-Level Errors (Unrecoverable)**
+
+Uncaught exceptions from a tool handler are mapped to a JSON-RPC error response. Use this only for truly unexpected failures (e.g., infrastructure errors such as DB timeout), not for input validation.
+
+```java
+// This propagates as a JSON-RPC error — use sparingly
+throw new McpError(McpSchema.ErrorCodes.INTERNAL_ERROR, "Unexpected failure");
+```
+
+#### Decision Guide
+
+| Situation                          | Approach                              |
+|------------------------------------|---------------------------------------|
+| Domain validation failure          | `CallToolResult` with `isError=true`  |
+| Infrastructure / unexpected error  | Throw `McpError` or let it propagate  |
+| Partial success with a warning     | `CallToolResult` with warning in text |

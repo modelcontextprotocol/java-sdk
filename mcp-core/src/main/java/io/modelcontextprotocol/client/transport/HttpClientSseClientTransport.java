@@ -186,19 +186,6 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		}
 
 		/**
-		 * Creates a new builder with the specified base URI.
-		 * @param baseUri the base URI of the MCP server
-		 * @deprecated Use {@link HttpClientSseClientTransport#builder(String)} instead.
-		 * This constructor is deprecated and will be removed or made {@code protected} or
-		 * {@code private} in a future release.
-		 */
-		@Deprecated(forRemoval = true)
-		public Builder(String baseUri) {
-			Assert.hasText(baseUri, "baseUri must not be empty");
-			this.baseUri = baseUri;
-		}
-
-		/**
 		 * Sets the base URI.
 		 * @param baseUri the base URI
 		 * @return this builder
@@ -250,17 +237,6 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		public Builder requestBuilder(HttpRequest.Builder requestBuilder) {
 			Assert.notNull(requestBuilder, "requestBuilder must not be null");
 			this.requestBuilder = requestBuilder;
-			return this;
-		}
-
-		/**
-		 * Customizes the HTTP client builder.
-		 * @param requestCustomizer the consumer to customize the HTTP request builder
-		 * @return this builder
-		 */
-		public Builder customizeRequest(final Consumer<HttpRequest.Builder> requestCustomizer) {
-			Assert.notNull(requestCustomizer, "requestCustomizer must not be null");
-			requestCustomizer.accept(requestBuilder);
 			return this;
 		}
 
@@ -469,7 +445,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		return Mono.deferContextual(ctx -> {
 			var builder = this.requestBuilder.copy()
 				.uri(requestUri)
-				.header(HttpHeaders.CONTENT_TYPE, "application/json")
+				.header(HttpHeaders.CONTENT_TYPE, "application/json; charset=utf-8")
 				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
 				.POST(HttpRequest.BodyPublishers.ofString(body));
 			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);

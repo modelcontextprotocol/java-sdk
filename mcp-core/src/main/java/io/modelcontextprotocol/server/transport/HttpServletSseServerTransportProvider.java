@@ -228,6 +228,25 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			.then();
 	}
 
+	@Override
+	public Mono<Void> notifyClient(String sessionId, String method, Object params) {
+		return Mono.defer(() -> {
+			// Need to iterate in O(n) because the transport session id
+			// is different from the server-logical session id (in streamable http this
+			// design issue was solved)
+			McpServerSession session = sessions.values()
+				.stream()
+				.filter(s -> sessionId.equals(s.getId()))
+				.findFirst()
+				.orElse(null);
+			if (session == null) {
+				logger.debug("Session {} not found", sessionId);
+				return Mono.empty();
+			}
+			return session.sendNotification(method, params);
+		});
+	}
+
 	/**
 	 * Handles GET requests to establish SSE connections.
 	 * <p>
@@ -267,7 +286,6 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		response.setCharacterEncoding(UTF_8);
 		response.setHeader("Cache-Control", "no-cache");
 		response.setHeader("Connection", "keep-alive");
-		response.setHeader("Access-Control-Allow-Origin", "*");
 
 		String sessionId = UUID.randomUUID().toString();
 		AsyncContext asyncContext = request.startAsync();
@@ -343,7 +361,9 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			response.setContentType(APPLICATION_JSON);
 			response.setCharacterEncoding(UTF_8);
 			response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-			String jsonError = jsonMapper.writeValueAsString(new McpError("Session ID missing in message endpoint"));
+			String jsonError = jsonMapper.writeValueAsString(McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND)
+				.message("Session ID missing in message endpoint")
+				.build());
 			PrintWriter writer = response.getWriter();
 			writer.write(jsonError);
 			writer.flush();
@@ -356,7 +376,9 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			response.setContentType(APPLICATION_JSON);
 			response.setCharacterEncoding(UTF_8);
 			response.setStatus(HttpServletResponse.SC_NOT_FOUND);
-			String jsonError = jsonMapper.writeValueAsString(new McpError("Session not found: " + sessionId));
+			String jsonError = jsonMapper.writeValueAsString(McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+				.message("Session not found: " + sessionId)
+				.build());
 			PrintWriter writer = response.getWriter();
 			writer.write(jsonError);
 			writer.flush();
@@ -383,7 +405,9 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		catch (Exception e) {
 			logger.error("Error processing message: {}", e.getMessage());
 			try {
-				McpError mcpError = new McpError(e.getMessage());
+				McpError mcpError = McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+					.message(e.getMessage())
+					.build();
 				response.setContentType(APPLICATION_JSON);
 				response.setCharacterEncoding(UTF_8);
 				response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);

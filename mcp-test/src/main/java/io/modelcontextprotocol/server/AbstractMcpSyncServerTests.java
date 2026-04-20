@@ -4,7 +4,10 @@
 
 package io.modelcontextprotocol.server;
 
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
+
 import java.util.List;
+import java.util.Map;
 
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -20,7 +23,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -100,25 +102,6 @@ public abstract class AbstractMcpSyncServerTests {
 	// ---------------------------------------
 
 	@Test
-	@Deprecated
-	void testAddTool() {
-		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
-			.capabilities(ServerCapabilities.builder().tools(true).build())
-			.build();
-
-		Tool newTool = McpSchema.Tool.builder()
-			.name("new-tool")
-			.title("New test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
-		assertThatCode(() -> mcpSyncServer.addTool(new McpServerFeatures.SyncToolSpecification(newTool,
-				(exchange, args) -> CallToolResult.builder().content(List.of()).isError(false).build())))
-			.doesNotThrowAnyException();
-
-		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
-	}
-
-	@Test
 	void testAddToolCall() {
 		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
@@ -134,27 +117,6 @@ public abstract class AbstractMcpSyncServerTests {
 			.tool(newTool)
 			.callHandler((exchange, request) -> CallToolResult.builder().content(List.of()).isError(false).build())
 			.build())).doesNotThrowAnyException();
-
-		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
-	}
-
-	@Test
-	@Deprecated
-	void testAddDuplicateTool() {
-		Tool duplicateTool = McpSchema.Tool.builder()
-			.name(TEST_TOOL_NAME)
-			.title("Duplicate tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
-
-		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
-			.capabilities(ServerCapabilities.builder().tools(true).build())
-			.tool(duplicateTool, (exchange, args) -> CallToolResult.builder().content(List.of()).isError(false).build())
-			.build();
-
-		assertThatCode(() -> mcpSyncServer.addTool(new McpServerFeatures.SyncToolSpecification(duplicateTool,
-				(exchange, args) -> CallToolResult.builder().content(List.of()).isError(false).build())))
-			.doesNotThrowAnyException();
 
 		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
 	}

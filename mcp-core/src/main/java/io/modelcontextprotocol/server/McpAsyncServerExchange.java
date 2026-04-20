@@ -55,28 +55,6 @@ public class McpAsyncServerExchange {
 	 * @param clientCapabilities The client capabilities that define the supported
 	 * features and functionality.
 	 * @param clientInfo The client implementation information.
-	 * @deprecated Use
-	 * {@link #McpAsyncServerExchange(String, McpLoggableSession, McpSchema.ClientCapabilities, McpSchema.Implementation, McpTransportContext)}
-	 */
-	@Deprecated
-	public McpAsyncServerExchange(McpSession session, McpSchema.ClientCapabilities clientCapabilities,
-			McpSchema.Implementation clientInfo) {
-		this.sessionId = null;
-		if (!(session instanceof McpLoggableSession)) {
-			throw new IllegalArgumentException("Expecting session to be a McpLoggableSession instance");
-		}
-		this.session = (McpLoggableSession) session;
-		this.clientCapabilities = clientCapabilities;
-		this.clientInfo = clientInfo;
-		this.transportContext = McpTransportContext.EMPTY;
-	}
-
-	/**
-	 * Create a new asynchronous exchange with the client.
-	 * @param session The server session representing a 1-1 interaction.
-	 * @param clientCapabilities The client capabilities that define the supported
-	 * features and functionality.
-	 * @param clientInfo The client implementation information.
 	 * @param transportContext context associated with the client as extracted from the
 	 * transport
 	 */
@@ -142,10 +120,11 @@ public class McpAsyncServerExchange {
 	 */
 	public Mono<McpSchema.CreateMessageResult> createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
 		if (this.clientCapabilities == null) {
-			return Mono.error(new McpError("Client must be initialized. Call the initialize method first!"));
+			return Mono
+				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
 		}
 		if (this.clientCapabilities.sampling() == null) {
-			return Mono.error(new McpError("Client must be configured with sampling capabilities"));
+			return Mono.error(new IllegalStateException("Client must be configured with sampling capabilities"));
 		}
 		return this.session.sendRequest(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, createMessageRequest,
 				CREATE_MESSAGE_RESULT_TYPE_REF);
@@ -167,10 +146,11 @@ public class McpAsyncServerExchange {
 	 */
 	public Mono<McpSchema.ElicitResult> createElicitation(McpSchema.ElicitRequest elicitRequest) {
 		if (this.clientCapabilities == null) {
-			return Mono.error(new McpError("Client must be initialized. Call the initialize method first!"));
+			return Mono
+				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
 		}
 		if (this.clientCapabilities.elicitation() == null) {
-			return Mono.error(new McpError("Client must be configured with elicitation capabilities"));
+			return Mono.error(new IllegalStateException("Client must be configured with elicitation capabilities"));
 		}
 		return this.session.sendRequest(McpSchema.METHOD_ELICITATION_CREATE, elicitRequest,
 				ELICITATION_RESULT_TYPE_REF);
@@ -215,7 +195,7 @@ public class McpAsyncServerExchange {
 	public Mono<Void> loggingNotification(LoggingMessageNotification loggingMessageNotification) {
 
 		if (loggingMessageNotification == null) {
-			return Mono.error(new McpError("Logging message must not be null"));
+			return Mono.error(new IllegalStateException("Logging message must not be null"));
 		}
 
 		return Mono.defer(() -> {
@@ -234,7 +214,7 @@ public class McpAsyncServerExchange {
 	 */
 	public Mono<Void> progressNotification(McpSchema.ProgressNotification progressNotification) {
 		if (progressNotification == null) {
-			return Mono.error(new McpError("Progress notification must not be null"));
+			return Mono.error(new IllegalStateException("Progress notification must not be null"));
 		}
 		return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_PROGRESS, progressNotification);
 	}

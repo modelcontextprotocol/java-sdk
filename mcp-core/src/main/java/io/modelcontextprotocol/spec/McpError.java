@@ -27,11 +27,6 @@ public class McpError extends RuntimeException {
 		this.jsonRpcError = jsonRpcError;
 	}
 
-	@Deprecated
-	public McpError(Object error) {
-		super(error.toString());
-	}
-
 	public JSONRPCError getJsonRpcError() {
 		return jsonRpcError;
 	}

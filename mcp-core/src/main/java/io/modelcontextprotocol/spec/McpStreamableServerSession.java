@@ -62,6 +62,34 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	private volatile McpSchema.LoggingLevel minLoggingLevel = McpSchema.LoggingLevel.INFO;
 
+	private final Supplier<Mono<Void>> onClose;
+
+	/**
+	 * Create an instance of the streamable session.
+	 * @param id session ID
+	 * @param clientCapabilities client capabilities
+	 * @param clientInfo client info
+	 * @param requestTimeout timeout to use for requests
+	 * @param requestHandlers the map of MCP request handlers keyed by method name
+	 * @param notificationHandlers the map of MCP notification handlers keyed by method
+	 * name
+	 * @param onClose supplier of a reactive callback invoked when the session is closed
+	 */
+	public McpStreamableServerSession(String id, McpSchema.ClientCapabilities clientCapabilities,
+			McpSchema.Implementation clientInfo, Duration requestTimeout,
+			Map<String, McpRequestHandler<?>> requestHandlers, Map<String, McpNotificationHandler> notificationHandlers,
+			Supplier<Mono<Void>> onClose) {
+		this.id = id;
+		this.missingMcpTransportSession = new MissingMcpTransportSession(id);
+		this.listeningStreamRef = new AtomicReference<>(this.missingMcpTransportSession);
+		this.clientCapabilities.lazySet(clientCapabilities);
+		this.clientInfo.lazySet(clientInfo);
+		this.requestTimeout = requestTimeout;
+		this.requestHandlers = requestHandlers;
+		this.notificationHandlers = notificationHandlers;
+		this.onClose = onClose;
+	}
+
 	/**
 	 * Create an instance of the streamable session.
 	 * @param id session ID
@@ -76,14 +104,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 			McpSchema.Implementation clientInfo, Duration requestTimeout,
 			Map<String, McpRequestHandler<?>> requestHandlers,
 			Map<String, McpNotificationHandler> notificationHandlers) {
-		this.id = id;
-		this.missingMcpTransportSession = new MissingMcpTransportSession(id);
-		this.listeningStreamRef = new AtomicReference<>(this.missingMcpTransportSession);
-		this.clientCapabilities.lazySet(clientCapabilities);
-		this.clientInfo.lazySet(clientInfo);
-		this.requestTimeout = requestTimeout;
-		this.requestHandlers = requestHandlers;
-		this.notificationHandlers = notificationHandlers;
+		this(id, clientCapabilities, clientInfo, requestTimeout, requestHandlers, notificationHandlers, Mono::empty);
 	}
 
 	@Override
@@ -126,6 +147,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	}
 
 	public Mono<Void> delete() {
+		// onClose is invoked inside closeGracefully
 		return this.closeGracefully().then(Mono.fromRunnable(() -> {
 			// TODO: review in the context of history storage
 			// delete history, etc.
@@ -258,15 +280,16 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	@Override
 	public Mono<Void> closeGracefully() {
-		return Mono.defer(() -> {
+		return this.onClose.get().onErrorComplete().then(Mono.defer(() -> {
 			McpLoggableSession listeningStream = this.listeningStreamRef.getAndSet(missingMcpTransportSession);
 			return listeningStream.closeGracefully();
 			// TODO: Also close all the open streams
-		});
+		}));
 	}
 
 	@Override
 	public void close() {
+		this.onClose.get().onErrorComplete().subscribe();
 		McpLoggableSession listeningStream = this.listeningStreamRef.getAndSet(missingMcpTransportSession);
 		if (listeningStream != null) {
 			listeningStream.close();
