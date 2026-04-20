@@ -235,3 +235,13 @@ Concurrency in the JDK – Virtual Threads and Structured Concurrency may simpli
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+## Contributor Quick Verification
+<!-- codex-batch30-readme -->
+
+Before opening a PR, run these quick checks locally:
+
+- Build: `./mvnw -q -DskipTests package`
+- Tests: `./mvnw -q test`
+- Keep changes focused: one topic per PR with a clear title
+
