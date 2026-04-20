@@ -31,6 +31,10 @@ public class InMemoryClientTransport implements McpClientTransport {
 		this.transport = requireNonNull(transport, "transport cannot be null");
 	}
 
+	protected InMemoryTransport transport() {
+		return transport;
+	}
+
 	@Override
 	public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
 		disposable = transport.clientSink()
