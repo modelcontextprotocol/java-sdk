@@ -2320,6 +2320,7 @@ public final class McpSchema {
 	 */
 	public enum LoggingLevel {
 
+		// @formatter:off
 		@JsonProperty("debug") DEBUG(0),
 		@JsonProperty("info") INFO(1),
 		@JsonProperty("notice") NOTICE(2),
@@ -2328,6 +2329,7 @@ public final class McpSchema {
 		@JsonProperty("critical") CRITICAL(5),
 		@JsonProperty("alert") ALERT(6),
 		@JsonProperty("emergency") EMERGENCY(7);
+		// @formatter:on
 
 		private final int level;
 
