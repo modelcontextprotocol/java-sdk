@@ -445,7 +445,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		return Mono.deferContextual(ctx -> {
 			var builder = this.requestBuilder.copy()
 				.uri(requestUri)
-				.header(HttpHeaders.CONTENT_TYPE, "application/json")
+				.header(HttpHeaders.CONTENT_TYPE, "application/json; charset=utf-8")
 				.header(MCP_PROTOCOL_VERSION_HEADER_NAME, MCP_PROTOCOL_VERSION)
 				.POST(HttpRequest.BodyPublishers.ofString(body));
 			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
