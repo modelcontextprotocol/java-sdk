@@ -67,6 +67,24 @@ public interface McpSession {
 	Mono<Void> sendNotification(String method, Object params);
 
 	/**
+	 * Cancels a previously issued outbound request. The pending response is errored
+	 * locally and a {@code notifications/cancelled} notification is sent to the other
+	 * party.
+	 *
+	 * <p>
+	 * Implementations that track pending responses should override this to also error the
+	 * pending response before sending the notification.
+	 * </p>
+	 * @param requestId the ID of the request to cancel
+	 * @param reason an optional human-readable reason for the cancellation
+	 * @return a Mono that completes when the cancellation notification has been sent
+	 */
+	default Mono<Void> sendCancellation(Object requestId, String reason) {
+		return sendNotification(McpSchema.METHOD_NOTIFICATION_CANCELLED,
+				new McpSchema.CancelledNotification(requestId, reason));
+	}
+
+	/**
 	 * Closes the session and releases any associated resources asynchronously.
 	 * @return a {@link Mono<Void>} that completes when the session has been closed.
 	 */
