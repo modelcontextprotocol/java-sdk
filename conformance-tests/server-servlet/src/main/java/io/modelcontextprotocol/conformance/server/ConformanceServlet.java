@@ -20,7 +20,6 @@ import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.EmbeddedResource;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
 import io.modelcontextprotocol.spec.McpSchema.ImageContent;
-import io.modelcontextprotocol.spec.McpSchema.JsonSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSchema.ProgressNotification;
@@ -51,8 +50,8 @@ public class ConformanceServlet {
 
 	private static final String MCP_ENDPOINT = "/mcp";
 
-	private static final JsonSchema EMPTY_JSON_SCHEMA = new JsonSchema("object", Collections.emptyMap(), null, null,
-			null, null);
+	private static final Map<String, Object> EMPTY_JSON_SCHEMA = Map.of("type", "object", "properties",
+			Collections.emptyMap());
 
 	// Minimal 1x1 red pixel PNG (base64 encoded)
 	private static final String RED_PIXEL_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
@@ -326,10 +325,10 @@ public class ConformanceServlet {
 					.tool(Tool.builder()
 						.name("test_sampling")
 						.description("Tool that requests LLM sampling from client")
-						.inputSchema(new JsonSchema("object",
+						.inputSchema(Map.of("type", "object", "properties",
 								Map.of("prompt",
 										Map.of("type", "string", "description", "The prompt to send to the LLM")),
-								List.of("prompt"), null, null, null))
+								"required", List.of("prompt")))
 						.build())
 					.callHandler((exchange, request) -> {
 						logger.info("Tool 'test_sampling' called");
@@ -355,10 +354,10 @@ public class ConformanceServlet {
 					.tool(Tool.builder()
 						.name("test_elicitation")
 						.description("Tool that requests user input from client")
-						.inputSchema(new JsonSchema("object",
+						.inputSchema(Map.of("type", "object", "properties",
 								Map.of("message",
 										Map.of("type", "string", "description", "The message to show the user")),
-								List.of("message"), null, null, null))
+								"required", List.of("message")))
 						.build())
 					.callHandler((exchange, request) -> {
 						logger.info("Tool 'test_elicitation' called");

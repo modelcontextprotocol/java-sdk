@@ -4,8 +4,11 @@
 
 package io.modelcontextprotocol.server;
 
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
+
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -25,7 +28,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -96,26 +98,6 @@ public abstract class AbstractMcpAsyncServerTests {
 	// Tools Tests
 	// ---------------------------------------
 	@Test
-	@Deprecated
-	void testAddTool() {
-		Tool newTool = McpSchema.Tool.builder()
-			.name("new-tool")
-			.title("New test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
-		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
-			.capabilities(ServerCapabilities.builder().tools(true).build())
-			.build();
-
-		StepVerifier
-			.create(mcpAsyncServer.addTool(new McpServerFeatures.AsyncToolSpecification(newTool,
-					(exchange, args) -> Mono.just(CallToolResult.builder().content(List.of()).isError(false).build()))))
-			.verifyComplete();
-
-		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
-	}
-
-	@Test
 	void testAddToolCall() {
 		Tool newTool = McpSchema.Tool.builder()
 			.name("new-tool")
@@ -132,29 +114,6 @@ public abstract class AbstractMcpAsyncServerTests {
 			.callHandler((exchange, request) -> Mono
 				.just(CallToolResult.builder().content(List.of()).isError(false).build()))
 			.build())).verifyComplete();
-
-		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
-	}
-
-	@Test
-	@Deprecated
-	void testAddDuplicateTool() {
-		Tool duplicateTool = McpSchema.Tool.builder()
-			.name(TEST_TOOL_NAME)
-			.title("Duplicate tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
-
-		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
-			.capabilities(ServerCapabilities.builder().tools(true).build())
-			.tool(duplicateTool,
-					(exchange, args) -> Mono.just(CallToolResult.builder().content(List.of()).isError(false).build()))
-			.build();
-
-		StepVerifier
-			.create(mcpAsyncServer.addTool(new McpServerFeatures.AsyncToolSpecification(duplicateTool,
-					(exchange, args) -> Mono.just(CallToolResult.builder().content(List.of()).isError(false).build()))))
-			.verifyComplete();
 
 		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
 	}

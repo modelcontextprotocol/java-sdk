@@ -7,6 +7,7 @@ package io.modelcontextprotocol.spec;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -65,9 +66,36 @@ public class McpServerSession implements McpLoggableSession {
 
 	private volatile McpSchema.LoggingLevel minLoggingLevel = McpSchema.LoggingLevel.INFO;
 
+	private final Supplier<Mono<Void>> onClose;
+
 	/**
 	 * Creates a new server session with the given parameters and the transport to use.
 	 * @param id session id
+	 * @param requestTimeout duration to wait for request responses before timing out
+	 * @param transport the transport to use
+	 * @param initHandler called when a
+	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
+	 * server
+	 * @param requestHandlers map of request handlers to use
+	 * @param notificationHandlers map of notification handlers to use
+	 * @param onClose supplier of a reactive callback invoked when the session is closed
+	 */
+	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
+			McpInitRequestHandler initHandler, Map<String, McpRequestHandler<?>> requestHandlers,
+			Map<String, McpNotificationHandler> notificationHandlers, Supplier<Mono<Void>> onClose) {
+		this.id = id;
+		this.requestTimeout = requestTimeout;
+		this.transport = transport;
+		this.initRequestHandler = initHandler;
+		this.requestHandlers = requestHandlers;
+		this.notificationHandlers = notificationHandlers;
+		this.onClose = onClose;
+	}
+
+	/**
+	 * Creates a new server session with the given parameters and the transport to use.
+	 * @param id session id
+	 * @param requestTimeout duration to wait for request responses before timing out
 	 * @param transport the transport to use
 	 * @param initHandler called when a
 	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
@@ -78,40 +106,7 @@ public class McpServerSession implements McpLoggableSession {
 	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
 			McpInitRequestHandler initHandler, Map<String, McpRequestHandler<?>> requestHandlers,
 			Map<String, McpNotificationHandler> notificationHandlers) {
-		this.id = id;
-		this.requestTimeout = requestTimeout;
-		this.transport = transport;
-		this.initRequestHandler = initHandler;
-		this.requestHandlers = requestHandlers;
-		this.notificationHandlers = notificationHandlers;
-	}
-
-	/**
-	 * Creates a new server session with the given parameters and the transport to use.
-	 * @param id session id
-	 * @param transport the transport to use
-	 * @param initHandler called when a
-	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
-	 * server
-	 * @param initNotificationHandler called when a
-	 * {@link io.modelcontextprotocol.spec.McpSchema#METHOD_NOTIFICATION_INITIALIZED} is
-	 * received.
-	 * @param requestHandlers map of request handlers to use
-	 * @param notificationHandlers map of notification handlers to use
-	 * @deprecated Use
-	 * {@link #McpServerSession(String, Duration, McpServerTransport, McpInitRequestHandler, Map, Map)}
-	 */
-	@Deprecated
-	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
-			McpInitRequestHandler initHandler, InitNotificationHandler initNotificationHandler,
-			Map<String, McpRequestHandler<?>> requestHandlers,
-			Map<String, McpNotificationHandler> notificationHandlers) {
-		this.id = id;
-		this.requestTimeout = requestTimeout;
-		this.transport = transport;
-		this.initRequestHandler = initHandler;
-		this.requestHandlers = requestHandlers;
-		this.notificationHandlers = notificationHandlers;
+		this(id, requestTimeout, transport, initHandler, requestHandlers, notificationHandlers, Mono::empty);
 	}
 
 	/**
@@ -346,30 +341,14 @@ public class McpServerSession implements McpLoggableSession {
 	@Override
 	public Mono<Void> closeGracefully() {
 		// TODO: clear pendingResponses and emit errors?
-		return this.transport.closeGracefully();
+		return this.onClose.get().onErrorComplete().then(this.transport.closeGracefully());
 	}
 
 	@Override
 	public void close() {
 		// TODO: clear pendingResponses and emit errors?
+		this.onClose.get().onErrorComplete().subscribe();
 		this.transport.close();
-	}
-
-	/**
-	 * Request handler for the initialization request.
-	 *
-	 * @deprecated Use {@link McpInitRequestHandler}
-	 */
-	@Deprecated
-	public interface InitRequestHandler {
-
-		/**
-		 * Handles the initialization request.
-		 * @param initializeRequest the initialization request by the client
-		 * @return a Mono that will emit the result of the initialization
-		 */
-		Mono<McpSchema.InitializeResult> handle(McpSchema.InitializeRequest initializeRequest);
-
 	}
 
 	/**
@@ -382,46 +361,6 @@ public class McpServerSession implements McpLoggableSession {
 		 * @return a Mono that will complete when the initialization is acted upon.
 		 */
 		Mono<Void> handle();
-
-	}
-
-	/**
-	 * A handler for client-initiated notifications.
-	 *
-	 * @deprecated Use {@link McpNotificationHandler}
-	 */
-	@Deprecated
-	public interface NotificationHandler {
-
-		/**
-		 * Handles a notification from the client.
-		 * @param exchange the exchange associated with the client that allows calling
-		 * back to the connected client or inspecting its capabilities.
-		 * @param params the parameters of the notification.
-		 * @return a Mono that completes once the notification is handled.
-		 */
-		Mono<Void> handle(McpAsyncServerExchange exchange, Object params);
-
-	}
-
-	/**
-	 * A handler for client-initiated requests.
-	 *
-	 * @param <T> the type of the response that is expected as a result of handling the
-	 * request.
-	 * @deprecated Use {@link McpRequestHandler}
-	 */
-	@Deprecated
-	public interface RequestHandler<T> {
-
-		/**
-		 * Handles a request from the client.
-		 * @param exchange the exchange associated with the client that allows calling
-		 * back to the connected client or inspecting its capabilities.
-		 * @param params the parameters of the request.
-		 * @return a Mono that will emit the response to the request.
-		 */
-		Mono<T> handle(McpAsyncServerExchange exchange, Object params);
 
 	}
 

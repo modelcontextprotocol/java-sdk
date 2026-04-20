@@ -5,10 +5,12 @@
 package io.modelcontextprotocol.server;
 
 import java.time.Duration;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -25,7 +27,6 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.CompleteResult.CompleteCompletion;
 import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
-import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
 import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
@@ -37,6 +38,7 @@ import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DefaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
+import io.modelcontextprotocol.util.ToolInputValidator;
 import io.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -97,6 +99,8 @@ public class McpAsyncServer {
 
 	private final JsonSchemaValidator jsonSchemaValidator;
 
+	private final boolean validateToolInputs;
+
 	private final McpSchema.ServerCapabilities serverCapabilities;
 
 	private final McpSchema.Implementation serverInfo;
@@ -111,11 +115,9 @@ public class McpAsyncServer {
 
 	private final ConcurrentHashMap<String, McpServerFeatures.AsyncPromptSpecification> prompts = new ConcurrentHashMap<>();
 
-	// FIXME: this field is deprecated and should be remvoed together with the
-	// broadcasting loggingNotification.
-	private LoggingLevel minLoggingLevel = LoggingLevel.DEBUG;
-
 	private final ConcurrentHashMap<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions = new ConcurrentHashMap<>();
+
+	private final ConcurrentHashMap<String, Set<String>> resourceSubscriptions = new ConcurrentHashMap<>();
 
 	private List<String> protocolVersions;
 
@@ -130,7 +132,8 @@ public class McpAsyncServer {
 	 */
 	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
-			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
+			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
+			boolean validateToolInputs) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
@@ -143,19 +146,24 @@ public class McpAsyncServer {
 		this.completions.putAll(features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
+		this.validateToolInputs = validateToolInputs;
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
 
 		this.protocolVersions = mcpTransportProvider.protocolVersions();
 
-		mcpTransportProvider.setSessionFactory(transport -> new McpServerSession(UUID.randomUUID().toString(),
-				requestTimeout, transport, this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers));
+		mcpTransportProvider.setSessionFactory(transport -> {
+			String sessionId = UUID.randomUUID().toString();
+			return new McpServerSession(sessionId, requestTimeout, transport, this::asyncInitializeRequestHandler,
+					requestHandlers, notificationHandlers, () -> this.cleanupForSession(sessionId));
+		});
 	}
 
 	McpAsyncServer(McpStreamableServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
-			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
+			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
+			boolean validateToolInputs) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
@@ -168,14 +176,16 @@ public class McpAsyncServer {
 		this.completions.putAll(features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
+		this.validateToolInputs = validateToolInputs;
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
 
 		this.protocolVersions = mcpTransportProvider.protocolVersions();
 
-		mcpTransportProvider.setSessionFactory(new DefaultMcpStreamableServerSessionFactory(requestTimeout,
-				this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers));
+		mcpTransportProvider.setSessionFactory(
+				new DefaultMcpStreamableServerSessionFactory(requestTimeout, this::asyncInitializeRequestHandler,
+						requestHandlers, notificationHandlers, sessionId -> this.cleanupForSession(sessionId)));
 	}
 
 	private Map<String, McpNotificationHandler> prepareNotificationHandlers(McpServerFeatures.Async features) {
@@ -215,6 +225,10 @@ public class McpAsyncServer {
 			requestHandlers.put(McpSchema.METHOD_RESOURCES_LIST, resourcesListRequestHandler());
 			requestHandlers.put(McpSchema.METHOD_RESOURCES_READ, resourcesReadRequestHandler());
 			requestHandlers.put(McpSchema.METHOD_RESOURCES_TEMPLATES_LIST, resourceTemplateListRequestHandler());
+			if (Boolean.TRUE.equals(this.serverCapabilities.resources().subscribe())) {
+				requestHandlers.put(McpSchema.METHOD_RESOURCES_SUBSCRIBE, resourcesSubscribeRequestHandler());
+				requestHandlers.put(McpSchema.METHOD_RESOURCES_UNSUBSCRIBE, resourcesUnsubscribeRequestHandler());
+			}
 		}
 
 		// Add prompts API handlers if provider exists
@@ -326,7 +340,7 @@ public class McpAsyncServer {
 		if (toolSpecification.tool() == null) {
 			return Mono.error(new IllegalArgumentException("Tool must not be null"));
 		}
-		if (toolSpecification.call() == null && toolSpecification.callHandler() == null) {
+		if (toolSpecification.callHandler() == null) {
 			return Mono.error(new IllegalArgumentException("Tool call handler must not be null"));
 		}
 		if (this.serverCapabilities.tools() == null) {
@@ -536,6 +550,13 @@ public class McpAsyncServer {
 					.build());
 			}
 
+			McpSchema.Tool tool = toolSpecification.get().tool();
+			CallToolResult validationError = ToolInputValidator.validate(tool, callToolRequest.arguments(),
+					this.validateToolInputs, this.jsonSchemaValidator);
+			if (validationError != null) {
+				return Mono.just(validationError);
+			}
+
 			return toolSpecification.get().callHandler().apply(exchange, callToolRequest);
 		};
 	}
@@ -685,12 +706,73 @@ public class McpAsyncServer {
 	}
 
 	/**
-	 * Notifies clients that the resources have updated.
-	 * @return A Mono that completes when all clients have been notified
+	 * Notifies only the sessions that have subscribed to the updated resource URI.
+	 * @param resourcesUpdatedNotification the notification containing the updated
+	 * resource URI
+	 * @return A Mono that completes when all subscribed sessions have been notified
 	 */
 	public Mono<Void> notifyResourcesUpdated(McpSchema.ResourcesUpdatedNotification resourcesUpdatedNotification) {
-		return this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_RESOURCES_UPDATED,
-				resourcesUpdatedNotification);
+		return Mono.defer(() -> {
+			String uri = resourcesUpdatedNotification.uri();
+			Set<String> subscribedSessions = this.resourceSubscriptions.get(uri);
+			if (subscribedSessions == null || subscribedSessions.isEmpty()) {
+				logger.debug("No sessions subscribed to resource URI: {}", uri);
+				return Mono.empty();
+			}
+			return Flux.fromIterable(subscribedSessions)
+				.flatMap(sessionId -> this.mcpTransportProvider
+					.notifyClient(sessionId, McpSchema.METHOD_NOTIFICATION_RESOURCES_UPDATED,
+							resourcesUpdatedNotification)
+					.doOnError(e -> logger.error("Failed to notify session {} of resource update for {}", sessionId,
+							uri, e))
+					.onErrorComplete())
+				.then();
+		});
+	}
+
+	private Mono<Void> cleanupForSession(String sessionId) {
+		return Mono.fromRunnable(() -> {
+			removeSessionSubscriptions(sessionId);
+		});
+	}
+
+	private void removeSessionSubscriptions(String sessionId) {
+		this.resourceSubscriptions.forEach((uri, sessions) -> sessions.remove(sessionId));
+		this.resourceSubscriptions.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+	}
+
+	private McpRequestHandler<Object> resourcesSubscribeRequestHandler() {
+		return (exchange, params) -> Mono.defer(() -> {
+			McpSchema.SubscribeRequest subscribeRequest = jsonMapper.convertValue(params,
+					new TypeRef<McpSchema.SubscribeRequest>() {
+					});
+			String uri = subscribeRequest.uri();
+			String sessionId = exchange.sessionId();
+			this.resourceSubscriptions.computeIfAbsent(uri, k -> Collections.newSetFromMap(new ConcurrentHashMap<>()))
+				.add(sessionId);
+			logger.debug("Session {} subscribed to resource URI: {}", sessionId, uri);
+
+			return Mono.just(Map.of());
+		});
+	}
+
+	private McpRequestHandler<Object> resourcesUnsubscribeRequestHandler() {
+		return (exchange, params) -> Mono.defer(() -> {
+			McpSchema.UnsubscribeRequest unsubscribeRequest = jsonMapper.convertValue(params,
+					new TypeRef<McpSchema.UnsubscribeRequest>() {
+					});
+			String uri = unsubscribeRequest.uri();
+			String sessionId = exchange.sessionId();
+			Set<String> sessions = this.resourceSubscriptions.get(uri);
+			if (sessions != null) {
+				sessions.remove(sessionId);
+				if (sessions.isEmpty()) {
+					this.resourceSubscriptions.remove(uri, sessions);
+				}
+			}
+			logger.debug("Session {} unsubscribed from resource URI: {}", sessionId, uri);
+			return Mono.just(Map.of());
+		});
 	}
 
 	private McpRequestHandler<McpSchema.ListResourcesResult> resourcesListRequestHandler() {
@@ -869,32 +951,6 @@ public class McpAsyncServer {
 	// Logging Management
 	// ---------------------------------------
 
-	/**
-	 * This implementation would, incorrectly, broadcast the logging message to all
-	 * connected clients, using a single minLoggingLevel for all of them. Similar to the
-	 * sampling and roots, the logging level should be set per client session and use the
-	 * ServerExchange to send the logging message to the right client.
-	 * @param loggingMessageNotification The logging message to send
-	 * @return A Mono that completes when the notification has been sent
-	 * @deprecated Use
-	 * {@link McpAsyncServerExchange#loggingNotification(LoggingMessageNotification)}
-	 * instead.
-	 */
-	@Deprecated
-	public Mono<Void> loggingNotification(LoggingMessageNotification loggingMessageNotification) {
-
-		if (loggingMessageNotification == null) {
-			return Mono.error(new McpError("Logging message must not be null"));
-		}
-
-		if (loggingMessageNotification.level().level() < minLoggingLevel.level()) {
-			return Mono.empty();
-		}
-
-		return this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_MESSAGE,
-				loggingMessageNotification);
-	}
-
 	private McpRequestHandler<Object> setLoggerRequestHandler() {
 		return (exchange, params) -> {
 			return Mono.defer(() -> {
@@ -903,10 +959,6 @@ public class McpAsyncServer {
 				});
 
 				exchange.setMinLoggingLevel(newMinLoggingLevel.level());
-
-				// FIXME: this field is deprecated and should be removed together
-				// with the broadcasting loggingNotification.
-				this.minLoggingLevel = newMinLoggingLevel.level();
 
 				return Mono.just(Map.of());
 			});
