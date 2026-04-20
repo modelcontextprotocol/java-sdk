@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 import io.modelcontextprotocol.client.McpClient;
@@ -256,6 +257,7 @@ class McpCompletionTests {
 	}
 
 	@Test
+	(10)
 	void testCompletionErrorOnMissingContext() {
 		BiFunction<McpSyncServerExchange, CompleteRequest, CompleteResult> completionHandler = (exchange, request) -> {
 			if (request.ref() instanceof ResourceReference resourceRef) {
