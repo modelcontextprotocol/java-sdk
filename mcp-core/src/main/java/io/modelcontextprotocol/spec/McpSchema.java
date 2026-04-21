@@ -1307,7 +1307,9 @@ public final class McpSchema {
 	 * @param additionalProperties Whether additional properties are allowed
 	 * @param defs Schema definitions using the newer $defs keyword
 	 * @param definitions Schema definitions using the legacy definitions keyword
+	 * @deprecated use {@link Map} instead.
 	 */
+	@Deprecated
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record JsonSchema( // @formatter:off
@@ -1363,7 +1365,7 @@ public final class McpSchema {
 		@JsonProperty("name") String name,
 		@JsonProperty("title") String title,
 		@JsonProperty("description") String description,
-		@JsonProperty("inputSchema") JsonSchema inputSchema,
+		@JsonProperty("inputSchema") Map<String, Object> inputSchema,
 		@JsonProperty("outputSchema") Map<String, Object> outputSchema,
 		@JsonProperty("annotations") ToolAnnotations annotations,
 		@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
@@ -1380,7 +1382,7 @@ public final class McpSchema {
 
 			private String description;
 
-			private JsonSchema inputSchema;
+			private Map<String, Object> inputSchema;
 
 			private Map<String, Object> outputSchema;
 
@@ -1403,13 +1405,34 @@ public final class McpSchema {
 				return this;
 			}
 
+			/**
+			 * @deprecated use {@link #inputSchema(Map)} instead.
+			 */
+			@Deprecated
 			public Builder inputSchema(JsonSchema inputSchema) {
+				Map<String, Object> schema = new HashMap<>();
+				if (inputSchema.type() != null)
+					schema.put("type", inputSchema.type());
+				if (inputSchema.properties() != null)
+					schema.put("properties", inputSchema.properties());
+				if (inputSchema.required() != null)
+					schema.put("required", inputSchema.required());
+				if (inputSchema.additionalProperties() != null)
+					schema.put("additionalProperties", inputSchema.additionalProperties());
+				if (inputSchema.defs() != null)
+					schema.put("$defs", inputSchema.defs());
+				if (inputSchema.definitions() != null)
+					schema.put("definitions", inputSchema.definitions());
+				return inputSchema(schema);
+			}
+
+			public Builder inputSchema(Map<String, Object> inputSchema) {
 				this.inputSchema = inputSchema;
 				return this;
 			}
 
 			public Builder inputSchema(McpJsonMapper jsonMapper, String inputSchema) {
-				this.inputSchema = parseSchema(jsonMapper, inputSchema);
+				this.inputSchema = schemaToMap(jsonMapper, inputSchema);
 				return this;
 			}
 
@@ -1444,15 +1467,6 @@ public final class McpSchema {
 	private static Map<String, Object> schemaToMap(McpJsonMapper jsonMapper, String schema) {
 		try {
 			return jsonMapper.readValue(schema, MAP_TYPE_REF);
-		}
-		catch (IOException e) {
-			throw new IllegalArgumentException("Invalid schema: " + schema, e);
-		}
-	}
-
-	private static JsonSchema parseSchema(McpJsonMapper jsonMapper, String schema) {
-		try {
-			return jsonMapper.readValue(schema, JsonSchema.class);
 		}
 		catch (IOException e) {
 			throw new IllegalArgumentException("Invalid schema: " + schema, e);
