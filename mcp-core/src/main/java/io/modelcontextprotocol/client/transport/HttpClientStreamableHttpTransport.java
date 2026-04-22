@@ -411,16 +411,12 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private Retry authorizationErrorRetrySpec() {
 		return Retry.from(companion -> companion.flatMap(retrySignal -> {
-			logger.debug("Inside authorizationErrorRetrySpec: {}, retries: {}", retrySignal.failure(),
-					retrySignal.totalRetriesInARow());
 			if (!(retrySignal.failure() instanceof McpHttpClientTransportAuthorizationException authException)) {
 				return Mono.error(retrySignal.failure());
 			}
 			if (retrySignal.totalRetriesInARow() >= this.authorizationErrorHandler.maxRetries()) {
-				logger.debug("Max retries exceeded");
 				return Mono.error(retrySignal.failure());
 			}
-			logger.debug("Calling authorizationErrorHandler");
 			return Mono.deferContextual(ctx -> {
 				var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 				return Mono
