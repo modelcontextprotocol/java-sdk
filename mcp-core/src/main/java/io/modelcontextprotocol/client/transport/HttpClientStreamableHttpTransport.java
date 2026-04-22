@@ -517,22 +517,22 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 								});
 							}
 							else if (contentType.contains(APPLICATION_JSON)) {
-								Flux<String> lines = ResponseSubscribers.decodeLines(httpResponse.body());
-								return ResponseSubscribers.decodeAggregateResponse(lines).flatMapMany(data -> {
-									deliveredSink.success();
-									if (sentMessage instanceof McpSchema.JSONRPCNotification) {
-										logger.warn("Notification: {} received non-compliant response: {}", sentMessage,
-												Utils.hasText(data) ? data : "[empty]");
-										return Flux.empty();
-									}
-									try {
-										return Flux.just(McpSchema.deserializeJsonRpcMessage(jsonMapper, data));
-									}
-									catch (IOException e) {
-										return Flux.<McpSchema.JSONRPCMessage>error(
-												new McpTransportException("Error deserializing JSON-RPC message", e));
-									}
-								});
+								return ResponseSubscribers.decodeAggregateResponse(httpResponse.body())
+									.flatMapMany(data -> {
+										deliveredSink.success();
+										if (sentMessage instanceof McpSchema.JSONRPCNotification) {
+											logger.warn("Notification: {} received non-compliant response: {}",
+													sentMessage, Utils.hasText(data) ? data : "[empty]");
+											return Flux.empty();
+										}
+										try {
+											return Flux.just(McpSchema.deserializeJsonRpcMessage(jsonMapper, data));
+										}
+										catch (IOException e) {
+											return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
+													"Error deserializing JSON-RPC message", e));
+										}
+									});
 							}
 
 							logger.warn("Unknown media type {} returned for POST in session {}", contentType,

@@ -63,16 +63,21 @@ class ResponseSubscribers {
 	}
 
 	/**
-	 * Collects a flux of lines into a single string, joined by {@code "\n"} terminators.
+	 * Collects all byte-buffer chunks from the publisher into a single UTF-8 decoded
+	 * string.
 	 */
-	static Mono<String> decodeAggregateResponse(Flux<String> lines) {
-		return lines.collectList().map(list -> {
-			StringBuilder builder = new StringBuilder();
-			for (String line : list) {
-				builder.append(line).append("\n");
-			}
-			return builder.toString();
-		}).defaultIfEmpty("");
+	static Mono<String> decodeAggregateResponse(Publisher<List<ByteBuffer>> publisher) {
+		return JdkFlowAdapter.flowPublisherToFlux(publisher)
+			.flatMapIterable(list -> list)
+			.collectList()
+			.map(buffers -> {
+				int totalSize = buffers.stream().mapToInt(ByteBuffer::remaining).sum();
+				ByteBuffer combined = ByteBuffer.allocate(totalSize);
+				buffers.forEach(combined::put);
+				combined.flip();
+				return StandardCharsets.UTF_8.decode(combined).toString();
+			})
+			.defaultIfEmpty("");
 	}
 
 	/**
