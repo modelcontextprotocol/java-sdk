@@ -10,12 +10,14 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandler;
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -320,25 +322,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						int statusCode = response.statusCode();
 						if (statusCode == 401 || statusCode == 403) {
 							logger.debug("Authorization error in reconnect with code {}", statusCode);
-							HttpResponse.ResponseInfo responseInfo = new HttpResponse.ResponseInfo() {
-								@Override
-								public int statusCode() {
-									return response.statusCode();
-								}
-
-								@Override
-								public java.net.http.HttpHeaders headers() {
-									return response.headers();
-								}
-
-								@Override
-								public HttpClient.Version version() {
-									return response.version();
-								}
-							};
 							return ResponseSubscribers.drainThenError(response.body(),
 									new McpHttpClientTransportAuthorizationException(
-											"Authorization error connecting to SSE stream", responseInfo));
+											"Authorization error connecting to SSE stream", toResponseInfo(response)));
 						}
 						else if (statusCode == METHOD_NOT_ALLOWED) {
 							logger.debug("The server does not support SSE streams, using request-response mode.");
@@ -413,6 +399,13 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	}
 
+	private static HttpResponse.ResponseInfo toResponseInfo(HttpResponse<Flow.Publisher<List<ByteBuffer>>> response) {
+		return new HttpClientResponseInfo(response.statusCode(), response.headers(), response.version());
+	}
+
+	private record HttpClientResponseInfo(int statusCode, java.net.http.HttpHeaders headers, HttpClient.Version version) implements HttpResponse.ResponseInfo {
+	}
+
 	private Retry authorizationErrorRetrySpec() {
 		return Retry.from(companion -> companion.flatMap(retrySignal -> {
 			logger.debug("Inside authorizationErrorRetrySpec: {}, retries: {}", retrySignal.failure(),
@@ -482,25 +475,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						int statusCode = response.statusCode();
 						if (statusCode == 401 || statusCode == 403) {
 							logger.debug("Authorization error in sendMessage with code {}", statusCode);
-							HttpResponse.ResponseInfo responseInfo = new HttpResponse.ResponseInfo() {
-								@Override
-								public int statusCode() {
-									return response.statusCode();
-								}
-
-								@Override
-								public java.net.http.HttpHeaders headers() {
-									return response.headers();
-								}
-
-								@Override
-								public HttpClient.Version version() {
-									return response.version();
-								}
-							};
 							return ResponseSubscribers.drainThenError(response.body(),
 									new McpHttpClientTransportAuthorizationException(
-											"Authorization error when sending message", responseInfo));
+											"Authorization error when sending message", toResponseInfo(response)));
 						}
 
 						if (transportSession
