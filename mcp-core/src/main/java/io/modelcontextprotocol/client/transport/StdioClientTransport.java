@@ -11,7 +11,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -88,9 +87,9 @@ public class StdioClientTransport implements McpClientTransport {
 		this.errorSink = Sinks.many().unicast().onBackpressureBuffer();
 
 		// Start threads
-		this.inboundScheduler = Schedulers.fromExecutorService(Executors.newSingleThreadExecutor(), "inbound");
-		this.outboundScheduler = Schedulers.fromExecutorService(Executors.newSingleThreadExecutor(), "outbound");
-		this.errorScheduler = Schedulers.fromExecutorService(Executors.newSingleThreadExecutor(), "error");
+		this.inboundScheduler = Schedulers.newSingle("inbound", true);
+		this.outboundScheduler = Schedulers.newSingle("outbound", true);
+		this.errorScheduler = Schedulers.newSingle("error", true);
 	}
 
 	/**
@@ -348,6 +347,14 @@ public class StdioClientTransport implements McpClientTransport {
 		})).then(Mono.defer(() -> {
 			logger.debug("Sending TERM to process");
 			if (this.process != null) {
+				try {
+					this.process.getInputStream().close();
+					this.process.getErrorStream().close();
+					this.process.getOutputStream().close();
+				}
+				catch (IOException e) {
+					logger.warn("Failed to close process streams: {}", e.getMessage());
+				}
 				this.process.destroy();
 				return Mono.fromFuture(process.onExit());
 			}
