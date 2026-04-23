@@ -123,7 +123,7 @@ Add the BOM to your project:
             <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-bom</artifactId>
-                <version>1.0.0</version>
+                <version>2.0.0-M1</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
