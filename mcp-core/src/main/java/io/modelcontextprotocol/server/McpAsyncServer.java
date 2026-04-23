@@ -999,9 +999,8 @@ public class McpAsyncServer {
 						.message("Prompt not found: " + promptReference.name())
 						.build());
 				}
-				if (!promptSpec.prompt()
-					.arguments()
-					.stream()
+				List<McpSchema.PromptArgument> promptArgs = promptSpec.prompt().arguments();
+				if (promptArgs != null && !promptArgs.stream()
 					.filter(arg -> arg.name().equals(argumentName))
 					.findFirst()
 					.isPresent()) {

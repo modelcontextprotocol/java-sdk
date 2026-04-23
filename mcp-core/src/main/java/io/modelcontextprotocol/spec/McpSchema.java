@@ -10,6 +10,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -17,11 +20,10 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Based on the <a href="http://www.jsonrpc.org/specification">JSON-RPC 2.0
@@ -1176,6 +1178,19 @@ public final class McpSchema {
 
 		public Prompt(String name, String title, String description, List<PromptArgument> arguments) {
 			this(name, title, description, arguments, null);
+		}
+
+		/**
+		 * Creates a Prompt that coerces {@code null} arguments to an empty list,
+		 * preserving the 1.x behaviour. Use this factory when callers expect
+		 * {@code prompt.arguments()} to never return {@code null}.
+		 * @param name the prompt name
+		 * @param description an optional description
+		 * @param arguments the argument list, or {@code null} to default to an empty list
+		 * @return a new Prompt with non-null arguments
+		 */
+		public static Prompt withDefaults(String name, String description, List<PromptArgument> arguments) {
+			return new Prompt(name, null, description, arguments != null ? arguments : new ArrayList<>(), null);
 		}
 	}
 
