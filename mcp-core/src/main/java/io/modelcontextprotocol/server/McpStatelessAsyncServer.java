@@ -744,12 +744,9 @@ public class McpStatelessAsyncServer {
 						.message("Prompt not found: " + promptReference.name())
 						.build());
 				}
-				if (!promptSpec.prompt()
-					.arguments()
-					.stream()
-					.filter(arg -> arg.name().equals(argumentName))
-					.findFirst()
-					.isPresent()) {
+				List<McpSchema.PromptArgument> arguments = promptSpec.prompt().arguments();
+				if (arguments == null
+						|| arguments.stream().filter(arg -> arg.name().equals(argumentName)).findFirst().isPresent()) {
 
 					logger.warn("Argument not found: {} in prompt: {}", argumentName, promptReference.name());
 

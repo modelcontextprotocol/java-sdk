@@ -13,11 +13,9 @@ import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
@@ -36,6 +34,9 @@ import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpError;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 /**
  * Tests for completion functionality with context support.
@@ -319,6 +320,37 @@ class McpCompletionTests {
 
 			CompleteResult resultWithContext = mcpClient.completeCompletion(requestWithContext);
 			assertThat(resultWithContext.completion().values()).containsExactly("users", "orders", "products");
+		}
+
+		mcpServer.close();
+	}
+
+	@Test
+	void testPromptWithoutArgumentsCompletionForArgument() {
+		BiFunction<McpSyncServerExchange, CompleteRequest, CompleteResult> completionHandler = (exchange,
+				request) -> new CompleteResult(new CompleteResult.CompleteCompletion(List.of("test"), 1, false));
+
+		McpSchema.Prompt prompt = new Prompt("test-prompt", "this is a test prompt", null);
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.prompts(new McpServerFeatures.SyncPromptSpecification(prompt,
+					(mcpSyncServerExchange, getPromptRequest) -> null))
+			.completions(new McpServerFeatures.SyncCompletionSpecification(
+					new PromptReference(PromptReference.TYPE, "test-prompt"), completionHandler))
+			.build();
+
+		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
+			.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// try completing an argument knowing that the prompt is not parameterized
+			CompleteRequest request = new CompleteRequest(new PromptReference(PromptReference.TYPE, "test-prompt"),
+					new CompleteRequest.CompleteArgument("arg", "val"));
+
+			CompleteResult completeResult = mcpClient.completeCompletion(request);
+			assertThat(completeResult.completion().values()).isEmpty();
 		}
 
 		mcpServer.close();
