@@ -4,12 +4,6 @@
 
 package io.modelcontextprotocol.spec;
 
-import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
@@ -17,11 +11,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Test;
 
 import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import net.javacrumbs.jsonunit.core.Option;
 
 /**
@@ -1723,6 +1722,93 @@ public class McpSchemaTests {
 		String json = JSON_MAPPER.writeValueAsString(capabilities);
 		assertThat(json).contains("\"form\"");
 		assertThat(json).doesNotContain("\"url\"");
+	}
+
+	@Test
+	void testElicitationCapabilityWithApplyDefaults() throws Exception {
+		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder()
+			.elicitation(true, false, true)
+			.build();
+
+		assertThat(capabilities.elicitation()).isNotNull();
+		assertThat(capabilities.elicitation().form()).isNotNull();
+		assertThat(capabilities.elicitation().form().applyDefaults()).isTrue();
+
+		String json = JSON_MAPPER.writeValueAsString(capabilities);
+		assertThatJson(json).node("elicitation.form.applyDefaults").isEqualTo(true);
+	}
+
+	@Test
+	void testElicitationCapabilityApplyDefaultsSerializationRoundTrip() throws Exception {
+		McpSchema.ClientCapabilities original = McpSchema.ClientCapabilities.builder()
+			.elicitation(true, false, true)
+			.build();
+
+		String json = JSON_MAPPER.writeValueAsString(original);
+		McpSchema.ClientCapabilities deserialized = JSON_MAPPER.readValue(json, McpSchema.ClientCapabilities.class);
+
+		assertThat(deserialized.elicitation()).isNotNull();
+		assertThat(deserialized.elicitation().form()).isNotNull();
+		assertThat(deserialized.elicitation().form().applyDefaults()).isTrue();
+	}
+
+	@Test
+	void testElicitationCapabilityFormWithoutApplyDefaults() throws Exception {
+		// Form without applyDefaults should not include it in JSON
+		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder()
+			.elicitation(true, false)
+			.build();
+
+		assertThat(capabilities.elicitation().form().applyDefaults()).isNull();
+
+		String json = JSON_MAPPER.writeValueAsString(capabilities);
+		assertThat(json).doesNotContain("\"applyDefaults\"");
+	}
+
+	@Test
+	void testElicitationFormDeserializesWithoutApplyDefaults() throws Exception {
+		String json = """
+				{"elicitation":{"form":{}}}""";
+
+		McpSchema.ClientCapabilities capabilities = JSON_MAPPER.readValue(json, McpSchema.ClientCapabilities.class);
+
+		assertThat(capabilities.elicitation()).isNotNull();
+		assertThat(capabilities.elicitation().form()).isNotNull();
+		assertThat(capabilities.elicitation().form().applyDefaults()).isNull();
+	}
+
+	@Test
+	void testElicitationFormToleratesUnknownFields() throws Exception {
+		String json = """
+				{"elicitation":{"form":{"applyDefaults":true,"futureField":"ignored"}}}""";
+
+		McpSchema.ClientCapabilities capabilities = JSON_MAPPER.readValue(json, McpSchema.ClientCapabilities.class);
+
+		assertThat(capabilities.elicitation().form()).isNotNull();
+		assertThat(capabilities.elicitation().form().applyDefaults()).isTrue();
+	}
+
+	@Test
+	void testElicitRequestWithDefaultValues() throws Exception {
+		// Test that schemas with default values serialize correctly in an ElicitRequest
+		McpSchema.ElicitRequest request = McpSchema.ElicitRequest.builder()
+			.message("Please provide your info")
+			.requestedSchema(Map.of("type", "object", "properties",
+					Map.of("name", Map.of("type", "string", "default", "John Doe"), "age",
+							Map.of("type", "integer", "default", 30), "score",
+							Map.of("type", "number", "default", 95.5), "status",
+							Map.of("type", "string", "enum", List.of("active", "inactive"), "default", "active"),
+							"verified", Map.of("type", "boolean", "default", true)),
+					"required", List.of("name")))
+			.build();
+
+		String value = JSON_MAPPER.writeValueAsString(request);
+
+		assertThatJson(value).node("requestedSchema.properties.name.default").isEqualTo("John Doe");
+		assertThatJson(value).node("requestedSchema.properties.age.default").isEqualTo(30);
+		assertThatJson(value).node("requestedSchema.properties.score.default").isEqualTo(95.5);
+		assertThatJson(value).node("requestedSchema.properties.status.default").isEqualTo("active");
+		assertThatJson(value).node("requestedSchema.properties.verified.default").isEqualTo(true);
 	}
 
 	// Progress Notification Tests

@@ -10,6 +10,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -17,11 +20,10 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Based on the <a href="http://www.jsonrpc.org/specification">JSON-RPC 2.0
@@ -426,11 +428,23 @@ public final class McpSchema {
 		public record Elicitation(@JsonProperty("form") Form form, @JsonProperty("url") Url url) {
 
 			/**
-			 * Marker record indicating support for form-based elicitation mode.
+			 * Record indicating support for form-based elicitation mode.
+			 *
+			 * @param applyDefaults Whether the client should apply default values from
+			 * the schema to the elicitation result content when fields are missing. When
+			 * true, the SDK will automatically fill in missing fields with their
+			 * schema-defined defaults before returning the result to the server.
 			 */
 			@JsonInclude(JsonInclude.Include.NON_ABSENT)
 			@JsonIgnoreProperties(ignoreUnknown = true)
-			public record Form() {
+			public record Form(@JsonProperty("applyDefaults") Boolean applyDefaults) {
+
+				/**
+				 * Creates a Form with default settings (no applyDefaults).
+				 */
+				public Form() {
+					this(null);
+				}
 			}
 
 			/**
@@ -497,6 +511,31 @@ public final class McpSchema {
 			 */
 			public Builder elicitation(boolean form, boolean url) {
 				this.elicitation = new Elicitation(form ? new Elicitation.Form() : null,
+						url ? new Elicitation.Url() : null);
+				return this;
+			}
+
+			/**
+			 * Enables elicitation capability with form mode and applyDefaults setting.
+			 * <p>
+			 * Note: {@code applyDefaults} is an SDK-level behavior flag that controls
+			 * whether the client automatically fills in missing fields from schema
+			 * defaults. It is serialized as part of the capabilities sent to the server
+			 * during initialization, consistent with the TypeScript SDK behavior. Servers
+			 * should tolerate unknown capability fields per the MCP specification.
+			 * @param form whether to support form-based elicitation
+			 * @param url whether to support URL-based elicitation
+			 * @param applyDefaults whether the client should apply schema defaults to
+			 * elicitation results. Requires {@code form} to be {@code true}.
+			 * @return this builder
+			 * @throws IllegalArgumentException if {@code applyDefaults} is {@code true}
+			 * but {@code form} is {@code false}
+			 */
+			public Builder elicitation(boolean form, boolean url, boolean applyDefaults) {
+				if (!form && applyDefaults) {
+					throw new IllegalArgumentException("applyDefaults requires form to be true");
+				}
+				this.elicitation = new Elicitation(form ? new Elicitation.Form(applyDefaults) : null,
 						url ? new Elicitation.Url() : null);
 				return this;
 			}

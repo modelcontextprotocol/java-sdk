@@ -451,6 +451,137 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@MethodSource("clientsForTesting")
+	void testCreateElicitationWithApplyDefaults(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Client handler returns empty content — SDK should apply defaults
+		Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler = request -> {
+			assertThat(request.message()).isNotEmpty();
+			assertThat(request.requestedSchema()).isNotNull();
+			// Return accept with empty content, simulating a user who didn't fill
+			// anything
+			return new McpSchema.ElicitResult(McpSchema.ElicitResult.Action.ACCEPT, new java.util.HashMap<>());
+		};
+
+		CallToolResult callResponse = McpSchema.CallToolResult.builder()
+			.addContent(new McpSchema.TextContent("CALL RESPONSE"))
+			.build();
+
+		AtomicReference<McpSchema.ElicitResult> elicitResultRef = new AtomicReference<>();
+
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.callHandler((exchange, request) -> {
+
+				var elicitationRequest = McpSchema.ElicitRequest.builder()
+					.message("Provide your preferences")
+					.requestedSchema(Map.of("type", "object", "properties",
+							Map.of("nickname", Map.of("type", "string", "default", "Guest"), "age",
+									Map.of("type", "integer", "default", 18), "subscribe",
+									Map.of("type", "boolean", "default", true), "color",
+									Map.of("type", "string", "enum", java.util.List.of("red", "green"), "default",
+											"green")),
+							"required", java.util.List.of("nickname", "age", "subscribe", "color")))
+					.build();
+
+				return exchange.createElicitation(elicitationRequest)
+					.doOnNext(elicitResultRef::set)
+					.thenReturn(callResponse);
+			})
+			.build();
+
+		var mcpServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").tools(tool).build();
+
+		// Enable applyDefaults via the capability
+		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+			.capabilities(ClientCapabilities.builder().elicitation(true, false, true).build())
+			.elicitation(elicitationHandler)
+			.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+
+			assertThat(response).isNotNull();
+			assertWith(elicitResultRef.get(), result -> {
+				assertThat(result).isNotNull();
+				assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+				assertThat(result.content()).containsEntry("nickname", "Guest");
+				assertThat(result.content()).containsEntry("age", 18);
+				assertThat(result.content()).containsEntry("subscribe", true);
+				assertThat(result.content()).containsEntry("color", "green");
+			});
+		}
+		finally {
+			mcpServer.closeGracefully().block();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testCreateElicitationWithApplyDefaultsAndUnmodifiableMap(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Client handler returns an unmodifiable map (Map.of()) — SDK should handle this
+		// gracefully by copying into a new HashMap before applying defaults
+		Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler = request -> {
+			return new McpSchema.ElicitResult(McpSchema.ElicitResult.Action.ACCEPT, Map.of());
+		};
+
+		CallToolResult callResponse = McpSchema.CallToolResult.builder()
+			.addContent(new McpSchema.TextContent("CALL RESPONSE"))
+			.build();
+
+		AtomicReference<McpSchema.ElicitResult> elicitResultRef = new AtomicReference<>();
+
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.callHandler((exchange, request) -> {
+
+				var elicitationRequest = McpSchema.ElicitRequest.builder()
+					.message("Provide your preferences")
+					.requestedSchema(Map.of("type", "object", "properties",
+							Map.of("nickname", Map.of("type", "string", "default", "Guest"), "age",
+									Map.of("type", "integer", "default", 18)),
+							"required", java.util.List.of("nickname", "age")))
+					.build();
+
+				return exchange.createElicitation(elicitationRequest)
+					.doOnNext(elicitResultRef::set)
+					.thenReturn(callResponse);
+			})
+			.build();
+
+		var mcpServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").tools(tool).build();
+
+		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample client", "0.0.0"))
+			.capabilities(ClientCapabilities.builder().elicitation(true, false, true).build())
+			.elicitation(elicitationHandler)
+			.build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+
+			assertThat(response).isNotNull();
+			assertWith(elicitResultRef.get(), result -> {
+				assertThat(result).isNotNull();
+				assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+				assertThat(result.content()).containsEntry("nickname", "Guest");
+				assertThat(result.content()).containsEntry("age", 18);
+			});
+		}
+		finally {
+			mcpServer.closeGracefully().block();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
 	void testCreateElicitationWithRequestTimeoutSuccess(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
