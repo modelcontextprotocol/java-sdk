@@ -7,13 +7,6 @@
     ]
   },
   {
-    "version": "2.0.0-M1",
-    "title": "2.0.0-M1",
-    "aliases": [
-      "latest"
-    ]
-  },
-  {
     "version": "1.1.0-SNAPSHOT",
     "title": "1.1.0-SNAPSHOT",
     "aliases": []
@@ -24,18 +17,8 @@
     "aliases": []
   },
   {
-    "version": "v1.1.0",
-    "title": "v1.1.0",
-    "aliases": []
-  },
-  {
     "version": "v1.0.1",
     "title": "v1.0.1",
-    "aliases": []
-  },
-  {
-    "version": "v0.18.1",
-    "title": "v0.18.1",
     "aliases": []
   }
 ]
