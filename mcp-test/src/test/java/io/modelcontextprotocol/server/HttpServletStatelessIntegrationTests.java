@@ -184,10 +184,10 @@ class HttpServletStatelessIntegrationTests {
 				true // hasMore
 		));
 
-		AtomicReference<CompleteRequest> samplingRequest = new AtomicReference<>();
+		AtomicReference<CompleteRequest> completeRequest = new AtomicReference<>();
 		BiFunction<McpTransportContext, CompleteRequest, CompleteResult> completionHandler = (transportContext,
 				request) -> {
-			samplingRequest.set(request);
+			completeRequest.set(request);
 			return completionResponse;
 		};
 
@@ -214,9 +214,9 @@ class HttpServletStatelessIntegrationTests {
 
 			assertThat(result).isNotNull();
 
-			assertThat(samplingRequest.get().argument().name()).isEqualTo("language");
-			assertThat(samplingRequest.get().argument().value()).isEqualTo("py");
-			assertThat(samplingRequest.get().ref().type()).isEqualTo(PromptReference.TYPE);
+			assertThat(completeRequest.get().argument().name()).isEqualTo("language");
+			assertThat(completeRequest.get().argument().value()).isEqualTo("py");
+			assertThat(completeRequest.get().ref().type()).isEqualTo(PromptReference.TYPE);
 		}
 		finally {
 			mcpServer.close();
