@@ -10,13 +10,13 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.spec.McpServerSession;
@@ -161,11 +161,12 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
 
 			return Mono.zip(inboundReady.asMono(), outboundReady.asMono()).then(Mono.defer(() -> {
-				if (outboundSink.tryEmitNext(message).isSuccess()) {
+				try {
+					outboundSink.emitNext(message, Sinks.EmitFailureHandler.busyLooping(Duration.ofMillis(100)));
 					return Mono.empty();
 				}
-				else {
-					return Mono.error(new RuntimeException("Failed to enqueue message"));
+				catch (Sinks.EmissionException e) {
+					return Mono.error(new RuntimeException("Failed to enqueue message", e));
 				}
 			}));
 		}

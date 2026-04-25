@@ -227,16 +227,13 @@ public class StdioClientTransport implements McpClientTransport {
 
 	@Override
 	public Mono<Void> sendMessage(JSONRPCMessage message) {
-		if (this.outboundSink.tryEmitNext(message).isSuccess()) {
-			// TODO: essentially we could reschedule ourselves in some time and make
-			// another attempt with the already read data but pause reading until
-			// success
-			// In this approach we delegate the retry and the backpressure onto the
-			// caller. This might be enough for most cases.
+		try {
+			// busyLooping retries FAIL_NON_SERIALIZED under concurrent senders
+			this.outboundSink.emitNext(message, Sinks.EmitFailureHandler.busyLooping(Duration.ofMillis(100)));
 			return Mono.empty();
 		}
-		else {
-			return Mono.error(new RuntimeException("Failed to enqueue message"));
+		catch (Sinks.EmissionException e) {
+			return Mono.error(new RuntimeException("Failed to enqueue message", e));
 		}
 	}
 
