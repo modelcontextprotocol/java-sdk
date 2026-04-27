@@ -4,12 +4,6 @@
 
 package io.modelcontextprotocol.spec;
 
-import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
@@ -17,11 +11,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Test;
 
 import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import net.javacrumbs.jsonunit.core.Option;
 
 /**
@@ -1766,6 +1765,221 @@ public class McpSchemaTests {
 			.isObject()
 			.isEqualTo(json("""
 					{"progressToken":"progress-token-789","progress":0.25}"""));
+	}
+
+	// SEP-973: Icons and metadata tests
+
+	@Test
+	void testIconSerialization() throws Exception {
+		McpSchema.Icon icon = new McpSchema.Icon("https://example.com/icon.png", "image/png", List.of("48x48", "96x96"),
+				"dark");
+
+		String value = JSON_MAPPER.writeValueAsString(icon);
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.isObject()
+			.containsEntry("src", "https://example.com/icon.png")
+			.containsEntry("mimeType", "image/png")
+			.containsEntry("theme", "dark");
+		assertThatJson(value).node("sizes").isArray().containsExactlyInAnyOrder("48x48", "96x96");
+	}
+
+	@Test
+	void testIconDeserializationRoundTrip() throws Exception {
+		McpSchema.Icon original = new McpSchema.Icon("https://example.com/icon.svg", "image/svg+xml", List.of("any"),
+				"light");
+
+		String json = JSON_MAPPER.writeValueAsString(original);
+		McpSchema.Icon deserialized = JSON_MAPPER.readValue(json, McpSchema.Icon.class);
+
+		assertThat(deserialized.src()).isEqualTo("https://example.com/icon.svg");
+		assertThat(deserialized.mimeType()).isEqualTo("image/svg+xml");
+		assertThat(deserialized.sizes()).containsExactly("any");
+		assertThat(deserialized.theme()).isEqualTo("light");
+	}
+
+	@Test
+	void testIconWithoutOptionalFields() throws Exception {
+		McpSchema.Icon icon = new McpSchema.Icon("https://example.com/icon.png", null, null, null);
+
+		String value = JSON_MAPPER.writeValueAsString(icon);
+		assertThatJson(value).isObject().containsEntry("src", "https://example.com/icon.png");
+		assertThat(value).doesNotContain("mimeType");
+		assertThat(value).doesNotContain("sizes");
+		assertThat(value).doesNotContain("theme");
+	}
+
+	@Test
+	void testIconRequiresSrc() {
+		assertThatThrownBy(() -> new McpSchema.Icon(null, "image/png", null, null))
+			.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new McpSchema.Icon("", "image/png", null, null))
+			.isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	void testIconWithThemeDeserialization() throws Exception {
+		String json = """
+				{"src":"https://example.com/dark-icon.png","mimeType":"image/png","theme":"dark"}""";
+
+		McpSchema.Icon icon = JSON_MAPPER.readValue(json, McpSchema.Icon.class);
+
+		assertThat(icon.src()).isEqualTo("https://example.com/dark-icon.png");
+		assertThat(icon.mimeType()).isEqualTo("image/png");
+		assertThat(icon.theme()).isEqualTo("dark");
+		assertThat(icon.sizes()).isNull();
+	}
+
+	@Test
+	void testIconConvenienceConstructorWithoutTheme() throws Exception {
+		McpSchema.Icon icon = new McpSchema.Icon("https://example.com/icon.png", "image/png");
+
+		assertThat(icon.src()).isEqualTo("https://example.com/icon.png");
+		assertThat(icon.mimeType()).isEqualTo("image/png");
+		assertThat(icon.sizes()).isNull();
+		assertThat(icon.theme()).isNull();
+
+		String value = JSON_MAPPER.writeValueAsString(icon);
+		assertThat(value).doesNotContain("theme");
+	}
+
+	@Test
+	void testIconDeserializesWithoutTheme() throws Exception {
+		String json = """
+				{"src":"https://example.com/icon.png","mimeType":"image/png"}""";
+
+		McpSchema.Icon icon = JSON_MAPPER.readValue(json, McpSchema.Icon.class);
+
+		assertThat(icon.src()).isEqualTo("https://example.com/icon.png");
+		assertThat(icon.mimeType()).isEqualTo("image/png");
+		assertThat(icon.theme()).isNull();
+	}
+
+	@Test
+	void testIconToleratesUnknownFields() throws Exception {
+		String json = """
+				{"src":"https://example.com/icon.png","futureField":42}""";
+
+		McpSchema.Icon icon = JSON_MAPPER.readValue(json, McpSchema.Icon.class);
+
+		assertThat(icon.src()).isEqualTo("https://example.com/icon.png");
+	}
+
+	@Test
+	void testImplementationWithIconsAndWebsiteUrl() throws Exception {
+		List<McpSchema.Icon> icons = List
+			.of(new McpSchema.Icon("https://example.com/icon.png", "image/png", List.of("48x48")));
+
+		McpSchema.Implementation impl = new McpSchema.Implementation("test-server", "Test Server", "1.0.0",
+				"A test server", icons, "https://example.com");
+
+		String value = JSON_MAPPER.writeValueAsString(impl);
+		assertThatJson(value).isObject()
+			.containsEntry("name", "test-server")
+			.containsEntry("title", "Test Server")
+			.containsEntry("version", "1.0.0")
+			.containsEntry("description", "A test server")
+			.containsEntry("websiteUrl", "https://example.com");
+		assertThatJson(value).node("icons").isArray().hasSize(1);
+		assertThatJson(value).node("icons[0].src").isEqualTo("https://example.com/icon.png");
+	}
+
+	@Test
+	void testImplementationBackwardCompatibility() throws Exception {
+		// Existing 2-arg constructor should still work
+		McpSchema.Implementation impl = new McpSchema.Implementation("test-server", "1.0.0");
+
+		String value = JSON_MAPPER.writeValueAsString(impl);
+		assertThatJson(value).isObject().containsEntry("name", "test-server").containsEntry("version", "1.0.0");
+		assertThat(value).doesNotContain("icons");
+		assertThat(value).doesNotContain("websiteUrl");
+		assertThat(value).doesNotContain("description");
+	}
+
+	@Test
+	void testImplementationDeserializationWithIcons() throws Exception {
+		String json = """
+				{"name":"server","version":"2.0","icons":[{"src":"data:image/png;base64,abc","mimeType":"image/png"}],"websiteUrl":"https://example.com"}""";
+
+		McpSchema.Implementation impl = JSON_MAPPER.readValue(json, McpSchema.Implementation.class);
+
+		assertThat(impl.name()).isEqualTo("server");
+		assertThat(impl.version()).isEqualTo("2.0");
+		assertThat(impl.websiteUrl()).isEqualTo("https://example.com");
+		assertThat(impl.icons()).hasSize(1);
+		assertThat(impl.icons().get(0).src()).isEqualTo("data:image/png;base64,abc");
+	}
+
+	@Test
+	void testToolWithIcons() throws Exception {
+		List<McpSchema.Icon> icons = List
+			.of(new McpSchema.Icon("https://example.com/tool-icon.png", "image/png", List.of("32x32")));
+
+		McpSchema.Tool tool = McpSchema.Tool.builder()
+			.name("search")
+			.description("Search the web")
+			.inputSchema(new McpSchema.JsonSchema("object", null, null, null, null, null))
+			.icons(icons)
+			.build();
+
+		String value = JSON_MAPPER.writeValueAsString(tool);
+		assertThatJson(value).node("icons").isArray().hasSize(1);
+		assertThatJson(value).node("icons[0].src").isEqualTo("https://example.com/tool-icon.png");
+	}
+
+	@Test
+	void testToolWithoutIcons() throws Exception {
+		McpSchema.Tool tool = McpSchema.Tool.builder()
+			.name("test-tool")
+			.description("A test tool")
+			.inputSchema(new McpSchema.JsonSchema("object", null, null, null, null, null))
+			.build();
+
+		String value = JSON_MAPPER.writeValueAsString(tool);
+		assertThat(value).doesNotContain("icons");
+	}
+
+	@Test
+	void testResourceWithIcons() throws Exception {
+		List<McpSchema.Icon> icons = List
+			.of(new McpSchema.Icon("https://example.com/res-icon.svg", "image/svg+xml", List.of("any")));
+
+		McpSchema.Resource resource = McpSchema.Resource.builder()
+			.uri("file:///test.txt")
+			.name("Test Resource")
+			.icons(icons)
+			.build();
+
+		String value = JSON_MAPPER.writeValueAsString(resource);
+		assertThatJson(value).node("icons").isArray().hasSize(1);
+		assertThatJson(value).node("icons[0].src").isEqualTo("https://example.com/res-icon.svg");
+	}
+
+	@Test
+	void testPromptWithIcons() throws Exception {
+		List<McpSchema.Icon> icons = List
+			.of(new McpSchema.Icon("https://example.com/prompt-icon.png", "image/png", null));
+
+		McpSchema.Prompt prompt = new McpSchema.Prompt("test-prompt", "Test", "A test prompt", List.of(), icons, null);
+
+		String value = JSON_MAPPER.writeValueAsString(prompt);
+		assertThatJson(value).node("icons").isArray().hasSize(1);
+		assertThatJson(value).node("icons[0].src").isEqualTo("https://example.com/prompt-icon.png");
+	}
+
+	@Test
+	void testResourceTemplateWithIcons() throws Exception {
+		List<McpSchema.Icon> icons = List
+			.of(new McpSchema.Icon("https://example.com/template-icon.png", "image/png", List.of("48x48")));
+
+		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
+			.uriTemplate("file:///{path}")
+			.name("File Template")
+			.icons(icons)
+			.build();
+
+		String value = JSON_MAPPER.writeValueAsString(template);
+		assertThatJson(value).node("icons").isArray().hasSize(1);
+		assertThatJson(value).node("icons[0].src").isEqualTo("https://example.com/template-icon.png");
 	}
 
 }
