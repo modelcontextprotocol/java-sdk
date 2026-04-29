@@ -370,9 +370,9 @@ public class McpStatelessAsyncServer {
 			return Mono.empty();
 		}
 
-		List<McpStatelessServerFeatures.AsyncToolSpecification> wrappedToolSpecifications;
+		Map<String, McpStatelessServerFeatures.AsyncToolSpecification> wrappedToolSpecificationsByName;
 		try {
-			wrappedToolSpecifications = sanitizeToolSpecifications(toolSpecifications);
+			wrappedToolSpecificationsByName = sanitizeToolSpecifications(toolSpecifications);
 		}
 		catch (IllegalArgumentException e) {
 			return Mono.error(e);
@@ -380,20 +380,19 @@ public class McpStatelessAsyncServer {
 		if (this.serverCapabilities.tools() == null) {
 			return Mono.error(new IllegalStateException("Server must be configured with tool capabilities"));
 		}
-		Set<String> toolNames = new HashSet<>(
-				wrappedToolSpecifications.stream().map(tool -> tool.tool().name()).toList());
 
 		return Mono.defer(() -> {
-			this.tools.removeIf(toolSpecification -> toolNames.contains(toolSpecification.tool().name()));
-			this.tools.addAll(wrappedToolSpecifications);
+			this.tools.removeIf(
+					toolSpecification -> wrappedToolSpecificationsByName.containsKey(toolSpecification.tool().name()));
+			this.tools.addAll(wrappedToolSpecificationsByName.values());
 
-			logger.debug("Added tool handlers: {}", toolNames);
+			logger.debug("Added tool handlers: {}", wrappedToolSpecificationsByName.keySet());
 
 			return Mono.empty();
 		});
 	}
 
-	private List<McpStatelessServerFeatures.AsyncToolSpecification> sanitizeToolSpecifications(
+	private Map<String, McpStatelessServerFeatures.AsyncToolSpecification> sanitizeToolSpecifications(
 			List<McpStatelessServerFeatures.AsyncToolSpecification> toolSpecifications) {
 		LinkedHashMap<String, McpStatelessServerFeatures.AsyncToolSpecification> toolSpecificationsByName = new LinkedHashMap<>();
 
@@ -411,7 +410,7 @@ public class McpStatelessAsyncServer {
 			toolSpecificationsByName.put(wrappedToolSpecification.tool().name(), wrappedToolSpecification);
 		}
 
-		return new ArrayList<>(toolSpecificationsByName.values());
+		return toolSpecificationsByName;
 	}
 
 	/**

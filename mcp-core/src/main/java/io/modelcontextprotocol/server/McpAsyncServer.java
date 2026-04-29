@@ -381,9 +381,9 @@ public class McpAsyncServer {
 			return Mono.empty();
 		}
 
-		List<McpServerFeatures.AsyncToolSpecification> wrappedToolSpecifications;
+		Map<String, McpServerFeatures.AsyncToolSpecification> wrappedToolSpecificationsByName;
 		try {
-			wrappedToolSpecifications = sanitizeToolSpecifications(toolSpecifications);
+			wrappedToolSpecificationsByName = sanitizeToolSpecifications(toolSpecifications);
 		}
 		catch (IllegalArgumentException e) {
 			return Mono.error(e);
@@ -391,14 +391,13 @@ public class McpAsyncServer {
 		if (this.serverCapabilities.tools() == null) {
 			return Mono.error(new IllegalStateException("Server must be configured with tool capabilities"));
 		}
-		Set<String> toolNames = new HashSet<>(
-				wrappedToolSpecifications.stream().map(tool -> tool.tool().name()).toList());
 
 		return Mono.defer(() -> {
-			this.tools.removeIf(toolSpecification -> toolNames.contains(toolSpecification.tool().name()));
-			this.tools.addAll(wrappedToolSpecifications);
+			this.tools.removeIf(
+					toolSpecification -> wrappedToolSpecificationsByName.containsKey(toolSpecification.tool().name()));
+			this.tools.addAll(wrappedToolSpecificationsByName.values());
 
-			logger.debug("Added tool handlers: {}", toolNames);
+			logger.debug("Added tool handlers: {}", wrappedToolSpecificationsByName.keySet());
 
 			if (this.serverCapabilities.tools().listChanged()) {
 				return notifyToolsListChanged();
@@ -407,7 +406,7 @@ public class McpAsyncServer {
 		});
 	}
 
-	private List<McpServerFeatures.AsyncToolSpecification> sanitizeToolSpecifications(
+	private Map<String, McpServerFeatures.AsyncToolSpecification> sanitizeToolSpecifications(
 			List<McpServerFeatures.AsyncToolSpecification> toolSpecifications) {
 		LinkedHashMap<String, McpServerFeatures.AsyncToolSpecification> toolSpecificationsByName = new LinkedHashMap<>();
 
@@ -425,7 +424,7 @@ public class McpAsyncServer {
 			toolSpecificationsByName.put(wrappedToolSpecification.tool().name(), wrappedToolSpecification);
 		}
 
-		return new ArrayList<>(toolSpecificationsByName.values());
+		return toolSpecificationsByName;
 	}
 
 	private static class StructuredOutputCallToolHandler
