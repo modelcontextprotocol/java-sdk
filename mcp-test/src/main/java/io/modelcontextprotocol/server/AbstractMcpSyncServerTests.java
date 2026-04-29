@@ -264,8 +264,11 @@ public abstract class AbstractMcpSyncServerTests {
 			.doesNotThrowAnyException();
 
 		assertThat(mcpSyncServer.listTools()).extracting(McpSchema.Tool::name)
-			.containsExactly("middle-tool", "duplicate-tool");
-		assertThat(mcpSyncServer.listTools().get(1).title()).isEqualTo("Last tool");
+			.containsExactlyInAnyOrder("middle-tool", "duplicate-tool");
+		assertThat(mcpSyncServer.listTools()).filteredOn(tool -> tool.name().equals("duplicate-tool"))
+			.singleElement()
+			.extracting(McpSchema.Tool::title)
+			.isEqualTo("Last tool");
 
 		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
 	}

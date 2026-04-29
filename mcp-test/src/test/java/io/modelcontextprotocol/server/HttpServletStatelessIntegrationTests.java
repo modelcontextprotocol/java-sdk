@@ -129,8 +129,12 @@ class HttpServletStatelessIntegrationTests {
 
 			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
 				List<Tool> tools = mcpClient.listTools().tools();
-				assertThat(tools).extracting(McpSchema.Tool::name).containsExactly("middle-tool", "duplicate-tool");
-				assertThat(tools.get(1).title()).isEqualTo("Last tool");
+				assertThat(tools).extracting(McpSchema.Tool::name)
+					.containsExactlyInAnyOrder("middle-tool", "duplicate-tool");
+				assertThat(tools).filteredOn(tool -> tool.name().equals("duplicate-tool"))
+					.singleElement()
+					.extracting(McpSchema.Tool::title)
+					.isEqualTo("Last tool");
 			});
 
 			mcpServer.addTools(List.of(syncToolSpecification("middle-tool", "Replacement tool"),

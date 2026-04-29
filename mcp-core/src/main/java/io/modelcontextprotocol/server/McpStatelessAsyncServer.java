@@ -30,7 +30,6 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -396,12 +395,9 @@ public class McpStatelessAsyncServer {
 
 	private List<McpStatelessServerFeatures.AsyncToolSpecification> sanitizeToolSpecifications(
 			List<McpStatelessServerFeatures.AsyncToolSpecification> toolSpecifications) {
-		List<McpStatelessServerFeatures.AsyncToolSpecification> copiedToolSpecifications = new ArrayList<>(
-				toolSpecifications);
 		LinkedHashMap<String, McpStatelessServerFeatures.AsyncToolSpecification> toolSpecificationsByName = new LinkedHashMap<>();
 
-		for (int i = copiedToolSpecifications.size() - 1; i >= 0; i--) {
-			var toolSpecification = copiedToolSpecifications.get(i);
+		for (var toolSpecification : toolSpecifications) {
 			if (toolSpecification == null) {
 				throw new IllegalArgumentException("Tool specification must not be null");
 			}
@@ -412,13 +408,10 @@ public class McpStatelessAsyncServer {
 				throw new IllegalArgumentException("Tool call handler must not be null");
 			}
 			var wrappedToolSpecification = withStructuredOutputHandling(this.jsonSchemaValidator, toolSpecification);
-			toolSpecificationsByName.putIfAbsent(wrappedToolSpecification.tool().name(), wrappedToolSpecification);
+			toolSpecificationsByName.put(wrappedToolSpecification.tool().name(), wrappedToolSpecification);
 		}
 
-		List<McpStatelessServerFeatures.AsyncToolSpecification> sanitizedToolSpecifications = new ArrayList<>(
-				toolSpecificationsByName.values());
-		Collections.reverse(sanitizedToolSpecifications);
-		return sanitizedToolSpecifications;
+		return new ArrayList<>(toolSpecificationsByName.values());
 	}
 
 	/**

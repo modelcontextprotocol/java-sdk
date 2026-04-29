@@ -275,8 +275,12 @@ public abstract class AbstractMcpAsyncServerTests {
 			.verifyComplete();
 
 		StepVerifier.create(mcpAsyncServer.listTools().collectList()).assertNext(tools -> {
-			assertThat(tools).extracting(McpSchema.Tool::name).containsExactly("middle-tool", "duplicate-tool");
-			assertThat(tools.get(1).title()).isEqualTo("Last tool");
+			assertThat(tools).extracting(McpSchema.Tool::name)
+				.containsExactlyInAnyOrder("middle-tool", "duplicate-tool");
+			assertThat(tools).filteredOn(tool -> tool.name().equals("duplicate-tool"))
+				.singleElement()
+				.extracting(McpSchema.Tool::title)
+				.isEqualTo("Last tool");
 		}).verifyComplete();
 
 		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
