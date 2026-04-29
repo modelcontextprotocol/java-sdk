@@ -46,6 +46,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.client.RestClient;
+import reactor.core.publisher.Mono;
 
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.APPLICATION_JSON;
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.TEXT_EVENT_STREAM;
@@ -109,6 +110,66 @@ class HttpServletStatelessIntegrationTests {
 	// ---------------------------------------
 	// Tools Tests
 	// ---------------------------------------
+	@Test
+	void testStatelessAsyncBulkToolMutations() {
+		var mcpServer = McpServer.async(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.build();
+
+		mcpServer
+			.addTools(List.of(asyncToolSpecification("duplicate-tool", "First tool"),
+					asyncToolSpecification("middle-tool"), asyncToolSpecification("duplicate-tool", "Last tool")))
+			.block();
+
+		List<Tool> tools = mcpServer.listTools().collectList().block();
+		assertThat(tools).extracting(McpSchema.Tool::name).containsExactly("middle-tool", "duplicate-tool");
+		assertThat(tools.get(1).title()).isEqualTo("Last tool");
+
+		mcpServer
+			.addTools(List.of(asyncToolSpecification("middle-tool", "Replacement tool"),
+					asyncToolSpecification("new-tool")))
+			.block();
+
+		tools = mcpServer.listTools().collectList().block();
+		assertThat(tools).extracting(McpSchema.Tool::name).containsExactly("duplicate-tool", "middle-tool", "new-tool");
+		assertThat(tools.get(1).title()).isEqualTo("Replacement tool");
+
+		mcpServer.removeTools(List.of("duplicate-tool", "missing-tool")).block();
+
+		tools = mcpServer.listTools().collectList().block();
+		assertThat(tools).extracting(McpSchema.Tool::name).containsExactly("middle-tool", "new-tool");
+
+		mcpServer.closeGracefully().block();
+	}
+
+	@Test
+	void testStatelessSyncBulkToolMutations() {
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.build();
+
+		mcpServer.addTools(List.of(syncToolSpecification("duplicate-tool", "First tool"),
+				syncToolSpecification("middle-tool"), syncToolSpecification("duplicate-tool", "Last tool")));
+
+		List<Tool> tools = mcpServer.listTools();
+		assertThat(tools).extracting(McpSchema.Tool::name).containsExactly("middle-tool", "duplicate-tool");
+		assertThat(tools.get(1).title()).isEqualTo("Last tool");
+
+		mcpServer.addTools(
+				List.of(syncToolSpecification("middle-tool", "Replacement tool"), syncToolSpecification("new-tool")));
+
+		tools = mcpServer.listTools();
+		assertThat(tools).extracting(McpSchema.Tool::name).containsExactly("duplicate-tool", "middle-tool", "new-tool");
+		assertThat(tools.get(1).title()).isEqualTo("Replacement tool");
+
+		mcpServer.removeTools(List.of("duplicate-tool", "missing-tool"));
+
+		tools = mcpServer.listTools();
+		assertThat(tools).extracting(McpSchema.Tool::name).containsExactly("middle-tool", "new-tool");
+
+		mcpServer.closeGracefully().block();
+	}
+
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient" })
 	void testToolCallSuccess(String clientType) {
@@ -649,6 +710,29 @@ class HttpServletStatelessIntegrationTests {
 			case "5 + 3" -> 8.0;
 			default -> 0.0;
 		};
+	}
+
+	private McpStatelessServerFeatures.AsyncToolSpecification asyncToolSpecification(String name) {
+		return asyncToolSpecification(name, name);
+	}
+
+	private McpStatelessServerFeatures.AsyncToolSpecification asyncToolSpecification(String name, String title) {
+		return McpStatelessServerFeatures.AsyncToolSpecification.builder()
+			.tool(McpSchema.Tool.builder().name(name).title(title).inputSchema(EMPTY_JSON_SCHEMA).build())
+			.callHandler(
+					(context, request) -> Mono.just(CallToolResult.builder().content(List.of()).isError(false).build()))
+			.build();
+	}
+
+	private McpStatelessServerFeatures.SyncToolSpecification syncToolSpecification(String name) {
+		return syncToolSpecification(name, name);
+	}
+
+	private McpStatelessServerFeatures.SyncToolSpecification syncToolSpecification(String name, String title) {
+		return McpStatelessServerFeatures.SyncToolSpecification.builder()
+			.tool(McpSchema.Tool.builder().name(name).title(title).inputSchema(EMPTY_JSON_SCHEMA).build())
+			.callHandler((context, request) -> CallToolResult.builder().content(List.of()).isError(false).build())
+			.build();
 	}
 
 }

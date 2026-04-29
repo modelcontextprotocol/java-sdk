@@ -30,10 +30,14 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
@@ -355,6 +359,69 @@ public class McpStatelessAsyncServer {
 	}
 
 	/**
+	 * Add multiple tool specifications at runtime.
+	 * @param toolSpecifications The tool specifications to add
+	 * @return Mono that completes when the tools have been added
+	 */
+	public Mono<Void> addTools(List<McpStatelessServerFeatures.AsyncToolSpecification> toolSpecifications) {
+		if (toolSpecifications == null) {
+			return Mono.error(new IllegalArgumentException("Tool specifications must not be null"));
+		}
+		if (toolSpecifications.isEmpty()) {
+			return Mono.empty();
+		}
+
+		List<McpStatelessServerFeatures.AsyncToolSpecification> wrappedToolSpecifications;
+		try {
+			wrappedToolSpecifications = sanitizeToolSpecifications(toolSpecifications);
+		}
+		catch (IllegalArgumentException e) {
+			return Mono.error(e);
+		}
+		if (this.serverCapabilities.tools() == null) {
+			return Mono.error(new IllegalStateException("Server must be configured with tool capabilities"));
+		}
+		Set<String> toolNames = new HashSet<>(
+				wrappedToolSpecifications.stream().map(tool -> tool.tool().name()).toList());
+
+		return Mono.defer(() -> {
+			this.tools.removeIf(toolSpecification -> toolNames.contains(toolSpecification.tool().name()));
+			this.tools.addAll(wrappedToolSpecifications);
+
+			logger.debug("Added tool handlers: {}", toolNames);
+
+			return Mono.empty();
+		});
+	}
+
+	private List<McpStatelessServerFeatures.AsyncToolSpecification> sanitizeToolSpecifications(
+			List<McpStatelessServerFeatures.AsyncToolSpecification> toolSpecifications) {
+		List<McpStatelessServerFeatures.AsyncToolSpecification> copiedToolSpecifications = new ArrayList<>(
+				toolSpecifications);
+		LinkedHashMap<String, McpStatelessServerFeatures.AsyncToolSpecification> toolSpecificationsByName = new LinkedHashMap<>();
+
+		for (int i = copiedToolSpecifications.size() - 1; i >= 0; i--) {
+			var toolSpecification = copiedToolSpecifications.get(i);
+			if (toolSpecification == null) {
+				throw new IllegalArgumentException("Tool specification must not be null");
+			}
+			if (toolSpecification.tool() == null) {
+				throw new IllegalArgumentException("Tool must not be null");
+			}
+			if (toolSpecification.callHandler() == null) {
+				throw new IllegalArgumentException("Tool call handler must not be null");
+			}
+			var wrappedToolSpecification = withStructuredOutputHandling(this.jsonSchemaValidator, toolSpecification);
+			toolSpecificationsByName.putIfAbsent(wrappedToolSpecification.tool().name(), wrappedToolSpecification);
+		}
+
+		List<McpStatelessServerFeatures.AsyncToolSpecification> sanitizedToolSpecifications = new ArrayList<>(
+				toolSpecificationsByName.values());
+		Collections.reverse(sanitizedToolSpecifications);
+		return sanitizedToolSpecifications;
+	}
+
+	/**
 	 * List all registered tools.
 	 * @return A Flux stream of all registered tools
 	 */
@@ -382,6 +449,42 @@ public class McpStatelessAsyncServer {
 			}
 			else {
 				logger.warn("Ignore as a Tool with name '{}' not found", toolName);
+			}
+
+			return Mono.empty();
+		});
+	}
+
+	/**
+	 * Remove multiple tool handlers at runtime.
+	 * @param toolNames The names of the tool handlers to remove
+	 * @return Mono that completes when the tools have been removed
+	 */
+	public Mono<Void> removeTools(List<String> toolNames) {
+		if (toolNames == null) {
+			return Mono.error(new IllegalArgumentException("Tool names must not be null"));
+		}
+		if (toolNames.isEmpty()) {
+			return Mono.empty();
+		}
+
+		Set<String> toolNamesToRemove = new HashSet<>();
+		for (String toolName : new ArrayList<>(toolNames)) {
+			if (toolName == null) {
+				return Mono.error(new IllegalArgumentException("Tool name must not be null"));
+			}
+			toolNamesToRemove.add(toolName);
+		}
+		if (this.serverCapabilities.tools() == null) {
+			return Mono.error(new IllegalStateException("Server must be configured with tool capabilities"));
+		}
+
+		return Mono.defer(() -> {
+			if (this.tools.removeIf(toolSpecification -> toolNamesToRemove.contains(toolSpecification.tool().name()))) {
+				logger.debug("Removed tool handlers: {}", toolNamesToRemove);
+			}
+			else {
+				logger.warn("Ignore as no Tools with names '{}' were found", toolNamesToRemove);
 			}
 
 			return Mono.empty();

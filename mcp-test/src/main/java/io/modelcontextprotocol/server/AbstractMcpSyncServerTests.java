@@ -213,6 +213,82 @@ public abstract class AbstractMcpSyncServerTests {
 	}
 
 	@Test
+	void testAddTools() {
+		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.build();
+
+		assertThatCode(() -> mcpSyncServer
+			.addTools(List.of(syncToolSpecification("bulk-tool-1"), syncToolSpecification("bulk-tool-2"))))
+			.doesNotThrowAnyException();
+
+		assertThat(mcpSyncServer.listTools()).extracting(McpSchema.Tool::name)
+			.containsExactly("bulk-tool-1", "bulk-tool-2");
+
+		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testAddToolsReplacesExistingTools() {
+		Tool originalTool = McpSchema.Tool.builder()
+			.name("replace-tool")
+			.title("Original tool")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
+
+		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.toolCall(originalTool,
+					(exchange, request) -> CallToolResult.builder().content(List.of()).isError(false).build())
+			.build();
+
+		assertThatCode(() -> mcpSyncServer.addTools(List.of(syncToolSpecification("replace-tool", "Replacement tool"),
+				syncToolSpecification("new-bulk-tool"))))
+			.doesNotThrowAnyException();
+
+		assertThat(mcpSyncServer.listTools()).extracting(McpSchema.Tool::name)
+			.containsExactly("replace-tool", "new-bulk-tool");
+		assertThat(mcpSyncServer.listTools().get(0).title()).isEqualTo("Replacement tool");
+
+		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testAddToolsWithDuplicateInputKeepsLastOccurrence() {
+		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.build();
+
+		assertThatCode(() -> mcpSyncServer.addTools(List.of(syncToolSpecification("duplicate-tool", "First tool"),
+				syncToolSpecification("middle-tool"), syncToolSpecification("duplicate-tool", "Last tool"))))
+			.doesNotThrowAnyException();
+
+		assertThat(mcpSyncServer.listTools()).extracting(McpSchema.Tool::name)
+			.containsExactly("middle-tool", "duplicate-tool");
+		assertThat(mcpSyncServer.listTools().get(1).title()).isEqualTo("Last tool");
+
+		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testAddToolsWithEmptyListIsNoOp() {
+		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0").build();
+
+		assertThatCode(() -> mcpSyncServer.addTools(List.of())).doesNotThrowAnyException();
+
+		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testAddToolsWithoutCapability() {
+		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0").build();
+
+		assertThatThrownBy(() -> mcpSyncServer.addTools(List.of(syncToolSpecification("no-capability-tool"))))
+			.isInstanceOf(IllegalStateException.class)
+			.hasMessage("Server must be configured with tool capabilities");
+	}
+
+	@Test
 	void testRemoveTool() {
 		Tool tool = McpSchema.Tool.builder()
 			.name(TEST_TOOL_NAME)
@@ -228,6 +304,42 @@ public abstract class AbstractMcpSyncServerTests {
 		assertThatCode(() -> mcpSyncServer.removeTool(TEST_TOOL_NAME)).doesNotThrowAnyException();
 
 		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testRemoveTools() {
+		Tool tool1 = McpSchema.Tool.builder()
+			.name("remove-tool-1")
+			.title("Remove tool 1")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
+		Tool tool2 = McpSchema.Tool.builder()
+			.name("remove-tool-2")
+			.title("Remove tool 2")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
+
+		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.toolCall(tool1, (exchange, request) -> CallToolResult.builder().content(List.of()).isError(false).build())
+			.toolCall(tool2, (exchange, request) -> CallToolResult.builder().content(List.of()).isError(false).build())
+			.build();
+
+		assertThatCode(() -> mcpSyncServer.removeTools(List.of("remove-tool-1", "missing-tool")))
+			.doesNotThrowAnyException();
+
+		assertThat(mcpSyncServer.listTools()).extracting(McpSchema.Tool::name).containsExactly("remove-tool-2");
+
+		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testRemoveToolsWithoutCapability() {
+		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0").build();
+
+		assertThatThrownBy(() -> mcpSyncServer.removeTools(List.of("no-capability-tool")))
+			.isInstanceOf(IllegalStateException.class)
+			.hasMessage("Server must be configured with tool capabilities");
 	}
 
 	@Test
@@ -248,6 +360,17 @@ public abstract class AbstractMcpSyncServerTests {
 		assertThatCode(mcpSyncServer::notifyToolsListChanged).doesNotThrowAnyException();
 
 		assertThatCode(mcpSyncServer::closeGracefully).doesNotThrowAnyException();
+	}
+
+	private McpServerFeatures.SyncToolSpecification syncToolSpecification(String name) {
+		return syncToolSpecification(name, name);
+	}
+
+	private McpServerFeatures.SyncToolSpecification syncToolSpecification(String name, String title) {
+		return McpServerFeatures.SyncToolSpecification.builder()
+			.tool(McpSchema.Tool.builder().name(name).title(title).inputSchema(EMPTY_JSON_SCHEMA).build())
+			.callHandler((exchange, request) -> CallToolResult.builder().content(List.of()).isError(false).build())
+			.build();
 	}
 
 	// ---------------------------------------

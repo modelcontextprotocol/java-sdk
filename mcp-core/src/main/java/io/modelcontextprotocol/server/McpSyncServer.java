@@ -90,6 +90,23 @@ public class McpSyncServer {
 	}
 
 	/**
+	 * Add multiple tool handlers.
+	 * @param toolHandlers The tool handlers to add
+	 */
+	public void addTools(List<McpServerFeatures.SyncToolSpecification> toolHandlers) {
+		if (toolHandlers == null) {
+			this.asyncServer.addTools(null).block();
+			return;
+		}
+		this.asyncServer
+			.addTools(toolHandlers.stream()
+				.map(toolHandler -> McpServerFeatures.AsyncToolSpecification.fromSync(toolHandler,
+						this.immediateExecution))
+				.toList())
+			.block();
+	}
+
+	/**
 	 * List all registered tools.
 	 * @return A list of all registered tools
 	 */
@@ -103,6 +120,14 @@ public class McpSyncServer {
 	 */
 	public void removeTool(String toolName) {
 		this.asyncServer.removeTool(toolName).block();
+	}
+
+	/**
+	 * Remove multiple tool handlers.
+	 * @param toolNames The names of the tool handlers to remove
+	 */
+	public void removeTools(List<String> toolNames) {
+		this.asyncServer.removeTools(toolNames).block();
 	}
 
 	/**
