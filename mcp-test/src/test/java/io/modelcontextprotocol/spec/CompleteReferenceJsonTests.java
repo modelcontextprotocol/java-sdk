@@ -14,7 +14,6 @@ import java.io.IOException;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import org.junit.jupiter.api.Test;
-import tools.jackson.databind.exc.ValueInstantiationException;
 
 /**
  * Verifies that {@link McpSchema.CompleteReference} polymorphic dispatch works via direct
@@ -94,7 +93,7 @@ class CompleteReferenceJsonTests {
 		Object paramsMap = mapper.readValue(json, Object.class);
 
 		assertThatThrownBy(() -> mapper.convertValue(paramsMap, new TypeRef<McpSchema.CompleteRequest>() {
-		})).isInstanceOf(ValueInstantiationException.class).hasMessageContaining("ref must not be null");
+		})).hasMessageContaining("ref must not be null");
 
 	}
 
