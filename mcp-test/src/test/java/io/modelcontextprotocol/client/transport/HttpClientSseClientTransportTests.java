@@ -19,7 +19,6 @@ import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequ
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
-
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -35,13 +34,13 @@ import reactor.test.StepVerifier;
 
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.util.UriComponentsBuilder;
-
 import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.ArgumentMatchers.matches;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -66,6 +65,8 @@ class HttpClientSseClientTransportTests {
 
 	private TestHttpClientSseClientTransport transport;
 
+	private SseMessageEndpointValidator sseMessageEndpointValidator = mock(SseMessageEndpointValidator.class);
+
 	private final McpTransportContext context = McpTransportContext.create(Map.of("some-key", "some-value"));
 
 	// Test class to access protected methods
@@ -75,10 +76,11 @@ class HttpClientSseClientTransportTests {
 
 		private Sinks.Many<ServerSentEvent<String>> events = Sinks.many().unicast().onBackpressureBuffer();
 
-		public TestHttpClientSseClientTransport(final String baseUri) {
+		public TestHttpClientSseClientTransport(final String baseUri,
+				SseMessageEndpointValidator sseMessageEndpointValidator) {
 			super(HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(),
 					HttpRequest.newBuilder().header("Content-Type", "application/json"), baseUri, "/sse", JSON_MAPPER,
-					McpAsyncHttpClientRequestCustomizer.NOOP);
+					McpAsyncHttpClientRequestCustomizer.NOOP, sseMessageEndpointValidator);
 		}
 
 		public int getInboundMessageCount() {
@@ -112,7 +114,7 @@ class HttpClientSseClientTransportTests {
 
 	@BeforeEach
 	void setUp() {
-		transport = new TestHttpClientSseClientTransport(host);
+		transport = new TestHttpClientSseClientTransport(host, sseMessageEndpointValidator);
 		transport.connect(Function.identity()).block();
 	}
 
@@ -475,6 +477,46 @@ class HttpClientSseClientTransportTests {
 
 		// Clean up
 		customizedTransport.closeGracefully().block();
+	}
+
+	@Test
+	void testMessageEndpointValidation() throws InvalidSseMessageEndpointException {
+		var uriCaptor = ArgumentCaptor.forClass(URI.class);
+		verify(sseMessageEndpointValidator).validate(uriCaptor.capture(), matches("/message\\?sessionId=[a-z0-9-]+"));
+		assertThat(uriCaptor.getValue().toString()).matches("http://localhost:\\d+/sse");
+	}
+
+	@Test
+	void testMessageEndpointValidationRejects() {
+		TestHttpClientSseClientTransport transport = new TestHttpClientSseClientTransport(host,
+				(sseUri, messageEndpoint) -> {
+					throw new InvalidSseMessageEndpointException("boom", messageEndpoint);
+				});
+
+		try {
+			// fails to connect
+			StepVerifier.create(transport.connect(Function.identity()))
+				.verifyErrorMatches(HttpClientSseClientTransportTests::isInvalidEndpointError);
+
+			// Since connection failed, there is no message endpoint, and no message can
+			// be sent
+			JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
+					Map.of("key", "value"));
+
+			StepVerifier.create(transport.sendMessage(testMessage))
+				.verifyErrorMatches(HttpClientSseClientTransportTests::isInvalidEndpointError);
+		}
+		finally {
+			transport.closeGracefully();
+		}
+	}
+
+	private static boolean isInvalidEndpointError(Throwable e) {
+		if (e instanceof InvalidSseMessageEndpointException ismee) {
+			return ismee.getMessageEndpoint().matches("/message\\?sessionId=[a-z0-9-]+")
+					&& ismee.getMessage().equals("boom");
+		}
+		return false;
 	}
 
 }
