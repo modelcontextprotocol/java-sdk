@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.client.transport;
 
+import java.net.URI;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.mockito.ArgumentCaptor;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import reactor.core.publisher.Flux;
@@ -35,6 +37,9 @@ import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.matches;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 /**
  * Tests for the {@link WebFluxSseClientTransport} class.
@@ -57,6 +62,8 @@ class WebFluxSseClientTransportTests {
 
 	private WebClient.Builder webClientBuilder;
 
+	private SseMessageEndpointValidator sseMessageEndpointValidator = mock(SseMessageEndpointValidator.class);
+
 	// Test class to access protected methods
 	static class TestSseClientTransport extends WebFluxSseClientTransport {
 
@@ -64,8 +71,9 @@ class WebFluxSseClientTransportTests {
 
 		private Sinks.Many<ServerSentEvent<String>> events = Sinks.many().unicast().onBackpressureBuffer();
 
-		public TestSseClientTransport(WebClient.Builder webClientBuilder, McpJsonMapper jsonMapper) {
-			super(webClientBuilder, jsonMapper);
+		public TestSseClientTransport(WebClient.Builder webClientBuilder, McpJsonMapper jsonMapper,
+				SseMessageEndpointValidator sseMessageEndpointValidator) {
+			super(webClientBuilder, jsonMapper, "/sse", sseMessageEndpointValidator);
 		}
 
 		@Override
@@ -113,7 +121,7 @@ class WebFluxSseClientTransportTests {
 	@BeforeEach
 	void setUp() {
 		webClientBuilder = WebClient.builder().baseUrl(host);
-		transport = new TestSseClientTransport(webClientBuilder, JSON_MAPPER);
+		transport = new TestSseClientTransport(webClientBuilder, JSON_MAPPER, sseMessageEndpointValidator);
 		transport.connect(Function.identity()).block();
 	}
 
@@ -366,6 +374,46 @@ class WebFluxSseClientTransportTests {
 
 		// Verify message count and order
 		assertThat(transport.getInboundMessageCount()).isEqualTo(3);
+	}
+
+	@Test
+	void testMessageEndpointValidation() throws InvalidSseMessageEndpointException {
+		var uriCaptor = ArgumentCaptor.forClass(URI.class);
+		verify(sseMessageEndpointValidator).validate(uriCaptor.capture(), matches("/message\\?sessionId=[a-z0-9-]+"));
+		assertThat(uriCaptor.getValue().toString()).matches("http://localhost:\\d+/sse");
+	}
+
+	@Test
+	void testMessageEndpointValidationRejects() {
+		TestSseClientTransport transport = new TestSseClientTransport(webClientBuilder, JSON_MAPPER,
+				(sseUri, messageEndpoint) -> {
+					throw new InvalidSseMessageEndpointException("boom", messageEndpoint);
+				});
+
+		try {
+			// fails to connect
+			StepVerifier.create(transport.connect(Function.identity()))
+				.verifyErrorMatches(WebFluxSseClientTransportTests::isInvalidEndpointError);
+
+			// Since connection failed, there is no message endpoint, and no message can
+			// be sent
+			JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
+					Map.of("key", "value"));
+
+			StepVerifier.create(transport.sendMessage(testMessage))
+				.verifyErrorMatches(WebFluxSseClientTransportTests::isInvalidEndpointError);
+		}
+		finally {
+			transport.closeGracefully();
+		}
+	}
+
+	private static boolean isInvalidEndpointError(Throwable e) {
+		if (e instanceof InvalidSseMessageEndpointException ismee) {
+			return ismee.getMessageEndpoint().matches("/message\\?sessionId=[a-z0-9-]+")
+					&& ismee.getMessage().equals("boom");
+		}
+		return false;
 	}
 
 }
