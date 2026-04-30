@@ -366,11 +366,12 @@ public class McpStatelessAsyncServer {
 		if (toolSpecifications == null) {
 			return Mono.error(new IllegalArgumentException("Tool specifications must not be null"));
 		}
-		if (toolSpecifications.isEmpty()) {
-			return Mono.empty();
-		}
 		if (this.serverCapabilities.tools() == null) {
 			return Mono.error(new IllegalStateException("Server must be configured with tool capabilities"));
+		}
+
+		if (toolSpecifications.isEmpty()) {
+			return Mono.empty();
 		}
 
 		Map<String, McpStatelessServerFeatures.AsyncToolSpecification> wrappedToolSpecificationsByName;
