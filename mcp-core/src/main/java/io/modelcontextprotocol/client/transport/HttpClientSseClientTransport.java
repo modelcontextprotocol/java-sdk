@@ -16,8 +16,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
@@ -33,6 +31,8 @@ import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.Utils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -118,6 +118,11 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	private final McpAsyncHttpClientRequestCustomizer httpRequestCustomizer;
 
 	/**
+	 * Validator for the message endpoint;
+	 */
+	private final SseMessageEndpointValidator messageEndpointValidator;
+
+	/**
 	 * Creates a new transport instance with custom HTTP client builder, object mapper,
 	 * and headers.
 	 * @param httpClient the HTTP client to use
@@ -127,22 +132,26 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 * @param jsonMapper the object mapper for JSON serialization/deserialization
 	 * @param httpRequestCustomizer customizer for the requestBuilder before executing
 	 * requests
+	 * @param messageEndpointValidator validator for the message endpoint
 	 * @throws IllegalArgumentException if objectMapper, clientBuilder, or headers is null
 	 */
 	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
-			String sseEndpoint, McpJsonMapper jsonMapper, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer) {
+			String sseEndpoint, McpJsonMapper jsonMapper, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer,
+			SseMessageEndpointValidator messageEndpointValidator) {
 		Assert.notNull(jsonMapper, "jsonMapper must not be null");
 		Assert.hasText(baseUri, "baseUri must not be empty");
 		Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
 		Assert.notNull(httpClient, "httpClient must not be null");
 		Assert.notNull(requestBuilder, "requestBuilder must not be null");
 		Assert.notNull(httpRequestCustomizer, "httpRequestCustomizer must not be null");
+		Assert.notNull(messageEndpointValidator, "messageEndpointValidator must not be null");
 		this.baseUri = URI.create(baseUri);
 		this.sseEndpoint = sseEndpoint;
 		this.jsonMapper = jsonMapper;
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
 		this.httpRequestCustomizer = httpRequestCustomizer;
+		this.messageEndpointValidator = messageEndpointValidator;
 	}
 
 	@Override
@@ -177,6 +186,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		private McpAsyncHttpClientRequestCustomizer httpRequestCustomizer = McpAsyncHttpClientRequestCustomizer.NOOP;
 
 		private Duration connectTimeout = Duration.ofSeconds(10);
+
+		private SseMessageEndpointValidator messageEndpointValidator = new DefaultSseMessageEndpointValidator();
 
 		/**
 		 * Creates a new builder instance.
@@ -322,13 +333,26 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		}
 
 		/**
+		 * Sets the validator that ensure the message endpoint returned over the SSE
+		 * connection is valid.
+		 * @param messageEndpointValidator the validator
+		 * @return this builder
+		 */
+		public Builder messageEndpointValidator(SseMessageEndpointValidator messageEndpointValidator) {
+			Assert.notNull(messageEndpointValidator, "messageEndpointValidator must not be null");
+			this.messageEndpointValidator = messageEndpointValidator;
+			return this;
+		}
+
+		/**
 		 * Builds a new {@link HttpClientSseClientTransport} instance.
 		 * @return a new transport instance
 		 */
 		public HttpClientSseClientTransport build() {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
 			return new HttpClientSseClientTransport(httpClient, requestBuilder, baseUri, sseEndpoint,
-					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, httpRequestCustomizer);
+					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, httpRequestCustomizer,
+					messageEndpointValidator);
 		}
 
 	}
@@ -366,6 +390,14 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 						try {
 							if (ENDPOINT_EVENT_TYPE.equals(responseEvent.sseEvent().event())) {
 								String messageEndpointUri = responseEvent.sseEvent().data();
+								try {
+									messageEndpointValidator.validate(uri, messageEndpointUri);
+								}
+								catch (InvalidSseMessageEndpointException e) {
+									sink.error(e);
+									this.messageEndpointSink.tryEmitError(e);
+									return Flux.error(e);
+								}
 								if (this.messageEndpointSink.tryEmitValue(messageEndpointUri).isSuccess()) {
 									sink.success();
 									return Flux.empty(); // No further processing needed
