@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicReference;
@@ -135,6 +136,14 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	private final List<String> supportedProtocolVersions;
 
 	private final String latestSupportedProtocolVersion;
+
+	/**
+	 * Stores the protocol version negotiated during the initialize handshake so that the
+	 * GET SSE reconnect triggered by {@link #sendMessage} can use the correct version
+	 * immediately, before the Reactor context is populated by
+	 * {@code LifecycleInitializer}.
+	 */
+	private final AtomicReference<String> negotiatedProtocolVersion = new AtomicReference<>();
 
 	private HttpClientStreamableHttpTransport(McpJsonMapper jsonMapper, HttpClient httpClient,
 			HttpRequest.Builder requestBuilder, String baseUri, String endpoint, boolean resumableStreams,
@@ -277,7 +286,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					.header("Cache-Control", "no-cache")
 					.header(HttpHeaders.PROTOCOL_VERSION,
 							connectionCtx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
-									this.latestSupportedProtocolVersion))
+									Optional.ofNullable(this.negotiatedProtocolVersion.get())
+										.orElse(this.latestSupportedProtocolVersion)))
 					.GET();
 				var transportContext = connectionCtx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 				return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
@@ -450,6 +460,39 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	}
 
+	/**
+	 * Attempts to parse a {@code protocolVersion} from the initialize response body. This
+	 * is needed because the Reactor context is not yet populated by
+	 * {@code LifecycleInitializer} at the time the first GET reconnect is triggered.
+	 */
+	@SuppressWarnings("unchecked")
+	private Optional<String> extractProtocolVersion(ResponseSubscribers.ResponseEvent responseEvent) {
+		String data = null;
+		if (responseEvent instanceof ResponseSubscribers.AggregateResponseEvent agg) {
+			data = agg.data();
+		}
+		else if (responseEvent instanceof ResponseSubscribers.SseResponseEvent sse) {
+			data = sse.sseEvent().data();
+		}
+		if (data == null || data.isBlank()) {
+			return Optional.empty();
+		}
+		try {
+			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.jsonMapper, data);
+			if (message instanceof McpSchema.JSONRPCResponse response
+					&& response.result() instanceof Map<?, ?> result) {
+				Object version = result.get("protocolVersion");
+				if (version instanceof String v && !v.isBlank()) {
+					return Optional.of(v);
+				}
+			}
+		}
+		catch (Exception ignored) {
+			// Best-effort; the context-based fallback in reconnect() still applies.
+		}
+		return Optional.empty();
+	}
+
 	public String toString(McpSchema.JSONRPCMessage message) {
 		try {
 			return this.jsonMapper.writeValueAsString(message);
@@ -514,7 +557,11 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						responseEvent.responseInfo().headers().firstValue("mcp-session-id").orElseGet(() -> null))) {
 					// Once we have a session, we try to open an async stream for
 					// the server to send notifications and requests out-of-band.
-
+					// Extract the negotiated protocol version from the initialize
+					// response body before triggering the GET reconnect, since the
+					// Reactor context is not yet populated by LifecycleInitializer
+					// at this point in the reactive chain.
+					extractProtocolVersion(responseEvent).ifPresent(this.negotiatedProtocolVersion::set);
 					reconnect(null).contextWrite(deliveredSink.contextView()).subscribe();
 				}
 
