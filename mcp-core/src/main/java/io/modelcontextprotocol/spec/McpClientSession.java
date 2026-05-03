@@ -119,7 +119,15 @@ public class McpClientSession implements McpSession {
 		this.requestHandlers.putAll(requestHandlers);
 		this.notificationHandlers.putAll(notificationHandlers);
 
-		this.transport.connect(mono -> mono.doOnNext(this::handle)).transform(connectHook).subscribe();
+		this.transport.connect(mono -> mono.doOnNext(this::handle)).transform(connectHook).subscribe(v -> {
+		}, error -> {
+			logger.error("MCP session connection error", error);
+			this.pendingResponses.forEach((id, sink) -> {
+				logger.warn("Terminating exchange for request {} due to connection error", id);
+				sink.error(new RuntimeException("MCP session connection error", error));
+			});
+			this.pendingResponses.clear();
+		});
 	}
 
 	private void dismissPendingResponses() {
