@@ -10,6 +10,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -17,11 +20,10 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Based on the <a href="http://www.jsonrpc.org/specification">JSON-RPC 2.0
@@ -661,16 +663,63 @@ public final class McpSchema {
 	 * past specs or fallback (if title isn't present).
 	 * @param title Intended for UI and end-user contexts
 	 * @param version The version of the implementation.
+	 * @param description An optional human-readable description of this implementation.
+	 * @param icons An optional list of icons for this implementation.
+	 * @param websiteUrl An optional URL of the website for this implementation.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Implementation( // @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("title") String title,
-		@JsonProperty("version") String version) implements Identifier { // @formatter:on			
+		@JsonProperty("version") String version,
+		@JsonProperty("description") String description,
+		@JsonProperty("icons") List<Icon> icons,
+		@JsonProperty("websiteUrl") String websiteUrl) implements Identifier { // @formatter:on
 
 		public Implementation(String name, String version) {
-			this(name, null, version);
+			this(name, null, version, null, null, null);
+		}
+
+		public Implementation(String name, String title, String version) {
+			this(name, title, version, null, null, null);
+		}
+	}
+
+	/**
+	 * Represents an icon that can be displayed in a user interface.
+	 *
+	 * @param src A URI pointing to an icon resource or a base64-encoded data URI.
+	 * @param mimeType Optional MIME type override if the server's MIME type is missing or
+	 * generic.
+	 * @param sizes Optional array of strings specifying sizes at which the icon can be
+	 * used. Each string should be in WxH format (e.g., "48x48", "96x96") or "any" for
+	 * scalable formats like SVG.
+	 * @param theme Optional specifier for the theme this icon is designed for. "light"
+	 * indicates the icon is designed for a light background, "dark" indicates the icon is
+	 * designed for a dark background. If not provided, the client should assume the icon
+	 * can be used with any theme.
+	 * @see <a href=
+	 * "https://github.com/modelcontextprotocol/modelcontextprotocol/issues/973">SEP-973</a>
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record Icon( // @formatter:off
+		@JsonProperty("src") String src,
+		@JsonProperty("mimeType") String mimeType,
+		@JsonProperty("sizes") List<String> sizes,
+		@JsonProperty("theme") String theme) { // @formatter:on
+
+		public Icon {
+			Assert.hasText(src, "Icon src must not be empty");
+		}
+
+		public Icon(String src, String mimeType) {
+			this(src, mimeType, null, null);
+		}
+
+		public Icon(String src, String mimeType, List<String> sizes) {
+			this(src, mimeType, sizes, null);
 		}
 	}
 
@@ -792,6 +841,7 @@ public final class McpSchema {
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("size") Long size,
 		@JsonProperty("annotations") Annotations annotations,
+		@JsonProperty("icons") List<Icon> icons,
 		@JsonProperty("_meta") Map<String, Object> meta) implements ResourceContent { // @formatter:on
 
 		public static Builder builder() {
@@ -813,6 +863,8 @@ public final class McpSchema {
 			private Long size;
 
 			private Annotations annotations;
+
+			private List<Icon> icons;
 
 			private Map<String, Object> meta;
 
@@ -851,6 +903,11 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder icons(List<Icon> icons) {
+				this.icons = icons;
+				return this;
+			}
+
 			public Builder meta(Map<String, Object> meta) {
 				this.meta = meta;
 				return this;
@@ -860,7 +917,7 @@ public final class McpSchema {
 				Assert.hasText(uri, "uri must not be empty");
 				Assert.hasText(name, "name must not be empty");
 
-				return new Resource(uri, name, title, description, mimeType, size, annotations, meta);
+				return new Resource(uri, name, title, description, mimeType, size, annotations, icons, meta);
 			}
 
 		}
@@ -893,16 +950,22 @@ public final class McpSchema {
 		@JsonProperty("description") String description,
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("annotations") Annotations annotations,
+		@JsonProperty("icons") List<Icon> icons,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Identifier, Meta { // @formatter:on
 
 		public ResourceTemplate(String uriTemplate, String name, String title, String description, String mimeType,
 				Annotations annotations) {
-			this(uriTemplate, name, title, description, mimeType, annotations, null);
+			this(uriTemplate, name, title, description, mimeType, annotations, null, null);
 		}
 
 		public ResourceTemplate(String uriTemplate, String name, String description, String mimeType,
 				Annotations annotations) {
 			this(uriTemplate, name, null, description, mimeType, annotations);
+		}
+
+		public ResourceTemplate(String uriTemplate, String name, String title, String description, String mimeType,
+				Annotations annotations, Map<String, Object> meta) {
+			this(uriTemplate, name, title, description, mimeType, annotations, null, meta);
 		}
 
 		public static Builder builder() {
@@ -922,6 +985,8 @@ public final class McpSchema {
 			private String mimeType;
 
 			private Annotations annotations;
+
+			private List<Icon> icons;
 
 			private Map<String, Object> meta;
 
@@ -955,6 +1020,11 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder icons(List<Icon> icons) {
+				this.icons = icons;
+				return this;
+			}
+
 			public Builder meta(Map<String, Object> meta) {
 				this.meta = meta;
 				return this;
@@ -964,7 +1034,7 @@ public final class McpSchema {
 				Assert.hasText(uriTemplate, "uri must not be empty");
 				Assert.hasText(name, "name must not be empty");
 
-				return new ResourceTemplate(uriTemplate, name, title, description, mimeType, annotations, meta);
+				return new ResourceTemplate(uriTemplate, name, title, description, mimeType, annotations, icons, meta);
 			}
 
 		}
@@ -1168,14 +1238,20 @@ public final class McpSchema {
 		@JsonProperty("title") String title,
 		@JsonProperty("description") String description,
 		@JsonProperty("arguments") List<PromptArgument> arguments,
+		@JsonProperty("icons") List<Icon> icons,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Identifier { // @formatter:on
 
 		public Prompt(String name, String description, List<PromptArgument> arguments) {
-			this(name, null, description, arguments, null);
+			this(name, null, description, arguments, null, null);
 		}
 
 		public Prompt(String name, String title, String description, List<PromptArgument> arguments) {
-			this(name, title, description, arguments, null);
+			this(name, title, description, arguments, null, null);
+		}
+
+		public Prompt(String name, String title, String description, List<PromptArgument> arguments,
+				Map<String, Object> meta) {
+			this(name, title, description, arguments, null, meta);
 		}
 	}
 
@@ -1367,6 +1443,7 @@ public final class McpSchema {
 		@JsonProperty("inputSchema") Map<String, Object> inputSchema,
 		@JsonProperty("outputSchema") Map<String, Object> outputSchema,
 		@JsonProperty("annotations") ToolAnnotations annotations,
+		@JsonProperty("icons") List<Icon> icons,
 		@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
 
 		public static Builder builder() {
@@ -1386,6 +1463,8 @@ public final class McpSchema {
 			private Map<String, Object> outputSchema;
 
 			private ToolAnnotations annotations;
+
+			private List<Icon> icons;
 
 			private Map<String, Object> meta;
 
@@ -1450,6 +1529,11 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder icons(List<Icon> icons) {
+				this.icons = icons;
+				return this;
+			}
+
 			public Builder meta(Map<String, Object> meta) {
 				this.meta = meta;
 				return this;
@@ -1457,7 +1541,7 @@ public final class McpSchema {
 
 			public Tool build() {
 				Assert.hasText(name, "name must not be empty");
-				return new Tool(name, title, description, inputSchema, outputSchema, annotations, meta);
+				return new Tool(name, title, description, inputSchema, outputSchema, annotations, icons, meta);
 			}
 
 		}
