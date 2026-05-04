@@ -10,8 +10,8 @@ import io.modelcontextprotocol.util.Assert;
 
 /**
  * Default {@link SseMessageEndpointValidator} that validates the {@code message} endpoint
- * advertised by an SSE server. Message endpoints must be a relative URI, without path
- * traversal or authority.
+ * advertised by an SSE server. Message endpoints must either have the same origin as the
+ * SSE uri, or be a relative uri.
  *
  * @author Daniel Garnier-Moiroux
  */
@@ -30,16 +30,19 @@ public final class DefaultSseMessageEndpointValidator implements SseMessageEndpo
 					messageEndpoint);
 		}
 
-		if (endpointUri.isAbsolute()) {
-			// Exclude absolute URIs e.g. https://example.com/mcp
-			throw new InvalidSseMessageEndpointException("messageEndpoint must be a relative path, not an absolute URI",
-					messageEndpoint);
-		}
+		if (endpointUri.isAbsolute() || endpointUri.getRawAuthority() != null) {
+			String scheme = endpointUri.getScheme();
+			String host = endpointUri.getHost();
+			int port = endpointUri.getPort();
 
-		if (endpointUri.getRawAuthority() != null) {
-			// Exclude network paths e.g. //example.com/mcp
-			throw new InvalidSseMessageEndpointException(
-					"messageEndpoint must be a relative path and must not contain an authority", messageEndpoint);
+			boolean sameScheme = scheme != null && scheme.equalsIgnoreCase(sseUri.getScheme());
+			boolean sameHost = host != null && host.equalsIgnoreCase(sseUri.getHost());
+			boolean samePort = port == sseUri.getPort();
+
+			if (!sameScheme || !sameHost || !samePort) {
+				throw new InvalidSseMessageEndpointException(
+						"messageEndpoint must be a relative path or a same-origin URI", messageEndpoint);
+			}
 		}
 
 		// Exclude path-traversal

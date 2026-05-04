@@ -25,7 +25,7 @@ class DefaultSseMessageEndpointValidatorTests {
 	private final DefaultSseMessageEndpointValidator validator = new DefaultSseMessageEndpointValidator();
 
 	@ParameterizedTest
-	@ValueSource(strings = { "/messages", "messages?session=abc", "/" })
+	@ValueSource(strings = { "/messages", "messages?session=abc", "/", "https://mcp.example.com/messages" })
 	void valid(String endpoint) {
 		assertThatCode(() -> validator.validate(SSE_URI, endpoint)).doesNotThrowAnyException();
 	}
@@ -41,20 +41,20 @@ class DefaultSseMessageEndpointValidatorTests {
 	@ParameterizedTest
 	@ValueSource(strings = { "/foo/../bar", "/foo/./bar", "../bar", "./bar", "/foo/%2E%2E/bar", "/foo/%2e/bar" })
 	void invalidPathTraversal(String endpoint) {
-		assertThatThrownBy(() -> validator.validate(SSE_URI, endpoint)).hasMessageContaining("path-traversal")
+		assertThatThrownBy(() -> validator.validate(SSE_URI, endpoint))
+			.hasMessageContaining("must not contain path-traversal segments")
 			.asInstanceOf(type(InvalidSseMessageEndpointException.class))
 			.extracting(InvalidSseMessageEndpointException::getMessageEndpoint)
 			.isEqualTo(endpoint);
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "https://mcp.example.com/messages", "https://127.0.0.1/messages",
-			"https://mcp.example.com:8443/messages", "http://localhost:1234/messages", "file:///etc/passwd",
-			"gopher://mcp.example.com/_test" })
+	@ValueSource(strings = { "https://127.0.0.1/messages", "https://mcp.example.com:8443/messages",
+			"http://localhost:1234/messages", "file:///etc/passwd", "gopher://mcp.example.com/_test" })
 	void invalidAbsoluteUris(String endpoint) {
-		// Even an absolute URI on the same origin must be rejected: the contract
-		// is that the messageEndpoint is a path-only relative reference.
-		assertThatThrownBy(() -> validator.validate(SSE_URI, endpoint)).hasMessageContaining("must be a relative path")
+		// Absolute URIs must be same-origin.
+		assertThatThrownBy(() -> validator.validate(SSE_URI, endpoint))
+			.hasMessageContaining("must be a relative path or a same-origin URI")
 			.asInstanceOf(type(InvalidSseMessageEndpointException.class))
 			.extracting(InvalidSseMessageEndpointException::getMessageEndpoint)
 			.isEqualTo(endpoint);
@@ -62,11 +62,12 @@ class DefaultSseMessageEndpointValidatorTests {
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = { "//example/messages", "//user:secret@example/messages" })
+	@ValueSource(strings = { "//example/messages", "//user:secret@example/messages", "//mcp.example.com/messages" })
 	void invalidNetworkReference(String endpoint) {
 		// `//host/...` introduces an authority and is therefore not a pure path.
+		// It is missing a scheme, so it fails same-origin check.
 		assertThatThrownBy(() -> validator.validate(SSE_URI, endpoint))
-			.hasMessageContaining("must not contain an authority")
+			.hasMessageContaining("must be a relative path or a same-origin URI")
 			.asInstanceOf(type(InvalidSseMessageEndpointException.class))
 			.extracting(InvalidSseMessageEndpointException::getMessageEndpoint)
 			.isEqualTo(endpoint);
