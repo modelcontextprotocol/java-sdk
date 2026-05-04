@@ -483,7 +483,7 @@ class HttpClientSseClientTransportTests {
 	void testMessageEndpointValidation() throws InvalidSseMessageEndpointException {
 		var uriCaptor = ArgumentCaptor.forClass(URI.class);
 		verify(sseMessageEndpointValidator).validate(uriCaptor.capture(), matches("/message\\?sessionId=[a-z0-9-]+"));
-		assertThat(uriCaptor.getValue().toString()).matches("http://localhost:\\d+/sse");
+		assertThat(uriCaptor.getValue().toString()).matches(host + "/sse");
 	}
 
 	@Test
