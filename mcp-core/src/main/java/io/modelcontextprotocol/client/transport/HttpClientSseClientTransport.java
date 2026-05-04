@@ -504,6 +504,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			if (subscription != null && !subscription.isDisposed()) {
 				subscription.dispose();
 			}
+			Utils.closeHttpClient(this.httpClient);
 		});
 	}
 
