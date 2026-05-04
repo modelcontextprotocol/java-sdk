@@ -57,6 +57,6 @@ jobs:
         uses: modelcontextprotocol/conformance@v0.1.11
         with:
           mode: client
-          command: 'java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-0.18.0-SNAPSHOT.jar'
+          command: 'java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-*-SNAPSHOT.jar'
           scenario: ${{ matrix.scenario }}
           expected-failures: ./conformance-tests/conformance-baseline.yml
