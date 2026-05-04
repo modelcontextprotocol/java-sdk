@@ -15,6 +15,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.modelcontextprotocol.client.LifecycleInitializer.Initialization;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
@@ -30,16 +33,14 @@ import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
 import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
-import io.modelcontextprotocol.util.ToolNameValidator;
 import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSchema.PaginatedRequest;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.ToolNameValidator;
 import io.modelcontextprotocol.util.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -561,8 +562,63 @@ public class McpAsyncClient {
 			ElicitRequest request = transport.unmarshalFrom(params, new TypeRef<>() {
 			});
 
-			return this.elicitationHandler.apply(request);
+			return this.elicitationHandler.apply(request).map(result -> {
+				// Apply defaults from schema when applyDefaults is enabled
+				if (result.action() == ElicitResult.Action.ACCEPT && result.content() != null
+						&& shouldApplyElicitationDefaults()) {
+					Map<String, Object> merged = new HashMap<>(result.content());
+					applyElicitationDefaults(request.requestedSchema(), merged);
+					return new ElicitResult(result.action(), merged, result.meta());
+				}
+				return result;
+			});
 		};
+	}
+
+	/**
+	 * Checks whether the client is configured to apply elicitation defaults.
+	 * @return true if the client capabilities indicate that defaults should be applied
+	 */
+	private boolean shouldApplyElicitationDefaults() {
+		if (this.clientCapabilities.elicitation() == null) {
+			return false;
+		}
+		McpSchema.ClientCapabilities.Elicitation.Form form = this.clientCapabilities.elicitation().form();
+		return form != null && Boolean.TRUE.equals(form.applyDefaults());
+	}
+
+	/**
+	 * Applies default values from the elicitation schema to the result content. For each
+	 * property in the schema that has a "default" value, if the corresponding key is
+	 * missing from the content map, the default value is inserted.
+	 * @param schema the requestedSchema from the ElicitRequest
+	 * @param content the mutable content map from the ElicitResult
+	 */
+	@SuppressWarnings("unchecked")
+	static void applyElicitationDefaults(Map<String, Object> schema, Map<String, Object> content) {
+		if (schema == null || content == null) {
+			return;
+		}
+
+		Object propertiesObj = schema.get("properties");
+		if (!(propertiesObj instanceof Map)) {
+			return;
+		}
+
+		Map<String, Object> properties = (Map<String, Object>) propertiesObj;
+		for (Map.Entry<String, Object> entry : properties.entrySet()) {
+			String key = entry.getKey();
+			Object propDef = entry.getValue();
+
+			if (!(propDef instanceof Map)) {
+				continue;
+			}
+
+			Map<String, Object> propMap = (Map<String, Object>) propDef;
+			if (!content.containsKey(key) && propMap.containsKey("default")) {
+				content.put(key, propMap.get("default"));
+			}
+		}
 	}
 
 	// --------------------------
