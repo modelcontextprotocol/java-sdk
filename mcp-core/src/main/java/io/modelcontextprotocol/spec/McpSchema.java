@@ -1212,11 +1212,16 @@ public final class McpSchema {
 			return new Builder(uri, name);
 		}
 
+		@Deprecated
+		public static Builder builder() {
+			return new Builder();
+		}
+
 		public static class Builder {
 
-			private final String uri;
+			private /* final */ String uri;
 
-			private final String name;
+			private /* final */ String name;
 
 			private String title;
 
@@ -1229,6 +1234,24 @@ public final class McpSchema {
 			private Annotations annotations;
 
 			private Map<String, Object> meta;
+
+			@Deprecated
+			public Builder() {
+			}
+
+			@Deprecated
+			public Builder uri(String uri) {
+				Assert.hasText(uri, "uri must not be empty");
+				this.uri = uri;
+				return this;
+			}
+
+			@Deprecated
+			public Builder name(String name) {
+				this.name = name;
+				Assert.hasText(name, "name must not be empty");
+				return this;
+			}
 
 			private Builder(String uri, String name) {
 				Assert.hasText(uri, "uri must not be empty");
@@ -1330,11 +1353,16 @@ public final class McpSchema {
 			return new Builder(uriTemplate, name);
 		}
 
+		@Deprecated
+		public static Builder builder() {
+			return new Builder();
+		}
+
 		public static class Builder {
 
-			private final String uriTemplate;
+			private /* final */ String uriTemplate;
 
-			private final String name;
+			private /* final */ String name;
 
 			private String title;
 
@@ -1346,11 +1374,30 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
+			@Deprecated
+			private Builder() {
+
+			}
+
 			private Builder(String uriTemplate, String name) {
 				Assert.hasText(uriTemplate, "uriTemplate must not be empty");
 				Assert.hasText(name, "name must not be empty");
 				this.uriTemplate = uriTemplate;
 				this.name = name;
+			}
+
+			@Deprecated
+			public Builder uriTemplate(String uriTemplate) {
+				Assert.hasText(uriTemplate, "uriTemplate must not be empty");
+				this.uriTemplate = uriTemplate;
+				return this;
+			}
+
+			@Deprecated
+			public Builder name(String name) {
+				Assert.hasText(name, "name must not be empty");
+				this.name = name;
+				return this;
 			}
 
 			public Builder title(String title) {
