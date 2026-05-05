@@ -92,7 +92,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 * HTTP client for sending messages to the server. Uses HTTP POST over the message
 	 * endpoint
 	 */
-	private final HttpClient httpClient;
+	private final OwnedHttpClient ownedHttpClient;
 
 	/** HTTP request builder for building requests to send messages to the server */
 	private final HttpRequest.Builder requestBuilder;
@@ -148,10 +148,14 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		this.baseUri = URI.create(baseUri);
 		this.sseEndpoint = sseEndpoint;
 		this.jsonMapper = jsonMapper;
-		this.httpClient = httpClient;
+		this.ownedHttpClient = OwnedHttpClient.create(httpClient);
 		this.requestBuilder = requestBuilder;
 		this.httpRequestCustomizer = httpRequestCustomizer;
 		this.messageEndpointValidator = messageEndpointValidator;
+	}
+
+	private HttpClient httpClient() {
+		return this.ownedHttpClient.currentClientOrThrow();
 	}
 
 	@Override
@@ -347,7 +351,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
 		}).flatMap(requestBuilder -> Mono.create(sink -> {
-			Disposable connection = Flux.<ResponseEvent>create(sseSink -> this.httpClient
+			Disposable connection = Flux.<ResponseEvent>create(sseSink -> this.httpClient()
 				.sendAsync(requestBuilder.build(),
 						responseInfo -> ResponseSubscribers.sseToBodySubscriber(responseInfo, sseSink))
 				.exceptionallyCompose(e -> {
@@ -484,7 +488,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", requestUri, body, transportContext));
 		}).flatMap(customizedBuilder -> {
 			var request = customizedBuilder.build();
-			return Mono.fromFuture(httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()));
+			return Mono.fromFuture(this.httpClient().sendAsync(request, HttpResponse.BodyHandlers.ofString()));
 		});
 	}
 
@@ -504,7 +508,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			if (subscription != null && !subscription.isDisposed()) {
 				subscription.dispose();
 			}
-		});
+		}).then(this.ownedHttpClient.releaseAfterClose());
 	}
 
 	/**
