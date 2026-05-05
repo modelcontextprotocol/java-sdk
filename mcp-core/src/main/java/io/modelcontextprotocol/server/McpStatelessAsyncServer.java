@@ -457,20 +457,21 @@ public class McpStatelessAsyncServer {
 		if (toolNames == null) {
 			return Mono.error(new IllegalArgumentException("Tool names must not be null"));
 		}
+		if (this.serverCapabilities.tools() == null) {
+			return Mono.error(new IllegalStateException("Server must be configured with tool capabilities"));
+		}
 		if (toolNames.isEmpty()) {
 			return Mono.empty();
 		}
 
 		Set<String> toolNamesToRemove = new HashSet<>();
-		for (String toolName : new ArrayList<>(toolNames)) {
+		for (String toolName : toolNames) {
 			if (toolName == null) {
 				return Mono.error(new IllegalArgumentException("Tool name must not be null"));
 			}
 			toolNamesToRemove.add(toolName);
 		}
-		if (this.serverCapabilities.tools() == null) {
-			return Mono.error(new IllegalStateException("Server must be configured with tool capabilities"));
-		}
+
 
 		return Mono.defer(() -> {
 			if (this.tools.removeIf(toolSpecification -> toolNamesToRemove.contains(toolSpecification.tool().name()))) {
