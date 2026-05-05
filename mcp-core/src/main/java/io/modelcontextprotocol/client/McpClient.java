@@ -4,6 +4,15 @@
 
 package io.modelcontextprotocol.client;
 
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
@@ -19,15 +28,6 @@ import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpTransport;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
-
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
 /**
  * Factory class for creating Model Context Protocol (MCP) clients. MCP is a protocol that
@@ -189,6 +189,8 @@ public interface McpClient {
 
 		private Function<ElicitRequest, ElicitResult> elicitationHandler;
 
+		private final List<Consumer<McpSchema.ElicitationCompleteNotification>> elicitationCompleteConsumers = new ArrayList<>();
+
 		private Supplier<McpTransportContext> contextProvider = () -> McpTransportContext.EMPTY;
 
 		private JsonSchemaValidator jsonSchemaValidator;
@@ -315,6 +317,21 @@ public interface McpClient {
 		public SyncSpec elicitation(Function<ElicitRequest, ElicitResult> elicitationHandler) {
 			Assert.notNull(elicitationHandler, "Elicitation handler must not be null");
 			this.elicitationHandler = elicitationHandler;
+			return this;
+		}
+
+		/**
+		 * Adds a consumer to be notified when an elicitation complete notification is
+		 * received from the server. This allows the client to react when an out-of-band
+		 * URL elicitation interaction has completed.
+		 * @param consumer A consumer that receives the elicitation complete notification.
+		 * Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if consumer is null
+		 */
+		public SyncSpec elicitationCompleteConsumer(Consumer<McpSchema.ElicitationCompleteNotification> consumer) {
+			Assert.notNull(consumer, "Elicitation complete consumer must not be null");
+			this.elicitationCompleteConsumers.add(consumer);
 			return this;
 		}
 
@@ -488,7 +505,7 @@ public interface McpClient {
 			McpClientFeatures.Sync syncFeatures = new McpClientFeatures.Sync(this.clientInfo, this.capabilities,
 					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 					this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers, this.samplingHandler,
-					this.elicitationHandler, this.enableCallToolSchemaCaching);
+					this.elicitationHandler, this.enableCallToolSchemaCaching, this.elicitationCompleteConsumers);
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
@@ -544,6 +561,8 @@ public interface McpClient {
 		private Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler;
 
 		private Function<ElicitRequest, Mono<ElicitResult>> elicitationHandler;
+
+		private final List<Function<McpSchema.ElicitationCompleteNotification, Mono<Void>>> elicitationCompleteConsumers = new ArrayList<>();
 
 		private JsonSchemaValidator jsonSchemaValidator;
 
@@ -669,6 +688,22 @@ public interface McpClient {
 		public AsyncSpec elicitation(Function<ElicitRequest, Mono<ElicitResult>> elicitationHandler) {
 			Assert.notNull(elicitationHandler, "Elicitation handler must not be null");
 			this.elicitationHandler = elicitationHandler;
+			return this;
+		}
+
+		/**
+		 * Adds a consumer to be notified when an elicitation complete notification is
+		 * received from the server. This allows the client to react when an out-of-band
+		 * URL elicitation interaction has completed.
+		 * @param consumer A function that receives the elicitation complete notification
+		 * and returns a Mono signaling completion. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if consumer is null
+		 */
+		public AsyncSpec elicitationCompleteConsumer(
+				Function<McpSchema.ElicitationCompleteNotification, Mono<Void>> consumer) {
+			Assert.notNull(consumer, "Elicitation complete consumer must not be null");
+			this.elicitationCompleteConsumers.add(consumer);
 			return this;
 		}
 
@@ -833,7 +868,8 @@ public interface McpClient {
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
 							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 							this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
-							this.samplingHandler, this.elicitationHandler, this.enableCallToolSchemaCaching));
+							this.samplingHandler, this.elicitationHandler, this.enableCallToolSchemaCaching,
+							this.elicitationCompleteConsumers));
 		}
 
 	}

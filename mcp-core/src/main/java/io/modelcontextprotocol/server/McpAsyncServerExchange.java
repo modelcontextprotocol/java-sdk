@@ -4,17 +4,15 @@
 
 package io.modelcontextprotocol.server;
 
-import io.modelcontextprotocol.common.McpTransportContext;
 import java.util.ArrayList;
 import java.util.Collections;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpLoggableSession;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
-import io.modelcontextprotocol.spec.McpSession;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
 
@@ -152,8 +150,31 @@ public class McpAsyncServerExchange {
 		if (this.clientCapabilities.elicitation() == null) {
 			return Mono.error(new IllegalStateException("Client must be configured with elicitation capabilities"));
 		}
+		if ("url".equals(elicitRequest.mode()) && this.clientCapabilities.elicitation().url() == null) {
+			return Mono.error(new IllegalStateException(
+					"Client must be configured with URL elicitation capabilities to handle URL mode requests"));
+		}
 		return this.session.sendRequest(McpSchema.METHOD_ELICITATION_CREATE, elicitRequest,
 				ELICITATION_RESULT_TYPE_REF);
+	}
+
+	/**
+	 * Sends an elicitation complete notification to the client, indicating that an
+	 * out-of-band URL elicitation interaction has completed.
+	 * @param notification The notification containing the elicitation ID
+	 * @return A Mono that completes when the notification has been sent.
+	 * @see McpSchema.ElicitationCompleteNotification
+	 */
+	public Mono<Void> sendElicitationComplete(McpSchema.ElicitationCompleteNotification notification) {
+		if (this.clientCapabilities == null) {
+			return Mono
+				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
+		}
+		if (this.clientCapabilities.elicitation() == null || this.clientCapabilities.elicitation().url() == null) {
+			return Mono.error(new IllegalStateException(
+					"Client must be configured with URL elicitation capabilities to receive elicitation complete notifications"));
+		}
+		return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_ELICITATION_COMPLETE, notification);
 	}
 
 	/**

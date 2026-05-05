@@ -4,31 +4,31 @@
 
 package io.modelcontextprotocol.server;
 
-import io.modelcontextprotocol.common.McpTransportContext;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpServerSession;
-import io.modelcontextprotocol.json.TypeRef;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import org.mockito.Mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.MockitoAnnotations;
+
+import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpServerSession;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 /**
  * Tests for {@link McpAsyncServerExchange}.
@@ -458,6 +458,85 @@ class McpAsyncServerExchangeTests {
 
 		StepVerifier.create(exchangeWithElicitation.createElicitation(elicitRequest)).verifyErrorSatisfies(error -> {
 			assertThat(error).isInstanceOf(RuntimeException.class).hasMessage("Session communication error");
+		});
+	}
+
+	// ---------------------------------------
+	// URL Elicitation Tests (SEP-1036)
+	// ---------------------------------------
+
+	@Test
+	void testCreateUrlElicitationWithoutUrlCapability() {
+		// Client has elicitation but not URL sub-capability
+		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder().elicitation().build();
+
+		McpAsyncServerExchange exchange = new McpAsyncServerExchange("testSessionId", mockSession, capabilities,
+				clientInfo, McpTransportContext.EMPTY);
+
+		McpSchema.ElicitRequest urlRequest = McpSchema.ElicitRequest
+			.urlBuilder("Authenticate", "https://example.com/oauth", "elicit-1")
+			.build();
+
+		StepVerifier.create(exchange.createElicitation(urlRequest)).verifyErrorSatisfies(error -> {
+			assertThat(error).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("URL elicitation capabilities");
+		});
+	}
+
+	@Test
+	void testCreateUrlElicitationWithUrlCapability() {
+		McpSchema.ClientCapabilities capabilities = new McpSchema.ClientCapabilities(null, null, null,
+				new McpSchema.ClientCapabilities.Elicitation(null, new McpSchema.ClientCapabilities.Elicitation.Url()));
+
+		McpAsyncServerExchange exchange = new McpAsyncServerExchange("testSessionId", mockSession, capabilities,
+				clientInfo, McpTransportContext.EMPTY);
+
+		McpSchema.ElicitRequest urlRequest = McpSchema.ElicitRequest
+			.urlBuilder("Authenticate", "https://example.com/oauth", "elicit-1")
+			.build();
+
+		McpSchema.ElicitResult expectedResult = McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT)
+			.build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(urlRequest), any(TypeRef.class)))
+			.thenReturn(Mono.just(expectedResult));
+
+		StepVerifier.create(exchange.createElicitation(urlRequest)).assertNext(result -> {
+			assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+		}).verifyComplete();
+	}
+
+	@Test
+	void testSendElicitationCompleteWithUrlCapability() {
+		McpSchema.ClientCapabilities capabilities = new McpSchema.ClientCapabilities(null, null, null,
+				new McpSchema.ClientCapabilities.Elicitation(null, new McpSchema.ClientCapabilities.Elicitation.Url()));
+
+		McpAsyncServerExchange exchange = new McpAsyncServerExchange("testSessionId", mockSession, capabilities,
+				clientInfo, McpTransportContext.EMPTY);
+
+		McpSchema.ElicitationCompleteNotification notification = new McpSchema.ElicitationCompleteNotification(
+				"elicit-1");
+
+		when(mockSession.sendNotification(eq(McpSchema.METHOD_NOTIFICATION_ELICITATION_COMPLETE), eq(notification)))
+			.thenReturn(Mono.empty());
+
+		StepVerifier.create(exchange.sendElicitationComplete(notification)).verifyComplete();
+	}
+
+	@Test
+	void testSendElicitationCompleteWithoutUrlCapability() {
+		// Client has elicitation but not URL sub-capability
+		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder().elicitation().build();
+
+		McpAsyncServerExchange exchange = new McpAsyncServerExchange("testSessionId", mockSession, capabilities,
+				clientInfo, McpTransportContext.EMPTY);
+
+		McpSchema.ElicitationCompleteNotification notification = new McpSchema.ElicitationCompleteNotification(
+				"elicit-1");
+
+		StepVerifier.create(exchange.sendElicitationComplete(notification)).verifyErrorSatisfies(error -> {
+			assertThat(error).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("URL elicitation capabilities");
 		});
 	}
 
