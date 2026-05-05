@@ -851,6 +851,44 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@MethodSource("clientsForTesting")
+	void testToolCallWithUnicodeArguments(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// String containing multi-byte UTF-8 characters: em dash, Chinese, emoji
+		String unicodeInput = "Test \u2014 em dash, \u5929\u6c14\u9884\u62a5, \ud83d\ude00";
+
+		McpServerFeatures.SyncToolSpecification echoTool = McpServerFeatures.SyncToolSpecification.builder()
+			.tool(Tool.builder().name("echo").description("Echoes input").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.callHandler((exchange, request) -> {
+				String text = (String) request.arguments().get("text");
+				return CallToolResult.builder().addContent(new TextContent(text)).build();
+			})
+			.build();
+
+		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(echoTool)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CallToolResult response = mcpClient
+				.callTool(new McpSchema.CallToolRequest("echo", Map.of("text", unicodeInput)));
+
+			assertThat(response).isNotNull();
+			assertThat(response.content()).hasSize(1);
+			assertThat(response.content().get(0)).isInstanceOf(TextContent.class);
+			assertThat(((TextContent) response.content().get(0)).text()).isEqualTo(unicodeInput);
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
 	void testThrowingToolCallIsCaughtBeforeTimeout(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);

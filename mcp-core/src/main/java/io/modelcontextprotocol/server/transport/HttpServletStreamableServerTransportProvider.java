@@ -428,6 +428,10 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		try {
+			// Servlet containers (e.g. Tomcat, Undertow) default to ISO-8859-1 when no
+			// charset is specified in the Content-Type header. JSON is always UTF-8 per
+			// RFC 8259, so we must explicitly set the encoding before reading the body.
+			request.setCharacterEncoding(UTF_8);
 			BufferedReader reader = request.getReader();
 			StringBuilder body = new StringBuilder();
 			String line;
