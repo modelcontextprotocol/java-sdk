@@ -18,6 +18,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -1080,6 +1081,90 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
 				assertThat(toolsRef.get()).containsAll(List.of(tool2.tool()));
 			});
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testBulkToolListChangeHandlingSuccess(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		var callResponse = McpSchema.CallToolResult.builder()
+			.addContent(new McpSchema.TextContent("CALL RESPONSE"))
+			.build();
+
+		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
+			.tool(Tool.builder().name("bulk-tool-1").description("bulk tool 1").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.callHandler((exchange, request) -> callResponse)
+			.build();
+		McpServerFeatures.SyncToolSpecification tool2 = McpServerFeatures.SyncToolSpecification.builder()
+			.tool(Tool.builder().name("bulk-tool-2").description("bulk tool 2").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.callHandler((exchange, request) -> callResponse)
+			.build();
+		McpServerFeatures.SyncToolSpecification replacementTool2 = McpServerFeatures.SyncToolSpecification.builder()
+			.tool(Tool.builder()
+				.name("bulk-tool-2")
+				.title("Replacement Bulk Tool 2")
+				.description("replacement bulk tool 2")
+				.inputSchema(EMPTY_JSON_SCHEMA)
+				.build())
+			.callHandler((exchange, request) -> callResponse)
+			.build();
+		McpServerFeatures.SyncToolSpecification tool3 = McpServerFeatures.SyncToolSpecification.builder()
+			.tool(Tool.builder().name("bulk-tool-3").description("bulk tool 3").inputSchema(EMPTY_JSON_SCHEMA).build())
+			.callHandler((exchange, request) -> callResponse)
+			.build();
+
+		AtomicInteger notificationCount = new AtomicInteger();
+		AtomicReference<List<Tool>> toolsRef = new AtomicReference<>();
+
+		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().tools(true).build())
+			.build();
+
+		try (var mcpClient = clientBuilder.toolsChangeConsumer(toolsUpdate -> {
+			toolsRef.set(toolsUpdate);
+			notificationCount.incrementAndGet();
+		}).build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+			assertThat(toolsRef.get()).isNull();
+			assertThat(notificationCount.get()).isZero();
+			assertThat(mcpClient.listTools().tools()).isEmpty();
+
+			mcpServer.addTools(List.of(tool1, tool2));
+
+			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+				assertThat(notificationCount.get()).isEqualTo(1);
+				assertThat(toolsRef.get()).extracting(Tool::name).containsExactly("bulk-tool-1", "bulk-tool-2");
+			});
+			assertThat(mcpClient.listTools().tools()).extracting(Tool::name)
+				.containsExactly("bulk-tool-1", "bulk-tool-2");
+
+			mcpServer.addTools(List.of(replacementTool2, tool3));
+
+			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+				assertThat(notificationCount.get()).isEqualTo(2);
+				List<Tool> tools = toolsRef.get();
+				assertThat(tools).extracting(Tool::name).containsExactly("bulk-tool-1", "bulk-tool-2", "bulk-tool-3");
+				Tool replacedTool = tools.stream()
+					.filter(tool -> "bulk-tool-2".equals(tool.name()))
+					.findFirst()
+					.orElseThrow();
+				assertThat(replacedTool.title()).isEqualTo("Replacement Bulk Tool 2");
+			});
+
+			mcpServer.removeTools(List.of("bulk-tool-1", "missing-tool"));
+
+			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+				assertThat(notificationCount.get()).isEqualTo(3);
+				assertThat(toolsRef.get()).extracting(Tool::name).containsExactly("bulk-tool-2", "bulk-tool-3");
+			});
+			assertThat(mcpClient.listTools().tools()).extracting(Tool::name)
+				.containsExactly("bulk-tool-2", "bulk-tool-3");
 		}
 		finally {
 			mcpServer.closeGracefully();
