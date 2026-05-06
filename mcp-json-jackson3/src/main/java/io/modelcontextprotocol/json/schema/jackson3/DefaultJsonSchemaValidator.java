@@ -3,6 +3,8 @@
  */
 package io.modelcontextprotocol.json.schema.jackson3;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -12,6 +14,8 @@ import com.networknt.schema.SchemaRegistry;
 import com.networknt.schema.Error;
 import com.networknt.schema.dialect.Dialects;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
+import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,14 +41,33 @@ public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 	// TODO: Implement a strategy to purge the cache (TTL, size limit, etc.)
 	private final ConcurrentHashMap<String, Schema> schemaCache;
 
+	private final Schema metaSchema202012;
+
 	public DefaultJsonSchemaValidator() {
 		this(JsonMapper.shared());
 	}
 
 	public DefaultJsonSchemaValidator(JsonMapper jsonMapper) {
 		this.jsonMapper = jsonMapper;
-		this.schemaFactory = SchemaRegistry.withDialect(Dialects.getDraft202012());
+		this.schemaFactory = SchemaRegistry.withDefaultDialect(Dialects.getDraft202012());
 		this.schemaCache = new ConcurrentHashMap<>();
+		this.metaSchema202012 = loadMetaSchema();
+	}
+
+	private Schema loadMetaSchema() {
+		try (InputStream stream = getClass().getClassLoader().getResourceAsStream("draft/2020-12/schema")) {
+			if (stream == null) {
+				logger.warn(
+						"JSON Schema 2020-12 meta-schema not found on classpath; schema conformance checking disabled");
+				return null;
+			}
+			return this.schemaFactory.getSchema(stream);
+		}
+		catch (IOException e) {
+			logger.warn("Failed to load JSON Schema 2020-12 meta-schema: {}; schema conformance checking disabled",
+					e.getMessage());
+			return null;
+		}
 	}
 
 	@Override
@@ -82,6 +105,31 @@ public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 		catch (Exception e) {
 			logger.error("Failed to validate CallToolResult: Unexpected error: {}", e);
 			return ValidationResponse.asInvalid("Unexpected validation error: " + e.getMessage());
+		}
+	}
+
+	@Override
+	public ValidationResponse validateSchema(Map<String, Object> schema) {
+		Assert.notNull(schema, "schema must not be null");
+		Object declaredDialect = schema.get("$schema");
+		if (declaredDialect != null && !McpSchema.JSON_SCHEMA_DIALECT_2020_12.equals(declaredDialect.toString())) {
+			return ValidationResponse.asValid(null);
+		}
+		if (this.metaSchema202012 == null) {
+			return ValidationResponse.asValid(null);
+		}
+		try {
+			JsonNode schemaNode = this.jsonMapper.valueToTree(schema);
+			List<Error> errors = this.metaSchema202012.validate(schemaNode);
+			if (!errors.isEmpty()) {
+				return ValidationResponse
+					.asInvalid("Schema does not conform to JSON Schema 2020-12 (SEP-1613): " + errors);
+			}
+			return ValidationResponse.asValid(null);
+		}
+		catch (Exception e) {
+			logger.error("Failed to validate schema definition: {}", e.getMessage());
+			return ValidationResponse.asInvalid("Failed to validate schema definition: " + e.getMessage());
 		}
 	}
 

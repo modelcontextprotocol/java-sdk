@@ -156,7 +156,8 @@ public class McpAsyncServer {
 		mcpTransportProvider.setSessionFactory(transport -> {
 			String sessionId = UUID.randomUUID().toString();
 			return new McpServerSession(sessionId, requestTimeout, transport, this::asyncInitializeRequestHandler,
-					requestHandlers, notificationHandlers, () -> this.cleanupForSession(sessionId));
+					requestHandlers, notificationHandlers, () -> this.cleanupForSession(sessionId),
+					this.jsonSchemaValidator);
 		});
 	}
 
@@ -183,9 +184,9 @@ public class McpAsyncServer {
 
 		this.protocolVersions = mcpTransportProvider.protocolVersions();
 
-		mcpTransportProvider.setSessionFactory(
-				new DefaultMcpStreamableServerSessionFactory(requestTimeout, this::asyncInitializeRequestHandler,
-						requestHandlers, notificationHandlers, sessionId -> this.cleanupForSession(sessionId)));
+		mcpTransportProvider.setSessionFactory(new DefaultMcpStreamableServerSessionFactory(requestTimeout,
+				this::asyncInitializeRequestHandler, requestHandlers, notificationHandlers,
+				sessionId -> this.cleanupForSession(sessionId), this.jsonSchemaValidator));
 	}
 
 	private Map<String, McpNotificationHandler> prepareNotificationHandlers(McpServerFeatures.Async features) {
@@ -345,6 +346,15 @@ public class McpAsyncServer {
 		}
 		if (this.serverCapabilities.tools() == null) {
 			return Mono.error(new IllegalStateException("Server must be configured with tool capabilities"));
+		}
+
+		try {
+			var t = toolSpecification.tool();
+			this.jsonSchemaValidator.assertConforms("Tool '" + t.name() + "' inputSchema", t.inputSchema());
+			this.jsonSchemaValidator.assertConforms("Tool '" + t.name() + "' outputSchema", t.outputSchema());
+		}
+		catch (IllegalArgumentException e) {
+			return Mono.error(e);
 		}
 
 		var wrappedToolSpecification = withStructuredOutputHandling(this.jsonSchemaValidator, toolSpecification);
