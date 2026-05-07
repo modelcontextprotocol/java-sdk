@@ -62,11 +62,17 @@ import reactor.core.publisher.Mono;
  * </ul>
  *
  * @author Christian Tzolov
+ * @deprecated This SSE transport is deprecated. Use Streamable HTTP instead, with
+ * {@link HttpServletStreamableServerTransportProvider} or
+ * {@link HttpServletStatelessServerTransport}.
  * @author Alexandros Pappas
  * @see McpServerTransportProvider
  * @see HttpServlet
+ * @see <a href=
+ * "https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#backwards-compatibility">Transports
+ * backwards compatibility</a>
  */
-
+@Deprecated
 @WebServlet(asyncSupported = true)
 public class HttpServletSseServerTransportProvider extends HttpServlet implements McpServerTransportProvider {
 
