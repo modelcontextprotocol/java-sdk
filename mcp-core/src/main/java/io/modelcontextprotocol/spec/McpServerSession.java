@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpInitRequestHandler;
 import io.modelcontextprotocol.server.McpNotificationHandler;
@@ -68,6 +69,36 @@ public class McpServerSession implements McpLoggableSession {
 
 	private final Supplier<Mono<Void>> onClose;
 
+	private final JsonSchemaValidator jsonSchemaValidator;
+
+	/**
+	 * Creates a new server session with the given parameters and the transport to use.
+	 * @param id session id
+	 * @param requestTimeout duration to wait for request responses before timing out
+	 * @param transport the transport to use
+	 * @param initHandler called when a
+	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
+	 * server
+	 * @param requestHandlers map of request handlers to use
+	 * @param notificationHandlers map of notification handlers to use
+	 * @param onClose supplier of a reactive callback invoked when the session is closed
+	 * @param jsonSchemaValidator optional validator threaded to exchanges for elicitation
+	 * schema validation
+	 */
+	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
+			McpInitRequestHandler initHandler, Map<String, McpRequestHandler<?>> requestHandlers,
+			Map<String, McpNotificationHandler> notificationHandlers, Supplier<Mono<Void>> onClose,
+			JsonSchemaValidator jsonSchemaValidator) {
+		this.id = id;
+		this.requestTimeout = requestTimeout;
+		this.transport = transport;
+		this.initRequestHandler = initHandler;
+		this.requestHandlers = requestHandlers;
+		this.notificationHandlers = notificationHandlers;
+		this.onClose = onClose;
+		this.jsonSchemaValidator = jsonSchemaValidator;
+	}
+
 	/**
 	 * Creates a new server session with the given parameters and the transport to use.
 	 * @param id session id
@@ -83,13 +114,7 @@ public class McpServerSession implements McpLoggableSession {
 	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
 			McpInitRequestHandler initHandler, Map<String, McpRequestHandler<?>> requestHandlers,
 			Map<String, McpNotificationHandler> notificationHandlers, Supplier<Mono<Void>> onClose) {
-		this.id = id;
-		this.requestTimeout = requestTimeout;
-		this.transport = transport;
-		this.initRequestHandler = initHandler;
-		this.requestHandlers = requestHandlers;
-		this.notificationHandlers = notificationHandlers;
-		this.onClose = onClose;
+		this(id, requestTimeout, transport, initHandler, requestHandlers, notificationHandlers, onClose, null);
 	}
 
 	/**
@@ -300,7 +325,7 @@ public class McpServerSession implements McpLoggableSession {
 				// FIXME: The session ID passed here is not the same as the one in the
 				// legacy SSE transport.
 				exchangeSink.tryEmitValue(new McpAsyncServerExchange(this.id, this, clientCapabilities.get(),
-						clientInfo.get(), transportContext));
+						clientInfo.get(), transportContext, this.jsonSchemaValidator));
 			}
 
 			var handler = notificationHandlers.get(notification.method());
@@ -322,7 +347,7 @@ public class McpServerSession implements McpLoggableSession {
 	 */
 	private McpAsyncServerExchange copyExchange(McpAsyncServerExchange exchange, McpTransportContext transportContext) {
 		return new McpAsyncServerExchange(exchange.sessionId(), this, exchange.getClientCapabilities(),
-				exchange.getClientInfo(), transportContext);
+				exchange.getClientInfo(), transportContext, this.jsonSchemaValidator);
 	}
 
 	record MethodNotFoundError(String method, String message, Object data) {

@@ -46,6 +46,12 @@ public final class McpSchema {
 
 	public static final String FIRST_PAGE = null;
 
+	/**
+	 * The JSON Schema 2020-12 meta-schema URI (SEP-1613). This is the default dialect for
+	 * all schema objects in MCP when no explicit {@code $schema} field is present.
+	 */
+	public static final String JSON_SCHEMA_DIALECT_2020_12 = "https://json-schema.org/draft/2020-12/schema";
+
 	// ---------------------------
 	// Method Names
 	// ---------------------------
@@ -2666,9 +2672,14 @@ public final class McpSchema {
 	 * @param description A human-readable description of what the tool does. This can be
 	 * used by clients to improve the LLM's understanding of available tools.
 	 * @param inputSchema A JSON Schema object that describes the expected structure of
-	 * the arguments when calling this tool. This allows clients to validate tool
+	 * the arguments when calling this tool. Per SEP-1613, the dialect defaults to JSON
+	 * Schema 2020-12 ({@link #JSON_SCHEMA_DIALECT_2020_12}) when no explicit
+	 * {@code $schema} entry is present. To declare a different dialect, include a
+	 * {@code "$schema"} key in the map. For tools with no parameters the spec recommends
+	 * {@code {"type":"object","additionalProperties":false}}.
 	 * @param outputSchema An optional JSON Schema object defining the structure of the
-	 * tool's output returned in the structuredContent field of a CallToolResult.
+	 * tool's output returned in the structuredContent field of a CallToolResult. Same
+	 * dialect rules as {@code inputSchema}.
 	 * @param annotations Optional additional tool information.
 	 * @param meta See specification for notes on _meta usage
 	 */
@@ -3692,7 +3703,10 @@ public final class McpSchema {
 	 *
 	 * @param message The message to present to the user
 	 * @param requestedSchema A restricted subset of JSON Schema. Only top-level
-	 * properties are allowed, without nesting
+	 * properties are allowed, without nesting. Per SEP-1613, the dialect defaults to JSON
+	 * Schema 2020-12 ({@link #JSON_SCHEMA_DIALECT_2020_12}) when no explicit
+	 * {@code $schema} entry is present. To declare a different dialect, include a
+	 * {@code "$schema"} key in the map.
 	 * @param meta See specification for notes on _meta usage
 	 * <p>
 	 * Note: {@code message} and {@code requestedSchema} are required by the MCP

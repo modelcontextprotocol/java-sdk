@@ -2,21 +2,30 @@
 
 ## Summary
 
-**Server Tests:** 40/40 passed (100%)
+**Server Tests (active suite):** 44/44 passed (31 scenarios, 100%)
+**Server Tests (spec 2025-11-25):** 4/4 passed — SEP-1613 `json-schema-2020-12` scenario ✨
 **Client Tests:** 3/4 scenarios passed (9/10 checks passed)
 **Auth Tests:** 14/15 scenarios fully passing (196 passed, 0 failed, 1 warning, 93.3% scenarios, 99.5% checks)
 
 ## Server Test Results
 
-### Passing (40/40)
+### Active Suite — Passing (31/31 scenarios, 44/44 checks)
 
 - **Lifecycle & Utilities (4/4):** initialize, ping, logging-set-level, completion-complete
-- **Tools (11/11):** All scenarios including progress notifications ✨
+- **Tools (13/13):** All scenarios including progress notifications, sampling, elicitation ✨
 - **Elicitation (10/10):** SEP-1034 defaults (5 checks), SEP-1330 enums (5 checks)
-- **Resources (6/6):** list, read-text, read-binary, templates-read, subscribe, unsubscribe
-- **Prompts (4/4):** list, simple, with-args, embedded-resource, with-image
+- **Resources (7/7):** list, read-text, read-binary, templates-read, subscribe, unsubscribe, SEP-2164 resource-not-found
+- **Prompts (5/5):** list, simple, with-args, embedded-resource, with-image
 - **SSE Transport (2/2):** Multiple streams
 - **Security (2/2):** Localhost validation passes, DNS rebinding protection
+
+### Spec 2025-11-25 Scenarios — Passing (1/1 scenario, 4/4 checks)
+
+- **JSON Schema 2020-12 (SEP-1613) (4/4):** ✨
+  - `json_schema_2020_12_tool` found
+  - `inputSchema.$schema` field preserved
+  - `inputSchema.$defs` field preserved
+  - `inputSchema.additionalProperties` field preserved
 
 ## Client Test Results
 
@@ -69,13 +78,24 @@ Uses the `client-spring-http-client` module with Spring Security OAuth2 and the 
 
 ## Running Tests
 
-### Server
+### Server (active suite)
 ```bash
 # Start server
 ./mvnw compile -pl conformance-tests/server-servlet -am exec:java
 
 # Run tests (in another terminal)
 npx @modelcontextprotocol/conformance server --url http://localhost:8080/mcp --suite active
+```
+
+### Server (spec 2025-11-25 scenarios — SEP-1613)
+```bash
+# Start server (if not already running)
+./mvnw compile -pl conformance-tests/server-servlet -am exec:java
+
+# Run json-schema-2020-12 scenario
+cd ../conformance && node --import tsx/esm src/index.ts server \
+  --url http://localhost:8080/mcp \
+  --scenario json-schema-2020-12
 ```
 
 ### Client

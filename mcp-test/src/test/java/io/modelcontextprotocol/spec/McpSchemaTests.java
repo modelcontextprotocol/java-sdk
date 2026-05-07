@@ -1185,6 +1185,58 @@ public class McpSchemaTests {
 	}
 
 	@Test
+	void testToolInputSchemaWithExplicitDialect() throws Exception {
+		Map<String, Object> inputSchema = new HashMap<>();
+		inputSchema.put("$schema", "http://json-schema.org/draft-07/schema#");
+		inputSchema.put("type", "object");
+		inputSchema.put("properties", Map.of("a", Map.of("type", "number")));
+
+		McpSchema.Tool tool = McpSchema.Tool.builder("calc", inputSchema).description("draft-07 tool").build();
+
+		String json = JSON_MAPPER.writeValueAsString(tool);
+		assertThatJson(json).inPath("$.inputSchema.$schema").isEqualTo("http://json-schema.org/draft-07/schema#");
+
+		McpSchema.Tool parsed = JSON_MAPPER.readValue(json, McpSchema.Tool.class);
+		assertThat(parsed.inputSchema()).containsEntry("$schema", "http://json-schema.org/draft-07/schema#");
+	}
+
+	@Test
+	void testToolOutputSchemaWithExplicitDialect() throws Exception {
+		Map<String, Object> inputSchema = Map.of("type", "object");
+		Map<String, Object> outputSchema = new HashMap<>();
+		outputSchema.put("$schema", McpSchema.JSON_SCHEMA_DIALECT_2020_12);
+		outputSchema.put("type", "object");
+		outputSchema.put("properties", Map.of("count", Map.of("type", "integer")));
+
+		McpSchema.Tool tool = McpSchema.Tool.builder("counter", inputSchema).outputSchema(outputSchema).build();
+
+		String json = JSON_MAPPER.writeValueAsString(tool);
+		assertThatJson(json).inPath("$.outputSchema.$schema").isEqualTo(McpSchema.JSON_SCHEMA_DIALECT_2020_12);
+
+		McpSchema.Tool parsed = JSON_MAPPER.readValue(json, McpSchema.Tool.class);
+		assertThat(parsed.outputSchema()).containsEntry("$schema", McpSchema.JSON_SCHEMA_DIALECT_2020_12);
+	}
+
+	@Test
+	void testToolPreserves2020_12Keywords() throws Exception {
+		Map<String, Object> inputSchema = Map.of("$schema", McpSchema.JSON_SCHEMA_DIALECT_2020_12, "type", "object",
+				"$defs",
+				Map.of("address",
+						Map.of("type", "object", "properties",
+								Map.of("street", Map.of("type", "string"), "city", Map.of("type", "string")))),
+				"properties", Map.of("name", Map.of("type", "string"), "address", Map.of("$ref", "#/$defs/address")),
+				"additionalProperties", false);
+
+		McpSchema.Tool tool = McpSchema.Tool.builder("addr_tool", inputSchema).build();
+		McpSchema.Tool parsed = JSON_MAPPER.readValue(JSON_MAPPER.writeValueAsString(tool), McpSchema.Tool.class);
+
+		Map<String, Object> rt = parsed.inputSchema();
+		assertThat(rt).containsEntry("$schema", McpSchema.JSON_SCHEMA_DIALECT_2020_12);
+		assertThat(rt).containsKey("$defs");
+		assertThat(rt).containsEntry("additionalProperties", false);
+	}
+
+	@Test
 	void testToolDeserializationWithoutOutputSchema() throws Exception {
 		String toolJson = """
 				{
@@ -1565,6 +1617,24 @@ public class McpSchemaTests {
 		// Test Request interface methods
 		assertThat(request.meta()).isEqualTo(meta);
 		assertThat(request.progressToken()).isEqualTo("elicit-token-789");
+	}
+
+	@Test
+	void testElicitRequestSchemaWithExplicitDialect() throws Exception {
+		Map<String, Object> requestedSchema = new HashMap<>();
+		requestedSchema.put("$schema", McpSchema.JSON_SCHEMA_DIALECT_2020_12);
+		requestedSchema.put("type", "object");
+		requestedSchema.put("properties", Map.of("name", Map.of("type", "string")));
+		requestedSchema.put("required", List.of("name"));
+
+		McpSchema.ElicitRequest request = McpSchema.ElicitRequest.builder("Please provide name", requestedSchema)
+			.build();
+
+		String json = JSON_MAPPER.writeValueAsString(request);
+		assertThatJson(json).inPath("$.requestedSchema.$schema").isEqualTo(McpSchema.JSON_SCHEMA_DIALECT_2020_12);
+
+		McpSchema.ElicitRequest parsed = JSON_MAPPER.readValue(json, McpSchema.ElicitRequest.class);
+		assertThat(parsed.requestedSchema()).containsEntry("$schema", McpSchema.JSON_SCHEMA_DIALECT_2020_12);
 	}
 
 	// Pagination Tests

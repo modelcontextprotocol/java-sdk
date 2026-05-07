@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 
 import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpLoggableSession;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -37,6 +38,8 @@ public class McpAsyncServerExchange {
 
 	private final McpTransportContext transportContext;
 
+	private final JsonSchemaValidator jsonSchemaValidator;
+
 	private static final TypeRef<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeRef<>() {
 	};
 
@@ -51,6 +54,29 @@ public class McpAsyncServerExchange {
 
 	/**
 	 * Create a new asynchronous exchange with the client.
+	 * @param sessionId the session ID
+	 * @param session The server session representing a 1-1 interaction.
+	 * @param clientCapabilities The client capabilities that define the supported
+	 * features and functionality.
+	 * @param clientInfo The client implementation information.
+	 * @param transportContext context associated with the client as extracted from the
+	 * transport
+	 * @param jsonSchemaValidator optional validator used to verify elicitation schemas
+	 */
+	public McpAsyncServerExchange(String sessionId, McpLoggableSession session,
+			McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
+			McpTransportContext transportContext, JsonSchemaValidator jsonSchemaValidator) {
+		this.sessionId = sessionId;
+		this.session = session;
+		this.clientCapabilities = clientCapabilities;
+		this.clientInfo = clientInfo;
+		this.transportContext = transportContext;
+		this.jsonSchemaValidator = jsonSchemaValidator;
+	}
+
+	/**
+	 * Create a new asynchronous exchange with the client.
+	 * @param sessionId the session ID
 	 * @param session The server session representing a 1-1 interaction.
 	 * @param clientCapabilities The client capabilities that define the supported
 	 * features and functionality.
@@ -61,11 +87,7 @@ public class McpAsyncServerExchange {
 	public McpAsyncServerExchange(String sessionId, McpLoggableSession session,
 			McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
 			McpTransportContext transportContext) {
-		this.sessionId = sessionId;
-		this.session = session;
-		this.clientCapabilities = clientCapabilities;
-		this.clientInfo = clientInfo;
-		this.transportContext = transportContext;
+		this(sessionId, session, clientCapabilities, clientInfo, transportContext, null);
 	}
 
 	/**
@@ -151,6 +173,15 @@ public class McpAsyncServerExchange {
 		}
 		if (this.clientCapabilities.elicitation() == null) {
 			return Mono.error(new IllegalStateException("Client must be configured with elicitation capabilities"));
+		}
+		if (this.jsonSchemaValidator != null) {
+			try {
+				this.jsonSchemaValidator.assertConforms("ElicitRequest requestedSchema",
+						elicitRequest.requestedSchema());
+			}
+			catch (IllegalArgumentException e) {
+				return Mono.error(e);
+			}
 		}
 		return this.session.sendRequest(McpSchema.METHOD_ELICITATION_CREATE, elicitRequest,
 				ELICITATION_RESULT_TYPE_REF);
