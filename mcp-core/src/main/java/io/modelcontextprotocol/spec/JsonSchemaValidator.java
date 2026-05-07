@@ -11,7 +11,9 @@ import java.util.Map;
  * defines a method to validate structured content based on the provided output schema.
  *
  * @author Christian Tzolov
+ * @deprecated Use {@link io.modelcontextprotocol.json.schema.JsonSchemaValidator}
  */
+@Deprecated
 public interface JsonSchemaValidator {
 
 	/**

@@ -3,13 +3,12 @@
  */
 package io.modelcontextprotocol.json.schema.jackson3;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.networknt.schema.Schema;
+import com.networknt.schema.SchemaLocation;
 import com.networknt.schema.SchemaRegistry;
 import com.networknt.schema.Error;
 import com.networknt.schema.dialect.Dialects;
@@ -51,23 +50,8 @@ public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 		this.jsonMapper = jsonMapper;
 		this.schemaFactory = SchemaRegistry.withDefaultDialect(Dialects.getDraft202012());
 		this.schemaCache = new ConcurrentHashMap<>();
-		this.metaSchema202012 = loadMetaSchema();
-	}
-
-	private Schema loadMetaSchema() {
-		try (InputStream stream = getClass().getClassLoader().getResourceAsStream("draft/2020-12/schema")) {
-			if (stream == null) {
-				logger.warn(
-						"JSON Schema 2020-12 meta-schema not found on classpath; schema conformance checking disabled");
-				return null;
-			}
-			return this.schemaFactory.getSchema(stream);
-		}
-		catch (IOException e) {
-			logger.warn("Failed to load JSON Schema 2020-12 meta-schema: {}; schema conformance checking disabled",
-					e.getMessage());
-			return null;
-		}
+		this.metaSchema202012 = schemaFactory
+			.getSchema(SchemaLocation.of("https://json-schema.org/draft/2020-12/schema"));
 	}
 
 	@Override
