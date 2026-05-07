@@ -9,6 +9,7 @@ import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.transport.DefaultServerTransportSecurityValidator;
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
+import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.AudioContent;
 import io.modelcontextprotocol.spec.McpSchema.BlobResourceContents;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -397,6 +398,29 @@ public class ConformanceServlet {
 								+ response.content();
 						return CallToolResult.builder()
 							.content(List.of(TextContent.builder(responseText).build()))
+							.isError(false)
+							.build();
+					})
+					.build(),
+
+				// json_schema_2020_12_tool - SEP-1613 dialect/keyword preservation
+				McpServerFeatures.SyncToolSpecification.builder()
+					.tool(Tool
+						.builder("json_schema_2020_12_tool", Map.of("$schema", McpSchema.JSON_SCHEMA_DIALECT_2020_12,
+								"type", "object", "$defs",
+								Map.of("address",
+										Map.of("type", "object", "properties",
+												Map.of("street", Map.of("type", "string"), "city",
+														Map.of("type", "string")))),
+								"properties",
+								Map.of("name", Map.of("type", "string"), "address", Map.of("$ref", "#/$defs/address")),
+								"additionalProperties", false))
+						.description("Tool with JSON Schema 2020-12 features (SEP-1613)")
+						.build())
+					.callHandler((exchange, request) -> {
+						logger.info("Tool 'json_schema_2020_12_tool' called");
+						return CallToolResult.builder()
+							.content(List.of(TextContent.builder("ok").build()))
 							.isError(false)
 							.build();
 					})

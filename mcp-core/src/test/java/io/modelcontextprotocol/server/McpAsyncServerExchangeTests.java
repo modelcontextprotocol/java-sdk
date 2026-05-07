@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
@@ -459,6 +460,75 @@ class McpAsyncServerExchangeTests {
 		StepVerifier.create(exchangeWithElicitation.createElicitation(elicitRequest)).verifyErrorSatisfies(error -> {
 			assertThat(error).isInstanceOf(RuntimeException.class).hasMessage("Session communication error");
 		});
+	}
+
+	@Test
+	void testCreateElicitationWithInvalidRequestedSchema() {
+		McpSchema.ClientCapabilities capabilitiesWithElicitation = McpSchema.ClientCapabilities.builder()
+			.elicitation()
+			.build();
+
+		JsonSchemaValidator rejectingValidator = new JsonSchemaValidator() {
+			@Override
+			public ValidationResponse validate(Map<String, Object> schema, Object content) {
+				return ValidationResponse.asValid(null);
+			}
+
+			@Override
+			public ValidationResponse validateSchema(Map<String, Object> schema) {
+				return ValidationResponse.asInvalid("bad schema");
+			}
+		};
+
+		McpAsyncServerExchange exchangeWithValidator = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY, rejectingValidator);
+
+		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest
+			.builder("Provide info", Map.of("type", "invalid-type"))
+			.build();
+
+		StepVerifier.create(exchangeWithValidator.createElicitation(elicitRequest)).verifyErrorSatisfies(error -> {
+			assertThat(error).isInstanceOf(IllegalArgumentException.class)
+				.hasMessageContaining("SEP-1613")
+				.hasMessageContaining("ElicitRequest requestedSchema");
+		});
+
+		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), any(), any(TypeRef.class));
+	}
+
+	@Test
+	void testCreateElicitationWithValidSchemaPassesThroughToSession() {
+		McpSchema.ClientCapabilities capabilitiesWithElicitation = McpSchema.ClientCapabilities.builder()
+			.elicitation()
+			.build();
+
+		JsonSchemaValidator acceptingValidator = new JsonSchemaValidator() {
+			@Override
+			public ValidationResponse validate(Map<String, Object> schema, Object content) {
+				return ValidationResponse.asValid(null);
+			}
+
+			@Override
+			public ValidationResponse validateSchema(Map<String, Object> schema) {
+				return ValidationResponse.asValid(null);
+			}
+		};
+
+		McpAsyncServerExchange exchangeWithValidator = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY, acceptingValidator);
+
+		Map<String, Object> validSchema = Map.of("type", "object");
+		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder("Provide info", validSchema).build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitRequest), any(TypeRef.class)))
+			.thenReturn(Mono.just(McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT).build()));
+
+		StepVerifier.create(exchangeWithValidator.createElicitation(elicitRequest)).assertNext(result -> {
+			assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+		}).verifyComplete();
+
+		verify(mockSession, times(1)).sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitRequest),
+				any(TypeRef.class));
 	}
 
 	// ---------------------------------------
