@@ -77,22 +77,35 @@ git checkout -b feature/your-feature-name
 
 ## Evolving wire-serialized records
 
-Records in `McpSchema` are serialized directly to the MCP JSON wire format. Follow these rules whenever you add a field to an existing record to keep the protocol forward- and backward-compatible.
+Records in `McpSchema` are serialized directly to the MCP JSON wire format. The rules differ depending on whether the field you are adding (or maintaining) is *optional* — Java code may legitimately leave it `null` and the wire may omit it — or *spec-required* by MCP. Follow **Case A** for optional fields and **Case B** for spec-required fields.
 
-### Rules
+### Case A — Optional fields
 
 1. **Add new components only at the end** of the record's component list. Never reorder or rename existing components.
 2. **Annotate every component** with `@JsonProperty("fieldName")` even when the Java name already matches. This survives local renames via refactoring tools.
 3. **Use boxed types** (`Boolean`, `Integer`, `Long`, `Double`) so the field can be absent on the wire without a special sentinel.
-4. **Default to `null`**, not an empty collection or neutral value, so the `@JsonInclude(NON_NULL)` rule omits the field for clients that don't know about it yet.
+4. **Default to `null`**, not an empty collection or neutral value, so the `@JsonInclude(NON_ABSENT)` rule omits the field for clients that don't know about it yet.
 5. **Keep existing constructors as source-compatible overloads** that delegate to the new canonical constructor and pass `null` for the new component. Do not remove them in the same release that adds the field.
-6. **Do not put `@JsonCreator` on the canonical constructor** unless strictly necessary. Jackson auto-detects record canonical constructors; adding `@JsonCreator` pins deserialization to that exact parameter order forever.
-7. **Do not convert `null` to a default value in the canonical constructor.** Null carries "absent" semantics and must be preserved through the serialization round-trip.
+6. **Do not put `@JsonCreator` on the canonical constructor** unless strictly necessary. Jackson auto-detects record canonical constructors; adding `@JsonCreator` pins deserialization to that exact parameter order forever. *(For records that also have spec-required fields, the `@JsonCreator` belongs on a separate static `fromJson` factory — see Case B, Rule 2.)*
+7. **Do not convert `null` to a default value in the canonical constructor.** Null carries "absent" semantics and must be preserved through the serialization round-trip. *(Spec-required fields are the exception — see Case B, Rule 1.)*
 8. **Add three tests per new field** (put them in the relevant test class in `mcp-test`):
    - Deserialize JSON *without* the field → succeeds, field is `null`.
    - Serialize an instance with the field unset (`null`) → the key is absent from output.
    - Deserialize JSON with an extra *unknown* field → succeeds.
-9. **An inner `Builder` subclass can be used.** This improves the developer experience since frequently not all fields are required. 
+9. **An inner `Builder` subclass can be used.** This improves the developer experience since frequently not all fields are required.
+
+### Case B — Spec-required fields
+
+When the MCP specification marks a field as required, callers must not be able to construct a structurally invalid record, but the wire parser must still tolerate peers that fail to send it. Follow these rules in addition to the relevant Case A rules (annotation, naming, append-only).
+
+1. **Reject `null` in the compact constructor.** Use `Assert.notNull` for required objects or `Assert.hasText` for required `String` identifiers (`name`, `uri`, `uriTemplate`, `version`). This throws `IllegalArgumentException` at construction time instead of producing a record that fails later in serialization or protocol handling. Overrides Case A Rule 7 for this field.
+2. **Add a `@JsonCreator` static `fromJson` factory** alongside the canonical constructor. When a required field is absent from the wire, substitute a documented safe default (`""` for strings, `[]` for collections, `{}` for maps, `0` / `0.0` for numerics, `INFO` for `LoggingLevel`, etc.) and log at `WARN` naming the field and the value used. The SDK must not halt the conversation because of a missing field. Place `@JsonCreator` on this `fromJson` factory, never on the canonical constructor (Case A Rule 6 still applies to the canonical constructor itself).
+   - Exception: `JSONRPCResponse.JSONRPCError` fails fast on missing `code` / `message` because a malformed JSON-RPC error envelope is unrecoverable.
+3. **Provide a required-first builder factory** `builder(req1, req2, …)` and remove the corresponding setters from the `Builder`. A no-arg `builder()` factory must not exist on a record that has required fields. If one already exists for source compatibility, mark it `@Deprecated`.
+4. **Add tests per required field**:
+   - Constructing the record with `null` for the field throws `IllegalArgumentException`.
+   - Deserializing JSON *without* the field succeeds and yields the documented default.
+   - Deserializing JSON with an extra *unknown* field still succeeds (Case A Rule 8 also applies).
 
 ### Example
 

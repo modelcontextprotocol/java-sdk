@@ -24,7 +24,7 @@ class ContentJsonTests {
 
 	@Test
 	void textContentHasExactlyOneTypeProperty() throws IOException {
-		McpSchema.TextContent content = new McpSchema.TextContent("hello");
+		McpSchema.TextContent content = McpSchema.TextContent.builder("hello").build();
 		String json = mapper.writeValueAsString(content);
 
 		assertExactlyOneTypeProperty(json);
@@ -34,7 +34,7 @@ class ContentJsonTests {
 
 	@Test
 	void imageContentHasExactlyOneTypeProperty() throws IOException {
-		McpSchema.ImageContent content = new McpSchema.ImageContent(null, "base64data", "image/png");
+		McpSchema.ImageContent content = McpSchema.ImageContent.builder("base64data", "image/png").build();
 		String json = mapper.writeValueAsString(content);
 
 		assertExactlyOneTypeProperty(json);
@@ -43,7 +43,7 @@ class ContentJsonTests {
 
 	@Test
 	void audioContentHasExactlyOneTypeProperty() throws IOException {
-		McpSchema.AudioContent content = new McpSchema.AudioContent(null, "base64data", "audio/mp3");
+		McpSchema.AudioContent content = McpSchema.AudioContent.builder("base64data", "audio/mp3").build();
 		String json = mapper.writeValueAsString(content);
 
 		assertExactlyOneTypeProperty(json);
@@ -52,7 +52,7 @@ class ContentJsonTests {
 
 	@Test
 	void textContentRoundTrip() throws IOException {
-		McpSchema.TextContent original = new McpSchema.TextContent("round-trip");
+		McpSchema.TextContent original = McpSchema.TextContent.builder("round-trip").build();
 		String json = mapper.writeValueAsString(original);
 
 		McpSchema.Content decoded = mapper.readValue(json, McpSchema.Content.class);

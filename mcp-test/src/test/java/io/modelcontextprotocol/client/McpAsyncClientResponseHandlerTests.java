@@ -30,7 +30,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class McpAsyncClientResponseHandlerTests {
 
-	private static final McpSchema.Implementation SERVER_INFO = new McpSchema.Implementation("test-server", "1.0.0");
+	private static final McpSchema.Implementation SERVER_INFO = McpSchema.Implementation.builder("test-server", "1.0.0")
+		.build();
 
 	private static final McpSchema.ServerCapabilities SERVER_CAPABILITIES = McpSchema.ServerCapabilities.builder()
 		.tools(true)
@@ -43,13 +44,14 @@ class McpAsyncClientResponseHandlerTests {
 
 	private static MockMcpClientTransport initializationEnabledTransport(
 			McpSchema.ServerCapabilities mockServerCapabilities, McpSchema.Implementation mockServerInfo) {
-		McpSchema.InitializeResult mockInitResult = new McpSchema.InitializeResult(ProtocolVersions.MCP_2025_11_25,
-				mockServerCapabilities, mockServerInfo, "Test instructions");
+		McpSchema.InitializeResult mockInitResult = McpSchema.InitializeResult
+			.builder(ProtocolVersions.MCP_2025_11_25, mockServerCapabilities, mockServerInfo)
+			.instructions("Test instructions")
+			.build();
 
 		return new MockMcpClientTransport((t, message) -> {
 			if (message instanceof McpSchema.JSONRPCRequest r && METHOD_INITIALIZE.equals(r.method())) {
-				McpSchema.JSONRPCResponse initResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
-						r.id(), mockInitResult, null);
+				McpSchema.JSONRPCResponse initResponse = McpSchema.JSONRPCResponse.result(r.id(), mockInitResult);
 				t.simulateIncomingMessage(initResponse);
 			}
 		}).withProtocolVersion(ProtocolVersions.MCP_2025_11_25);
@@ -57,7 +59,7 @@ class McpAsyncClientResponseHandlerTests {
 
 	@Test
 	void testSuccessfulInitialization() {
-		McpSchema.Implementation serverInfo = new McpSchema.Implementation("mcp-test-server", "0.0.1");
+		McpSchema.Implementation serverInfo = McpSchema.Implementation.builder("mcp-test-server", "0.0.1").build();
 		McpSchema.ServerCapabilities serverCapabilities = McpSchema.ServerCapabilities.builder()
 			.tools(false)
 			.resources(true, true) // Enable both resources and resource templates
@@ -111,37 +113,37 @@ class McpAsyncClientResponseHandlerTests {
 
 		// Create a mock tools list that the server will return
 		Map<String, Object> inputSchema = Map.of("type", "object", "properties", Map.of(), "required", List.of());
-		McpSchema.Tool mockTool = McpSchema.Tool.builder()
-			.name("test-tool-1")
+		McpSchema.Tool mockTool = McpSchema.Tool
+			.builder("test-tool-1", JSON_MAPPER, JSON_MAPPER.writeValueAsString(inputSchema))
 			.description("Test Tool 1 Description")
-			.inputSchema(JSON_MAPPER, JSON_MAPPER.writeValueAsString(inputSchema))
 			.build();
 
 		// Create page 1 response with nextPageToken
 		String nextPageToken = "page2Token";
-		McpSchema.ListToolsResult mockToolsResult1 = new McpSchema.ListToolsResult(List.of(mockTool), nextPageToken);
+		McpSchema.ListToolsResult mockToolsResult1 = McpSchema.ListToolsResult.builder(List.of(mockTool))
+			.nextCursor(nextPageToken)
+			.build();
 
 		// Simulate server sending tools/list_changed notification
-		McpSchema.JSONRPCNotification notification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_NOTIFICATION_TOOLS_LIST_CHANGED, null);
+		McpSchema.JSONRPCNotification notification = new McpSchema.JSONRPCNotification(
+				McpSchema.METHOD_NOTIFICATION_TOOLS_LIST_CHANGED);
 		transport.simulateIncomingMessage(notification);
 
 		// Simulate server response to first tools/list request
 		McpSchema.JSONRPCRequest toolsListRequest1 = transport.getLastSentMessageAsRequest();
 		assertThat(toolsListRequest1.method()).isEqualTo(McpSchema.METHOD_TOOLS_LIST);
 
-		McpSchema.JSONRPCResponse toolsListResponse1 = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
-				toolsListRequest1.id(), mockToolsResult1, null);
+		McpSchema.JSONRPCResponse toolsListResponse1 = McpSchema.JSONRPCResponse.result(toolsListRequest1.id(),
+				mockToolsResult1);
 		transport.simulateIncomingMessage(toolsListResponse1);
 
 		// Create mock tools for page 2
-		McpSchema.Tool mockTool2 = McpSchema.Tool.builder()
-			.name("test-tool-2")
+		McpSchema.Tool mockTool2 = McpSchema.Tool
+			.builder("test-tool-2", JSON_MAPPER, JSON_MAPPER.writeValueAsString(inputSchema))
 			.description("Test Tool 2 Description")
-			.inputSchema(JSON_MAPPER, JSON_MAPPER.writeValueAsString(inputSchema))
 			.build();
 		// Create page 2 response with no nextPageToken (last page)
-		McpSchema.ListToolsResult mockToolsResult2 = new McpSchema.ListToolsResult(List.of(mockTool2), null);
+		McpSchema.ListToolsResult mockToolsResult2 = McpSchema.ListToolsResult.builder(List.of(mockTool2)).build();
 
 		// Simulate server response to second tools/list request with page token
 		McpSchema.JSONRPCRequest toolsListRequest2 = transport.getLastSentMessageAsRequest();
@@ -152,8 +154,8 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(params).isNotNull();
 		assertThat(params.cursor()).isEqualTo(nextPageToken);
 
-		McpSchema.JSONRPCResponse toolsListResponse2 = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
-				toolsListRequest2.id(), mockToolsResult2, null);
+		McpSchema.JSONRPCResponse toolsListResponse2 = McpSchema.JSONRPCResponse.result(toolsListRequest2.id(),
+				mockToolsResult2);
 		transport.simulateIncomingMessage(toolsListResponse2);
 
 		// Verify the consumer received all expected tools from both pages
@@ -171,14 +173,13 @@ class McpAsyncClientResponseHandlerTests {
 		MockMcpClientTransport transport = initializationEnabledTransport();
 
 		McpAsyncClient asyncMcpClient = McpClient.async(transport)
-			.roots(new Root("file:///test/path", "test-root"))
+			.roots(Root.builder("file:///test/path").name("test-root").build())
 			.build();
 
 		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Simulate incoming request
-		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_ROOTS_LIST, "test-id", null);
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.METHOD_ROOTS_LIST, "test-id");
 		transport.simulateIncomingMessage(request);
 
 		// Verify response
@@ -187,8 +188,9 @@ class McpAsyncClientResponseHandlerTests {
 
 		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
 		assertThat(response.id()).isEqualTo("test-id");
-		assertThat(response.result())
-			.isEqualTo(new McpSchema.ListRootsResult(List.of(new Root("file:///test/path", "test-root"))));
+		assertThat(response.result()).isEqualTo(McpSchema.ListRootsResult
+			.builder(List.of(McpSchema.Root.builder("file:///test/path").name("test-root").build()))
+			.build());
 		assertThat(response.error()).isNull();
 
 		asyncMcpClient.closeGracefully();
@@ -213,26 +215,24 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Create a mock resources list that the server will return
-		McpSchema.Resource mockResource = McpSchema.Resource.builder()
-			.uri("test://resource")
-			.name("Test Resource")
+		McpSchema.Resource mockResource = McpSchema.Resource.builder("test://resource", "Test Resource")
 			.description("A test resource")
 			.mimeType("text/plain")
 			.build();
-		McpSchema.ListResourcesResult mockResourcesResult = new McpSchema.ListResourcesResult(List.of(mockResource),
-				null);
+		McpSchema.ListResourcesResult mockResourcesResult = McpSchema.ListResourcesResult.builder(List.of(mockResource))
+			.build();
 
 		// Simulate server sending resources/list_changed notification
-		McpSchema.JSONRPCNotification notification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED, null);
+		McpSchema.JSONRPCNotification notification = new McpSchema.JSONRPCNotification(
+				McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED);
 		transport.simulateIncomingMessage(notification);
 
 		// Simulate server response to resources/list request
 		McpSchema.JSONRPCRequest resourcesListRequest = transport.getLastSentMessageAsRequest();
 		assertThat(resourcesListRequest.method()).isEqualTo(McpSchema.METHOD_RESOURCES_LIST);
 
-		McpSchema.JSONRPCResponse resourcesListResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
-				resourcesListRequest.id(), mockResourcesResult, null);
+		McpSchema.JSONRPCResponse resourcesListResponse = McpSchema.JSONRPCResponse.result(resourcesListRequest.id(),
+				mockResourcesResult);
 		transport.simulateIncomingMessage(resourcesListResponse);
 
 		// Verify the consumer received the expected resources
@@ -261,21 +261,29 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Create a mock prompts list that the server will return
-		McpSchema.Prompt mockPrompt = new McpSchema.Prompt("test-prompt", "Test Prompt", "Test Prompt Description",
-				List.of(new McpSchema.PromptArgument("arg1", "Test argument", "Test argument", true)));
-		McpSchema.ListPromptsResult mockPromptsResult = new McpSchema.ListPromptsResult(List.of(mockPrompt), null);
+		McpSchema.Prompt mockPrompt = McpSchema.Prompt.builder("test-prompt")
+			.title("Test Prompt")
+			.description("Test Prompt Description")
+			.arguments(List.of(McpSchema.PromptArgument.builder("arg1")
+				.title("Test argument")
+				.description("Test argument")
+				.required(true)
+				.build()))
+			.build();
+		McpSchema.ListPromptsResult mockPromptsResult = McpSchema.ListPromptsResult.builder(List.of(mockPrompt))
+			.build();
 
 		// Simulate server sending prompts/list_changed notification
-		McpSchema.JSONRPCNotification notification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED, null);
+		McpSchema.JSONRPCNotification notification = new McpSchema.JSONRPCNotification(
+				McpSchema.METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED);
 		transport.simulateIncomingMessage(notification);
 
 		// Simulate server response to prompts/list request
 		McpSchema.JSONRPCRequest promptsListRequest = transport.getLastSentMessageAsRequest();
 		assertThat(promptsListRequest.method()).isEqualTo(McpSchema.METHOD_PROMPT_LIST);
 
-		McpSchema.JSONRPCResponse promptsListResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
-				promptsListRequest.id(), mockPromptsResult, null);
+		McpSchema.JSONRPCResponse promptsListResponse = McpSchema.JSONRPCResponse.result(promptsListRequest.id(),
+				mockPromptsResult);
 		transport.simulateIncomingMessage(promptsListResponse);
 
 		// Verify the consumer received the expected prompts
@@ -295,8 +303,9 @@ class McpAsyncClientResponseHandlerTests {
 		// Create a test sampling handler that echoes back the input
 		Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler = request -> {
 			var content = request.messages().get(0).content();
-			return Mono.just(new McpSchema.CreateMessageResult(McpSchema.Role.ASSISTANT, content, "test-model",
-					McpSchema.CreateMessageResult.StopReason.END_TURN));
+			return Mono.just(McpSchema.CreateMessageResult.builder(McpSchema.Role.ASSISTANT, content, "test-model")
+				.stopReason(McpSchema.CreateMessageResult.StopReason.END_TURN)
+				.build());
 		};
 
 		// Create client with sampling capability and handler
@@ -308,18 +317,18 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Create a mock create message request
-		var messageRequest = new McpSchema.CreateMessageRequest(
-				List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("Test message"))),
-				null, // modelPreferences
-				"Test system prompt", McpSchema.CreateMessageRequest.ContextInclusionStrategy.NONE, 0.7, // temperature
-				100, // maxTokens
-				null, // stopSequences
-				null // metadata
-		);
+		var messageRequest = McpSchema.CreateMessageRequest
+			.builder(List.of(McpSchema.SamplingMessage
+				.builder(McpSchema.Role.USER, McpSchema.TextContent.builder("Test message").build())
+				.build()), 100)
+			.systemPrompt("Test system prompt")
+			.includeContext(McpSchema.CreateMessageRequest.ContextInclusionStrategy.NONE)
+			.temperature(0.7)
+			.build();
 
 		// Simulate incoming request
-		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, "test-id", messageRequest);
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE,
+				"test-id", messageRequest);
 		transport.simulateIncomingMessage(request);
 
 		// Verify response
@@ -354,13 +363,13 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Create a mock create message request
-		var messageRequest = new McpSchema.CreateMessageRequest(
-				List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("Test message"))),
-				null, null, null, null, 0, null, null);
+		var messageRequest = McpSchema.CreateMessageRequest.builder(List.of(McpSchema.SamplingMessage
+			.builder(McpSchema.Role.USER, McpSchema.TextContent.builder("Test message").build())
+			.build()), 0).build();
 
 		// Simulate incoming request
-		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, "test-id", messageRequest);
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE,
+				"test-id", messageRequest);
 		transport.simulateIncomingMessage(request);
 
 		// Verify error response
@@ -402,8 +411,7 @@ class McpAsyncClientResponseHandlerTests {
 			assertThat(properties).isNotNull();
 			assertThat(((Map<String, Object>) properties).get("message")).isInstanceOf(Map.class);
 
-			return Mono.just(McpSchema.ElicitResult.builder()
-				.message(McpSchema.ElicitResult.Action.ACCEPT)
+			return Mono.just(McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT)
 				.content(Map.of("message", request.message()))
 				.build());
 		};
@@ -417,14 +425,14 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Create a mock elicitation
-		var elicitRequest = McpSchema.ElicitRequest.builder()
-			.message("Test message")
-			.requestedSchema(Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
+		var elicitRequest = McpSchema.ElicitRequest
+			.builder("Test message",
+					Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
 			.build();
 
 		// Simulate incoming request
-		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_ELICITATION_CREATE, "test-id", elicitRequest);
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.METHOD_ELICITATION_CREATE, "test-id",
+				elicitRequest);
 		transport.simulateIncomingMessage(request);
 
 		// Verify response
@@ -451,7 +459,7 @@ class McpAsyncClientResponseHandlerTests {
 
 		// Create a test elicitation handler to decline the request
 		Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler = request -> Mono
-			.just(McpSchema.ElicitResult.builder().message(action).build());
+			.just(McpSchema.ElicitResult.builder(action).build());
 
 		// Create client with elicitation capability and handler
 		McpAsyncClient asyncMcpClient = McpClient.async(transport)
@@ -462,14 +470,14 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Create a mock elicitation
-		var elicitRequest = McpSchema.ElicitRequest.builder()
-			.message("Test message")
-			.requestedSchema(Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
+		var elicitRequest = McpSchema.ElicitRequest
+			.builder("Test message",
+					Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
 			.build();
 
 		// Simulate incoming request
-		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_ELICITATION_CREATE, "test-id", elicitRequest);
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.METHOD_ELICITATION_CREATE, "test-id",
+				elicitRequest);
 		transport.simulateIncomingMessage(request);
 
 		// Verify response
@@ -502,13 +510,15 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Create a mock elicitation
-		var elicitRequest = new McpSchema.ElicitRequest("test",
-				Map.of("type", "object", "properties", Map.of("test", Map.of("type", "boolean", "defaultValue", true,
-						"description", "test-description", "title", "test-title"))));
+		var elicitRequest = McpSchema.ElicitRequest
+			.builder("test",
+					Map.of("type", "object", "properties", Map.of("test", Map.of("type", "boolean", "defaultValue",
+							true, "description", "test-description", "title", "test-title"))))
+			.build();
 
 		// Simulate incoming request
-		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_ELICITATION_CREATE, "test-id", elicitRequest);
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.METHOD_ELICITATION_CREATE, "test-id",
+				elicitRequest);
 		transport.simulateIncomingMessage(request);
 
 		// Verify error response
@@ -544,8 +554,7 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(asyncMcpClient.initialize().block()).isNotNull();
 
 		// Simulate incoming ping request from server
-		McpSchema.JSONRPCRequest pingRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_PING, "ping-id", null);
+		McpSchema.JSONRPCRequest pingRequest = new McpSchema.JSONRPCRequest(McpSchema.METHOD_PING, "ping-id");
 		transport.simulateIncomingMessage(pingRequest);
 
 		// Verify response

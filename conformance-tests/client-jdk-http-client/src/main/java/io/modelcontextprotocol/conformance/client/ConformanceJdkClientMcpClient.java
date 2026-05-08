@@ -80,7 +80,7 @@ public class ConformanceJdkClientMcpClient {
 		HttpClientStreamableHttpTransport transport = HttpClientStreamableHttpTransport.builder(serverUrl).build();
 
 		return McpClient.sync(transport)
-			.clientInfo(new McpSchema.Implementation("test-client", "1.0.0"))
+			.clientInfo(McpSchema.Implementation.builder("test-client", "1.0.0").build())
 			.requestTimeout(Duration.ofSeconds(30))
 			.build();
 	}
@@ -97,7 +97,7 @@ public class ConformanceJdkClientMcpClient {
 		var capabilities = McpSchema.ClientCapabilities.builder().elicitation().build();
 
 		return McpClient.sync(transport)
-			.clientInfo(new McpSchema.Implementation("test-client", "1.0.0"))
+			.clientInfo(McpSchema.Implementation.builder("test-client", "1.0.0").build())
 			.requestTimeout(Duration.ofSeconds(30))
 			.capabilities(capabilities)
 			.elicitation(request -> {
@@ -120,7 +120,7 @@ public class ConformanceJdkClientMcpClient {
 				}
 
 				// Return accept action with the defaults applied
-				return new McpSchema.ElicitResult(McpSchema.ElicitResult.Action.ACCEPT, content, null);
+				return McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT).content(content).build();
 			})
 			.build();
 	}
@@ -174,7 +174,7 @@ public class ConformanceJdkClientMcpClient {
 						arguments.put("b", 3);
 
 						McpSchema.CallToolResult result = client
-							.callTool(new McpSchema.CallToolRequest("add_numbers", arguments));
+							.callTool(McpSchema.CallToolRequest.builder("add_numbers").arguments(arguments).build());
 
 						System.out.println("Successfully called add_numbers tool");
 						if (result != null && result.content() != null) {
@@ -219,7 +219,9 @@ public class ConformanceJdkClientMcpClient {
 						var arguments = new java.util.HashMap<String, Object>();
 
 						McpSchema.CallToolResult result = client
-							.callTool(new McpSchema.CallToolRequest("test_client_elicitation_defaults", arguments));
+							.callTool(McpSchema.CallToolRequest.builder("test_client_elicitation_defaults")
+								.arguments(arguments)
+								.build());
 
 						System.out.println("Successfully called test_client_elicitation_defaults tool");
 						if (result != null && result.content() != null) {
@@ -264,8 +266,8 @@ public class ConformanceJdkClientMcpClient {
 						// reconnection
 						var arguments = new java.util.HashMap<String, Object>();
 
-						McpSchema.CallToolResult result = client
-							.callTool(new McpSchema.CallToolRequest("test_reconnection", arguments));
+						McpSchema.CallToolResult result = client.callTool(
+								McpSchema.CallToolRequest.builder("test_reconnection").arguments(arguments).build());
 
 						System.out.println("Successfully called test_reconnection tool");
 						if (result != null && result.content() != null) {

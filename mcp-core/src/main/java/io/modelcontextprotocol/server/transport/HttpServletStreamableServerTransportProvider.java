@@ -462,8 +462,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 					response.setHeader(HttpHeaders.MCP_SESSION_ID, init.session().getId());
 					response.setStatus(HttpServletResponse.SC_OK);
 
-					String jsonResponse = jsonMapper.writeValueAsString(new McpSchema.JSONRPCResponse(
-							McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), initResult, null));
+					String jsonResponse = jsonMapper
+						.writeValueAsString(McpSchema.JSONRPCResponse.result(jsonrpcRequest.id(), initResult));
 
 					PrintWriter writer = response.getWriter();
 					writer.write(jsonResponse);

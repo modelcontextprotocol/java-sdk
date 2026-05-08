@@ -62,15 +62,13 @@ public class ResourceTemplateManagementTests {
 			.capabilities(ServerCapabilities.builder().resources(true, false).build())
 			.build();
 
-		ResourceTemplate template = ResourceTemplate.builder()
-			.uriTemplate(TEST_TEMPLATE_URI)
-			.name(TEST_TEMPLATE_NAME)
+		ResourceTemplate template = ResourceTemplate.builder(TEST_TEMPLATE_URI, TEST_TEMPLATE_NAME)
 			.description("Test resource template")
 			.mimeType("text/plain")
 			.build();
 
 		McpServerFeatures.AsyncResourceTemplateSpecification specification = new McpServerFeatures.AsyncResourceTemplateSpecification(
-				template, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
+				template, (exchange, req) -> Mono.just(ReadResourceResult.builder(List.of()).build()));
 
 		StepVerifier.create(mcpAsyncServer.addResourceTemplate(specification)).verifyComplete();
 	}
@@ -82,15 +80,13 @@ public class ResourceTemplateManagementTests {
 			.serverInfo("test-server", "1.0.0")
 			.build();
 
-		ResourceTemplate template = ResourceTemplate.builder()
-			.uriTemplate(TEST_TEMPLATE_URI)
-			.name(TEST_TEMPLATE_NAME)
+		ResourceTemplate template = ResourceTemplate.builder(TEST_TEMPLATE_URI, TEST_TEMPLATE_NAME)
 			.description("Test resource template")
 			.mimeType("text/plain")
 			.build();
 
 		McpServerFeatures.AsyncResourceTemplateSpecification specification = new McpServerFeatures.AsyncResourceTemplateSpecification(
-				template, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
+				template, (exchange, req) -> Mono.just(ReadResourceResult.builder(List.of()).build()));
 
 		StepVerifier.create(serverWithoutResources.addResourceTemplate(specification)).verifyErrorSatisfies(error -> {
 			assertThat(error).isInstanceOf(IllegalStateException.class)
@@ -103,15 +99,13 @@ public class ResourceTemplateManagementTests {
 
 	@Test
 	void testRemoveResourceTemplate() {
-		ResourceTemplate template = ResourceTemplate.builder()
-			.uriTemplate(TEST_TEMPLATE_URI)
-			.name(TEST_TEMPLATE_NAME)
+		ResourceTemplate template = ResourceTemplate.builder(TEST_TEMPLATE_URI, TEST_TEMPLATE_NAME)
 			.description("Test resource template")
 			.mimeType("text/plain")
 			.build();
 
 		McpServerFeatures.AsyncResourceTemplateSpecification specification = new McpServerFeatures.AsyncResourceTemplateSpecification(
-				template, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
+				template, (exchange, req) -> Mono.just(ReadResourceResult.builder(List.of()).build()));
 
 		mcpAsyncServer = McpServer.async(mockTransportProvider)
 			.serverInfo("test-server", "1.0.0")
@@ -154,25 +148,21 @@ public class ResourceTemplateManagementTests {
 
 	@Test
 	void testReplaceExistingResourceTemplate() {
-		ResourceTemplate originalTemplate = ResourceTemplate.builder()
-			.uriTemplate(TEST_TEMPLATE_URI)
-			.name(TEST_TEMPLATE_NAME)
+		ResourceTemplate originalTemplate = ResourceTemplate.builder(TEST_TEMPLATE_URI, TEST_TEMPLATE_NAME)
 			.description("Original template")
 			.mimeType("text/plain")
 			.build();
 
-		ResourceTemplate updatedTemplate = ResourceTemplate.builder()
-			.uriTemplate(TEST_TEMPLATE_URI)
-			.name(TEST_TEMPLATE_NAME)
+		ResourceTemplate updatedTemplate = ResourceTemplate.builder(TEST_TEMPLATE_URI, TEST_TEMPLATE_NAME)
 			.description("Updated template")
 			.mimeType("application/json")
 			.build();
 
 		McpServerFeatures.AsyncResourceTemplateSpecification originalSpec = new McpServerFeatures.AsyncResourceTemplateSpecification(
-				originalTemplate, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
+				originalTemplate, (exchange, req) -> Mono.just(ReadResourceResult.builder(List.of()).build()));
 
 		McpServerFeatures.AsyncResourceTemplateSpecification updatedSpec = new McpServerFeatures.AsyncResourceTemplateSpecification(
-				updatedTemplate, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
+				updatedTemplate, (exchange, req) -> Mono.just(ReadResourceResult.builder(List.of()).build()));
 
 		mcpAsyncServer = McpServer.async(mockTransportProvider)
 			.serverInfo("test-server", "1.0.0")
@@ -190,15 +180,13 @@ public class ResourceTemplateManagementTests {
 
 	@Test
 	void testSyncAddResourceTemplate() {
-		ResourceTemplate template = ResourceTemplate.builder()
-			.uriTemplate(TEST_TEMPLATE_URI)
-			.name(TEST_TEMPLATE_NAME)
+		ResourceTemplate template = ResourceTemplate.builder(TEST_TEMPLATE_URI, TEST_TEMPLATE_NAME)
 			.description("Test resource template")
 			.mimeType("text/plain")
 			.build();
 
 		McpServerFeatures.SyncResourceTemplateSpecification specification = new McpServerFeatures.SyncResourceTemplateSpecification(
-				template, (exchange, req) -> new ReadResourceResult(List.of()));
+				template, (exchange, req) -> ReadResourceResult.builder(List.of()).build());
 
 		var mcpSyncServer = McpServer.sync(mockTransportProvider)
 			.serverInfo("test-server", "1.0.0")
@@ -212,15 +200,13 @@ public class ResourceTemplateManagementTests {
 
 	@Test
 	void testSyncRemoveResourceTemplate() {
-		ResourceTemplate template = ResourceTemplate.builder()
-			.uriTemplate(TEST_TEMPLATE_URI)
-			.name(TEST_TEMPLATE_NAME)
+		ResourceTemplate template = ResourceTemplate.builder(TEST_TEMPLATE_URI, TEST_TEMPLATE_NAME)
 			.description("Test resource template")
 			.mimeType("text/plain")
 			.build();
 
 		McpServerFeatures.SyncResourceTemplateSpecification specification = new McpServerFeatures.SyncResourceTemplateSpecification(
-				template, (exchange, req) -> new ReadResourceResult(List.of()));
+				template, (exchange, req) -> ReadResourceResult.builder(List.of()).build());
 
 		var mcpSyncServer = McpServer.sync(mockTransportProvider)
 			.serverInfo("test-server", "1.0.0")
@@ -239,25 +225,21 @@ public class ResourceTemplateManagementTests {
 
 	@Test
 	void testResourceTemplateMapBasedStorage() {
-		ResourceTemplate template1 = ResourceTemplate.builder()
-			.uriTemplate("test://template1/{id}")
-			.name("template1")
+		ResourceTemplate template1 = ResourceTemplate.builder("test://template1/{id}", "template1")
 			.description("First template")
 			.mimeType("text/plain")
 			.build();
 
-		ResourceTemplate template2 = ResourceTemplate.builder()
-			.uriTemplate("test://template2/{id}")
-			.name("template2")
+		ResourceTemplate template2 = ResourceTemplate.builder("test://template2/{id}", "template2")
 			.description("Second template")
 			.mimeType("application/json")
 			.build();
 
 		McpServerFeatures.AsyncResourceTemplateSpecification spec1 = new McpServerFeatures.AsyncResourceTemplateSpecification(
-				template1, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
+				template1, (exchange, req) -> Mono.just(ReadResourceResult.builder(List.of()).build()));
 
 		McpServerFeatures.AsyncResourceTemplateSpecification spec2 = new McpServerFeatures.AsyncResourceTemplateSpecification(
-				template2, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
+				template2, (exchange, req) -> Mono.just(ReadResourceResult.builder(List.of()).build()));
 
 		mcpAsyncServer = McpServer.async(mockTransportProvider)
 			.serverInfo("test-server", "1.0.0")
@@ -274,15 +256,13 @@ public class ResourceTemplateManagementTests {
 	@Test
 	void testResourceTemplateBuilderWithMap() {
 		// Test that the new Map-based builder methods work correctly
-		ResourceTemplate template = ResourceTemplate.builder()
-			.uriTemplate(TEST_TEMPLATE_URI)
-			.name(TEST_TEMPLATE_NAME)
+		ResourceTemplate template = ResourceTemplate.builder(TEST_TEMPLATE_URI, TEST_TEMPLATE_NAME)
 			.description("Test resource template")
 			.mimeType("text/plain")
 			.build();
 
 		McpServerFeatures.AsyncResourceTemplateSpecification specification = new McpServerFeatures.AsyncResourceTemplateSpecification(
-				template, (exchange, req) -> Mono.just(new ReadResourceResult(List.of())));
+				template, (exchange, req) -> Mono.just(ReadResourceResult.builder(List.of()).build()));
 
 		// Test varargs builder method
 		assertThatCode(() -> {

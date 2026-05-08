@@ -48,6 +48,12 @@ public final class McpSchema {
 
 	public static final String FIRST_PAGE = null;
 
+	/**
+	 * The JSON Schema 2020-12 meta-schema URI (SEP-1613). This is the default dialect for
+	 * all schema objects in MCP when no explicit {@code $schema} field is present.
+	 */
+	public static final String JSON_SCHEMA_DIALECT_2020_12 = "https://json-schema.org/draft/2020-12/schema";
+
 	// ---------------------------
 	// Method Names
 	// ---------------------------
@@ -246,9 +252,19 @@ public final class McpSchema {
 		 * MUST NOT be null
 		 */
 		public JSONRPCRequest {
+			Assert.hasText(jsonrpc, "jsonrpc must not be empty");
 			Assert.notNull(id, "MCP requests MUST include an ID - null IDs are not allowed");
 			Assert.isTrue(id instanceof String || id instanceof Integer || id instanceof Long,
 					"MCP requests MUST have an ID that is either a string or integer");
+			Assert.notNull(method, "MCP request method must not be null");
+		}
+
+		public JSONRPCRequest(String method, Object id, Object params) {
+			this(JSONRPC_VERSION, method, id, params);
+		}
+
+		public JSONRPCRequest(String method, Object id) {
+			this(JSONRPC_VERSION, method, id, null);
 		}
 	}
 
@@ -265,6 +281,19 @@ public final class McpSchema {
 		@JsonProperty("jsonrpc") String jsonrpc,
 		@JsonProperty("method") String method,
 		@JsonProperty("params") Object params) implements JSONRPCMessage { // @formatter:on
+
+		public JSONRPCNotification {
+			Assert.hasText(jsonrpc, "jsonrpc must not be empty");
+			Assert.notNull(method, "MCP notification method must not be null");
+		}
+
+		public JSONRPCNotification(String method, Object params) {
+			this(JSONRPC_VERSION, method, params);
+		}
+
+		public JSONRPCNotification(String method) {
+			this(JSONRPC_VERSION, method, null);
+		}
 	}
 
 	/**
@@ -283,6 +312,22 @@ public final class McpSchema {
 		@JsonProperty("result") Object result,
 		@JsonProperty("error") JSONRPCError error) implements JSONRPCMessage { // @formatter:on
 
+		public JSONRPCResponse {
+			Assert.hasText(jsonrpc, "jsonrpc must not be empty");
+			Assert.notNull(id, "MCP responses MUST include an ID - null IDs are not allowed");
+			Assert.isTrue(id instanceof String || id instanceof Integer || id instanceof Long,
+					"MCP responses MUST have an ID that is either a string or integer");
+			Assert.isTrue((result != null) ^ (error != null), "MCP responses MUST either have a result or error");
+		}
+
+		public static JSONRPCResponse result(Object id, Object result) {
+			return new JSONRPCResponse(JSONRPC_VERSION, id, result, null);
+		}
+
+		public static JSONRPCResponse error(Object id, JSONRPCError error) {
+			return new JSONRPCResponse(JSONRPC_VERSION, id, null, error);
+		}
+
 		/**
 		 * A response to a request that indicates an error occurred.
 		 *
@@ -298,6 +343,16 @@ public final class McpSchema {
 			@JsonProperty("code") Integer code,
 			@JsonProperty("message") String message,
 			@JsonProperty("data") Object data) { // @formatter:on
+
+			public JSONRPCError {
+				Assert.notNull(code, "code must not be null");
+				Assert.notNull(message, "message must not be null");
+			}
+
+			public JSONRPCError(Integer code, String message) {
+				this(code, message, null);
+			}
+
 		}
 	}
 
@@ -322,8 +377,79 @@ public final class McpSchema {
 		@JsonProperty("clientInfo") Implementation clientInfo,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
+		public InitializeRequest {
+			Assert.notNull(protocolVersion, "protocolVersion must not be null");
+			Assert.notNull(capabilities, "capabilities must not be null");
+			Assert.notNull(clientInfo, "clientInfo must not be null");
+		}
+
+		@JsonCreator
+		static InitializeRequest fromJson(@JsonProperty("protocolVersion") String protocolVersion,
+				@JsonProperty("capabilities") ClientCapabilities capabilities,
+				@JsonProperty("clientInfo") Implementation clientInfo,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (protocolVersion == null || capabilities == null || clientInfo == null) {
+				List<String> missing = new ArrayList<>();
+				if (protocolVersion == null) {
+					missing.add("protocolVersion -> ''");
+					protocolVersion = "";
+				}
+				if (capabilities == null) {
+					missing.add("capabilities -> {}");
+					capabilities = new ClientCapabilities(null, null, null, null);
+				}
+				if (clientInfo == null) {
+					missing.add("clientInfo -> {name='', version=''}");
+					clientInfo = new Implementation("", "");
+				}
+				logger.warn("InitializeRequest: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new InitializeRequest(protocolVersion, capabilities, clientInfo, meta);
+		}
+
+		/**
+		 * @deprecated Use {@link #builder(String, ClientCapabilities, Implementation)}
+		 * instead.
+		 */
+		@Deprecated
 		public InitializeRequest(String protocolVersion, ClientCapabilities capabilities, Implementation clientInfo) {
 			this(protocolVersion, capabilities, clientInfo, null);
+		}
+
+		public static Builder builder(String protocolVersion, ClientCapabilities capabilities,
+				Implementation clientInfo) {
+			return new Builder(protocolVersion, capabilities, clientInfo);
+		}
+
+		public static class Builder {
+
+			private final String protocolVersion;
+
+			private final ClientCapabilities capabilities;
+
+			private final Implementation clientInfo;
+
+			private Map<String, Object> meta;
+
+			private Builder(String protocolVersion, ClientCapabilities capabilities, Implementation clientInfo) {
+				Assert.hasText(protocolVersion, "protocolVersion must not be empty");
+				Assert.notNull(capabilities, "capabilities must not be null");
+				Assert.notNull(clientInfo, "clientInfo must not be null");
+				this.protocolVersion = protocolVersion;
+				this.capabilities = capabilities;
+				this.clientInfo = clientInfo;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public InitializeRequest build() {
+				return new InitializeRequest(protocolVersion, capabilities, clientInfo, meta);
+			}
+
 		}
 	}
 
@@ -351,9 +477,87 @@ public final class McpSchema {
 		@JsonProperty("instructions") String instructions,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
 
+		public InitializeResult {
+			Assert.notNull(protocolVersion, "protocolVersion must not be null");
+			Assert.notNull(capabilities, "capabilities must not be null");
+			Assert.notNull(serverInfo, "serverInfo must not be null");
+		}
+
+		@JsonCreator
+		static InitializeResult fromJson(@JsonProperty("protocolVersion") String protocolVersion,
+				@JsonProperty("capabilities") ServerCapabilities capabilities,
+				@JsonProperty("serverInfo") Implementation serverInfo,
+				@JsonProperty("instructions") String instructions, @JsonProperty("_meta") Map<String, Object> meta) {
+			if (protocolVersion == null || capabilities == null || serverInfo == null) {
+				List<String> missing = new ArrayList<>();
+				if (protocolVersion == null) {
+					missing.add("protocolVersion -> ''");
+					protocolVersion = "";
+				}
+				if (capabilities == null) {
+					missing.add("capabilities -> {}");
+					capabilities = new ServerCapabilities(null, null, null, null, null, null);
+				}
+				if (serverInfo == null) {
+					missing.add("serverInfo -> {name='', version=''}");
+					serverInfo = new Implementation("", "");
+				}
+				logger.warn("InitializeResult: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new InitializeResult(protocolVersion, capabilities, serverInfo, instructions, meta);
+		}
+
+		/**
+		 * @deprecated Use {@link #builder(String, ServerCapabilities, Implementation)}
+		 * instead.
+		 */
+		@Deprecated
 		public InitializeResult(String protocolVersion, ServerCapabilities capabilities, Implementation serverInfo,
 				String instructions) {
 			this(protocolVersion, capabilities, serverInfo, instructions, null);
+		}
+
+		public static Builder builder(String protocolVersion, ServerCapabilities capabilities,
+				Implementation serverInfo) {
+			return new Builder(protocolVersion, capabilities, serverInfo);
+		}
+
+		public static class Builder {
+
+			private final String protocolVersion;
+
+			private final ServerCapabilities capabilities;
+
+			private final Implementation serverInfo;
+
+			private String instructions;
+
+			private Map<String, Object> meta;
+
+			private Builder(String protocolVersion, ServerCapabilities capabilities, Implementation serverInfo) {
+				Assert.hasText(protocolVersion, "protocolVersion must not be empty");
+				Assert.notNull(capabilities, "capabilities must not be null");
+				Assert.notNull(serverInfo, "serverInfo must not be null");
+				this.protocolVersion = protocolVersion;
+				this.capabilities = capabilities;
+				this.serverInfo = serverInfo;
+			}
+
+			public Builder instructions(String instructions) {
+				this.instructions = instructions;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public InitializeResult build() {
+				return new InitializeResult(protocolVersion, capabilities, serverInfo, instructions, meta);
+			}
+
 		}
 	}
 
@@ -385,6 +589,25 @@ public final class McpSchema {
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record RootCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
+
+			public static Builder builder() {
+				return new Builder();
+			}
+
+			public static class Builder {
+
+				private Boolean listChanged;
+
+				public Builder listChanged(Boolean listChanged) {
+					this.listChanged = listChanged;
+					return this;
+				}
+
+				public RootCapabilities build() {
+					return new RootCapabilities(listChanged);
+				}
+
+			}
 		}
 
 		/**
@@ -446,9 +669,37 @@ public final class McpSchema {
 			/**
 			 * Creates an Elicitation with default settings (backward compatible, produces
 			 * empty JSON object).
+			 * @deprecated Use {@link #builder()} instead.
 			 */
+			@Deprecated
 			public Elicitation() {
 				this(null, null);
+			}
+
+			public static Builder builder() {
+				return new Builder();
+			}
+
+			public static class Builder {
+
+				private Form form;
+
+				private Url url;
+
+				public Builder form(Form form) {
+					this.form = form;
+					return this;
+				}
+
+				public Builder url(Url url) {
+					this.url = url;
+					return this;
+				}
+
+				public Elicitation build() {
+					return new Elicitation(form, url);
+				}
+
 			}
 		}
 
@@ -487,7 +738,7 @@ public final class McpSchema {
 			 * @return this builder
 			 */
 			public Builder elicitation() {
-				this.elicitation = new Elicitation();
+				this.elicitation = Elicitation.builder().build();
 				return this;
 			}
 
@@ -500,6 +751,11 @@ public final class McpSchema {
 			public Builder elicitation(boolean form, boolean url) {
 				this.elicitation = new Elicitation(form ? new Elicitation.Form() : null,
 						url ? new Elicitation.Url() : null);
+				return this;
+			}
+
+			public Builder elicitation(Elicitation elicitation) {
+				this.elicitation = elicitation;
 				return this;
 			}
 
@@ -559,6 +815,25 @@ public final class McpSchema {
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record PromptCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
+
+			public static Builder builder() {
+				return new Builder();
+			}
+
+			public static class Builder {
+
+				private Boolean listChanged;
+
+				public Builder listChanged(Boolean listChanged) {
+					this.listChanged = listChanged;
+					return this;
+				}
+
+				public PromptCapabilities build() {
+					return new PromptCapabilities(listChanged);
+				}
+
+			}
 		}
 
 		/**
@@ -572,6 +847,32 @@ public final class McpSchema {
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record ResourceCapabilities(@JsonProperty("subscribe") Boolean subscribe,
 				@JsonProperty("listChanged") Boolean listChanged) {
+
+			public static Builder builder() {
+				return new Builder();
+			}
+
+			public static class Builder {
+
+				private Boolean subscribe;
+
+				private Boolean listChanged;
+
+				public Builder subscribe(Boolean subscribe) {
+					this.subscribe = subscribe;
+					return this;
+				}
+
+				public Builder listChanged(Boolean listChanged) {
+					this.listChanged = listChanged;
+					return this;
+				}
+
+				public ResourceCapabilities build() {
+					return new ResourceCapabilities(subscribe, listChanged);
+				}
+
+			}
 		}
 
 		/**
@@ -583,6 +884,25 @@ public final class McpSchema {
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record ToolCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
+
+			public static Builder builder() {
+				return new Builder();
+			}
+
+			public static class Builder {
+
+				private Boolean listChanged;
+
+				public Builder listChanged(Boolean listChanged) {
+					this.listChanged = listChanged;
+					return this;
+				}
+
+				public ToolCapabilities build() {
+					return new ToolCapabilities(listChanged);
+				}
+
+			}
 		}
 
 		/**
@@ -677,12 +997,96 @@ public final class McpSchema {
 		@JsonProperty("icons") List<Icon> icons,
 		@JsonProperty("websiteUrl") String websiteUrl) implements Identifier { // @formatter:on
 
+		public Implementation {
+			Assert.notNull(name, "name must not be null");
+			Assert.notNull(version, "version must not be null");
+		}
+
+		@JsonCreator
+		static Implementation fromJson(@JsonProperty("name") String name, @JsonProperty("title") String title,
+				@JsonProperty("version") String version, @JsonProperty("description") String description,
+				@JsonProperty("icons") List<Icon> icons, @JsonProperty("websiteUrl") String websiteUrl) {
+			if (name == null || version == null) {
+				List<String> missing = new ArrayList<>();
+				if (name == null) {
+					missing.add("name -> ''");
+					name = "";
+				}
+				if (version == null) {
+					missing.add("version -> ''");
+					version = "";
+				}
+				logger.warn("Implementation: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new Implementation(name, title, version, description, icons, websiteUrl);
+		}
+
+		/**
+		 * @deprecated Use {@link #builder(String, String)}
+		 */
+		@Deprecated
 		public Implementation(String name, String version) {
 			this(name, null, version, null, null, null);
 		}
 
+		/**
+		 * @deprecated Use {@link #builder(String, String)}
+		 */
+		@Deprecated
 		public Implementation(String name, String title, String version) {
 			this(name, title, version, null, null, null);
+		}
+
+		public static Builder builder(String name, String version) {
+			return new Builder(name, version);
+		}
+
+		public static class Builder {
+
+			private final String name;
+
+			private String title;
+
+			private final String version;
+
+			private String description;
+
+			private List<Icon> icons;
+
+			private String websiteUrl;
+
+			private Builder(String name, String version) {
+				Assert.hasText(name, "name must not be empty");
+				Assert.hasText(version, "version must not be empty");
+				this.name = name;
+				this.version = version;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder icons(List<Icon> icons) {
+				this.icons = icons;
+				return this;
+			}
+
+			public Builder websiteUrl(String websiteUrl) {
+				this.websiteUrl = websiteUrl;
+				return this;
+			}
+
+			public Implementation build() {
+				return new Implementation(name, title, version, description, icons, websiteUrl);
+			}
+
 		}
 	}
 
@@ -711,15 +1115,57 @@ public final class McpSchema {
 		@JsonProperty("theme") String theme) { // @formatter:on
 
 		public Icon {
-			Assert.hasText(src, "Icon src must not be empty");
+			Assert.notNull(src, "Icon src must not be null");
 		}
 
-		public Icon(String src, String mimeType) {
-			this(src, mimeType, null, null);
+		@JsonCreator
+		static Icon fromJson(@JsonProperty("src") String src, @JsonProperty("mimeType") String mimeType,
+				@JsonProperty("sizes") List<String> sizes, @JsonProperty("theme") String theme) {
+			if (src == null) {
+				logger.warn("Icon: missing required field 'src' during deserialization, using default ''");
+				src = "";
+			}
+			return new Icon(src, mimeType, sizes, theme);
 		}
 
-		public Icon(String src, String mimeType, List<String> sizes) {
-			this(src, mimeType, sizes, null);
+		public static Builder builder(String src) {
+			return new Builder(src);
+		}
+
+		public static class Builder {
+
+			private final String src;
+
+			private String mimeType;
+
+			private List<String> sizes;
+
+			private String theme;
+
+			private Builder(String src) {
+				Assert.hasText(src, "src must not be empty");
+				this.src = src;
+			}
+
+			public Builder mimeType(String mimeType) {
+				this.mimeType = mimeType;
+				return this;
+			}
+
+			public Builder sizes(List<String> sizes) {
+				this.sizes = sizes;
+				return this;
+			}
+
+			public Builder theme(String theme) {
+				this.theme = theme;
+				return this;
+			}
+
+			public Icon build() {
+				return new Icon(src, mimeType, sizes, theme);
+			}
+
 		}
 	}
 
@@ -764,8 +1210,45 @@ public final class McpSchema {
 		@JsonProperty("lastModified") String lastModified
 		) { // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder()} instead.
+		 */
+		@Deprecated
 		public Annotations(List<Role> audience, Double priority) {
 			this(audience, priority, null);
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+
+			private List<Role> audience;
+
+			private Double priority;
+
+			private String lastModified;
+
+			public Builder audience(List<Role> audience) {
+				this.audience = audience;
+				return this;
+			}
+
+			public Builder priority(Double priority) {
+				this.priority = priority;
+				return this;
+			}
+
+			public Builder lastModified(String lastModified) {
+				this.lastModified = lastModified;
+				return this;
+			}
+
+			public Annotations build() {
+				return new Annotations(audience, priority, lastModified);
+			}
+
 		}
 	}
 
@@ -829,6 +1312,7 @@ public final class McpSchema {
 	 * sizes and estimate context window usage.
 	 * @param annotations Optional annotations for the client. The client can use
 	 * annotations to inform how objects are used or displayed.
+	 * @param icons Optional list of icons for this resource.
 	 * @param meta See specification for notes on _meta usage
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -841,18 +1325,37 @@ public final class McpSchema {
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("size") Long size,
 		@JsonProperty("annotations") Annotations annotations,
-		@JsonProperty("icons") List<Icon> icons,
-		@JsonProperty("_meta") Map<String, Object> meta) implements ResourceContent { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta,
+		@JsonProperty("icons") List<Icon> icons) implements ResourceContent { // @formatter:on
 
+		public Resource {
+			Assert.hasText(uri, "uri must not be empty");
+			Assert.hasText(name, "name must not be empty");
+		}
+
+		/**
+		 * @deprecated Use {@link #builder(String, String)}
+		 */
+		@Deprecated
+		public Resource(String uri, String name, String title, String description, String mimeType, Long size,
+				Annotations annotations, Map<String, Object> meta) {
+			this(uri, name, title, description, mimeType, size, annotations, meta, null);
+		}
+
+		public static Builder builder(String uri, String name) {
+			return new Builder(uri, name);
+		}
+
+		@Deprecated
 		public static Builder builder() {
 			return new Builder();
 		}
 
 		public static class Builder {
 
-			private String uri;
+			private /* final */ String uri;
 
-			private String name;
+			private /* final */ String name;
 
 			private String title;
 
@@ -868,14 +1371,29 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
+			@Deprecated
+			public Builder() {
+			}
+
+			@Deprecated
 			public Builder uri(String uri) {
+				Assert.hasText(uri, "uri must not be empty");
 				this.uri = uri;
 				return this;
 			}
 
+			@Deprecated
 			public Builder name(String name) {
 				this.name = name;
+				Assert.hasText(name, "name must not be empty");
 				return this;
+			}
+
+			private Builder(String uri, String name) {
+				Assert.hasText(uri, "uri must not be empty");
+				Assert.hasText(name, "name must not be empty");
+				this.uri = uri;
+				this.name = name;
 			}
 
 			public Builder title(String title) {
@@ -914,10 +1432,7 @@ public final class McpSchema {
 			}
 
 			public Resource build() {
-				Assert.hasText(uri, "uri must not be empty");
-				Assert.hasText(name, "name must not be empty");
-
-				return new Resource(uri, name, title, description, mimeType, size, annotations, icons, meta);
+				return new Resource(uri, name, title, description, mimeType, size, annotations, meta, icons);
 			}
 
 		}
@@ -937,6 +1452,7 @@ public final class McpSchema {
 	 * @param mimeType The MIME type of this resource, if known.
 	 * @param annotations Optional annotations for the client. The client can use
 	 * annotations to inform how objects are used or displayed.
+	 * @param icons Optional list of icons for this resource template.
 	 * @see <a href="https://datatracker.ietf.org/doc/html/rfc6570">RFC 6570</a>
 	 * @param meta See specification for notes on _meta usage
 	 *
@@ -950,33 +1466,55 @@ public final class McpSchema {
 		@JsonProperty("description") String description,
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("annotations") Annotations annotations,
-		@JsonProperty("icons") List<Icon> icons,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Identifier, Meta { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta,
+		@JsonProperty("icons") List<Icon> icons) implements Annotated, Identifier, Meta { // @formatter:on
 
+		public ResourceTemplate {
+			Assert.hasText(uriTemplate, "uriTemplate must not be empty");
+			Assert.hasText(name, "name must not be empty");
+		}
+
+		/**
+		 * @deprecated Use {@link #builder(String, String)}.
+		 */
+		@Deprecated
+		public ResourceTemplate(String uriTemplate, String name, String title, String description, String mimeType,
+				Annotations annotations, Map<String, Object> meta) {
+			this(uriTemplate, name, title, description, mimeType, annotations, meta, null);
+		}
+
+		/**
+		 * @deprecated Use {@link #builder(String, String)}.
+		 */
+		@Deprecated
 		public ResourceTemplate(String uriTemplate, String name, String title, String description, String mimeType,
 				Annotations annotations) {
 			this(uriTemplate, name, title, description, mimeType, annotations, null, null);
 		}
 
+		/**
+		 * @deprecated Use {@link #builder(String, String)}.
+		 */
+		@Deprecated
 		public ResourceTemplate(String uriTemplate, String name, String description, String mimeType,
 				Annotations annotations) {
-			this(uriTemplate, name, null, description, mimeType, annotations);
+			this(uriTemplate, name, null, description, mimeType, annotations, null, null);
 		}
 
-		public ResourceTemplate(String uriTemplate, String name, String title, String description, String mimeType,
-				Annotations annotations, Map<String, Object> meta) {
-			this(uriTemplate, name, title, description, mimeType, annotations, null, meta);
+		public static Builder builder(String uriTemplate, String name) {
+			return new Builder(uriTemplate, name);
 		}
 
+		@Deprecated
 		public static Builder builder() {
 			return new Builder();
 		}
 
 		public static class Builder {
 
-			private String uriTemplate;
+			private /* final */ String uriTemplate;
 
-			private String name;
+			private /* final */ String name;
 
 			private String title;
 
@@ -990,12 +1528,28 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
-			public Builder uriTemplate(String uri) {
-				this.uriTemplate = uri;
+			@Deprecated
+			private Builder() {
+
+			}
+
+			private Builder(String uriTemplate, String name) {
+				Assert.hasText(uriTemplate, "uriTemplate must not be empty");
+				Assert.hasText(name, "name must not be empty");
+				this.uriTemplate = uriTemplate;
+				this.name = name;
+			}
+
+			@Deprecated
+			public Builder uriTemplate(String uriTemplate) {
+				Assert.hasText(uriTemplate, "uriTemplate must not be empty");
+				this.uriTemplate = uriTemplate;
 				return this;
 			}
 
+			@Deprecated
 			public Builder name(String name) {
+				Assert.hasText(name, "name must not be empty");
 				this.name = name;
 				return this;
 			}
@@ -1031,10 +1585,7 @@ public final class McpSchema {
 			}
 
 			public ResourceTemplate build() {
-				Assert.hasText(uriTemplate, "uri must not be empty");
-				Assert.hasText(name, "name must not be empty");
-
-				return new ResourceTemplate(uriTemplate, name, title, description, mimeType, annotations, icons, meta);
+				return new ResourceTemplate(uriTemplate, name, title, description, mimeType, annotations, meta, icons);
 			}
 
 		}
@@ -1055,8 +1606,57 @@ public final class McpSchema {
 		@JsonProperty("nextCursor") String nextCursor,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
 
+		public ListResourcesResult {
+			Assert.notNull(resources, "resources must not be null");
+		}
+
+		@JsonCreator
+		static ListResourcesResult fromJson(@JsonProperty("resources") List<Resource> resources,
+				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
+			if (resources == null) {
+				logger.warn(
+						"ListResourcesResult: missing required field 'resources' during deserialization, using default []");
+				resources = List.of();
+			}
+			return new ListResourcesResult(resources, nextCursor, meta);
+		}
+
+		@Deprecated
 		public ListResourcesResult(List<Resource> resources, String nextCursor) {
 			this(resources, nextCursor, null);
+		}
+
+		public static Builder builder(List<Resource> resources) {
+			return new Builder(resources);
+		}
+
+		public static class Builder {
+
+			private final List<Resource> resources;
+
+			private String nextCursor;
+
+			private Map<String, Object> meta;
+
+			private Builder(List<Resource> resources) {
+				Assert.notNull(resources, "resources must not be null");
+				this.resources = resources;
+			}
+
+			public Builder nextCursor(String nextCursor) {
+				this.nextCursor = nextCursor;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public ListResourcesResult build() {
+				return new ListResourcesResult(resources, nextCursor, meta);
+			}
+
 		}
 	}
 
@@ -1075,8 +1675,58 @@ public final class McpSchema {
 		@JsonProperty("nextCursor") String nextCursor,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
 
+		public ListResourceTemplatesResult {
+			Assert.notNull(resourceTemplates, "resourceTemplates must not be null");
+		}
+
+		@JsonCreator
+		static ListResourceTemplatesResult fromJson(
+				@JsonProperty("resourceTemplates") List<ResourceTemplate> resourceTemplates,
+				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
+			if (resourceTemplates == null) {
+				logger.warn(
+						"ListResourceTemplatesResult: missing required field 'resourceTemplates' during deserialization, using default []");
+				resourceTemplates = List.of();
+			}
+			return new ListResourceTemplatesResult(resourceTemplates, nextCursor, meta);
+		}
+
+		@Deprecated
 		public ListResourceTemplatesResult(List<ResourceTemplate> resourceTemplates, String nextCursor) {
 			this(resourceTemplates, nextCursor, null);
+		}
+
+		public static Builder builder(List<ResourceTemplate> resourceTemplates) {
+			return new Builder(resourceTemplates);
+		}
+
+		public static class Builder {
+
+			private final List<ResourceTemplate> resourceTemplates;
+
+			private String nextCursor;
+
+			private Map<String, Object> meta;
+
+			private Builder(List<ResourceTemplate> resourceTemplates) {
+				Assert.notNull(resourceTemplates, "resourceTemplates must not be null");
+				this.resourceTemplates = resourceTemplates;
+			}
+
+			public Builder nextCursor(String nextCursor) {
+				this.nextCursor = nextCursor;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public ListResourceTemplatesResult build() {
+				return new ListResourceTemplatesResult(resourceTemplates, nextCursor, meta);
+			}
+
 		}
 	}
 
@@ -1093,8 +1743,50 @@ public final class McpSchema {
 		@JsonProperty("uri") String uri,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
+		public ReadResourceRequest {
+			Assert.notNull(uri, "uri must not be null");
+		}
+
+		@JsonCreator
+		static ReadResourceRequest fromJson(@JsonProperty("uri") String uri,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (uri == null) {
+				logger
+					.warn("ReadResourceRequest: missing required field 'uri' during deserialization, using default ''");
+				uri = "";
+			}
+			return new ReadResourceRequest(uri, meta);
+		}
+
+		@Deprecated
 		public ReadResourceRequest(String uri) {
 			this(uri, null);
+		}
+
+		public static Builder builder(String uri) {
+			return new Builder(uri);
+		}
+
+		public static class Builder {
+
+			private final String uri;
+
+			private Map<String, Object> meta;
+
+			private Builder(String uri) {
+				Assert.hasText(uri, "uri must not be empty");
+				this.uri = uri;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public ReadResourceRequest build() {
+				return new ReadResourceRequest(uri, meta);
+			}
+
 		}
 	}
 
@@ -1110,8 +1802,50 @@ public final class McpSchema {
 		@JsonProperty("contents") List<ResourceContents> contents,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
 
+		public ReadResourceResult {
+			Assert.notNull(contents, "contents must not be null");
+		}
+
+		@JsonCreator
+		static ReadResourceResult fromJson(@JsonProperty("contents") List<ResourceContents> contents,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (contents == null) {
+				logger.warn(
+						"ReadResourceResult: missing required field 'contents' during deserialization, using default []");
+				contents = List.of();
+			}
+			return new ReadResourceResult(contents, meta);
+		}
+
+		@Deprecated
 		public ReadResourceResult(List<ResourceContents> contents) {
 			this(contents, null);
+		}
+
+		public static Builder builder(List<ResourceContents> contents) {
+			return new Builder(contents);
+		}
+
+		public static class Builder {
+
+			private final List<ResourceContents> contents;
+
+			private Map<String, Object> meta;
+
+			private Builder(List<ResourceContents> contents) {
+				Assert.notNull(contents, "contents must not be null");
+				this.contents = contents;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public ReadResourceResult build() {
+				return new ReadResourceResult(contents, meta);
+			}
+
 		}
 	}
 
@@ -1129,8 +1863,49 @@ public final class McpSchema {
 		@JsonProperty("uri") String uri,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
+		public SubscribeRequest {
+			Assert.notNull(uri, "uri must not be null");
+		}
+
+		@JsonCreator
+		static SubscribeRequest fromJson(@JsonProperty("uri") String uri,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (uri == null) {
+				logger.warn("SubscribeRequest: missing required field 'uri' during deserialization, using default ''");
+				uri = "";
+			}
+			return new SubscribeRequest(uri, meta);
+		}
+
+		@Deprecated
 		public SubscribeRequest(String uri) {
 			this(uri, null);
+		}
+
+		public static Builder builder(String uri) {
+			return new Builder(uri);
+		}
+
+		public static class Builder {
+
+			private final String uri;
+
+			private Map<String, Object> meta;
+
+			private Builder(String uri) {
+				Assert.hasText(uri, "uri must not be empty");
+				this.uri = uri;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public SubscribeRequest build() {
+				return new SubscribeRequest(uri, meta);
+			}
+
 		}
 	}
 
@@ -1147,8 +1922,50 @@ public final class McpSchema {
 		@JsonProperty("uri") String uri,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
+		public UnsubscribeRequest {
+			Assert.notNull(uri, "uri must not be null");
+		}
+
+		@JsonCreator
+		static UnsubscribeRequest fromJson(@JsonProperty("uri") String uri,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (uri == null) {
+				logger
+					.warn("UnsubscribeRequest: missing required field 'uri' during deserialization, using default ''");
+				uri = "";
+			}
+			return new UnsubscribeRequest(uri, meta);
+		}
+
+		@Deprecated
 		public UnsubscribeRequest(String uri) {
 			this(uri, null);
+		}
+
+		public static Builder builder(String uri) {
+			return new Builder(uri);
+		}
+
+		public static class Builder {
+
+			private final String uri;
+
+			private Map<String, Object> meta;
+
+			private Builder(String uri) {
+				Assert.hasText(uri, "uri must not be empty");
+				this.uri = uri;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public UnsubscribeRequest build() {
+				return new UnsubscribeRequest(uri, meta);
+			}
+
 		}
 	}
 
@@ -1191,8 +2008,70 @@ public final class McpSchema {
 		@JsonProperty("text") String text,
 		@JsonProperty("_meta") Map<String, Object> meta) implements ResourceContents { // @formatter:on
 
+		public TextResourceContents {
+			Assert.notNull(uri, "uri must not be null");
+			Assert.notNull(text, "text must not be null");
+		}
+
+		@JsonCreator
+		static TextResourceContents fromJson(@JsonProperty("uri") String uri, @JsonProperty("mimeType") String mimeType,
+				@JsonProperty("text") String text, @JsonProperty("_meta") Map<String, Object> meta) {
+			if (uri == null || text == null) {
+				List<String> missing = new ArrayList<>();
+				if (uri == null) {
+					missing.add("uri -> ''");
+					uri = "";
+				}
+				if (text == null) {
+					missing.add("text -> ''");
+					text = "";
+				}
+				logger.warn("TextResourceContents: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new TextResourceContents(uri, mimeType, text, meta);
+		}
+
+		@Deprecated
 		public TextResourceContents(String uri, String mimeType, String text) {
 			this(uri, mimeType, text, null);
+		}
+
+		public static Builder builder(String uri, String text) {
+			return new Builder(uri, text);
+		}
+
+		public static class Builder {
+
+			private final String uri;
+
+			private String mimeType;
+
+			private final String text;
+
+			private Map<String, Object> meta;
+
+			private Builder(String uri, String text) {
+				Assert.hasText(uri, "uri must not be empty");
+				Assert.notNull(text, "text must not be null");
+				this.uri = uri;
+				this.text = text;
+			}
+
+			public Builder mimeType(String mimeType) {
+				this.mimeType = mimeType;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public TextResourceContents build() {
+				return new TextResourceContents(uri, mimeType, text, meta);
+			}
+
 		}
 	}
 
@@ -1214,8 +2093,70 @@ public final class McpSchema {
 		@JsonProperty("blob") String blob,
 		@JsonProperty("_meta") Map<String, Object> meta) implements ResourceContents { // @formatter:on
 
+		public BlobResourceContents {
+			Assert.notNull(uri, "uri must not be null");
+			Assert.notNull(blob, "blob must not be null");
+		}
+
+		@JsonCreator
+		static BlobResourceContents fromJson(@JsonProperty("uri") String uri, @JsonProperty("mimeType") String mimeType,
+				@JsonProperty("blob") String blob, @JsonProperty("_meta") Map<String, Object> meta) {
+			if (uri == null || blob == null) {
+				List<String> missing = new ArrayList<>();
+				if (uri == null) {
+					missing.add("uri -> ''");
+					uri = "";
+				}
+				if (blob == null) {
+					missing.add("blob -> ''");
+					blob = "";
+				}
+				logger.warn("BlobResourceContents: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new BlobResourceContents(uri, mimeType, blob, meta);
+		}
+
+		@Deprecated
 		public BlobResourceContents(String uri, String mimeType, String blob) {
 			this(uri, mimeType, blob, null);
+		}
+
+		public static Builder builder(String uri, String blob) {
+			return new Builder(uri, blob);
+		}
+
+		public static class Builder {
+
+			private final String uri;
+
+			private String mimeType;
+
+			private final String blob;
+
+			private Map<String, Object> meta;
+
+			private Builder(String uri, String blob) {
+				Assert.hasText(uri, "uri must not be empty");
+				Assert.notNull(blob, "blob must not be null");
+				this.uri = uri;
+				this.blob = blob;
+			}
+
+			public Builder mimeType(String mimeType) {
+				this.mimeType = mimeType;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public BlobResourceContents build() {
+				return new BlobResourceContents(uri, mimeType, blob, meta);
+			}
+
 		}
 	}
 
@@ -1229,6 +2170,7 @@ public final class McpSchema {
 	 * @param title An optional title for the prompt.
 	 * @param description An optional description of what this prompt provides.
 	 * @param arguments A list of arguments to use for templating the prompt.
+	 * @param icons Optional list of icons for this prompt.
 	 * @param meta See specification for notes on _meta usage
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -1238,20 +2180,93 @@ public final class McpSchema {
 		@JsonProperty("title") String title,
 		@JsonProperty("description") String description,
 		@JsonProperty("arguments") List<PromptArgument> arguments,
-		@JsonProperty("icons") List<Icon> icons,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Identifier { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta,
+		@JsonProperty("icons") List<Icon> icons) implements Identifier { // @formatter:on
 
+		public Prompt {
+			Assert.notNull(name, "name must not be null");
+		}
+
+		@JsonCreator
+		static Prompt fromJson(@JsonProperty("name") String name, @JsonProperty("title") String title,
+				@JsonProperty("description") String description,
+				@JsonProperty("arguments") List<PromptArgument> arguments,
+				@JsonProperty("_meta") Map<String, Object> meta, @JsonProperty("icons") List<Icon> icons) {
+			if (name == null) {
+				logger.warn("Prompt: missing required field 'name' during deserialization, using default ''");
+				name = "";
+			}
+			return new Prompt(name, title, description, arguments, meta, icons);
+		}
+
+		@Deprecated
 		public Prompt(String name, String description, List<PromptArgument> arguments) {
 			this(name, null, description, arguments, null, null);
 		}
 
+		@Deprecated
 		public Prompt(String name, String title, String description, List<PromptArgument> arguments) {
 			this(name, title, description, arguments, null, null);
 		}
 
+		@Deprecated
 		public Prompt(String name, String title, String description, List<PromptArgument> arguments,
 				Map<String, Object> meta) {
-			this(name, title, description, arguments, null, meta);
+			this(name, title, description, arguments, meta, null);
+		}
+
+		public static Builder builder(String name) {
+			return new Builder(name);
+		}
+
+		public static class Builder {
+
+			private final String name;
+
+			private String title;
+
+			private String description;
+
+			private List<PromptArgument> arguments;
+
+			private List<Icon> icons;
+
+			private Map<String, Object> meta;
+
+			private Builder(String name) {
+				Assert.hasText(name, "name must not be empty");
+				this.name = name;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder arguments(List<PromptArgument> arguments) {
+				this.arguments = arguments;
+				return this;
+			}
+
+			public Builder icons(List<Icon> icons) {
+				this.icons = icons;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public Prompt build() {
+				return new Prompt(name, title, description, arguments, meta, icons);
+			}
+
 		}
 	}
 
@@ -1271,8 +2286,53 @@ public final class McpSchema {
 		@JsonProperty("description") String description,
 		@JsonProperty("required") Boolean required) implements Identifier { // @formatter:on
 
+		public PromptArgument {
+			Assert.hasText(name, "name must not be empty");
+		}
+
+		@Deprecated
 		public PromptArgument(String name, String description, Boolean required) {
 			this(name, null, description, required);
+		}
+
+		public static Builder builder(String name) {
+			return new Builder(name);
+		}
+
+		public static class Builder {
+
+			private final String name;
+
+			private String title;
+
+			private String description;
+
+			private Boolean required;
+
+			private Builder(String name) {
+				Assert.hasText(name, "name must not be empty");
+				this.name = name;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder required(Boolean required) {
+				this.required = required;
+				return this;
+			}
+
+			public PromptArgument build() {
+				return new PromptArgument(name, title, description, required);
+			}
+
 		}
 	}
 
@@ -1290,6 +2350,52 @@ public final class McpSchema {
 	public record PromptMessage( // @formatter:off
 		@JsonProperty("role") Role role,
 		@JsonProperty("content") Content content) { // @formatter:on
+
+		public PromptMessage {
+			Assert.notNull(role, "role must not be null");
+			Assert.notNull(content, "content must not be null");
+		}
+
+		@JsonCreator
+		static PromptMessage fromJson(@JsonProperty("role") Role role, @JsonProperty("content") Content content) {
+			if (role == null || content == null) {
+				List<String> missing = new ArrayList<>();
+				if (role == null) {
+					missing.add("role -> 'user'");
+					role = Role.USER;
+				}
+				if (content == null) {
+					missing.add("content -> ''");
+					content = TextContent.builder("").build();
+				}
+				logger.warn("PromptMessage: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new PromptMessage(role, content);
+		}
+
+		public static Builder builder(Role role, Content content) {
+			return new Builder(role, content);
+		}
+
+		public static class Builder {
+
+			private final Role role;
+
+			private final Content content;
+
+			private Builder(Role role, Content content) {
+				Assert.notNull(role, "role must not be null");
+				Assert.notNull(content, "content must not be null");
+				this.role = role;
+				this.content = content;
+			}
+
+			public PromptMessage build() {
+				return new PromptMessage(role, content);
+			}
+
+		}
 	}
 
 	/**
@@ -1307,8 +2413,57 @@ public final class McpSchema {
 		@JsonProperty("nextCursor") String nextCursor,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Result  { // @formatter:on
 
+		public ListPromptsResult {
+			Assert.notNull(prompts, "prompts must not be null");
+		}
+
+		@JsonCreator
+		static ListPromptsResult fromJson(@JsonProperty("prompts") List<Prompt> prompts,
+				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
+			if (prompts == null) {
+				logger.warn(
+						"ListPromptsResult: missing required field 'prompts' during deserialization, using default []");
+				prompts = List.of();
+			}
+			return new ListPromptsResult(prompts, nextCursor, meta);
+		}
+
+		@Deprecated
 		public ListPromptsResult(List<Prompt> prompts, String nextCursor) {
 			this(prompts, nextCursor, null);
+		}
+
+		public static Builder builder(List<Prompt> prompts) {
+			return new Builder(prompts);
+		}
+
+		public static class Builder {
+
+			private final List<Prompt> prompts;
+
+			private String nextCursor;
+
+			private Map<String, Object> meta;
+
+			private Builder(List<Prompt> prompts) {
+				Assert.notNull(prompts, "prompts must not be null");
+				this.prompts = prompts;
+			}
+
+			public Builder nextCursor(String nextCursor) {
+				this.nextCursor = nextCursor;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public ListPromptsResult build() {
+				return new ListPromptsResult(prompts, nextCursor, meta);
+			}
+
 		}
 	}
 
@@ -1326,8 +2481,57 @@ public final class McpSchema {
 		@JsonProperty("arguments") Map<String, Object> arguments,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
+		public GetPromptRequest {
+			Assert.notNull(name, "name must not be null");
+		}
+
+		@JsonCreator
+		static GetPromptRequest fromJson(@JsonProperty("name") String name,
+				@JsonProperty("arguments") Map<String, Object> arguments,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (name == null) {
+				logger.warn("GetPromptRequest: missing required field 'name' during deserialization, using default ''");
+				name = "";
+			}
+			return new GetPromptRequest(name, arguments, meta);
+		}
+
+		@Deprecated
 		public GetPromptRequest(String name, Map<String, Object> arguments) {
 			this(name, arguments, null);
+		}
+
+		public static Builder builder(String name) {
+			return new Builder(name);
+		}
+
+		public static class Builder {
+
+			private final String name;
+
+			private Map<String, Object> arguments;
+
+			private Map<String, Object> meta;
+
+			private Builder(String name) {
+				Assert.hasText(name, "name must not be empty");
+				this.name = name;
+			}
+
+			public Builder arguments(Map<String, Object> arguments) {
+				this.arguments = arguments;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public GetPromptRequest build() {
+				return new GetPromptRequest(name, arguments, meta);
+			}
+
 		}
 	}
 
@@ -1345,8 +2549,58 @@ public final class McpSchema {
 		@JsonProperty("messages") List<PromptMessage> messages,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
 
+		public GetPromptResult {
+			Assert.notNull(messages, "messages must not be null");
+		}
+
+		@JsonCreator
+		static GetPromptResult fromJson(@JsonProperty("description") String description,
+				@JsonProperty("messages") List<PromptMessage> messages,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (messages == null) {
+				logger.warn(
+						"GetPromptResult: missing required field 'messages' during deserialization, using default []");
+				messages = List.of();
+			}
+			return new GetPromptResult(description, messages, meta);
+		}
+
+		@Deprecated
 		public GetPromptResult(String description, List<PromptMessage> messages) {
 			this(description, messages, null);
+		}
+
+		public static Builder builder(List<PromptMessage> messages) {
+			return new Builder(messages);
+		}
+
+		public static class Builder {
+
+			private String description;
+
+			private final List<PromptMessage> messages;
+
+			private Map<String, Object> meta;
+
+			private Builder(List<PromptMessage> messages) {
+				Assert.notNull(messages, "messages must not be null");
+				this.messages = messages;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public GetPromptResult build() {
+				return new GetPromptResult(description, messages, meta);
+			}
+
 		}
 	}
 
@@ -1368,8 +2622,56 @@ public final class McpSchema {
 		@JsonProperty("nextCursor") String nextCursor,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
 
+		public ListToolsResult {
+			Assert.notNull(tools, "tools must not be null");
+		}
+
+		@JsonCreator
+		static ListToolsResult fromJson(@JsonProperty("tools") List<Tool> tools,
+				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
+			if (tools == null) {
+				logger.warn("ListToolsResult: missing required field 'tools' during deserialization, using default []");
+				tools = List.of();
+			}
+			return new ListToolsResult(tools, nextCursor, meta);
+		}
+
+		@Deprecated
 		public ListToolsResult(List<Tool> tools, String nextCursor) {
 			this(tools, nextCursor, null);
+		}
+
+		public static Builder builder(List<Tool> tools) {
+			return new Builder(tools);
+		}
+
+		public static class Builder {
+
+			private final List<Tool> tools;
+
+			private String nextCursor;
+
+			private Map<String, Object> meta;
+
+			private Builder(List<Tool> tools) {
+				Assert.notNull(tools, "tools must not be null");
+				this.tools = tools;
+			}
+
+			public Builder nextCursor(String nextCursor) {
+				this.nextCursor = nextCursor;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public ListToolsResult build() {
+				return new ListToolsResult(tools, nextCursor, meta);
+			}
+
 		}
 	}
 
@@ -1394,6 +2696,61 @@ public final class McpSchema {
 		@JsonProperty("additionalProperties") Boolean additionalProperties,
 		@JsonProperty("$defs") Map<String, Object> defs,
 		@JsonProperty("definitions") Map<String, Object> definitions) { // @formatter:on
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+
+			private String type;
+
+			private Map<String, Object> properties;
+
+			private List<String> required;
+
+			private Boolean additionalProperties;
+
+			private Map<String, Object> defs;
+
+			private Map<String, Object> definitions;
+
+			public Builder type(String type) {
+				this.type = type;
+				return this;
+			}
+
+			public Builder properties(Map<String, Object> properties) {
+				this.properties = properties;
+				return this;
+			}
+
+			public Builder required(List<String> required) {
+				this.required = required;
+				return this;
+			}
+
+			public Builder additionalProperties(Boolean additionalProperties) {
+				this.additionalProperties = additionalProperties;
+				return this;
+			}
+
+			public Builder defs(Map<String, Object> defs) {
+				this.defs = defs;
+				return this;
+			}
+
+			public Builder definitions(Map<String, Object> definitions) {
+				this.definitions = definitions;
+				return this;
+			}
+
+			public JsonSchema build() {
+				return new JsonSchema(type, properties, required, additionalProperties, defs, definitions);
+			}
+
+		}
+
 	}
 
 	/**
@@ -1415,6 +2772,61 @@ public final class McpSchema {
 		@JsonProperty("idempotentHint") Boolean idempotentHint,
 		@JsonProperty("openWorldHint") Boolean openWorldHint,
 		@JsonProperty("returnDirect") Boolean returnDirect) { // @formatter:on
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+
+			private String title;
+
+			private Boolean readOnlyHint;
+
+			private Boolean destructiveHint;
+
+			private Boolean idempotentHint;
+
+			private Boolean openWorldHint;
+
+			private Boolean returnDirect;
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder readOnlyHint(Boolean readOnlyHint) {
+				this.readOnlyHint = readOnlyHint;
+				return this;
+			}
+
+			public Builder destructiveHint(Boolean destructiveHint) {
+				this.destructiveHint = destructiveHint;
+				return this;
+			}
+
+			public Builder idempotentHint(Boolean idempotentHint) {
+				this.idempotentHint = idempotentHint;
+				return this;
+			}
+
+			public Builder openWorldHint(Boolean openWorldHint) {
+				this.openWorldHint = openWorldHint;
+				return this;
+			}
+
+			public Builder returnDirect(Boolean returnDirect) {
+				this.returnDirect = returnDirect;
+				return this;
+			}
+
+			public ToolAnnotations build() {
+				return new ToolAnnotations(title, readOnlyHint, destructiveHint, idempotentHint, openWorldHint,
+						returnDirect);
+			}
+
+		}
 	}
 
 	/**
@@ -1428,10 +2840,16 @@ public final class McpSchema {
 	 * @param description A human-readable description of what the tool does. This can be
 	 * used by clients to improve the LLM's understanding of available tools.
 	 * @param inputSchema A JSON Schema object that describes the expected structure of
-	 * the arguments when calling this tool. This allows clients to validate tool
+	 * the arguments when calling this tool. Per SEP-1613, the dialect defaults to JSON
+	 * Schema 2020-12 ({@link #JSON_SCHEMA_DIALECT_2020_12}) when no explicit
+	 * {@code $schema} entry is present. To declare a different dialect, include a
+	 * {@code "$schema"} key in the map. For tools with no parameters the spec recommends
+	 * {@code {"type":"object","additionalProperties":false}}.
 	 * @param outputSchema An optional JSON Schema object defining the structure of the
-	 * tool's output returned in the structuredContent field of a CallToolResult.
+	 * tool's output returned in the structuredContent field of a CallToolResult. Same
+	 * dialect rules as {@code inputSchema}.
 	 * @param annotations Optional additional tool information.
+	 * @param icons Optional list of icons for this tool.
 	 * @param meta See specification for notes on _meta usage
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -1443,11 +2861,69 @@ public final class McpSchema {
 		@JsonProperty("inputSchema") Map<String, Object> inputSchema,
 		@JsonProperty("outputSchema") Map<String, Object> outputSchema,
 		@JsonProperty("annotations") ToolAnnotations annotations,
-		@JsonProperty("icons") List<Icon> icons,
-		@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta,
+		@JsonProperty("icons") List<Icon> icons) { // @formatter:on
 
+		public Tool {
+			Assert.notNull(name, "name must not be null");
+			Assert.notNull(inputSchema, "inputSchema must not be null");
+		}
+
+		/**
+		 * @deprecated Use {@link #builder(String, Map)}
+		 */
+		@Deprecated
+		public Tool(String name, String title, String description, Map<String, Object> inputSchema,
+				Map<String, Object> outputSchema, ToolAnnotations annotations, Map<String, Object> meta) {
+			this(name, title, description, inputSchema, outputSchema, annotations, meta, null);
+		}
+
+		@JsonCreator
+		static Tool fromJson(@JsonProperty("name") String name, @JsonProperty("title") String title,
+				@JsonProperty("description") String description,
+				@JsonProperty("inputSchema") Map<String, Object> inputSchema,
+				@JsonProperty("outputSchema") Map<String, Object> outputSchema,
+				@JsonProperty("annotations") ToolAnnotations annotations,
+				@JsonProperty("_meta") Map<String, Object> meta, @JsonProperty("icons") List<Icon> icons) {
+			if (name == null || inputSchema == null) {
+				List<String> missing = new ArrayList<>();
+				if (name == null) {
+					missing.add("name -> ''");
+					name = "";
+				}
+				if (inputSchema == null) {
+					missing.add("inputSchema -> {}");
+					inputSchema = Map.of();
+				}
+				logger.warn("Tool: missing required fields during deserialization: {}", String.join(", ", missing));
+			}
+			return new Tool(name, title, description, inputSchema, outputSchema, annotations, meta, icons);
+		}
+
+		/**
+		 * @deprecated Use {@link #builder(String, Map)} instead.
+		 */
+		@Deprecated
 		public static Builder builder() {
 			return new Builder();
+		}
+
+		/**
+		 * Uses empty input schema.
+		 * @param name
+		 * @return
+		 */
+		@Deprecated
+		public static Builder builder(String name) {
+			return new Builder(name);
+		}
+
+		public static Builder builder(String name, Map<String, Object> inputSchema) {
+			return new Builder(name, inputSchema);
+		}
+
+		public static Builder builder(String name, McpJsonMapper jsonMapper, String inputSchema) {
+			return new Builder(name, schemaToMap(jsonMapper, inputSchema));
 		}
 
 		public static class Builder {
@@ -1467,6 +2943,29 @@ public final class McpSchema {
 			private List<Icon> icons;
 
 			private Map<String, Object> meta;
+
+			/**
+			 * @deprecated Use {@link Tool#builder(String, Map)} instead.
+			 */
+			@Deprecated
+			public Builder() {
+			}
+
+			/**
+			 * @deprecated Use {@link Tool#builder(String, Map)} instead.
+			 */
+			@Deprecated
+			private Builder(String name) {
+				Assert.hasText(name, "name must not be empty");
+				this.name = name;
+			}
+
+			private Builder(String name, Map<String, Object> inputSchema) {
+				Assert.hasText(name, "name must not be empty");
+				Assert.notNull(inputSchema, "inputSchema must not be null");
+				this.name = name;
+				this.inputSchema = inputSchema;
+			}
 
 			public Builder name(String name) {
 				this.name = name;
@@ -1541,7 +3040,11 @@ public final class McpSchema {
 
 			public Tool build() {
 				Assert.hasText(name, "name must not be empty");
-				return new Tool(name, title, description, inputSchema, outputSchema, annotations, icons, meta);
+				if (inputSchema == null) {
+					logger.warn("Input schema was not set, falling back to empty schema");
+					inputSchema = Map.of("type", "object");
+				}
+				return new Tool(name, title, description, inputSchema, outputSchema, annotations, meta, icons);
 			}
 
 		}
@@ -1573,10 +3076,27 @@ public final class McpSchema {
 		@JsonProperty("arguments") Map<String, Object> arguments,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
+		public CallToolRequest {
+			Assert.notNull(name, "name must not be null");
+		}
+
+		@JsonCreator
+		static CallToolRequest fromJson(@JsonProperty("name") String name,
+				@JsonProperty("arguments") Map<String, Object> arguments,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (name == null) {
+				logger.warn("CallToolRequest: missing required field 'name' during deserialization, using default ''");
+				name = "";
+			}
+			return new CallToolRequest(name, arguments, meta);
+		}
+
+		@Deprecated
 		public CallToolRequest(McpJsonMapper jsonMapper, String name, String jsonArguments) {
 			this(name, parseJsonArguments(jsonMapper, jsonArguments), null);
 		}
 
+		@Deprecated
 		public CallToolRequest(String name, Map<String, Object> arguments) {
 			this(name, arguments, null);
 		}
@@ -1590,8 +3110,16 @@ public final class McpSchema {
 			}
 		}
 
+		/**
+		 * @deprecated Use {@link #builder(String)} instead.
+		 */
+		@Deprecated
 		public static Builder builder() {
 			return new Builder();
+		}
+
+		public static Builder builder(String name) {
+			return new Builder(name);
 		}
 
 		public static class Builder {
@@ -1601,6 +3129,18 @@ public final class McpSchema {
 			private Map<String, Object> arguments;
 
 			private Map<String, Object> meta;
+
+			/**
+			 * @deprecated Use {@link CallToolRequest#builder(String)} instead.
+			 */
+			@Deprecated
+			public Builder() {
+			}
+
+			private Builder(String name) {
+				Assert.hasText(name, "name must not be empty");
+				this.name = name;
+			}
 
 			public Builder name(String name) {
 				this.name = name;
@@ -1648,6 +3188,10 @@ public final class McpSchema {
 	 * @param structuredContent An optional JSON object that represents the structured
 	 * result of the tool call.
 	 * @param meta See specification for notes on _meta usage
+	 * <p>
+	 * Note: {@code content} is required by the MCP specification. Deserialization accepts
+	 * a missing value and substitutes an empty list to avoid breaking existing
+	 * integrations that may omit the field.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1657,12 +3201,36 @@ public final class McpSchema {
 		@JsonProperty("structuredContent") Object structuredContent,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
 
+		public CallToolResult {
+			Assert.notNull(content, "content must not be null");
+		}
+
+		@JsonCreator
+		static CallToolResult fromJson(@JsonProperty("content") List<Content> content,
+				@JsonProperty("isError") Boolean isError, @JsonProperty("structuredContent") Object structuredContent,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (content == null) {
+				logger.warn("CallToolResult: missing required fields during deserialization: content -> []");
+				content = List.of();
+			}
+			return new CallToolResult(content, isError, structuredContent, meta);
+		}
+
+		/**
+		 * Creates a builder for {@link CallToolResult} with the required content list.
+		 * @param content the content list
+		 * @return a new builder instance
+		 */
+		public static Builder builder(List<Content> content) {
+			return new Builder(content);
+		}
+
 		/**
 		 * Creates a builder for {@link CallToolResult}.
 		 * @return a new builder instance
 		 */
 		public static Builder builder() {
-			return new Builder();
+			return new Builder(new ArrayList<>());
 		}
 
 		/**
@@ -1673,6 +3241,18 @@ public final class McpSchema {
 			private List<Content> content = new ArrayList<>();
 
 			private Boolean isError = false;
+
+			/**
+			 * @deprecated Use {@link CallToolResult#builder()} factory method instead of
+			 * instantiating the builder directly.
+			 */
+			@Deprecated
+			public Builder() {
+			}
+
+			private Builder(List<Content> content) {
+				this.content.addAll(content);
+			}
 
 			private Object structuredContent;
 
@@ -1685,7 +3265,7 @@ public final class McpSchema {
 			 */
 			public Builder content(List<Content> content) {
 				Assert.notNull(content, "content must not be null");
-				this.content = content;
+				this.content = new ArrayList<>(content);
 				return this;
 			}
 
@@ -1713,7 +3293,7 @@ public final class McpSchema {
 			 */
 			public Builder textContent(List<String> textContent) {
 				Assert.notNull(textContent, "textContent must not be null");
-				textContent.stream().map(TextContent::new).forEach(this.content::add);
+				textContent.stream().map(t -> TextContent.builder(t).build()).forEach(this.content::add);
 				return this;
 			}
 
@@ -1724,9 +3304,6 @@ public final class McpSchema {
 			 */
 			public Builder addContent(Content contentItem) {
 				Assert.notNull(contentItem, "contentItem must not be null");
-				if (this.content == null) {
-					this.content = new ArrayList<>();
-				}
 				this.content.add(contentItem);
 				return this;
 			}
@@ -1738,7 +3315,7 @@ public final class McpSchema {
 			 */
 			public Builder addTextContent(String text) {
 				Assert.notNull(text, "text must not be null");
-				return addContent(new TextContent(text));
+				return addContent(TextContent.builder(text).build());
 			}
 
 			/**
@@ -1767,6 +3344,7 @@ public final class McpSchema {
 			 * @return a new CallToolResult instance
 			 */
 			public CallToolResult build() {
+				Assert.notNull(content, "content must not be null");
 				return new CallToolResult(content, isError, structuredContent, meta);
 			}
 
@@ -1865,6 +3443,11 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ModelHint(@JsonProperty("name") String name) {
+
+		/**
+		 * @deprecated Use {@link #ModelHint(String)}
+		 */
+		@Deprecated
 		public static ModelHint of(String name) {
 			return new ModelHint(name);
 		}
@@ -1875,12 +3458,62 @@ public final class McpSchema {
 	 *
 	 * @param role The sender or recipient of messages and data in a conversation
 	 * @param content The content of the message
+	 * <p>
+	 * Note: {@code role} and {@code content} are required by the MCP specification.
+	 * Deserialization accepts missing values and substitutes defaults to avoid breaking
+	 * existing integrations that may omit these fields.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record SamplingMessage( // @formatter:off
 		@JsonProperty("role") Role role,
 		@JsonProperty("content") Content content) { // @formatter:on
+
+		public SamplingMessage {
+			Assert.notNull(role, "role must not be null");
+			Assert.notNull(content, "content must not be null");
+		}
+
+		@JsonCreator
+		static SamplingMessage fromJson(@JsonProperty("role") Role role, @JsonProperty("content") Content content) {
+			if (role == null || content == null) {
+				List<String> missing = new ArrayList<>();
+				if (role == null) {
+					missing.add("role -> 'user'");
+					role = Role.USER;
+				}
+				if (content == null) {
+					missing.add("content -> ''");
+					content = TextContent.builder("").build();
+				}
+				logger.warn("SamplingMessage: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new SamplingMessage(role, content);
+		}
+
+		public static Builder builder(Role role, Content content) {
+			return new Builder(role, content);
+		}
+
+		public static class Builder {
+
+			private final Role role;
+
+			private final Content content;
+
+			private Builder(Role role, Content content) {
+				Assert.notNull(role, "role must not be null");
+				Assert.notNull(content, "content must not be null");
+				this.role = role;
+				this.content = content;
+			}
+
+			public SamplingMessage build() {
+				return new SamplingMessage(role, content);
+			}
+
+		}
 	}
 
 	/**
@@ -1904,6 +3537,10 @@ public final class McpSchema {
 	 * @param metadata Optional metadata to pass through to the LLM provider. The format
 	 * of this metadata is provider-specific
 	 * @param meta See specification for notes on _meta usage
+	 * <p>
+	 * Note: {@code messages} and {@code maxTokens} are required by the MCP specification.
+	 * Deserialization accepts missing values and substitutes defaults to avoid breaking
+	 * existing integrations that may omit these fields.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1917,6 +3554,37 @@ public final class McpSchema {
 		@JsonProperty("stopSequences") List<String> stopSequences,
 		@JsonProperty("metadata") Map<String, Object> metadata,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
+
+		public CreateMessageRequest {
+			Assert.notNull(messages, "messages must not be null");
+			Assert.notNull(maxTokens, "maxTokens must not be null");
+		}
+
+		@JsonCreator
+		static CreateMessageRequest fromJson(@JsonProperty("messages") List<SamplingMessage> messages,
+				@JsonProperty("modelPreferences") ModelPreferences modelPreferences,
+				@JsonProperty("systemPrompt") String systemPrompt,
+				@JsonProperty("includeContext") ContextInclusionStrategy includeContext,
+				@JsonProperty("temperature") Double temperature, @JsonProperty("maxTokens") Integer maxTokens,
+				@JsonProperty("stopSequences") List<String> stopSequences,
+				@JsonProperty("metadata") Map<String, Object> metadata,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (messages == null || maxTokens == null) {
+				List<String> missing = new ArrayList<>();
+				if (messages == null) {
+					missing.add("messages -> []");
+					messages = List.of();
+				}
+				if (maxTokens == null) {
+					missing.add("maxTokens -> 0");
+					maxTokens = 0;
+				}
+				logger.warn("CreateMessageRequest: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new CreateMessageRequest(messages, modelPreferences, systemPrompt, includeContext, temperature,
+					maxTokens, stopSequences, metadata, meta);
+		}
 
 		// backwards compatibility constructor
 		public CreateMessageRequest(List<SamplingMessage> messages, ModelPreferences modelPreferences,
@@ -1934,8 +3602,16 @@ public final class McpSchema {
 			@JsonProperty("allServers") ALL_SERVERS
 		} // @formatter:on
 
+		/**
+		 * @deprecated Use {@link #builder(List, int)} instead.
+		 */
+		@Deprecated
 		public static Builder builder() {
 			return new Builder();
+		}
+
+		public static Builder builder(List<SamplingMessage> messages, int maxTokens) {
+			return new Builder(messages, maxTokens);
 		}
 
 		public static class Builder {
@@ -1958,7 +3634,22 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
+			/**
+			 * @deprecated Use {@link CreateMessageRequest#builder(List, int)} factory
+			 * method instead.
+			 */
+			@Deprecated
+			public Builder() {
+			}
+
+			private Builder(List<SamplingMessage> messages, int maxTokens) {
+				Assert.notNull(messages, "messages must not be null");
+				this.messages = messages;
+				this.maxTokens = maxTokens;
+			}
+
 			public Builder messages(List<SamplingMessage> messages) {
+				Assert.notNull(messages, "messages must not be null");
 				this.messages = messages;
 				return this;
 			}
@@ -2012,6 +3703,8 @@ public final class McpSchema {
 			}
 
 			public CreateMessageRequest build() {
+				Assert.notNull(messages, "messages must not be null");
+				Assert.notNull(maxTokens, "maxTokens must not be null");
 				return new CreateMessageRequest(messages, modelPreferences, systemPrompt, includeContext, temperature,
 						maxTokens, stopSequences, metadata, meta);
 			}
@@ -2019,6 +3712,7 @@ public final class McpSchema {
 		}
 	}
 
+	// TODO: role, content and model are required
 	/**
 	 * The client's response to a sampling/create_message request from the server. The
 	 * client should inform the user before returning the sampled message, to allow them
@@ -2039,6 +3733,36 @@ public final class McpSchema {
 		@JsonProperty("model") String model,
 		@JsonProperty("stopReason") StopReason stopReason,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+
+		public CreateMessageResult {
+			Assert.notNull(role, "role must not be null");
+			Assert.notNull(content, "content must not be null");
+			Assert.notNull(model, "model must not be null");
+		}
+
+		@JsonCreator
+		static CreateMessageResult fromJson(@JsonProperty("role") Role role, @JsonProperty("content") Content content,
+				@JsonProperty("model") String model, @JsonProperty("stopReason") StopReason stopReason,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (role == null || content == null || model == null) {
+				List<String> missing = new ArrayList<>();
+				if (role == null) {
+					missing.add("role -> 'assistant'");
+					role = Role.ASSISTANT;
+				}
+				if (content == null) {
+					missing.add("content -> ''");
+					content = TextContent.builder("").build();
+				}
+				if (model == null) {
+					missing.add("model -> ''");
+					model = "";
+				}
+				logger.warn("CreateMessageResult: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new CreateMessageResult(role, content, model, stopReason, meta);
+		}
 
 		public enum StopReason {
 
@@ -2077,13 +3801,22 @@ public final class McpSchema {
 			this(role, content, model, stopReason, null);
 		}
 
+		@Deprecated
 		public static Builder builder() {
-			return new Builder();
+			return new Builder(Role.ASSISTANT);
+		}
+
+		public static Builder builder(Role role, String textContent, String model) {
+			return builder(role, TextContent.builder(textContent).build(), model);
+		}
+
+		public static Builder builder(Role role, Content content, String model) {
+			return new Builder(role, content, model);
 		}
 
 		public static class Builder {
 
-			private Role role = Role.ASSISTANT;
+			private Role role;
 
 			private Content content;
 
@@ -2093,16 +3826,34 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
+			// temporary to keep deprecated use
+			private Builder(Role role) {
+				Assert.notNull(role, "role must not be null");
+				this.role = role;
+			}
+
+			Builder(Role role, Content content, String model) {
+				Assert.notNull(role, "role must not be null");
+				Assert.notNull(content, "content must not be null");
+				Assert.notNull(model, "model must not be null");
+				this.role = role;
+				this.content = content;
+				this.model = model;
+			}
+
+			@Deprecated
 			public Builder role(Role role) {
 				this.role = role;
 				return this;
 			}
 
+			@Deprecated
 			public Builder content(Content content) {
 				this.content = content;
 				return this;
 			}
 
+			@Deprecated
 			public Builder model(String model) {
 				this.model = model;
 				return this;
@@ -2113,8 +3864,9 @@ public final class McpSchema {
 				return this;
 			}
 
+			@Deprecated
 			public Builder message(String message) {
-				this.content = new TextContent(message);
+				this.content = TextContent.builder(message).build();
 				return this;
 			}
 
@@ -2137,8 +3889,15 @@ public final class McpSchema {
 	 *
 	 * @param message The message to present to the user
 	 * @param requestedSchema A restricted subset of JSON Schema. Only top-level
-	 * properties are allowed, without nesting
+	 * properties are allowed, without nesting. Per SEP-1613, the dialect defaults to JSON
+	 * Schema 2020-12 ({@link #JSON_SCHEMA_DIALECT_2020_12}) when no explicit
+	 * {@code $schema} entry is present. To declare a different dialect, include a
+	 * {@code "$schema"} key in the map.
 	 * @param meta See specification for notes on _meta usage
+	 * <p>
+	 * Note: {@code message} and {@code requestedSchema} are required by the MCP
+	 * specification. Deserialization accepts missing values and substitutes defaults to
+	 * avoid breaking existing integrations that may omit these fields.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -2147,13 +3906,46 @@ public final class McpSchema {
 		@JsonProperty("requestedSchema") Map<String, Object> requestedSchema,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
+		public ElicitRequest {
+			Assert.notNull(message, "message must not be null");
+			Assert.notNull(requestedSchema, "requestedSchema must not be null");
+		}
+
+		@JsonCreator
+		static ElicitRequest fromJson(@JsonProperty("message") String message,
+				@JsonProperty("requestedSchema") Map<String, Object> requestedSchema,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (message == null || requestedSchema == null) {
+				List<String> missing = new ArrayList<>();
+				if (message == null) {
+					missing.add("message -> ''");
+					message = "";
+				}
+				if (requestedSchema == null) {
+					missing.add("requestedSchema -> {}");
+					requestedSchema = Map.of();
+				}
+				logger.warn("ElicitRequest: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new ElicitRequest(message, requestedSchema, meta);
+		}
+
 		// backwards compatibility constructor
 		public ElicitRequest(String message, Map<String, Object> requestedSchema) {
 			this(message, requestedSchema, null);
 		}
 
+		/**
+		 * @deprecated Use {@link #builder(String, Map)} instead.
+		 */
+		@Deprecated
 		public static Builder builder() {
 			return new Builder();
+		}
+
+		public static Builder builder(String message, Map<String, Object> requestedSchema) {
+			return new Builder(message, requestedSchema);
 		}
 
 		public static class Builder {
@@ -2164,12 +3956,29 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
+			/**
+			 * @deprecated Use {@link ElicitRequest#builder(String, Map)} factory method
+			 * instead.
+			 */
+			@Deprecated
+			public Builder() {
+			}
+
+			private Builder(String message, Map<String, Object> requestedSchema) {
+				Assert.notNull(message, "message must not be null");
+				Assert.notNull(requestedSchema, "requestedSchema must not be null");
+				this.message = message;
+				this.requestedSchema = requestedSchema;
+			}
+
 			public Builder message(String message) {
+				Assert.notNull(message, "message must not be null");
 				this.message = message;
 				return this;
 			}
 
 			public Builder requestedSchema(Map<String, Object> requestedSchema) {
+				Assert.notNull(requestedSchema, "requestedSchema must not be null");
 				this.requestedSchema = requestedSchema;
 				return this;
 			}
@@ -2188,6 +3997,8 @@ public final class McpSchema {
 			}
 
 			public ElicitRequest build() {
+				Assert.notNull(message, "message must not be null");
+				Assert.notNull(requestedSchema, "requestedSchema must not be null");
 				return new ElicitRequest(message, requestedSchema, meta);
 			}
 
@@ -2211,6 +4022,21 @@ public final class McpSchema {
 		@JsonProperty("content") Map<String, Object> content,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
 
+		public ElicitResult {
+			Assert.notNull(action, "action must not be null");
+		}
+
+		@JsonCreator
+		static ElicitResult fromJson(@JsonProperty("action") Action action,
+				@JsonProperty("content") Map<String, Object> content, @JsonProperty("_meta") Map<String, Object> meta) {
+			if (action == null) {
+				logger.warn(
+						"ElicitResult: missing required field 'action' during deserialization, using default 'cancel'");
+				action = Action.CANCEL;
+			}
+			return new ElicitResult(action, content, meta);
+		}
+
 		public enum Action {
 
 		// @formatter:off
@@ -2226,8 +4052,13 @@ public final class McpSchema {
 			this(action, content, null);
 		}
 
+		@Deprecated
 		public static Builder builder() {
 			return new Builder();
+		}
+
+		public static Builder builder(Action action) {
+			return new Builder(action);
 		}
 
 		public static class Builder {
@@ -2238,6 +4069,17 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
+			// tepmorary to support deprecated builder
+			private Builder() {
+
+			}
+
+			private Builder(Action action) {
+				Assert.notNull(action, "action must not be null");
+				this.action = action;
+			}
+
+			@Deprecated
 			public Builder message(Action action) {
 				this.action = action;
 				return this;
@@ -2254,6 +4096,7 @@ public final class McpSchema {
 			}
 
 			public ElicitResult build() {
+				Assert.notNull(action, "action must not be null");
 				return new ElicitResult(action, content, meta);
 			}
 
@@ -2314,6 +4157,10 @@ public final class McpSchema {
 	 * @param total An optional total amount of work to be done, if known.
 	 * @param message An optional message providing additional context about the progress.
 	 * @param meta See specification for notes on _meta usage
+	 * <p>
+	 * Note: {@code progressToken} and {@code progress} are required by the MCP
+	 * specification. Deserialization accepts missing values and substitutes defaults to
+	 * avoid breaking existing integrations that may omit these fields.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -2324,9 +4171,79 @@ public final class McpSchema {
 		@JsonProperty("message") String message,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Notification { // @formatter:on
 
+		public ProgressNotification {
+			Assert.notNull(progressToken, "progressToken must not be null");
+			Assert.notNull(progress, "progress must not be null");
+		}
+
+		@JsonCreator
+		static ProgressNotification fromJson(@JsonProperty("progressToken") Object progressToken,
+				@JsonProperty("progress") Double progress, @JsonProperty("total") Double total,
+				@JsonProperty("message") String message, @JsonProperty("_meta") Map<String, Object> meta) {
+			if (progressToken == null || progress == null) {
+				List<String> missing = new ArrayList<>();
+				if (progressToken == null) {
+					missing.add("progressToken -> ''");
+					progressToken = "";
+				}
+				if (progress == null) {
+					missing.add("progress -> 0.0");
+					progress = 0.0;
+				}
+				logger.warn("ProgressNotification: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new ProgressNotification(progressToken, progress, total, message, meta);
+		}
+
+		@Deprecated
 		public ProgressNotification(Object progressToken, double progress, Double total, String message) {
 			this(progressToken, progress, total, message, null);
 		}
+
+		public static Builder builder(Object progressToken, double progress) {
+			return new Builder(progressToken, progress);
+		}
+
+		public static class Builder {
+
+			private final Object progressToken;
+
+			private final Double progress;
+
+			private Double total;
+
+			private String message;
+
+			private Map<String, Object> meta;
+
+			private Builder(Object progressToken, double progress) {
+				Assert.notNull(progressToken, "progressToken must not be null");
+				this.progressToken = progressToken;
+				this.progress = progress;
+			}
+
+			public Builder total(Double total) {
+				this.total = total;
+				return this;
+			}
+
+			public Builder message(String message) {
+				this.message = message;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public ProgressNotification build() {
+				return new ProgressNotification(progressToken, progress, total, message, meta);
+			}
+
+		}
+
 	}
 
 	/**
@@ -2342,8 +4259,23 @@ public final class McpSchema {
 		@JsonProperty("uri") String uri,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Notification { // @formatter:on
 
+		public ResourcesUpdatedNotification {
+			Assert.notNull(uri, "uri must not be null");
+		}
+
 		public ResourcesUpdatedNotification(String uri) {
 			this(uri, null);
+		}
+
+		@JsonCreator
+		static ResourcesUpdatedNotification fromJson(@JsonProperty("uri") String uri,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (uri == null) {
+				logger.warn(
+						"ResourcesUpdatedNotification: missing required field 'uri' during deserialization, using default ''");
+				uri = "";
+			}
+			return new ResourcesUpdatedNotification(uri, meta);
 		}
 	}
 
@@ -2357,6 +4289,10 @@ public final class McpSchema {
 	 * @param logger The logger that generated the message.
 	 * @param data JSON-serializable logging data.
 	 * @param meta See specification for notes on _meta usage
+	 * <p>
+	 * Note: {@code level} and {@code data} are required by the MCP specification.
+	 * Deserialization accepts missing values and substitutes defaults to avoid breaking
+	 * existing integrations that may omit these fields.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -2366,18 +4302,51 @@ public final class McpSchema {
 		@JsonProperty("data") String data,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Notification { // @formatter:on
 
+		public LoggingMessageNotification {
+			Assert.notNull(level, "level must not be null");
+			Assert.notNull(data, "data must not be null");
+		}
+
+		@JsonCreator
+		static LoggingMessageNotification fromJson(@JsonProperty("level") LoggingLevel level,
+				@JsonProperty("logger") String loggerName, @JsonProperty("data") String data,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (level == null || data == null) {
+				List<String> missing = new ArrayList<>();
+				if (level == null) {
+					missing.add("level -> INFO");
+					level = LoggingLevel.INFO;
+				}
+				if (data == null) {
+					missing.add("data -> ''");
+					data = "";
+				}
+				McpSchema.logger.warn("LoggingMessageNotification: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new LoggingMessageNotification(level, loggerName, data, meta);
+		}
+
 		// backwards compatibility constructor
 		public LoggingMessageNotification(LoggingLevel level, String logger, String data) {
 			this(level, logger, data, null);
 		}
 
+		/**
+		 * @deprecated Use {@link #builder(LoggingLevel, String)} instead.
+		 */
+		@Deprecated
 		public static Builder builder() {
-			return new Builder();
+			return new Builder().level(LoggingLevel.INFO);
+		}
+
+		public static Builder builder(LoggingLevel level, String data) {
+			return new Builder(level, data);
 		}
 
 		public static class Builder {
 
-			private LoggingLevel level = LoggingLevel.INFO;
+			private LoggingLevel level;
 
 			private String logger = "server";
 
@@ -2385,7 +4354,25 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
+			/**
+			 * @deprecated Use
+			 * {@link LoggingMessageNotification#builder(LoggingLevel, String)} factory
+			 * method instead.
+			 */
+			@Deprecated
+			public Builder() {
+			}
+
+			private Builder(LoggingLevel level, String data) {
+				Assert.notNull(level, "level must not be null");
+				Assert.notNull(data, "data must not be null");
+				this.level = level;
+				this.data = data;
+			}
+
+			@Deprecated
 			public Builder level(LoggingLevel level) {
+				Assert.notNull(level, "level must not be null");
 				this.level = level;
 				return this;
 			}
@@ -2395,7 +4382,9 @@ public final class McpSchema {
 				return this;
 			}
 
+			@Deprecated
 			public Builder data(String data) {
+				Assert.notNull(data, "data must not be null");
 				this.data = data;
 				return this;
 			}
@@ -2406,6 +4395,8 @@ public final class McpSchema {
 			}
 
 			public LoggingMessageNotification build() {
+				Assert.notNull(level, "level must not be null");
+				Assert.notNull(data, "data must not be null");
 				return new LoggingMessageNotification(level, logger, data, meta);
 			}
 
@@ -2468,6 +4459,20 @@ public final class McpSchema {
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record SetLevelRequest(@JsonProperty("level") LoggingLevel level) {
+
+		public SetLevelRequest {
+			Assert.notNull(level, "level must not be null");
+		}
+
+		@JsonCreator
+		static SetLevelRequest fromJson(@JsonProperty("level") LoggingLevel level) {
+			if (level == null) {
+				logger.warn(
+						"SetLevelRequest: missing required field 'level' during deserialization, using default 'info'");
+				level = LoggingLevel.INFO;
+			}
+			return new SetLevelRequest(level);
+		}
 	}
 
 	// ---------------------------
@@ -2485,16 +4490,29 @@ public final class McpSchema {
 			@JsonSubTypes.Type(value = ResourceReference.class, name = ResourceReference.TYPE) })
 	public interface CompleteReference {
 
-		String type();
+		default String type() {
+			if (this instanceof PromptReference) {
+				return PromptReference.TYPE;
+			}
+			else if (this instanceof ResourceReference) {
+				return ResourceReference.TYPE;
+			}
+			throw new IllegalArgumentException("Unknown CompleteReference type: " + this);
+		}
 
-		String identifier();
+		@Deprecated
+		default String identifier() {
+			return null;
+		}
 
 	}
 
 	/**
 	 * Identifies a prompt for completion requests.
 	 *
-	 * @param type The reference type identifier (typically "ref/prompt")
+	 * @param type Always {@value #TYPE}; present as the polymorphic discriminator. Any
+	 * non-null value other than {@value #TYPE} is replaced with {@value #TYPE} and a WARN
+	 * is logged.
 	 * @param name The name of the prompt
 	 * @param title An optional title for the prompt
 	 */
@@ -2503,10 +4521,30 @@ public final class McpSchema {
 	public record PromptReference( // @formatter:off
 		@JsonProperty("type") String type,
 		@JsonProperty("name") String name,
-		@JsonProperty("title") String title ) implements McpSchema.CompleteReference, Identifier { // @formatter:on
+		@JsonProperty("title") String title) implements McpSchema.CompleteReference, Identifier { // @formatter:on
 
 		public static final String TYPE = "ref/prompt";
 
+		public PromptReference {
+			Assert.hasText(name, "name must not be null or empty");
+			if (type != null && !TYPE.equals(type)) {
+				logger.warn("PromptReference: 'type' argument '{}' is ignored, type is always '{}'", type, TYPE);
+			}
+			type = TYPE;
+		}
+
+		@JsonCreator
+		static PromptReference fromJson(@JsonProperty("type") String type, @JsonProperty("name") String name,
+				@JsonProperty("title") String title) {
+			return new PromptReference(type, name, title);
+		}
+
+		/**
+		 * @deprecated The {@code type} argument is ignored — the type discriminator is
+		 * always {@value #TYPE}. Use {@link #PromptReference(String)} or the
+		 * {@link #builder(String)} instead.
+		 */
+		@Deprecated
 		public PromptReference(String type, String name) {
 			this(type, name, null);
 		}
@@ -2527,32 +4565,73 @@ public final class McpSchema {
 			if (obj == null || getClass() != obj.getClass())
 				return false;
 			PromptReference that = (PromptReference) obj;
-			return java.util.Objects.equals(identifier(), that.identifier())
-					&& java.util.Objects.equals(type(), that.type());
+			return java.util.Objects.equals(name, that.name);
 		}
 
 		@Override
 		public int hashCode() {
-			return java.util.Objects.hash(identifier(), type());
+			return java.util.Objects.hash(name);
 		}
+
+		public static Builder builder(String name) {
+			return new Builder(name);
+		}
+
+		public static final class Builder {
+
+			private final String name;
+
+			private String title;
+
+			private Builder(String name) {
+				this.name = name;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public PromptReference build() {
+				return new PromptReference(TYPE, name, title);
+			}
+
+		}
+
 	}
 
+	// TODO: this should actually be a ResourceTemplateReference
 	/**
 	 * A reference to a resource or resource template definition for completion requests.
 	 *
-	 * @param type The reference type identifier (typically "ref/resource")
 	 * @param uri The URI or URI template of the resource
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ResourceReference( // @formatter:off
-		@JsonProperty("type") String type,
 		@JsonProperty("uri") String uri) implements McpSchema.CompleteReference { // @formatter:on
 
 		public static final String TYPE = "ref/resource";
 
-		public ResourceReference(String uri) {
-			this(TYPE, uri);
+		public ResourceReference {
+			Assert.notNull(uri, "uri must not be null");
+		}
+
+		@JsonProperty("type")
+		@Override
+		public String type() {
+			return CompleteReference.super.type();
+		}
+
+		@JsonCreator
+		static ResourceReference fromJson(@JsonProperty("uri") String uri, @JsonProperty("type") String type) {
+			return new ResourceReference(uri);
+		}
+
+		@Deprecated
+		public ResourceReference(String type, String uri) {
+			this(uri);
+			logger.warn("ResourceReference: type argument '{}' is ignored, type is always '{}'", type, TYPE);
 		}
 
 		@Override
@@ -2577,16 +4656,68 @@ public final class McpSchema {
 		@JsonProperty("_meta") Map<String, Object> meta,
 		@JsonProperty("context") CompleteContext context) implements Request { // @formatter:on
 
+		public CompleteRequest {
+			Assert.notNull(ref, "ref must not be null");
+			Assert.notNull(argument, "argument must not be null");
+		}
+
+		@JsonCreator
+		static CompleteRequest fromJson(@JsonProperty("ref") McpSchema.CompleteReference ref,
+				@JsonProperty("argument") CompleteArgument argument, @JsonProperty("_meta") Map<String, Object> meta,
+				@JsonProperty("context") CompleteContext context) {
+			return new CompleteRequest(ref, argument, meta, context);
+		}
+
+		@Deprecated
 		public CompleteRequest(McpSchema.CompleteReference ref, CompleteArgument argument, Map<String, Object> meta) {
 			this(ref, argument, meta, null);
 		}
 
+		@Deprecated
 		public CompleteRequest(McpSchema.CompleteReference ref, CompleteArgument argument, CompleteContext context) {
 			this(ref, argument, null, context);
 		}
 
+		@Deprecated
 		public CompleteRequest(McpSchema.CompleteReference ref, CompleteArgument argument) {
 			this(ref, argument, null, null);
+		}
+
+		public static Builder builder(McpSchema.CompleteReference ref, CompleteArgument argument) {
+			return new Builder(ref, argument);
+		}
+
+		public static class Builder {
+
+			private final McpSchema.CompleteReference ref;
+
+			private final CompleteArgument argument;
+
+			private Map<String, Object> meta;
+
+			private CompleteContext context;
+
+			private Builder(McpSchema.CompleteReference ref, CompleteArgument argument) {
+				Assert.notNull(ref, "ref must not be null");
+				Assert.notNull(argument, "argument must not be null");
+				this.ref = ref;
+				this.argument = argument;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public Builder context(CompleteContext context) {
+				this.context = context;
+				return this;
+			}
+
+			public CompleteRequest build() {
+				return new CompleteRequest(ref, argument, meta, context);
+			}
+
 		}
 
 		/**
@@ -2598,6 +4729,10 @@ public final class McpSchema {
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record CompleteArgument(@JsonProperty("name") String name, @JsonProperty("value") String value) {
+			public CompleteArgument {
+				Assert.hasText(name, "name must not be empty");
+				Assert.notNull(value, "value must not be null");
+			}
 		}
 
 		/**
@@ -2608,6 +4743,25 @@ public final class McpSchema {
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record CompleteContext(@JsonProperty("arguments") Map<String, String> arguments) {
+
+			public static Builder builder() {
+				return new Builder();
+			}
+
+			public static class Builder {
+
+				private Map<String, String> arguments;
+
+				public Builder arguments(Map<String, String> arguments) {
+					this.arguments = arguments;
+					return this;
+				}
+
+				public CompleteContext build() {
+					return new CompleteContext(arguments);
+				}
+
+			}
 		}
 	}
 
@@ -2623,7 +4777,21 @@ public final class McpSchema {
 			@JsonProperty("completion") CompleteCompletion completion,
 			@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
 
-		// backwards compatibility constructor
+		public CompleteResult {
+			Assert.notNull(completion, "completion must not be null");
+		}
+
+		@JsonCreator
+		static CompleteResult fromJson(@JsonProperty("completion") CompleteCompletion completion,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (completion == null) {
+				logger.warn(
+						"CompleteResult: missing required field 'completion' during deserialization, using default {values=[]}");
+				completion = new CompleteCompletion(List.of(), null, null);
+			}
+			return new CompleteResult(completion, meta);
+		}
+
 		public CompleteResult(CompleteCompletion completion) {
 			this(completion, null);
 		}
@@ -2646,6 +4814,10 @@ public final class McpSchema {
 
 			public CompleteCompletion {
 				Assert.notNull(values, "values must not be null");
+			}
+
+			public CompleteCompletion(List<String> values) {
+				this(values, null, null);
 			}
 		}
 	}
@@ -2702,12 +4874,61 @@ public final class McpSchema {
 		@JsonProperty("text") String text,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Content { // @formatter:on
 
+		public TextContent {
+			Assert.notNull(text, "text must not be null");
+		}
+
+		@JsonCreator
+		static TextContent fromJson(@JsonProperty("annotations") Annotations annotations,
+				@JsonProperty("text") String text, @JsonProperty("_meta") Map<String, Object> meta) {
+			if (text == null) {
+				logger.warn("TextContent: missing required field 'text' during deserialization, using default ''");
+				text = "";
+			}
+			return new TextContent(annotations, text, meta);
+		}
+
+		@Deprecated
 		public TextContent(Annotations annotations, String text) {
 			this(annotations, text, null);
 		}
 
+		@Deprecated
 		public TextContent(String content) {
 			this(null, content, null);
+		}
+
+		public static Builder builder(String text) {
+			return new Builder(text);
+		}
+
+		public static class Builder {
+
+			private Annotations annotations;
+
+			private final String text;
+
+			private Map<String, Object> meta;
+
+			private Builder(String text) {
+				Assert.notNull(text, "text must not be null");
+				this.text = text;
+			}
+
+			public Builder annotations(Annotations annotations) {
+				this.annotations = annotations;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public TextContent build() {
+				return new TextContent(annotations, text, meta);
+			}
+
 		}
 	}
 
@@ -2728,8 +4949,71 @@ public final class McpSchema {
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Content { // @formatter:on
 
+		public ImageContent {
+			Assert.notNull(data, "data must not be null");
+			Assert.notNull(mimeType, "mimeType must not be null");
+		}
+
+		@JsonCreator
+		static ImageContent fromJson(@JsonProperty("annotations") Annotations annotations,
+				@JsonProperty("data") String data, @JsonProperty("mimeType") String mimeType,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (data == null || mimeType == null) {
+				List<String> missing = new ArrayList<>();
+				if (data == null) {
+					missing.add("data -> ''");
+					data = "";
+				}
+				if (mimeType == null) {
+					missing.add("mimeType -> ''");
+					mimeType = "";
+				}
+				logger.warn("ImageContent: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new ImageContent(annotations, data, mimeType, meta);
+		}
+
+		@Deprecated
 		public ImageContent(Annotations annotations, String data, String mimeType) {
 			this(annotations, data, mimeType, null);
+		}
+
+		public static Builder builder(String data, String mimeType) {
+			return new Builder(data, mimeType);
+		}
+
+		public static class Builder {
+
+			private Annotations annotations;
+
+			private final String data;
+
+			private final String mimeType;
+
+			private Map<String, Object> meta;
+
+			private Builder(String data, String mimeType) {
+				Assert.notNull(data, "data must not be null");
+				Assert.notNull(mimeType, "mimeType must not be null");
+				this.data = data;
+				this.mimeType = mimeType;
+			}
+
+			public Builder annotations(Annotations annotations) {
+				this.annotations = annotations;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public ImageContent build() {
+				return new ImageContent(annotations, data, mimeType, meta);
+			}
+
 		}
 	}
 
@@ -2750,9 +5034,72 @@ public final class McpSchema {
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Content { // @formatter:on
 
+		public AudioContent {
+			Assert.notNull(data, "data must not be null");
+			Assert.notNull(mimeType, "mimeType must not be null");
+		}
+
+		@JsonCreator
+		static AudioContent fromJson(@JsonProperty("annotations") Annotations annotations,
+				@JsonProperty("data") String data, @JsonProperty("mimeType") String mimeType,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (data == null || mimeType == null) {
+				List<String> missing = new ArrayList<>();
+				if (data == null) {
+					missing.add("data -> ''");
+					data = "";
+				}
+				if (mimeType == null) {
+					missing.add("mimeType -> ''");
+					mimeType = "";
+				}
+				logger.warn("AudioContent: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new AudioContent(annotations, data, mimeType, meta);
+		}
+
 		// backwards compatibility constructor
+		@Deprecated
 		public AudioContent(Annotations annotations, String data, String mimeType) {
 			this(annotations, data, mimeType, null);
+		}
+
+		public static Builder builder(String data, String mimeType) {
+			return new Builder(data, mimeType);
+		}
+
+		public static class Builder {
+
+			private Annotations annotations;
+
+			private final String data;
+
+			private final String mimeType;
+
+			private Map<String, Object> meta;
+
+			private Builder(String data, String mimeType) {
+				Assert.notNull(data, "data must not be null");
+				Assert.notNull(mimeType, "mimeType must not be null");
+				this.data = data;
+				this.mimeType = mimeType;
+			}
+
+			public Builder annotations(Annotations annotations) {
+				this.annotations = annotations;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public AudioContent build() {
+				return new AudioContent(annotations, data, mimeType, meta);
+			}
+
 		}
 	}
 
@@ -2773,9 +5120,58 @@ public final class McpSchema {
 		@JsonProperty("resource") ResourceContents resource,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Content { // @formatter:on
 
+		public EmbeddedResource {
+			Assert.notNull(resource, "resource must not be null");
+		}
+
+		@JsonCreator
+		static EmbeddedResource fromJson(@JsonProperty("annotations") Annotations annotations,
+				@JsonProperty("resource") ResourceContents resource, @JsonProperty("_meta") Map<String, Object> meta) {
+			if (resource == null) {
+				logger.warn(
+						"EmbeddedResource: missing required field 'resource' during deserialization, using empty text resource");
+				resource = new TextResourceContents("", null, "", null);
+			}
+			return new EmbeddedResource(annotations, resource, meta);
+		}
+
 		// backwards compatibility constructor
+		@Deprecated
 		public EmbeddedResource(Annotations annotations, ResourceContents resource) {
 			this(annotations, resource, null);
+		}
+
+		public static Builder builder(ResourceContents resource) {
+			return new Builder(resource);
+		}
+
+		public static class Builder {
+
+			private Annotations annotations;
+
+			private final ResourceContents resource;
+
+			private Map<String, Object> meta;
+
+			private Builder(ResourceContents resource) {
+				Assert.notNull(resource, "resource must not be null");
+				this.resource = resource;
+			}
+
+			public Builder annotations(Annotations annotations) {
+				this.annotations = annotations;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public EmbeddedResource build() {
+				return new EmbeddedResource(annotations, resource, meta);
+			}
+
 		}
 	}
 
@@ -2902,8 +5298,55 @@ public final class McpSchema {
 		@JsonProperty("name") String name,
 		@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
 
+		public Root {
+			Assert.notNull(uri, "uri must not be null");
+		}
+
+		@JsonCreator
+		static Root fromJson(@JsonProperty("uri") String uri, @JsonProperty("name") String name,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (uri == null) {
+				logger.warn("Root: missing required field 'uri' during deserialization, using default ''");
+				uri = "";
+			}
+			return new Root(uri, name, meta);
+		}
+
 		public Root(String uri, String name) {
 			this(uri, name, null);
+		}
+
+		public static Builder builder(String uri) {
+			return new Builder(uri);
+		}
+
+		public static class Builder {
+
+			private final String uri;
+
+			private String name;
+
+			private Map<String, Object> meta;
+
+			private Builder(String uri) {
+				Assert.hasText(uri, "uri must not be empty");
+				this.uri = uri;
+			}
+
+			public Builder name(String name) {
+				this.name = name;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public Root build() {
+				return new Root(uri, name, meta);
+			}
+
 		}
 	}
 
@@ -2926,12 +5369,61 @@ public final class McpSchema {
 		@JsonProperty("nextCursor") String nextCursor,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
 
-		public ListRootsResult(List<Root> roots) {
-			this(roots, null);
+		public ListRootsResult {
+			Assert.notNull(roots, "roots must not be null");
 		}
 
+		@JsonCreator
+		static ListRootsResult fromJson(@JsonProperty("roots") List<Root> roots,
+				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
+			if (roots == null) {
+				logger.warn("ListRootsResult: missing required field 'roots' during deserialization, using default []");
+				roots = List.of();
+			}
+			return new ListRootsResult(roots, nextCursor, meta);
+		}
+
+		@Deprecated
+		public ListRootsResult(List<Root> roots) {
+			this(roots, null, null);
+		}
+
+		@Deprecated
 		public ListRootsResult(List<Root> roots, String nextCursor) {
 			this(roots, nextCursor, null);
+		}
+
+		public static Builder builder(List<Root> roots) {
+			return new Builder(roots);
+		}
+
+		public static class Builder {
+
+			private final List<Root> roots;
+
+			private String nextCursor;
+
+			private Map<String, Object> meta;
+
+			private Builder(List<Root> roots) {
+				Assert.notNull(roots, "roots must not be null");
+				this.roots = roots;
+			}
+
+			public Builder nextCursor(String nextCursor) {
+				this.nextCursor = nextCursor;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public ListRootsResult build() {
+				return new ListRootsResult(roots, nextCursor, meta);
+			}
+
 		}
 	}
 
