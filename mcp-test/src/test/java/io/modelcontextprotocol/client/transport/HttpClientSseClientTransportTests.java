@@ -11,15 +11,15 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCRequest;
-
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -35,13 +35,13 @@ import reactor.test.StepVerifier;
 
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.util.UriComponentsBuilder;
-
 import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.ArgumentMatchers.matches;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -66,6 +66,8 @@ class HttpClientSseClientTransportTests {
 
 	private TestHttpClientSseClientTransport transport;
 
+	private SseMessageEndpointValidator sseMessageEndpointValidator = mock(SseMessageEndpointValidator.class);
+
 	private final McpTransportContext context = McpTransportContext.create(Map.of("some-key", "some-value"));
 
 	// Test class to access protected methods
@@ -75,10 +77,11 @@ class HttpClientSseClientTransportTests {
 
 		private Sinks.Many<ServerSentEvent<String>> events = Sinks.many().unicast().onBackpressureBuffer();
 
-		public TestHttpClientSseClientTransport(final String baseUri) {
+		public TestHttpClientSseClientTransport(final String baseUri,
+				SseMessageEndpointValidator sseMessageEndpointValidator) {
 			super(HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(),
 					HttpRequest.newBuilder().header("Content-Type", "application/json"), baseUri, "/sse", JSON_MAPPER,
-					McpAsyncHttpClientRequestCustomizer.NOOP);
+					McpAsyncHttpClientRequestCustomizer.NOOP, sseMessageEndpointValidator);
 		}
 
 		public int getInboundMessageCount() {
@@ -112,7 +115,7 @@ class HttpClientSseClientTransportTests {
 
 	@BeforeEach
 	void setUp() {
-		transport = new TestHttpClientSseClientTransport(host);
+		transport = new TestHttpClientSseClientTransport(host, sseMessageEndpointValidator);
 		transport.connect(Function.identity()).block();
 	}
 
@@ -125,8 +128,7 @@ class HttpClientSseClientTransportTests {
 
 	@Test
 	void testErrorOnBogusMessage() {
-		// bogus message
-		JSONRPCRequest bogusMessage = new JSONRPCRequest(null, null, "test-id", Map.of("key", "value"));
+		var bogusMessage = new BogusJsonRpcMessage("test-id", Map.of("key", "value"));
 
 		StepVerifier.create(transport.sendMessage(bogusMessage))
 			.verifyErrorMessage(
@@ -136,8 +138,7 @@ class HttpClientSseClientTransportTests {
 	@Test
 	void testMessageProcessing() {
 		// Create a test message
-		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
-				Map.of("key", "value"));
+		JSONRPCRequest testMessage = new McpSchema.JSONRPCRequest("test-method", "test-id", Map.of("key", "value"));
 
 		// Simulate receiving the message
 		transport.simulateMessageEvent("""
@@ -167,8 +168,7 @@ class HttpClientSseClientTransportTests {
 				""");
 
 		// Create and send a request message
-		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
-				Map.of("key", "value"));
+		JSONRPCRequest testMessage = new McpSchema.JSONRPCRequest("test-method", "test-id", Map.of("key", "value"));
 
 		// Verify message handling
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
@@ -191,8 +191,7 @@ class HttpClientSseClientTransportTests {
 				""");
 
 		// Create and send a request message
-		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
-				Map.of("key", "value"));
+		JSONRPCRequest testMessage = new McpSchema.JSONRPCRequest("test-method", "test-id", Map.of("key", "value"));
 
 		// Verify message handling
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
@@ -221,8 +220,7 @@ class HttpClientSseClientTransportTests {
 		StepVerifier.create(transport.closeGracefully()).verifyComplete();
 
 		// Create a test message
-		JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
-				Map.of("key", "value"));
+		JSONRPCRequest testMessage = new McpSchema.JSONRPCRequest("test-method", "test-id", Map.of("key", "value"));
 
 		// Verify message is not processed after shutdown
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
@@ -266,11 +264,9 @@ class HttpClientSseClientTransportTests {
 				""");
 
 		// Create and send corresponding messages
-		JSONRPCRequest message1 = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "method1", "id1",
-				Map.of("key", "value1"));
+		JSONRPCRequest message1 = new McpSchema.JSONRPCRequest("method1", "id1", Map.of("key", "value1"));
 
-		JSONRPCRequest message2 = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "method2", "id2",
-				Map.of("key", "value2"));
+		JSONRPCRequest message2 = new McpSchema.JSONRPCRequest("method2", "id2", Map.of("key", "value2"));
 
 		// Verify both messages are processed
 		StepVerifier.create(transport.sendMessage(message1).then(transport.sendMessage(message2))).verifyComplete();
@@ -354,8 +350,7 @@ class HttpClientSseClientTransportTests {
 		clearInvocations(mockCustomizer);
 
 		// Send test message
-		var testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
-				Map.of("key", "value"));
+		var testMessage = new McpSchema.JSONRPCRequest("test-method", "test-id", Map.of("key", "value"));
 
 		// Subscribe to messages and verify
 		StepVerifier
@@ -397,8 +392,7 @@ class HttpClientSseClientTransportTests {
 		clearInvocations(mockCustomizer);
 
 		// Send test message
-		var testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
-				Map.of("key", "value"));
+		var testMessage = new McpSchema.JSONRPCRequest("test-method", "test-id", Map.of("key", "value"));
 
 		// Subscribe to messages and verify
 		StepVerifier
@@ -415,6 +409,72 @@ class HttpClientSseClientTransportTests {
 
 		// Clean up
 		customizedTransport.closeGracefully().block();
+	}
+
+	@Test
+	void testMessageEndpointValidation() throws InvalidSseMessageEndpointException {
+		var uriCaptor = ArgumentCaptor.forClass(URI.class);
+		verify(sseMessageEndpointValidator).validate(uriCaptor.capture(), matches("/message\\?sessionId=[a-z0-9-]+"));
+		assertThat(uriCaptor.getValue().toString()).matches(host + "/sse");
+	}
+
+	@Test
+	void testMessageEndpointValidationRejects() {
+		TestHttpClientSseClientTransport transport = new TestHttpClientSseClientTransport(host,
+				(sseUri, messageEndpoint) -> {
+					throw new InvalidSseMessageEndpointException("boom", messageEndpoint);
+				});
+
+		try {
+			// fails to connect
+			StepVerifier.create(transport.connect(Function.identity()))
+				.verifyErrorMatches(HttpClientSseClientTransportTests::isInvalidEndpointError);
+
+			// Since connection failed, there is no message endpoint, and no message can
+			// be sent
+			JSONRPCRequest testMessage = new JSONRPCRequest(McpSchema.JSONRPC_VERSION, "test-method", "test-id",
+					Map.of("key", "value"));
+
+			StepVerifier.create(transport.sendMessage(testMessage))
+				.verifyErrorMatches(HttpClientSseClientTransportTests::isInvalidEndpointError);
+		}
+		finally {
+			transport.closeGracefully();
+		}
+	}
+
+	private static boolean isInvalidEndpointError(Throwable e) {
+		if (e instanceof InvalidSseMessageEndpointException ismee) {
+			return ismee.getMessageEndpoint().matches("/message\\?sessionId=[a-z0-9-]+")
+					&& ismee.getMessage().equals("boom");
+		}
+		return false;
+	}
+
+	/**
+	 * A minimal {@link McpSchema.JSONRPCMessage} that serializes only the supplied
+	 * fields, intentionally omitting {@code jsonrpc} and {@code method} to produce a
+	 * bogus wire payload for error-handling tests.
+	 */
+	private static class BogusJsonRpcMessage implements McpSchema.JSONRPCMessage {
+
+		@JsonProperty("id")
+		private final String id;
+
+		@JsonProperty("params")
+		private final Map<String, Object> params;
+
+		BogusJsonRpcMessage(String id, Map<String, Object> params) {
+			this.id = id;
+			this.params = params;
+		}
+
+		@Override
+		@JsonIgnore
+		public String jsonrpc() {
+			return null;
+		}
+
 	}
 
 }

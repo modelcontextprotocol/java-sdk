@@ -302,8 +302,9 @@ class LifecycleInitializer {
 
 		String latestVersion = this.protocolVersions.get(this.protocolVersions.size() - 1);
 
-		McpSchema.InitializeRequest initializeRequest = new McpSchema.InitializeRequest(latestVersion,
-				this.clientCapabilities, this.clientInfo);
+		McpSchema.InitializeRequest initializeRequest = McpSchema.InitializeRequest
+			.builder(latestVersion, this.clientCapabilities, this.clientInfo)
+			.build();
 
 		Mono<McpSchema.InitializeResult> result = mcpClientSession.sendRequest(McpSchema.METHOD_INITIALIZE,
 				initializeRequest, McpAsyncClient.INITIALIZE_RESULT_TYPE_REF);

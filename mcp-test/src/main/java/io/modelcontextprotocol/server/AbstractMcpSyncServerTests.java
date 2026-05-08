@@ -4,7 +4,10 @@
 
 package io.modelcontextprotocol.server;
 
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
+
 import java.util.List;
+import java.util.Map;
 
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -20,7 +23,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -105,11 +107,7 @@ public abstract class AbstractMcpSyncServerTests {
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.build();
 
-		Tool newTool = McpSchema.Tool.builder()
-			.name("new-tool")
-			.title("New test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool newTool = McpSchema.Tool.builder("new-tool", EMPTY_JSON_SCHEMA).title("New test tool").build();
 
 		assertThatCode(() -> mcpSyncServer.addTool(McpServerFeatures.SyncToolSpecification.builder()
 			.tool(newTool)
@@ -121,11 +119,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testAddDuplicateToolCall() {
-		Tool duplicateTool = McpSchema.Tool.builder()
-			.name(TEST_TOOL_NAME)
-			.title("Duplicate tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool duplicateTool = McpSchema.Tool.builder(TEST_TOOL_NAME, EMPTY_JSON_SCHEMA).title("Duplicate tool").build();
 
 		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
@@ -143,10 +137,8 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testDuplicateToolCallDuringBuilding() {
-		Tool duplicateTool = McpSchema.Tool.builder()
-			.name("duplicate-build-toolcall")
+		Tool duplicateTool = McpSchema.Tool.builder("duplicate-build-toolcall", EMPTY_JSON_SCHEMA)
 			.title("Duplicate toolcall during building")
-			.inputSchema(EMPTY_JSON_SCHEMA)
 			.build();
 
 		assertThatThrownBy(() -> prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
@@ -161,10 +153,8 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testDuplicateToolsInBatchListRegistration() {
-		Tool duplicateTool = McpSchema.Tool.builder()
-			.name("batch-list-tool")
+		Tool duplicateTool = McpSchema.Tool.builder("batch-list-tool", EMPTY_JSON_SCHEMA)
 			.title("Duplicate tool in batch list")
-			.inputSchema(EMPTY_JSON_SCHEMA)
 			.build();
 		List<McpServerFeatures.SyncToolSpecification> specs = List.of(
 				McpServerFeatures.SyncToolSpecification.builder()
@@ -188,10 +178,8 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testDuplicateToolsInBatchVarargsRegistration() {
-		Tool duplicateTool = McpSchema.Tool.builder()
-			.name("batch-varargs-tool")
+		Tool duplicateTool = McpSchema.Tool.builder("batch-varargs-tool", EMPTY_JSON_SCHEMA)
 			.title("Duplicate tool in batch varargs")
-			.inputSchema(EMPTY_JSON_SCHEMA)
 			.build();
 
 		assertThatThrownBy(() -> prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
@@ -212,11 +200,7 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testRemoveTool() {
-		Tool tool = McpSchema.Tool.builder()
-			.name(TEST_TOOL_NAME)
-			.title("Test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool tool = McpSchema.Tool.builder(TEST_TOOL_NAME, EMPTY_JSON_SCHEMA).title("Test tool").build();
 
 		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
@@ -278,15 +262,13 @@ public abstract class AbstractMcpSyncServerTests {
 			.capabilities(ServerCapabilities.builder().resources(true, false).build())
 			.build();
 
-		Resource resource = Resource.builder()
-			.uri(TEST_RESOURCE_URI)
-			.name("Test Resource")
+		Resource resource = Resource.builder(TEST_RESOURCE_URI, "Test Resource")
 			.title("Test Resource")
 			.mimeType("text/plain")
 			.description("Test resource description")
 			.build();
 		McpServerFeatures.SyncResourceSpecification specification = new McpServerFeatures.SyncResourceSpecification(
-				resource, (exchange, req) -> new ReadResourceResult(List.of()));
+				resource, (exchange, req) -> ReadResourceResult.builder(List.of()).build());
 
 		assertThatCode(() -> mcpSyncServer.addResource(specification)).doesNotThrowAnyException();
 
@@ -310,15 +292,13 @@ public abstract class AbstractMcpSyncServerTests {
 	void testAddResourceWithoutCapability() {
 		var serverWithoutResources = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0").build();
 
-		Resource resource = Resource.builder()
-			.uri(TEST_RESOURCE_URI)
-			.name("Test Resource")
+		Resource resource = Resource.builder(TEST_RESOURCE_URI, "Test Resource")
 			.title("Test Resource")
 			.mimeType("text/plain")
 			.description("Test resource description")
 			.build();
 		McpServerFeatures.SyncResourceSpecification specification = new McpServerFeatures.SyncResourceSpecification(
-				resource, (exchange, req) -> new ReadResourceResult(List.of()));
+				resource, (exchange, req) -> ReadResourceResult.builder(List.of()).build());
 
 		assertThatThrownBy(() -> serverWithoutResources.addResource(specification))
 			.isInstanceOf(IllegalStateException.class)
@@ -340,15 +320,13 @@ public abstract class AbstractMcpSyncServerTests {
 			.capabilities(ServerCapabilities.builder().resources(true, false).build())
 			.build();
 
-		Resource resource = Resource.builder()
-			.uri(TEST_RESOURCE_URI)
-			.name("Test Resource")
+		Resource resource = Resource.builder(TEST_RESOURCE_URI, "Test Resource")
 			.title("Test Resource")
 			.mimeType("text/plain")
 			.description("Test resource description")
 			.build();
 		McpServerFeatures.SyncResourceSpecification specification = new McpServerFeatures.SyncResourceSpecification(
-				resource, (exchange, req) -> new ReadResourceResult(List.of()));
+				resource, (exchange, req) -> ReadResourceResult.builder(List.of()).build());
 
 		mcpSyncServer.addResource(specification);
 		List<McpSchema.Resource> resources = mcpSyncServer.listResources();
@@ -365,15 +343,13 @@ public abstract class AbstractMcpSyncServerTests {
 			.capabilities(ServerCapabilities.builder().resources(true, false).build())
 			.build();
 
-		Resource resource = Resource.builder()
-			.uri(TEST_RESOURCE_URI)
-			.name("Test Resource")
+		Resource resource = Resource.builder(TEST_RESOURCE_URI, "Test Resource")
 			.title("Test Resource")
 			.mimeType("text/plain")
 			.description("Test resource description")
 			.build();
 		McpServerFeatures.SyncResourceSpecification specification = new McpServerFeatures.SyncResourceSpecification(
-				resource, (exchange, req) -> new ReadResourceResult(List.of()));
+				resource, (exchange, req) -> ReadResourceResult.builder(List.of()).build());
 
 		mcpSyncServer.addResource(specification);
 		assertThatCode(() -> mcpSyncServer.removeResource(TEST_RESOURCE_URI)).doesNotThrowAnyException();
@@ -404,15 +380,14 @@ public abstract class AbstractMcpSyncServerTests {
 			.capabilities(ServerCapabilities.builder().resources(true, false).build())
 			.build();
 
-		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
-			.uriTemplate("test://template/{id}")
-			.name("test-template")
+		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate
+			.builder("test://template/{id}", "test-template")
 			.description("Test resource template")
 			.mimeType("text/plain")
 			.build();
 
 		McpServerFeatures.SyncResourceTemplateSpecification specification = new McpServerFeatures.SyncResourceTemplateSpecification(
-				template, (exchange, req) -> new ReadResourceResult(List.of()));
+				template, (exchange, req) -> ReadResourceResult.builder(List.of()).build());
 
 		assertThatCode(() -> mcpSyncServer.addResourceTemplate(specification)).doesNotThrowAnyException();
 
@@ -424,15 +399,14 @@ public abstract class AbstractMcpSyncServerTests {
 		// Create a server without resource capabilities
 		var serverWithoutResources = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0").build();
 
-		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
-			.uriTemplate("test://template/{id}")
-			.name("test-template")
+		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate
+			.builder("test://template/{id}", "test-template")
 			.description("Test resource template")
 			.mimeType("text/plain")
 			.build();
 
 		McpServerFeatures.SyncResourceTemplateSpecification specification = new McpServerFeatures.SyncResourceTemplateSpecification(
-				template, (exchange, req) -> new ReadResourceResult(List.of()));
+				template, (exchange, req) -> ReadResourceResult.builder(List.of()).build());
 
 		assertThatThrownBy(() -> serverWithoutResources.addResourceTemplate(specification))
 			.isInstanceOf(IllegalStateException.class)
@@ -441,15 +415,14 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testRemoveResourceTemplate() {
-		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
-			.uriTemplate("test://template/{id}")
-			.name("test-template")
+		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate
+			.builder("test://template/{id}", "test-template")
 			.description("Test resource template")
 			.mimeType("text/plain")
 			.build();
 
 		McpServerFeatures.SyncResourceTemplateSpecification specification = new McpServerFeatures.SyncResourceTemplateSpecification(
-				template, (exchange, req) -> new ReadResourceResult(List.of()));
+				template, (exchange, req) -> ReadResourceResult.builder(List.of()).build());
 
 		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().resources(true, false).build())
@@ -485,15 +458,14 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testListResourceTemplates() {
-		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder()
-			.uriTemplate("test://template/{id}")
-			.name("test-template")
+		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate
+			.builder("test://template/{id}", "test-template")
 			.description("Test resource template")
 			.mimeType("text/plain")
 			.build();
 
 		McpServerFeatures.SyncResourceTemplateSpecification specification = new McpServerFeatures.SyncResourceTemplateSpecification(
-				template, (exchange, req) -> new ReadResourceResult(List.of()));
+				template, (exchange, req) -> ReadResourceResult.builder(List.of()).build());
 
 		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().resources(true, false).build())
@@ -535,10 +507,21 @@ public abstract class AbstractMcpSyncServerTests {
 	void testAddPromptWithoutCapability() {
 		var serverWithoutPrompts = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0").build();
 
-		Prompt prompt = new Prompt(TEST_PROMPT_NAME, "Test Prompt", "Test Prompt", List.of());
+		Prompt prompt = Prompt.builder(TEST_PROMPT_NAME)
+			.title("Test Prompt")
+			.description("Test Prompt")
+			.arguments(List.of())
+			.build();
 		McpServerFeatures.SyncPromptSpecification specification = new McpServerFeatures.SyncPromptSpecification(prompt,
-				(exchange, req) -> new GetPromptResult("Test prompt description", List
-					.of(new PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent("Test content")))));
+				(exchange,
+						req) -> GetPromptResult
+							.builder(
+									List.of(PromptMessage
+										.builder(McpSchema.Role.ASSISTANT,
+												McpSchema.TextContent.builder("Test content").build())
+										.build()))
+							.description("Test prompt description")
+							.build());
 
 		assertThatThrownBy(() -> serverWithoutPrompts.addPrompt(specification))
 			.isInstanceOf(IllegalStateException.class)
@@ -556,10 +539,21 @@ public abstract class AbstractMcpSyncServerTests {
 
 	@Test
 	void testRemovePrompt() {
-		Prompt prompt = new Prompt(TEST_PROMPT_NAME, "Test Prompt", "Test Prompt", List.of());
+		Prompt prompt = Prompt.builder(TEST_PROMPT_NAME)
+			.title("Test Prompt")
+			.description("Test Prompt")
+			.arguments(List.of())
+			.build();
 		McpServerFeatures.SyncPromptSpecification specification = new McpServerFeatures.SyncPromptSpecification(prompt,
-				(exchange, req) -> new GetPromptResult("Test prompt description", List
-					.of(new PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent("Test content")))));
+				(exchange,
+						req) -> GetPromptResult
+							.builder(
+									List.of(PromptMessage
+										.builder(McpSchema.Role.ASSISTANT,
+												McpSchema.TextContent.builder("Test content").build())
+										.build()))
+							.description("Test prompt description")
+							.build());
 
 		var mcpSyncServer = prepareSyncServerBuilder().serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().prompts(true).build())

@@ -538,7 +538,7 @@ public class McpAsyncClient {
 
 			List<Root> roots = this.roots.values().stream().toList();
 
-			return Mono.just(new McpSchema.ListRootsResult(roots));
+			return Mono.just(McpSchema.ListRootsResult.builder(roots).build());
 		};
 	}
 
@@ -633,10 +633,10 @@ public class McpAsyncClient {
 		return this.listTools(McpSchema.FIRST_PAGE).expand(result -> {
 			String next = result.nextCursor();
 			return (next != null && !next.isEmpty()) ? this.listTools(next) : Mono.empty();
-		}).reduce(new McpSchema.ListToolsResult(new ArrayList<>(), null), (allToolsResult, result) -> {
-			allToolsResult.tools().addAll(result.tools());
-			return allToolsResult;
-		}).map(result -> new McpSchema.ListToolsResult(Collections.unmodifiableList(result.tools()), null));
+		}).reduce(new ArrayList<McpSchema.Tool>(), (accumulated, result) -> {
+			accumulated.addAll(result.tools());
+			return accumulated;
+		}).map(all -> McpSchema.ListToolsResult.builder(Collections.unmodifiableList(all)).build());
 	}
 
 	/**
@@ -719,11 +719,11 @@ public class McpAsyncClient {
 	public Mono<McpSchema.ListResourcesResult> listResources() {
 		return this.listResources(McpSchema.FIRST_PAGE)
 			.expand(result -> (result.nextCursor() != null) ? this.listResources(result.nextCursor()) : Mono.empty())
-			.reduce(new McpSchema.ListResourcesResult(new ArrayList<>(), null), (allResourcesResult, result) -> {
-				allResourcesResult.resources().addAll(result.resources());
-				return allResourcesResult;
+			.reduce(new ArrayList<McpSchema.Resource>(), (accumulated, result) -> {
+				accumulated.addAll(result.resources());
+				return accumulated;
 			})
-			.map(result -> new McpSchema.ListResourcesResult(Collections.unmodifiableList(result.resources()), null));
+			.map(all -> McpSchema.ListResourcesResult.builder(Collections.unmodifiableList(all)).build());
 	}
 
 	/**
@@ -774,7 +774,7 @@ public class McpAsyncClient {
 	 * @see McpSchema.ReadResourceResult
 	 */
 	public Mono<McpSchema.ReadResourceResult> readResource(McpSchema.Resource resource) {
-		return this.readResource(new McpSchema.ReadResourceRequest(resource.uri()));
+		return this.readResource(McpSchema.ReadResourceRequest.builder(resource.uri()).build());
 	}
 
 	/**
@@ -806,13 +806,11 @@ public class McpAsyncClient {
 		return this.listResourceTemplates(McpSchema.FIRST_PAGE)
 			.expand(result -> (result.nextCursor() != null) ? this.listResourceTemplates(result.nextCursor())
 					: Mono.empty())
-			.reduce(new McpSchema.ListResourceTemplatesResult(new ArrayList<>(), null),
-					(allResourceTemplatesResult, result) -> {
-						allResourceTemplatesResult.resourceTemplates().addAll(result.resourceTemplates());
-						return allResourceTemplatesResult;
-					})
-			.map(result -> new McpSchema.ListResourceTemplatesResult(
-					Collections.unmodifiableList(result.resourceTemplates()), null));
+			.reduce(new ArrayList<McpSchema.ResourceTemplate>(), (accumulated, result) -> {
+				accumulated.addAll(result.resourceTemplates());
+				return accumulated;
+			})
+			.map(all -> McpSchema.ListResourceTemplatesResult.builder(Collections.unmodifiableList(all)).build());
 	}
 
 	/**
@@ -898,7 +896,7 @@ public class McpAsyncClient {
 					new TypeRef<>() {
 					});
 
-			return readResource(new McpSchema.ReadResourceRequest(resourcesUpdatedNotification.uri()))
+			return readResource(McpSchema.ReadResourceRequest.builder(resourcesUpdatedNotification.uri()).build())
 				.flatMap(readResourceResult -> Flux.fromIterable(resourcesUpdateConsumers)
 					.flatMap(consumer -> consumer.apply(readResourceResult.contents()))
 					.onErrorResume(error -> {
@@ -927,11 +925,11 @@ public class McpAsyncClient {
 	public Mono<ListPromptsResult> listPrompts() {
 		return this.listPrompts(McpSchema.FIRST_PAGE)
 			.expand(result -> (result.nextCursor() != null) ? this.listPrompts(result.nextCursor()) : Mono.empty())
-			.reduce(new ListPromptsResult(new ArrayList<>(), null), (allPromptsResult, result) -> {
-				allPromptsResult.prompts().addAll(result.prompts());
-				return allPromptsResult;
+			.reduce(new ArrayList<McpSchema.Prompt>(), (accumulated, result) -> {
+				accumulated.addAll(result.prompts());
+				return accumulated;
 			})
-			.map(result -> new McpSchema.ListPromptsResult(Collections.unmodifiableList(result.prompts()), null));
+			.map(all -> McpSchema.ListPromptsResult.builder(Collections.unmodifiableList(all)).build());
 	}
 
 	/**
