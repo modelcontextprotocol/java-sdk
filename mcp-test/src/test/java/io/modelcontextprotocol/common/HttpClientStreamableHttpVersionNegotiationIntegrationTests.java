@@ -41,8 +41,7 @@ class HttpClientStreamableHttpVersionNegotiationIntegrationTests {
 				req -> McpTransportContext.create(Map.of("protocol-version", req.getHeader("MCP-protocol-version"))))
 		.build();
 
-	private final McpSchema.Tool toolSpec = McpSchema.Tool.builder()
-		.name("test-tool")
+	private final McpSchema.Tool toolSpec = McpSchema.Tool.builder("test-tool")
 		.description("return the protocol version used")
 		.build();
 
@@ -70,7 +69,8 @@ class HttpClientStreamableHttpVersionNegotiationIntegrationTests {
 			.build();
 
 		client.initialize();
-		McpSchema.CallToolResult response = client.callTool(new McpSchema.CallToolRequest("test-tool", Map.of()));
+		McpSchema.CallToolResult response = client
+			.callTool(McpSchema.CallToolRequest.builder("test-tool").arguments(Map.of()).build());
 
 		var calls = requestRecordingFilter.getCalls();
 
@@ -100,7 +100,8 @@ class HttpClientStreamableHttpVersionNegotiationIntegrationTests {
 		var client = McpClient.sync(transport).build();
 
 		client.initialize();
-		McpSchema.CallToolResult response = client.callTool(new McpSchema.CallToolRequest("test-tool", Map.of()));
+		McpSchema.CallToolResult response = client
+			.callTool(McpSchema.CallToolRequest.builder("test-tool").arguments(Map.of()).build());
 
 		var calls = requestRecordingFilter.getCalls();
 		// Initialize tells the server the Client's latest supported version

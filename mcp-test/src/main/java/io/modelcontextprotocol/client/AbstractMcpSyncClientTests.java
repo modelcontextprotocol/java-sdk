@@ -186,14 +186,16 @@ public abstract class AbstractMcpSyncClientTests {
 	@Test
 	void testCallToolsWithoutInitialization() {
 		verifyCallSucceedsWithImplicitInitialization(
-				client -> client.callTool(new CallToolRequest("add", Map.of("a", 3, "b", 4))), "calling tools");
+				client -> client.callTool(CallToolRequest.builder("add").arguments(Map.of("a", 3, "b", 4)).build()),
+				"calling tools");
 	}
 
 	@Test
 	void testCallTools() {
 		withClient(createMcpTransport(), mcpSyncClient -> {
 			mcpSyncClient.initialize();
-			CallToolResult toolResult = mcpSyncClient.callTool(new CallToolRequest("add", Map.of("a", 3, "b", 4)));
+			CallToolResult toolResult = mcpSyncClient
+				.callTool(CallToolRequest.builder("add").arguments(Map.of("a", 3, "b", 4)).build());
 
 			assertThat(toolResult).isNotNull().satisfies(result -> {
 
@@ -223,7 +225,9 @@ public abstract class AbstractMcpSyncClientTests {
 
 	@Test
 	void testCallToolWithoutInitialization() {
-		CallToolRequest callToolRequest = new CallToolRequest("echo", Map.of("message", TEST_MESSAGE));
+		CallToolRequest callToolRequest = CallToolRequest.builder("echo")
+			.arguments(Map.of("message", TEST_MESSAGE))
+			.build();
 		verifyCallSucceedsWithImplicitInitialization(client -> client.callTool(callToolRequest), "calling tools");
 	}
 
@@ -231,7 +235,9 @@ public abstract class AbstractMcpSyncClientTests {
 	void testCallTool() {
 		withClient(createMcpTransport(), mcpSyncClient -> {
 			mcpSyncClient.initialize();
-			CallToolRequest callToolRequest = new CallToolRequest("echo", Map.of("message", TEST_MESSAGE));
+			CallToolRequest callToolRequest = CallToolRequest.builder("echo")
+				.arguments(Map.of("message", TEST_MESSAGE))
+				.build();
 
 			CallToolResult callToolResult = mcpSyncClient.callTool(callToolRequest);
 
@@ -245,7 +251,9 @@ public abstract class AbstractMcpSyncClientTests {
 	@Test
 	void testCallToolWithInvalidTool() {
 		withClient(createMcpTransport(), mcpSyncClient -> {
-			CallToolRequest invalidRequest = new CallToolRequest("nonexistent_tool", Map.of("message", TEST_MESSAGE));
+			CallToolRequest invalidRequest = CallToolRequest.builder("nonexistent_tool")
+				.arguments(Map.of("message", TEST_MESSAGE))
+				.build();
 
 			assertThatThrownBy(() -> mcpSyncClient.callTool(invalidRequest)).isInstanceOf(Exception.class);
 		});
@@ -259,8 +267,9 @@ public abstract class AbstractMcpSyncClientTests {
 		withClient(transport, client -> {
 			client.initialize();
 
-			McpSchema.CallToolResult result = client.callTool(new McpSchema.CallToolRequest("annotatedMessage",
-					Map.of("messageType", messageType, "includeImage", true)));
+			McpSchema.CallToolResult result = client.callTool(McpSchema.CallToolRequest.builder("annotatedMessage")
+				.arguments(Map.of("messageType", messageType, "includeImage", true))
+				.build());
 
 			assertThat(result).isNotNull();
 			assertThat(result.isError()).isNotEqualTo(true);
@@ -370,7 +379,8 @@ public abstract class AbstractMcpSyncClientTests {
 
 	@Test
 	void testInitializeWithRootsListProviders() {
-		withClient(createMcpTransport(), builder -> builder.roots(new Root("file:///test/path", "test-root")),
+		withClient(createMcpTransport(),
+				builder -> builder.roots(Root.builder("file:///test/path").name("test-root").build()),
 				mcpSyncClient -> {
 
 					assertThatCode(() -> {
@@ -383,7 +393,7 @@ public abstract class AbstractMcpSyncClientTests {
 	@Test
 	void testAddRoot() {
 		withClient(createMcpTransport(), mcpSyncClient -> {
-			Root newRoot = new Root("file:///new/test/path", "new-test-root");
+			Root newRoot = Root.builder("file:///new/test/path").name("new-test-root").build();
 			assertThatCode(() -> mcpSyncClient.addRoot(newRoot)).doesNotThrowAnyException();
 		});
 	}
@@ -398,7 +408,7 @@ public abstract class AbstractMcpSyncClientTests {
 	@Test
 	void testRemoveRoot() {
 		withClient(createMcpTransport(), mcpSyncClient -> {
-			Root root = new Root("file:///test/path/to/remove", "root-to-remove");
+			Root root = Root.builder("file:///test/path/to/remove").name("root-to-remove").build();
 			assertThatCode(() -> {
 				mcpSyncClient.addRoot(root);
 				mcpSyncClient.removeRoot(root.uri());
@@ -533,11 +543,13 @@ public abstract class AbstractMcpSyncClientTests {
 				Resource firstResource = resources.resources().get(0);
 
 				// Test subscribe
-				assertThatCode(() -> mcpSyncClient.subscribeResource(new SubscribeRequest(firstResource.uri())))
+				assertThatCode(
+						() -> mcpSyncClient.subscribeResource(SubscribeRequest.builder(firstResource.uri()).build()))
 					.doesNotThrowAnyException();
 
 				// Test unsubscribe
-				assertThatCode(() -> mcpSyncClient.unsubscribeResource(new UnsubscribeRequest(firstResource.uri())))
+				assertThatCode(() -> mcpSyncClient
+					.unsubscribeResource(UnsubscribeRequest.builder(firstResource.uri()).build()))
 					.doesNotThrowAnyException();
 			}
 		});
@@ -623,13 +635,16 @@ public abstract class AbstractMcpSyncClientTests {
 				receivedMessage.set(messageText.text());
 				receivedMaxTokens.set(request.maxTokens());
 
-				return new McpSchema.CreateMessageResult(McpSchema.Role.USER, new McpSchema.TextContent(response),
-						"modelId", McpSchema.CreateMessageResult.StopReason.END_TURN);
+				return McpSchema.CreateMessageResult
+					.builder(McpSchema.Role.USER, McpSchema.TextContent.builder(response).build(), "modelId")
+					.stopReason(McpSchema.CreateMessageResult.StopReason.END_TURN)
+					.build();
 			}), client -> {
 				client.initialize();
 
-				McpSchema.CallToolResult result = client.callTool(
-						new McpSchema.CallToolRequest("sampleLLM", Map.of("prompt", message, "maxTokens", maxTokens)));
+				McpSchema.CallToolResult result = client.callTool(McpSchema.CallToolRequest.builder("sampleLLM")
+					.arguments(Map.of("prompt", message, "maxTokens", maxTokens))
+					.build());
 
 				// Verify tool response to ensure our sampling response was passed through
 				assertThat(result.content()).hasAtLeastOneElementOfType(McpSchema.TextContent.class);

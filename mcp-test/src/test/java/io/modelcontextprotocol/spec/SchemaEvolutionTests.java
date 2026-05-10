@@ -41,7 +41,7 @@ class SchemaEvolutionTests {
 
 	@Test
 	void textContentNullAnnotationsOmitted() throws IOException {
-		McpSchema.TextContent content = new McpSchema.TextContent(null, "hello");
+		McpSchema.TextContent content = McpSchema.TextContent.builder("hello").build();
 		String json = mapper.writeValueAsString(content);
 		assertThat(json).doesNotContain("annotations");
 	}
@@ -61,7 +61,7 @@ class SchemaEvolutionTests {
 
 	@Test
 	void promptWithNullArgumentsOmitsFieldOnWire() throws IOException {
-		McpSchema.Prompt prompt = new McpSchema.Prompt("p", "desc", (List<McpSchema.PromptArgument>) null);
+		McpSchema.Prompt prompt = McpSchema.Prompt.builder("p").description("desc").build();
 		String json = mapper.writeValueAsString(prompt);
 		assertThat(json).doesNotContain("arguments");
 	}
@@ -95,8 +95,7 @@ class SchemaEvolutionTests {
 
 	@Test
 	void completeCompletionOmitsNullOptionals() throws IOException {
-		McpSchema.CompleteResult.CompleteCompletion c = new McpSchema.CompleteResult.CompleteCompletion(List.of("x"),
-				null, null);
+		McpSchema.CompleteResult.CompleteCompletion c = new McpSchema.CompleteResult.CompleteCompletion(List.of("x"));
 		String json = mapper.writeValueAsString(c);
 		assertThat(json).doesNotContain("total");
 		assertThat(json).doesNotContain("hasMore");

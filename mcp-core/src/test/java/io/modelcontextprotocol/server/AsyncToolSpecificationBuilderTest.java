@@ -42,16 +42,15 @@ class AsyncToolSpecificationBuilderTest {
 	@Test
 	void builderShouldCreateValidAsyncToolSpecification() {
 
-		Tool tool = McpSchema.Tool.builder()
-			.name("test-tool")
-			.title("A test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool tool = McpSchema.Tool.builder("test-tool", EMPTY_JSON_SCHEMA).title("A test tool").build();
 
 		McpServerFeatures.AsyncToolSpecification specification = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(tool)
-			.callHandler((exchange, request) -> Mono
-				.just(CallToolResult.builder().content(List.of(new TextContent("Test result"))).isError(false).build()))
+			.callHandler((exchange,
+					request) -> Mono.just(CallToolResult.builder()
+						.content(List.of(TextContent.builder("Test result").build()))
+						.isError(false)
+						.build()))
 			.build();
 
 		assertThat(specification).isNotNull();
@@ -69,11 +68,7 @@ class AsyncToolSpecificationBuilderTest {
 
 	@Test
 	void builderShouldThrowExceptionWhenCallToolIsNull() {
-		Tool tool = McpSchema.Tool.builder()
-			.name("test-tool")
-			.title("A test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool tool = McpSchema.Tool.builder("test-tool", EMPTY_JSON_SCHEMA).title("A test tool").build();
 
 		assertThatThrownBy(() -> McpServerFeatures.AsyncToolSpecification.builder().tool(tool).build())
 			.isInstanceOf(IllegalArgumentException.class)
@@ -82,11 +77,7 @@ class AsyncToolSpecificationBuilderTest {
 
 	@Test
 	void builderShouldAllowMethodChaining() {
-		Tool tool = McpSchema.Tool.builder()
-			.name("test-tool")
-			.title("A test tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool tool = McpSchema.Tool.builder("test-tool", EMPTY_JSON_SCHEMA).title("A test tool").build();
 		McpServerFeatures.AsyncToolSpecification.Builder builder = McpServerFeatures.AsyncToolSpecification.builder();
 
 		// Then - verify method chaining returns the same builder instance
@@ -98,20 +89,19 @@ class AsyncToolSpecificationBuilderTest {
 
 	@Test
 	void builtSpecificationShouldExecuteCallToolCorrectly() {
-		Tool tool = McpSchema.Tool.builder()
-			.name("calculator")
-			.title("Simple calculator")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool tool = McpSchema.Tool.builder("calculator", EMPTY_JSON_SCHEMA).title("Simple calculator").build();
 		String expectedResult = "42";
 
 		McpServerFeatures.AsyncToolSpecification specification = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(tool)
-			.callHandler((exchange, request) -> Mono.just(
-					CallToolResult.builder().content(List.of(new TextContent(expectedResult))).isError(false).build()))
+			.callHandler((exchange,
+					request) -> Mono.just(CallToolResult.builder()
+						.content(List.of(TextContent.builder(expectedResult).build()))
+						.isError(false)
+						.build()))
 			.build();
 
-		CallToolRequest request = new CallToolRequest("calculator", Map.of());
+		CallToolRequest request = CallToolRequest.builder("calculator").build();
 		Mono<CallToolResult> resultMono = specification.callHandler().apply(null, request);
 
 		StepVerifier.create(resultMono).assertNext(result -> {
@@ -125,18 +115,14 @@ class AsyncToolSpecificationBuilderTest {
 
 	@Test
 	void fromSyncShouldConvertSyncToolSpecificationCorrectly() {
-		Tool tool = McpSchema.Tool.builder()
-			.name("sync-tool")
-			.title("A sync tool")
-			.inputSchema(EMPTY_JSON_SCHEMA)
-			.build();
+		Tool tool = McpSchema.Tool.builder("sync-tool", EMPTY_JSON_SCHEMA).title("A sync tool").build();
 		String expectedResult = "sync result";
 
 		// Create a sync tool specification
 		McpServerFeatures.SyncToolSpecification syncSpec = McpServerFeatures.SyncToolSpecification.builder()
 			.tool(tool)
 			.callHandler((exchange, request) -> CallToolResult.builder()
-				.content(List.of(new TextContent(expectedResult)))
+				.content(List.of(TextContent.builder(expectedResult).build()))
 				.isError(false)
 				.build())
 			.build();
@@ -150,7 +136,7 @@ class AsyncToolSpecificationBuilderTest {
 		assertThat(asyncSpec.callHandler()).isNotNull();
 
 		// Test that the converted async specification works correctly
-		CallToolRequest request = new CallToolRequest("sync-tool", Map.of("param", "value"));
+		CallToolRequest request = CallToolRequest.builder("sync-tool").arguments(Map.of("param", "value")).build();
 		Mono<CallToolResult> resultMono = asyncSpec.callHandler().apply(null, request);
 
 		StepVerifier.create(resultMono).assertNext(result -> {
@@ -193,7 +179,7 @@ class AsyncToolSpecificationBuilderTest {
 
 		@Test
 		void defaultShouldThrowOnInvalidName() {
-			Tool invalidTool = Tool.builder().name("invalid tool name").build();
+			Tool invalidTool = Tool.builder("invalid tool name", EMPTY_JSON_SCHEMA).build();
 
 			assertThatThrownBy(
 					() -> McpServer.async(transportProvider).toolCall(invalidTool, (exchange, request) -> null))
@@ -204,7 +190,7 @@ class AsyncToolSpecificationBuilderTest {
 		@Test
 		void lenientDefaultShouldLogOnInvalidName() {
 			System.setProperty(ToolNameValidator.STRICT_VALIDATION_PROPERTY, "false");
-			Tool invalidTool = Tool.builder().name("invalid tool name").build();
+			Tool invalidTool = Tool.builder("invalid tool name", EMPTY_JSON_SCHEMA).build();
 
 			assertThatCode(() -> McpServer.async(transportProvider).toolCall(invalidTool, (exchange, request) -> null))
 				.doesNotThrowAnyException();
@@ -213,7 +199,7 @@ class AsyncToolSpecificationBuilderTest {
 
 		@Test
 		void lenientConfigurationShouldLogOnInvalidName() {
-			Tool invalidTool = Tool.builder().name("invalid tool name").build();
+			Tool invalidTool = Tool.builder("invalid tool name", EMPTY_JSON_SCHEMA).build();
 
 			assertThatCode(() -> McpServer.async(transportProvider)
 				.strictToolNameValidation(false)
@@ -224,7 +210,7 @@ class AsyncToolSpecificationBuilderTest {
 		@Test
 		void serverConfigurationShouldOverrideDefault() {
 			System.setProperty(ToolNameValidator.STRICT_VALIDATION_PROPERTY, "false");
-			Tool invalidTool = Tool.builder().name("invalid tool name").build();
+			Tool invalidTool = Tool.builder("invalid tool name", EMPTY_JSON_SCHEMA).build();
 
 			assertThatThrownBy(() -> McpServer.async(transportProvider)
 				.strictToolNameValidation(true)

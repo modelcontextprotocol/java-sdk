@@ -25,7 +25,8 @@ class McpClientProtocolVersionTests {
 
 	private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(300);
 
-	private static final McpSchema.Implementation CLIENT_INFO = new McpSchema.Implementation("test-client", "1.0.0");
+	private static final McpSchema.Implementation CLIENT_INFO = McpSchema.Implementation.builder("test-client", "1.0.0")
+		.build();
 
 	@Test
 	void shouldUseLatestVersionByDefault() {
@@ -46,10 +47,11 @@ class McpClientProtocolVersionTests {
 				McpSchema.InitializeRequest initRequest = (McpSchema.InitializeRequest) request.params();
 				assertThat(initRequest.protocolVersion()).isEqualTo(transport.protocolVersions().get(0));
 
-				transport.simulateIncomingMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-						new McpSchema.InitializeResult(protocolVersion, ServerCapabilities.builder().build(),
-								new McpSchema.Implementation("test-server", "1.0.0"), null),
-						null));
+				transport.simulateIncomingMessage(McpSchema.JSONRPCResponse.result(request.id(),
+						McpSchema.InitializeResult
+							.builder(protocolVersion, ServerCapabilities.builder().build(),
+									McpSchema.Implementation.builder("test-server", "1.0.0").build())
+							.build()));
 			}).assertNext(result -> {
 				assertThat(result.protocolVersion()).isEqualTo(protocolVersion);
 			}).verifyComplete();
@@ -80,10 +82,11 @@ class McpClientProtocolVersionTests {
 				McpSchema.InitializeRequest initRequest = (McpSchema.InitializeRequest) request.params();
 				assertThat(initRequest.protocolVersion()).isIn(List.of(oldVersion, ProtocolVersions.MCP_2025_11_25));
 
-				transport.simulateIncomingMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-						new McpSchema.InitializeResult(oldVersion, ServerCapabilities.builder().build(),
-								new McpSchema.Implementation("test-server", "1.0.0"), null),
-						null));
+				transport.simulateIncomingMessage(McpSchema.JSONRPCResponse.result(request.id(),
+						McpSchema.InitializeResult
+							.builder(oldVersion, ServerCapabilities.builder().build(),
+									McpSchema.Implementation.builder("test-server", "1.0.0").build())
+							.build()));
 			}).assertNext(result -> {
 				assertThat(result.protocolVersion()).isEqualTo(oldVersion);
 			}).verifyComplete();
@@ -109,10 +112,11 @@ class McpClientProtocolVersionTests {
 				McpSchema.JSONRPCRequest request = transport.getLastSentMessageAsRequest();
 				assertThat(request.params()).isInstanceOf(McpSchema.InitializeRequest.class);
 
-				transport.simulateIncomingMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-						new McpSchema.InitializeResult(unsupportedVersion, ServerCapabilities.builder().build(),
-								new McpSchema.Implementation("test-server", "1.0.0"), null),
-						null));
+				transport.simulateIncomingMessage(McpSchema.JSONRPCResponse.result(request.id(),
+						McpSchema.InitializeResult
+							.builder(unsupportedVersion, ServerCapabilities.builder().build(),
+									McpSchema.Implementation.builder("test-server", "1.0.0").build())
+							.build()));
 			}).expectError(RuntimeException.class).verify();
 		}
 		finally {
@@ -142,10 +146,11 @@ class McpClientProtocolVersionTests {
 				McpSchema.InitializeRequest initRequest = (McpSchema.InitializeRequest) request.params();
 				assertThat(initRequest.protocolVersion()).isEqualTo(latestVersion);
 
-				transport.simulateIncomingMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-						new McpSchema.InitializeResult(latestVersion, ServerCapabilities.builder().build(),
-								new McpSchema.Implementation("test-server", "1.0.0"), null),
-						null));
+				transport.simulateIncomingMessage(McpSchema.JSONRPCResponse.result(request.id(),
+						McpSchema.InitializeResult
+							.builder(latestVersion, ServerCapabilities.builder().build(),
+									McpSchema.Implementation.builder("test-server", "1.0.0").build())
+							.build()));
 			}).assertNext(result -> {
 				assertThat(result.protocolVersion()).isEqualTo(latestVersion);
 			}).verifyComplete();

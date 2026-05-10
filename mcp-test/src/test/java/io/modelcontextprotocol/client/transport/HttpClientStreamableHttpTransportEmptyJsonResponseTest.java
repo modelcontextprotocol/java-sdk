@@ -76,11 +76,11 @@ public class HttpClientStreamableHttpTransportEmptyJsonResponseTest {
 			.httpRequestCustomizer(mockRequestCustomizer)
 			.build();
 
-		var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_03_26,
-				McpSchema.ClientCapabilities.builder().roots(true).build(),
-				new McpSchema.Implementation("MCP Client", "0.3.1"));
-		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
-				"test-id", initializeRequest);
+		var initializeRequest = McpSchema.InitializeRequest
+			.builder(ProtocolVersions.MCP_2025_03_26, McpSchema.ClientCapabilities.builder().roots(true).build(),
+					McpSchema.Implementation.builder("MCP Client", "0.3.1").build())
+			.build();
+		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, "test-id", initializeRequest);
 
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 

@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.json;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -16,6 +17,8 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
+
+import io.modelcontextprotocol.spec.McpSchema;
 
 import io.modelcontextprotocol.json.schema.jackson3.DefaultJsonSchemaValidator;
 import org.junit.jupiter.api.BeforeEach;
@@ -802,6 +805,109 @@ class DefaultJsonSchemaValidatorTests {
 		ValidationResponse response3 = new ValidationResponse(true, null, "{\"valid\":true}");
 		assertEquals(response1, response3);
 		assertNotEquals(response1, response2);
+	}
+
+	@Test
+	void validatesSchemaWithExplicitDraft07Dialect() {
+		Map<String, Object> schema = Map.of("$schema", "http://json-schema.org/draft-07/schema#", "type", "object",
+				"properties", Map.of("name", Map.of("type", "string")), "required", List.of("name"));
+
+		assertTrue(validator.validate(schema, Map.of("name", "alice")).valid());
+		assertFalse(validator.validate(schema, Map.of()).valid());
+	}
+
+	@Test
+	void validatesSchemaWithExplicit2020_12Dialect() {
+		Map<String, Object> schema = Map.of("$schema", McpSchema.JSON_SCHEMA_DIALECT_2020_12, "type", "object",
+				"properties", Map.of("name", Map.of("type", "string")), "required", List.of("name"));
+
+		assertTrue(validator.validate(schema, Map.of("name", "alice")).valid());
+		assertFalse(validator.validate(schema, Map.of()).valid());
+	}
+
+	@Test
+	void validatesSchemaWith2020_12Keywords() {
+		Map<String, Object> schema = Map.of("type", "array", "prefixItems",
+				List.of(Map.of("type", "string"), Map.of("type", "number")));
+
+		assertTrue(validator.validate(schema, List.of("hello", 42)).valid());
+		assertFalse(validator.validate(schema, List.of(1, "wrong")).valid());
+	}
+
+	@Test
+	void validatesOutputAgainstSchemaWithDefsAndRef() {
+		Map<String, Object> schema = Map.of("$schema", McpSchema.JSON_SCHEMA_DIALECT_2020_12, "type", "object", "$defs",
+				Map.of("address",
+						Map.of("type", "object", "properties",
+								Map.of("street", Map.of("type", "string"), "city", Map.of("type", "string")))),
+				"properties", Map.of("name", Map.of("type", "string"), "address", Map.of("$ref", "#/$defs/address")),
+				"additionalProperties", false);
+
+		assertTrue(validator
+			.validate(schema, Map.of("name", "alice", "address", Map.of("street", "1 Main", "city", "Springfield")))
+			.valid());
+		assertFalse(validator.validate(schema, Map.of("name", "alice", "extra", 1)).valid());
+	}
+
+	@Test
+	void validateSchemaAcceptsValidSchema() {
+		Map<String, Object> schema = Map.of("type", "object", "properties",
+				Map.of("name", Map.of("type", "string"), "age", Map.of("type", "integer")), "required",
+				List.of("name"));
+
+		assertTrue(validator.validateSchema(schema).valid());
+	}
+
+	@Test
+	void validateSchemaAcceptsValid2020_12SchemaWithExplicitDialect() {
+		Map<String, Object> schema = Map.of("$schema", McpSchema.JSON_SCHEMA_DIALECT_2020_12, "type", "object",
+				"properties", Map.of("count", Map.of("type", "integer")));
+
+		assertTrue(validator.validateSchema(schema).valid());
+	}
+
+	@Test
+	void validateSchemaRejectsSchemaWithInvalidTypeValue() {
+		Map<String, Object> schema = Map.of("type", "not-a-valid-type");
+
+		assertFalse(validator.validateSchema(schema).valid());
+	}
+
+	@Test
+	void validateSchemaRejectsSchemaWithWrongTypeForRequired() {
+		Map<String, Object> schema = Map.of("type", "object", "required", "should-be-an-array");
+
+		assertFalse(validator.validateSchema(schema).valid());
+	}
+
+	@Test
+	void validateSchemaSkipsDraft07SchemasWithExplicitDialect() {
+		Map<String, Object> schema = Map.of("$schema", "http://json-schema.org/draft-07/schema#", "type", "object",
+				"properties", Map.of("a", Map.of("type", "string")));
+
+		assertTrue(validator.validateSchema(schema).valid());
+	}
+
+	@Test
+	void assertConformsDoesNothingOnNullSchema() {
+		validator.assertConforms("test context", null);
+	}
+
+	@Test
+	void assertConformsPassesForValidSchema() {
+		Map<String, Object> schema = Map.of("type", "object", "properties", Map.of("name", Map.of("type", "string")));
+
+		validator.assertConforms("Tool 'my-tool' inputSchema", schema);
+	}
+
+	@Test
+	void assertConformsThrowsForInvalidSchema() {
+		Map<String, Object> schema = Map.of("type", "not-a-valid-type");
+
+		assertThatThrownBy(() -> validator.assertConforms("Tool 'bad' inputSchema", schema))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("Tool 'bad' inputSchema")
+			.hasMessageContaining("SEP-1613");
 	}
 
 }
