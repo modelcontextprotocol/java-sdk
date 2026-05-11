@@ -15,6 +15,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.modelcontextprotocol.client.LifecycleInitializer.Initialization;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
@@ -30,16 +33,14 @@ import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
 import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
-import io.modelcontextprotocol.util.ToolNameValidator;
 import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSchema.PaginatedRequest;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.ToolNameValidator;
 import io.modelcontextprotocol.util.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -105,6 +106,9 @@ public class McpAsyncClient {
 	};
 
 	public static final TypeRef<McpSchema.ProgressNotification> PROGRESS_NOTIFICATION_TYPE_REF = new TypeRef<>() {
+	};
+
+	public static final TypeRef<McpSchema.ElicitationCompleteNotification> ELICITATION_COMPLETE_NOTIFICATION_TYPE_REF = new TypeRef<>() {
 	};
 
 	public static final String NEGOTIATED_PROTOCOL_VERSION = "io.modelcontextprotocol.client.negotiated-protocol-version";
@@ -296,6 +300,16 @@ public class McpAsyncClient {
 		}
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_PROGRESS,
 				asyncProgressNotificationHandler(progressConsumersFinal));
+
+		// Elicitation Complete Notification
+		List<Function<McpSchema.ElicitationCompleteNotification, Mono<Void>>> elicitationCompleteConsumersFinal = new ArrayList<>();
+		elicitationCompleteConsumersFinal
+			.add((notification) -> Mono.fromRunnable(() -> logger.debug("Elicitation complete: {}", notification)));
+		if (!Utils.isEmpty(features.elicitationCompleteConsumers())) {
+			elicitationCompleteConsumersFinal.addAll(features.elicitationCompleteConsumers());
+		}
+		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_ELICITATION_COMPLETE,
+				asyncElicitationCompleteNotificationHandler(elicitationCompleteConsumersFinal));
 
 		Function<Initialization, Mono<Void>> postInitializationHook = init -> {
 
@@ -1033,6 +1047,18 @@ public class McpAsyncClient {
 
 			return Flux.fromIterable(progressConsumers)
 				.flatMap(consumer -> consumer.apply(progressNotification))
+				.then();
+		};
+	}
+
+	private NotificationHandler asyncElicitationCompleteNotificationHandler(
+			List<Function<McpSchema.ElicitationCompleteNotification, Mono<Void>>> elicitationCompleteConsumers) {
+		return params -> {
+			McpSchema.ElicitationCompleteNotification notification = transport.unmarshalFrom(params,
+					ELICITATION_COMPLETE_NOTIFICATION_TYPE_REF);
+
+			return Flux.fromIterable(elicitationCompleteConsumers)
+				.flatMap(consumer -> consumer.apply(notification))
 				.then();
 		};
 	}
