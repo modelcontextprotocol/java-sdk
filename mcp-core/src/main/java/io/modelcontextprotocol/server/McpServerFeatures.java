@@ -32,18 +32,26 @@ public class McpServerFeatures {
 	 * @param serverInfo The server implementation details
 	 * @param serverCapabilities The server capabilities
 	 * @param tools The list of tool specifications
+	 * @param toolsRepository The custom tools repository
 	 * @param resources The map of resource specifications
-	 * @param resourceTemplates The list of resource templates
+	 * @param resourceTemplates The map of resource templates
+	 * @param resourcesRepository The custom resources repository
 	 * @param prompts The map of prompt specifications
+	 * @param promptsRepository The custom prompts repository
+	 * @param completions The map of completion specifications
+	 * @param completionsRepository The custom completions repository
 	 * @param rootsChangeConsumers The list of consumers that will be notified when the
 	 * roots list changes
 	 * @param instructions The server instructions text
 	 */
 	record Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-			List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
+			List<McpServerFeatures.AsyncToolSpecification> tools, ToolsRepository toolsRepository,
+			Map<String, AsyncResourceSpecification> resources,
 			Map<String, McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
-			Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
+			ResourcesRepository resourcesRepository, Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
+			PromptsRepository promptsRepository,
 			Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
+			CompletionsRepository completionsRepository,
 			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
 			String instructions) {
 
@@ -52,18 +60,26 @@ public class McpServerFeatures {
 		 * @param serverInfo The server implementation details
 		 * @param serverCapabilities The server capabilities
 		 * @param tools The list of tool specifications
+		 * @param toolsRepository The custom tools repository
 		 * @param resources The map of resource specifications
 		 * @param resourceTemplates The map of resource templates
+		 * @param resourcesRepository The custom resources repository
 		 * @param prompts The map of prompt specifications
+		 * @param promptsRepository The custom prompts repository
+		 * @param completions The map of completion specifications
+		 * @param completionsRepository The custom completions repository
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
 		 * @param instructions The server instructions text
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-				List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
+				List<McpServerFeatures.AsyncToolSpecification> tools, ToolsRepository toolsRepository,
+				Map<String, AsyncResourceSpecification> resources,
 				Map<String, McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
-				Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
+				ResourcesRepository resourcesRepository,
+				Map<String, McpServerFeatures.AsyncPromptSpecification> prompts, PromptsRepository promptsRepository,
 				Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
+				CompletionsRepository completionsRepository,
 				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
 				String instructions) {
 
@@ -71,24 +87,32 @@ public class McpServerFeatures {
 
 			this.serverInfo = serverInfo;
 			this.serverCapabilities = (serverCapabilities != null) ? serverCapabilities
-					: new McpSchema.ServerCapabilities(null, // completions
+					: new McpSchema.ServerCapabilities(
+							(!Utils.isEmpty(completions) || completionsRepository != null)
+									? new McpSchema.ServerCapabilities.CompletionCapabilities() : null,
 							null, // experimental
 							new McpSchema.ServerCapabilities.LoggingCapabilities(), // Enable
 																					// logging
 																					// by
 																					// default
-							!Utils.isEmpty(prompts) ? McpSchema.ServerCapabilities.PromptCapabilities.builder().build()
-									: null,
-							!Utils.isEmpty(resources)
-									? McpSchema.ServerCapabilities.ResourceCapabilities.builder().build() : null,
-							!Utils.isEmpty(tools) ? McpSchema.ServerCapabilities.ToolCapabilities.builder().build()
-									: null);
+							(!Utils.isEmpty(prompts) || promptsRepository != null)
+									? McpSchema.ServerCapabilities.PromptCapabilities.builder().build() : null,
+							(!Utils.isEmpty(resources) || !Utils.isEmpty(resourceTemplates)
+									|| resourcesRepository != null)
+											? McpSchema.ServerCapabilities.ResourceCapabilities.builder().build()
+											: null,
+							(!Utils.isEmpty(tools) || toolsRepository != null)
+									? McpSchema.ServerCapabilities.ToolCapabilities.builder().build() : null);
 
 			this.tools = (tools != null) ? tools : List.of();
+			this.toolsRepository = toolsRepository;
 			this.resources = (resources != null) ? resources : Map.of();
 			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : Map.of();
+			this.resourcesRepository = resourcesRepository;
 			this.prompts = (prompts != null) ? prompts : Map.of();
+			this.promptsRepository = promptsRepository;
 			this.completions = (completions != null) ? completions : Map.of();
+			this.completionsRepository = completionsRepository;
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : List.of();
 			this.instructions = instructions;
 		}
@@ -137,8 +161,9 @@ public class McpServerFeatures {
 					.subscribeOn(Schedulers.boundedElastic()));
 			}
 
-			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources, resourceTemplates,
-					prompts, completions, rootChangeConsumers, syncSpec.instructions());
+			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, syncSpec.toolsRepository(),
+					resources, resourceTemplates, syncSpec.resourcesRepository(), prompts, syncSpec.promptsRepository(),
+					completions, syncSpec.completionsRepository(), rootChangeConsumers, syncSpec.instructions());
 		}
 	}
 
@@ -148,19 +173,26 @@ public class McpServerFeatures {
 	 * @param serverInfo The server implementation details
 	 * @param serverCapabilities The server capabilities
 	 * @param tools The list of tool specifications
+	 * @param toolsRepository The custom tools repository
 	 * @param resources The map of resource specifications
-	 * @param resourceTemplates The list of resource templates
+	 * @param resourceTemplates The map of resource templates
+	 * @param resourcesRepository The custom resources repository
 	 * @param prompts The map of prompt specifications
+	 * @param promptsRepository The custom prompts repository
+	 * @param completions The map of completion specifications
+	 * @param completionsRepository The custom completions repository
 	 * @param rootsChangeConsumers The list of consumers that will be notified when the
 	 * roots list changes
 	 * @param instructions The server instructions text
 	 */
 	record Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-			List<McpServerFeatures.SyncToolSpecification> tools,
+			List<McpServerFeatures.SyncToolSpecification> tools, ToolsRepository toolsRepository,
 			Map<String, McpServerFeatures.SyncResourceSpecification> resources,
 			Map<String, McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
-			Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
+			ResourcesRepository resourcesRepository, Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
+			PromptsRepository promptsRepository,
 			Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions,
+			CompletionsRepository completionsRepository,
 			List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers, String instructions) {
 
 		/**
@@ -168,19 +200,26 @@ public class McpServerFeatures {
 		 * @param serverInfo The server implementation details
 		 * @param serverCapabilities The server capabilities
 		 * @param tools The list of tool specifications
+		 * @param toolsRepository The custom tools repository
 		 * @param resources The map of resource specifications
-		 * @param resourceTemplates The list of resource templates
+		 * @param resourceTemplates The map of resource templates
+		 * @param resourcesRepository The custom resources repository
 		 * @param prompts The map of prompt specifications
+		 * @param promptsRepository The custom prompts repository
+		 * @param completions The map of completion specifications
+		 * @param completionsRepository The custom completions repository
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
 		 * @param instructions The server instructions text
 		 */
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-				List<McpServerFeatures.SyncToolSpecification> tools,
+				List<McpServerFeatures.SyncToolSpecification> tools, ToolsRepository toolsRepository,
 				Map<String, McpServerFeatures.SyncResourceSpecification> resources,
 				Map<String, McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
-				Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
+				ResourcesRepository resourcesRepository, Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
+				PromptsRepository promptsRepository,
 				Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions,
+				CompletionsRepository completionsRepository,
 				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers,
 				String instructions) {
 
@@ -188,24 +227,32 @@ public class McpServerFeatures {
 
 			this.serverInfo = serverInfo;
 			this.serverCapabilities = (serverCapabilities != null) ? serverCapabilities
-					: new McpSchema.ServerCapabilities(null, // completions
+					: new McpSchema.ServerCapabilities(
+							(!Utils.isEmpty(completions) || completionsRepository != null)
+									? new McpSchema.ServerCapabilities.CompletionCapabilities() : null,
 							null, // experimental
 							new McpSchema.ServerCapabilities.LoggingCapabilities(), // Enable
 																					// logging
 																					// by
 																					// default
-							!Utils.isEmpty(prompts) ? McpSchema.ServerCapabilities.PromptCapabilities.builder().build()
-									: null,
-							!Utils.isEmpty(resources)
-									? McpSchema.ServerCapabilities.ResourceCapabilities.builder().build() : null,
-							!Utils.isEmpty(tools) ? McpSchema.ServerCapabilities.ToolCapabilities.builder().build()
-									: null);
+							(!Utils.isEmpty(prompts) || promptsRepository != null)
+									? McpSchema.ServerCapabilities.PromptCapabilities.builder().build() : null,
+							(!Utils.isEmpty(resources) || !Utils.isEmpty(resourceTemplates)
+									|| resourcesRepository != null)
+											? McpSchema.ServerCapabilities.ResourceCapabilities.builder().build()
+											: null,
+							(!Utils.isEmpty(tools) || toolsRepository != null)
+									? McpSchema.ServerCapabilities.ToolCapabilities.builder().build() : null);
 
 			this.tools = (tools != null) ? tools : new ArrayList<>();
+			this.toolsRepository = toolsRepository;
 			this.resources = (resources != null) ? resources : new HashMap<>();
 			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : Map.of();
+			this.resourcesRepository = resourcesRepository;
 			this.prompts = (prompts != null) ? prompts : new HashMap<>();
+			this.promptsRepository = promptsRepository;
 			this.completions = (completions != null) ? completions : new HashMap<>();
+			this.completionsRepository = completionsRepository;
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : new ArrayList<>();
 			this.instructions = instructions;
 		}
@@ -218,13 +265,12 @@ public class McpServerFeatures {
 	 * represents a specific capability.
 	 *
 	 * @param tool The tool definition including name, description, and parameter schema
-	 * @param call Deprecated. Use the {@link AsyncToolSpecification#callHandler} instead.
 	 * @param callHandler The function that implements the tool's logic, receiving a
 	 * {@link McpAsyncServerExchange} and a
 	 * {@link io.modelcontextprotocol.spec.McpSchema.CallToolRequest} and returning
 	 * results. The function's first argument is an {@link McpAsyncServerExchange} upon
-	 * which the server can interact with the connected client. The second arguments is a
-	 * map of tool arguments.
+	 * which the server can interact with the connected client. The second argument is the
+	 * {@link io.modelcontextprotocol.spec.McpSchema.CallToolRequest} object.
 	 */
 	public record AsyncToolSpecification(McpSchema.Tool tool,
 			BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler) {
@@ -320,21 +366,19 @@ public class McpServerFeatures {
 	 *
 	 * <pre>{@code
 	 * new McpServerFeatures.AsyncResourceSpecification(
-	 *     Resource.builder()
-	 *         .uri("docs")
-	 *         .name("Documentation files")
+	 *     McpSchema.Resource.builder("file:///docs", "Documentation files")
 	 * 		   .title("Documentation files")
 	 * 		   .mimeType("text/markdown")
 	 * 		   .description("Markdown documentation files")
 	 * 		   .build(),
-	 * 		(exchange, request) -> Mono.fromSupplier(() -> readFile(request.getPath()))
-	 * 				.map(ReadResourceResult::new))
+	 * 		(exchange, request) -> Mono.fromSupplier(() -> readFile(request.uri()))
+	 * 				.map(contents -> McpSchema.ReadResourceResult.builder(contents).build()))
 	 * }</pre>
 	 *
 	 * @param resource The resource definition including name, description, and MIME type
 	 * @param readHandler The function that handles resource read requests. The function's
 	 * first argument is an {@link McpAsyncServerExchange} upon which the server can
-	 * interact with the connected client. The second arguments is a
+	 * interact with the connected client. The second argument is a
 	 * {@link io.modelcontextprotocol.spec.McpSchema.ReadResourceRequest}.
 	 */
 	public record AsyncResourceSpecification(McpSchema.Resource resource,
@@ -354,7 +398,7 @@ public class McpServerFeatures {
 	}
 
 	/**
-	 * Specification of a resource template with its synchronous handler function.
+	 * Specification of a resource template with its asynchronous handler function.
 	 * Resource templates allow servers to expose parameterized resources using URI
 	 * templates: <a href=https://datatracker.ietf.org/doc/html/rfc6570> URI
 	 * templates.</a>. Arguments may be auto-completed through <a href=
@@ -370,10 +414,10 @@ public class McpServerFeatures {
 	 * </ul>
 	 *
 	 * @param resourceTemplate The resource template definition including name,
-	 * description, and parameter schema
+	 * description, and URI template
 	 * @param readHandler The function that handles resource read requests. The function's
-	 * first argument is an {@link McpSyncServerExchange} upon which the server can
-	 * interact with the connected client. The second arguments is a
+	 * first argument is an {@link McpAsyncServerExchange} upon which the server can
+	 * interact with the connected client. The second argument is a
 	 * {@link McpSchema.ReadResourceRequest}. {@link McpSchema.ResourceTemplate}
 	 * {@link McpSchema.ReadResourceResult}
 	 */
@@ -410,11 +454,13 @@ public class McpServerFeatures {
 	 *
 	 * <pre>{@code
 	 * new McpServerFeatures.AsyncPromptSpecification(
-	 * 		new Prompt("analyze", "Code analysis template"),
+	 * 		McpSchema.Prompt.builder("analyze").description("Code analysis template").build(),
 	 * 		(exchange, request) -> {
-	 * 			String code = request.getArguments().get("code");
-	 * 			return Mono.just(new GetPromptResult(
-	 * 					"Analyze this code:\n\n" + code + "\n\nProvide feedback on:"));
+	 * 			String code = (String) request.arguments().get("code");
+	 * 			var message = McpSchema.PromptMessage.builder(McpSchema.Role.USER,
+	 * 					McpSchema.TextContent.builder("Analyze this code:\n\n" + code + "\n\nProvide feedback on:").build())
+	 * 				.build();
+	 * 			return Mono.just(McpSchema.GetPromptResult.builder(List.of(message)).build());
 	 * 		})
 	 * }</pre>
 	 *
@@ -422,7 +468,7 @@ public class McpServerFeatures {
 	 * @param promptHandler The function that processes prompt requests and returns
 	 * formatted templates. The function's first argument is an
 	 * {@link McpAsyncServerExchange} upon which the server can interact with the
-	 * connected client. The second arguments is a
+	 * connected client. The second argument is a
 	 * {@link io.modelcontextprotocol.spec.McpSchema.GetPromptRequest}.
 	 */
 	public record AsyncPromptSpecification(McpSchema.Prompt prompt,
@@ -588,23 +634,21 @@ public class McpServerFeatures {
 	 *
 	 * <pre>{@code
 	 * new McpServerFeatures.SyncResourceSpecification(
-	 *     Resource.builder()
-	 *         .uri("docs")
-	 *         .name("Documentation files")
+	 *     McpSchema.Resource.builder("file:///docs", "Documentation files")
 	 * 		   .title("Documentation files")
 	 * 		   .mimeType("text/markdown")
 	 * 		   .description("Markdown documentation files")
 	 * 		   .build(),
 	 * 		(exchange, request) -> {
-	 * 			String content = readFile(request.getPath());
-	 * 			return new ReadResourceResult(content);
+	 * 			var contents = readFile(request.uri());
+	 * 			return McpSchema.ReadResourceResult.builder(contents).build();
 	 * 		})
 	 * }</pre>
 	 *
 	 * @param resource The resource definition including name, description, and MIME type
 	 * @param readHandler The function that handles resource read requests. The function's
 	 * first argument is an {@link McpSyncServerExchange} upon which the server can
-	 * interact with the connected client. The second arguments is a
+	 * interact with the connected client. The second argument is a
 	 * {@link io.modelcontextprotocol.spec.McpSchema.ReadResourceRequest}.
 	 */
 	public record SyncResourceSpecification(McpSchema.Resource resource,
@@ -628,10 +672,10 @@ public class McpServerFeatures {
 	 * </ul>
 	 *
 	 * @param resourceTemplate The resource template definition including name,
-	 * description, and parameter schema
+	 * description, and URI template
 	 * @param readHandler The function that handles resource read requests. The function's
 	 * first argument is an {@link McpSyncServerExchange} upon which the server can
-	 * interact with the connected client. The second arguments is a
+	 * interact with the connected client. The second argument is a
 	 * {@link McpSchema.ReadResourceRequest}. {@link McpSchema.ResourceTemplate}
 	 * {@link McpSchema.ReadResourceResult}
 	 */
@@ -655,11 +699,13 @@ public class McpServerFeatures {
 	 *
 	 * <pre>{@code
 	 * new McpServerFeatures.SyncPromptSpecification(
-	 * 		new Prompt("analyze", "Code analysis template"),
+	 * 		McpSchema.Prompt.builder("analyze").description("Code analysis template").build(),
 	 * 		(exchange, request) -> {
-	 * 			String code = request.getArguments().get("code");
-	 * 			return new GetPromptResult(
-	 * 					"Analyze this code:\n\n" + code + "\n\nProvide feedback on:");
+	 * 			String code = (String) request.arguments().get("code");
+	 * 			var message = McpSchema.PromptMessage.builder(McpSchema.Role.USER,
+	 * 					McpSchema.TextContent.builder("Analyze this code:\n\n" + code + "\n\nProvide feedback on:").build())
+	 * 				.build();
+	 * 			return McpSchema.GetPromptResult.builder(List.of(message)).build();
 	 * 		})
 	 * }</pre>
 	 *
@@ -667,7 +713,7 @@ public class McpServerFeatures {
 	 * @param promptHandler The function that processes prompt requests and returns
 	 * formatted templates. The function's first argument is an
 	 * {@link McpSyncServerExchange} upon which the server can interact with the connected
-	 * client. The second arguments is a
+	 * client. The second argument is a
 	 * {@link io.modelcontextprotocol.spec.McpSchema.GetPromptRequest}.
 	 */
 	public record SyncPromptSpecification(McpSchema.Prompt prompt,

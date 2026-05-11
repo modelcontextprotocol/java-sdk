@@ -75,8 +75,8 @@ public class McpStatelessSyncServer {
 	}
 
 	/**
-	 * List all registered tools.
-	 * @return A list of all registered tools
+	 * List tools from the repository without a transport request context.
+	 * @return A list of context-free visible tools
 	 */
 	public List<McpSchema.Tool> listTools() {
 		return this.asyncServer.listTools().collectList().block();
@@ -102,8 +102,8 @@ public class McpStatelessSyncServer {
 	}
 
 	/**
-	 * List all registered resources.
-	 * @return A list of all registered resources
+	 * List resources from the repository without a transport request context.
+	 * @return A list of context-free visible resources
 	 */
 	public List<McpSchema.Resource> listResources() {
 		return this.asyncServer.listResources().collectList().block();
@@ -130,8 +130,8 @@ public class McpStatelessSyncServer {
 	}
 
 	/**
-	 * List all registered resource templates.
-	 * @return A list of all registered resource templates
+	 * List resource templates from the repository without a transport request context.
+	 * @return A list of context-free visible resource templates
 	 */
 	public List<McpSchema.ResourceTemplate> listResourceTemplates() {
 		return this.asyncServer.listResourceTemplates().collectList().block();
@@ -157,8 +157,8 @@ public class McpStatelessSyncServer {
 	}
 
 	/**
-	 * List all registered prompts.
-	 * @return A list of all registered prompts
+	 * List prompts from the repository without a transport request context.
+	 * @return A list of context-free visible prompts
 	 */
 	public List<McpSchema.Prompt> listPrompts() {
 		return this.asyncServer.listPrompts().collectList().block();

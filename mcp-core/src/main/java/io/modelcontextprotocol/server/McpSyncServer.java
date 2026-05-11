@@ -7,7 +7,6 @@ package io.modelcontextprotocol.server;
 import java.util.List;
 
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.util.Assert;
 
 /**
@@ -90,8 +89,8 @@ public class McpSyncServer {
 	}
 
 	/**
-	 * List all registered tools.
-	 * @return A list of all registered tools
+	 * List tools from the repository without a client request exchange.
+	 * @return A list of context-free visible tools
 	 */
 	public List<McpSchema.Tool> listTools() {
 		return this.asyncServer.listTools().collectList().block();
@@ -117,8 +116,8 @@ public class McpSyncServer {
 	}
 
 	/**
-	 * List all registered resources.
-	 * @return A list of all registered resources
+	 * List resources from the repository without a client request exchange.
+	 * @return A list of context-free visible resources
 	 */
 	public List<McpSchema.Resource> listResources() {
 		return this.asyncServer.listResources().collectList().block();
@@ -144,8 +143,8 @@ public class McpSyncServer {
 	}
 
 	/**
-	 * List all registered resource templates.
-	 * @return A list of all registered resource templates
+	 * List resource templates from the repository without a client request exchange.
+	 * @return A list of context-free visible resource templates
 	 */
 	public List<McpSchema.ResourceTemplate> listResourceTemplates() {
 		return this.asyncServer.listResourceTemplates().collectList().block();
@@ -153,6 +152,11 @@ public class McpSyncServer {
 
 	/**
 	 * Remove a resource template.
+	 * <p>
+	 * This method does not automatically send a
+	 * {@code notifications/resources/list_changed} notification. Call
+	 * {@link #notifyResourcesListChanged()} explicitly when clients should refresh the
+	 * resource and resource-template lists.
 	 * @param uriTemplate The URI template of the resource template to remove
 	 */
 	public void removeResourceTemplate(String uriTemplate) {
@@ -171,8 +175,8 @@ public class McpSyncServer {
 	}
 
 	/**
-	 * List all registered prompts.
-	 * @return A list of all registered prompts
+	 * List prompts from the repository without a client request exchange.
+	 * @return A list of context-free visible prompts
 	 */
 	public List<McpSchema.Prompt> listPrompts() {
 		return this.asyncServer.listPrompts().collectList().block();
