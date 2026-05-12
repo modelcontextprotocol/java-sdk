@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -298,6 +299,42 @@ class McpAsyncClientTests {
 
 	}
 
+	@Test
+	void listResourcesStopsOnEmptyNextCursor() {
+		var transport = new EmptyCursorTestMcpClientTransport(McpSchema.METHOD_RESOURCES_LIST);
+		McpAsyncClient client = McpClient.async(transport).build();
+
+		McpSchema.ListResourcesResult result = client.listResources().block();
+
+		assertThat(result).isNotNull();
+		assertThat(result.resources()).extracting(McpSchema.Resource::name).containsExactly("test.txt");
+		assertThat(transport.getRequestCount()).isEqualTo(1);
+	}
+
+	@Test
+	void listResourceTemplatesStopsOnEmptyNextCursor() {
+		var transport = new EmptyCursorTestMcpClientTransport(McpSchema.METHOD_RESOURCES_TEMPLATES_LIST);
+		McpAsyncClient client = McpClient.async(transport).build();
+
+		McpSchema.ListResourceTemplatesResult result = client.listResourceTemplates().block();
+
+		assertThat(result).isNotNull();
+		assertThat(result.resourceTemplates()).extracting(McpSchema.ResourceTemplate::name).containsExactly("template");
+		assertThat(transport.getRequestCount()).isEqualTo(1);
+	}
+
+	@Test
+	void listPromptsStopsOnEmptyNextCursor() {
+		var transport = new EmptyCursorTestMcpClientTransport(McpSchema.METHOD_PROMPT_LIST);
+		McpAsyncClient client = McpClient.async(transport).build();
+
+		McpSchema.ListPromptsResult result = client.listPrompts().block();
+
+		assertThat(result).isNotNull();
+		assertThat(result.prompts()).extracting(McpSchema.Prompt::name).containsExactly("test-prompt");
+		assertThat(transport.getRequestCount()).isEqualTo(1);
+	}
+
 	static class TestMcpClientTransport implements McpClientTransport {
 
 		private Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler;
@@ -393,6 +430,92 @@ class McpAsyncClientTests {
 
 		public McpSchema.PaginatedRequest getCapturedRequest() {
 			return capturedRequest;
+		}
+
+	}
+
+	static class EmptyCursorTestMcpClientTransport implements McpClientTransport {
+
+		private final String listMethod;
+
+		private final AtomicInteger requestCount = new AtomicInteger();
+
+		private Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler;
+
+		EmptyCursorTestMcpClientTransport(String listMethod) {
+			this.listMethod = listMethod;
+		}
+
+		@Override
+		public Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
+			this.handler = handler;
+			return Mono.empty();
+		}
+
+		@Override
+		public Mono<Void> closeGracefully() {
+			return Mono.empty();
+		}
+
+		@Override
+		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+			if (!(message instanceof McpSchema.JSONRPCRequest request)) {
+				return Mono.empty();
+			}
+
+			McpSchema.JSONRPCResponse response;
+			if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
+				McpSchema.ServerCapabilities caps = McpSchema.ServerCapabilities.builder()
+					.prompts(false)
+					.resources(false, false)
+					.tools(false)
+					.build();
+
+				McpSchema.InitializeResult initResult = McpSchema.InitializeResult
+					.builder(ProtocolVersions.MCP_2024_11_05, caps, MOCK_SERVER_INFO)
+					.build();
+				response = McpSchema.JSONRPCResponse.result(request.id(), initResult);
+			}
+			else if (this.listMethod.equals(request.method())) {
+				this.requestCount.incrementAndGet();
+				response = McpSchema.JSONRPCResponse.result(request.id(), resultForMethod(request.method()));
+			}
+			else {
+				return Mono.empty();
+			}
+
+			return this.handler.apply(Mono.just(response)).then();
+		}
+
+		private Object resultForMethod(String method) {
+			if (McpSchema.METHOD_RESOURCES_LIST.equals(method)) {
+				McpSchema.Resource resource = McpSchema.Resource.builder("file:///test.txt", "test.txt").build();
+				return McpSchema.ListResourcesResult.builder(List.of(resource)).nextCursor("").build();
+			}
+			if (McpSchema.METHOD_RESOURCES_TEMPLATES_LIST.equals(method)) {
+				McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder("file:///{name}", "template")
+					.build();
+				return McpSchema.ListResourceTemplatesResult.builder(List.of(template)).nextCursor("").build();
+			}
+			if (McpSchema.METHOD_PROMPT_LIST.equals(method)) {
+				McpSchema.Prompt prompt = McpSchema.Prompt.builder("test-prompt").build();
+				return McpSchema.ListPromptsResult.builder(List.of(prompt)).nextCursor("").build();
+			}
+			throw new IllegalArgumentException("Unsupported method: " + method);
+		}
+
+		@Override
+		public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+			return JSON_MAPPER.convertValue(data, new TypeRef<>() {
+				@Override
+				public java.lang.reflect.Type getType() {
+					return typeRef.getType();
+				}
+			});
+		}
+
+		int getRequestCount() {
+			return this.requestCount.get();
 		}
 
 	}

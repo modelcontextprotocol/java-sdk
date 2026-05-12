@@ -717,13 +717,13 @@ public class McpAsyncClient {
 	 * @see #readResource(McpSchema.Resource)
 	 */
 	public Mono<McpSchema.ListResourcesResult> listResources() {
-		return this.listResources(McpSchema.FIRST_PAGE)
-			.expand(result -> (result.nextCursor() != null) ? this.listResources(result.nextCursor()) : Mono.empty())
-			.reduce(new ArrayList<McpSchema.Resource>(), (accumulated, result) -> {
-				accumulated.addAll(result.resources());
-				return accumulated;
-			})
-			.map(all -> McpSchema.ListResourcesResult.builder(Collections.unmodifiableList(all)).build());
+		return this.listResources(McpSchema.FIRST_PAGE).expand(result -> {
+			String next = result.nextCursor();
+			return (next != null && !next.isEmpty()) ? this.listResources(next) : Mono.empty();
+		}).reduce(new ArrayList<McpSchema.Resource>(), (accumulated, result) -> {
+			accumulated.addAll(result.resources());
+			return accumulated;
+		}).map(all -> McpSchema.ListResourcesResult.builder(Collections.unmodifiableList(all)).build());
 	}
 
 	/**
@@ -803,14 +803,13 @@ public class McpAsyncClient {
 	 * @see McpSchema.ListResourceTemplatesResult
 	 */
 	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates() {
-		return this.listResourceTemplates(McpSchema.FIRST_PAGE)
-			.expand(result -> (result.nextCursor() != null) ? this.listResourceTemplates(result.nextCursor())
-					: Mono.empty())
-			.reduce(new ArrayList<McpSchema.ResourceTemplate>(), (accumulated, result) -> {
-				accumulated.addAll(result.resourceTemplates());
-				return accumulated;
-			})
-			.map(all -> McpSchema.ListResourceTemplatesResult.builder(Collections.unmodifiableList(all)).build());
+		return this.listResourceTemplates(McpSchema.FIRST_PAGE).expand(result -> {
+			String next = result.nextCursor();
+			return (next != null && !next.isEmpty()) ? this.listResourceTemplates(next) : Mono.empty();
+		}).reduce(new ArrayList<McpSchema.ResourceTemplate>(), (accumulated, result) -> {
+			accumulated.addAll(result.resourceTemplates());
+			return accumulated;
+		}).map(all -> McpSchema.ListResourceTemplatesResult.builder(Collections.unmodifiableList(all)).build());
 	}
 
 	/**
@@ -923,13 +922,13 @@ public class McpAsyncClient {
 	 * @see #getPrompt(GetPromptRequest)
 	 */
 	public Mono<ListPromptsResult> listPrompts() {
-		return this.listPrompts(McpSchema.FIRST_PAGE)
-			.expand(result -> (result.nextCursor() != null) ? this.listPrompts(result.nextCursor()) : Mono.empty())
-			.reduce(new ArrayList<McpSchema.Prompt>(), (accumulated, result) -> {
-				accumulated.addAll(result.prompts());
-				return accumulated;
-			})
-			.map(all -> McpSchema.ListPromptsResult.builder(Collections.unmodifiableList(all)).build());
+		return this.listPrompts(McpSchema.FIRST_PAGE).expand(result -> {
+			String next = result.nextCursor();
+			return (next != null && !next.isEmpty()) ? this.listPrompts(next) : Mono.empty();
+		}).reduce(new ArrayList<McpSchema.Prompt>(), (accumulated, result) -> {
+			accumulated.addAll(result.prompts());
+			return accumulated;
+		}).map(all -> McpSchema.ListPromptsResult.builder(Collections.unmodifiableList(all)).build());
 	}
 
 	/**
