@@ -26,15 +26,18 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 
 class McpAsyncClientTests {
 
-	public static final McpSchema.Implementation MOCK_SERVER_INFO = new McpSchema.Implementation("test-server",
-			"1.0.0");
+	public static final McpSchema.Implementation MOCK_SERVER_INFO = McpSchema.Implementation
+		.builder("test-server", "1.0.0")
+		.build();
 
 	public static final McpSchema.ServerCapabilities MOCK_SERVER_CAPABILITIES = McpSchema.ServerCapabilities.builder()
 		.tools(true)
 		.build();
 
-	public static final McpSchema.InitializeResult MOCK_INIT_RESULT = new McpSchema.InitializeResult(
-			ProtocolVersions.MCP_2024_11_05, MOCK_SERVER_CAPABILITIES, MOCK_SERVER_INFO, "Test instructions");
+	public static final McpSchema.InitializeResult MOCK_INIT_RESULT = McpSchema.InitializeResult
+		.builder(ProtocolVersions.MCP_2024_11_05, MOCK_SERVER_CAPABILITIES, MOCK_SERVER_INFO)
+		.instructions("Test instructions")
+		.build();
 
 	private static final String CONTEXT_KEY = "context.key";
 
@@ -44,10 +47,8 @@ class McpAsyncClientTests {
 		Map<String, Object> inputSchemaMap = Map.of("type", "object", "properties",
 				Map.of("expression", Map.of("type", "string")), "required", List.of("expression"));
 
-		McpSchema.Tool.Builder toolBuilder = McpSchema.Tool.builder()
-			.name("calculator")
-			.description("Performs mathematical calculations")
-			.inputSchema(inputSchemaMap);
+		McpSchema.Tool.Builder toolBuilder = McpSchema.Tool.builder("calculator", inputSchemaMap)
+			.description("Performs mathematical calculations");
 
 		if (hasOutputSchema) {
 			Map<String, Object> outputSchema = Map.of("type", "object", "properties",
@@ -57,7 +58,7 @@ class McpAsyncClientTests {
 		}
 
 		McpSchema.Tool calculatorTool = toolBuilder.build();
-		McpSchema.ListToolsResult mockToolsResult = new McpSchema.ListToolsResult(List.of(calculatorTool), null);
+		McpSchema.ListToolsResult mockToolsResult = McpSchema.ListToolsResult.builder(List.of(calculatorTool)).build();
 
 		// Create call tool result - valid or invalid based on parameter
 		Map<String, Object> structuredContent = invalidOutput ? Map.of("result", "5", "operation", "add")
@@ -91,16 +92,13 @@ class McpAsyncClientTests {
 
 				McpSchema.JSONRPCResponse response;
 				if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
-					response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), MOCK_INIT_RESULT,
-							null);
+					response = McpSchema.JSONRPCResponse.result(request.id(), MOCK_INIT_RESULT);
 				}
 				else if (McpSchema.METHOD_TOOLS_LIST.equals(request.method())) {
-					response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), mockToolsResult,
-							null);
+					response = McpSchema.JSONRPCResponse.result(request.id(), mockToolsResult);
 				}
 				else if (McpSchema.METHOD_TOOLS_CALL.equals(request.method())) {
-					response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-							mockCallToolResult, null);
+					response = McpSchema.JSONRPCResponse.result(request.id(), mockCallToolResult);
 				}
 				else {
 					return Mono.empty();
@@ -155,8 +153,8 @@ class McpAsyncClientTests {
 				if (!(message instanceof McpSchema.JSONRPCRequest)) {
 					return Mono.empty();
 				}
-				McpSchema.JSONRPCResponse initResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
-						((McpSchema.JSONRPCRequest) message).id(), MOCK_INIT_RESULT, null);
+				McpSchema.JSONRPCResponse initResponse = McpSchema.JSONRPCResponse
+					.result(((McpSchema.JSONRPCRequest) message).id(), MOCK_INIT_RESULT);
 				return handler.apply(Mono.just(initResponse)).then();
 			}
 
@@ -185,7 +183,9 @@ class McpAsyncClientTests {
 
 		StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
 
-		StepVerifier.create(client.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3"))))
+		StepVerifier
+			.create(client.callTool(
+					McpSchema.CallToolRequest.builder("calculator").arguments(Map.of("expression", "2 + 3")).build()))
 			.expectNextMatches(response -> {
 				assertThat(response).isNotNull();
 				assertThat(response.isError()).isFalse();
@@ -207,7 +207,9 @@ class McpAsyncClientTests {
 
 		StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
 
-		StepVerifier.create(client.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3"))))
+		StepVerifier
+			.create(client.callTool(
+					McpSchema.CallToolRequest.builder("calculator").arguments(Map.of("expression", "2 + 3")).build()))
 			.expectNextMatches(response -> {
 				assertThat(response).isNotNull();
 				assertThat(response.isError()).isFalse();
@@ -229,7 +231,9 @@ class McpAsyncClientTests {
 
 		StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
 
-		StepVerifier.create(client.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3"))))
+		StepVerifier
+			.create(client.callTool(
+					McpSchema.CallToolRequest.builder("calculator").arguments(Map.of("expression", "2 + 3")).build()))
 			.expectErrorMatches(ex -> ex instanceof IllegalArgumentException
 					&& ex.getMessage().contains("Tool call result validation failed"))
 			.verify();
@@ -326,50 +330,50 @@ class McpAsyncClientTests {
 					.tools(false)
 					.build();
 
-				McpSchema.InitializeResult initResult = new McpSchema.InitializeResult(ProtocolVersions.MCP_2024_11_05,
-						caps, MOCK_SERVER_INFO, null);
+				McpSchema.InitializeResult initResult = McpSchema.InitializeResult
+					.builder(ProtocolVersions.MCP_2024_11_05, caps, MOCK_SERVER_INFO)
+					.build();
 
-				response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), initResult, null);
+				response = McpSchema.JSONRPCResponse.result(request.id(), initResult);
 			}
 			else if (McpSchema.METHOD_PROMPT_LIST.equals(request.method())) {
 				capturedRequest = JSON_MAPPER.convertValue(request.params(), McpSchema.PaginatedRequest.class);
 
-				McpSchema.Prompt mockPrompt = new McpSchema.Prompt("test-prompt", "A test prompt", List.of());
-				McpSchema.ListPromptsResult mockPromptResult = new McpSchema.ListPromptsResult(List.of(mockPrompt),
-						null);
-				response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), mockPromptResult,
-						null);
+				McpSchema.Prompt mockPrompt = McpSchema.Prompt.builder("test-prompt")
+					.description("A test prompt")
+					.arguments(List.of())
+					.build();
+				McpSchema.ListPromptsResult mockPromptResult = McpSchema.ListPromptsResult.builder(List.of(mockPrompt))
+					.build();
+				response = McpSchema.JSONRPCResponse.result(request.id(), mockPromptResult);
 			}
 			else if (McpSchema.METHOD_RESOURCES_TEMPLATES_LIST.equals(request.method())) {
 				capturedRequest = JSON_MAPPER.convertValue(request.params(), McpSchema.PaginatedRequest.class);
 
-				McpSchema.ResourceTemplate mockTemplate = new McpSchema.ResourceTemplate("file:///{name}", "template",
-						null, null, null);
-				McpSchema.ListResourceTemplatesResult mockResourceTemplateResult = new McpSchema.ListResourceTemplatesResult(
-						List.of(mockTemplate), null);
-				response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
-						mockResourceTemplateResult, null);
+				McpSchema.ResourceTemplate mockTemplate = McpSchema.ResourceTemplate
+					.builder("file:///{name}", "template")
+					.build();
+				McpSchema.ListResourceTemplatesResult mockResourceTemplateResult = McpSchema.ListResourceTemplatesResult
+					.builder(List.of(mockTemplate))
+					.build();
+				response = McpSchema.JSONRPCResponse.result(request.id(), mockResourceTemplateResult);
 			}
 			else if (McpSchema.METHOD_RESOURCES_LIST.equals(request.method())) {
 				capturedRequest = JSON_MAPPER.convertValue(request.params(), McpSchema.PaginatedRequest.class);
 
-				McpSchema.Resource mockResource = McpSchema.Resource.builder()
-					.uri("file:///test.txt")
-					.name("test.txt")
+				McpSchema.Resource mockResource = McpSchema.Resource.builder("file:///test.txt", "test.txt").build();
+				McpSchema.ListResourcesResult mockResourceResult = McpSchema.ListResourcesResult
+					.builder(List.of(mockResource))
 					.build();
-				McpSchema.ListResourcesResult mockResourceResult = new McpSchema.ListResourcesResult(
-						List.of(mockResource), null);
 
-				response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), mockResourceResult,
-						null);
+				response = McpSchema.JSONRPCResponse.result(request.id(), mockResourceResult);
 			}
 			else if (McpSchema.METHOD_TOOLS_LIST.equals(request.method())) {
 				capturedRequest = JSON_MAPPER.convertValue(request.params(), McpSchema.PaginatedRequest.class);
 
-				McpSchema.Tool addTool = McpSchema.Tool.builder().name("add").description("calculate add").build();
-				McpSchema.ListToolsResult mockToolsResult = new McpSchema.ListToolsResult(List.of(addTool), null);
-				response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), mockToolsResult,
-						null);
+				McpSchema.Tool addTool = McpSchema.Tool.builder("add").description("calculate add").build();
+				McpSchema.ListToolsResult mockToolsResult = McpSchema.ListToolsResult.builder(List.of(addTool)).build();
+				response = McpSchema.JSONRPCResponse.result(request.id(), mockToolsResult);
 			}
 			else {
 				return Mono.empty();

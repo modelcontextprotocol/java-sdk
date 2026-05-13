@@ -49,9 +49,11 @@ class ToolInputValidationIntegrationTests {
 
 	private static final String TOOL_NAME = "test-tool";
 
-	private static final McpSchema.JsonSchema INPUT_SCHEMA = new McpSchema.JsonSchema("object",
-			Map.of("name", Map.of("type", "string"), "age", Map.of("type", "integer", "minimum", 0)),
-			List.of("name", "age"), null, null, null);
+	private static final McpSchema.JsonSchema INPUT_SCHEMA = McpSchema.JsonSchema.builder()
+		.type("object")
+		.properties(Map.of("name", Map.of("type", "string"), "age", Map.of("type", "integer", "minimum", 0)))
+		.required(List.of("name", "age"))
+		.build();
 
 	private static final McpTransportContextExtractor<HttpServletRequest> TEST_CONTEXT_EXTRACTOR = (
 			r) -> McpTransportContext.create(Map.of("important", "value"));
@@ -123,34 +125,26 @@ class ToolInputValidationIntegrationTests {
 	}
 
 	private McpServerFeatures.SyncToolSpecification createSyncTool() {
-		Tool tool = Tool.builder()
-			.name(TOOL_NAME)
-			.description("Test tool with schema")
-			.inputSchema(INPUT_SCHEMA)
-			.build();
+		Tool tool = Tool.builder(TOOL_NAME).inputSchema(INPUT_SCHEMA).description("Test tool with schema").build();
 
 		return McpServerFeatures.SyncToolSpecification.builder().tool(tool).callHandler((exchange, request) -> {
 			String name = (String) request.arguments().get("name");
 			Integer age = ((Number) request.arguments().get("age")).intValue();
 			return CallToolResult.builder()
-				.content(List.of(new TextContent("Hello " + name + ", age " + age)))
+				.content(List.of(TextContent.builder("Hello " + name + ", age " + age).build()))
 				.isError(false)
 				.build();
 		}).build();
 	}
 
 	private McpServerFeatures.AsyncToolSpecification createAsyncTool() {
-		Tool tool = Tool.builder()
-			.name(TOOL_NAME)
-			.description("Test tool with schema")
-			.inputSchema(INPUT_SCHEMA)
-			.build();
+		Tool tool = Tool.builder(TOOL_NAME).inputSchema(INPUT_SCHEMA).description("Test tool with schema").build();
 
 		return McpServerFeatures.AsyncToolSpecification.builder().tool(tool).callHandler((exchange, request) -> {
 			String name = (String) request.arguments().get("name");
 			Integer age = ((Number) request.arguments().get("age")).intValue();
 			return Mono.just(CallToolResult.builder()
-				.content(List.of(new TextContent("Hello " + name + ", age " + age)))
+				.content(List.of(TextContent.builder("Hello " + name + ", age " + age).build()))
 				.isError(false)
 				.build());
 		}).build();
@@ -162,9 +156,10 @@ class ToolInputValidationIntegrationTests {
 			String expectedOutput) {
 		Object server = createServer(serverType, validationEnabled);
 
-		try (var client = clientBuilder.clientInfo(new McpSchema.Implementation("test-client", "1.0.0")).build()) {
+		try (var client = clientBuilder.clientInfo(McpSchema.Implementation.builder("test-client", "1.0.0").build())
+			.build()) {
 			client.initialize();
-			CallToolResult result = client.callTool(new CallToolRequest(TOOL_NAME, input));
+			CallToolResult result = client.callTool(CallToolRequest.builder(TOOL_NAME).arguments(input).build());
 
 			assertThat(result.isError()).isFalse();
 			assertThat(((TextContent) result.content().get(0)).text()).isEqualTo(expectedOutput);
@@ -180,9 +175,10 @@ class ToolInputValidationIntegrationTests {
 			String expectedErrorSubstring) {
 		Object server = createServerWithDefaultValidation(serverType);
 
-		try (var client = clientBuilder.clientInfo(new McpSchema.Implementation("test-client", "1.0.0")).build()) {
+		try (var client = clientBuilder.clientInfo(McpSchema.Implementation.builder("test-client", "1.0.0").build())
+			.build()) {
 			client.initialize();
-			CallToolResult result = client.callTool(new CallToolRequest(TOOL_NAME, input));
+			CallToolResult result = client.callTool(CallToolRequest.builder(TOOL_NAME).arguments(input).build());
 
 			assertThat(result.isError()).isTrue();
 			String errorMessage = ((TextContent) result.content().get(0)).text();
@@ -199,13 +195,14 @@ class ToolInputValidationIntegrationTests {
 			String ignored) {
 		Object server = createServer(serverType, false);
 
-		try (var client = clientBuilder.clientInfo(new McpSchema.Implementation("test-client", "1.0.0")).build()) {
+		try (var client = clientBuilder.clientInfo(McpSchema.Implementation.builder("test-client", "1.0.0").build())
+			.build()) {
 			client.initialize();
 			// Invalid input should pass through when validation is disabled
 			// The tool handler will fail, but that's expected - we're testing validation
 			// is skipped
 			try {
-				client.callTool(new CallToolRequest(TOOL_NAME, input));
+				client.callTool(CallToolRequest.builder(TOOL_NAME).arguments(input).build());
 			}
 			catch (Exception e) {
 				// Expected - tool handler fails on invalid input, but validation didn't
