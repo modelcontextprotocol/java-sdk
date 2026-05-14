@@ -279,6 +279,10 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			return;
 		}
 
+		if (!validateProtocolVersion(request, response)) {
+			return;
+		}
+
 		List<String> badRequestErrors = new ArrayList<>();
 
 		String accept = request.getHeader(ACCEPT);
@@ -480,6 +484,10 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				}
 			}
 
+			if (!validateProtocolVersion(request, response)) {
+				return;
+			}
+
 			String sessionId = request.getHeader(HttpHeaders.MCP_SESSION_ID);
 
 			if (sessionId == null || sessionId.isBlank()) {
@@ -596,6 +604,10 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			return;
 		}
 
+		if (!validateProtocolVersion(request, response)) {
+			return;
+		}
+
 		if (this.disallowDelete) {
 			response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
 			return;
@@ -646,6 +658,22 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		writer.write(jsonError);
 		writer.flush();
 		return;
+	}
+
+	private boolean validateProtocolVersion(HttpServletRequest request, HttpServletResponse response)
+			throws IOException {
+		String protocolVersion = request.getHeader(HttpHeaders.PROTOCOL_VERSION);
+		if (protocolVersion == null || protocolVersion.isBlank()) {
+			return true;
+		}
+		if (protocolVersions().contains(protocolVersion)) {
+			return true;
+		}
+		this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+				McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+					.message("Unsupported or invalid MCP protocol version: " + protocolVersion)
+					.build());
+		return false;
 	}
 
 	/**
