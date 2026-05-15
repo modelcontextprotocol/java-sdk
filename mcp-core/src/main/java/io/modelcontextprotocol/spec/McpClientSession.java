@@ -123,12 +123,16 @@ public class McpClientSession implements McpSession {
 		}, error -> logger.warn("Client failed during connect", error));
 	}
 
-	private void dismissPendingResponses() {
+	private void dismissPendingResponses(Throwable cause) {
 		this.pendingResponses.forEach((id, sink) -> {
-			logger.info("Abruptly terminating exchange for request {}", id);
-			sink.error(new RuntimeException("MCP session with server terminated"));
+			logger.warn("Abruptly terminating exchange for request {}: {}", id, cause.toString());
+			sink.error(cause);
 		});
 		this.pendingResponses.clear();
+	}
+
+	private void dismissPendingResponses() {
+		dismissPendingResponses(new RuntimeException("MCP session with server terminated"));
 	}
 
 	private void handle(McpSchema.JSONRPCMessage message) {
@@ -308,6 +312,15 @@ public class McpClientSession implements McpSession {
 	@Override
 	public void close() {
 		dismissPendingResponses();
+	}
+
+	/**
+	 * Closes the session immediately, failing pending operations with the given cause.
+	 * @param cause the transport-level cause of the closure
+	 */
+	public void close(Throwable cause) {
+		Assert.notNull(cause, "The cause can not be null");
+		dismissPendingResponses(cause);
 	}
 
 }

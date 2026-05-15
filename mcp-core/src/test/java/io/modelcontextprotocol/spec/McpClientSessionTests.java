@@ -108,6 +108,21 @@ class McpClientSessionTests {
 	}
 
 	@Test
+	void testPendingRequestFailsWithCloseCause() {
+		var transport = new MockMcpClientTransport();
+		var session = new McpClientSession(TIMEOUT, transport, Map.of(),
+				Map.of(TEST_NOTIFICATION, params -> Mono.fromRunnable(() -> logger.info("Status update: {}", params))),
+				Function.identity());
+		var cause = new McpTransportException("Transport closed");
+
+		Mono<String> responseMono = session.sendRequest(TEST_METHOD, "test", responseType);
+
+		StepVerifier.create(responseMono).then(() -> session.close(cause)).expectErrorSatisfies(error -> {
+			assertThat(error).isSameAs(cause);
+		}).verify();
+	}
+
+	@Test
 	void testSendNotification() {
 		var transport = new MockMcpClientTransport();
 		var session = new McpClientSession(TIMEOUT, transport, Map.of(),

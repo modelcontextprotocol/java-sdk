@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
+import io.modelcontextprotocol.client.transport.McpStdioServerProcessExitException;
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -225,6 +226,16 @@ class LifecycleInitializer {
 			this.mcpSession().close();
 		}
 
+		private void close(Throwable cause) {
+			McpClientSession mcpClientSession = this.mcpSession();
+			if (mcpClientSession != null) {
+				mcpClientSession.close(cause);
+			}
+			else {
+				this.error(cause);
+			}
+		}
+
 		private Mono<Void> closeGracefully() {
 			return this.mcpSession().closeGracefully();
 		}
@@ -258,6 +269,13 @@ class LifecycleInitializer {
 			// Providing an empty operation since we are only interested in triggering
 			// the implicit initialization step.
 			this.withInitialization("re-initializing", result -> Mono.empty()).subscribe();
+		}
+		else if (t instanceof McpStdioServerProcessExitException) {
+			DefaultInitialization previous = this.initializationRef.get();
+			if (previous != null && previous.initializeResult() == null
+					&& this.initializationRef.compareAndSet(previous, null)) {
+				previous.close(t);
+			}
 		}
 	}
 

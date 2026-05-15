@@ -11,8 +11,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import io.modelcontextprotocol.client.LifecycleInitializer.Initialization;
+import io.modelcontextprotocol.client.transport.McpStdioServerProcessExitException;
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -299,6 +301,56 @@ class LifecycleInitializerTests {
 		assertThat(initializer.isInitialized()).isTrue();
 		verify(mockClientSession, never()).close();
 		// Verify that the session was not re-created
+		verify(mockSessionSupplier, times(1)).apply(any(ContextView.class));
+	}
+
+	@Test
+	void shouldCloseInProgressInitializationOnStdioProcessExit() {
+		var cause = new McpStdioServerProcessExitException(127, "java");
+		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenReturn(Mono.never())
+			.thenReturn(Mono.just(MOCK_INIT_RESULT));
+
+		var subscription = initializer.withInitialization("test", init -> Mono.just(init.initializeResult()))
+			.subscribe();
+
+		initializer.handleException(cause);
+		subscription.dispose();
+
+		verify(mockClientSession).close(cause);
+
+		StepVerifier.create(initializer.withInitialization("retry", init -> Mono.just(init.initializeResult())))
+			.expectNext(MOCK_INIT_RESULT)
+			.verifyComplete();
+
+		verify(mockSessionSupplier, times(2)).apply(any(ContextView.class));
+	}
+
+	@Test
+	void shouldIgnoreGenericTransportExceptionDuringInitialization() {
+		var cause = new McpTransportException("Transport closed");
+		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenReturn(Mono.never());
+
+		var subscription = initializer.withInitialization("test", init -> Mono.just(init.initializeResult()))
+			.subscribe();
+
+		initializer.handleException(cause);
+		subscription.dispose();
+
+		verify(mockClientSession, never()).close(cause);
+	}
+
+	@Test
+	void shouldKeepInitializedAfterTransportException() {
+		StepVerifier.create(initializer.withInitialization("test", init -> Mono.just(init.initializeResult())))
+			.expectNext(MOCK_INIT_RESULT)
+			.verifyComplete();
+
+		var cause = new McpTransportException("Transport closed");
+
+		initializer.handleException(cause);
+
+		assertThat(initializer.isInitialized()).isTrue();
+		verify(mockClientSession, never()).close(cause);
 		verify(mockSessionSupplier, times(1)).apply(any(ContextView.class));
 	}
 

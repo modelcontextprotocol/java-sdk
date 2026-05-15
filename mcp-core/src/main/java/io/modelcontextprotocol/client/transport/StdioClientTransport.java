@@ -14,6 +14,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.IntStream;
@@ -60,6 +61,10 @@ public class StdioClientTransport implements McpClientTransport {
 	/** The server process being communicated with */
 	private Process process;
 
+	private final AtomicReference<McpStdioServerProcessExitException> unexpectedExitException = new AtomicReference<>();
+
+	private final AtomicReference<Consumer<Throwable>> exceptionHandler = new AtomicReference<>();
+
 	private McpJsonMapper jsonMapper;
 
 	/** Scheduler for handling inbound messages from the server process */
@@ -77,6 +82,8 @@ public class StdioClientTransport implements McpClientTransport {
 	private final Sinks.Many<String> errorSink;
 
 	private volatile boolean isClosing = false;
+
+	private volatile boolean closeRequested = false;
 
 	// visible for tests
 	private Consumer<String> stdErrorHandler = error -> logger.info("STDERR Message received: {}", error);
@@ -146,6 +153,7 @@ public class StdioClientTransport implements McpClientTransport {
 			startInboundProcessing();
 			startOutboundProcessing();
 			startErrorProcessing();
+			startExitMonitoring();
 			logger.info("MCP server started");
 		}).subscribeOn(Schedulers.boundedElastic());
 	}
@@ -170,6 +178,11 @@ public class StdioClientTransport implements McpClientTransport {
 	 */
 	public void setStdErrorHandler(Consumer<String> errorHandler) {
 		this.stdErrorHandler = errorHandler;
+	}
+
+	@Override
+	public void setExceptionHandler(Consumer<Throwable> handler) {
+		this.exceptionHandler.set(handler);
 	}
 
 	/**
@@ -239,6 +252,14 @@ public class StdioClientTransport implements McpClientTransport {
 
 	@Override
 	public Mono<Void> sendMessage(JSONRPCMessage message) {
+		McpStdioServerProcessExitException exitException = this.unexpectedExitException.get();
+		if (exitException != null) {
+			return Mono.error(exitException);
+		}
+		if (!this.closeRequested && this.process != null && !this.process.isAlive()) {
+			exitException = signalUnexpectedProcessExit(this.process.exitValue());
+			return Mono.error(exitException);
+		}
 		if (this.outboundSink.tryEmitNext(message).isSuccess()) {
 			// TODO: essentially we could reschedule ourselves in some time and make
 			// another attempt with the already read data but pause reading until
@@ -250,6 +271,32 @@ public class StdioClientTransport implements McpClientTransport {
 		else {
 			return Mono.error(new RuntimeException("Failed to enqueue message"));
 		}
+	}
+
+	private void startExitMonitoring() {
+		this.process.onExit().thenAccept(process -> {
+			if (!closeRequested) {
+				signalUnexpectedProcessExit(process.exitValue());
+			}
+		});
+	}
+
+	private McpStdioServerProcessExitException signalUnexpectedProcessExit(int exitCode) {
+		McpStdioServerProcessExitException exception = new McpStdioServerProcessExitException(exitCode,
+				this.params.getCommand());
+		if (this.unexpectedExitException.compareAndSet(null, exception)) {
+			logger.warn(exception.getMessage());
+			isClosing = true;
+			inboundSink.tryEmitComplete();
+			outboundSink.tryEmitComplete();
+			errorSink.tryEmitComplete();
+
+			Consumer<Throwable> handler = this.exceptionHandler.get();
+			if (handler != null) {
+				handler.accept(exception);
+			}
+		}
+		return this.unexpectedExitException.get();
 	}
 
 	/**
@@ -347,6 +394,7 @@ public class StdioClientTransport implements McpClientTransport {
 	@Override
 	public Mono<Void> closeGracefully() {
 		return Mono.fromRunnable(() -> {
+			closeRequested = true;
 			isClosing = true;
 			logger.debug("Initiating graceful shutdown");
 		}).then(Mono.<Void>defer(() -> {
