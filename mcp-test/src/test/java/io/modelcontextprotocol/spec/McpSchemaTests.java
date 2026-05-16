@@ -228,10 +228,8 @@ public class McpSchemaTests {
 
 	@Test
 	void testResourceLink() throws Exception {
-		McpSchema.ResourceLink resourceLink = McpSchema.ResourceLink.builder()
-			.name("main.rs")
+		McpSchema.ResourceLink resourceLink = McpSchema.ResourceLink.builder("file:///project/src/main.rs", "main.rs")
 			.title("Main file")
-			.uri("file:///project/src/main.rs")
 			.description("Primary application entry point")
 			.mimeType("text/x-rust")
 			.meta(Map.of("metaKey", "metaValue"))
@@ -259,6 +257,44 @@ public class McpSchemaTests {
 		assertThat(resourceLink.description()).isEqualTo("Primary application entry point");
 		assertThat(resourceLink.mimeType()).isEqualTo("text/x-rust");
 		assertThat(resourceLink.meta()).containsEntry("metaKey", "metaValue");
+	}
+
+	@Test
+	void testResourceLinkRejectsNullName() {
+		assertThatThrownBy(() -> new McpSchema.ResourceLink(null, null, "file:///project/src/main.rs", null, null, null,
+				null, null))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("name must not be null");
+	}
+
+	@Test
+	void testResourceLinkRejectsNullUri() {
+		assertThatThrownBy(() -> new McpSchema.ResourceLink("main.rs", null, null, null, null, null, null, null))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("uri must not be null");
+	}
+
+	@Test
+	void testResourceLinkDeserializationWithMissingRequiredFields() throws Exception {
+		McpSchema.ResourceLink resourceLink = JSON_MAPPER.readValue("""
+				{"type":"resource_link","description":"Primary application entry point"}""",
+				McpSchema.ResourceLink.class);
+
+		assertThat(resourceLink).isNotNull();
+		assertThat(resourceLink.name()).isEmpty();
+		assertThat(resourceLink.uri()).isEmpty();
+		assertThat(resourceLink.description()).isEqualTo("Primary application entry point");
+	}
+
+	@Test
+	void testResourceLinkUnknownFieldsIgnored() throws Exception {
+		McpSchema.ResourceLink resourceLink = JSON_MAPPER.readValue(
+				"""
+						{"type":"resource_link","name":"main.rs","uri":"file:///project/src/main.rs","futureField":"ignored"}""",
+				McpSchema.ResourceLink.class);
+
+		assertThat(resourceLink.name()).isEqualTo("main.rs");
+		assertThat(resourceLink.uri()).isEqualTo("file:///project/src/main.rs");
 	}
 
 	// JSON-RPC Message Types Tests
