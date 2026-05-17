@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Questions and Community Support
-    url: https://stackoverflow.com/questions/tagged/spring-ai-mcp
-    about: Please ask and answer questions on StackOverflow with the spring-ai tag
+    url: https://stackoverflow.com/questions/tagged/mcp-java-sdk
+    about: Please ask and answer questions on StackOverflow with the mcp-java-sdk tag

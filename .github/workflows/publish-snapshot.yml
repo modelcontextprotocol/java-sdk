@@ -32,6 +32,9 @@ jobs:
       - name: Generate Java docs
         run: mvn -Pjavadoc -B javadoc:aggregate
 
+      - name: Jackson 2 Integration Tests
+        run: mvn -pl mcp-test -am -Pjackson2 test
+
       - name: Build with Maven and deploy to Sonatype snapshot repository
         env:
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}

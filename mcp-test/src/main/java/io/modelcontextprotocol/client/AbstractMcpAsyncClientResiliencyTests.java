@@ -10,6 +10,7 @@ import eu.rekawek.toxiproxy.model.ToxicDirection;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransport;
+import io.modelcontextprotocol.spec.McpTransportSessionClosedException;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,12 +45,12 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 	private static final Logger logger = LoggerFactory.getLogger(AbstractMcpAsyncClientResiliencyTests.class);
 
 	static Network network = Network.newNetwork();
-	static String host = "http://localhost:3001";
 
-	// Uses the https://github.com/tzolov/mcp-everything-server-docker-image
+	public static String host = "http://localhost:3001";
+
 	@SuppressWarnings("resource")
-	static GenericContainer<?> container = new GenericContainer<>("docker.io/tzolov/mcp-everything-server:v2")
-		.withCommand("node dist/index.js streamableHttp")
+	static GenericContainer<?> container = new GenericContainer<>("docker.io/node:lts-alpine3.23")
+		.withCommand("npx -y @modelcontextprotocol/server-everything@2025.12.18 streamableHttp")
 		.withLogConsumer(outputFrame -> System.out.println(outputFrame.getUtf8String()))
 		.withNetwork(network)
 		.withNetworkAliases("everything-server")
@@ -134,10 +135,13 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 		AtomicReference<McpAsyncClient> client = new AtomicReference<>();
 
 		assertThatCode(() -> {
+			// Do not advertise roots. Otherwise, the server will list roots during
+			// initialization. The client responds asynchronously, and there might be a
+			// rest condition in tests where we disconnect right after initialization.
 			McpClient.AsyncSpec builder = McpClient.async(transport)
 				.requestTimeout(getRequestTimeout())
 				.initializationTimeout(getInitializationTimeout())
-				.capabilities(McpSchema.ClientCapabilities.builder().roots(true).build());
+				.capabilities(McpSchema.ClientCapabilities.builder().build());
 			builder = customizer.apply(builder);
 			client.set(builder.build());
 		}).doesNotThrowAnyException();
@@ -201,7 +205,9 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 
 			String name = tools.get().get(0).name();
 			// Assuming this is the echo tool
-			McpSchema.CallToolRequest request = new McpSchema.CallToolRequest(name, Map.of("message", "hello"));
+			McpSchema.CallToolRequest request = McpSchema.CallToolRequest.builder(name)
+				.arguments(Map.of("message", "hello"))
+				.build();
 			StepVerifier.create(mcpAsyncClient.callTool(request)).expectError().verify();
 
 			reconnect();
@@ -217,9 +223,10 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 			// In case of Streamable HTTP this call should issue a HTTP DELETE request
 			// invalidating the session
 			StepVerifier.create(mcpAsyncClient.closeGracefully()).expectComplete().verify();
-			// The next use should immediately re-initialize with no issue and send the
-			// request without any broken connections.
-			StepVerifier.create(mcpAsyncClient.ping()).expectNextCount(1).verifyComplete();
+			// The next tries to use the closed session and fails
+			StepVerifier.create(mcpAsyncClient.ping())
+				.expectErrorMatches(err -> err.getCause() instanceof McpTransportSessionClosedException)
+				.verify();
 		});
 	}
 

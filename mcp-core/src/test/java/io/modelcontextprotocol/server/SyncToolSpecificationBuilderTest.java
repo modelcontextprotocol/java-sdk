@@ -1,0 +1,178 @@
+/*
+ * Copyright 2024-2024 the original author or authors.
+ */
+
+package io.modelcontextprotocol.server;
+
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
+
+import java.util.List;
+import java.util.Map;
+
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
+import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import io.modelcontextprotocol.spec.McpSchema.TextContent;
+import io.modelcontextprotocol.spec.McpSchema.Tool;
+import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.util.ToolNameValidator;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+
+/**
+ * Tests for {@link McpServerFeatures.SyncToolSpecification.Builder}.
+ *
+ * @author Christian Tzolov
+ */
+class SyncToolSpecificationBuilderTest {
+
+	@Test
+	void builderShouldCreateValidSyncToolSpecification() {
+
+		Tool tool = Tool.builder("test-tool", EMPTY_JSON_SCHEMA).title("A test tool").build();
+
+		McpServerFeatures.SyncToolSpecification specification = McpServerFeatures.SyncToolSpecification.builder()
+			.tool(tool)
+			.callHandler((exchange, request) -> CallToolResult.builder()
+				.content(List.of(TextContent.builder("Test result").build()))
+				.isError(false)
+				.build())
+			.build();
+
+		assertThat(specification).isNotNull();
+		assertThat(specification.tool()).isEqualTo(tool);
+		assertThat(specification.callHandler()).isNotNull();
+	}
+
+	@Test
+	void builderShouldThrowExceptionWhenToolIsNull() {
+		assertThatThrownBy(() -> McpServerFeatures.SyncToolSpecification.builder()
+			.callHandler((exchange, request) -> CallToolResult.builder().content(List.of()).isError(false).build())
+			.build()).isInstanceOf(IllegalArgumentException.class).hasMessage("Tool must not be null");
+	}
+
+	@Test
+	void builderShouldThrowExceptionWhenCallToolIsNull() {
+		Tool tool = Tool.builder("test-tool", EMPTY_JSON_SCHEMA).description("A test tool").build();
+
+		assertThatThrownBy(() -> McpServerFeatures.SyncToolSpecification.builder().tool(tool).build())
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("CallTool function must not be null");
+	}
+
+	@Test
+	void builderShouldAllowMethodChaining() {
+		Tool tool = Tool.builder("test-tool", EMPTY_JSON_SCHEMA).description("A test tool").build();
+		McpServerFeatures.SyncToolSpecification.Builder builder = McpServerFeatures.SyncToolSpecification.builder();
+
+		// Then - verify method chaining returns the same builder instance
+		assertThat(builder.tool(tool)).isSameAs(builder);
+		assertThat(builder
+			.callHandler((exchange, request) -> CallToolResult.builder().content(List.of()).isError(false).build()))
+			.isSameAs(builder);
+	}
+
+	@Test
+	void builtSpecificationShouldExecuteCallToolCorrectly() {
+		Tool tool = Tool.builder("calculator", EMPTY_JSON_SCHEMA).description("Simple calculator").build();
+		String expectedResult = "42";
+
+		McpServerFeatures.SyncToolSpecification specification = McpServerFeatures.SyncToolSpecification.builder()
+			.tool(tool)
+			.callHandler((exchange, request) -> {
+				// Simple test implementation
+				return CallToolResult.builder()
+					.content(List.of(TextContent.builder(expectedResult).build()))
+					.isError(false)
+					.build();
+			})
+			.build();
+
+		CallToolRequest request = CallToolRequest.builder("calculator").build();
+		CallToolResult result = specification.callHandler().apply(null, request);
+
+		assertThat(result).isNotNull();
+		assertThat(result.content()).hasSize(1);
+		assertThat(result.content().get(0)).isInstanceOf(TextContent.class);
+		assertThat(((TextContent) result.content().get(0)).text()).isEqualTo(expectedResult);
+		assertThat(result.isError()).isFalse();
+	}
+
+	@Nested
+	class ToolNameValidation {
+
+		private McpServerTransportProvider transportProvider;
+
+		private final Logger logger = (Logger) LoggerFactory.getLogger(ToolNameValidator.class);
+
+		private final ListAppender<ILoggingEvent> logAppender = new ListAppender<>();
+
+		@BeforeEach
+		void setUp() {
+			transportProvider = mock(McpServerTransportProvider.class);
+			System.clearProperty(ToolNameValidator.STRICT_VALIDATION_PROPERTY);
+			logAppender.start();
+			logger.addAppender(logAppender);
+		}
+
+		@AfterEach
+		void tearDown() {
+			System.clearProperty(ToolNameValidator.STRICT_VALIDATION_PROPERTY);
+			logger.detachAppender(logAppender);
+			logAppender.stop();
+		}
+
+		@Test
+		void defaultShouldThrowOnInvalidName() {
+			Tool invalidTool = Tool.builder("invalid tool name", EMPTY_JSON_SCHEMA).build();
+
+			assertThatThrownBy(
+					() -> McpServer.sync(transportProvider).toolCall(invalidTool, (exchange, request) -> null))
+				.isInstanceOf(IllegalArgumentException.class)
+				.hasMessageContaining("invalid characters");
+		}
+
+		@Test
+		void lenientDefaultShouldLogOnInvalidName() {
+			System.setProperty(ToolNameValidator.STRICT_VALIDATION_PROPERTY, "false");
+			Tool invalidTool = Tool.builder("invalid tool name", EMPTY_JSON_SCHEMA).build();
+
+			assertThatCode(() -> McpServer.sync(transportProvider).toolCall(invalidTool, (exchange, request) -> null))
+				.doesNotThrowAnyException();
+			assertThat(logAppender.list).hasSize(1);
+		}
+
+		@Test
+		void lenientConfigurationShouldLogOnInvalidName() {
+			Tool invalidTool = Tool.builder("invalid tool name", EMPTY_JSON_SCHEMA).build();
+
+			assertThatCode(() -> McpServer.sync(transportProvider)
+				.strictToolNameValidation(false)
+				.toolCall(invalidTool, (exchange, request) -> null)).doesNotThrowAnyException();
+			assertThat(logAppender.list).hasSize(1);
+		}
+
+		@Test
+		void serverConfigurationShouldOverrideDefault() {
+			System.setProperty(ToolNameValidator.STRICT_VALIDATION_PROPERTY, "false");
+			Tool invalidTool = Tool.builder("invalid tool name", EMPTY_JSON_SCHEMA).build();
+
+			assertThatThrownBy(() -> McpServer.sync(transportProvider)
+				.strictToolNameValidation(true)
+				.toolCall(invalidTool, (exchange, request) -> null)).isInstanceOf(IllegalArgumentException.class)
+				.hasMessageContaining("invalid characters");
+		}
+
+	}
+
+}

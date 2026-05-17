@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scr:component xmlns:scr="http://www.osgi.org/xmlns/scr/v1.3.0" name="io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapperSupplier" immediate="true">
+  <service>
+    <provide interface="io.modelcontextprotocol.json.McpJsonMapperSupplier"/>
+  </service>
+  <implementation class="io.modelcontextprotocol.json.jackson3.JacksonMcpJsonMapperSupplier"/>
+</scr:component>
