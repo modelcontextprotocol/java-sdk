@@ -544,11 +544,12 @@ public class McpAsyncServer {
 	private McpRequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
 		return (exchange, params) -> {
 			var paginatedRequest = jsonMapper.convertValue(params, PAGINATED_REQUEST_TYPE_REF);
+			var cursor = paginatedRequest != null ? paginatedRequest.cursor() : null;
 
 			var mapSize = this.tools.size();
 			var mapHash = this.tools.hashCode();
 
-			return handleCursor(paginatedRequest.cursor(), mapSize, mapHash).map(requestedStartIndex -> {
+			return handleCursor(cursor, mapSize, mapHash).map(requestedStartIndex -> {
 				var startIndex = requestedStartIndex != null ? requestedStartIndex : 0;
 				var endIndex = Math.min(startIndex + PAGE_SIZE, mapSize);
 
@@ -810,11 +811,12 @@ public class McpAsyncServer {
 	private McpRequestHandler<McpSchema.ListResourcesResult> resourcesListRequestHandler() {
 		return (exchange, params) -> {
 			var paginatedRequest = jsonMapper.convertValue(params, PAGINATED_REQUEST_TYPE_REF);
+			var cursor = paginatedRequest != null ? paginatedRequest.cursor() : null;
 
 			var mapSize = this.resources.size();
 			var mapHash = this.resources.hashCode();
 
-			return handleCursor(paginatedRequest.cursor(), mapSize, mapHash).map(requestedStartIndex -> {
+			return handleCursor(cursor, mapSize, mapHash).map(requestedStartIndex -> {
 				var startIndex = requestedStartIndex != null ? requestedStartIndex : 0;
 				var endIndex = Math.min(startIndex + PAGE_SIZE, mapSize);
 
@@ -835,11 +837,12 @@ public class McpAsyncServer {
 	private McpRequestHandler<McpSchema.ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
 		return (exchange, params) -> {
 			var paginatedRequest = jsonMapper.convertValue(params, PAGINATED_REQUEST_TYPE_REF);
+			var cursor = paginatedRequest != null ? paginatedRequest.cursor() : null;
 
 			var mapSize = this.resourceTemplates.size();
 			var mapHash = this.resourceTemplates.hashCode();
 
-			return handleCursor(paginatedRequest.cursor(), mapSize, mapHash).map(requestedStartIndex -> {
+			return handleCursor(cursor, mapSize, mapHash).map(requestedStartIndex -> {
 				var startIndex = requestedStartIndex != null ? requestedStartIndex : 0;
 				var endIndex = Math.min(startIndex + PAGE_SIZE, mapSize);
 
@@ -976,11 +979,12 @@ public class McpAsyncServer {
 	private McpRequestHandler<McpSchema.ListPromptsResult> promptsListRequestHandler() {
 		return (exchange, params) -> {
 			var paginatedRequest = jsonMapper.convertValue(params, PAGINATED_REQUEST_TYPE_REF);
+			var cursor = paginatedRequest != null ? paginatedRequest.cursor() : null;
 
 			var mapSize = this.prompts.size();
 			var mapHash = this.prompts.hashCode();
 
-			return handleCursor(paginatedRequest.cursor(), mapSize, mapHash).map(requestedStartIndex -> {
+			return handleCursor(cursor, mapSize, mapHash).map(requestedStartIndex -> {
 				var startIndex = requestedStartIndex != null ? requestedStartIndex : 0;
 				var endIndex = Math.min(startIndex + PAGE_SIZE, mapSize);
 
