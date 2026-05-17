@@ -327,9 +327,11 @@ public class StdioClientTransport implements McpClientTransport {
 	}
 
 	/**
-	 * Gracefully closes the transport by destroying the process and disposing of the
-	 * schedulers. This method sends a TERM signal to the process and waits for it to exit
-	 * before cleaning up resources.
+	 * Gracefully closes the transport by destroying the server process tree and disposing
+	 * of the schedulers. This method sends a TERM signal to every process in the tree
+	 * (descendants first, then the root) and waits for the root to exit before cleaning
+	 * up resources. Tree-aware termination prevents leaked child processes when a wrapper
+	 * command such as {@code npx} or {@code cmd.exe /c npx.cmd} is used.
 	 * @return A Mono that completes when the transport is closed
 	 */
 	@Override
@@ -346,9 +348,9 @@ public class StdioClientTransport implements McpClientTransport {
 			// Give a short time for any pending messages to be processed
 			return Mono.delay(Duration.ofMillis(100)).then();
 		})).then(Mono.defer(() -> {
-			logger.debug("Sending TERM to process");
+			logger.debug("Sending TERM to process tree");
 			if (this.process != null) {
-				this.process.destroy();
+				destroyProcessTree(this.process);
 				return Mono.fromFuture(process.onExit());
 			}
 			else {
@@ -385,6 +387,23 @@ public class StdioClientTransport implements McpClientTransport {
 	@Override
 	public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
 		return this.jsonMapper.convertValue(data, typeRef);
+	}
+
+	/**
+	 * Destroys {@code process} together with any descendant processes spawned beneath it.
+	 * Wrapper invocations such as {@code cmd.exe /c npx.cmd ...} on Windows or
+	 * {@code npx} on POSIX systems spawn additional child processes; destroying only the
+	 * wrapper leaves those descendants orphaned and prevents graceful JVM shutdown.
+	 * <p>
+	 * The descendant snapshot from {@link ProcessHandle#descendants()} is best-effort:
+	 * processes that fork concurrently with this call may not be signalled. The wider
+	 * tree typically dies anyway once its parent is gone.
+	 * <p>
+	 * Visible for tests.
+	 */
+	static void destroyProcessTree(Process process) {
+		process.descendants().forEach(ProcessHandle::destroy);
+		process.destroy();
 	}
 
 }
