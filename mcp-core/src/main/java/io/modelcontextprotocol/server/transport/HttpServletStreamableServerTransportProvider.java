@@ -415,6 +415,12 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			return;
 		}
 
+		String contentType = request.getContentType();
+		if (contentType == null || !contentType.startsWith(APPLICATION_JSON)) {
+			response.sendError(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE, "Content-Type must be application/json");
+			return;
+		}
+
 		List<String> badRequestErrors = new ArrayList<>();
 
 		String accept = request.getHeader(ACCEPT);
@@ -450,6 +456,17 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				McpSchema.InitializeRequest initializeRequest = jsonMapper.convertValue(jsonrpcRequest.params(),
 						new TypeRef<McpSchema.InitializeRequest>() {
 						});
+
+				String headerVersion = request.getHeader(HttpHeaders.PROTOCOL_VERSION);
+				if (headerVersion != null && !headerVersion.equals(initializeRequest.protocolVersion())) {
+					this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, McpError
+						.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+						.message("MCP-Protocol-Version header '" + headerVersion
+								+ "' does not match body protocolVersion '" + initializeRequest.protocolVersion() + "'")
+						.build());
+					return;
+				}
+
 				McpStreamableServerSession.McpStreamableServerSessionInit init = this.sessionFactory
 					.startSession(initializeRequest);
 				this.sessions.put(init.session().getId(), init.session());
