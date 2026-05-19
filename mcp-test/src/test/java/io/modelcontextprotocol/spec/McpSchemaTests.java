@@ -1990,4 +1990,302 @@ public class McpSchemaTests {
 		assertThat(notification.data()).isEmpty();
 	}
 
+	// --- Icon tests (SEP-973) ---
+
+	@Test
+	void testIconSerializationWithBuilder() throws Exception {
+		McpSchema.Icon icon = McpSchema.Icon.builder("https://example.com/icon.png")
+			.mimeType("image/png")
+			.sizes(List.of("48x48", "96x96"))
+			.theme("dark")
+			.build();
+
+		String json = JSON_MAPPER.writeValueAsString(icon);
+		assertThatJson(json).when(Option.IGNORING_ARRAY_ORDER)
+			.isObject()
+			.containsEntry("src", "https://example.com/icon.png")
+			.containsEntry("mimeType", "image/png")
+			.containsEntry("theme", "dark");
+		assertThatJson(json).inPath("$.sizes").isArray().containsExactlyInAnyOrder("48x48", "96x96");
+	}
+
+	@Test
+	void testIconDeserializationRoundTrip() throws Exception {
+		McpSchema.Icon original = McpSchema.Icon.builder("https://example.com/icon.svg")
+			.mimeType("image/svg+xml")
+			.sizes(List.of("any"))
+			.theme("light")
+			.build();
+
+		String json = JSON_MAPPER.writeValueAsString(original);
+		McpSchema.Icon deserialized = JSON_MAPPER.readValue(json, McpSchema.Icon.class);
+
+		assertThat(deserialized.src()).isEqualTo("https://example.com/icon.svg");
+		assertThat(deserialized.mimeType()).isEqualTo("image/svg+xml");
+		assertThat(deserialized.sizes()).containsExactly("any");
+		assertThat(deserialized.theme()).isEqualTo("light");
+	}
+
+	@Test
+	void testIconDeserializesWithoutOptionalFields() throws Exception {
+		McpSchema.Icon icon = JSON_MAPPER.readValue("""
+				{"src":"https://example.com/icon.png"}""", McpSchema.Icon.class);
+
+		assertThat(icon.src()).isEqualTo("https://example.com/icon.png");
+		assertThat(icon.mimeType()).isNull();
+		assertThat(icon.sizes()).isNull();
+		assertThat(icon.theme()).isNull();
+	}
+
+	@Test
+	void testIconOmitsNullFields() throws Exception {
+		McpSchema.Icon icon = McpSchema.Icon.builder("https://example.com/icon.png").build();
+		String json = JSON_MAPPER.writeValueAsString(icon);
+
+		assertThat(json).contains("src");
+		assertThat(json).doesNotContain("mimeType");
+		assertThat(json).doesNotContain("sizes");
+		assertThat(json).doesNotContain("theme");
+	}
+
+	@Test
+	void testIconToleratesUnknownFields() throws Exception {
+		McpSchema.Icon icon = JSON_MAPPER.readValue("""
+				{"src":"https://example.com/icon.png","futureField":"ignored"}""", McpSchema.Icon.class);
+
+		assertThat(icon.src()).isEqualTo("https://example.com/icon.png");
+	}
+
+	@Test
+	void testIconRequiresSrcNotNull() {
+		assertThatThrownBy(() -> new McpSchema.Icon(null, null, null, null))
+			.isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	void testIconRequiresSrcInBuilder() {
+		assertThatThrownBy(() -> McpSchema.Icon.builder("").build()).isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	void testIconDeserializesWithoutSrc() throws Exception {
+		McpSchema.Icon icon = JSON_MAPPER.readValue("""
+				{"mimeType":"image/png"}""", McpSchema.Icon.class);
+
+		assertThat(icon.src()).isEmpty();
+	}
+
+	// --- Implementation icons/description/websiteUrl tests (SEP-973) ---
+
+	@Test
+	void testImplementationWithAllNewFields() throws Exception {
+		McpSchema.Icon icon = McpSchema.Icon.builder("https://example.com/icon.png").mimeType("image/png").build();
+		McpSchema.Implementation impl = McpSchema.Implementation.builder("test-server", "1.0.0")
+			.title("Test Server")
+			.description("A test server implementation")
+			.icons(List.of(icon))
+			.websiteUrl("https://example.com")
+			.build();
+
+		String json = JSON_MAPPER.writeValueAsString(impl);
+		assertThatJson(json).isObject()
+			.containsEntry("name", "test-server")
+			.containsEntry("version", "1.0.0")
+			.containsEntry("title", "Test Server")
+			.containsEntry("description", "A test server implementation")
+			.containsEntry("websiteUrl", "https://example.com");
+		assertThatJson(json).inPath("$.icons[0].src").isEqualTo("https://example.com/icon.png");
+	}
+
+	@Test
+	void testImplementationDeserializesWithoutNewFields() throws Exception {
+		McpSchema.Implementation impl = JSON_MAPPER.readValue("""
+				{"name":"server","version":"2.0"}""", McpSchema.Implementation.class);
+
+		assertThat(impl.name()).isEqualTo("server");
+		assertThat(impl.version()).isEqualTo("2.0");
+		assertThat(impl.description()).isNull();
+		assertThat(impl.icons()).isNull();
+		assertThat(impl.websiteUrl()).isNull();
+	}
+
+	@Test
+	void testImplementationOmitsNullNewFields() throws Exception {
+		McpSchema.Implementation impl = McpSchema.Implementation.builder("server", "1.0").build();
+		String json = JSON_MAPPER.writeValueAsString(impl);
+
+		assertThat(json).doesNotContain("description");
+		assertThat(json).doesNotContain("icons");
+		assertThat(json).doesNotContain("websiteUrl");
+	}
+
+	@Test
+	void testImplementationToleratesUnknownFields() throws Exception {
+		McpSchema.Implementation impl = JSON_MAPPER.readValue("""
+				{"name":"server","version":"1.0","unknownField":true}""", McpSchema.Implementation.class);
+
+		assertThat(impl.name()).isEqualTo("server");
+		assertThat(impl.version()).isEqualTo("1.0");
+	}
+
+	@Test
+	void testImplementationBackwardCompatibility() {
+		McpSchema.Implementation impl = new McpSchema.Implementation("server", "1.0");
+		assertThat(impl.name()).isEqualTo("server");
+		assertThat(impl.version()).isEqualTo("1.0");
+		assertThat(impl.title()).isNull();
+		assertThat(impl.description()).isNull();
+		assertThat(impl.icons()).isNull();
+		assertThat(impl.websiteUrl()).isNull();
+	}
+
+	// --- Resource icons tests (SEP-973) ---
+
+	@Test
+	void testResourceWithIcons() throws Exception {
+		McpSchema.Icon icon = McpSchema.Icon.builder("https://example.com/res.png").mimeType("image/png").build();
+		McpSchema.Resource resource = McpSchema.Resource.builder("file:///test", "test-resource")
+			.icons(List.of(icon))
+			.build();
+
+		String json = JSON_MAPPER.writeValueAsString(resource);
+		assertThatJson(json).inPath("$.icons[0].src").isEqualTo("https://example.com/res.png");
+	}
+
+	@Test
+	void testResourceDeserializesWithoutIcons() throws Exception {
+		McpSchema.Resource resource = JSON_MAPPER.readValue("""
+				{"uri":"file:///test","name":"test"}""", McpSchema.Resource.class);
+
+		assertThat(resource.icons()).isNull();
+	}
+
+	@Test
+	void testResourceOmitsNullIcons() throws Exception {
+		McpSchema.Resource resource = McpSchema.Resource.builder("file:///test", "test").build();
+		String json = JSON_MAPPER.writeValueAsString(resource);
+
+		assertThat(json).doesNotContain("icons");
+	}
+
+	@Test
+	void testResourceToleratesUnknownFields() throws Exception {
+		McpSchema.Resource resource = JSON_MAPPER.readValue("""
+				{"uri":"file:///test","name":"test","futureField":42}""", McpSchema.Resource.class);
+
+		assertThat(resource.uri()).isEqualTo("file:///test");
+		assertThat(resource.name()).isEqualTo("test");
+	}
+
+	// --- ResourceTemplate icons tests (SEP-973) ---
+
+	@Test
+	void testResourceTemplateWithIcons() throws Exception {
+		McpSchema.Icon icon = McpSchema.Icon.builder("https://example.com/tpl.png").build();
+		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder("file:///{path}", "template")
+			.icons(List.of(icon))
+			.build();
+
+		String json = JSON_MAPPER.writeValueAsString(template);
+		assertThatJson(json).inPath("$.icons[0].src").isEqualTo("https://example.com/tpl.png");
+	}
+
+	@Test
+	void testResourceTemplateDeserializesWithoutIcons() throws Exception {
+		McpSchema.ResourceTemplate template = JSON_MAPPER.readValue("""
+				{"uriTemplate":"file:///{path}","name":"tpl"}""", McpSchema.ResourceTemplate.class);
+
+		assertThat(template.icons()).isNull();
+	}
+
+	@Test
+	void testResourceTemplateOmitsNullIcons() throws Exception {
+		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate.builder("file:///{path}", "tpl").build();
+		String json = JSON_MAPPER.writeValueAsString(template);
+
+		assertThat(json).doesNotContain("icons");
+	}
+
+	@Test
+	void testResourceTemplateToleratesUnknownFields() throws Exception {
+		McpSchema.ResourceTemplate template = JSON_MAPPER.readValue("""
+				{"uriTemplate":"file:///{path}","name":"tpl","futureField":"ignored"}""",
+				McpSchema.ResourceTemplate.class);
+
+		assertThat(template.uriTemplate()).isEqualTo("file:///{path}");
+		assertThat(template.name()).isEqualTo("tpl");
+	}
+
+	// --- Prompt icons tests (SEP-973) ---
+
+	@Test
+	void testPromptWithIcons() throws Exception {
+		McpSchema.Icon icon = McpSchema.Icon.builder("https://example.com/prompt.png").build();
+		McpSchema.Prompt prompt = McpSchema.Prompt.builder("test-prompt").icons(List.of(icon)).build();
+
+		String json = JSON_MAPPER.writeValueAsString(prompt);
+		assertThatJson(json).inPath("$.icons[0].src").isEqualTo("https://example.com/prompt.png");
+	}
+
+	@Test
+	void testPromptDeserializesWithoutIcons() throws Exception {
+		McpSchema.Prompt prompt = JSON_MAPPER.readValue("""
+				{"name":"test-prompt"}""", McpSchema.Prompt.class);
+
+		assertThat(prompt.icons()).isNull();
+	}
+
+	@Test
+	void testPromptOmitsNullIcons() throws Exception {
+		McpSchema.Prompt prompt = McpSchema.Prompt.builder("test-prompt").build();
+		String json = JSON_MAPPER.writeValueAsString(prompt);
+
+		assertThat(json).doesNotContain("icons");
+	}
+
+	@Test
+	void testPromptToleratesUnknownFields() throws Exception {
+		McpSchema.Prompt prompt = JSON_MAPPER.readValue("""
+				{"name":"test-prompt","futureField":true}""", McpSchema.Prompt.class);
+
+		assertThat(prompt.name()).isEqualTo("test-prompt");
+	}
+
+	// --- Tool icons tests (SEP-973) ---
+
+	@Test
+	void testToolWithIcons() throws Exception {
+		McpSchema.Icon icon = McpSchema.Icon.builder("https://example.com/tool.png").build();
+		McpSchema.Tool tool = McpSchema.Tool.builder("test-tool", Map.of("type", "object"))
+			.icons(List.of(icon))
+			.build();
+
+		String json = JSON_MAPPER.writeValueAsString(tool);
+		assertThatJson(json).inPath("$.icons[0].src").isEqualTo("https://example.com/tool.png");
+	}
+
+	@Test
+	void testToolDeserializesWithoutIcons() throws Exception {
+		McpSchema.Tool tool = JSON_MAPPER.readValue("""
+				{"name":"test-tool","inputSchema":{"type":"object"}}""", McpSchema.Tool.class);
+
+		assertThat(tool.icons()).isNull();
+	}
+
+	@Test
+	void testToolOmitsNullIcons() throws Exception {
+		McpSchema.Tool tool = McpSchema.Tool.builder("test-tool", Map.of("type", "object")).build();
+		String json = JSON_MAPPER.writeValueAsString(tool);
+
+		assertThat(json).doesNotContain("icons");
+	}
+
+	@Test
+	void testToolToleratesUnknownFields() throws Exception {
+		McpSchema.Tool tool = JSON_MAPPER.readValue("""
+				{"name":"test-tool","inputSchema":{"type":"object"},"futureField":"ignored"}""", McpSchema.Tool.class);
+
+		assertThat(tool.name()).isEqualTo("test-tool");
+	}
+
 }
