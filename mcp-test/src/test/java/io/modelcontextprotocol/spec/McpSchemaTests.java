@@ -1,5 +1,5 @@
 /*
-* Copyright 2025 - 2025 the original author or authors.
+* Copyright 2025 - 2026 the original author or authors.
 */
 
 package io.modelcontextprotocol.spec;
@@ -1884,6 +1884,29 @@ public class McpSchemaTests {
 		String json = JSON_MAPPER.writeValueAsString(capabilities);
 		assertThat(json).contains("\"form\"");
 		assertThat(json).doesNotContain("\"url\"");
+	}
+
+	@Test
+	void testElicitRequestWithDefaultValues() throws Exception {
+		// Test that schemas with default values serialize correctly in an ElicitRequest
+		McpSchema.ElicitRequest request = McpSchema.ElicitRequest.builder()
+			.message("Please provide your info")
+			.requestedSchema(Map.of("type", "object", "properties",
+					Map.of("name", Map.of("type", "string", "default", "John Doe"), "age",
+							Map.of("type", "integer", "default", 30), "score",
+							Map.of("type", "number", "default", 95.5), "status",
+							Map.of("type", "string", "enum", List.of("active", "inactive"), "default", "active"),
+							"verified", Map.of("type", "boolean", "default", true)),
+					"required", List.of("name")))
+			.build();
+
+		String value = JSON_MAPPER.writeValueAsString(request);
+
+		assertThatJson(value).node("requestedSchema.properties.name.default").isEqualTo("John Doe");
+		assertThatJson(value).node("requestedSchema.properties.age.default").isEqualTo(30);
+		assertThatJson(value).node("requestedSchema.properties.score.default").isEqualTo(95.5);
+		assertThatJson(value).node("requestedSchema.properties.status.default").isEqualTo("active");
+		assertThatJson(value).node("requestedSchema.properties.verified.default").isEqualTo(true);
 	}
 
 	// Progress Notification Tests

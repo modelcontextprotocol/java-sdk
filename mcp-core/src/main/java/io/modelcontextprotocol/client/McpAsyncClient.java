@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.client;
@@ -14,6 +14,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.modelcontextprotocol.client.LifecycleInitializer.Initialization;
 import io.modelcontextprotocol.json.TypeRef;
@@ -30,16 +33,14 @@ import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
 import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
-import io.modelcontextprotocol.util.ToolNameValidator;
 import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSchema.PaginatedRequest;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.ToolNameValidator;
 import io.modelcontextprotocol.util.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -171,6 +172,8 @@ public class McpAsyncClient {
 	 */
 	private final boolean enableCallToolSchemaCaching;
 
+	private final boolean applyElicitationDefaults;
+
 	/**
 	 * Create a new McpAsyncClient with the given transport and session request-response
 	 * timeout.
@@ -195,6 +198,7 @@ public class McpAsyncClient {
 		this.jsonSchemaValidator = jsonSchemaValidator;
 		this.toolsOutputSchemaCache = new ConcurrentHashMap<>();
 		this.enableCallToolSchemaCaching = features.enableCallToolSchemaCaching();
+		this.applyElicitationDefaults = features.applyElicitationDefaults();
 
 		// Request Handlers
 		Map<String, RequestHandler<?>> requestHandlers = new HashMap<>();
@@ -561,8 +565,55 @@ public class McpAsyncClient {
 			ElicitRequest request = transport.unmarshalFrom(params, new TypeRef<>() {
 			});
 
-			return this.elicitationHandler.apply(request);
+			return this.elicitationHandler.apply(request).map(result -> {
+				if (this.applyElicitationDefaults && result.action() == ElicitResult.Action.ACCEPT
+						&& result.content() != null) {
+					Map<String, Object> merged = new HashMap<>(result.content());
+					applyElicitationDefaults(request.requestedSchema(), merged);
+					return new ElicitResult(result.action(), merged, result.meta());
+				}
+				return result;
+			});
 		};
+	}
+
+	/**
+	 * Applies default values from the elicitation schema into a result-content map: for
+	 * each top-level property in {@code schema.properties} that declares a
+	 * {@code "default"}, the value is inserted into {@code content} when the key is
+	 * absent.
+	 * <p>
+	 * Only top-level properties are visited; nested objects and {@code anyOf}/
+	 * {@code oneOf} branches are not traversed. This is sufficient for SEP-1034's flat
+	 * elicitation primitive schemas (string, number, boolean, enum).
+	 * @param schema the {@code requestedSchema} from the {@link ElicitRequest}
+	 * @param content the mutable content map to update
+	 */
+	@SuppressWarnings("unchecked")
+	static void applyElicitationDefaults(Map<String, Object> schema, Map<String, Object> content) {
+		if (schema == null || content == null) {
+			return;
+		}
+
+		Object propertiesObj = schema.get("properties");
+		if (!(propertiesObj instanceof Map)) {
+			return;
+		}
+
+		Map<String, Object> properties = (Map<String, Object>) propertiesObj;
+		for (Map.Entry<String, Object> entry : properties.entrySet()) {
+			String key = entry.getKey();
+			Object propDef = entry.getValue();
+
+			if (!(propDef instanceof Map)) {
+				continue;
+			}
+
+			Map<String, Object> propMap = (Map<String, Object>) propDef;
+			if (!content.containsKey(key) && propMap.containsKey("default")) {
+				content.put(key, propMap.get("default"));
+			}
+		}
 	}
 
 	// --------------------------
