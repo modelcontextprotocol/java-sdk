@@ -8,17 +8,23 @@ import java.util.Optional;
 
 import io.modelcontextprotocol.conformance.client.scenario.Scenario;
 import org.springaicommunity.mcp.security.client.sync.oauth2.metadata.McpMetadataDiscoveryService;
-import org.springaicommunity.mcp.security.client.sync.oauth2.registration.DefaultMcpOAuth2ClientManager;
+import org.springaicommunity.mcp.security.client.sync.oauth2.registration.DefaultMcpOAuth2DcrClientManager;
 import org.springaicommunity.mcp.security.client.sync.oauth2.registration.DynamicClientRegistrationService;
 import org.springaicommunity.mcp.security.client.sync.oauth2.registration.InMemoryMcpClientRegistrationRepository;
 import org.springaicommunity.mcp.security.client.sync.oauth2.registration.McpClientRegistrationRepository;
-import org.springaicommunity.mcp.security.client.sync.oauth2.registration.McpOAuth2ClientManager;
+import org.springaicommunity.mcp.security.client.sync.oauth2.registration.McpOAuth2DcrClientManager;
+import org.springaicommunity.mcp.security.client.sync.oauth2.registration.cimd.DefaultMcpOAuth2CimdClientManager;
+import org.springaicommunity.mcp.security.client.sync.oauth2.registration.cimd.McpOAuth2CimdClientManager;
+import org.springaicommunity.mcp.security.common.url.DefaultUrlValidator;
 
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
+import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizedClientManager;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository;
 
 /**
  * MCP Conformance Test Client - Spring HTTP Client Implementation.
@@ -42,13 +48,15 @@ public class ConformanceSpringClientApplication {
 
 	public static final String REGISTRATION_ID = "default_registration";
 
+	private final DefaultUrlValidator URL_VALIDATOR = new DefaultUrlValidator(true);
+
 	public static void main(String[] args) {
 		SpringApplication.run(ConformanceSpringClientApplication.class, args);
 	}
 
 	@Bean
 	McpMetadataDiscoveryService discovery() {
-		return new McpMetadataDiscoveryService();
+		return new McpMetadataDiscoveryService(URL_VALIDATOR);
 	}
 
 	@Bean
@@ -57,10 +65,24 @@ public class ConformanceSpringClientApplication {
 	}
 
 	@Bean
-	McpOAuth2ClientManager mcpOAuth2ClientManager(McpClientRegistrationRepository mcpClientRegistrationRepository,
+	McpOAuth2DcrClientManager mcpOAuth2ClientManager(McpClientRegistrationRepository mcpClientRegistrationRepository,
 			McpMetadataDiscoveryService mcpMetadataDiscoveryService) {
-		return new DefaultMcpOAuth2ClientManager(mcpClientRegistrationRepository,
-				new DynamicClientRegistrationService(), mcpMetadataDiscoveryService);
+		return new DefaultMcpOAuth2DcrClientManager(mcpClientRegistrationRepository,
+				new DynamicClientRegistrationService(URL_VALIDATOR), mcpMetadataDiscoveryService, URL_VALIDATOR);
+	}
+
+	@Bean
+	McpOAuth2CimdClientManager mcpOAuth2CimdClientManager(McpMetadataDiscoveryService mcpMetadataDiscoveryService,
+			McpClientRegistrationRepository mcpClientRegistrationRepository) {
+		return new DefaultMcpOAuth2CimdClientManager(mcpMetadataDiscoveryService, mcpClientRegistrationRepository,
+				URL_VALIDATOR);
+	}
+
+	@Bean
+	OAuth2AuthorizedClientManager oAuth2AuthorizedClientManager(
+			OAuth2AuthorizedClientRepository oAuth2AuthorizedClientRepository,
+			McpClientRegistrationRepository clientRegistrationRepository) {
+		return new DefaultOAuth2AuthorizedClientManager(clientRegistrationRepository, oAuth2AuthorizedClientRepository);
 	}
 
 	@Bean

@@ -7,5 +7,3 @@ client:
   # - Client does not parse or respect retry: field timing
   # - Client does not send Last-Event-ID header
   - sse-retry
-  # CIMD not implemented yet
-  - auth/basic-cimd
