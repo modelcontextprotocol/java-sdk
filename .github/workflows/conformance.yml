@@ -6,8 +6,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  MAVEN_ARGS: --no-transfer-progress
+
 jobs:
   server:
+    if: ${{ github.repository_owner == 'modelcontextprotocol' }}
     name: Server Conformance
     runs-on: ubuntu-latest
     steps:
@@ -20,10 +24,11 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Build and start server
+      - name: Build
+        run: ./mvnw clean install -DskipTests
+      - name: Start server
         run: |
-          mvn clean install -DskipTests
-          mvn exec:java -pl conformance-tests/server-servlet -Dexec.mainClass="io.modelcontextprotocol.conformance.server.ConformanceServlet" &
+          ./mvnw exec:java -pl conformance-tests/server-servlet -Dexec.mainClass="io.modelcontextprotocol.conformance.server.ConformanceServlet" &
           timeout 30 bash -c 'until curl -s http://localhost:8080/mcp > /dev/null 2>&1; do sleep 0.5; done'
 
       - name: Run conformance tests
@@ -35,6 +40,7 @@ jobs:
           expected-failures: ./conformance-tests/conformance-baseline.yml
 
   client:
+    if: ${{ github.repository_owner == 'modelcontextprotocol' }}
     name: Client Conformance
     runs-on: ubuntu-latest
     strategy:
@@ -51,7 +57,7 @@ jobs:
           cache: 'maven'
 
       - name: Build client
-        run: mvn clean install -DskipTests
+        run: ./mvnw clean install -DskipTests -T 1C
 
       - name: Run conformance test
         uses: modelcontextprotocol/conformance@v0.1.11
@@ -62,6 +68,7 @@ jobs:
           expected-failures: ./conformance-tests/conformance-baseline.yml
 
   auth:
+    if: ${{ github.repository_owner == 'modelcontextprotocol' }}
     name: Auth Conformance
     runs-on: ubuntu-latest
     strategy:
@@ -92,7 +99,7 @@ jobs:
           cache: 'maven'
 
       - name: Build client
-        run: mvn clean install -DskipTests
+        run: ./mvnw clean install -DskipTests
 
       - name: Run conformance test
         uses: modelcontextprotocol/conformance@v0.1.15
