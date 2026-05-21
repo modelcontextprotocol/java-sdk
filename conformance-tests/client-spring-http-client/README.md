@@ -68,7 +68,7 @@ cd conformance-tests/client-spring-http-client
 
 This creates an executable JAR at:
 ```
-target/client-spring-http-client-2.0.0-SNAPSHOT.jar
+target/client-spring-http-client-2.0.0-M3.jar
 ```
 
 ## Running Tests
@@ -80,7 +80,7 @@ Run the full auth suite:
 ```bash
 npx @modelcontextprotocol/conformance@0.1.15 client \
   --spec-version 2025-11-25 \
-  --command "java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.0-SNAPSHOT.jar" \
+  --command "java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.0-M3.jar" \
   --suite auth
 ```
 
@@ -89,7 +89,7 @@ Run a single scenario:
 ```bash
 npx @modelcontextprotocol/conformance@0.1.15 client \
   --spec-version 2025-11-25 \
-  --command "java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.0-SNAPSHOT.jar" \
+  --command "java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.0-M3.jar" \
   --scenario auth/metadata-default
 ```
 
@@ -98,7 +98,7 @@ Run with verbose output:
 ```bash
 npx @modelcontextprotocol/conformance@0.1.15 client \
   --spec-version 2025-11-25 \
-  --command "java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.0-SNAPSHOT.jar" \
+  --command "java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.0-M3.jar" \
   --scenario auth/metadata-default \
   --verbose
 ```
@@ -109,7 +109,7 @@ You can also run the client manually if you have a test server:
 
 ```bash
 export MCP_CONFORMANCE_SCENARIO=auth/metadata-default
-java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.0-SNAPSHOT.jar http://localhost:3000/mcp
+java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.0-M3.jar http://localhost:3000/mcp
 ```
 
 ## Known Issues
