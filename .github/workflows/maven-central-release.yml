@@ -26,18 +26,18 @@ jobs:
         with:
           node-version: '20'
 
+      # Deploy runs the integration tests, but only with Jackson 3
+      # We run Jackson 2 IT manually
       - name: Jackson 2 Integration Tests
         run: mvn -pl mcp-test -am -Pjackson2 test
 
-      - name: Build and Test
-        run: mvn clean verify
-
+      # Deploy runs all previous maven goals, including test and verify
       - name: Publish to Maven Central
         run: |
           mvn --batch-mode \
             -Prelease \
             -Pjavadoc \
-            deploy
+            clean deploy
         env:
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
