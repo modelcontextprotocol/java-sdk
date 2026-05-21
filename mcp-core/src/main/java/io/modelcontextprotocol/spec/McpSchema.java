@@ -377,6 +377,7 @@ public final class McpSchema {
 		@JsonProperty("clientInfo") Implementation clientInfo,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
+		@JsonCreator(mode = JsonCreator.Mode.DISABLED)
 		public InitializeRequest {
 			Assert.notNull(protocolVersion, "protocolVersion must not be null");
 			Assert.notNull(capabilities, "capabilities must not be null");
@@ -1743,6 +1744,7 @@ public final class McpSchema {
 		@JsonProperty("uri") String uri,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
+		@JsonCreator(mode = JsonCreator.Mode.DISABLED)
 		public ReadResourceRequest {
 			Assert.notNull(uri, "uri must not be null");
 		}
@@ -2481,6 +2483,7 @@ public final class McpSchema {
 		@JsonProperty("arguments") Map<String, Object> arguments,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
+		@JsonCreator(mode = JsonCreator.Mode.DISABLED)
 		public GetPromptRequest {
 			Assert.notNull(name, "name must not be null");
 		}
@@ -3076,6 +3079,7 @@ public final class McpSchema {
 		@JsonProperty("arguments") Map<String, Object> arguments,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
 
+		@JsonCreator(mode = JsonCreator.Mode.DISABLED)
 		public CallToolRequest {
 			Assert.notNull(name, "name must not be null");
 		}
