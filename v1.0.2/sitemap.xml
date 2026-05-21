@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://modelcontextprotocol.github.io/java-sdk/v1.0.2/</loc>
+         <lastmod>2026-05-21</lastmod>
+    </url>
+    <url>
+         <loc>https://modelcontextprotocol.github.io/java-sdk/v1.0.2/client/</loc>
+         <lastmod>2026-05-21</lastmod>
+    </url>
+    <url>
+         <loc>https://modelcontextprotocol.github.io/java-sdk/v1.0.2/contribute/</loc>
+         <lastmod>2026-05-21</lastmod>
+    </url>
+    <url>
+         <loc>https://modelcontextprotocol.github.io/java-sdk/v1.0.2/development/</loc>
+         <lastmod>2026-05-21</lastmod>
+    </url>
+    <url>
+         <loc>https://modelcontextprotocol.github.io/java-sdk/v1.0.2/overview/</loc>
+         <lastmod>2026-05-21</lastmod>
+    </url>
+    <url>
+         <loc>https://modelcontextprotocol.github.io/java-sdk/v1.0.2/quickstart/</loc>
+         <lastmod>2026-05-21</lastmod>
+    </url>
+    <url>
+         <loc>https://modelcontextprotocol.github.io/java-sdk/v1.0.2/server/</loc>
+         <lastmod>2026-05-21</lastmod>
+    </url>
+</urlset>
