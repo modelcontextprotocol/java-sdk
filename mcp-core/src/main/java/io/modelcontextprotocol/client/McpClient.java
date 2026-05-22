@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.client;
@@ -194,6 +194,8 @@ public interface McpClient {
 		private JsonSchemaValidator jsonSchemaValidator;
 
 		private boolean enableCallToolSchemaCaching = false; // Default to false
+
+		private boolean applyElicitationDefaults = false; // Default to false
 
 		private SyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
@@ -480,6 +482,19 @@ public interface McpClient {
 		}
 
 		/**
+		 * Enables SDK-side merging of elicitation schema defaults into an accepted
+		 * {@link ElicitResult}'s {@code content} for fields the elicitation handler left
+		 * unset. This is a client-local behavior and is NOT serialized as part of the MCP
+		 * capability handshake.
+		 * @param applyElicitationDefaults true to enable, false to disable
+		 * @return This builder instance for method chaining
+		 */
+		public SyncSpec applyElicitationDefaults(boolean applyElicitationDefaults) {
+			this.applyElicitationDefaults = applyElicitationDefaults;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpSyncClient} with the provided configurations or
 		 * sensible defaults.
 		 * @return a new instance of {@link McpSyncClient}.
@@ -488,7 +503,7 @@ public interface McpClient {
 			McpClientFeatures.Sync syncFeatures = new McpClientFeatures.Sync(this.clientInfo, this.capabilities,
 					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 					this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers, this.samplingHandler,
-					this.elicitationHandler, this.enableCallToolSchemaCaching);
+					this.elicitationHandler, this.enableCallToolSchemaCaching, this.applyElicitationDefaults);
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
@@ -548,6 +563,8 @@ public interface McpClient {
 		private JsonSchemaValidator jsonSchemaValidator;
 
 		private boolean enableCallToolSchemaCaching = false; // Default to false
+
+		private boolean applyElicitationDefaults = false; // Default to false
 
 		private AsyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
@@ -821,6 +838,19 @@ public interface McpClient {
 		}
 
 		/**
+		 * Enables SDK-side merging of elicitation schema defaults into an accepted
+		 * {@link ElicitResult}'s {@code content} for fields the elicitation handler left
+		 * unset. This is a client-local behavior and is NOT serialized as part of the MCP
+		 * capability handshake.
+		 * @param applyElicitationDefaults true to enable, false to disable
+		 * @return This builder instance for method chaining
+		 */
+		public AsyncSpec applyElicitationDefaults(boolean applyElicitationDefaults) {
+			this.applyElicitationDefaults = applyElicitationDefaults;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpAsyncClient} with the provided configurations
 		 * or sensible defaults.
 		 * @return a new instance of {@link McpAsyncClient}.
@@ -833,7 +863,8 @@ public interface McpClient {
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
 							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 							this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
-							this.samplingHandler, this.elicitationHandler, this.enableCallToolSchemaCaching));
+							this.samplingHandler, this.elicitationHandler, this.enableCallToolSchemaCaching,
+							this.applyElicitationDefaults));
 		}
 
 	}
