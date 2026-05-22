@@ -24,6 +24,7 @@ import io.modelcontextprotocol.client.McpAsyncClient;
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpHttpClientAuthorizationErrorHandler;
+import io.modelcontextprotocol.client.transport.customizer.McpHttpClientTransportAuthorizationErrorHandler;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonDefaults;
@@ -120,7 +121,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private final boolean openConnectionOnStartup;
 
-	private final McpHttpClientAuthorizationErrorHandler authorizationErrorHandler;
+	private final McpHttpClientTransportAuthorizationErrorHandler authorizationErrorHandler;
 
 	private final boolean resumableStreams;
 
@@ -139,7 +140,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	private HttpClientStreamableHttpTransport(McpJsonMapper jsonMapper, HttpClient httpClient,
 			HttpRequest.Builder requestBuilder, String baseUri, String endpoint, boolean resumableStreams,
 			boolean openConnectionOnStartup, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer,
-			McpHttpClientAuthorizationErrorHandler authorizationErrorHandler, List<String> supportedProtocolVersions) {
+			McpHttpClientTransportAuthorizationErrorHandler authorizationErrorHandler,
+			List<String> supportedProtocolVersions) {
 		this.jsonMapper = jsonMapper;
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
@@ -295,9 +297,12 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						int statusCode = responseEvent.responseInfo().statusCode();
 						if (statusCode == 401 || statusCode == 403) {
 							logger.debug("Authorization error in reconnect with code {}", statusCode);
+							var request = requestBuilder.build();
+							var requestSnapshot = new HttpRequestSnapshot(request.uri(), request.method(),
+									request.headers());
 							return Mono.<McpSchema.JSONRPCMessage>error(
 									new McpHttpClientTransportAuthorizationException(
-											"Authorization error connecting to SSE stream",
+											"Authorization error connecting to SSE stream", requestSnapshot,
 											responseEvent.responseInfo()));
 						}
 						else if (statusCode == METHOD_NOT_ALLOWED) {
@@ -417,7 +422,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			return Mono.deferContextual(ctx -> {
 				var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 				return Mono
-					.from(this.authorizationErrorHandler.handle(authException.getResponseInfo(), transportContext))
+					.from(this.authorizationErrorHandler.handle(authException.getRequestSnapshot(),
+							authException.getResponseInfo(), transportContext))
 					.switchIfEmpty(Mono.just(false))
 					.flatMap(shouldRetry -> shouldRetry ? Mono.just(retrySignal.totalRetries())
 							: Mono.error(retrySignal.failure()));
@@ -489,7 +495,6 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				return Mono
 					.from(this.httpRequestCustomizer.customize(builder, "POST", uri, jsonBody, transportContext));
 			}).flatMapMany(requestBuilder -> Flux.<ResponseEvent>create(responseEventSink -> {
-
 				// Create the async request with proper body subscriber selection
 				Mono.fromFuture(this.httpClient
 					.sendAsync(requestBuilder.build(), this.toSendMessageBodySubscriber(responseEventSink))
@@ -502,12 +507,14 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						}
 					})).onErrorMap(CompletionException.class, t -> t.getCause()).onErrorComplete().subscribe();
 
-			})).flatMap(responseEvent -> {
+			}).flatMap(responseEvent -> {
 				int statusCode = responseEvent.responseInfo().statusCode();
 				if (statusCode == 401 || statusCode == 403) {
+					var request = requestBuilder.build();
+					var requestSnapshot = new HttpRequestSnapshot(request.uri(), request.method(), request.headers());
 					logger.debug("Authorization error in sendMessage with code {}", statusCode);
 					return Mono.<McpSchema.JSONRPCMessage>error(new McpHttpClientTransportAuthorizationException(
-							"Authorization error when sending message", responseEvent.responseInfo()));
+							"Authorization error when sending message", requestSnapshot, responseEvent.responseInfo()));
 				}
 
 				if (transportSession.markInitialized(
@@ -651,13 +658,12 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					if (ref != null) {
 						transportSession.removeConnection(ref);
 					}
-				})
-				.contextWrite(deliveredSink.contextView())
-				.subscribe();
+				})).contextWrite(deliveredSink.contextView()).subscribe();
 
 			disposableRef.set(connection);
 			transportSession.addConnection(connection);
 		});
+
 	}
 
 	private static String sessionIdOrPlaceholder(McpTransportSession<?> transportSession) {
@@ -695,7 +701,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		private List<String> supportedProtocolVersions = List.of(ProtocolVersions.MCP_2024_11_05,
 				ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18, ProtocolVersions.MCP_2025_11_25);
 
-		private McpHttpClientAuthorizationErrorHandler authorizationErrorHandler = McpHttpClientAuthorizationErrorHandler.NOOP;
+		private McpHttpClientTransportAuthorizationErrorHandler authorizationErrorHandler = McpHttpClientTransportAuthorizationErrorHandler.NOOP;
 
 		/**
 		 * Creates a new builder with the specified base URI.
@@ -828,8 +834,34 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 * when sending a message.
 		 * @param authorizationErrorHandler the handler
 		 * @return this builder
+		 * @deprecated in favor of
+		 * {@link #authorizationErrorHandler(McpHttpClientTransportAuthorizationErrorHandler)}
 		 */
+		@Deprecated(forRemoval = true, since = "2.0.0")
 		public Builder authorizationErrorHandler(McpHttpClientAuthorizationErrorHandler authorizationErrorHandler) {
+			this.authorizationErrorHandler = new McpHttpClientTransportAuthorizationErrorHandler() {
+				@Override
+				public Publisher<Boolean> handle(HttpRequestSnapshot requestSnapshot,
+						HttpResponse.ResponseInfo responseInfo, McpTransportContext context) {
+					return authorizationErrorHandler.handle(responseInfo, context);
+				}
+
+				@Override
+				public int maxRetries() {
+					return authorizationErrorHandler.maxRetries();
+				}
+			};
+			return this;
+		}
+
+		/**
+		 * Sets the handler to be used when the server responds with HTTP 401 or HTTP 403
+		 * when sending a message.
+		 * @param authorizationErrorHandler the handler
+		 * @return this builder
+		 */
+		public Builder authorizationErrorHandler(
+				McpHttpClientTransportAuthorizationErrorHandler authorizationErrorHandler) {
 			this.authorizationErrorHandler = authorizationErrorHandler;
 			return this;
 		}
