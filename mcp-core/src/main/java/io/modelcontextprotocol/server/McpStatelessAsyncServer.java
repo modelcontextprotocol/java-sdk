@@ -80,16 +80,19 @@ public class McpStatelessAsyncServer {
 
 	private final boolean validateToolInputs;
 
+	private final boolean duplicateStructuredContent;
+
 	McpStatelessAsyncServer(McpStatelessServerTransport mcpTransport, McpJsonMapper jsonMapper,
 			McpStatelessServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
-			boolean validateToolInputs) {
+			boolean validateToolInputs, boolean duplicateStructuredContent) {
 		this.mcpTransportProvider = mcpTransport;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
 		this.serverCapabilities = features.serverCapabilities();
 		this.instructions = features.instructions();
-		this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, features.tools()));
+		this.tools
+			.addAll(withStructuredOutputHandling(jsonSchemaValidator, duplicateStructuredContent, features.tools()));
 		this.resources.putAll(features.resources());
 		this.resourceTemplates.putAll(features.resourceTemplates());
 		this.prompts.putAll(features.prompts());
@@ -97,6 +100,7 @@ public class McpStatelessAsyncServer {
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
 		this.validateToolInputs = validateToolInputs;
+		this.duplicateStructuredContent = duplicateStructuredContent;
 
 		Map<String, McpStatelessRequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -207,17 +211,20 @@ public class McpStatelessAsyncServer {
 	// ---------------------------------------
 
 	private static List<McpStatelessServerFeatures.AsyncToolSpecification> withStructuredOutputHandling(
-			JsonSchemaValidator jsonSchemaValidator, List<McpStatelessServerFeatures.AsyncToolSpecification> tools) {
+			JsonSchemaValidator jsonSchemaValidator, boolean duplicateStructuredContent,
+			List<McpStatelessServerFeatures.AsyncToolSpecification> tools) {
 
 		if (Utils.isEmpty(tools)) {
 			return tools;
 		}
 
-		return tools.stream().map(tool -> withStructuredOutputHandling(jsonSchemaValidator, tool)).toList();
+		return tools.stream()
+			.map(tool -> withStructuredOutputHandling(jsonSchemaValidator, duplicateStructuredContent, tool))
+			.toList();
 	}
 
 	private static McpStatelessServerFeatures.AsyncToolSpecification withStructuredOutputHandling(
-			JsonSchemaValidator jsonSchemaValidator,
+			JsonSchemaValidator jsonSchemaValidator, boolean duplicateStructuredContent,
 			McpStatelessServerFeatures.AsyncToolSpecification toolSpecification) {
 
 		if (toolSpecification.callHandler() instanceof StructuredOutputCallToolHandler) {
@@ -232,7 +239,7 @@ public class McpStatelessAsyncServer {
 
 		return new McpStatelessServerFeatures.AsyncToolSpecification(toolSpecification.tool(),
 				new StructuredOutputCallToolHandler(jsonSchemaValidator, toolSpecification.tool().outputSchema(),
-						toolSpecification.callHandler()));
+						duplicateStructuredContent, toolSpecification.callHandler()));
 	}
 
 	private static class StructuredOutputCallToolHandler
@@ -244,8 +251,10 @@ public class McpStatelessAsyncServer {
 
 		private final Map<String, Object> outputSchema;
 
+		private final boolean duplicateStructuredContent;
+
 		public StructuredOutputCallToolHandler(JsonSchemaValidator jsonSchemaValidator,
-				Map<String, Object> outputSchema,
+				Map<String, Object> outputSchema, boolean duplicateStructuredContent,
 				BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> delegateHandler) {
 
 			Assert.notNull(jsonSchemaValidator, "JsonSchemaValidator must not be null");
@@ -253,6 +262,7 @@ public class McpStatelessAsyncServer {
 
 			this.delegateHandler = delegateHandler;
 			this.outputSchema = outputSchema;
+			this.duplicateStructuredContent = duplicateStructuredContent;
 			this.jsonSchemaValidator = jsonSchemaValidator;
 		}
 
@@ -300,7 +310,7 @@ public class McpStatelessAsyncServer {
 						.build();
 				}
 
-				if (Utils.isEmpty(result.content())) {
+				if (this.duplicateStructuredContent && Utils.isEmpty(result.content())) {
 					// For backwards compatibility, a tool that returns structured
 					// content SHOULD also return functionally equivalent unstructured
 					// content. (For example, serialized JSON can be returned in a
@@ -348,7 +358,8 @@ public class McpStatelessAsyncServer {
 			return Mono.error(e);
 		}
 
-		var wrappedToolSpecification = withStructuredOutputHandling(this.jsonSchemaValidator, toolSpecification);
+		var wrappedToolSpecification = withStructuredOutputHandling(this.jsonSchemaValidator,
+				this.duplicateStructuredContent, toolSpecification);
 
 		return Mono.defer(() -> {
 			// Remove tools with duplicate tool names first
