@@ -5,7 +5,7 @@
 package io.modelcontextprotocol.server.transport;
 
 import java.util.List;
-import java.util.Map;
+import java.util.function.Function;
 
 /**
  * Interface for validating HTTP requests in server transports. Implementations can
@@ -22,15 +22,16 @@ public interface ServerTransportSecurityValidator {
 	/**
 	 * A no-op validator that accepts all requests without validation.
 	 */
-	ServerTransportSecurityValidator NOOP = headers -> {
+	ServerTransportSecurityValidator NOOP = headerAccessor -> {
 	};
 
 	/**
 	 * Validates the HTTP headers from an incoming request.
-	 * @param headers A map of header names to their values (multi-valued headers
-	 * supported)
+	 * @param headerAccessor A function that returns the list of values for a given header
+	 * name, or an empty list if the header is not present. Header name lookup should be
+	 * case-insensitive.
 	 * @throws ServerTransportSecurityException if validation fails
 	 */
-	void validateHeaders(Map<String, List<String>> headers) throws ServerTransportSecurityException;
+	void validateHeaders(Function<String, List<String>> headerAccessor) throws ServerTransportSecurityException;
 
 }

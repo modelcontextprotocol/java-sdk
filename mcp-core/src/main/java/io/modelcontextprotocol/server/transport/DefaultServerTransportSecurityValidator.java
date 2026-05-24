@@ -6,7 +6,7 @@ package io.modelcontextprotocol.server.transport;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.function.Function;
 
 import io.modelcontextprotocol.util.Assert;
 
@@ -47,27 +47,18 @@ public final class DefaultServerTransportSecurityValidator implements ServerTran
 	}
 
 	@Override
-	public void validateHeaders(Map<String, List<String>> headers) throws ServerTransportSecurityException {
-		boolean missingHost = true;
-		for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
-			if (ORIGIN_HEADER.equalsIgnoreCase(entry.getKey())) {
-				List<String> values = entry.getValue();
-				if (values == null || values.isEmpty()) {
-					throw new ServerTransportSecurityException(403, "Invalid Origin header");
-				}
-				validateOrigin(values.get(0));
-			}
-			else if (HOST_HEADER.equalsIgnoreCase(entry.getKey())) {
-				missingHost = false;
-				List<String> values = entry.getValue();
-				if (values == null || values.isEmpty()) {
-					throw new ServerTransportSecurityException(421, "Invalid Host header");
-				}
-				validateHost(values.get(0));
-			}
+	public void validateHeaders(Function<String, List<String>> headerAccessor) throws ServerTransportSecurityException {
+		List<String> originValues = headerAccessor.apply(ORIGIN_HEADER);
+		if (originValues != null && !originValues.isEmpty()) {
+			validateOrigin(originValues.get(0));
 		}
-		if (!allowedHosts.isEmpty() && missingHost) {
-			throw new ServerTransportSecurityException(421, "Invalid Host header");
+
+		if (!allowedHosts.isEmpty()) {
+			List<String> hostValues = headerAccessor.apply(HOST_HEADER);
+			if (hostValues == null || hostValues.isEmpty()) {
+				throw new ServerTransportSecurityException(421, "Invalid Host header");
+			}
+			validateHost(hostValues.get(0));
 		}
 	}
 

@@ -8,6 +8,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -280,8 +281,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		}
 
 		try {
-			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
-			this.securityValidator.validateHeaders(headers);
+			this.securityValidator.validateHeaders(name -> Collections.list(request.getHeaders(name)));
 		}
 		catch (ServerTransportSecurityException e) {
 			response.sendError(e.getStatusCode(), e.getMessage());
@@ -353,8 +353,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		}
 
 		try {
-			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
-			this.securityValidator.validateHeaders(headers);
+			this.securityValidator.validateHeaders(name -> Collections.list(request.getHeaders(name)));
 		}
 		catch (ServerTransportSecurityException e) {
 			response.sendError(e.getStatusCode(), e.getMessage());
