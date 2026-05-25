@@ -12,5 +12,5 @@
 	</root>
 
 	<!-- More verbose logging for MCP client -->
-	<logger name="io.modelcontextprotocol" level="DEBUG" />
+	<logger name="io.modelcontextprotocol" level="INFO" />
 </configuration>
