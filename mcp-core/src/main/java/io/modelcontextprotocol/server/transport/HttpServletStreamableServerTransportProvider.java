@@ -11,7 +11,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.slf4j.Logger;
@@ -22,8 +21,10 @@ import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.HttpHeaders;
+import io.modelcontextprotocol.spec.InMemoryMcpSessionStore;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSessionStore;
 import io.modelcontextprotocol.spec.McpStreamableServerSession;
 import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
@@ -104,9 +105,9 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	private McpStreamableServerSession.Factory sessionFactory;
 
 	/**
-	 * Map of active client sessions, keyed by mcp-session-id.
+	 * Store for active client sessions, keyed by mcp-session-id.
 	 */
-	private final ConcurrentHashMap<String, McpStreamableServerSession> sessions = new ConcurrentHashMap<>();
+	private final McpSessionStore sessionStore;
 
 	private McpTransportContextExtractor<HttpServletRequest> contextExtractor;
 
@@ -141,22 +142,25 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 */
 	private HttpServletStreamableServerTransportProvider(McpJsonMapper jsonMapper, String mcpEndpoint,
 			boolean disallowDelete, McpTransportContextExtractor<HttpServletRequest> contextExtractor,
-			Duration keepAliveInterval, ServerTransportSecurityValidator securityValidator) {
+			Duration keepAliveInterval, ServerTransportSecurityValidator securityValidator,
+			McpSessionStore sessionStore) {
 		Assert.notNull(jsonMapper, "JsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "MCP endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
 		Assert.notNull(securityValidator, "Security validator must not be null");
+		Assert.notNull(sessionStore, "Session store must not be null");
 
 		this.jsonMapper = jsonMapper;
 		this.mcpEndpoint = mcpEndpoint;
 		this.disallowDelete = disallowDelete;
 		this.contextExtractor = contextExtractor;
 		this.securityValidator = securityValidator;
+		this.sessionStore = sessionStore;
 
 		if (keepAliveInterval != null) {
 
 			this.keepAliveScheduler = KeepAliveScheduler
-				.builder(() -> (isClosing) ? Flux.empty() : Flux.fromIterable(sessions.values()))
+				.builder(() -> (isClosing) ? Flux.empty() : Flux.fromIterable(sessionStore.values()))
 				.initialDelay(keepAliveInterval)
 				.interval(keepAliveInterval)
 				.build();
@@ -187,15 +191,15 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 */
 	@Override
 	public Mono<Void> notifyClients(String method, Object params) {
-		if (this.sessions.isEmpty()) {
+		if (this.sessionStore.isEmpty()) {
 			logger.debug("No active sessions to broadcast message to");
 			return Mono.empty();
 		}
 
-		logger.debug("Attempting to broadcast message to {} active sessions", this.sessions.size());
+		logger.debug("Attempting to broadcast message to {} active sessions", this.sessionStore.size());
 
 		return Mono.fromRunnable(() -> {
-			this.sessions.values().parallelStream().forEach(session -> {
+			this.sessionStore.values().parallelStream().forEach(session -> {
 				try {
 					session.sendNotification(method, params).block();
 				}
@@ -209,7 +213,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	@Override
 	public Mono<Void> notifyClient(String sessionId, String method, Object params) {
 		return Mono.defer(() -> {
-			McpStreamableServerSession session = this.sessions.get(sessionId);
+			McpStreamableServerSession session = this.sessionStore.get(sessionId);
 			if (session == null) {
 				logger.debug("Session {} not found", sessionId);
 				return Mono.empty();
@@ -226,9 +230,9 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	public Mono<Void> closeGracefully() {
 		return Mono.fromRunnable(() -> {
 			this.isClosing = true;
-			logger.debug("Initiating graceful shutdown with {} active sessions", this.sessions.size());
+			logger.debug("Initiating graceful shutdown with {} active sessions", this.sessionStore.size());
 
-			this.sessions.values().parallelStream().forEach(session -> {
+			this.sessionStore.values().parallelStream().forEach(session -> {
 				try {
 					session.closeGracefully().block();
 				}
@@ -237,10 +241,10 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				}
 			});
 
-			this.sessions.clear();
+			this.sessionStore.clear();
 			logger.debug("Graceful shutdown completed");
 		}).then().doOnSuccess(v -> {
-			sessions.clear();
+			sessionStore.clear();
 			logger.debug("Graceful shutdown completed");
 			if (this.keepAliveScheduler != null) {
 				this.keepAliveScheduler.shutdown();
@@ -299,7 +303,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			return;
 		}
 
-		McpStreamableServerSession session = this.sessions.get(sessionId);
+		McpStreamableServerSession session = this.sessionStore.get(sessionId);
 
 		if (session == null) {
 			response.sendError(HttpServletResponse.SC_NOT_FOUND);
@@ -452,7 +456,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 						});
 				McpStreamableServerSession.McpStreamableServerSessionInit init = this.sessionFactory
 					.startSession(initializeRequest);
-				this.sessions.put(init.session().getId(), init.session());
+				this.sessionStore.save(init.session().getId(), init.session());
 
 				try {
 					McpSchema.InitializeResult initResult = init.initResult().block();
@@ -493,7 +497,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				return;
 			}
 
-			McpStreamableServerSession session = this.sessions.get(sessionId);
+			McpStreamableServerSession session = this.sessionStore.get(sessionId);
 
 			if (session == null) {
 				this.responseError(response, HttpServletResponse.SC_NOT_FOUND,
@@ -612,7 +616,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		String sessionId = request.getHeader(HttpHeaders.MCP_SESSION_ID);
-		McpStreamableServerSession session = this.sessions.get(sessionId);
+		McpStreamableServerSession session = this.sessionStore.get(sessionId);
 
 		if (session == null) {
 			response.sendError(HttpServletResponse.SC_NOT_FOUND);
@@ -621,7 +625,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		try {
 			session.delete().contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext)).block();
-			this.sessions.remove(sessionId);
+			this.sessionStore.remove(sessionId);
 			response.setStatus(HttpServletResponse.SC_OK);
 		}
 		catch (Exception e) {
@@ -755,7 +759,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				}
 				catch (Exception e) {
 					logger.error("Failed to send message to session {}: {}", this.sessionId, e.getMessage());
-					HttpServletStreamableServerTransportProvider.this.sessions.remove(this.sessionId);
+					HttpServletStreamableServerTransportProvider.this.sessionStore.remove(this.sessionId);
 					this.asyncContext.complete();
 				}
 				finally {
@@ -801,7 +805,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 				this.closed = true;
 
-				// HttpServletStreamableServerTransportProvider.this.sessions.remove(this.sessionId);
+				// HttpServletStreamableServerTransportProvider.this.sessionStore.remove(this.sessionId);
 				this.asyncContext.complete();
 				logger.debug("Successfully completed async context for session {}", sessionId);
 			}
@@ -837,6 +841,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		private Duration keepAliveInterval;
 
 		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
+
+		private McpSessionStore sessionStore;
 
 		/**
 		 * Sets the JsonMapper to use for JSON serialization/deserialization of MCP
@@ -910,6 +916,19 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		/**
+		 * Sets the session store for managing active client sessions. If not set, an
+		 * {@link InMemoryMcpSessionStore} will be used by default.
+		 * @param sessionStore The session store to use. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if sessionStore is null
+		 */
+		public Builder sessionStore(McpSessionStore sessionStore) {
+			Assert.notNull(sessionStore, "Session store must not be null");
+			this.sessionStore = sessionStore;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link HttpServletStreamableServerTransportProvider}
 		 * with the configured settings.
 		 * @return A new HttpServletStreamableServerTransportProvider instance
@@ -919,7 +938,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 			return new HttpServletStreamableServerTransportProvider(
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, mcpEndpoint, disallowDelete,
-					contextExtractor, keepAliveInterval, securityValidator);
+					contextExtractor, keepAliveInterval, securityValidator,
+					sessionStore == null ? new InMemoryMcpSessionStore() : sessionStore);
 		}
 
 	}
