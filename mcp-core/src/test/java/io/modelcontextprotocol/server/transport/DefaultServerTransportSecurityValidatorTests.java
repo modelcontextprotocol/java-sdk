@@ -404,6 +404,116 @@ class DefaultServerTransportSecurityValidatorTests {
 
 	}
 
+	@Nested
+	class DeprecatedMapBasedApi {
+
+		@Test
+		void originValidation() {
+			Map<String, List<String>> headers = new HashMap<>();
+			headers.put("Origin", List.of("http://localhost:8080"));
+
+			assertThatCode(() -> validator.validateHeaders(headers)).doesNotThrowAnyException();
+		}
+
+		@Test
+		void originRejected() {
+			Map<String, List<String>> headers = new HashMap<>();
+			headers.put("Origin", List.of("http://malicious.example.com"));
+
+			assertThatThrownBy(() -> validator.validateHeaders(headers)).isEqualTo(INVALID_ORIGIN);
+		}
+
+		@Test
+		void caseInsensitiveHeaderLookup() {
+			Map<String, List<String>> headers = new HashMap<>();
+			headers.put("origin", List.of("http://localhost:8080"));
+
+			assertThatCode(() -> validator.validateHeaders(headers)).doesNotThrowAnyException();
+		}
+
+		@Test
+		void hostValidation() {
+			DefaultServerTransportSecurityValidator hostValidator = DefaultServerTransportSecurityValidator.builder()
+				.allowedHost("localhost:8080")
+				.build();
+
+			Map<String, List<String>> headers = new HashMap<>();
+			headers.put("Host", List.of("localhost:8080"));
+
+			assertThatCode(() -> hostValidator.validateHeaders(headers)).doesNotThrowAnyException();
+		}
+
+		@Test
+		void hostRejected() {
+			DefaultServerTransportSecurityValidator hostValidator = DefaultServerTransportSecurityValidator.builder()
+				.allowedHost("localhost:8080")
+				.build();
+
+			Map<String, List<String>> headers = new HashMap<>();
+			headers.put("Host", List.of("malicious.com:8080"));
+
+			assertThatThrownBy(() -> hostValidator.validateHeaders(headers)).isEqualTo(INVALID_HOST);
+		}
+
+		@Test
+		void emptyHeaders() {
+			assertThatCode(() -> validator.validateHeaders(new HashMap<>())).doesNotThrowAnyException();
+		}
+
+		@Test
+		void combinedOriginAndHost() {
+			DefaultServerTransportSecurityValidator combinedValidator = DefaultServerTransportSecurityValidator
+				.builder()
+				.allowedOrigin("http://localhost:*")
+				.allowedHost("localhost:*")
+				.build();
+
+			Map<String, List<String>> headers = new HashMap<>();
+			headers.put("Origin", List.of("http://localhost:8080"));
+			headers.put("Host", List.of("localhost:8080"));
+
+			assertThatCode(() -> combinedValidator.validateHeaders(headers)).doesNotThrowAnyException();
+		}
+
+	}
+
+	@Nested
+	class InterfaceDefaultBridge {
+
+		@Test
+		void noopAcceptsAll() {
+			assertThatCode(() -> ServerTransportSecurityValidator.NOOP.validateHeaders(emptyAccessor()))
+				.doesNotThrowAnyException();
+			assertThatCode(() -> ServerTransportSecurityValidator.NOOP.validateHeaders(new HashMap<>()))
+				.doesNotThrowAnyException();
+		}
+
+		@Test
+		void mapDefaultBridgesToFunctionOverride() {
+			// A validator that only overrides the Function method should still work
+			// when called via the deprecated Map method
+			ServerTransportSecurityValidator functionOnlyValidator = new ServerTransportSecurityValidator() {
+				@Override
+				public void validateHeaders(Function<String, List<String>> headerAccessor)
+						throws ServerTransportSecurityException {
+					List<String> origins = headerAccessor.apply("Origin");
+					if (origins != null && !origins.isEmpty() && origins.get(0).contains("evil")) {
+						throw new ServerTransportSecurityException(403, "Invalid Origin header");
+					}
+				}
+			};
+
+			Map<String, List<String>> goodHeaders = new HashMap<>();
+			goodHeaders.put("Origin", List.of("http://good.example.com"));
+			assertThatCode(() -> functionOnlyValidator.validateHeaders(goodHeaders)).doesNotThrowAnyException();
+
+			Map<String, List<String>> evilHeaders = new HashMap<>();
+			evilHeaders.put("Origin", List.of("http://evil.example.com"));
+			assertThatThrownBy(() -> functionOnlyValidator.validateHeaders(evilHeaders)).isEqualTo(INVALID_ORIGIN);
+		}
+
+	}
+
 	private static Function<String, List<String>> emptyAccessor() {
 		return name -> List.of();
 	}

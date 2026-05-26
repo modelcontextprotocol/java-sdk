@@ -9,7 +9,6 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -272,7 +271,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		try {
-			this.securityValidator.validateHeaders(name -> Collections.list(request.getHeaders(name)));
+			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
+			this.securityValidator.validateHeaders(headers);
 		}
 		catch (ServerTransportSecurityException e) {
 			response.sendError(e.getStatusCode(), e.getMessage());
@@ -407,7 +407,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		try {
-			this.securityValidator.validateHeaders(name -> Collections.list(request.getHeaders(name)));
+			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
+			this.securityValidator.validateHeaders(headers);
 		}
 		catch (ServerTransportSecurityException e) {
 			response.sendError(e.getStatusCode(), e.getMessage());
@@ -587,7 +588,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		try {
-			this.securityValidator.validateHeaders(name -> Collections.list(request.getHeaders(name)));
+			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
+			this.securityValidator.validateHeaders(headers);
 		}
 		catch (ServerTransportSecurityException e) {
 			response.sendError(e.getStatusCode(), e.getMessage());
