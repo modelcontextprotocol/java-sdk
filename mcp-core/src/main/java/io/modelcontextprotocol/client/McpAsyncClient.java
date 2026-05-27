@@ -484,9 +484,7 @@ public class McpAsyncClient {
 			if (this.isInitialized()) {
 				return this.rootsListChangedNotification();
 			}
-			else {
-				logger.warn("Client is not initialized, ignore sending a roots list changed notification");
-			}
+			logger.debug("Client is not initialized, ignore sending a roots list changed notification");
 		}
 		return Mono.empty();
 	}
@@ -514,10 +512,7 @@ public class McpAsyncClient {
 				if (this.isInitialized()) {
 					return this.rootsListChangedNotification();
 				}
-				else {
-					logger.warn("Client is not initialized, ignore sending a roots list changed notification");
-				}
-
+				logger.debug("Client is not initialized, ignore sending a roots list changed notification");
 			}
 			return Mono.empty();
 		}
