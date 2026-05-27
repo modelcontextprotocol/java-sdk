@@ -124,7 +124,7 @@ public class McpClientSession implements McpSession {
 
 	private void dismissPendingResponses() {
 		this.pendingResponses.forEach((id, sink) -> {
-			logger.warn("Abruptly terminating exchange for request {}", id);
+			logger.info("Abruptly terminating exchange for request {}", id);
 			sink.error(new RuntimeException("MCP session with server terminated"));
 		});
 		this.pendingResponses.clear();
@@ -257,7 +257,8 @@ public class McpClientSession implements McpSession {
 			});
 		})).timeout(this.requestTimeout).handle((jsonRpcResponse, deliveredResponseSink) -> {
 			if (jsonRpcResponse.error() != null) {
-				logger.error("Error handling request: {}", jsonRpcResponse.error());
+				logger.info("Server returned a JSON-RPC error when calling method {}: {}", method,
+						jsonRpcResponse.error());
 				deliveredResponseSink.error(new McpError(jsonRpcResponse.error()));
 			}
 			else {

@@ -200,7 +200,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 					session.sendNotification(method, params).block();
 				}
 				catch (Exception e) {
-					logger.error("Failed to send message to session {}: {}", session.getId(), e.getMessage());
+					logger.info("Failed to send message to session {}: {}", session.getId(), e.getMessage());
 				}
 			});
 		});
@@ -233,12 +233,11 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 					session.closeGracefully().block();
 				}
 				catch (Exception e) {
-					logger.error("Failed to close session {}: {}", session.getId(), e.getMessage());
+					logger.warn("Failed to close session {}: {}", session.getId(), e.getMessage());
 				}
 			});
 
 			this.sessions.clear();
-			logger.debug("Graceful shutdown completed");
 		}).then().doOnSuccess(v -> {
 			sessions.clear();
 			logger.debug("Graceful shutdown completed");
