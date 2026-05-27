@@ -19,13 +19,21 @@ public class McpHttpClientTransportAuthorizationException extends McpTransportEx
 
 	private final HttpResponse.ResponseInfo responseInfo;
 
-	public McpHttpClientTransportAuthorizationException(String message, HttpResponse.ResponseInfo responseInfo) {
+	private final HttpRequestSnapshot requestSnapshot;
+
+	public McpHttpClientTransportAuthorizationException(String message, HttpRequestSnapshot requestSnapshot,
+			HttpResponse.ResponseInfo responseInfo) {
 		super(message);
 		this.responseInfo = responseInfo;
+		this.requestSnapshot = requestSnapshot;
 	}
 
 	public HttpResponse.ResponseInfo getResponseInfo() {
 		return responseInfo;
+	}
+
+	public HttpRequestSnapshot getRequestSnapshot() {
+		return requestSnapshot;
 	}
 
 }
