@@ -65,6 +65,26 @@ public interface JsonSchemaValidator {
 	ValidationResponse validate(Map<String, Object> schema, Object structuredContent);
 
 	/**
+	 * Validates the structured content against the provided JSON schema, describing the
+	 * validated data in any resulting error message.
+	 * <p>
+	 * Use this overload when the caller knows which data is being validated (for example
+	 * tool input arguments versus tool output) so that error messages are not misleading
+	 * to consumers or LLMs.
+	 * @param schema The JSON schema to validate against.
+	 * @param structuredContent The structured content to validate.
+	 * @param dataDescription A short, human-readable description of the data being
+	 * validated and the schema it is checked against, for example
+	 * {@code "input arguments do not match tool inputSchema"}. Included verbatim in
+	 * validation error messages.
+	 * @return A ValidationResponse indicating whether the validation was successful or
+	 * not.
+	 */
+	default ValidationResponse validate(Map<String, Object> schema, Object structuredContent, String dataDescription) {
+		return validate(schema, structuredContent);
+	}
+
+	/**
 	 * Validates that the given schema document itself conforms to JSON Schema 2020-12
 	 * (SEP-1613). Schemas that declare an explicit non-2020-12 {@code $schema} dialect
 	 * are skipped and considered valid. The default implementation is a no-op.
