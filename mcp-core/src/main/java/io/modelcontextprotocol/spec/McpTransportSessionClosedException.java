@@ -13,8 +13,14 @@ import reactor.util.annotation.Nullable;
  * @see ClosedMcpTransportSession
  * @author Daniel Garnier-Moiroux
  */
+
 public class McpTransportSessionClosedException extends RuntimeException {
 
+	public McpTransportSessionClosedException() {
+		super("Transport has already been closed.");
+	}
+
+	@Deprecated(forRemoval = true)
 	public McpTransportSessionClosedException(@Nullable String sessionId) {
 		super(sessionId != null ? "MCP session with ID %s has been closed".formatted(sessionId)
 				: "MCP session has been closed");

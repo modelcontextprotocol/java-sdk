@@ -8,6 +8,8 @@ import java.util.List;
 
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.json.TypeRef;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 /**
@@ -39,6 +41,8 @@ import reactor.core.publisher.Mono;
  */
 public interface McpTransport {
 
+	Logger logger = LoggerFactory.getLogger(McpTransport.class);
+
 	/**
 	 * Closes the transport connection and releases any associated resources.
 	 *
@@ -48,7 +52,8 @@ public interface McpTransport {
 	 * </p>
 	 */
 	default void close() {
-		this.closeGracefully().subscribe();
+		this.closeGracefully().subscribe(ignored -> {
+		}, error -> logger.warn("Error during asynchronous close", error));
 	}
 
 	/**
