@@ -815,9 +815,7 @@ public class McpStatelessAsyncServer {
 			McpStatelessServerFeatures.AsyncCompletionSpecification specification = this.completions.get(request.ref());
 
 			if (specification == null) {
-				return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
-					.message("AsyncCompletionSpecification not found: " + request.ref())
-					.build());
+				return EMPTY_COMPLETION_RESULT;
 			}
 
 			return specification.completionHandler().apply(ctx, request);
