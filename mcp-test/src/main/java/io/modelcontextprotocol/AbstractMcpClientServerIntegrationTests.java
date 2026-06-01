@@ -4,8 +4,6 @@
 
 package io.modelcontextprotocol;
 
-import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -21,6 +19,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -39,7 +38,7 @@ import io.modelcontextprotocol.spec.McpSchema.CompleteRequest;
 import io.modelcontextprotocol.spec.McpSchema.CompleteResult;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
-import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
+import io.modelcontextprotocol.spec.McpSchema.ElicitFormRequest;
 import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.ModelPreferences;
@@ -51,7 +50,6 @@ import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
-import io.modelcontextprotocol.util.McpJsonMapperUtils;
 import io.modelcontextprotocol.util.Utils;
 import net.javacrumbs.jsonunit.core.Option;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -59,11 +57,16 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertWith;
+import static org.assertj.core.api.InstanceOfAssertFactories.LIST;
+import static org.assertj.core.api.InstanceOfAssertFactories.MAP;
+import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 
@@ -381,7 +384,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(Tool.builder("tool1", EMPTY_JSON_SCHEMA).description("tool1 description").build())
-			.callHandler((exchange, request) -> exchange.createElicitation(mock(ElicitRequest.class))
+			.callHandler((exchange, request) -> exchange.createElicitation(mock(McpSchema.ElicitFormRequest.class))
 				.then(Mono.just(mock(CallToolResult.class))))
 			.build();
 
@@ -412,7 +415,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
-		Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler = request -> {
+		Function<McpSchema.ElicitFormRequest, McpSchema.ElicitResult> formElicitationHandler = request -> {
 			assertThat(request.message()).isNotEmpty();
 			assertThat(request.requestedSchema()).isNotNull();
 
@@ -431,7 +434,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.tool(Tool.builder("tool1", EMPTY_JSON_SCHEMA).description("tool1 description").build())
 			.callHandler((exchange, request) -> {
 
-				var elicitationRequest = McpSchema.ElicitRequest
+				var elicitationRequest = McpSchema.ElicitFormRequest
 					.builder("Test message",
 							Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
 					.build();
@@ -447,7 +450,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		try (var mcpClient = clientBuilder
 			.clientInfo(McpSchema.Implementation.builder("Sample client", "0.0.0").build())
 			.capabilities(ClientCapabilities.builder().elicitation().build())
-			.elicitation(elicitationHandler)
+			.elicitation(formElicitationHandler)
 			.build()) {
 
 			InitializeResult initResult = mcpClient.initialize();
@@ -476,7 +479,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		var clientBuilder = clientBuilders.get(clientType);
 
 		// Client handler returns empty content — SDK should apply defaults
-		Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler = request -> {
+		Function<McpSchema.ElicitFormRequest, McpSchema.ElicitResult> elicitationHandler = request -> {
 			assertThat(request.message()).isNotEmpty();
 			assertThat(request.requestedSchema()).isNotNull();
 			return new McpSchema.ElicitResult(McpSchema.ElicitResult.Action.ACCEPT, new HashMap<>());
@@ -491,15 +494,13 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
 			.callHandler((exchange, request) -> {
-
-				var elicitationRequest = McpSchema.ElicitRequest.builder()
-					.message("Provide your preferences")
-					.requestedSchema(Map.of("type", "object", "properties",
-							Map.of("nickname", Map.of("type", "string", "default", "Guest"), "age",
-									Map.of("type", "integer", "default", 18), "subscribe",
-									Map.of("type", "boolean", "default", true), "color",
-									Map.of("type", "string", "enum", List.of("red", "green"), "default", "green")),
-							"required", List.of("nickname", "age", "subscribe", "color")))
+				var elicitationRequest = McpSchema.ElicitFormRequest.builder("Provide your preferences",
+						Map.of("type", "object", "properties",
+								Map.of("nickname", Map.of("type", "string", "default", "Guest"), "age",
+										Map.of("type", "integer", "default", 18), "subscribe",
+										Map.of("type", "boolean", "default", true), "color",
+										Map.of("type", "string", "enum", List.of("red", "green"), "default", "green")),
+								"required", List.of("nickname", "age", "subscribe", "color")))
 					.build();
 
 				return exchange.createElicitation(elicitationRequest)
@@ -544,7 +545,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 		// Client handler returns an unmodifiable map (Map.of()) — SDK must copy into a
 		// mutable map before applying defaults.
-		Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler = request -> new McpSchema.ElicitResult(
+		Function<McpSchema.ElicitFormRequest, McpSchema.ElicitResult> elicitationHandler = request -> new McpSchema.ElicitResult(
 				McpSchema.ElicitResult.Action.ACCEPT, Map.of());
 
 		CallToolResult callResponse = McpSchema.CallToolResult.builder()
@@ -557,9 +558,8 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
 			.callHandler((exchange, request) -> {
 
-				var elicitationRequest = McpSchema.ElicitRequest.builder()
-					.message("Provide your preferences")
-					.requestedSchema(Map.of("type", "object", "properties",
+				var elicitationRequest = McpSchema.ElicitFormRequest
+					.builder("Provide your preferences", Map.of("type", "object", "properties",
 							Map.of("nickname", Map.of("type", "string", "default", "Guest"), "age",
 									Map.of("type", "integer", "default", 18)),
 							"required", List.of("nickname", "age")))
@@ -603,7 +603,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
-		Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler = request -> new McpSchema.ElicitResult(
+		Function<McpSchema.ElicitFormRequest, McpSchema.ElicitResult> elicitationHandler = request -> new McpSchema.ElicitResult(
 				McpSchema.ElicitResult.Action.ACCEPT, new HashMap<>());
 
 		CallToolResult callResponse = McpSchema.CallToolResult.builder()
@@ -616,10 +616,8 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
 			.callHandler((exchange, request) -> {
 
-				var elicitationRequest = McpSchema.ElicitRequest.builder()
-					.message("Provide your preferences")
-					.requestedSchema(Map.of("type", "object", "properties",
-							Map.of("nickname", Map.of("type", "string", "default", "Guest"))))
+				var elicitationRequest = McpSchema.ElicitFormRequest.builder("Provide your preferences", Map.of("type",
+						"object", "properties", Map.of("nickname", Map.of("type", "string", "default", "Guest"))))
 					.build();
 
 				return exchange.createElicitation(elicitationRequest)
@@ -659,7 +657,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
-		Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler = request -> new McpSchema.ElicitResult(
+		Function<McpSchema.ElicitFormRequest, McpSchema.ElicitResult> elicitationHandler = request -> new McpSchema.ElicitResult(
 				McpSchema.ElicitResult.Action.DECLINE, new HashMap<>());
 
 		CallToolResult callResponse = McpSchema.CallToolResult.builder()
@@ -672,10 +670,8 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
 			.callHandler((exchange, request) -> {
 
-				var elicitationRequest = McpSchema.ElicitRequest.builder()
-					.message("Provide your preferences")
-					.requestedSchema(Map.of("type", "object", "properties",
-							Map.of("nickname", Map.of("type", "string", "default", "Guest"))))
+				var elicitationRequest = McpSchema.ElicitFormRequest.builder("Provide your preferences", Map.of("type",
+						"object", "properties", Map.of("nickname", Map.of("type", "string", "default", "Guest"))))
 					.build();
 
 				return exchange.createElicitation(elicitationRequest)
@@ -716,7 +712,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		var clientBuilder = clientBuilders.get(clientType);
 
 		Map<String, Object> meta = Map.of("trace-id", "abc-123");
-		Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler = request -> new McpSchema.ElicitResult(
+		Function<McpSchema.ElicitFormRequest, McpSchema.ElicitResult> elicitationHandler = request -> new McpSchema.ElicitResult(
 				McpSchema.ElicitResult.Action.ACCEPT, new HashMap<>(), meta);
 
 		CallToolResult callResponse = McpSchema.CallToolResult.builder()
@@ -729,10 +725,8 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.tool(Tool.builder().name("tool1").description("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build())
 			.callHandler((exchange, request) -> {
 
-				var elicitationRequest = McpSchema.ElicitRequest.builder()
-					.message("Provide your preferences")
-					.requestedSchema(Map.of("type", "object", "properties",
-							Map.of("nickname", Map.of("type", "string", "default", "Guest"))))
+				var elicitationRequest = McpSchema.ElicitFormRequest.builder("Provide your preferences", Map.of("type",
+						"object", "properties", Map.of("nickname", Map.of("type", "string", "default", "Guest"))))
 					.build();
 
 				return exchange.createElicitation(elicitationRequest)
@@ -773,9 +767,9 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
-		Function<ElicitRequest, ElicitResult> elicitationHandler = request -> {
+		Function<ElicitFormRequest, ElicitResult> elicitationHandler = request -> {
 			assertThat(request.message()).isNotEmpty();
-			assertThat(request.requestedSchema()).isNotNull();
+			assertThat(((McpSchema.ElicitFormRequest) request).requestedSchema()).isNotNull();
 			return ElicitResult.builder(ElicitResult.Action.ACCEPT)
 				.content(Map.of("message", request.message()))
 				.build();
@@ -791,7 +785,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.tool(Tool.builder("tool1", EMPTY_JSON_SCHEMA).description("tool1 description").build())
 			.callHandler((exchange, request) -> {
 
-				var elicitationRequest = McpSchema.ElicitRequest
+				var elicitationRequest = McpSchema.ElicitFormRequest
 					.builder("Test message",
 							Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
 					.build();
@@ -840,7 +834,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 		var clientBuilder = clientBuilders.get(clientType);
 
-		Function<ElicitRequest, ElicitResult> elicitationHandler = request -> {
+		Function<ElicitFormRequest, ElicitResult> elicitationHandler = request -> {
 			assertThat(request.message()).isNotEmpty();
 			assertThat(request.requestedSchema()).isNotNull();
 
@@ -867,7 +861,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.tool(Tool.builder("tool1", EMPTY_JSON_SCHEMA).description("tool1 description").build())
 			.callHandler((exchange, request) -> {
 
-				var elicitationRequest = ElicitRequest
+				var elicitationRequest = ElicitFormRequest
 					.builder("Test message",
 							Map.of("type", "object", "properties", Map.of("message", Map.of("type", "string"))))
 					.build();
@@ -898,6 +892,165 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 			ElicitResult elicitResult = resultRef.get();
 			assertThat(elicitResult).isNull();
+		}
+		finally {
+			mcpServer.closeGracefully().block();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testCreateUrlElicitationSuccess(String clientType) {
+		var elicitationRequest = McpSchema.ElicitUrlRequest
+			.builder("Test message", "https://example.com/auth", "elicitation-123")
+			.build();
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		Function<McpSchema.ElicitUrlRequest, McpSchema.ElicitResult> urlElicitationHandler = request -> {
+			assertThat(request.message()).isEqualTo("Test message");
+			assertThat(request.url()).isEqualTo("https://example.com/auth");
+			assertThat(request.elicitationId()).isEqualTo("elicitation-123");
+
+			return McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT).build();
+		};
+
+		CallToolResult callResponse = McpSchema.CallToolResult.builder()
+			.addContent(McpSchema.TextContent.builder("CALL RESPONSE").build())
+			.build();
+
+		AtomicReference<McpSchema.ElicitResult> elicitResultRef = new AtomicReference<>();
+
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(Tool.builder("tool1", EMPTY_JSON_SCHEMA).description("tool1 description").build())
+			.callHandler((exchange, request) -> exchange.createElicitation(elicitationRequest)
+				.doOnNext(elicitResultRef::set)
+				.thenReturn(callResponse))
+			.build();
+
+		var mcpServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").tools(tool).build();
+
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample client", "0.0.0").build())
+			.capabilities(ClientCapabilities.builder().elicitation(false, true).build())
+			.urlElicitation(urlElicitationHandler)
+			.build()) {
+
+			CallToolResult response = mcpClient
+				.callTool(McpSchema.CallToolRequest.builder("tool1").arguments(Map.of()).build());
+
+			assertThat(response).isNotNull();
+			assertThat(response).isEqualTo(callResponse);
+			var elicitResult = elicitResultRef.get();
+			assertThat(elicitResult).isNotNull();
+			assertThat(elicitResult.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+		}
+		finally {
+			mcpServer.closeGracefully().block();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testElicitationCompleteNotification(String clientType) throws InterruptedException {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		CountDownLatch notificationLatch = new CountDownLatch(1);
+		AtomicReference<McpSchema.ElicitationCompleteNotification> notificationRef = new AtomicReference<>();
+		AtomicReference<String> sessionId = new AtomicReference<>();
+
+		Consumer<McpSchema.ElicitationCompleteNotification> elicitationCompleteConsumer = notification -> {
+			notificationRef.set(notification);
+			notificationLatch.countDown();
+		};
+
+		CallToolResult callResponse = McpSchema.CallToolResult.builder()
+			.addContent(McpSchema.TextContent.builder("CALL RESPONSE").build())
+			.build();
+
+		// Capture the session ID so we can trigger an "elicitation complete" notification
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(Tool.builder("tool1", EMPTY_JSON_SCHEMA).description("tool1 description").build())
+			.callHandler((exchange, request) -> {
+				sessionId.set(exchange.sessionId());
+				return Mono.just(callResponse);
+			})
+			.build();
+
+		var mcpServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").tools(tool).build();
+
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample client", "0.0.0").build())
+			.elicitationCompleteConsumer(elicitationCompleteConsumer)
+			// enable elicitation so that we can register an elicitation complete consumer
+			.urlElicitation(request -> McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT).build())
+			.build()) {
+
+			var response = mcpClient.callTool(McpSchema.CallToolRequest.builder("tool1").arguments(Map.of()).build());
+			var capturedSessionId = sessionId.get();
+			assertThat(response).isNotNull();
+			assertThat(capturedSessionId).isNotNull();
+			mcpServer
+				.sendElicitationComplete(capturedSessionId,
+						new McpSchema.ElicitationCompleteNotification("elicitation-123"))
+				.block();
+
+			assertThat(notificationLatch.await(5, TimeUnit.SECONDS)).isTrue();
+			var notification = notificationRef.get();
+			assertThat(notification).isNotNull();
+			assertThat(notification.elicitationId()).isEqualTo("elicitation-123");
+		}
+		finally {
+			mcpServer.closeGracefully().block();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testElicitationRequiredError(String clientType) throws InterruptedException {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		// Capture the session ID so we can trigger an "elicitation complete" notification
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(Tool.builder("tool1", EMPTY_JSON_SCHEMA).description("tool1 description").build())
+			.callHandler((exchange, request) -> {
+				return Mono.error(McpError.URL_ELICITATION_REQUIRED.apply(List
+					.of(McpSchema.ElicitUrlRequest.builder("do the thing", "https://example.com", "elicitation-1234")
+						.build())));
+			})
+			.build();
+
+		var mcpServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").tools(tool).build();
+
+		Function<McpSchema.ElicitUrlRequest, ElicitResult> elicitationHandler = request -> ElicitResult
+			.builder(ElicitResult.Action.ACCEPT)
+			.build();
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample client", "0.0.0").build())
+			.urlElicitation(elicitationHandler)
+			.build()) {
+
+			assertThatThrownBy(
+					() -> mcpClient.callTool(McpSchema.CallToolRequest.builder("tool1").arguments(Map.of()).build()))
+				.isInstanceOf(McpError.class)
+				.extracting("jsonRpcError")
+				.asInstanceOf(type(McpSchema.JSONRPCResponse.JSONRPCError.class))
+				.satisfies(error -> {
+					assertThat(error.code()).isEqualTo(McpSchema.ErrorCodes.URL_ELICITATION_REQUIRED);
+					assertThat(error.data()).asInstanceOf(MAP)
+						.hasSize(1)
+						.extracting("elicitations")
+						.asInstanceOf(LIST)
+						.hasSize(1)
+						.first()
+						.asInstanceOf(MAP)
+						.containsEntry("mode", "url")
+						.containsEntry("message", "do the thing")
+						.containsEntry("url", "https://example.com")
+						.containsEntry("elicitationId", "elicitation-1234");
+				});
 		}
 		finally {
 			mcpServer.closeGracefully().block();

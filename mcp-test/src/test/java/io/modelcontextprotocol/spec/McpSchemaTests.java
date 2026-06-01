@@ -1,14 +1,8 @@
 /*
-* Copyright 2025 - 2026 the original author or authors.
-*/
+ * Copyright 2025 - 2026 the original author or authors.
+ */
 
 package io.modelcontextprotocol.spec;
-
-import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -17,12 +11,17 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
+import net.javacrumbs.jsonunit.core.Option;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Test;
 
-import io.modelcontextprotocol.json.TypeRef;
-import net.javacrumbs.jsonunit.core.Option;
+import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * @author Christian Tzolov
@@ -1557,7 +1556,7 @@ public class McpSchemaTests {
 
 	@Test
 	void testCreateElicitationRequest() throws Exception {
-		McpSchema.ElicitRequest request = McpSchema.ElicitRequest
+		McpSchema.ElicitRequest request = McpSchema.ElicitFormRequest
 			.builder("Please provide additional information", Map.of("type", "object", "required", List.of("a"),
 					"properties", Map.of("foo", Map.of("type", "string"))))
 			.build();
@@ -1567,9 +1566,43 @@ public class McpSchemaTests {
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
-			.isEqualTo(
-					json("""
-							{"message":"Please provide additional information","requestedSchema":{"properties":{"foo":{"type":"string"}},"required":["a"],"type":"object"}}"""));
+			.isEqualTo(json("""
+					{
+					  "mode": "form",
+					  "message": "Please provide additional information",
+					  "requestedSchema": {
+						"properties": {
+						  "foo": {
+							"type": "string"
+						  }
+						},
+						"required": [
+						  "a"
+						],
+						"type": "object"
+					  }
+					}"""));
+	}
+
+	@Test
+	void testCreateElicitationUrlRequest() throws Exception {
+		McpSchema.ElicitRequest request = McpSchema.ElicitUrlRequest
+			.builder("Please visit the URL", "https://example.com/oauth", "elicit-oauth-123")
+			.build();
+
+		String value = JSON_MAPPER.writeValueAsString(request);
+
+		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
+			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
+			.isObject()
+			.isEqualTo(json("""
+					{
+						 "mode": "url",
+						 "message": "Please visit the URL",
+						 "url": "https://example.com/oauth",
+						 "elicitationId": "elicit-oauth-123"
+					}
+					"""));
 	}
 
 	@Test
@@ -1588,12 +1621,57 @@ public class McpSchemaTests {
 	}
 
 	@Test
-	void testElicitRequestDeserializationWithMissingRequiredFields() throws Exception {
-		McpSchema.ElicitRequest request = JSON_MAPPER.readValue("{}", McpSchema.ElicitRequest.class);
+	void testElicitRequestDeserializationDefaultsToForm() throws Exception {
+		var request = JSON_MAPPER.readValue("{\"message\":\"do the thing\"}", McpSchema.ElicitRequest.class);
 
-		assertThat(request).isNotNull();
+		assertThat(request).isNotNull().isInstanceOf(McpSchema.ElicitFormRequest.class);
+		assertThat(request.message()).isEqualTo("do the thing");
+		assertThat(request.mode()).isEqualTo("form");
+		var formRequest = (McpSchema.ElicitFormRequest) request;
+		assertThat(formRequest.requestedSchema()).isEmpty();
+
+	}
+
+	@Test
+	void testElicitRequestDeserializationWithMissingRequiredFields() throws Exception {
+		var request = JSON_MAPPER.readValue("{\"mode\":\"form\"}", McpSchema.ElicitRequest.class);
+
+		assertThat(request).isNotNull().isInstanceOf(McpSchema.ElicitFormRequest.class);
 		assertThat(request.message()).isEmpty();
-		assertThat(request.requestedSchema()).isEmpty();
+		assertThat(request.mode()).isEqualTo("form");
+		var formRequest = (McpSchema.ElicitFormRequest) request;
+		assertThat(formRequest.requestedSchema()).isEmpty();
+
+	}
+
+	@Test
+	void testElicitUrlRequestDeserializationWithMissingRequiredFields() throws Exception {
+		McpSchema.ElicitRequest request = JSON_MAPPER.readValue("{\"mode\":\"url\"}", McpSchema.ElicitRequest.class);
+		assertThat(request).isNotNull().isInstanceOf(McpSchema.ElicitUrlRequest.class);
+		assertThat(request.message()).isEmpty();
+		assertThat(request.mode()).isEqualTo("url");
+		var urlRequest = (McpSchema.ElicitUrlRequest) request;
+		assertThat(urlRequest.url()).isEmpty();
+		assertThat(urlRequest.elicitationId()).isEmpty();
+
+	}
+
+	@Test
+	void testElicitUrlDeserialization() throws Exception {
+		McpSchema.ElicitRequest request = JSON_MAPPER.readValue("""
+				{
+					 "mode": "url",
+					 "message": "Please visit the URL",
+					 "url": "https://example.com/oauth",
+					 "elicitationId": "elicit-oauth-123"
+				}
+				""", McpSchema.ElicitRequest.class);
+		assertThat(request).isNotNull().isInstanceOf(McpSchema.ElicitUrlRequest.class);
+		assertThat(request.message()).isEqualTo("Please visit the URL");
+		assertThat(request.mode()).isEqualTo("url");
+		var urlRequest = (McpSchema.ElicitUrlRequest) request;
+		assertThat(urlRequest.url()).isEqualTo("https://example.com/oauth");
+		assertThat(urlRequest.elicitationId()).isEqualTo("elicit-oauth-123");
 	}
 
 	@Test
@@ -1604,7 +1682,8 @@ public class McpSchemaTests {
 		Map<String, Object> meta = new HashMap<>();
 		meta.put("progressToken", "elicit-token-789");
 
-		McpSchema.ElicitRequest request = McpSchema.ElicitRequest.builder("Please provide your name", requestedSchema)
+		McpSchema.ElicitRequest request = McpSchema.ElicitFormRequest
+			.builder("Please provide your name", requestedSchema)
 			.meta(meta)
 			.build();
 
@@ -1612,7 +1691,8 @@ public class McpSchemaTests {
 		assertThatJson(value).when(Option.IGNORING_ARRAY_ORDER)
 			.when(Option.IGNORING_EXTRA_ARRAY_ITEMS)
 			.isObject()
-			.containsEntry("_meta", Map.of("progressToken", "elicit-token-789"));
+			.containsEntry("_meta", Map.of("progressToken", "elicit-token-789"))
+			.containsEntry("mode", "form");
 
 		// Test Request interface methods
 		assertThat(request.meta()).isEqualTo(meta);
@@ -1627,14 +1707,23 @@ public class McpSchemaTests {
 		requestedSchema.put("properties", Map.of("name", Map.of("type", "string")));
 		requestedSchema.put("required", List.of("name"));
 
-		McpSchema.ElicitRequest request = McpSchema.ElicitRequest.builder("Please provide name", requestedSchema)
+		McpSchema.ElicitRequest request = McpSchema.ElicitFormRequest.builder("Please provide name", requestedSchema)
 			.build();
 
 		String json = JSON_MAPPER.writeValueAsString(request);
 		assertThatJson(json).inPath("$.requestedSchema.$schema").isEqualTo(McpSchema.JSON_SCHEMA_DIALECT_2020_12);
 
-		McpSchema.ElicitRequest parsed = JSON_MAPPER.readValue(json, McpSchema.ElicitRequest.class);
+		McpSchema.ElicitFormRequest parsed = (McpSchema.ElicitFormRequest) JSON_MAPPER.readValue(json,
+				McpSchema.ElicitRequest.class);
 		assertThat(parsed.requestedSchema()).containsEntry("$schema", McpSchema.JSON_SCHEMA_DIALECT_2020_12);
+	}
+
+	@Test
+	void testElicitRequestToleratesUnknownFields() throws Exception {
+		McpSchema.ElicitRequest request = JSON_MAPPER.readValue("""
+				{"message":"hello","requestedSchema":{"type":"object"},"futureField":42}""",
+				McpSchema.ElicitRequest.class);
+		assertThat(request.message()).isEqualTo("hello");
 	}
 
 	// Pagination Tests
@@ -1889,15 +1978,13 @@ public class McpSchemaTests {
 	@Test
 	void testElicitRequestWithDefaultValues() throws Exception {
 		// Test that schemas with default values serialize correctly in an ElicitRequest
-		McpSchema.ElicitRequest request = McpSchema.ElicitRequest.builder()
-			.message("Please provide your info")
-			.requestedSchema(Map.of("type", "object", "properties",
-					Map.of("name", Map.of("type", "string", "default", "John Doe"), "age",
-							Map.of("type", "integer", "default", 30), "score",
-							Map.of("type", "number", "default", 95.5), "status",
-							Map.of("type", "string", "enum", List.of("active", "inactive"), "default", "active"),
-							"verified", Map.of("type", "boolean", "default", true)),
-					"required", List.of("name")))
+		McpSchema.ElicitRequest request = McpSchema.ElicitFormRequest.builder("Please provide your info", Map.of("type",
+				"object", "properties",
+				Map.of("name", Map.of("type", "string", "default", "John Doe"), "age",
+						Map.of("type", "integer", "default", 30), "score", Map.of("type", "number", "default", 95.5),
+						"status", Map.of("type", "string", "enum", List.of("active", "inactive"), "default", "active"),
+						"verified", Map.of("type", "boolean", "default", true)),
+				"required", List.of("name")))
 			.build();
 
 		String value = JSON_MAPPER.writeValueAsString(request);
@@ -1907,6 +1994,41 @@ public class McpSchemaTests {
 		assertThatJson(value).node("requestedSchema.properties.score.default").isEqualTo(95.5);
 		assertThatJson(value).node("requestedSchema.properties.status.default").isEqualTo("active");
 		assertThatJson(value).node("requestedSchema.properties.verified.default").isEqualTo(true);
+	}
+
+	// Elicitation Complete Notification Tests (SEP-1036)
+
+	@Test
+	void testElicitationCompleteNotification() throws Exception {
+		McpSchema.ElicitationCompleteNotification notification = new McpSchema.ElicitationCompleteNotification(
+				"elicit-789");
+
+		String json = JSON_MAPPER.writeValueAsString(notification);
+		assertThatJson(json).isObject().containsEntry("elicitationId", "elicit-789");
+
+		McpSchema.ElicitationCompleteNotification deserialized = JSON_MAPPER.readValue(json,
+				McpSchema.ElicitationCompleteNotification.class);
+		assertThat(deserialized.elicitationId()).isEqualTo("elicit-789");
+	}
+
+	@Test
+	void testElicitationCompleteNotificationNullElicitationIdThrows() {
+		assertThatThrownBy(() -> new McpSchema.ElicitationCompleteNotification(null))
+			.isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	void testElicitationCompleteNotificationDeserializesWithoutElicitationId() throws Exception {
+		McpSchema.ElicitationCompleteNotification notification = JSON_MAPPER.readValue("""
+				{}""", McpSchema.ElicitationCompleteNotification.class);
+		assertThat(notification.elicitationId()).isEqualTo("");
+	}
+
+	@Test
+	void testElicitationCompleteNotificationToleratesUnknownFields() throws Exception {
+		McpSchema.ElicitationCompleteNotification notification = JSON_MAPPER.readValue("""
+				{"elicitationId":"abc","futureField":"ignored"}""", McpSchema.ElicitationCompleteNotification.class);
+		assertThat(notification.elicitationId()).isEqualTo("abc");
 	}
 
 	// Progress Notification Tests

@@ -270,20 +270,28 @@ This capability allows:
 Elicitation enables servers to request additional information or user input through the client. This is useful when a server needs clarification or confirmation during an operation:
 
 ```java
-// Configure elicitation handler
-Function<ElicitRequest, ElicitResult> elicitationHandler = request -> {
+// Configure form elicitation handler
+Function<ElicitFormRequest, ElicitResult> formElicitationHandler = request -> {
     // Present the request to the user and collect their response
     // The request contains a message and a schema describing the expected input
     Map<String, Object> userResponse = collectUserInput(request.message(), request.requestedSchema());
     return new ElicitResult(ElicitResult.Action.ACCEPT, userResponse);
 };
 
+// Configure URL elicitation handler
+Function<ElicitUrlRequest, ElicitResult> urlElicitationHandler = request -> {
+    // Prompt the user to visit the URL
+    // e.g. openBrowser(request.url());
+    return new ElicitResult(ElicitResult.Action.ACCEPT, Map.of());
+};
+
 // Create client with elicitation support
 var client = McpClient.sync(transport)
     .capabilities(ClientCapabilities.builder()
-        .elicitation()
+        .elicitation(true, true) // enables both form and URL elicitation
         .build())
-    .elicitation(elicitationHandler)
+    .elicitation(formElicitationHandler)
+    .urlElicitation(urlElicitationHandler)
     .build();
 ```
 
@@ -292,6 +300,28 @@ The `ElicitResult` supports three actions:
 - `ACCEPT` - The user accepted and provided the requested information
 - `DECLINE` - The user declined to provide the information
 - `CANCEL` - The operation was cancelled
+
+#### URL Elicitation Required Handling
+
+When a server requires out-of-band URL elicitation but the client has not negotiated support for it (or the server strictly requires out-of-band handling), the server may return a `URL_ELICITATION_REQUIRED` error during tool execution or prompt retrieval.
+
+```java
+try {
+    mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+} catch (McpError e) {
+    if (e.getJsonRpcError().code() == McpSchema.ErrorCodes.URL_ELICITATION_REQUIRED) {
+        // Extract elicitation requests from the error data
+        Map<String, Object> data = (Map<String, Object>) e.getJsonRpcError().data();
+        TypeRef<List<McpSchema.ElicitUrlRequest>> typeRef = new TypeRef<>() {};
+        var requests = McpJsonDefaults.getMapper()
+                .convertValue(data.get("elicitations"), typeRef);
+
+		for (var req : requests) {
+            // handle elicitation requests
+        }
+    }
+}
+```
 
 ### Logging Support
 
