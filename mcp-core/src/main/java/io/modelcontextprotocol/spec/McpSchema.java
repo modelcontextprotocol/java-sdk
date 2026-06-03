@@ -10,6 +10,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -17,11 +20,10 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Based on the <a href="http://www.jsonrpc.org/specification">JSON-RPC 2.0
@@ -981,13 +983,19 @@ public final class McpSchema {
 	 * past specs or fallback (if title isn't present).
 	 * @param title Intended for UI and end-user contexts
 	 * @param version The version of the implementation.
+	 * @param description An optional human-readable description of this implementation.
+	 * @param icons An optional list of icons for this implementation.
+	 * @param websiteUrl An optional URL of the website for this implementation.
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Implementation( // @formatter:off
 		@JsonProperty("name") String name,
 		@JsonProperty("title") String title,
-		@JsonProperty("version") String version) implements Identifier { // @formatter:on
+		@JsonProperty("version") String version,
+		@JsonProperty("description") String description,
+		@JsonProperty("icons") List<Icon> icons,
+		@JsonProperty("websiteUrl") String websiteUrl) implements Identifier { // @formatter:on
 
 		public Implementation {
 			Assert.notNull(name, "name must not be null");
@@ -996,7 +1004,8 @@ public final class McpSchema {
 
 		@JsonCreator
 		static Implementation fromJson(@JsonProperty("name") String name, @JsonProperty("title") String title,
-				@JsonProperty("version") String version) {
+				@JsonProperty("version") String version, @JsonProperty("description") String description,
+				@JsonProperty("icons") List<Icon> icons, @JsonProperty("websiteUrl") String websiteUrl) {
 			if (name == null || version == null) {
 				List<String> missing = new ArrayList<>();
 				if (name == null) {
@@ -1010,7 +1019,7 @@ public final class McpSchema {
 				logger.warn("Implementation: missing required fields during deserialization: {}",
 						String.join(", ", missing));
 			}
-			return new Implementation(name, title, version);
+			return new Implementation(name, title, version, description, icons, websiteUrl);
 		}
 
 		/**
@@ -1018,7 +1027,15 @@ public final class McpSchema {
 		 */
 		@Deprecated
 		public Implementation(String name, String version) {
-			this(name, null, version);
+			this(name, null, version, null, null, null);
+		}
+
+		/**
+		 * @deprecated Use {@link #builder(String, String)}
+		 */
+		@Deprecated
+		public Implementation(String name, String title, String version) {
+			this(name, title, version, null, null, null);
 		}
 
 		public static Builder builder(String name, String version) {
@@ -1033,6 +1050,12 @@ public final class McpSchema {
 
 			private final String version;
 
+			private String description;
+
+			private List<Icon> icons;
+
+			private String websiteUrl;
+
 			private Builder(String name, String version) {
 				Assert.hasText(name, "name must not be empty");
 				Assert.hasText(version, "version must not be empty");
@@ -1045,8 +1068,102 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder icons(List<Icon> icons) {
+				this.icons = icons;
+				return this;
+			}
+
+			public Builder websiteUrl(String websiteUrl) {
+				this.websiteUrl = websiteUrl;
+				return this;
+			}
+
 			public Implementation build() {
-				return new Implementation(name, title, version);
+				return new Implementation(name, title, version, description, icons, websiteUrl);
+			}
+
+		}
+	}
+
+	/**
+	 * Represents an icon that can be displayed in a user interface.
+	 *
+	 * @param src A URI pointing to an icon resource or a base64-encoded data URI.
+	 * @param mimeType Optional MIME type override if the server's MIME type is missing or
+	 * generic.
+	 * @param sizes Optional array of strings specifying sizes at which the icon can be
+	 * used. Each string should be in WxH format (e.g., "48x48", "96x96") or "any" for
+	 * scalable formats like SVG.
+	 * @param theme Optional specifier for the theme this icon is designed for. "light"
+	 * indicates the icon is designed for a light background, "dark" indicates the icon is
+	 * designed for a dark background. If not provided, the client should assume the icon
+	 * can be used with any theme.
+	 * @see <a href=
+	 * "https://github.com/modelcontextprotocol/modelcontextprotocol/issues/973">SEP-973</a>
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record Icon( // @formatter:off
+		@JsonProperty("src") String src,
+		@JsonProperty("mimeType") String mimeType,
+		@JsonProperty("sizes") List<String> sizes,
+		@JsonProperty("theme") String theme) { // @formatter:on
+
+		public Icon {
+			Assert.notNull(src, "Icon src must not be null");
+		}
+
+		@JsonCreator
+		static Icon fromJson(@JsonProperty("src") String src, @JsonProperty("mimeType") String mimeType,
+				@JsonProperty("sizes") List<String> sizes, @JsonProperty("theme") String theme) {
+			if (src == null) {
+				logger.warn("Icon: missing required field 'src' during deserialization, using default ''");
+				src = "";
+			}
+			return new Icon(src, mimeType, sizes, theme);
+		}
+
+		public static Builder builder(String src) {
+			return new Builder(src);
+		}
+
+		public static class Builder {
+
+			private final String src;
+
+			private String mimeType;
+
+			private List<String> sizes;
+
+			private String theme;
+
+			private Builder(String src) {
+				Assert.hasText(src, "src must not be empty");
+				this.src = src;
+			}
+
+			public Builder mimeType(String mimeType) {
+				this.mimeType = mimeType;
+				return this;
+			}
+
+			public Builder sizes(List<String> sizes) {
+				this.sizes = sizes;
+				return this;
+			}
+
+			public Builder theme(String theme) {
+				this.theme = theme;
+				return this;
+			}
+
+			public Icon build() {
+				return new Icon(src, mimeType, sizes, theme);
 			}
 
 		}
@@ -1195,6 +1312,7 @@ public final class McpSchema {
 	 * sizes and estimate context window usage.
 	 * @param annotations Optional annotations for the client. The client can use
 	 * annotations to inform how objects are used or displayed.
+	 * @param icons Optional list of icons for this resource.
 	 * @param meta See specification for notes on _meta usage
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -1207,11 +1325,21 @@ public final class McpSchema {
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("size") Long size,
 		@JsonProperty("annotations") Annotations annotations,
-		@JsonProperty("_meta") Map<String, Object> meta) implements ResourceContent { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta,
+		@JsonProperty("icons") List<Icon> icons) implements ResourceContent { // @formatter:on
 
 		public Resource {
 			Assert.hasText(uri, "uri must not be empty");
 			Assert.hasText(name, "name must not be empty");
+		}
+
+		/**
+		 * @deprecated Use {@link #builder(String, String)}
+		 */
+		@Deprecated
+		public Resource(String uri, String name, String title, String description, String mimeType, Long size,
+				Annotations annotations, Map<String, Object> meta) {
+			this(uri, name, title, description, mimeType, size, annotations, meta, null);
 		}
 
 		public static Builder builder(String uri, String name) {
@@ -1238,6 +1366,8 @@ public final class McpSchema {
 			private Long size;
 
 			private Annotations annotations;
+
+			private List<Icon> icons;
 
 			private Map<String, Object> meta;
 
@@ -1291,13 +1421,18 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder icons(List<Icon> icons) {
+				this.icons = icons;
+				return this;
+			}
+
 			public Builder meta(Map<String, Object> meta) {
 				this.meta = meta;
 				return this;
 			}
 
 			public Resource build() {
-				return new Resource(uri, name, title, description, mimeType, size, annotations, meta);
+				return new Resource(uri, name, title, description, mimeType, size, annotations, meta, icons);
 			}
 
 		}
@@ -1317,6 +1452,7 @@ public final class McpSchema {
 	 * @param mimeType The MIME type of this resource, if known.
 	 * @param annotations Optional annotations for the client. The client can use
 	 * annotations to inform how objects are used or displayed.
+	 * @param icons Optional list of icons for this resource template.
 	 * @see <a href="https://datatracker.ietf.org/doc/html/rfc6570">RFC 6570</a>
 	 * @param meta See specification for notes on _meta usage
 	 *
@@ -1330,7 +1466,8 @@ public final class McpSchema {
 		@JsonProperty("description") String description,
 		@JsonProperty("mimeType") String mimeType,
 		@JsonProperty("annotations") Annotations annotations,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Annotated, Identifier, Meta { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta,
+		@JsonProperty("icons") List<Icon> icons) implements Annotated, Identifier, Meta { // @formatter:on
 
 		public ResourceTemplate {
 			Assert.hasText(uriTemplate, "uriTemplate must not be empty");
@@ -1342,8 +1479,17 @@ public final class McpSchema {
 		 */
 		@Deprecated
 		public ResourceTemplate(String uriTemplate, String name, String title, String description, String mimeType,
+				Annotations annotations, Map<String, Object> meta) {
+			this(uriTemplate, name, title, description, mimeType, annotations, meta, null);
+		}
+
+		/**
+		 * @deprecated Use {@link #builder(String, String)}.
+		 */
+		@Deprecated
+		public ResourceTemplate(String uriTemplate, String name, String title, String description, String mimeType,
 				Annotations annotations) {
-			this(uriTemplate, name, title, description, mimeType, annotations, null);
+			this(uriTemplate, name, title, description, mimeType, annotations, null, null);
 		}
 
 		/**
@@ -1352,7 +1498,7 @@ public final class McpSchema {
 		@Deprecated
 		public ResourceTemplate(String uriTemplate, String name, String description, String mimeType,
 				Annotations annotations) {
-			this(uriTemplate, name, null, description, mimeType, annotations);
+			this(uriTemplate, name, null, description, mimeType, annotations, null, null);
 		}
 
 		public static Builder builder(String uriTemplate, String name) {
@@ -1377,6 +1523,8 @@ public final class McpSchema {
 			private String mimeType;
 
 			private Annotations annotations;
+
+			private List<Icon> icons;
 
 			private Map<String, Object> meta;
 
@@ -1426,13 +1574,18 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder icons(List<Icon> icons) {
+				this.icons = icons;
+				return this;
+			}
+
 			public Builder meta(Map<String, Object> meta) {
 				this.meta = meta;
 				return this;
 			}
 
 			public ResourceTemplate build() {
-				return new ResourceTemplate(uriTemplate, name, title, description, mimeType, annotations, meta);
+				return new ResourceTemplate(uriTemplate, name, title, description, mimeType, annotations, meta, icons);
 			}
 
 		}
@@ -2017,6 +2170,7 @@ public final class McpSchema {
 	 * @param title An optional title for the prompt.
 	 * @param description An optional description of what this prompt provides.
 	 * @param arguments A list of arguments to use for templating the prompt.
+	 * @param icons Optional list of icons for this prompt.
 	 * @param meta See specification for notes on _meta usage
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -2026,7 +2180,8 @@ public final class McpSchema {
 		@JsonProperty("title") String title,
 		@JsonProperty("description") String description,
 		@JsonProperty("arguments") List<PromptArgument> arguments,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Identifier { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta,
+		@JsonProperty("icons") List<Icon> icons) implements Identifier { // @formatter:on
 
 		public Prompt {
 			Assert.notNull(name, "name must not be null");
@@ -2036,22 +2191,28 @@ public final class McpSchema {
 		static Prompt fromJson(@JsonProperty("name") String name, @JsonProperty("title") String title,
 				@JsonProperty("description") String description,
 				@JsonProperty("arguments") List<PromptArgument> arguments,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+				@JsonProperty("_meta") Map<String, Object> meta, @JsonProperty("icons") List<Icon> icons) {
 			if (name == null) {
 				logger.warn("Prompt: missing required field 'name' during deserialization, using default ''");
 				name = "";
 			}
-			return new Prompt(name, title, description, arguments, meta);
+			return new Prompt(name, title, description, arguments, meta, icons);
 		}
 
 		@Deprecated
 		public Prompt(String name, String description, List<PromptArgument> arguments) {
-			this(name, null, description, arguments, null);
+			this(name, null, description, arguments, null, null);
 		}
 
 		@Deprecated
 		public Prompt(String name, String title, String description, List<PromptArgument> arguments) {
-			this(name, title, description, arguments, null);
+			this(name, title, description, arguments, null, null);
+		}
+
+		@Deprecated
+		public Prompt(String name, String title, String description, List<PromptArgument> arguments,
+				Map<String, Object> meta) {
+			this(name, title, description, arguments, meta, null);
 		}
 
 		public static Builder builder(String name) {
@@ -2067,6 +2228,8 @@ public final class McpSchema {
 			private String description;
 
 			private List<PromptArgument> arguments;
+
+			private List<Icon> icons;
 
 			private Map<String, Object> meta;
 
@@ -2090,13 +2253,18 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder icons(List<Icon> icons) {
+				this.icons = icons;
+				return this;
+			}
+
 			public Builder meta(Map<String, Object> meta) {
 				this.meta = meta;
 				return this;
 			}
 
 			public Prompt build() {
-				return new Prompt(name, title, description, arguments, meta);
+				return new Prompt(name, title, description, arguments, meta, icons);
 			}
 
 		}
@@ -2681,6 +2849,7 @@ public final class McpSchema {
 	 * tool's output returned in the structuredContent field of a CallToolResult. Same
 	 * dialect rules as {@code inputSchema}.
 	 * @param annotations Optional additional tool information.
+	 * @param icons Optional list of icons for this tool.
 	 * @param meta See specification for notes on _meta usage
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -2692,11 +2861,21 @@ public final class McpSchema {
 		@JsonProperty("inputSchema") Map<String, Object> inputSchema,
 		@JsonProperty("outputSchema") Map<String, Object> outputSchema,
 		@JsonProperty("annotations") ToolAnnotations annotations,
-		@JsonProperty("_meta") Map<String, Object> meta) { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta,
+		@JsonProperty("icons") List<Icon> icons) { // @formatter:on
 
 		public Tool {
 			Assert.notNull(name, "name must not be null");
 			Assert.notNull(inputSchema, "inputSchema must not be null");
+		}
+
+		/**
+		 * @deprecated Use {@link #builder(String, Map)}
+		 */
+		@Deprecated
+		public Tool(String name, String title, String description, Map<String, Object> inputSchema,
+				Map<String, Object> outputSchema, ToolAnnotations annotations, Map<String, Object> meta) {
+			this(name, title, description, inputSchema, outputSchema, annotations, meta, null);
 		}
 
 		@JsonCreator
@@ -2705,7 +2884,7 @@ public final class McpSchema {
 				@JsonProperty("inputSchema") Map<String, Object> inputSchema,
 				@JsonProperty("outputSchema") Map<String, Object> outputSchema,
 				@JsonProperty("annotations") ToolAnnotations annotations,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+				@JsonProperty("_meta") Map<String, Object> meta, @JsonProperty("icons") List<Icon> icons) {
 			if (name == null || inputSchema == null) {
 				List<String> missing = new ArrayList<>();
 				if (name == null) {
@@ -2718,7 +2897,7 @@ public final class McpSchema {
 				}
 				logger.warn("Tool: missing required fields during deserialization: {}", String.join(", ", missing));
 			}
-			return new Tool(name, title, description, inputSchema, outputSchema, annotations, meta);
+			return new Tool(name, title, description, inputSchema, outputSchema, annotations, meta, icons);
 		}
 
 		/**
@@ -2760,6 +2939,8 @@ public final class McpSchema {
 			private Map<String, Object> outputSchema;
 
 			private ToolAnnotations annotations;
+
+			private List<Icon> icons;
 
 			private Map<String, Object> meta;
 
@@ -2847,6 +3028,11 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder icons(List<Icon> icons) {
+				this.icons = icons;
+				return this;
+			}
+
 			public Builder meta(Map<String, Object> meta) {
 				this.meta = meta;
 				return this;
@@ -2858,7 +3044,7 @@ public final class McpSchema {
 					logger.warn("Input schema was not set, falling back to empty schema");
 					inputSchema = Map.of("type", "object");
 				}
-				return new Tool(name, title, description, inputSchema, outputSchema, annotations, meta);
+				return new Tool(name, title, description, inputSchema, outputSchema, annotations, meta, icons);
 			}
 
 		}

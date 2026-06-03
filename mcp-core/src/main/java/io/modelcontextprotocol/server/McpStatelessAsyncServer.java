@@ -439,11 +439,10 @@ public class McpStatelessAsyncServer {
 
 		return Mono.defer(() -> {
 			if (this.toolsRepository.removeTool(toolName)) {
-
 				logger.debug("Removed tool handler: {}", toolName);
 			}
 			else {
-				logger.warn("Ignore as a Tool with name '{}' not found", toolName);
+				logger.warn("Failed to remove a tool with name '{}' (not found)", toolName);
 			}
 
 			return Mono.empty();
@@ -537,7 +536,7 @@ public class McpStatelessAsyncServer {
 				logger.debug("Removed resource handler: {}", resourceUri);
 			}
 			else {
-				logger.warn("Resource with URI '{}' not found", resourceUri);
+				logger.warn("Failed to remove a resource with URI '{}' (not found)", resourceUri);
 			}
 			return Mono.empty();
 		});
@@ -596,7 +595,7 @@ public class McpStatelessAsyncServer {
 				logger.debug("Removed resource template: {}", uriTemplate);
 			}
 			else {
-				logger.warn("Ignore as a Resource Template with URI '{}' not found", uriTemplate);
+				logger.warn("Failed to remove a resource template with URI '{}' (not found)", uriTemplate);
 			}
 			return Mono.empty();
 		});
@@ -689,7 +688,7 @@ public class McpStatelessAsyncServer {
 				return Mono.empty();
 			}
 			else {
-				logger.warn("Ignore as a Prompt with name '{}' not found", promptName);
+				logger.warn("Failed to remove a prompt with name '{}' (not found)", promptName);
 			}
 
 			return Mono.empty();

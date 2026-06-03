@@ -21,10 +21,8 @@ import reactor.core.scheduler.Schedulers;
  * "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization">MCP
  * Specification: Authorization</a>
  * @author Daniel Garnier-Moiroux
- * @deprecated in favor of {@link McpHttpClientTransportAuthorizationErrorHandler}
  */
-@Deprecated(forRemoval = true, since = "2.0.0")
-public interface McpHttpClientAuthorizationErrorHandler {
+public interface McpHttpClientTransportAuthorizationErrorHandler {
 
 	/**
 	 * Handle authorization error (HTTP 401 or 403), and signal whether the HTTP request
@@ -37,15 +35,14 @@ public interface McpHttpClientAuthorizationErrorHandler {
 	 * calling method, to be handled by the caller.
 	 * <p>
 	 * The number of retries is bounded by {@link #maxRetries()}.
+	 * @param requestSnapshot the HTTP request snapshot that failed authorization
 	 * @param responseInfo the HTTP response information
 	 * @param context the MCP client transport context
 	 * @return {@link Publisher} emitting true if the original request should be replayed,
 	 * false otherwise.
-	 * @deprecated in favor of
-	 * {@link McpHttpClientTransportAuthorizationErrorHandler#handle(HttpRequestSnapshot, HttpResponse.ResponseInfo, McpTransportContext)}
 	 */
-	@Deprecated(forRemoval = true, since = "2.0.0")
-	Publisher<Boolean> handle(HttpResponse.ResponseInfo responseInfo, McpTransportContext context);
+	Publisher<Boolean> handle(HttpRequestSnapshot requestSnapshot, HttpResponse.ResponseInfo responseInfo,
+			McpTransportContext context);
 
 	/**
 	 * Maximum number of authorization error retries the transport will attempt. When the
@@ -64,17 +61,17 @@ public interface McpHttpClientAuthorizationErrorHandler {
 	/**
 	 * A no-op handler, used in the default use-case.
 	 */
-	McpHttpClientAuthorizationErrorHandler NOOP = new Noop();
+	McpHttpClientTransportAuthorizationErrorHandler NOOP = new Noop();
 
 	/**
-	 * Create a {@link McpHttpClientAuthorizationErrorHandler} from a synchronous handler.
-	 * Will be subscribed on {@link Schedulers#boundedElastic()}. The handler may be
-	 * blocking.
+	 * Create a {@link McpHttpClientTransportAuthorizationErrorHandler} from a synchronous
+	 * handler. Will be subscribed on {@link Schedulers#boundedElastic()}. The handler may
+	 * be blocking.
 	 * @param handler the synchronous handler
 	 * @return an async handler
 	 */
-	static McpHttpClientAuthorizationErrorHandler fromSync(Sync handler) {
-		return (info, context) -> Mono.fromCallable(() -> handler.handle(info, context))
+	static McpHttpClientTransportAuthorizationErrorHandler fromSync(Sync handler) {
+		return (snapshot, info, context) -> Mono.fromCallable(() -> handler.handle(snapshot, info, context))
 			.subscribeOn(Schedulers.boundedElastic());
 	}
 
@@ -90,21 +87,21 @@ public interface McpHttpClientAuthorizationErrorHandler {
 		 * arguments. Otherwise, the transport will throw an
 		 * {@link McpHttpClientTransportAuthorizationException}, indicating the error
 		 * status.
+		 * @param requestSnapshot the HTTP request snapshot that failed authorization
 		 * @param responseInfo the HTTP response information
 		 * @param context the MCP client transport context
 		 * @return true if the original request should be replayed, false otherwise.
-		 * @deprecated in favor of
-		 * {@link McpHttpClientTransportAuthorizationErrorHandler.Sync#handle(HttpRequestSnapshot, HttpResponse.ResponseInfo, McpTransportContext)}
 		 */
-		@Deprecated(forRemoval = true, since = "2.0.0")
-		boolean handle(HttpResponse.ResponseInfo responseInfo, McpTransportContext context);
+		boolean handle(HttpRequestSnapshot requestSnapshot, HttpResponse.ResponseInfo responseInfo,
+				McpTransportContext context);
 
 	}
 
-	class Noop implements McpHttpClientAuthorizationErrorHandler {
+	class Noop implements McpHttpClientTransportAuthorizationErrorHandler {
 
 		@Override
-		public Publisher<Boolean> handle(HttpResponse.ResponseInfo responseInfo, McpTransportContext context) {
+		public Publisher<Boolean> handle(HttpRequestSnapshot requestSnapshot, HttpResponse.ResponseInfo responseInfo,
+				McpTransportContext context) {
 			return Mono.just(false);
 		}
 
