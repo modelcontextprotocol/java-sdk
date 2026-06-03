@@ -27,6 +27,11 @@ public interface HttpHeaders {
 	String PROTOCOL_VERSION = "MCP-Protocol-Version";
 
 	/**
+	 * The name or URI of the resource/tool/prompt being accessed.
+	 */
+	String MCP_NAME = "Mcp-Name";
+
+	/**
 	 * The HTTP Content-Length header.
 	 * @see <a href=
 	 * "https://httpwg.org/specs/rfc9110.html#field.content-length">RFC9110</a>
