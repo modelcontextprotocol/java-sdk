@@ -10,9 +10,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -20,10 +17,11 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Based on the <a href="http://www.jsonrpc.org/specification">JSON-RPC 2.0
@@ -114,6 +112,8 @@ public final class McpSchema {
 	// Elicitation Methods
 	public static final String METHOD_ELICITATION_CREATE = "elicitation/create";
 
+	public static final String METHOD_NOTIFICATION_ELICITATION_COMPLETE = "notifications/elicitation/complete";
+
 	// ---------------------------
 	// JSON-RPC Error Codes
 	// ---------------------------
@@ -151,6 +151,11 @@ public final class McpSchema {
 		 * Resource not found.
 		 */
 		public static final int RESOURCE_NOT_FOUND = -32002;
+
+		/**
+		 * URL elicitation is required before the request can proceed.
+		 */
+		public static final int URL_ELICITATION_REQUIRED = -32042;
 
 	}
 
@@ -3884,8 +3889,47 @@ public final class McpSchema {
 
 	// Elicitation
 	/**
+	 * A request from the server to elicit additional information from the user, either
+	 * through the client or out-of-band.
+	 *
+	 * @see ElicitFormRequest
+	 * @see ElicitUrlRequest
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "mode",
+			defaultImpl = ElicitFormRequest.class)
+	@JsonSubTypes({ @JsonSubTypes.Type(value = ElicitFormRequest.class, name = ElicitFormRequest.MODE),
+			@JsonSubTypes.Type(value = ElicitUrlRequest.class, name = ElicitUrlRequest.MODE) })
+	public interface ElicitRequest extends Request {
+
+		String message();
+
+		Map<String, Object> meta();
+
+		String mode();
+
+		/**
+		 * @deprecated Use {@link ElicitFormRequest#builder(String, Map)} instead.
+		 */
+		@Deprecated
+		static ElicitFormRequest.Builder builder() {
+			return new ElicitFormRequest.Builder();
+		}
+
+		/**
+		 * @deprecated Use {@link ElicitFormRequest#builder(String, Map)} instead.
+		 */
+		@Deprecated
+		static ElicitFormRequest.Builder builder(String message, Map<String, Object> requestedSchema) {
+			return new ElicitFormRequest.Builder(message, requestedSchema);
+		}
+
+	}
+
+	/**
 	 * A request from the server to elicit additional information from the user via the
-	 * client.
+	 * client, using {@code form} mode.
 	 *
 	 * @param message The message to present to the user
 	 * @param requestedSchema A restricted subset of JSON Schema. Only top-level
@@ -3901,18 +3945,26 @@ public final class McpSchema {
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record ElicitRequest( // @formatter:off
+	public record ElicitFormRequest( // @formatter:off
 		@JsonProperty("message") String message,
 		@JsonProperty("requestedSchema") Map<String, Object> requestedSchema,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta) implements ElicitRequest { // @formatter:on
 
-		public ElicitRequest {
+		public static final String MODE = "form";
+
+		public ElicitFormRequest {
 			Assert.notNull(message, "message must not be null");
 			Assert.notNull(requestedSchema, "requestedSchema must not be null");
 		}
 
+		@Override
+		@JsonProperty("mode")
+		public String mode() {
+			return MODE;
+		}
+
 		@JsonCreator
-		static ElicitRequest fromJson(@JsonProperty("message") String message,
+		static ElicitFormRequest fromJson(@JsonProperty("message") String message,
 				@JsonProperty("requestedSchema") Map<String, Object> requestedSchema,
 				@JsonProperty("_meta") Map<String, Object> meta) {
 			if (message == null || requestedSchema == null) {
@@ -3925,23 +3977,10 @@ public final class McpSchema {
 					missing.add("requestedSchema -> {}");
 					requestedSchema = Map.of();
 				}
-				logger.warn("ElicitRequest: missing required fields during deserialization: {}",
+				logger.warn("ElicitFormRequest: missing required fields during deserialization: {}",
 						String.join(", ", missing));
 			}
-			return new ElicitRequest(message, requestedSchema, meta);
-		}
-
-		// backwards compatibility constructor
-		public ElicitRequest(String message, Map<String, Object> requestedSchema) {
-			this(message, requestedSchema, null);
-		}
-
-		/**
-		 * @deprecated Use {@link #builder(String, Map)} instead.
-		 */
-		@Deprecated
-		public static Builder builder() {
-			return new Builder();
+			return new ElicitFormRequest(message, requestedSchema, meta);
 		}
 
 		public static Builder builder(String message, Map<String, Object> requestedSchema) {
@@ -3957,11 +3996,11 @@ public final class McpSchema {
 			private Map<String, Object> meta;
 
 			/**
-			 * @deprecated Use {@link ElicitRequest#builder(String, Map)} factory method
-			 * instead.
+			 * @deprecated Use {@link ElicitFormRequest#builder(String, Map)} factory
+			 * method instead.
 			 */
 			@Deprecated
-			public Builder() {
+			private Builder() {
 			}
 
 			private Builder(String message, Map<String, Object> requestedSchema) {
@@ -3971,12 +4010,22 @@ public final class McpSchema {
 				this.requestedSchema = requestedSchema;
 			}
 
+			/**
+			 * @deprecated Use {@link ElicitFormRequest#builder(String, Map)} factory
+			 * method instead.
+			 */
+			@Deprecated
 			public Builder message(String message) {
 				Assert.notNull(message, "message must not be null");
 				this.message = message;
 				return this;
 			}
 
+			/**
+			 * @deprecated Use {@link ElicitFormRequest#builder(String, Map)} factory
+			 * method instead.
+			 */
+			@Deprecated
 			public Builder requestedSchema(Map<String, Object> requestedSchema) {
 				Assert.notNull(requestedSchema, "requestedSchema must not be null");
 				this.requestedSchema = requestedSchema;
@@ -3996,10 +4045,114 @@ public final class McpSchema {
 				return this;
 			}
 
-			public ElicitRequest build() {
+			public ElicitFormRequest build() {
 				Assert.notNull(message, "message must not be null");
 				Assert.notNull(requestedSchema, "requestedSchema must not be null");
-				return new ElicitRequest(message, requestedSchema, meta);
+				return new ElicitFormRequest(message, requestedSchema, meta);
+			}
+
+		}
+	}
+
+	/**
+	 * A request from the server to elicit additional information from the user out of
+	 * band, using {@code url} mode.
+	 *
+	 * @param message The message to present to the user
+	 * @param url The URL the user must navigate to.
+	 * @param elicitationId The elicitation ID of the elicitations reques.t
+	 * @param meta See specification for notes on _meta usage
+	 * <p>
+	 * Note: {@code message}, {@code url} and {@code elicitationId} are required by the
+	 * MCP specification. Deserialization accepts missing values and substitutes defaults
+	 * to avoid breaking existing integrations that may omit these fields.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ElicitUrlRequest( // @formatter:off
+		@JsonProperty("message") String message,
+		@JsonProperty("url") String url,
+		@JsonProperty("elicitationId") String elicitationId,
+		@JsonProperty("_meta") Map<String, Object> meta) implements ElicitRequest { // @formatter:on
+
+		public static final String MODE = "url";
+
+		public ElicitUrlRequest {
+			Assert.notNull(message, "message must not be null");
+			Assert.notNull(url, "url must not be null");
+			Assert.notNull(elicitationId, "elicitationId must not be null");
+		}
+
+		@Override
+		@JsonProperty("mode")
+		public String mode() {
+			return MODE;
+		}
+
+		@JsonCreator
+		static ElicitUrlRequest fromJson(@JsonProperty("message") String message, @JsonProperty("url") String url,
+				@JsonProperty("elicitationId") String elicitationId, @JsonProperty("_meta") Map<String, Object> meta) {
+			if (message == null || url == null || elicitationId == null) {
+				List<String> missing = new ArrayList<>();
+				if (message == null) {
+					missing.add("message -> ''");
+					message = "";
+				}
+				if (url == null) {
+					missing.add("url -> ''");
+					url = "";
+				}
+				if (elicitationId == null) {
+					missing.add("elicitationId -> ''");
+					elicitationId = "";
+				}
+				logger.warn("ElicitUrlRequest: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new ElicitUrlRequest(message, url, elicitationId, meta);
+		}
+
+		public static Builder builder(String message, String url, String elicitationId) {
+			return new Builder(message, url, elicitationId);
+		}
+
+		public static class Builder {
+
+			private final String message;
+
+			private final String url;
+
+			private final String elicitationId;
+
+			private Map<String, Object> meta;
+
+			private Builder(String message, String url, String elicitationId) {
+				Assert.notNull(message, "message must not be null");
+				Assert.notNull(url, "url must not be null");
+				Assert.notNull(elicitationId, "elicitationId must not be null");
+				this.message = message;
+				this.url = url;
+				this.elicitationId = elicitationId;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public Builder progressToken(Object progressToken) {
+				if (this.meta == null) {
+					this.meta = new HashMap<>();
+				}
+				this.meta.put("progressToken", progressToken);
+				return this;
+			}
+
+			public ElicitUrlRequest build() {
+				Assert.notNull(message, "message must not be null");
+				Assert.notNull(url, "url must not be null");
+				Assert.notNull(elicitationId, "elicitationId must not be null");
+				return new ElicitUrlRequest(message, url, elicitationId, meta);
 			}
 
 		}
@@ -4100,6 +4253,39 @@ public final class McpSchema {
 				return new ElicitResult(action, content, meta);
 			}
 
+		}
+	}
+
+	/**
+	 * A notification from the server to the client indicating that an out-of-band URL
+	 * elicitation interaction has completed.
+	 *
+	 * @param elicitationId The unique identifier of the completed elicitation
+	 * @param meta See specification for notes on _meta usage
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ElicitationCompleteNotification( // @formatter:off
+	   @JsonProperty("elicitationId") String elicitationId,
+	   @JsonProperty("_meta") Map<String, Object> meta) implements Notification { // @formatter:on
+
+		public ElicitationCompleteNotification {
+			Assert.notNull(elicitationId, "elicitationId must not be null");
+		}
+
+		@JsonCreator
+		static ElicitationCompleteNotification fromJson(@JsonProperty("elicitationId") String elicitationId,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (elicitationId == null || elicitationId.isBlank()) {
+				logger.warn(
+						"ElicitationCompleteNotification: missing required field 'elicitationId' during deserialization, using default ''");
+				elicitationId = "";
+			}
+			return new ElicitationCompleteNotification(elicitationId, meta);
+		}
+
+		public ElicitationCompleteNotification(String elicitationId) {
+			this(elicitationId, null);
 		}
 	}
 
