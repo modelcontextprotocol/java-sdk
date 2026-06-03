@@ -15,11 +15,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
-import io.modelcontextprotocol.spec.McpSchema.ElicitFormRequest;
-import io.modelcontextprotocol.spec.McpSchema.ElicitUrlRequest;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import io.modelcontextprotocol.client.LifecycleInitializer.Initialization;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
@@ -31,8 +26,10 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
+import io.modelcontextprotocol.spec.McpSchema.ElicitFormRequest;
 import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
 import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
+import io.modelcontextprotocol.spec.McpSchema.ElicitUrlRequest;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
 import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
@@ -43,6 +40,8 @@ import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.ToolNameValidator;
 import io.modelcontextprotocol.util.Utils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -238,13 +237,16 @@ public class McpAsyncClient {
 
 		// Elicitation Handler
 		if (this.clientCapabilities.elicitation() != null) {
-			if ((this.clientCapabilities.elicitation().url() == null
-					|| this.clientCapabilities.elicitation().form() != null)
-					&& features.formElicitationHandler() == null) {
+			// elicitation: {} is equivalent to elicitation: { form: {} } for
+			// backwards-compatiblity
+			var supportsForm = this.clientCapabilities.elicitation().form() != null
+					|| this.clientCapabilities.elicitation().url() == null;
+			var supportsUrl = this.clientCapabilities.elicitation().url() != null;
+			if (supportsForm && features.formElicitationHandler() == null) {
 				throw new IllegalArgumentException(
 						"Form elicitation handler must not be null when client capabilities include form elicitation");
 			}
-			if (this.clientCapabilities.elicitation().url() != null && features.urlElicitationHandler() == null) {
+			if (supportsUrl && features.urlElicitationHandler() == null) {
 				throw new IllegalArgumentException(
 						"URL elicitation handler must not be null when client capabilities include URL elicitation");
 			}
@@ -597,7 +599,6 @@ public class McpAsyncClient {
 				if (this.formElicitationHandler == null) {
 					return Mono.error(new IllegalStateException(
 							"Received FORM elicitation request, but formElicitationHandler handler is null"));
-
 				}
 				return this.formElicitationHandler.apply(formRequest).map(result -> {
 					if (this.applyElicitationDefaults && result.action() == ElicitResult.Action.ACCEPT

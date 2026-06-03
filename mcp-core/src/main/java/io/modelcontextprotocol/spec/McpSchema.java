@@ -4022,12 +4022,22 @@ public final class McpSchema {
 				this.requestedSchema = requestedSchema;
 			}
 
+			/**
+			 * @deprecated Use {@link ElicitRequest#builder(String, Map)} factory method
+			 * instead.
+			 */
+			@Deprecated
 			public Builder message(String message) {
 				Assert.notNull(message, "message must not be null");
 				this.message = message;
 				return this;
 			}
 
+			/**
+			 * @deprecated Use {@link ElicitRequest#builder(String, Map)} factory method
+			 * instead.
+			 */
+			@Deprecated
 			public Builder requestedSchema(Map<String, Object> requestedSchema) {
 				Assert.notNull(requestedSchema, "requestedSchema must not be null");
 				this.requestedSchema = requestedSchema;
@@ -4120,16 +4130,13 @@ public final class McpSchema {
 
 		public static class Builder {
 
-			private String message;
+			private final String message;
 
-			private String url;
+			private final String url;
 
-			private String elicitationId;
+			private final String elicitationId;
 
 			private Map<String, Object> meta;
-
-			public Builder() {
-			}
 
 			private Builder(String message, String url, String elicitationId) {
 				Assert.notNull(message, "message must not be null");
@@ -4138,24 +4145,6 @@ public final class McpSchema {
 				this.message = message;
 				this.url = url;
 				this.elicitationId = elicitationId;
-			}
-
-			public Builder message(String message) {
-				Assert.notNull(message, "message must not be null");
-				this.message = message;
-				return this;
-			}
-
-			public Builder url(String url) {
-				Assert.notNull(url, "url must not be null");
-				this.url = url;
-				return this;
-			}
-
-			public Builder elicitationId(String elicitationId) {
-				Assert.notNull(elicitationId, "elicitationId must not be null");
-				this.elicitationId = elicitationId;
-				return this;
 			}
 
 			public Builder meta(Map<String, Object> meta) {

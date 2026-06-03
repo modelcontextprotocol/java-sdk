@@ -748,19 +748,25 @@ var urlTool = SyncToolSpecification.builder()
         .build())
     .callHandler((exchange, request) -> {
         // Request URL elicitation from client
-        ElicitRequest urlRequest = McpSchema.ElicitUrlRequest.builder("Please authenticate", "https://example.com/oauth", "oauth-123").build();
+        if (
+                exchange.getClientCapabilities().elicitation() != null 
+                && exchange.getClientCapabilities().elicitation().url() != null
+        ) {
+            ElicitRequest urlRequest = McpSchema.ElicitUrlRequest
+                    .builder("Please authenticate", "https://example.com/oauth", "oauth-123").build();
+            ElicitResult result = exchange.elicit(urlRequest);
+            // handle result.action == CANCELLED or DENIED
+            if (result.action() != ElicitResult.Action.ACCEPT) {
+                return CallToolResult.builder()
+                        .content(List.of(new McpSchema.TextContent("Authentication failed or cancelled")))
+                        .build();
+            }
+        }
 
-        ElicitResult result = exchange.elicit(urlRequest);
-
-        if (result.action() == ElicitResult.Action.ACCEPT) {
-            return CallToolResult.builder()
+        // wait for user to visit the URL
+        return CallToolResult.builder()
                 .content(List.of(new McpSchema.TextContent("Authentication successful")))
                 .build();
-        } else {
-            return CallToolResult.builder()
-                .content(List.of(new McpSchema.TextContent("Authentication failed or cancelled")))
-                .build();
-        }
     })
     .build();
 ```
