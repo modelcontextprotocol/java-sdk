@@ -4,13 +4,17 @@
 
 package io.modelcontextprotocol.client.transport;
 
+import com.sun.net.httpserver.HttpServer;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.ProtocolVersions;
+import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterAll;
@@ -159,6 +163,99 @@ class HttpClientStreamableHttpTransportTest {
 		StepVerifier.create(transport.sendMessage(testMessage))
 			.expectErrorMatches(err -> err.getMessage().matches("MCP session with ID [a-zA-Z0-9-]* has been closed"))
 			.verify();
+	}
+
+	@Test
+	void testMcpMethodHeaderIsAddedForInitializeRequest() throws IOException {
+		HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+		try {
+			server.createContext("/mcp", exchange -> {
+				try (exchange) {
+					if (!"POST".equals(exchange.getRequestMethod())) {
+						exchange.sendResponseHeaders(405, -1);
+						return;
+					}
+
+					String methodHeader = exchange.getRequestHeaders().getFirst("Mcp-Method");
+					byte[] requestBody = exchange.getRequestBody().readAllBytes();
+					String body = new String(requestBody, StandardCharsets.UTF_8);
+
+					if (!"initialize".equals(methodHeader) || !body.contains("\"method\":\"initialize\"")) {
+						exchange.sendResponseHeaders(400, 0);
+						return;
+					}
+
+					exchange.sendResponseHeaders(202, -1);
+				}
+			});
+			server.start();
+
+			int port = server.getAddress().getPort();
+			var transport = HttpClientStreamableHttpTransport.builder("http://localhost:" + port)
+				.endpoint("/mcp")
+				.build();
+			try {
+				var initializeRequest = McpSchema.InitializeRequest
+					.builder(ProtocolVersions.MCP_2025_11_25,
+							McpSchema.ClientCapabilities.builder().roots(true).build(),
+							McpSchema.Implementation.builder("MCP Client", "0.3.1").build())
+					.build();
+				var testMessage = new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, "test-id",
+						initializeRequest);
+
+				StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
+			}
+			finally {
+				StepVerifier.create(transport.closeGracefully()).verifyComplete();
+			}
+		}
+		finally {
+			server.stop(0);
+		}
+	}
+
+	@Test
+	void testMcpNameHeaderIsAddedForToolsCall() throws IOException {
+		HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+		try {
+			server.createContext("/mcp", exchange -> {
+				try (exchange) {
+					if (!"POST".equals(exchange.getRequestMethod())) {
+						exchange.sendResponseHeaders(405, -1);
+						return;
+					}
+
+					String nameHeader = exchange.getRequestHeaders().getFirst("Mcp-Name");
+					byte[] requestBody = exchange.getRequestBody().readAllBytes();
+					String body = new String(requestBody, StandardCharsets.UTF_8);
+
+					if (!"test-tool".equals(nameHeader) || !body.contains("\"method\":\"tools/call\"")) {
+						exchange.sendResponseHeaders(400, 0);
+						return;
+					}
+
+					exchange.sendResponseHeaders(202, -1);
+				}
+			});
+			server.start();
+
+			int port = server.getAddress().getPort();
+			var transport = HttpClientStreamableHttpTransport.builder("http://localhost:" + port)
+				.endpoint("/mcp")
+				.build();
+			try {
+				var callToolRequest = McpSchema.CallToolRequest.builder("test-tool").build();
+				var testMessage = new McpSchema.JSONRPCRequest(McpSchema.METHOD_TOOLS_CALL, "test-id", callToolRequest);
+
+				StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
+			}
+			finally {
+				StepVerifier.create(transport.closeGracefully()).verifyComplete();
+			}
+		}
+		finally {
+			server.stop(0);
+		}
 	}
 
 }
