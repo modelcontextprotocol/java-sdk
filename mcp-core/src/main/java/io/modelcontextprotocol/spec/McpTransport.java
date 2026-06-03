@@ -53,7 +53,23 @@ public interface McpTransport {
 	 */
 	default void close() {
 		this.closeGracefully().subscribe(ignored -> {
-		}, error -> logger.warn("Error during asynchronous close", error));
+		}, error -> {
+			if (isPeerClosed(error)) {
+				logger.debug("Error during asynchronous close", error);
+			}
+			else {
+				logger.warn("Error during asynchronous close", error);
+			}
+		});
+	}
+
+	static boolean isPeerClosed(Throwable t) {
+		for (Throwable c = t; c != null; c = c.getCause()) {
+			if (c instanceof java.io.EOFException) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

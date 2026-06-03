@@ -164,6 +164,9 @@ public class McpClientSession implements McpSession {
 				if (t instanceof McpTransportSessionClosedException) {
 					logger.debug("Can't send response to request {} when the transport is closed", request.id());
 				}
+				else if (McpTransport.isPeerClosed(t)) {
+					logger.debug("Can't send response to request {}: connection closed by peer", request.id(), t);
+				}
 				else {
 					logger.warn("Failed to send response to the server", t);
 				}
