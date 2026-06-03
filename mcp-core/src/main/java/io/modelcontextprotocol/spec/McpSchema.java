@@ -3983,18 +3983,6 @@ public final class McpSchema {
 			return new ElicitFormRequest(message, requestedSchema, meta);
 		}
 
-		public ElicitFormRequest(String message, Map<String, Object> requestedSchema) {
-			this(message, requestedSchema, null);
-		}
-
-		/**
-		 * @deprecated Use {@link #builder(String, Map)} instead.
-		 */
-		@Deprecated
-		public static Builder builder() {
-			return new Builder();
-		}
-
 		public static Builder builder(String message, Map<String, Object> requestedSchema) {
 			return new Builder(message, requestedSchema);
 		}
@@ -4008,11 +3996,11 @@ public final class McpSchema {
 			private Map<String, Object> meta;
 
 			/**
-			 * @deprecated Use {@link ElicitRequest#builder(String, Map)} factory method
-			 * instead.
+			 * @deprecated Use {@link ElicitFormRequest#builder(String, Map)} factory
+			 * method instead.
 			 */
 			@Deprecated
-			public Builder() {
+			private Builder() {
 			}
 
 			private Builder(String message, Map<String, Object> requestedSchema) {
@@ -4023,8 +4011,8 @@ public final class McpSchema {
 			}
 
 			/**
-			 * @deprecated Use {@link ElicitRequest#builder(String, Map)} factory method
-			 * instead.
+			 * @deprecated Use {@link ElicitFormRequest#builder(String, Map)} factory
+			 * method instead.
 			 */
 			@Deprecated
 			public Builder message(String message) {
@@ -4034,8 +4022,8 @@ public final class McpSchema {
 			}
 
 			/**
-			 * @deprecated Use {@link ElicitRequest#builder(String, Map)} factory method
-			 * instead.
+			 * @deprecated Use {@link ElicitFormRequest#builder(String, Map)} factory
+			 * method instead.
 			 */
 			@Deprecated
 			public Builder requestedSchema(Map<String, Object> requestedSchema) {
