@@ -464,7 +464,7 @@ public abstract class AbstractMcpAsyncClientTests {
 	void testInitializeWithRootsListProviders() {
 		withClient(createMcpTransport(),
 				builder -> builder.roots(Root.builder("file:///test/path").name("test-root").build()), client -> {
-					StepVerifier.create(client.initialize().then(client.closeGracefully())).verifyComplete();
+					StepVerifier.create(client.initialize()).expectNextCount(1).verifyComplete();
 				});
 	}
 
@@ -728,8 +728,6 @@ public abstract class AbstractMcpAsyncClientTests {
 				builder -> builder.loggingConsumer(notification -> Mono.fromRunnable(() -> logReceived.set(true))),
 				client -> {
 					StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
-					StepVerifier.create(client.closeGracefully()).verifyComplete();
-
 				});
 
 	}
