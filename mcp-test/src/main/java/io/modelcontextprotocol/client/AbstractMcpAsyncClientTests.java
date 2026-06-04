@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import io.modelcontextprotocol.spec.McpSchema.ElicitFormRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -685,11 +686,13 @@ public abstract class AbstractMcpAsyncClientTests {
 		Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler = request -> Mono
 			.just(CreateMessageResult.builder(McpSchema.Role.ASSISTANT, "test", "test-model").build());
 
-		Function<ElicitRequest, Mono<ElicitResult>> elicitationHandler = request -> Mono
+		Function<ElicitFormRequest, Mono<ElicitResult>> formElicitationHandler = request -> Mono
 			.just(ElicitResult.builder(ElicitResult.Action.ACCEPT).content(Map.of("foo", "bar")).build());
 
 		withClient(createMcpTransport(),
-				builder -> builder.capabilities(capabilities).sampling(samplingHandler).elicitation(elicitationHandler),
+				builder -> builder.capabilities(capabilities)
+					.sampling(samplingHandler)
+					.elicitation(formElicitationHandler),
 				client ->
 
 				StepVerifier.create(client.initialize()).assertNext(result -> {

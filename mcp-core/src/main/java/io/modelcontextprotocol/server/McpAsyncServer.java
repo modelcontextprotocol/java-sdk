@@ -920,6 +920,25 @@ public class McpAsyncServer {
 		return this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED, null);
 	}
 
+	/**
+	 * Sends an elicitation complete notification to a specific client session, indicating
+	 * that an out-of-band URL elicitation interaction has completed.
+	 * @param sessionId The ID of the session to notify
+	 * @param notification The notification containing the elicitation ID
+	 * @return A Mono that completes when the notification has been sent
+	 */
+	public Mono<Void> sendElicitationComplete(String sessionId,
+			McpSchema.ElicitationCompleteNotification notification) {
+		if (sessionId == null) {
+			return Mono.error(new IllegalArgumentException("Session ID must not be null"));
+		}
+		if (notification == null) {
+			return Mono.error(new IllegalArgumentException("Notification must not be null"));
+		}
+		return this.mcpTransportProvider.notifyClient(sessionId, McpSchema.METHOD_NOTIFICATION_ELICITATION_COMPLETE,
+				notification);
+	}
+
 	private McpRequestHandler<McpSchema.ListPromptsResult> promptsListRequestHandler() {
 		return (exchange, params) -> {
 			// TODO: Implement pagination

@@ -715,9 +715,7 @@ var tool = SyncToolSpecification.builder()
         }
 
         // Request user confirmation
-        ElicitRequest elicitRequest = ElicitRequest.builder()
-            .message("Do you want to proceed with this action?")
-            .requestedSchema(Map.of(
+        ElicitRequest elicitRequest = ElicitFormRequest.builder("Do you want to proceed with this action?", Map.of(
                 "type", "object",
                 "properties", Map.of("confirmed", Map.of("type", "boolean"))
             ))
@@ -735,6 +733,40 @@ var tool = SyncToolSpecification.builder()
                 .content(List.of(new McpSchema.TextContent("Action declined")))
                 .build();
         }
+    })
+    .build();
+```
+
+To request out-of-band URL elicitation, such as a user authorizing an OAuth flow:
+
+```java
+var urlTool = SyncToolSpecification.builder()
+    .tool(Tool.builder()
+        .name("oauth-auth")
+        .description("Authenticates via OAuth")
+        .inputSchema(schema)
+        .build())
+    .callHandler((exchange, request) -> {
+        // Request URL elicitation from client
+        if (
+                exchange.getClientCapabilities().elicitation() != null 
+                && exchange.getClientCapabilities().elicitation().url() != null
+        ) {
+            ElicitRequest urlRequest = McpSchema.ElicitUrlRequest
+                    .builder("Please authenticate", "https://example.com/oauth", "oauth-123").build();
+            ElicitResult result = exchange.elicit(urlRequest);
+            // handle result.action == CANCELLED or DENIED
+            if (result.action() != ElicitResult.Action.ACCEPT) {
+                return CallToolResult.builder()
+                        .content(List.of(new McpSchema.TextContent("Authentication failed or cancelled")))
+                        .build();
+            }
+        }
+
+        // wait for user to visit the URL
+        return CallToolResult.builder()
+                .content(List.of(new McpSchema.TextContent("Authentication successful")))
+                .build();
     })
     .build();
 ```
