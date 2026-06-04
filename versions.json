@@ -24,9 +24,7 @@
   {
     "version": "v2.0.0-M3",
     "title": "v2.0.0-M3",
-    "aliases": [
-      "latest"
-    ]
+    "aliases": []
   },
   {
     "version": "v2.0.0-M2",
@@ -37,6 +35,13 @@
     "version": "v2.0.0-M1",
     "title": "v2.0.0-M1",
     "aliases": []
+  },
+  {
+    "version": "v2.0.0-RC1",
+    "title": "v2.0.0-RC1",
+    "aliases": [
+      "latest"
+    ]
   },
   {
     "version": "v1.1.3",
