@@ -149,7 +149,7 @@ class HttpClientStreamableHttpTransportTest {
 	@Test
 	void testCloseInitialized() {
 		var transport = HttpClientStreamableHttpTransport.builder(host).build();
-		// transport.connect(Function.identity()).block();
+		transport.connect(Function.identity()).block();
 
 		var initializeRequest = McpSchema.InitializeRequest
 			.builder(ProtocolVersions.MCP_2025_11_25, McpSchema.ClientCapabilities.builder().roots(true).build(),
