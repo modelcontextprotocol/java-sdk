@@ -48,9 +48,7 @@ nav:
   - Contributing:
     - Contributing Guide: contribute.md
     - Documentation: development.md
-  - API Reference: https://javadoc.io/doc/io.modelcontextprotocol.sdk/mcp-core/latest
-  - News:
-    - blog/index.md
+  - API Reference: https://javadoc.io/doc/io.modelcontextprotocol.sdk/mcp-core/2.0.0-RC1
 
 markdown_extensions:
   - admonition
