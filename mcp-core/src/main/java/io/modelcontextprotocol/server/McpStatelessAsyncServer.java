@@ -8,7 +8,6 @@ import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
-import io.modelcontextprotocol.server.McpStatelessServerFeatures.AsyncResourceTemplateSpecification;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -34,8 +33,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
 
 import static io.modelcontextprotocol.spec.McpError.RESOURCE_NOT_FOUND;
@@ -62,15 +59,13 @@ public class McpStatelessAsyncServer {
 
 	private final String instructions;
 
-	private final CopyOnWriteArrayList<McpStatelessServerFeatures.AsyncToolSpecification> tools = new CopyOnWriteArrayList<>();
+	private final StatelessToolsRepository toolsRepository;
 
-	private final ConcurrentHashMap<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates = new ConcurrentHashMap<>();
+	private final StatelessResourcesRepository resourcesRepository;
 
-	private final ConcurrentHashMap<String, McpStatelessServerFeatures.AsyncResourceSpecification> resources = new ConcurrentHashMap<>();
+	private final StatelessPromptsRepository promptsRepository;
 
-	private final ConcurrentHashMap<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts = new ConcurrentHashMap<>();
-
-	private final ConcurrentHashMap<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions = new ConcurrentHashMap<>();
+	private final StatelessCompletionsRepository completionsRepository;
 
 	private List<String> protocolVersions;
 
@@ -89,11 +84,13 @@ public class McpStatelessAsyncServer {
 		this.serverInfo = features.serverInfo();
 		this.serverCapabilities = features.serverCapabilities();
 		this.instructions = features.instructions();
-		this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, features.tools()));
-		this.resources.putAll(features.resources());
-		this.resourceTemplates.putAll(features.resourceTemplates());
-		this.prompts.putAll(features.prompts());
-		this.completions.putAll(features.completions());
+		this.toolsRepository = initializeToolsRepository(features.toolsRepository(), jsonSchemaValidator,
+				features.tools());
+		this.resourcesRepository = initializeResourcesRepository(features.resourcesRepository(), features.resources(),
+				features.resourceTemplates(), uriTemplateManagerFactory);
+		this.promptsRepository = initializePromptsRepository(features.promptsRepository(), features.prompts());
+		this.completionsRepository = initializeCompletionsRepository(features.completionsRepository(),
+				features.completions());
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
 		this.validateToolInputs = validateToolInputs;
@@ -135,6 +132,60 @@ public class McpStatelessAsyncServer {
 
 		McpStatelessServerHandler handler = new DefaultMcpStatelessServerHandler(requestHandlers, Map.of());
 		mcpTransport.setMcpHandler(handler);
+	}
+
+	private StatelessToolsRepository initializeToolsRepository(StatelessToolsRepository repository,
+			JsonSchemaValidator jsonSchemaValidator, List<McpStatelessServerFeatures.AsyncToolSpecification> tools) {
+		List<McpStatelessServerFeatures.AsyncToolSpecification> wrappedTools = withStructuredOutputHandling(
+				jsonSchemaValidator, tools);
+		StatelessToolsRepository target = (repository != null) ? repository : new InMemoryStatelessToolsRepository();
+		if (wrappedTools != null) {
+			wrappedTools.forEach(target::addTool);
+		}
+		return target;
+	}
+
+	private StatelessResourcesRepository initializeResourcesRepository(StatelessResourcesRepository repository,
+			Map<String, McpStatelessServerFeatures.AsyncResourceSpecification> resources,
+			Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
+			McpUriTemplateManagerFactory uriTemplateManagerFactory) {
+		StatelessResourcesRepository target = (repository != null) ? repository
+				: new InMemoryStatelessResourcesRepository(Map.of(), Map.of(), uriTemplateManagerFactory);
+		if (resources != null) {
+			resources.values().forEach(target::addResource);
+		}
+		if (resourceTemplates != null) {
+			resourceTemplates.values().forEach(target::addResourceTemplate);
+		}
+		return target;
+	}
+
+	private StatelessPromptsRepository initializePromptsRepository(StatelessPromptsRepository repository,
+			Map<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts) {
+		StatelessPromptsRepository target = (repository != null) ? repository
+				: new InMemoryStatelessPromptsRepository();
+		if (prompts != null) {
+			prompts.values().forEach(target::addPrompt);
+		}
+		return target;
+	}
+
+	private StatelessCompletionsRepository initializeCompletionsRepository(StatelessCompletionsRepository repository,
+			Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions) {
+		StatelessCompletionsRepository target = (repository != null) ? repository
+				: new InMemoryStatelessCompletionsRepository();
+		if (completions != null) {
+			completions.values().forEach(target::addCompletion);
+		}
+		return target;
+	}
+
+	private McpSchema.PaginatedRequest paginatedRequest(Object params) {
+		if (params == null) {
+			return new McpSchema.PaginatedRequest();
+		}
+		return this.jsonMapper.convertValue(params, new TypeRef<McpSchema.PaginatedRequest>() {
+		});
 	}
 
 	// ---------------------------------------
@@ -323,7 +374,7 @@ public class McpStatelessAsyncServer {
 	/**
 	 * Add a new tool specification at runtime.
 	 * @param toolSpecification The tool specification to add
-	 * @return Mono that completes when clients have been notified of the change
+	 * @return Mono that completes when the repository has been updated
 	 */
 	public Mono<Void> addTool(McpStatelessServerFeatures.AsyncToolSpecification toolSpecification) {
 		if (toolSpecification == null) {
@@ -351,12 +402,7 @@ public class McpStatelessAsyncServer {
 		var wrappedToolSpecification = withStructuredOutputHandling(this.jsonSchemaValidator, toolSpecification);
 
 		return Mono.defer(() -> {
-			// Remove tools with duplicate tool names first
-			if (this.tools.removeIf(th -> th.tool().name().equals(wrappedToolSpecification.tool().name()))) {
-				logger.warn("Replace existing Tool with name '{}'", wrappedToolSpecification.tool().name());
-			}
-
-			this.tools.add(wrappedToolSpecification);
+			this.toolsRepository.addTool(wrappedToolSpecification);
 			logger.debug("Added tool handler: {}", wrappedToolSpecification.tool().name());
 
 			return Mono.empty();
@@ -364,17 +410,24 @@ public class McpStatelessAsyncServer {
 	}
 
 	/**
-	 * List all registered tools.
-	 * @return A Flux stream of all registered tools
+	 * List tools from the repository without a transport request context.
+	 * <p>
+	 * Dynamic repositories should treat the {@link McpTransportContext#EMPTY} context
+	 * passed by this helper as a context-free listing.
+	 * @return A Flux stream of context-free visible tools
 	 */
 	public Flux<Tool> listTools() {
-		return Flux.fromIterable(this.tools).map(McpStatelessServerFeatures.AsyncToolSpecification::tool);
+		return Flux.defer(() -> this.toolsRepository
+			.listTools(McpTransportContext.EMPTY, new McpSchema.PaginatedRequest())
+			.expand(result -> (result.nextCursor() != null) ? this.toolsRepository.listTools(McpTransportContext.EMPTY,
+					new McpSchema.PaginatedRequest(result.nextCursor())) : Mono.empty())
+			.flatMapIterable(McpSchema.ListToolsResult::tools));
 	}
 
 	/**
 	 * Remove a tool handler at runtime.
 	 * @param toolName The name of the tool handler to remove
-	 * @return Mono that completes when clients have been notified of the change
+	 * @return Mono that completes when the repository has been updated
 	 */
 	public Mono<Void> removeTool(String toolName) {
 		if (toolName == null) {
@@ -385,8 +438,7 @@ public class McpStatelessAsyncServer {
 		}
 
 		return Mono.defer(() -> {
-			if (this.tools.removeIf(toolSpecification -> toolSpecification.tool().name().equals(toolName))) {
-
+			if (this.toolsRepository.removeTool(toolName)) {
 				logger.debug("Removed tool handler: {}", toolName);
 			}
 			else {
@@ -399,10 +451,7 @@ public class McpStatelessAsyncServer {
 
 	private McpStatelessRequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
 		return (ctx, params) -> {
-			List<Tool> tools = this.tools.stream()
-				.map(McpStatelessServerFeatures.AsyncToolSpecification::tool)
-				.toList();
-			return Mono.just(McpSchema.ListToolsResult.builder(tools).build());
+			return this.toolsRepository.listTools(ctx, paginatedRequest(params));
 		};
 	}
 
@@ -412,25 +461,20 @@ public class McpStatelessAsyncServer {
 					new TypeRef<McpSchema.CallToolRequest>() {
 					});
 
-			Optional<McpStatelessServerFeatures.AsyncToolSpecification> toolSpecification = this.tools.stream()
-				.filter(tr -> callToolRequest.name().equals(tr.tool().name()))
-				.findAny();
-
-			if (toolSpecification.isEmpty()) {
-				return Mono.error(McpError.builder(McpSchema.ErrorCodes.INVALID_PARAMS)
+			return this.toolsRepository.resolveTool(callToolRequest.name(), ctx)
+				.switchIfEmpty(Mono.error(McpError.builder(McpSchema.ErrorCodes.INVALID_PARAMS)
 					.message("Unknown tool: invalid_tool_name")
 					.data("Tool not found: " + callToolRequest.name())
-					.build());
-			}
-
-			McpSchema.Tool tool = toolSpecification.get().tool();
-			CallToolResult validationError = ToolInputValidator.validate(tool, callToolRequest.arguments(),
-					this.validateToolInputs, this.jsonSchemaValidator);
-			if (validationError != null) {
-				return Mono.just(validationError);
-			}
-
-			return toolSpecification.get().callHandler().apply(ctx, callToolRequest);
+					.build()))
+				.flatMap(toolSpecification -> {
+					McpSchema.Tool tool = toolSpecification.tool();
+					CallToolResult validationError = ToolInputValidator.validate(tool, callToolRequest.arguments(),
+							this.validateToolInputs, this.jsonSchemaValidator);
+					if (validationError != null) {
+						return Mono.just(validationError);
+					}
+					return toolSpecification.callHandler().apply(ctx, callToolRequest);
+				});
 		};
 	}
 
@@ -441,7 +485,7 @@ public class McpStatelessAsyncServer {
 	/**
 	 * Add a new resource handler at runtime.
 	 * @param resourceSpecification The resource handler to add
-	 * @return Mono that completes when clients have been notified of the change
+	 * @return Mono that completes when the repository has been updated
 	 */
 	public Mono<Void> addResource(McpStatelessServerFeatures.AsyncResourceSpecification resourceSpecification) {
 		if (resourceSpecification == null || resourceSpecification.resource() == null) {
@@ -453,30 +497,31 @@ public class McpStatelessAsyncServer {
 		}
 
 		return Mono.defer(() -> {
-			var previous = this.resources.put(resourceSpecification.resource().uri(), resourceSpecification);
-			if (previous != null) {
-				logger.warn("Replace existing Resource with URI '{}'", resourceSpecification.resource().uri());
-			}
-			else {
-				logger.debug("Added resource handler: {}", resourceSpecification.resource().uri());
-			}
+			this.resourcesRepository.addResource(resourceSpecification);
+			logger.debug("Added resource handler: {}", resourceSpecification.resource().uri());
 			return Mono.empty();
 		});
 	}
 
 	/**
-	 * List all registered resources.
-	 * @return A Flux stream of all registered resources
+	 * List resources from the repository without a transport request context.
+	 * <p>
+	 * Dynamic repositories should treat the {@link McpTransportContext#EMPTY} context
+	 * passed by this helper as a context-free listing.
+	 * @return A Flux stream of context-free visible resources
 	 */
 	public Flux<McpSchema.Resource> listResources() {
-		return Flux.fromIterable(this.resources.values())
-			.map(McpStatelessServerFeatures.AsyncResourceSpecification::resource);
+		return Flux.defer(() -> this.resourcesRepository
+			.listResources(McpTransportContext.EMPTY, new McpSchema.PaginatedRequest())
+			.expand(result -> (result.nextCursor() != null) ? this.resourcesRepository.listResources(
+					McpTransportContext.EMPTY, new McpSchema.PaginatedRequest(result.nextCursor())) : Mono.empty())
+			.flatMapIterable(McpSchema.ListResourcesResult::resources));
 	}
 
 	/**
 	 * Remove a resource handler at runtime.
 	 * @param resourceUri The URI of the resource handler to remove
-	 * @return Mono that completes when clients have been notified of the change
+	 * @return Mono that completes when the repository has been updated
 	 */
 	public Mono<Void> removeResource(String resourceUri) {
 		if (resourceUri == null) {
@@ -487,8 +532,7 @@ public class McpStatelessAsyncServer {
 		}
 
 		return Mono.defer(() -> {
-			McpStatelessServerFeatures.AsyncResourceSpecification removed = this.resources.remove(resourceUri);
-			if (removed != null) {
+			if (this.resourcesRepository.removeResource(resourceUri)) {
 				logger.debug("Removed resource handler: {}", resourceUri);
 			}
 			else {
@@ -501,7 +545,7 @@ public class McpStatelessAsyncServer {
 	/**
 	 * Add a new resource template at runtime.
 	 * @param resourceTemplateSpecification The resource template to add
-	 * @return Mono that completes when clients have been notified of the change
+	 * @return Mono that completes when the repository has been updated
 	 */
 	public Mono<Void> addResourceTemplate(
 			McpStatelessServerFeatures.AsyncResourceTemplateSpecification resourceTemplateSpecification) {
@@ -512,33 +556,32 @@ public class McpStatelessAsyncServer {
 		}
 
 		return Mono.defer(() -> {
-			var previous = this.resourceTemplates.put(resourceTemplateSpecification.resourceTemplate().uriTemplate(),
-					resourceTemplateSpecification);
-			if (previous != null) {
-				logger.warn("Replace existing Resource Template with URI '{}'",
-						resourceTemplateSpecification.resourceTemplate().uriTemplate());
-			}
-			else {
-				logger.debug("Added resource template handler: {}",
-						resourceTemplateSpecification.resourceTemplate().uriTemplate());
-			}
+			this.resourcesRepository.addResourceTemplate(resourceTemplateSpecification);
+			logger.debug("Added resource template handler: {}",
+					resourceTemplateSpecification.resourceTemplate().uriTemplate());
 			return Mono.empty();
 		});
 	}
 
 	/**
-	 * List all registered resource templates.
-	 * @return A Flux stream of all registered resource templates
+	 * List resource templates from the repository without a transport request context.
+	 * <p>
+	 * Dynamic repositories should treat the {@link McpTransportContext#EMPTY} context
+	 * passed by this helper as a context-free listing.
+	 * @return A Flux stream of context-free visible resource templates
 	 */
 	public Flux<McpSchema.ResourceTemplate> listResourceTemplates() {
-		return Flux.fromIterable(this.resourceTemplates.values())
-			.map(McpStatelessServerFeatures.AsyncResourceTemplateSpecification::resourceTemplate);
+		return Flux.defer(() -> this.resourcesRepository
+			.listResourceTemplates(McpTransportContext.EMPTY, new McpSchema.PaginatedRequest())
+			.expand(result -> (result.nextCursor() != null) ? this.resourcesRepository.listResourceTemplates(
+					McpTransportContext.EMPTY, new McpSchema.PaginatedRequest(result.nextCursor())) : Mono.empty())
+			.flatMapIterable(McpSchema.ListResourceTemplatesResult::resourceTemplates));
 	}
 
 	/**
 	 * Remove a resource template at runtime.
 	 * @param uriTemplate The URI template of the resource template to remove
-	 * @return Mono that completes when clients have been notified of the change
+	 * @return Mono that completes when the repository has been updated
 	 */
 	public Mono<Void> removeResourceTemplate(String uriTemplate) {
 
@@ -548,9 +591,7 @@ public class McpStatelessAsyncServer {
 		}
 
 		return Mono.defer(() -> {
-			McpStatelessServerFeatures.AsyncResourceTemplateSpecification removed = this.resourceTemplates
-				.remove(uriTemplate);
-			if (removed != null) {
+			if (this.resourcesRepository.removeResourceTemplate(uriTemplate)) {
 				logger.debug("Removed resource template: {}", uriTemplate);
 			}
 			else {
@@ -562,21 +603,13 @@ public class McpStatelessAsyncServer {
 
 	private McpStatelessRequestHandler<McpSchema.ListResourcesResult> resourcesListRequestHandler() {
 		return (ctx, params) -> {
-			var resourceList = this.resources.values()
-				.stream()
-				.map(McpStatelessServerFeatures.AsyncResourceSpecification::resource)
-				.toList();
-			return Mono.just(McpSchema.ListResourcesResult.builder(resourceList).build());
+			return this.resourcesRepository.listResources(ctx, paginatedRequest(params));
 		};
 	}
 
 	private McpStatelessRequestHandler<McpSchema.ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
 		return (exchange, params) -> {
-			var resourceList = this.resourceTemplates.values()
-				.stream()
-				.map(AsyncResourceTemplateSpecification::resourceTemplate)
-				.toList();
-			return Mono.just(McpSchema.ListResourceTemplatesResult.builder(resourceList).build());
+			return this.resourcesRepository.listResourceTemplates(exchange, paginatedRequest(params));
 		};
 	}
 
@@ -586,35 +619,14 @@ public class McpStatelessAsyncServer {
 			});
 			var resourceUri = resourceRequest.uri();
 
-			// First try to find a static resource specification
-			// Static resources have exact URIs
-			return this.findResourceSpecification(resourceUri)
-				.map(spec -> spec.readHandler().apply(ctx, resourceRequest))
-				.orElseGet(() -> {
-					// If not found, try to find a dynamic resource specification
-					// Dynamic resources have URI templates
-					return this.findResourceTemplateSpecification(resourceUri)
-						.map(spec -> spec.readHandler().apply(ctx, resourceRequest))
-						.orElseGet(() -> Mono.error(RESOURCE_NOT_FOUND.apply(resourceUri)));
-				});
+			// Resolve direct resources first, then resource templates.
+			return this.resourcesRepository.resolveResource(resourceUri, ctx)
+				.flatMap(spec -> spec.readHandler().apply(ctx, resourceRequest))
+				.switchIfEmpty(this.resourcesRepository.resolveResourceTemplate(resourceUri, ctx)
+					.flatMap(spec -> spec.readHandler().apply(ctx, resourceRequest))
+					.switchIfEmpty(Mono.error(RESOURCE_NOT_FOUND.apply(resourceUri))));
 
 		};
-	}
-
-	private Optional<McpStatelessServerFeatures.AsyncResourceSpecification> findResourceSpecification(String uri) {
-		var result = this.resources.values()
-			.stream()
-			.filter(spec -> this.uriTemplateManagerFactory.create(spec.resource().uri()).matches(uri))
-			.findFirst();
-		return result;
-	}
-
-	private Optional<McpStatelessServerFeatures.AsyncResourceTemplateSpecification> findResourceTemplateSpecification(
-			String uri) {
-		return this.resourceTemplates.values()
-			.stream()
-			.filter(spec -> this.uriTemplateManagerFactory.create(spec.resourceTemplate().uriTemplate()).matches(uri))
-			.findFirst();
 	}
 
 	// ---------------------------------------
@@ -624,7 +636,7 @@ public class McpStatelessAsyncServer {
 	/**
 	 * Add a new prompt handler at runtime.
 	 * @param promptSpecification The prompt handler to add
-	 * @return Mono that completes when clients have been notified of the change
+	 * @return Mono that completes when the repository has been updated
 	 */
 	public Mono<Void> addPrompt(McpStatelessServerFeatures.AsyncPromptSpecification promptSpecification) {
 		if (promptSpecification == null) {
@@ -635,31 +647,32 @@ public class McpStatelessAsyncServer {
 		}
 
 		return Mono.defer(() -> {
-			var previous = this.prompts.put(promptSpecification.prompt().name(), promptSpecification);
-			if (previous != null) {
-				logger.warn("Replace existing Prompt with name '{}'", promptSpecification.prompt().name());
-			}
-			else {
-				logger.debug("Added prompt handler: {}", promptSpecification.prompt().name());
-			}
+			this.promptsRepository.addPrompt(promptSpecification);
+			logger.debug("Added prompt handler: {}", promptSpecification.prompt().name());
 
 			return Mono.empty();
 		});
 	}
 
 	/**
-	 * List all registered prompts.
-	 * @return A Flux stream of all registered prompts
+	 * List prompts from the repository without a transport request context.
+	 * <p>
+	 * Dynamic repositories should treat the {@link McpTransportContext#EMPTY} context
+	 * passed by this helper as a context-free listing.
+	 * @return A Flux stream of context-free visible prompts
 	 */
 	public Flux<McpSchema.Prompt> listPrompts() {
-		return Flux.fromIterable(this.prompts.values())
-			.map(McpStatelessServerFeatures.AsyncPromptSpecification::prompt);
+		return Flux
+			.defer(() -> this.promptsRepository.listPrompts(McpTransportContext.EMPTY, new McpSchema.PaginatedRequest())
+				.expand(result -> (result.nextCursor() != null) ? this.promptsRepository.listPrompts(
+						McpTransportContext.EMPTY, new McpSchema.PaginatedRequest(result.nextCursor())) : Mono.empty())
+				.flatMapIterable(McpSchema.ListPromptsResult::prompts));
 	}
 
 	/**
 	 * Remove a prompt handler at runtime.
 	 * @param promptName The name of the prompt handler to remove
-	 * @return Mono that completes when clients have been notified of the change
+	 * @return Mono that completes when the repository has been updated
 	 */
 	public Mono<Void> removePrompt(String promptName) {
 		if (promptName == null) {
@@ -670,9 +683,7 @@ public class McpStatelessAsyncServer {
 		}
 
 		return Mono.defer(() -> {
-			McpStatelessServerFeatures.AsyncPromptSpecification removed = this.prompts.remove(promptName);
-
-			if (removed != null) {
+			if (this.promptsRepository.removePrompt(promptName)) {
 				logger.debug("Removed prompt handler: {}", promptName);
 				return Mono.empty();
 			}
@@ -686,17 +697,7 @@ public class McpStatelessAsyncServer {
 
 	private McpStatelessRequestHandler<McpSchema.ListPromptsResult> promptsListRequestHandler() {
 		return (ctx, params) -> {
-			// TODO: Implement pagination
-			// McpSchema.PaginatedRequest request = objectMapper.convertValue(params,
-			// new TypeReference<McpSchema.PaginatedRequest>() {
-			// });
-
-			var promptList = this.prompts.values()
-				.stream()
-				.map(McpStatelessServerFeatures.AsyncPromptSpecification::prompt)
-				.toList();
-
-			return Mono.just(McpSchema.ListPromptsResult.builder(promptList).build());
+			return this.promptsRepository.listPrompts(ctx, paginatedRequest(params));
 		};
 	}
 
@@ -706,16 +707,12 @@ public class McpStatelessAsyncServer {
 					new TypeRef<McpSchema.GetPromptRequest>() {
 					});
 
-			// Implement prompt retrieval logic here
-			McpStatelessServerFeatures.AsyncPromptSpecification specification = this.prompts.get(promptRequest.name());
-			if (specification == null) {
-				return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
+			return this.promptsRepository.resolvePrompt(promptRequest.name(), ctx)
+				.switchIfEmpty(Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
 					.message("Invalid prompt name")
 					.data("Prompt not found: " + promptRequest.name())
-					.build());
-			}
-
-			return specification.promptHandler().apply(ctx, promptRequest);
+					.build()))
+				.flatMap(specification -> specification.promptHandler().apply(ctx, promptRequest));
 		};
 	}
 
@@ -738,88 +735,82 @@ public class McpStatelessAsyncServer {
 					.build());
 			}
 
-			String type = request.ref().type();
+			return validateCompletionRequest(request, ctx)
+				.switchIfEmpty(this.completionsRepository.resolveCompletion(request.ref(), ctx)
+					.switchIfEmpty(Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
+						.message("AsyncCompletionSpecification not found: " + request.ref())
+						.build()))
+					.flatMap(specification -> specification.completionHandler().apply(ctx, request)));
+		};
+	}
 
-			String argumentName = request.argument().name();
+	private Mono<McpSchema.CompleteResult> validateCompletionRequest(McpSchema.CompleteRequest request,
+			McpTransportContext transportContext) {
+		String type = request.ref().type();
+		String argumentName = request.argument().name();
 
-			// Check if valid a Prompt exists for this completion request
-			if (type.equals(PromptReference.TYPE)
-					&& request.ref() instanceof McpSchema.PromptReference promptReference) {
+		if (type.equals(PromptReference.TYPE) && request.ref() instanceof McpSchema.PromptReference promptReference) {
+			return this.promptsRepository.resolvePrompt(promptReference.name(), transportContext)
+				.switchIfEmpty(Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
+					.message("Prompt not found: " + promptReference.name())
+					.build()))
+				.flatMap(promptSpec -> {
+					List<McpSchema.PromptArgument> arguments = promptSpec.prompt().arguments();
+					if (arguments == null || arguments.stream().noneMatch(arg -> arg.name().equals(argumentName))) {
+						logger.warn("Argument not found: {} in prompt: {}", argumentName, promptReference.name());
+						return EMPTY_COMPLETION_RESULT;
+					}
+					return Mono.empty();
+				});
+		}
 
-				McpStatelessServerFeatures.AsyncPromptSpecification promptSpec = this.prompts
-					.get(promptReference.name());
-				if (promptSpec == null) {
-					return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
-						.message("Prompt not found: " + promptReference.name())
-						.build());
-				}
-				List<McpSchema.PromptArgument> arguments = promptSpec.prompt().arguments();
-				if (arguments == null
-						|| !arguments.stream().filter(arg -> arg.name().equals(argumentName)).findFirst().isPresent()) {
+		if (type.equals(ResourceReference.TYPE)
+				&& request.ref() instanceof McpSchema.ResourceReference resourceReference) {
+			return validateResourceCompletionRequest(resourceReference, argumentName, transportContext);
+		}
 
-					logger.warn("Argument not found: {} in prompt: {}", argumentName, promptReference.name());
+		return Mono.empty();
+	}
 
-					return EMPTY_COMPLETION_RESULT;
-				}
-			}
+	private Mono<McpSchema.CompleteResult> validateResourceCompletionRequest(
+			McpSchema.ResourceReference resourceReference, String argumentName, McpTransportContext transportContext) {
+		var uriTemplateManager = uriTemplateManagerFactory.create(resourceReference.uri());
 
-			// Check if valid Resource or ResourceTemplate exists for this completion
-			// request
-			if (type.equals(ResourceReference.TYPE)
-					&& request.ref() instanceof McpSchema.ResourceReference resourceReference) {
+		if (!uriTemplateManager.isUriTemplate(resourceReference.uri())) {
+			// Attempting to autocomplete a fixed resource URI is not an error in the
+			// spec.
+			return EMPTY_COMPLETION_RESULT;
+		}
 
-				var uriTemplateManager = uriTemplateManagerFactory.create(resourceReference.uri());
-
-				if (!uriTemplateManager.isUriTemplate(resourceReference.uri())) {
-					// Attempting to autocomplete a fixed resource URI is not an error in
-					// the spec (but probably should be).
-					return EMPTY_COMPLETION_RESULT;
-				}
-
-				McpStatelessServerFeatures.AsyncResourceSpecification resourceSpec = this
-					.findResourceSpecification(resourceReference.uri())
-					.orElse(null);
-
-				if (resourceSpec != null) {
-					if (!uriTemplateManagerFactory.create(resourceSpec.resource().uri())
+		return this.resourcesRepository.resolveResource(resourceReference.uri(), transportContext)
+			.map(Optional::of)
+			.defaultIfEmpty(Optional.empty())
+			.flatMap(resourceSpec -> {
+				if (resourceSpec.isPresent()) {
+					if (!uriTemplateManagerFactory.create(resourceSpec.get().resource().uri())
 						.getVariableNames()
 						.contains(argumentName)) {
-
 						return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
 							.message("Argument not found: " + argumentName + " in resource: " + resourceReference.uri())
 							.build());
 					}
+					return Mono.empty();
 				}
-				else {
-					var templateSpec = this.findResourceTemplateSpecification(resourceReference.uri()).orElse(null);
-					if (templateSpec != null) {
 
+				return this.resourcesRepository.resolveResourceTemplate(resourceReference.uri(), transportContext)
+					.switchIfEmpty(Mono.error(RESOURCE_NOT_FOUND.apply(resourceReference.uri())))
+					.flatMap(templateSpec -> {
 						if (!uriTemplateManagerFactory.create(templateSpec.resourceTemplate().uriTemplate())
 							.getVariableNames()
 							.contains(argumentName)) {
-
 							return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
 								.message("Argument not found: " + argumentName + " in resource template: "
 										+ resourceReference.uri())
 								.build());
 						}
-					}
-					else {
-						return Mono.error(RESOURCE_NOT_FOUND.apply(resourceReference.uri()));
-					}
-				}
-			}
-
-			McpStatelessServerFeatures.AsyncCompletionSpecification specification = this.completions.get(request.ref());
-
-			if (specification == null) {
-				return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
-					.message("AsyncCompletionSpecification not found: " + request.ref())
-					.build());
-			}
-
-			return specification.completionHandler().apply(ctx, request);
-		};
+						return Mono.empty();
+					});
+			});
 	}
 
 	/**
