@@ -312,6 +312,40 @@ class DefaultJsonSchemaValidatorTests {
 	}
 
 	@Test
+	void testValidateWithCustomDataDescription() {
+		String schemaJson = """
+				{
+					"type": "object",
+					"properties": {
+						"name": {"type": "string"},
+						"age": {"type": "integer"}
+					},
+					"required": ["name", "age"]
+				}
+				""";
+
+		String contentJson = """
+				{
+					"name": "John Doe"
+				}
+				""";
+
+		Map<String, Object> schema = toMap(schemaJson);
+		Map<String, Object> structuredContent = toMap(contentJson);
+
+		ValidationResponse response = validator.validate(schema, structuredContent,
+				"input arguments do not match tool inputSchema");
+
+		assertFalse(response.valid());
+		assertNotNull(response.errorMessage());
+		assertTrue(response.errorMessage().contains("Validation failed"));
+		assertTrue(response.errorMessage().contains("input arguments do not match tool inputSchema"));
+		assertFalse(response.errorMessage().contains("outputSchema"));
+		assertFalse(response.errorMessage().contains("structuredContent"));
+		assertTrue(response.errorMessage().contains("age"));
+	}
+
+	@Test
 	void testValidateWithMissingRequiredField() {
 		String schemaJson = """
 				{

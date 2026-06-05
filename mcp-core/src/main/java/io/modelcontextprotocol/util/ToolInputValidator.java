@@ -40,7 +40,7 @@ public final class ToolInputValidator {
 			return null;
 		}
 		Map<String, Object> args = arguments != null ? arguments : Map.of();
-		var validation = validator.validate(tool.inputSchema(), args);
+		var validation = validator.validate(tool.inputSchema(), args, "input arguments do not match tool inputSchema");
 		if (!validation.valid()) {
 			logger.warn("Tool '{}' input validation failed: {}", tool.name(), validation.errorMessage());
 			return CallToolResult.builder()

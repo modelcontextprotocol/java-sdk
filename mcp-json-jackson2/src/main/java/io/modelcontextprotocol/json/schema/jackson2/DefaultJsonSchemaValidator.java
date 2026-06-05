@@ -34,6 +34,12 @@ public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 
 	private static final Logger logger = LoggerFactory.getLogger(DefaultJsonSchemaValidator.class);
 
+	/**
+	 * Default description used by the two-argument {@code validate} overload, which is
+	 * primarily used for tool output validation.
+	 */
+	private static final String DEFAULT_DATA_DESCRIPTION = "structuredContent does not match tool outputSchema";
+
 	private final ObjectMapper objectMapper;
 
 	private final SchemaRegistry schemaFactory;
@@ -57,6 +63,11 @@ public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 
 	@Override
 	public ValidationResponse validate(Map<String, Object> schema, Object structuredContent) {
+		return validate(schema, structuredContent, DEFAULT_DATA_DESCRIPTION);
+	}
+
+	@Override
+	public ValidationResponse validate(Map<String, Object> schema, Object structuredContent, String dataDescription) {
 
 		if (schema == null) {
 			throw new IllegalArgumentException("Schema must not be null");
@@ -76,8 +87,7 @@ public class DefaultJsonSchemaValidator implements JsonSchemaValidator {
 			// Check if validation passed
 			if (!validationResult.isEmpty()) {
 				return ValidationResponse
-					.asInvalid("Validation failed: structuredContent does not match tool outputSchema. "
-							+ "Validation errors: " + validationResult);
+					.asInvalid("Validation failed: " + dataDescription + ". Validation errors: " + validationResult);
 			}
 
 			return ValidationResponse.asValid(jsonStructuredOutput.toString());

@@ -183,6 +183,12 @@ class ToolInputValidationIntegrationTests {
 			assertThat(result.isError()).isTrue();
 			String errorMessage = ((TextContent) result.content().get(0)).text();
 			assertThat(errorMessage).containsIgnoringCase(expectedErrorSubstring);
+			// The message must make clear the failure refers to tool input, not output,
+			// otherwise it is misleading to consumers/LLMs.
+			assertThat(errorMessage).contains("Validation failed")
+				.contains("input arguments do not match tool inputSchema")
+				.doesNotContain("outputSchema")
+				.doesNotContain("structuredContent");
 		}
 		finally {
 			closeServer(server, serverType);

@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -39,17 +40,17 @@ class ToolInputValidatorTests {
 		CallToolResult result = ToolInputValidator.validate(toolWithSchema, Map.of("name", "test"), false, validator);
 
 		assertThat(result).isNull();
-		verify(validator, never()).validate(any(), any());
+		verify(validator, never()).validate(any(), any(), any());
 	}
 
 	@Test
 	void validate_whenNoSchema_returnsNull() {
-		when(validator.validate(any(), any())).thenReturn(ValidationResponse.asValid(null));
+		when(validator.validate(any(), any(), any())).thenReturn(ValidationResponse.asValid(null));
 
 		CallToolResult result = ToolInputValidator.validate(toolWithoutSchema, Map.of("name", "test"), true, validator);
 
 		assertThat(result).isNull();
-		verify(validator).validate(any(), any());
+		verify(validator).validate(any(), any(), any());
 	}
 
 	@Test
@@ -61,7 +62,7 @@ class ToolInputValidatorTests {
 
 	@Test
 	void validate_withValidInput_returnsNull() {
-		when(validator.validate(any(), any())).thenReturn(ValidationResponse.asValid(null));
+		when(validator.validate(any(), any(), any())).thenReturn(ValidationResponse.asValid(null));
 
 		CallToolResult result = ToolInputValidator.validate(toolWithSchema, Map.of("name", "test"), true, validator);
 
@@ -70,24 +71,36 @@ class ToolInputValidatorTests {
 
 	@Test
 	void validate_withInvalidInput_returnsErrorResult() {
-		when(validator.validate(any(), any())).thenReturn(ValidationResponse.asInvalid("missing required: 'name'"));
+		when(validator.validate(any(), any(), any()))
+			.thenReturn(ValidationResponse.asInvalid("missing required: 'name'"));
 
 		CallToolResult result = ToolInputValidator.validate(toolWithSchema, Map.of(), true, validator);
 
 		assertThat(result).isNotNull();
 		assertThat(result.isError()).isTrue();
 		assertThat(((TextContent) result.content().get(0)).text()).contains("missing required: 'name'");
-		verify(validator).validate(any(), any());
+		verify(validator).validate(any(), any(), any());
+	}
+
+	@Test
+	void validate_passesInputDataDescriptionToValidator() {
+		when(validator.validate(any(), any(), any())).thenReturn(ValidationResponse.asValid(null));
+
+		ToolInputValidator.validate(toolWithSchema, Map.of("name", "test"), true, validator);
+
+		// The data description must reference input/inputSchema so error messages are not
+		// misleading to consumers/LLMs.
+		verify(validator).validate(any(), any(), eq("input arguments do not match tool inputSchema"));
 	}
 
 	@Test
 	void validate_withNullArguments_usesEmptyMap() {
-		when(validator.validate(any(), any())).thenReturn(ValidationResponse.asValid(null));
+		when(validator.validate(any(), any(), any())).thenReturn(ValidationResponse.asValid(null));
 
 		CallToolResult result = ToolInputValidator.validate(toolWithSchema, null, true, validator);
 
 		assertThat(result).isNull();
-		verify(validator).validate(any(), any());
+		verify(validator).validate(any(), any(), any());
 	}
 
 }
