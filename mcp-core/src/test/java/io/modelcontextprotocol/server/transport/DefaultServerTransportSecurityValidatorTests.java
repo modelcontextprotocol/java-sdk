@@ -7,7 +7,6 @@ package io.modelcontextprotocol.server.transport;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -49,7 +48,7 @@ class DefaultServerTransportSecurityValidatorTests {
 
 		@Test
 		void originHeaderListEmpty() {
-			assertThatCode(() -> validator.validateHeaders(name -> List.of())).doesNotThrowAnyException();
+			assertThatCode(() -> validator.validateHeaders(headerAccessor())).doesNotThrowAnyException();
 		}
 
 		@Test
@@ -221,7 +220,7 @@ class DefaultServerTransportSecurityValidatorTests {
 
 		@Test
 		void listEmpty() {
-			assertThatThrownBy(() -> hostValidator.validateHeaders(name -> List.of())).isEqualTo(INVALID_HOST);
+			assertThatThrownBy(() -> hostValidator.validateHeaders(headerAccessor())).isEqualTo(INVALID_HOST);
 		}
 
 		@Test
@@ -489,14 +488,13 @@ class DefaultServerTransportSecurityValidatorTests {
 		}
 
 		@Test
-		void mapDefaultBridgesToFunctionOverride() {
-			// A validator that only overrides the Function method should still work
+		void mapDefaultBridgesToAccessorOverride() {
+			// A validator that only overrides the HeaderAccessor method should still work
 			// when called via the deprecated Map method
-			ServerTransportSecurityValidator functionOnlyValidator = new ServerTransportSecurityValidator() {
+			ServerTransportSecurityValidator accessorOnlyValidator = new ServerTransportSecurityValidator() {
 				@Override
-				public void validateHeaders(Function<String, List<String>> headerAccessor)
-						throws ServerTransportSecurityException {
-					List<String> origins = headerAccessor.apply("Origin");
+				public void validateHeaders(HeaderAccessor accessor) throws ServerTransportSecurityException {
+					List<String> origins = accessor.getHeader("Origin");
 					if (origins != null && !origins.isEmpty() && origins.get(0).contains("evil")) {
 						throw new ServerTransportSecurityException(403, "Invalid Origin header");
 					}
@@ -505,34 +503,67 @@ class DefaultServerTransportSecurityValidatorTests {
 
 			Map<String, List<String>> goodHeaders = new HashMap<>();
 			goodHeaders.put("Origin", List.of("http://good.example.com"));
-			assertThatCode(() -> functionOnlyValidator.validateHeaders(goodHeaders)).doesNotThrowAnyException();
+			assertThatCode(() -> accessorOnlyValidator.validateHeaders(goodHeaders)).doesNotThrowAnyException();
 
 			Map<String, List<String>> evilHeaders = new HashMap<>();
 			evilHeaders.put("Origin", List.of("http://evil.example.com"));
-			assertThatThrownBy(() -> functionOnlyValidator.validateHeaders(evilHeaders)).isEqualTo(INVALID_ORIGIN);
+			assertThatThrownBy(() -> accessorOnlyValidator.validateHeaders(evilHeaders)).isEqualTo(INVALID_ORIGIN);
+		}
+
+		@Test
+		void accessorDefaultBridgesToMapOverride() {
+			// A validator that only overrides the deprecated Map method should still work
+			// when called via the new HeaderAccessor method
+			ServerTransportSecurityValidator mapOnlyValidator = new ServerTransportSecurityValidator() {
+				@Override
+				public void validateHeaders(Map<String, List<String>> headers) throws ServerTransportSecurityException {
+					List<String> origins = headers.getOrDefault("origin", List.of());
+					if (!origins.isEmpty() && origins.get(0).contains("evil")) {
+						throw new ServerTransportSecurityException(403, "Invalid Origin header");
+					}
+				}
+			};
+
+			assertThatCode(() -> mapOnlyValidator.validateHeaders(originAccessor("http://good.example.com")))
+				.doesNotThrowAnyException();
+
+			assertThatThrownBy(() -> mapOnlyValidator.validateHeaders(originAccessor("http://evil.example.com")))
+				.isEqualTo(INVALID_ORIGIN);
 		}
 
 	}
 
-	private static Function<String, List<String>> emptyAccessor() {
-		return name -> List.of();
+	private static HeaderAccessor emptyAccessor() {
+		return headerAccessor();
 	}
 
-	private static Function<String, List<String>> headerAccessor(String headerName, String value) {
+	private static HeaderAccessor headerAccessor(String... namesAndValues) {
 		Map<String, List<String>> headers = new HashMap<>();
-		headers.put(headerName, List.of(value));
-		return name -> headers.getOrDefault(name, List.of());
+		for (int i = 0; i < namesAndValues.length; i += 2) {
+			headers.put(namesAndValues[i], List.of(namesAndValues[i + 1]));
+		}
+		return new HeaderAccessor() {
+			@Override
+			public List<String> getHeader(String name) {
+				return headers.getOrDefault(name, List.of());
+			}
+
+			@Override
+			public List<String> getHeaderNames() {
+				return List.copyOf(headers.keySet());
+			}
+		};
 	}
 
-	private static Function<String, List<String>> originAccessor(String origin) {
+	private static HeaderAccessor originAccessor(String origin) {
 		return headerAccessor("Origin", origin);
 	}
 
-	private static Function<String, List<String>> hostAccessor(String host) {
+	private static HeaderAccessor hostAccessor(String host) {
 		return headerAccessor("Host", host);
 	}
 
-	private static Function<String, List<String>> combinedAccessor(String origin, String host) {
+	private static HeaderAccessor combinedAccessor(String origin, String host) {
 		Map<String, List<String>> headers = new HashMap<>();
 		if (origin != null) {
 			headers.put("Origin", List.of(origin));
@@ -540,7 +571,17 @@ class DefaultServerTransportSecurityValidatorTests {
 		if (host != null) {
 			headers.put("Host", List.of(host));
 		}
-		return name -> headers.getOrDefault(name, List.of());
+		return new HeaderAccessor() {
+			@Override
+			public List<String> getHeader(String name) {
+				return headers.getOrDefault(name, List.of());
+			}
+
+			@Override
+			public List<String> getHeaderNames() {
+				return List.copyOf(headers.keySet());
+			}
+		};
 	}
 
 }

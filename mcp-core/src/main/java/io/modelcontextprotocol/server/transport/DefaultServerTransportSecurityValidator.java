@@ -6,7 +6,6 @@ package io.modelcontextprotocol.server.transport;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Function;
 
 import io.modelcontextprotocol.util.Assert;
 
@@ -47,14 +46,14 @@ public final class DefaultServerTransportSecurityValidator implements ServerTran
 	}
 
 	@Override
-	public void validateHeaders(Function<String, List<String>> headerAccessor) throws ServerTransportSecurityException {
-		List<String> originValues = headerAccessor.apply(ORIGIN_HEADER);
+	public void validateHeaders(HeaderAccessor accessor) throws ServerTransportSecurityException {
+		List<String> originValues = accessor.getHeader(ORIGIN_HEADER);
 		if (originValues != null && !originValues.isEmpty()) {
 			validateOrigin(originValues.get(0));
 		}
 
 		if (!allowedHosts.isEmpty()) {
-			List<String> hostValues = headerAccessor.apply(HOST_HEADER);
+			List<String> hostValues = accessor.getHeader(HOST_HEADER);
 			if (hostValues == null || hostValues.isEmpty()) {
 				throw new ServerTransportSecurityException(421, "Invalid Host header");
 			}
