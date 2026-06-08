@@ -111,6 +111,55 @@ class HttpServletStatelessIntegrationTests {
 	// ---------------------------------------
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@ValueSource(strings = { "httpclient" })
+	void testStatelessSyncBulkToolMutations(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+			assertThat(mcpClient.listTools().tools()).isEmpty();
+
+			mcpServer.addTools(List.of(syncToolSpecification("duplicate-tool", "First tool"),
+					syncToolSpecification("middle-tool"), syncToolSpecification("duplicate-tool", "Last tool")));
+
+			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+				List<Tool> tools = mcpClient.listTools().tools();
+				assertThat(tools).extracting(McpSchema.Tool::name)
+					.containsExactlyInAnyOrder("middle-tool", "duplicate-tool");
+				assertThat(tools).filteredOn(tool -> tool.name().equals("duplicate-tool"))
+					.singleElement()
+					.extracting(McpSchema.Tool::title)
+					.isEqualTo("Last tool");
+			});
+
+			mcpServer.addTools(List.of(syncToolSpecification("middle-tool", "Replacement tool"),
+					syncToolSpecification("new-tool")));
+
+			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+				List<Tool> tools = mcpClient.listTools().tools();
+				assertThat(tools).extracting(McpSchema.Tool::name)
+					.containsExactly("duplicate-tool", "middle-tool", "new-tool");
+				assertThat(tools.get(1).title()).isEqualTo("Replacement tool");
+			});
+
+			mcpServer.removeTools(List.of("duplicate-tool", "missing-tool"));
+
+			await().atMost(Duration.ofSeconds(5))
+				.untilAsserted(() -> assertThat(mcpClient.listTools().tools()).extracting(McpSchema.Tool::name)
+					.containsExactly("middle-tool", "new-tool"));
+		}
+		finally {
+			mcpServer.closeGracefully().block();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient" })
 	void testToolCallSuccess(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -653,6 +702,17 @@ class HttpServletStatelessIntegrationTests {
 			case "5 + 3" -> 8.0;
 			default -> 0.0;
 		};
+	}
+
+	private McpStatelessServerFeatures.SyncToolSpecification syncToolSpecification(String name) {
+		return syncToolSpecification(name, name);
+	}
+
+	private McpStatelessServerFeatures.SyncToolSpecification syncToolSpecification(String name, String title) {
+		return McpStatelessServerFeatures.SyncToolSpecification.builder()
+			.tool(McpSchema.Tool.builder().name(name).title(title).inputSchema(EMPTY_JSON_SCHEMA).build())
+			.callHandler((context, request) -> CallToolResult.builder().content(List.of()).isError(false).build())
+			.build();
 	}
 
 }

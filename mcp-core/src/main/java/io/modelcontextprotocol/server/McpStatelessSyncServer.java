@@ -75,6 +75,23 @@ public class McpStatelessSyncServer {
 	}
 
 	/**
+	 * Add multiple tool specifications at runtime.
+	 * @param toolSpecifications The tool specifications to add
+	 */
+	public void addTools(List<McpStatelessServerFeatures.SyncToolSpecification> toolSpecifications) {
+		if (toolSpecifications == null) {
+			this.asyncServer.addTools(null).block();
+			return;
+		}
+		this.asyncServer
+			.addTools(toolSpecifications.stream()
+				.map(toolSpecification -> McpStatelessServerFeatures.AsyncToolSpecification.fromSync(toolSpecification,
+						this.immediateExecution))
+				.toList())
+			.block();
+	}
+
+	/**
 	 * List all registered tools.
 	 * @return A list of all registered tools
 	 */
@@ -88,6 +105,14 @@ public class McpStatelessSyncServer {
 	 */
 	public void removeTool(String toolName) {
 		this.asyncServer.removeTool(toolName).block();
+	}
+
+	/**
+	 * Remove multiple tool handlers at runtime.
+	 * @param toolNames The names of the tool handlers to remove
+	 */
+	public void removeTools(List<String> toolNames) {
+		this.asyncServer.removeTools(toolNames).block();
 	}
 
 	/**

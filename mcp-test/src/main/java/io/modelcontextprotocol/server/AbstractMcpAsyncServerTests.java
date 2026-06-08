@@ -9,6 +9,7 @@ import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -19,6 +20,7 @@ import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
 import io.modelcontextprotocol.spec.McpSchema.Resource;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
+import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -202,6 +204,95 @@ public abstract class AbstractMcpAsyncServerTests {
 	}
 
 	@Test
+	void testAddTools() {
+		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.build();
+
+		StepVerifier
+			.create(mcpAsyncServer
+				.addTools(List.of(asyncToolSpecification("bulk-tool-1"), asyncToolSpecification("bulk-tool-2"))))
+			.verifyComplete();
+
+		StepVerifier.create(mcpAsyncServer.listTools().collectList())
+			.assertNext(tools -> assertThat(tools).extracting(McpSchema.Tool::name)
+				.containsExactly("bulk-tool-1", "bulk-tool-2"))
+			.verifyComplete();
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testAddToolsReplacesExistingTools() {
+		Tool originalTool = McpSchema.Tool.builder()
+			.name("replace-tool")
+			.title("Original tool")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
+
+		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.toolCall(originalTool,
+					(exchange, request) -> Mono
+						.just(CallToolResult.builder().content(List.of()).isError(false).build()))
+			.build();
+
+		StepVerifier.create(mcpAsyncServer.addTools(List.of(asyncToolSpecification("replace-tool", "Replacement tool"),
+				asyncToolSpecification("new-bulk-tool"))))
+			.verifyComplete();
+
+		StepVerifier.create(mcpAsyncServer.listTools().collectList()).assertNext(tools -> {
+			assertThat(tools).extracting(McpSchema.Tool::name).containsExactly("replace-tool", "new-bulk-tool");
+			assertThat(tools.get(0).title()).isEqualTo("Replacement tool");
+		}).verifyComplete();
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testAddToolsWithDuplicateInputKeepsLastOccurrence() {
+		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.build();
+
+		StepVerifier
+			.create(mcpAsyncServer.addTools(List.of(asyncToolSpecification("duplicate-tool", "First tool"),
+					asyncToolSpecification("middle-tool"), asyncToolSpecification("duplicate-tool", "Last tool"))))
+			.verifyComplete();
+
+		StepVerifier.create(mcpAsyncServer.listTools().collectList()).assertNext(tools -> {
+			assertThat(tools).extracting(McpSchema.Tool::name)
+				.containsExactlyInAnyOrder("middle-tool", "duplicate-tool");
+			assertThat(tools).filteredOn(tool -> tool.name().equals("duplicate-tool"))
+				.singleElement()
+				.extracting(McpSchema.Tool::title)
+				.isEqualTo("Last tool");
+		}).verifyComplete();
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testAddToolsWithEmptyListIsNoOp() {
+		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
+
+		StepVerifier.create(mcpAsyncServer.addTools(List.of())).verifyComplete();
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testAddToolsWithoutCapability() {
+		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
+
+		StepVerifier.create(mcpAsyncServer.addTools(List.of(asyncToolSpecification("no-capability-tool"))))
+			.verifyErrorSatisfies(error -> assertThat(error).isInstanceOf(IllegalStateException.class)
+				.hasMessage("Server must be configured with tool capabilities"));
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
 	void testRemoveTool() {
 		Tool too = McpSchema.Tool.builder(TEST_TOOL_NAME, EMPTY_JSON_SCHEMA).title("Duplicate tool").build();
 
@@ -213,6 +304,69 @@ public abstract class AbstractMcpAsyncServerTests {
 			.build();
 
 		StepVerifier.create(mcpAsyncServer.removeTool(TEST_TOOL_NAME)).verifyComplete();
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testRemoveTools() {
+		Tool tool1 = McpSchema.Tool.builder()
+			.name("remove-tool-1")
+			.title("Remove tool 1")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
+		Tool tool2 = McpSchema.Tool.builder()
+			.name("remove-tool-2")
+			.title("Remove tool 2")
+			.inputSchema(EMPTY_JSON_SCHEMA)
+			.build();
+
+		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.toolCall(tool1,
+					(exchange, request) -> Mono
+						.just(CallToolResult.builder().content(List.of()).isError(false).build()))
+			.toolCall(tool2,
+					(exchange, request) -> Mono
+						.just(CallToolResult.builder().content(List.of()).isError(false).build()))
+			.build();
+
+		StepVerifier.create(mcpAsyncServer.removeTools(List.of("remove-tool-1", "missing-tool"))).verifyComplete();
+
+		StepVerifier.create(mcpAsyncServer.listTools().collectList())
+			.assertNext(tools -> assertThat(tools).extracting(McpSchema.Tool::name).containsExactly("remove-tool-2"))
+			.verifyComplete();
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testRemoveToolsWithoutCapability() {
+		var mcpAsyncServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
+
+		StepVerifier.create(mcpAsyncServer.removeTools(List.of("no-capability-tool")))
+			.verifyErrorSatisfies(error -> assertThat(error).isInstanceOf(IllegalStateException.class)
+				.hasMessage("Server must be configured with tool capabilities"));
+
+		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	@Test
+	void testBulkToolMutationsNotifyClientsOncePerOperation() {
+		CountingMcpServerTransportProvider transportProvider = new CountingMcpServerTransportProvider();
+		var mcpAsyncServer = McpServer.async(transportProvider)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.build();
+
+		StepVerifier
+			.create(mcpAsyncServer
+				.addTools(List.of(asyncToolSpecification("notify-tool-1"), asyncToolSpecification("notify-tool-2"))))
+			.verifyComplete();
+		assertThat(transportProvider.notificationCount()).isEqualTo(1);
+
+		StepVerifier.create(mcpAsyncServer.removeTools(List.of("notify-tool-1", "notify-tool-2"))).verifyComplete();
+		assertThat(transportProvider.notificationCount()).isEqualTo(2);
 
 		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
 	}
@@ -241,6 +395,43 @@ public abstract class AbstractMcpAsyncServerTests {
 		StepVerifier.create(mcpAsyncServer.notifyToolsListChanged()).verifyComplete();
 
 		assertThatCode(() -> mcpAsyncServer.closeGracefully().block(Duration.ofSeconds(10))).doesNotThrowAnyException();
+	}
+
+	private McpServerFeatures.AsyncToolSpecification asyncToolSpecification(String name) {
+		return asyncToolSpecification(name, name);
+	}
+
+	private McpServerFeatures.AsyncToolSpecification asyncToolSpecification(String name, String title) {
+		return McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(McpSchema.Tool.builder().name(name).title(title).inputSchema(EMPTY_JSON_SCHEMA).build())
+			.callHandler((exchange, request) -> Mono
+				.just(CallToolResult.builder().content(List.of()).isError(false).build()))
+			.build();
+	}
+
+	private static final class CountingMcpServerTransportProvider implements McpServerTransportProvider {
+
+		private final AtomicInteger notifications = new AtomicInteger();
+
+		@Override
+		public void setSessionFactory(McpServerSession.Factory sessionFactory) {
+		}
+
+		@Override
+		public Mono<Void> notifyClients(String method, Object params) {
+			this.notifications.incrementAndGet();
+			return Mono.empty();
+		}
+
+		@Override
+		public Mono<Void> closeGracefully() {
+			return Mono.empty();
+		}
+
+		int notificationCount() {
+			return this.notifications.get();
+		}
+
 	}
 
 	// ---------------------------------------
