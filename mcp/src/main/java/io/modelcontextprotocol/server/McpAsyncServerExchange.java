@@ -13,6 +13,7 @@ import io.modelcontextprotocol.spec.McpLoggableSession;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
+import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpSession;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
@@ -90,7 +91,7 @@ public class McpAsyncServerExchange {
 	}
 
 	public McpServerSession getSession() {
-		return session;
+		return (McpServerSession) session;
 	}
 
 	/**

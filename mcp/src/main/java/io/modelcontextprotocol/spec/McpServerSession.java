@@ -92,6 +92,7 @@ public class McpServerSession implements McpLoggableSession {
 		this.initRequestHandler = initHandler;
 		this.requestHandlers = requestHandlers;
 		this.notificationHandlers = notificationHandlers;
+		this.authentication = SecurityContextHolder.getContext().getAuthentication();
 	}
 
 	/**
