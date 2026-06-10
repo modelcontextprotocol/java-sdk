@@ -103,6 +103,9 @@ public class McpAsyncClient {
 	public static final TypeRef<CreateMessageRequest> CREATE_MESSAGE_REQUEST_TYPE_REF = new TypeRef<>() {
 	};
 
+	public static final TypeRef<McpSchema.CreateMessageWithToolsRequest> CREATE_MESSAGE_WITH_TOOLS_REQUEST_TYPE_REF = new TypeRef<>() {
+	};
+
 	public static final TypeRef<LoggingMessageNotification> LOGGING_MESSAGE_NOTIFICATION_TYPE_REF = new TypeRef<>() {
 	};
 
@@ -141,6 +144,8 @@ public class McpAsyncClient {
 	 * servers in their prompts.
 	 */
 	private Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler;
+
+	private Function<McpSchema.CreateMessageWithToolsRequest, Mono<McpSchema.CreateMessageWithToolsResult>> samplingWithToolsHandler;
 
 	/**
 	 * MCP provides a standardized way for servers to request additional information from
@@ -227,11 +232,21 @@ public class McpAsyncClient {
 
 		// Sampling Handler
 		if (this.clientCapabilities.sampling() != null) {
-			if (features.samplingHandler() == null) {
-				throw new IllegalArgumentException(
-						"Sampling handler must not be null when client capabilities include sampling");
+			boolean withTools = this.clientCapabilities.sampling().tools() != null;
+			if (withTools) {
+				if (features.samplingWithToolsHandler() == null) {
+					throw new IllegalArgumentException(
+							"Sampling-with-tools handler must not be null when client capabilities include sampling.tools");
+				}
+				this.samplingWithToolsHandler = features.samplingWithToolsHandler();
 			}
-			this.samplingHandler = features.samplingHandler();
+			else {
+				if (features.samplingHandler() == null) {
+					throw new IllegalArgumentException(
+							"Sampling handler must not be null when client capabilities include sampling");
+				}
+				this.samplingHandler = features.samplingHandler();
+			}
 			requestHandlers.put(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, samplingCreateMessageHandler());
 		}
 
@@ -575,11 +590,29 @@ public class McpAsyncClient {
 	// --------------------------
 	// Sampling
 	// --------------------------
-	private RequestHandler<CreateMessageResult> samplingCreateMessageHandler() {
+	private RequestHandler<Object> samplingCreateMessageHandler() {
 		return params -> {
-			McpSchema.CreateMessageRequest request = transport.unmarshalFrom(params, CREATE_MESSAGE_REQUEST_TYPE_REF);
-
-			return this.samplingHandler.apply(request);
+			// Dispatch to V2 handler if the request carries tools/toolChoice, otherwise
+			// V1
+			McpSchema.CreateMessageWithToolsRequest v2Request = transport.unmarshalFrom(params,
+					CREATE_MESSAGE_WITH_TOOLS_REQUEST_TYPE_REF);
+			boolean isV2Request = (v2Request.tools() != null && !v2Request.tools().isEmpty())
+					|| v2Request.toolChoice() != null;
+			if (isV2Request) {
+				if (this.samplingWithToolsHandler == null) {
+					return Mono.error(new IllegalStateException(
+							"Received sampling request with tools, but no samplingWithTools handler is registered. "
+									+ "Use McpClient.async(transport).samplingWithTools(handler) to register one."));
+				}
+				return this.samplingWithToolsHandler.apply(v2Request).cast(Object.class);
+			}
+			// V1 path: unmarshal as the legacy type for handler type-safety
+			McpSchema.CreateMessageRequest v1Request = transport.unmarshalFrom(params, CREATE_MESSAGE_REQUEST_TYPE_REF);
+			if (this.samplingHandler == null) {
+				return Mono.error(
+						new IllegalStateException("Received sampling request, but no sampling handler is registered."));
+			}
+			return this.samplingHandler.apply(v1Request).cast(Object.class);
 		};
 	}
 

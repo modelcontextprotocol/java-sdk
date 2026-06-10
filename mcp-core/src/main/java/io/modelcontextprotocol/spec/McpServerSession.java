@@ -57,6 +57,8 @@ public class McpServerSession implements McpLoggableSession {
 
 	private final AtomicReference<McpSchema.Implementation> clientInfo = new AtomicReference<>();
 
+	private final AtomicReference<String> negotiatedProtocolVersion = new AtomicReference<>();
+
 	private static final int STATE_UNINITIALIZED = 0;
 
 	private static final int STATE_INITIALIZING = 1;
@@ -284,7 +286,9 @@ public class McpServerSession implements McpLoggableSession {
 
 				this.state.lazySet(STATE_INITIALIZING);
 				this.init(initializeRequest.capabilities(), initializeRequest.clientInfo());
-				resultMono = this.initRequestHandler.handle(initializeRequest);
+				resultMono = this.initRequestHandler.handle(initializeRequest)
+					.doOnNext(r -> this.negotiatedProtocolVersion
+						.set(((McpSchema.InitializeResult) r).protocolVersion()));
 			}
 			else {
 				// TODO handle errors for communication to this session without
@@ -324,8 +328,9 @@ public class McpServerSession implements McpLoggableSession {
 				this.state.lazySet(STATE_INITIALIZED);
 				// FIXME: The session ID passed here is not the same as the one in the
 				// legacy SSE transport.
-				exchangeSink.tryEmitValue(new McpAsyncServerExchange(this.id, this, clientCapabilities.get(),
-						clientInfo.get(), transportContext, this.jsonSchemaValidator));
+				exchangeSink
+					.tryEmitValue(new McpAsyncServerExchange(this.id, this, clientCapabilities.get(), clientInfo.get(),
+							transportContext, this.jsonSchemaValidator, this.negotiatedProtocolVersion.get()));
 			}
 
 			var handler = notificationHandlers.get(notification.method());
@@ -347,7 +352,8 @@ public class McpServerSession implements McpLoggableSession {
 	 */
 	private McpAsyncServerExchange copyExchange(McpAsyncServerExchange exchange, McpTransportContext transportContext) {
 		return new McpAsyncServerExchange(exchange.sessionId(), this, exchange.getClientCapabilities(),
-				exchange.getClientInfo(), transportContext, this.jsonSchemaValidator);
+				exchange.getClientInfo(), transportContext, this.jsonSchemaValidator,
+				this.negotiatedProtocolVersion.get());
 	}
 
 	record MethodNotFoundError(String method, String message, Object data) {

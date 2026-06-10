@@ -57,6 +57,8 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	private final AtomicReference<McpSchema.Implementation> clientInfo = new AtomicReference<>();
 
+	private final AtomicReference<String> negotiatedProtocolVersion = new AtomicReference<>();
+
 	private final AtomicReference<McpLoggableSession> listeningStreamRef;
 
 	private final MissingMcpTransportSession missingMcpTransportSession;
@@ -150,6 +152,10 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		return this.id;
 	}
 
+	void setNegotiatedProtocolVersion(String version) {
+		this.negotiatedProtocolVersion.set(version);
+	}
+
 	private String generateRequestId() {
 		return this.id + "-" + this.requestCounter.getAndIncrement();
 	}
@@ -220,7 +226,8 @@ public class McpStreamableServerSession implements McpLoggableSession {
 			}
 			return requestHandler
 				.handle(new McpAsyncServerExchange(this.id, stream, clientCapabilities.get(), clientInfo.get(),
-						transportContext, this.jsonSchemaValidator), jsonrpcRequest.params())
+						transportContext, this.jsonSchemaValidator, this.negotiatedProtocolVersion.get()),
+						jsonrpcRequest.params())
 				.map(result -> McpSchema.JSONRPCResponse.result(jsonrpcRequest.id(), result))
 				.onErrorResume(e -> {
 					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (e instanceof McpError mcpError
@@ -251,8 +258,8 @@ public class McpStreamableServerSession implements McpLoggableSession {
 			}
 			McpLoggableSession listeningStream = this.listeningStreamRef.get();
 			return notificationHandler.handle(new McpAsyncServerExchange(this.id, listeningStream,
-					this.clientCapabilities.get(), this.clientInfo.get(), transportContext, this.jsonSchemaValidator),
-					notification.params());
+					this.clientCapabilities.get(), this.clientInfo.get(), transportContext, this.jsonSchemaValidator,
+					this.negotiatedProtocolVersion.get()), notification.params());
 		});
 
 	}

@@ -63,7 +63,7 @@ public class McpSchemaTests {
 			.extracting(throwable -> throwable.getCause() != null ? throwable.getCause() : throwable)
 			.asInstanceOf(InstanceOfAssertFactories.THROWABLE)
 			.hasMessageContaining(
-					"Could not resolve type id 'WRONG' as a subtype of `io.modelcontextprotocol.spec.McpSchema$TextContent`: known type ids = [audio, image, resource, resource_link, text]")
+					"Could not resolve type id 'WRONG' as a subtype of `io.modelcontextprotocol.spec.McpSchema$TextContent`")
 			.extracting(Object::getClass)
 			.extracting(Class::getSimpleName)
 			// Class name is the same for both Jackson 2 and 3, only the package differs.
@@ -1550,6 +1550,168 @@ public class McpSchemaTests {
 			.stopReason(McpSchema.CreateMessageResult.StopReason.UNKNOWN)
 			.build();
 		assertThat(value).isEqualTo(expected);
+	}
+
+	// SEP-1577 Sampling with Tools Tests
+
+	@Test
+	void testToolUseContentRoundTrip() throws Exception {
+		McpSchema.ToolUseContent content = McpSchema.ToolUseContent.builder("call_1", "echo")
+			.input(Map.of("text", "ping"))
+			.build();
+		String json = JSON_MAPPER.writeValueAsString(content);
+		assertThatJson(json).isObject().isEqualTo(json("""
+				{"type":"tool_use","id":"call_1","name":"echo","input":{"text":"ping"}}"""));
+		McpSchema.ToolUseContent roundTripped = JSON_MAPPER.readValue(json, McpSchema.ToolUseContent.class);
+		assertThat(roundTripped.id()).isEqualTo("call_1");
+		assertThat(roundTripped.name()).isEqualTo("echo");
+		assertThat(roundTripped.input()).containsEntry("text", "ping");
+	}
+
+	@Test
+	void testToolUseContentPolymorphic() throws Exception {
+		McpSchema.Content content = JSON_MAPPER.readValue("""
+				{"type":"tool_use","id":"call_2","name":"calc","input":{"x":1}}""", McpSchema.Content.class);
+		assertThat(content).isInstanceOf(McpSchema.ToolUseContent.class);
+		assertThat(((McpSchema.ToolUseContent) content).id()).isEqualTo("call_2");
+	}
+
+	@Test
+	void testToolResultContentRoundTrip() throws Exception {
+		McpSchema.ToolResultContent result = McpSchema.ToolResultContent.builder("call_1")
+			.content(List.of(McpSchema.TextContent.builder("42").build()))
+			.isError(false)
+			.build();
+		String json = JSON_MAPPER.writeValueAsString(result);
+		assertThatJson(json).isObject()
+			.isEqualTo(
+					json("""
+							{"type":"tool_result","toolUseId":"call_1","content":[{"type":"text","text":"42"}],"isError":false}"""));
+		McpSchema.ToolResultContent roundTripped = JSON_MAPPER.readValue(json, McpSchema.ToolResultContent.class);
+		assertThat(roundTripped.toolUseId()).isEqualTo("call_1");
+		assertThat(roundTripped.content()).hasSize(1);
+		assertThat(roundTripped.isError()).isFalse();
+	}
+
+	@Test
+	void testToolChoiceRoundTrip() throws Exception {
+		assertThatJson(JSON_MAPPER.writeValueAsString(McpSchema.ToolChoice.auto())).isObject()
+			.isEqualTo(json("{\"mode\":\"auto\"}"));
+		assertThatJson(JSON_MAPPER.writeValueAsString(McpSchema.ToolChoice.required())).isObject()
+			.isEqualTo(json("{\"mode\":\"required\"}"));
+		assertThatJson(JSON_MAPPER.writeValueAsString(McpSchema.ToolChoice.none())).isObject()
+			.isEqualTo(json("{\"mode\":\"none\"}"));
+		McpSchema.ToolChoice parsed = JSON_MAPPER.readValue("{\"mode\":\"auto\"}", McpSchema.ToolChoice.class);
+		assertThat(parsed.mode()).isEqualTo("auto");
+	}
+
+	@Test
+	void testSamplingMessageV2AcceptsSingleContentObject() throws Exception {
+		// Legacy wire format: bare object (not array) — must still deserialize
+		McpSchema.SamplingMessageV2 msg = JSON_MAPPER.readValue("""
+				{"role":"user","content":{"type":"text","text":"hi"}}""", McpSchema.SamplingMessageV2.class);
+		assertThat(msg.role()).isEqualTo(McpSchema.Role.USER);
+		assertThat(msg.content()).hasSize(1);
+		assertThat(msg.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
+	}
+
+	@Test
+	void testSamplingMessageV2EmitsArrayOnWire() throws Exception {
+		McpSchema.SamplingMessageV2 msg = McpSchema.SamplingMessageV2
+			.builder(McpSchema.Role.USER, McpSchema.TextContent.builder("hello").build())
+			.build();
+		String json = JSON_MAPPER.writeValueAsString(msg);
+		// content must be emitted as an array even for a single block
+		assertThatJson(json).isObject().node("content").isArray().hasSize(1);
+	}
+
+	@Test
+	void testCreateMessageWithToolsRequestRoundTrip() throws Exception {
+		McpSchema.Tool echoTool = McpSchema.Tool.builder()
+			.name("echo")
+			.description("Echoes input")
+			.inputSchema(Map.of("type", "object"))
+			.build();
+		McpSchema.CreateMessageWithToolsRequest request = McpSchema.CreateMessageWithToolsRequest
+			.builder(List.of(McpSchema.SamplingMessageV2.of(McpSchema.Role.USER,
+					McpSchema.TextContent.builder("say hi").build())), 100)
+			.tools(List.of(echoTool))
+			.toolChoice(McpSchema.ToolChoice.auto())
+			.build();
+		String json = JSON_MAPPER.writeValueAsString(request);
+		assertThatJson(json).isObject().node("tools").isArray().hasSize(1);
+		assertThatJson(json).isObject().node("toolChoice").isObject().node("mode").isEqualTo("auto");
+		McpSchema.CreateMessageWithToolsRequest roundTripped = JSON_MAPPER.readValue(json,
+				McpSchema.CreateMessageWithToolsRequest.class);
+		assertThat(roundTripped.tools()).hasSize(1);
+		assertThat(roundTripped.toolChoice().mode()).isEqualTo("auto");
+	}
+
+	@Test
+	void testCreateMessageWithToolsRequestLegacyBackwardCompat() throws Exception {
+		// Deserialize JSON without tools/toolChoice — must succeed with nulls
+		McpSchema.CreateMessageWithToolsRequest request = JSON_MAPPER.readValue("""
+				{"messages":[{"role":"user","content":{"type":"text","text":"hi"}}],"maxTokens":100}""",
+				McpSchema.CreateMessageWithToolsRequest.class);
+		assertThat(request.tools()).isNull();
+		assertThat(request.toolChoice()).isNull();
+		// Serialize back — tools and toolChoice keys must be absent
+		String json = JSON_MAPPER.writeValueAsString(request);
+		assertThatJson(json).isObject().doesNotContainKey("tools").doesNotContainKey("toolChoice");
+	}
+
+	@Test
+	void testCreateMessageWithToolsResultRoundTrip() throws Exception {
+		McpSchema.CreateMessageWithToolsResult result = McpSchema.CreateMessageWithToolsResult
+			.builder(McpSchema.Role.ASSISTANT,
+					List.of(McpSchema.ToolUseContent.builder("call_1", "echo").input(Map.of("text", "ping")).build()),
+					"gpt-4")
+			.stopReason(McpSchema.CreateMessageResult.StopReason.TOOL_USE)
+			.build();
+		String json = JSON_MAPPER.writeValueAsString(result);
+		assertThatJson(json).isObject().node("stopReason").isEqualTo("toolUse");
+		assertThatJson(json).isObject().node("content").isArray().hasSize(1);
+		assertThatJson(json).isObject()
+			.node("content")
+			.isArray()
+			.element(0)
+			.isObject()
+			.node("type")
+			.isEqualTo("tool_use");
+		McpSchema.CreateMessageWithToolsResult roundTripped = JSON_MAPPER.readValue(json,
+				McpSchema.CreateMessageWithToolsResult.class);
+		assertThat(roundTripped.stopReason()).isEqualTo(McpSchema.CreateMessageResult.StopReason.TOOL_USE);
+		assertThat(roundTripped.content().get(0)).isInstanceOf(McpSchema.ToolUseContent.class);
+	}
+
+	@Test
+	void testStopReasonToolUse() throws Exception {
+		assertThat(McpSchema.CreateMessageResult.StopReason.of("toolUse"))
+			.isEqualTo(McpSchema.CreateMessageResult.StopReason.TOOL_USE);
+		String json = JSON_MAPPER.writeValueAsString(McpSchema.CreateMessageResult.StopReason.TOOL_USE);
+		assertThat(json).isEqualTo("\"toolUse\"");
+	}
+
+	@Test
+	void testSamplingCapabilityWithTools() throws Exception {
+		McpSchema.ClientCapabilities caps = McpSchema.ClientCapabilities.builder().samplingTools().build();
+		String json = JSON_MAPPER.writeValueAsString(caps);
+		assertThatJson(json).isObject().node("sampling").isObject().node("tools").isObject();
+		McpSchema.ClientCapabilities roundTripped = JSON_MAPPER.readValue(json, McpSchema.ClientCapabilities.class);
+		assertThat(roundTripped.sampling()).isNotNull();
+		assertThat(roundTripped.sampling().tools()).isNotNull();
+	}
+
+	@Test
+	void testSamplingCapabilityEmptyBackwardCompat() throws Exception {
+		McpSchema.ClientCapabilities caps = McpSchema.ClientCapabilities.builder().sampling().build();
+		String json = JSON_MAPPER.writeValueAsString(caps);
+		// tools key must be absent when not set
+		assertThatJson(json).isObject().node("sampling").isObject();
+		assertThat(json).doesNotContain("\"tools\"");
+		McpSchema.ClientCapabilities roundTripped = JSON_MAPPER.readValue(json, McpSchema.ClientCapabilities.class);
+		assertThat(roundTripped.sampling()).isNotNull();
+		assertThat(roundTripped.sampling().tools()).isNull();
 	}
 
 	// Elicitation Tests

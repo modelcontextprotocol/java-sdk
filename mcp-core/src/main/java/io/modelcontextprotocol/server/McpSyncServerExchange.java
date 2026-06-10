@@ -83,6 +83,20 @@ public class McpSyncServerExchange {
 	}
 
 	/**
+	 * Create a new message using the sampling-with-tools capabilities of the client
+	 * (SEP-1577). Blocking variant of
+	 * {@link McpAsyncServerExchange#createMessageWithTools}.
+	 * @param request The sampling-with-tools request
+	 * @return The result containing the details of the sampling response
+	 * @see McpSchema.CreateMessageWithToolsRequest
+	 * @see McpSchema.CreateMessageWithToolsResult
+	 */
+	public McpSchema.CreateMessageWithToolsResult createMessageWithTools(
+			McpSchema.CreateMessageWithToolsRequest request) {
+		return this.exchange.createMessageWithTools(request).block();
+	}
+
+	/**
 	 * Creates a new elicitation. MCP provides a standardized way for servers to request
 	 * additional information from users through the client during interactions. This flow
 	 * allows clients to maintain control over user interactions and data sharing while

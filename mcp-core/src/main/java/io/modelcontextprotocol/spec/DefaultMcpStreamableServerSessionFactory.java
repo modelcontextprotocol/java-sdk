@@ -95,11 +95,12 @@ public class DefaultMcpStreamableServerSessionFactory implements McpStreamableSe
 	public McpStreamableServerSession.McpStreamableServerSessionInit startSession(
 			McpSchema.InitializeRequest initializeRequest) {
 		String sessionId = UUID.randomUUID().toString();
-		return new McpStreamableServerSession.McpStreamableServerSessionInit(
-				new McpStreamableServerSession(sessionId, initializeRequest.capabilities(),
-						initializeRequest.clientInfo(), requestTimeout, requestHandlers, notificationHandlers,
-						() -> this.onClose.apply(sessionId), this.jsonSchemaValidator),
-				this.initRequestHandler.handle(initializeRequest));
+		McpStreamableServerSession session = new McpStreamableServerSession(sessionId, initializeRequest.capabilities(),
+				initializeRequest.clientInfo(), requestTimeout, requestHandlers, notificationHandlers,
+				() -> this.onClose.apply(sessionId), this.jsonSchemaValidator);
+		return new McpStreamableServerSession.McpStreamableServerSessionInit(session,
+				this.initRequestHandler.handle(initializeRequest)
+					.doOnNext(result -> session.setNegotiatedProtocolVersion(result.protocolVersion())));
 	}
 
 }

@@ -173,3 +173,13 @@ The 1.x canonical 4-arg constructors continue to compile.
 When a `JsonSchemaValidator` is available (including the default from `McpJsonDefaults.getSchemaValidator()` when you do not configure one explicitly) and `validateToolInputs` is left at its default of `true`, the server validates incoming tool arguments against `tool.inputSchema()` before invoking the tool. Failed validation produces a `CallToolResult` with `isError` set and a textual error in the content.
 
 **Action:** Ensure `inputSchema` maps are valid for your validator, tighten client arguments, or disable validation with `validateToolInputs(false)` on the server builder if you must preserve pre-2.0 behaviour.
+
+---
+
+## Sampling with tools (SEP-1577)
+
+### New `StopReason.TOOL_USE` enum constant
+
+`McpSchema.CreateMessageResult.StopReason` gains a new value, `TOOL_USE("toolUse")`. Exhaustive `switch` *expressions* over the enum (which the compiler enforces at compile time) that covered all pre-existing constants without a `default` branch will no longer compile.
+
+**Action:** Add a `case TOOL_USE` branch or a `default` branch to any exhaustive `switch` expression on `StopReason`.

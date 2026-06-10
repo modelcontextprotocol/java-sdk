@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -108,6 +109,14 @@ public final class McpSchema {
 
 	// Sampling Methods
 	public static final String METHOD_SAMPLING_CREATE_MESSAGE = "sampling/createMessage";
+
+	/**
+	 * Minimum negotiated protocol version that supports SEP-1577 "Sampling with Tools".
+	 * Clients advertising {@code sampling.tools} and servers calling
+	 * {@link io.modelcontextprotocol.server.McpAsyncServerExchange#createMessageWithTools}
+	 * must have negotiated at least this version.
+	 */
+	public static final String PROTOCOL_VERSION_SAMPLING_WITH_TOOLS = "2025-11-25";
 
 	// Elicitation Methods
 	public static final String METHOD_ELICITATION_CREATE = "elicitation/create";
@@ -622,10 +631,28 @@ public final class McpSchema {
 		 * servers to leverage AI capabilities—with no server API keys necessary. Servers
 		 * can request text or image-based interactions and optionally include context
 		 * from MCP servers in their prompts.
+		 *
+		 * @param tools Present when the client supports sampling with tools (SEP-1577).
+		 * When non-null the client can handle {@code ToolUseContent} and
+		 * {@code ToolResultContent} blocks and the {@code "toolUse"} stop reason.
 		 */
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
-		public record Sampling() {
+		public record Sampling(@JsonProperty("tools") SamplingTools tools) {
+
+			/** Backward-compatible no-arg constructor — produces {@code sampling: {}}. */
+			public Sampling() {
+				this(null);
+			}
+
+			/**
+			 * Marker record that, when present, signals tool-aware sampling support
+			 * (SEP-1577). Serializes as {@code {}}.
+			 */
+			@JsonInclude(JsonInclude.Include.NON_ABSENT)
+			@JsonIgnoreProperties(ignoreUnknown = true)
+			public record SamplingTools() {
+			}
 		}
 
 		/**
@@ -734,6 +761,16 @@ public final class McpSchema {
 
 			public Builder sampling() {
 				this.sampling = new Sampling();
+				return this;
+			}
+
+			/**
+			 * Enables sampling capability and advertises support for sampling with tools
+			 * (SEP-1577). Produces {@code "sampling": {"tools": {}}}.
+			 * @return this builder
+			 */
+			public Builder samplingTools() {
+				this.sampling = new Sampling(new Sampling.SamplingTools());
 				return this;
 			}
 
@@ -3055,6 +3092,47 @@ public final class McpSchema {
 		}
 	}
 
+	/**
+	 * Specifies how tools should be selected during a sampling request (SEP-1577). The
+	 * {@link #mode} field holds one of the string constants defined here.
+	 *
+	 * @param mode One of {@link #MODE_AUTO}, {@link #MODE_REQUIRED}, or
+	 * {@link #MODE_NONE}.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ToolChoice(@JsonProperty("mode") String mode) {
+
+		/** The LLM decides whether to call a tool. */
+		public static final String MODE_AUTO = "auto";
+
+		/** The LLM must call at least one tool. */
+		public static final String MODE_REQUIRED = "required";
+
+		/** Tool calling is disabled for this request. */
+		public static final String MODE_NONE = "none";
+
+		public ToolChoice {
+			Assert.hasText(mode, "mode must not be empty");
+		}
+
+		/** Factory for {@code {"mode":"auto"}}. */
+		public static ToolChoice auto() {
+			return new ToolChoice(MODE_AUTO);
+		}
+
+		/** Factory for {@code {"mode":"required"}}. */
+		public static ToolChoice required() {
+			return new ToolChoice(MODE_REQUIRED);
+		}
+
+		/** Factory for {@code {"mode":"none"}}. */
+		public static ToolChoice none() {
+			return new ToolChoice(MODE_NONE);
+		}
+
+	}
+
 	private static Map<String, Object> schemaToMap(McpJsonMapper jsonMapper, String schema) {
 		try {
 			return jsonMapper.readValue(schema, MAP_TYPE_REF);
@@ -3522,6 +3600,85 @@ public final class McpSchema {
 	}
 
 	/**
+	 * A conversation message used in sampling-with-tools requests (SEP-1577). Unlike the
+	 * legacy {@link SamplingMessage}, the content is a list of blocks which allows a
+	 * single assistant turn to carry multiple {@link ToolUseContent} blocks (parallel
+	 * tool calls), and a single user turn to carry multiple {@link ToolResultContent}
+	 * blocks.
+	 *
+	 * <p>
+	 * On deserialization, a bare JSON object is accepted in addition to a JSON array (via
+	 * {@link JsonFormat.Feature#ACCEPT_SINGLE_VALUE_AS_ARRAY}) so that legacy peers that
+	 * still emit a single-block object are handled transparently.
+	 *
+	 * @param role the role of the message sender
+	 * @param content one or more content blocks
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record SamplingMessageV2( // @formatter:off
+		@JsonProperty("role") Role role,
+		@JsonProperty("content")
+		@JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+		List<Content> content) { // @formatter:on
+
+		public SamplingMessageV2 {
+			Assert.notNull(role, "role must not be null");
+			Assert.notNull(content, "content must not be null");
+		}
+
+		@JsonCreator
+		static SamplingMessageV2 fromJson(@JsonProperty("role") Role role,
+				@JsonProperty("content") List<Content> content) {
+			if (role == null || content == null || content.isEmpty()) {
+				List<String> missing = new ArrayList<>();
+				if (role == null) {
+					missing.add("role -> 'user'");
+					role = Role.USER;
+				}
+				if (content == null || content.isEmpty()) {
+					missing.add("content -> ['']");
+					content = List.of(TextContent.builder("").build());
+				}
+				logger.warn("SamplingMessageV2: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new SamplingMessageV2(role, content);
+		}
+
+		public static SamplingMessageV2 of(Role role, Content single) {
+			return new SamplingMessageV2(role, List.of(single));
+		}
+
+		public static Builder builder(Role role, Content single) {
+			return new Builder(role, List.of(single));
+		}
+
+		public static Builder builder(Role role, List<Content> content) {
+			return new Builder(role, content);
+		}
+
+		public static class Builder {
+
+			private final Role role;
+
+			private final List<Content> content;
+
+			private Builder(Role role, List<Content> content) {
+				Assert.notNull(role, "role must not be null");
+				Assert.notNull(content, "content must not be null");
+				this.role = role;
+				this.content = content;
+			}
+
+			public SamplingMessageV2 build() {
+				return new SamplingMessageV2(role, content);
+			}
+
+		}
+	}
+
+	/**
 	 * A request from the server to sample an LLM via the client. The client has full
 	 * discretion over which model to select. The client should also inform the user
 	 * before beginning sampling, to allow them to inspect the request (human in the loop)
@@ -3717,7 +3874,178 @@ public final class McpSchema {
 		}
 	}
 
-	// TODO: role, content and model are required
+	/**
+	 * A sampling-with-tools request from the server (SEP-1577). Carries the same fields
+	 * as {@link CreateMessageRequest} but uses {@link SamplingMessageV2} for messages
+	 * (which support multi-block content) and adds optional {@code tools} and
+	 * {@code toolChoice} parameters.
+	 *
+	 * <p>
+	 * This request is sent over the same {@code sampling/createMessage} JSON-RPC method.
+	 * Use
+	 * {@link io.modelcontextprotocol.server.McpAsyncServerExchange#createMessageWithTools}
+	 * rather than constructing this record directly; the exchange enforces the
+	 * wire-format version gate.
+	 *
+	 * @param messages The conversation messages to send to the LLM
+	 * @param modelPreferences The server's preferences for which model to select
+	 * @param systemPrompt An optional system prompt
+	 * @param includeContext A request to include context from MCP servers
+	 * @param temperature Optional temperature parameter
+	 * @param maxTokens The maximum number of tokens to sample
+	 * @param stopSequences Optional stop sequences
+	 * @param metadata Optional metadata to pass through to the LLM provider
+	 * @param meta See specification for notes on _meta usage
+	 * @param tools Tool definitions scoped to this sampling request. They do not need to
+	 * correspond to tools registered via {@code tools/list}.
+	 * @param toolChoice How tools should be selected; defaults to auto when null.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record CreateMessageWithToolsRequest( // @formatter:off
+		@JsonProperty("messages") List<SamplingMessageV2> messages,
+		@JsonProperty("modelPreferences") ModelPreferences modelPreferences,
+		@JsonProperty("systemPrompt") String systemPrompt,
+		@JsonProperty("includeContext") CreateMessageRequest.ContextInclusionStrategy includeContext,
+		@JsonProperty("temperature") Double temperature,
+		@JsonProperty("maxTokens") Integer maxTokens,
+		@JsonProperty("stopSequences") List<String> stopSequences,
+		@JsonProperty("metadata") Map<String, Object> metadata,
+		@JsonProperty("_meta") Map<String, Object> meta,
+		@JsonProperty("tools") List<Tool> tools,
+		@JsonProperty("toolChoice") ToolChoice toolChoice) implements Request { // @formatter:on
+
+		public CreateMessageWithToolsRequest {
+			Assert.notNull(messages, "messages must not be null");
+			Assert.notNull(maxTokens, "maxTokens must not be null");
+		}
+
+		@JsonCreator
+		static CreateMessageWithToolsRequest fromJson(@JsonProperty("messages") List<SamplingMessageV2> messages,
+				@JsonProperty("modelPreferences") ModelPreferences modelPreferences,
+				@JsonProperty("systemPrompt") String systemPrompt,
+				@JsonProperty("includeContext") CreateMessageRequest.ContextInclusionStrategy includeContext,
+				@JsonProperty("temperature") Double temperature, @JsonProperty("maxTokens") Integer maxTokens,
+				@JsonProperty("stopSequences") List<String> stopSequences,
+				@JsonProperty("metadata") Map<String, Object> metadata, @JsonProperty("_meta") Map<String, Object> meta,
+				@JsonProperty("tools") List<Tool> tools, @JsonProperty("toolChoice") ToolChoice toolChoice) {
+			if (messages == null || maxTokens == null) {
+				List<String> missing = new ArrayList<>();
+				if (messages == null) {
+					missing.add("messages -> []");
+					messages = List.of();
+				}
+				if (maxTokens == null) {
+					missing.add("maxTokens -> 0");
+					maxTokens = 0;
+				}
+				logger.warn("CreateMessageWithToolsRequest: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new CreateMessageWithToolsRequest(messages, modelPreferences, systemPrompt, includeContext,
+					temperature, maxTokens, stopSequences, metadata, meta, tools, toolChoice);
+		}
+
+		public static Builder builder(List<SamplingMessageV2> messages, int maxTokens) {
+			return new Builder(messages, maxTokens);
+		}
+
+		public static class Builder {
+
+			private List<SamplingMessageV2> messages;
+
+			private ModelPreferences modelPreferences;
+
+			private String systemPrompt;
+
+			private CreateMessageRequest.ContextInclusionStrategy includeContext;
+
+			private Double temperature;
+
+			private Integer maxTokens;
+
+			private List<String> stopSequences;
+
+			private Map<String, Object> metadata;
+
+			private Map<String, Object> meta;
+
+			private List<Tool> tools;
+
+			private ToolChoice toolChoice;
+
+			private Builder(List<SamplingMessageV2> messages, int maxTokens) {
+				Assert.notNull(messages, "messages must not be null");
+				this.messages = messages;
+				this.maxTokens = maxTokens;
+			}
+
+			public Builder messages(List<SamplingMessageV2> messages) {
+				Assert.notNull(messages, "messages must not be null");
+				this.messages = messages;
+				return this;
+			}
+
+			public Builder modelPreferences(ModelPreferences modelPreferences) {
+				this.modelPreferences = modelPreferences;
+				return this;
+			}
+
+			public Builder systemPrompt(String systemPrompt) {
+				this.systemPrompt = systemPrompt;
+				return this;
+			}
+
+			public Builder includeContext(CreateMessageRequest.ContextInclusionStrategy includeContext) {
+				this.includeContext = includeContext;
+				return this;
+			}
+
+			public Builder temperature(Double temperature) {
+				this.temperature = temperature;
+				return this;
+			}
+
+			public Builder maxTokens(int maxTokens) {
+				this.maxTokens = maxTokens;
+				return this;
+			}
+
+			public Builder stopSequences(List<String> stopSequences) {
+				this.stopSequences = stopSequences;
+				return this;
+			}
+
+			public Builder metadata(Map<String, Object> metadata) {
+				this.metadata = metadata;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public Builder tools(List<Tool> tools) {
+				this.tools = tools;
+				return this;
+			}
+
+			public Builder toolChoice(ToolChoice toolChoice) {
+				this.toolChoice = toolChoice;
+				return this;
+			}
+
+			public CreateMessageWithToolsRequest build() {
+				Assert.notNull(messages, "messages must not be null");
+				Assert.notNull(maxTokens, "maxTokens must not be null");
+				return new CreateMessageWithToolsRequest(messages, modelPreferences, systemPrompt, includeContext,
+						temperature, maxTokens, stopSequences, metadata, meta, tools, toolChoice);
+			}
+
+		}
+	}
+
 	/**
 	 * The client's response to a sampling/create_message request from the server. The
 	 * client should inform the user before returning the sampled message, to allow them
@@ -3776,6 +4104,7 @@ public final class McpSchema {
 			@JsonProperty("endTurn") END_TURN("endTurn"),
 			@JsonProperty("stopSequence") STOP_SEQUENCE("stopSequence"),
 			@JsonProperty("maxTokens") MAX_TOKENS("maxTokens"),
+			@JsonProperty("toolUse") TOOL_USE("toolUse"),
 			@JsonProperty("unknown") UNKNOWN("unknown"); // @formatter:on
 
 			private final String value;
@@ -3882,6 +4211,106 @@ public final class McpSchema {
 
 			public CreateMessageResult build() {
 				return new CreateMessageResult(role, content, model, stopReason, meta);
+			}
+
+		}
+	}
+
+	/**
+	 * The client's response to a sampling-with-tools request (SEP-1577). Carries a list
+	 * of content blocks rather than the single-block
+	 * {@link CreateMessageResult#content()} so that the LLM can return multiple
+	 * {@link ToolUseContent} blocks in one turn (parallel tool calls).
+	 *
+	 * <p>
+	 * On deserialization, a bare JSON object is accepted as a single-element list via
+	 * {@link JsonFormat.Feature#ACCEPT_SINGLE_VALUE_AS_ARRAY}.
+	 *
+	 * @param role The role of the message sender (typically assistant)
+	 * @param content One or more content blocks
+	 * @param model The name of the model that generated the message
+	 * @param stopReason The reason why sampling stopped
+	 * @param meta See specification for notes on _meta usage
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record CreateMessageWithToolsResult( // @formatter:off
+		@JsonProperty("role") Role role,
+		@JsonProperty("content")
+		@JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+		List<Content> content,
+		@JsonProperty("model") String model,
+		@JsonProperty("stopReason") CreateMessageResult.StopReason stopReason,
+		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+
+		public CreateMessageWithToolsResult {
+			Assert.notNull(role, "role must not be null");
+			Assert.notNull(content, "content must not be null");
+			Assert.notNull(model, "model must not be null");
+		}
+
+		@JsonCreator
+		static CreateMessageWithToolsResult fromJson(@JsonProperty("role") Role role,
+				@JsonProperty("content") List<Content> content, @JsonProperty("model") String model,
+				@JsonProperty("stopReason") CreateMessageResult.StopReason stopReason,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (role == null || content == null || content.isEmpty() || model == null) {
+				List<String> missing = new ArrayList<>();
+				if (role == null) {
+					missing.add("role -> 'assistant'");
+					role = Role.ASSISTANT;
+				}
+				if (content == null || content.isEmpty()) {
+					missing.add("content -> ['']");
+					content = List.of(TextContent.builder("").build());
+				}
+				if (model == null) {
+					missing.add("model -> ''");
+					model = "";
+				}
+				logger.warn("CreateMessageWithToolsResult: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new CreateMessageWithToolsResult(role, content, model, stopReason, meta);
+		}
+
+		public static Builder builder(Role role, List<Content> content, String model) {
+			return new Builder(role, content, model);
+		}
+
+		public static class Builder {
+
+			private Role role;
+
+			private List<Content> content;
+
+			private String model;
+
+			private CreateMessageResult.StopReason stopReason = CreateMessageResult.StopReason.END_TURN;
+
+			private Map<String, Object> meta;
+
+			private Builder(Role role, List<Content> content, String model) {
+				Assert.notNull(role, "role must not be null");
+				Assert.notNull(content, "content must not be null");
+				Assert.notNull(model, "model must not be null");
+				this.role = role;
+				this.content = content;
+				this.model = model;
+			}
+
+			public Builder stopReason(CreateMessageResult.StopReason stopReason) {
+				this.stopReason = stopReason;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public CreateMessageWithToolsResult build() {
+				return new CreateMessageWithToolsResult(role, content, model, stopReason, meta);
 			}
 
 		}
@@ -5021,7 +5450,9 @@ public final class McpSchema {
 			@JsonSubTypes.Type(value = ImageContent.class, name = "image"),
 			@JsonSubTypes.Type(value = AudioContent.class, name = "audio"),
 			@JsonSubTypes.Type(value = EmbeddedResource.class, name = "resource"),
-			@JsonSubTypes.Type(value = ResourceLink.class, name = "resource_link") })
+			@JsonSubTypes.Type(value = ResourceLink.class, name = "resource_link"),
+			@JsonSubTypes.Type(value = ToolUseContent.class, name = "tool_use"),
+			@JsonSubTypes.Type(value = ToolResultContent.class, name = "tool_result") })
 	public interface Content extends Meta {
 
 		@JsonIgnore
@@ -5040,6 +5471,12 @@ public final class McpSchema {
 			}
 			else if (this instanceof ResourceLink) {
 				return "resource_link";
+			}
+			else if (this instanceof ToolUseContent) {
+				return "tool_use";
+			}
+			else if (this instanceof ToolResultContent) {
+				return "tool_result";
 			}
 			throw new IllegalArgumentException("Unknown content type: " + this);
 		}
@@ -5458,6 +5895,180 @@ public final class McpSchema {
 				Assert.hasText(name, "name must not be empty");
 
 				return new ResourceLink(name, title, uri, description, mimeType, size, annotations, meta);
+			}
+
+		}
+	}
+
+	/**
+	 * An assistant-role content block produced when the LLM decides to call a tool
+	 * (SEP-1577). Only valid in {@link SamplingMessageV2} and
+	 * {@link CreateMessageWithToolsResult} content lists.
+	 *
+	 * @param id Unique identifier for this tool call. Must be echoed back in the matching
+	 * {@link ToolResultContent#toolUseId()}.
+	 * @param name The name of the tool to call.
+	 * @param input The arguments to pass to the tool, as a JSON-object-shaped map.
+	 * @param meta See specification for notes on _meta usage
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ToolUseContent( // @formatter:off
+		@JsonProperty("id") String id,
+		@JsonProperty("name") String name,
+		@JsonProperty("input") Map<String, Object> input,
+		@JsonProperty("_meta") Map<String, Object> meta) implements Content { // @formatter:on
+
+		public ToolUseContent {
+			Assert.hasText(id, "id must not be empty");
+			Assert.hasText(name, "name must not be empty");
+		}
+
+		@JsonCreator
+		static ToolUseContent fromJson(@JsonProperty("id") String id, @JsonProperty("name") String name,
+				@JsonProperty("input") Map<String, Object> input, @JsonProperty("_meta") Map<String, Object> meta) {
+			if (id == null || name == null) {
+				List<String> missing = new ArrayList<>();
+				if (id == null) {
+					missing.add("id -> ''");
+					id = "";
+				}
+				if (name == null) {
+					missing.add("name -> ''");
+					name = "";
+				}
+				logger.warn("ToolUseContent: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new ToolUseContent(id, name, input, meta);
+		}
+
+		/** Convenience constructor without {@code _meta}. */
+		public ToolUseContent(String id, String name, Map<String, Object> input) {
+			this(id, name, input, null);
+		}
+
+		public static Builder builder(String id, String name) {
+			return new Builder(id, name);
+		}
+
+		public static class Builder {
+
+			private final String id;
+
+			private final String name;
+
+			private Map<String, Object> input;
+
+			private Map<String, Object> meta;
+
+			private Builder(String id, String name) {
+				Assert.hasText(id, "id must not be empty");
+				Assert.hasText(name, "name must not be empty");
+				this.id = id;
+				this.name = name;
+			}
+
+			public Builder input(Map<String, Object> input) {
+				this.input = input;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public ToolUseContent build() {
+				return new ToolUseContent(id, name, input, meta);
+			}
+
+		}
+	}
+
+	/**
+	 * A user-role content block that carries the result of executing a tool call
+	 * (SEP-1577). Must be paired with a preceding {@link ToolUseContent} whose {@code id}
+	 * matches {@link #toolUseId()}. Only valid in {@link SamplingMessageV2} content
+	 * lists.
+	 *
+	 * @param toolUseId The {@link ToolUseContent#id()} of the tool call being answered.
+	 * @param content The tool output as a list of content blocks (typically text or
+	 * image). May be null when only {@link #structuredContent()} is provided.
+	 * @param structuredContent Optional structured (JSON) form of the result.
+	 * @param isError When {@code true} the tool invocation failed and {@code content}
+	 * contains an error description.
+	 * @param meta See specification for notes on _meta usage
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ToolResultContent( // @formatter:off
+		@JsonProperty("toolUseId") String toolUseId,
+		@JsonProperty("content") List<Content> content,
+		@JsonProperty("structuredContent") Map<String, Object> structuredContent,
+		@JsonProperty("isError") Boolean isError,
+		@JsonProperty("_meta") Map<String, Object> meta) implements Content { // @formatter:on
+
+		public ToolResultContent {
+			Assert.hasText(toolUseId, "toolUseId must not be empty");
+		}
+
+		@JsonCreator
+		static ToolResultContent fromJson(@JsonProperty("toolUseId") String toolUseId,
+				@JsonProperty("content") List<Content> content,
+				@JsonProperty("structuredContent") Map<String, Object> structuredContent,
+				@JsonProperty("isError") Boolean isError, @JsonProperty("_meta") Map<String, Object> meta) {
+			if (toolUseId == null) {
+				logger.warn(
+						"ToolResultContent: missing required field 'toolUseId' during deserialization, using default ''");
+				toolUseId = "";
+			}
+			return new ToolResultContent(toolUseId, content, structuredContent, isError, meta);
+		}
+
+		public static Builder builder(String toolUseId) {
+			return new Builder(toolUseId);
+		}
+
+		public static class Builder {
+
+			private final String toolUseId;
+
+			private List<Content> content;
+
+			private Map<String, Object> structuredContent;
+
+			private Boolean isError;
+
+			private Map<String, Object> meta;
+
+			private Builder(String toolUseId) {
+				Assert.hasText(toolUseId, "toolUseId must not be empty");
+				this.toolUseId = toolUseId;
+			}
+
+			public Builder content(List<Content> content) {
+				this.content = content;
+				return this;
+			}
+
+			public Builder structuredContent(Map<String, Object> structuredContent) {
+				this.structuredContent = structuredContent;
+				return this;
+			}
+
+			public Builder isError(Boolean isError) {
+				this.isError = isError;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public ToolResultContent build() {
+				return new ToolResultContent(toolUseId, content, structuredContent, isError, meta);
 			}
 
 		}

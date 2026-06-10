@@ -38,7 +38,12 @@ public class McpAsyncServerExchange {
 
 	private final JsonSchemaValidator jsonSchemaValidator;
 
+	private final String negotiatedProtocolVersion;
+
 	private static final TypeRef<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeRef<>() {
+	};
+
+	private static final TypeRef<McpSchema.CreateMessageWithToolsResult> CREATE_MESSAGE_WITH_TOOLS_RESULT_TYPE_REF = new TypeRef<>() {
 	};
 
 	private static final TypeRef<McpSchema.ListRootsResult> LIST_ROOTS_RESULT_TYPE_REF = new TypeRef<>() {
@@ -60,16 +65,37 @@ public class McpAsyncServerExchange {
 	 * @param transportContext context associated with the client as extracted from the
 	 * transport
 	 * @param jsonSchemaValidator optional validator used to verify elicitation schemas
+	 * @param negotiatedProtocolVersion the protocol version negotiated during
+	 * initialization, or {@code null} if unknown
 	 */
 	public McpAsyncServerExchange(String sessionId, McpLoggableSession session,
 			McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
-			McpTransportContext transportContext, JsonSchemaValidator jsonSchemaValidator) {
+			McpTransportContext transportContext, JsonSchemaValidator jsonSchemaValidator,
+			String negotiatedProtocolVersion) {
 		this.sessionId = sessionId;
 		this.session = session;
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
 		this.transportContext = transportContext;
 		this.jsonSchemaValidator = jsonSchemaValidator;
+		this.negotiatedProtocolVersion = negotiatedProtocolVersion;
+	}
+
+	/**
+	 * Create a new asynchronous exchange with the client.
+	 * @param sessionId the session ID
+	 * @param session The server session representing a 1-1 interaction.
+	 * @param clientCapabilities The client capabilities that define the supported
+	 * features and functionality.
+	 * @param clientInfo The client implementation information.
+	 * @param transportContext context associated with the client as extracted from the
+	 * transport
+	 * @param jsonSchemaValidator optional validator used to verify elicitation schemas
+	 */
+	public McpAsyncServerExchange(String sessionId, McpLoggableSession session,
+			McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
+			McpTransportContext transportContext, JsonSchemaValidator jsonSchemaValidator) {
+		this(sessionId, session, clientCapabilities, clientInfo, transportContext, jsonSchemaValidator, null);
 	}
 
 	/**
@@ -85,7 +111,7 @@ public class McpAsyncServerExchange {
 	public McpAsyncServerExchange(String sessionId, McpLoggableSession session,
 			McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
 			McpTransportContext transportContext) {
-		this(sessionId, session, clientCapabilities, clientInfo, transportContext, null);
+		this(sessionId, session, clientCapabilities, clientInfo, transportContext, null, null);
 	}
 
 	/**
@@ -148,6 +174,82 @@ public class McpAsyncServerExchange {
 		}
 		return this.session.sendRequest(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, createMessageRequest,
 				CREATE_MESSAGE_RESULT_TYPE_REF);
+	}
+
+	/**
+	 * Create a new message using the sampling-with-tools capabilities of the client
+	 * (SEP-1577). The request may include tool definitions and a tool choice mode. The
+	 * client drives its LLM with these tools and returns a
+	 * {@link McpSchema.CreateMessageWithToolsResult} whose content may include
+	 * {@link McpSchema.ToolUseContent} blocks.
+	 *
+	 * <p>
+	 * <strong>Wire-format version gate:</strong> if the negotiated protocol version is
+	 * older than {@link McpSchema#PROTOCOL_VERSION_SAMPLING_WITH_TOOLS}
+	 * ({@code 2025-11-25}), this method rejects requests that contain {@code tools}, a
+	 * {@code toolChoice}, or any message whose content list has more than one block. Such
+	 * requests cannot be round-tripped by a legacy peer without data loss.
+	 *
+	 * <p>
+	 * Note: the JSON-RPC method sent on the wire is the same
+	 * {@code sampling/createMessage} as {@link #createMessage}. What differs is the
+	 * richer V2 schema used to serialize the parameters and deserialize the result.
+	 * @param request The sampling-with-tools request
+	 * @return A Mono that emits the result when the client has responded
+	 * @see McpSchema.CreateMessageWithToolsRequest
+	 * @see McpSchema.CreateMessageWithToolsResult
+	 */
+	public Mono<McpSchema.CreateMessageWithToolsResult> createMessageWithTools(
+			McpSchema.CreateMessageWithToolsRequest request) {
+		if (this.clientCapabilities == null) {
+			return Mono
+				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
+		}
+		if (this.clientCapabilities.sampling() == null) {
+			return Mono.error(new IllegalStateException("Client must be configured with sampling capabilities"));
+		}
+		if (this.clientCapabilities.sampling().tools() == null) {
+			return Mono
+				.error(new IllegalStateException("Client must be configured with sampling-with-tools capabilities"));
+		}
+
+		// Version gate: refuse multi-content or tools if the peer is pre-2025-11-25
+		if (isOlderThanSamplingWithToolsVersion(this.negotiatedProtocolVersion)) {
+			if (request.tools() != null && !request.tools().isEmpty()) {
+				return Mono.error(
+						new IllegalStateException("Cannot send tools in sampling request: negotiated protocol version '"
+								+ this.negotiatedProtocolVersion + "' is older than '"
+								+ McpSchema.PROTOCOL_VERSION_SAMPLING_WITH_TOOLS + "'"));
+			}
+			if (request.toolChoice() != null) {
+				return Mono.error(new IllegalStateException(
+						"Cannot send toolChoice in sampling request: negotiated protocol version '"
+								+ this.negotiatedProtocolVersion + "' is older than '"
+								+ McpSchema.PROTOCOL_VERSION_SAMPLING_WITH_TOOLS + "'"));
+			}
+			for (int i = 0; i < request.messages().size(); i++) {
+				if (request.messages().get(i).content().size() > 1) {
+					return Mono.error(new IllegalStateException("Cannot send multi-content message at index " + i
+							+ " in sampling request: negotiated protocol version '" + this.negotiatedProtocolVersion
+							+ "' is older than '" + McpSchema.PROTOCOL_VERSION_SAMPLING_WITH_TOOLS + "'"));
+				}
+			}
+		}
+
+		return this.session.sendRequest(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, request,
+				CREATE_MESSAGE_WITH_TOOLS_RESULT_TYPE_REF);
+	}
+
+	/**
+	 * Returns {@code true} when the given version string is older than
+	 * {@link McpSchema#PROTOCOL_VERSION_SAMPLING_WITH_TOOLS}, or when the version is
+	 * {@code null} (unknown — treated as pre-SEP-1577).
+	 */
+	private static boolean isOlderThanSamplingWithToolsVersion(String negotiatedVersion) {
+		if (negotiatedVersion == null) {
+			return true;
+		}
+		return negotiatedVersion.compareTo(McpSchema.PROTOCOL_VERSION_SAMPLING_WITH_TOOLS) < 0;
 	}
 
 	/**

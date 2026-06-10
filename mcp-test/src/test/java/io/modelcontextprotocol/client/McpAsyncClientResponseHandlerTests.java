@@ -396,6 +396,150 @@ class McpAsyncClientResponseHandlerTests {
 			.hasMessage("Sampling handler must not be null when client capabilities include sampling");
 	}
 
+	// SEP-1577 — Sampling with Tools
+
+	@Test
+	void testSamplingWithToolsHandlerCapabilityAdvertisement() {
+		MockMcpClientTransport transport = new MockMcpClientTransport();
+		McpAsyncClient client = McpClient.async(transport)
+			.samplingWithTools(req -> Mono.just(McpSchema.CreateMessageWithToolsResult
+				.builder(McpSchema.Role.ASSISTANT, List.of(McpSchema.TextContent.builder("ok").build()), "m")
+				.build()))
+			.build();
+		McpSchema.ClientCapabilities caps = client.getClientCapabilities();
+		assertThat(caps.sampling()).isNotNull();
+		assertThat(caps.sampling().tools()).isNotNull();
+	}
+
+	@Test
+	void testSamplingHandlerCapabilityDoesNotAdvertiseTools() {
+		MockMcpClientTransport transport = new MockMcpClientTransport();
+		McpAsyncClient client = McpClient.async(transport)
+			.sampling(req -> Mono.just(McpSchema.CreateMessageResult
+				.builder(McpSchema.Role.ASSISTANT, req.messages().get(0).content(), "m")
+				.build()))
+			.build();
+		McpSchema.ClientCapabilities caps = client.getClientCapabilities();
+		assertThat(caps.sampling()).isNotNull();
+		assertThat(caps.sampling().tools()).isNull();
+	}
+
+	/**
+	 * Primitive end-to-end dynamic fulfillment test: the server-side test code drives the
+	 * agentic loop manually around the client's sampling-with-tools handler. The handler
+	 * is stateful: on turn 1 it returns a ToolUseContent + TOOL_USE stop reason; on turn
+	 * 2 it sees the ToolResultContent and returns TextContent + END_TURN.
+	 */
+	@Test
+	void testSamplingWithToolsDynamicFulfillmentLoop() {
+		MockMcpClientTransport transport = initializationEnabledTransport();
+
+		List<McpSchema.CreateMessageWithToolsRequest> receivedRequests = new ArrayList<>();
+
+		// Stateful handler — turn 1 returns tool call, turn 2 returns final text
+		Function<McpSchema.CreateMessageWithToolsRequest, Mono<McpSchema.CreateMessageWithToolsResult>> handler = req -> {
+			receivedRequests.add(req);
+			McpSchema.SamplingMessageV2 lastMsg = req.messages().get(req.messages().size() - 1);
+			boolean hasToolResult = lastMsg.content().stream().anyMatch(c -> c instanceof McpSchema.ToolResultContent);
+			if (hasToolResult) {
+				// Turn 2: echo the tool result back
+				McpSchema.ToolResultContent toolResult = lastMsg.content()
+					.stream()
+					.filter(c -> c instanceof McpSchema.ToolResultContent)
+					.map(c -> (McpSchema.ToolResultContent) c)
+					.findFirst()
+					.get();
+				String toolOutput = ((McpSchema.TextContent) toolResult.content().get(0)).text();
+				return Mono.just(McpSchema.CreateMessageWithToolsResult
+					.builder(McpSchema.Role.ASSISTANT,
+							List.of(McpSchema.TextContent.builder("done: " + toolOutput).build()), "test-model")
+					.stopReason(McpSchema.CreateMessageResult.StopReason.END_TURN)
+					.build());
+			}
+			else {
+				// Turn 1: request a tool call
+				return Mono
+					.just(McpSchema.CreateMessageWithToolsResult
+						.builder(McpSchema.Role.ASSISTANT,
+								List.of(McpSchema.ToolUseContent.builder("call_1", "echo")
+									.input(Map.of("text", "ping"))
+									.build()),
+								"test-model")
+						.stopReason(McpSchema.CreateMessageResult.StopReason.TOOL_USE)
+						.build());
+			}
+		};
+
+		McpAsyncClient asyncMcpClient = McpClient.async(transport).samplingWithTools(handler).build();
+		assertThat(asyncMcpClient.initialize().block()).isNotNull();
+
+		// --- Simulate server-side agentic loop ---
+		McpSchema.Tool echoTool = McpSchema.Tool.builder()
+			.name("echo")
+			.description("Echoes input")
+			.inputSchema(Map.of("type", "object"))
+			.build();
+
+		List<McpSchema.SamplingMessageV2> messages = new ArrayList<>();
+		messages.add(
+				McpSchema.SamplingMessageV2.of(McpSchema.Role.USER, McpSchema.TextContent.builder("say ping").build()));
+
+		// --- Turn 1 ---
+		McpSchema.CreateMessageWithToolsRequest turn1Req = McpSchema.CreateMessageWithToolsRequest
+			.builder(new ArrayList<>(messages), 100)
+			.tools(List.of(echoTool))
+			.toolChoice(McpSchema.ToolChoice.auto())
+			.build();
+
+		McpSchema.JSONRPCRequest rpcReq1 = new McpSchema.JSONRPCRequest(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE,
+				"id-1", turn1Req);
+		transport.simulateIncomingMessage(rpcReq1);
+
+		McpSchema.JSONRPCResponse response1 = (McpSchema.JSONRPCResponse) transport.getLastSentMessage();
+		assertThat(response1.error()).isNull();
+		McpSchema.CreateMessageWithToolsResult result1 = transport.unmarshalFrom(response1.result(),
+				new TypeRef<McpSchema.CreateMessageWithToolsResult>() {
+				});
+		assertThat(result1.stopReason()).isEqualTo(McpSchema.CreateMessageResult.StopReason.TOOL_USE);
+		assertThat(result1.content().get(0)).isInstanceOf(McpSchema.ToolUseContent.class);
+
+		// Server executes the tool
+		McpSchema.ToolUseContent toolUse = (McpSchema.ToolUseContent) result1.content().get(0);
+		String toolOutput = (String) toolUse.input().get("text"); // "ping"
+
+		// Extend messages with assistant turn + tool result
+		messages.add(new McpSchema.SamplingMessageV2(McpSchema.Role.ASSISTANT, result1.content()));
+		messages.add(McpSchema.SamplingMessageV2.of(McpSchema.Role.USER,
+				McpSchema.ToolResultContent.builder(toolUse.id())
+					.content(List.of(McpSchema.TextContent.builder(toolOutput).build()))
+					.build()));
+
+		// --- Turn 2 ---
+		McpSchema.CreateMessageWithToolsRequest turn2Req = McpSchema.CreateMessageWithToolsRequest
+			.builder(new ArrayList<>(messages), 100)
+			.tools(List.of(echoTool))
+			.toolChoice(McpSchema.ToolChoice.auto())
+			.build();
+
+		McpSchema.JSONRPCRequest rpcReq2 = new McpSchema.JSONRPCRequest(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE,
+				"id-2", turn2Req);
+		transport.simulateIncomingMessage(rpcReq2);
+
+		McpSchema.JSONRPCResponse response2 = (McpSchema.JSONRPCResponse) transport.getLastSentMessage();
+		assertThat(response2.error()).isNull();
+		McpSchema.CreateMessageWithToolsResult result2 = transport.unmarshalFrom(response2.result(),
+				new TypeRef<McpSchema.CreateMessageWithToolsResult>() {
+				});
+		assertThat(result2.stopReason()).isEqualTo(McpSchema.CreateMessageResult.StopReason.END_TURN);
+		assertThat(result2.content().get(0)).isInstanceOf(McpSchema.TextContent.class);
+		assertThat(((McpSchema.TextContent) result2.content().get(0)).text()).isEqualTo("done: ping");
+
+		// Two turns were processed
+		assertThat(receivedRequests).hasSize(2);
+
+		asyncMcpClient.closeGracefully();
+	}
+
 	@Test
 	@SuppressWarnings("unchecked")
 	void testElicitationCreateRequestHandling() {

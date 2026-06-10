@@ -190,6 +190,8 @@ public interface McpClient {
 
 		private Function<CreateMessageRequest, CreateMessageResult> samplingHandler;
 
+		private Function<McpSchema.CreateMessageWithToolsRequest, McpSchema.CreateMessageWithToolsResult> samplingWithToolsHandler;
+
 		private Function<ElicitFormRequest, ElicitResult> formElicitationHandler;
 
 		private Function<ElicitUrlRequest, ElicitResult> urlElicitationHandler;
@@ -307,6 +309,23 @@ public interface McpClient {
 		public SyncSpec sampling(Function<CreateMessageRequest, CreateMessageResult> samplingHandler) {
 			Assert.notNull(samplingHandler, "Sampling handler must not be null");
 			this.samplingHandler = samplingHandler;
+			return this;
+		}
+
+		/**
+		 * Sets a sampling handler that supports tool use (SEP-1577) and registers the
+		 * {@code sampling.tools} client capability. Use this instead of
+		 * {@link #sampling(Function)} when the server may include {@code tools} and
+		 * {@code toolChoice} in its {@code sampling/createMessage} requests.
+		 * @param samplingWithToolsHandler A function that processes sampling-with-tools
+		 * requests and returns results. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if samplingWithToolsHandler is null
+		 */
+		public SyncSpec samplingWithTools(
+				Function<McpSchema.CreateMessageWithToolsRequest, McpSchema.CreateMessageWithToolsResult> samplingWithToolsHandler) {
+			Assert.notNull(samplingWithToolsHandler, "Sampling-with-tools handler must not be null");
+			this.samplingWithToolsHandler = samplingWithToolsHandler;
 			return this;
 		}
 
@@ -554,7 +573,8 @@ public interface McpClient {
 					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 					this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
 					this.elicitationCompleteConsumers, this.samplingHandler, this.formElicitationHandler,
-					this.urlElicitationHandler, this.enableCallToolSchemaCaching, this.applyElicitationDefaults);
+					this.urlElicitationHandler, this.enableCallToolSchemaCaching, this.applyElicitationDefaults,
+					this.samplingWithToolsHandler);
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
@@ -610,6 +630,8 @@ public interface McpClient {
 		private final List<Function<McpSchema.ElicitationCompleteNotification, Mono<Void>>> elicitationCompleteConsumers = new ArrayList<>();
 
 		private Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler;
+
+		private Function<McpSchema.CreateMessageWithToolsRequest, Mono<McpSchema.CreateMessageWithToolsResult>> samplingWithToolsHandler;
 
 		private Function<ElicitFormRequest, Mono<ElicitResult>> formElicitationHandler;
 
@@ -726,6 +748,23 @@ public interface McpClient {
 		public AsyncSpec sampling(Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler) {
 			Assert.notNull(samplingHandler, "Sampling handler must not be null");
 			this.samplingHandler = samplingHandler;
+			return this;
+		}
+
+		/**
+		 * Sets a sampling handler that supports tool use (SEP-1577) and registers the
+		 * {@code sampling.tools} client capability. Use this instead of
+		 * {@link #sampling(Function)} when the server may include {@code tools} and
+		 * {@code toolChoice} in its {@code sampling/createMessage} requests.
+		 * @param samplingWithToolsHandler A function that processes sampling-with-tools
+		 * requests and returns results. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if samplingWithToolsHandler is null
+		 */
+		public AsyncSpec samplingWithTools(
+				Function<McpSchema.CreateMessageWithToolsRequest, Mono<McpSchema.CreateMessageWithToolsResult>> samplingWithToolsHandler) {
+			Assert.notNull(samplingWithToolsHandler, "Sampling-with-tools handler must not be null");
+			this.samplingWithToolsHandler = samplingWithToolsHandler;
 			return this;
 		}
 
@@ -964,8 +1003,8 @@ public interface McpClient {
 							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 							this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
 							this.elicitationCompleteConsumers, this.samplingHandler, this.formElicitationHandler,
-							this.urlElicitationHandler, this.enableCallToolSchemaCaching,
-							this.applyElicitationDefaults));
+							this.urlElicitationHandler, this.enableCallToolSchemaCaching, this.applyElicitationDefaults,
+							this.samplingWithToolsHandler));
 		}
 
 	}
