@@ -6,6 +6,7 @@ package io.modelcontextprotocol.spec;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -3888,6 +3889,636 @@ public final class McpSchema {
 	}
 
 	// Elicitation
+
+	/**
+	 * An option in a titled enum schema, with a machine-readable value and a
+	 * human-readable display label.
+	 *
+	 * @param constValue The machine-readable value of the option
+	 * @param title The human-readable display label
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record EnumSchemaOption( // @formatter:off
+		@JsonProperty("const") String constValue,
+		@JsonProperty("title") String title) { // @formatter:on
+
+		public static Builder builder(String constValue, String title) {
+			return new Builder(constValue, title);
+		}
+
+		public static class Builder {
+
+			private final String constValue;
+
+			private final String title;
+
+			private Builder(String constValue, String title) {
+				Assert.notNull(constValue, "constValue must not be null");
+				Assert.notNull(title, "title must not be null");
+				this.constValue = constValue;
+				this.title = title;
+			}
+
+			public EnumSchemaOption build() {
+				return new EnumSchemaOption(constValue, title);
+			}
+
+		}
+	}
+
+	/**
+	 * Legacy enum schema with optional display names via the non-standard
+	 * {@code enumNames} property. Use {@link TitledSingleSelectEnumSchema} instead.
+	 *
+	 * @param title Optional title for the enum field
+	 * @param description Optional description for the enum field
+	 * @param enumValues Array of enum values to choose from
+	 * @param enumNames Optional display names for enum values (non-standard per JSON
+	 * Schema 2020-12)
+	 * @param defaultValue Optional default value
+	 * @deprecated Use {@link TitledSingleSelectEnumSchema} instead
+	 */
+	@Deprecated
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record LegacyTitledEnumSchema( // @formatter:off
+		@JsonProperty("title") String title,
+		@JsonProperty("description") String description,
+		@JsonProperty("enum") List<String> enumValues,
+		@JsonProperty("enumNames") List<String> enumNames,
+		@JsonProperty("default") String defaultValue) { // @formatter:on
+
+		public LegacyTitledEnumSchema {
+			Assert.notNull(enumValues, "enum must not be null");
+		}
+
+		@JsonProperty("type")
+		public String type() {
+			return "string";
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+
+			private String title;
+
+			private String description;
+
+			private List<String> enumValues;
+
+			private List<String> enumNames;
+
+			private String defaultValue;
+
+			private Builder() {
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder enumValues(List<String> enumValues) {
+				Assert.notNull(enumValues, "enum must not be null");
+				this.enumValues = new ArrayList<>(enumValues);
+				return this;
+			}
+
+			public Builder enumValues(String... enumValues) {
+				Assert.notNull(enumValues, "enum must not be null");
+				this.enumValues = new ArrayList<>(Arrays.asList(enumValues));
+				return this;
+			}
+
+			public Builder enumValue(String enumValue) {
+				if (this.enumValues == null) {
+					this.enumValues = new ArrayList<>();
+				}
+				this.enumValues.add(enumValue);
+				return this;
+			}
+
+			public Builder enumNames(List<String> enumNames) {
+				this.enumNames = enumNames == null ? null : new ArrayList<>(enumNames);
+				return this;
+			}
+
+			public Builder enumNames(String... enumNames) {
+				this.enumNames = enumNames == null ? null : new ArrayList<>(Arrays.asList(enumNames));
+				return this;
+			}
+
+			public Builder enumName(String enumName) {
+				if (this.enumNames == null) {
+					this.enumNames = new ArrayList<>();
+				}
+				this.enumNames.add(enumName);
+				return this;
+			}
+
+			public Builder defaultValue(String defaultValue) {
+				this.defaultValue = defaultValue;
+				return this;
+			}
+
+			public LegacyTitledEnumSchema build() {
+				Assert.notEmpty(enumValues, "enum must not be empty");
+				return new LegacyTitledEnumSchema(title, description, enumValues, enumNames, defaultValue);
+			}
+
+		}
+	}
+
+	/**
+	 * Schema for single-selection enumeration without display titles for options.
+	 *
+	 * @param title Optional title for the enum field
+	 * @param description Optional description for the enum field
+	 * @param enumValues Array of enum values to choose from
+	 * @param defaultValue Optional default value
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record UntitledSingleSelectEnumSchema( // @formatter:off
+		@JsonProperty("title") String title,
+		@JsonProperty("description") String description,
+		@JsonProperty("enum") List<String> enumValues,
+		@JsonProperty("default") String defaultValue) { // @formatter:on
+
+		public UntitledSingleSelectEnumSchema {
+			Assert.notNull(enumValues, "enum must not be null");
+		}
+
+		@JsonProperty("type")
+		public String type() {
+			return "string";
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+
+			private String title;
+
+			private String description;
+
+			private List<String> enumValues;
+
+			private String defaultValue;
+
+			private Builder() {
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder enumValues(List<String> enumValues) {
+				Assert.notNull(enumValues, "enum must not be null");
+				this.enumValues = new ArrayList<>(enumValues);
+				return this;
+			}
+
+			public Builder enumValues(String... enumValues) {
+				Assert.notNull(enumValues, "enum must not be null");
+				this.enumValues = new ArrayList<>(Arrays.asList(enumValues));
+				return this;
+			}
+
+			public Builder enumValue(String enumValue) {
+				if (this.enumValues == null) {
+					this.enumValues = new ArrayList<>();
+				}
+				this.enumValues.add(enumValue);
+				return this;
+			}
+
+			public Builder defaultValue(String defaultValue) {
+				this.defaultValue = defaultValue;
+				return this;
+			}
+
+			public UntitledSingleSelectEnumSchema build() {
+				Assert.notEmpty(enumValues, "enum must not be empty");
+				return new UntitledSingleSelectEnumSchema(title, description, enumValues, defaultValue);
+			}
+
+		}
+	}
+
+	/**
+	 * Schema for single-selection enumeration with display titles for each option.
+	 *
+	 * @param title Optional title for the enum field
+	 * @param description Optional description for the enum field
+	 * @param oneOf Array of enum options, each with a machine-readable value and a
+	 * human-readable display label
+	 * @param defaultValue Optional default value
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record TitledSingleSelectEnumSchema( // @formatter:off
+		@JsonProperty("title") String title,
+		@JsonProperty("description") String description,
+		@JsonProperty("oneOf") List<EnumSchemaOption> oneOf,
+		@JsonProperty("default") String defaultValue) { // @formatter:on
+
+		public TitledSingleSelectEnumSchema {
+			Assert.notEmpty(oneOf, "oneOf must not be empty");
+		}
+
+		@JsonProperty("type")
+		public String type() {
+			return "string";
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+
+			private String title;
+
+			private String description;
+
+			private List<EnumSchemaOption> oneOf;
+
+			private String defaultValue;
+
+			private Builder() {
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder oneOf(List<EnumSchemaOption> oneOf) {
+				Assert.notNull(oneOf, "oneOf must not be null");
+				this.oneOf = new ArrayList<>(oneOf);
+				return this;
+			}
+
+			public Builder oneOf(EnumSchemaOption... oneOf) {
+				Assert.notNull(oneOf, "oneOf must not be null");
+				this.oneOf = new ArrayList<>(Arrays.asList(oneOf));
+				return this;
+			}
+
+			public Builder addOneOf(EnumSchemaOption option) {
+				if (this.oneOf == null) {
+					this.oneOf = new ArrayList<>();
+				}
+				this.oneOf.add(option);
+				return this;
+			}
+
+			public Builder defaultValue(String defaultValue) {
+				this.defaultValue = defaultValue;
+				return this;
+			}
+
+			public TitledSingleSelectEnumSchema build() {
+				Assert.notEmpty(oneOf, "oneOf must not be empty");
+				return new TitledSingleSelectEnumSchema(title, description, oneOf, defaultValue);
+			}
+
+		}
+	}
+
+	/**
+	 * The items schema for {@link UntitledMultiSelectEnumSchema}, describing the allowed
+	 * enum values.
+	 *
+	 * @param enumValues Array of enum values to choose from
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record UntitledMultiSelectItems( // @formatter:off
+		@JsonProperty("enum") List<String> enumValues) { // @formatter:on
+
+		public UntitledMultiSelectItems {
+			Assert.notNull(enumValues, "enum must not be null");
+		}
+
+		@JsonProperty("type")
+		public String type() {
+			return "string";
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+
+			private List<String> enumValues;
+
+			private Builder() {
+			}
+
+			public Builder enumValues(List<String> enumValues) {
+				Assert.notNull(enumValues, "enum must not be null");
+				this.enumValues = new ArrayList<>(enumValues);
+				return this;
+			}
+
+			public Builder enumValues(String... enumValues) {
+				Assert.notNull(enumValues, "enum must not be null");
+				this.enumValues = new ArrayList<>(Arrays.asList(enumValues));
+				return this;
+			}
+
+			public Builder enumValue(String enumValue) {
+				if (this.enumValues == null) {
+					this.enumValues = new ArrayList<>();
+				}
+				this.enumValues.add(enumValue);
+				return this;
+			}
+
+			public UntitledMultiSelectItems build() {
+				Assert.notEmpty(enumValues, "enum must not be empty");
+				return new UntitledMultiSelectItems(enumValues);
+			}
+
+		}
+	}
+
+	/**
+	 * Schema for multiple-selection enumeration without display titles for options.
+	 *
+	 * @param title Optional title for the enum field
+	 * @param description Optional description for the enum field
+	 * @param items Schema for the array items, containing the list of enum values
+	 * @param minItems Optional minimum number of items to select
+	 * @param maxItems Optional maximum number of items to select
+	 * @param defaultValue Optional default selected values
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record UntitledMultiSelectEnumSchema( // @formatter:off
+		@JsonProperty("title") String title,
+		@JsonProperty("description") String description,
+		@JsonProperty("items") UntitledMultiSelectItems items,
+		@JsonProperty("minItems") Integer minItems,
+		@JsonProperty("maxItems") Integer maxItems,
+		@JsonProperty("default") List<String> defaultValue) { // @formatter:on
+
+		public UntitledMultiSelectEnumSchema {
+			Assert.notNull(items, "items must not be null");
+		}
+
+		@JsonProperty("type")
+		public String type() {
+			return "array";
+		}
+
+		public static Builder builder(UntitledMultiSelectItems items) {
+			return new Builder(items);
+		}
+
+		public static class Builder {
+
+			private String title;
+
+			private String description;
+
+			private UntitledMultiSelectItems items;
+
+			private Integer minItems;
+
+			private Integer maxItems;
+
+			private List<String> defaultValue;
+
+			private Builder(UntitledMultiSelectItems items) {
+				Assert.notNull(items, "items must not be null");
+				this.items = items;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder items(UntitledMultiSelectItems items) {
+				Assert.notNull(items, "items must not be null");
+				this.items = items;
+				return this;
+			}
+
+			public Builder minItems(Integer minItems) {
+				this.minItems = minItems;
+				return this;
+			}
+
+			public Builder maxItems(Integer maxItems) {
+				this.maxItems = maxItems;
+				return this;
+			}
+
+			public Builder defaultValue(List<String> defaultValue) {
+				this.defaultValue = defaultValue == null ? null : new ArrayList<>(defaultValue);
+				return this;
+			}
+
+			public Builder addDefaultValue(String defaultValue) {
+				if (this.defaultValue == null) {
+					this.defaultValue = new ArrayList<>();
+				}
+				this.defaultValue.add(defaultValue);
+				return this;
+			}
+
+			public UntitledMultiSelectEnumSchema build() {
+				return new UntitledMultiSelectEnumSchema(title, description, items, minItems, maxItems, defaultValue);
+			}
+
+		}
+	}
+
+	/**
+	 * The items schema for {@link TitledMultiSelectEnumSchema}, describing the allowed
+	 * enum options with display labels.
+	 *
+	 * @param anyOf Array of enum options, each with a machine-readable value and a
+	 * human-readable display label
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record TitledMultiSelectItems( // @formatter:off
+		@JsonProperty("anyOf") List<EnumSchemaOption> anyOf) { // @formatter:on
+
+		public TitledMultiSelectItems {
+			Assert.notNull(anyOf, "anyOf must not be null");
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+
+			private List<EnumSchemaOption> anyOf;
+
+			private Builder() {
+			}
+
+			public Builder anyOf(List<EnumSchemaOption> anyOf) {
+				Assert.notNull(anyOf, "anyOf must not be null");
+				this.anyOf = new ArrayList<>(anyOf);
+				return this;
+			}
+
+			public Builder anyOf(EnumSchemaOption... anyOf) {
+				Assert.notNull(anyOf, "anyOf must not be null");
+				this.anyOf = new ArrayList<>(Arrays.asList(anyOf));
+				return this;
+			}
+
+			public Builder addAnyOf(EnumSchemaOption option) {
+				if (this.anyOf == null) {
+					this.anyOf = new ArrayList<>();
+				}
+				this.anyOf.add(option);
+				return this;
+			}
+
+			public TitledMultiSelectItems build() {
+				Assert.notEmpty(anyOf, "anyOf must not be empty");
+				return new TitledMultiSelectItems(anyOf);
+			}
+
+		}
+	}
+
+	/**
+	 * Schema for multiple-selection enumeration with display titles for each option.
+	 *
+	 * @param title Optional title for the enum field
+	 * @param description Optional description for the enum field
+	 * @param items Schema for the array items, containing the list of titled enum options
+	 * @param minItems Optional minimum number of items to select
+	 * @param maxItems Optional maximum number of items to select
+	 * @param defaultValue Optional default selected values
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record TitledMultiSelectEnumSchema( // @formatter:off
+		@JsonProperty("title") String title,
+		@JsonProperty("description") String description,
+		@JsonProperty("items") TitledMultiSelectItems items,
+		@JsonProperty("minItems") Integer minItems,
+		@JsonProperty("maxItems") Integer maxItems,
+		@JsonProperty("default") List<String> defaultValue) { // @formatter:on
+
+		public TitledMultiSelectEnumSchema {
+			Assert.notNull(items, "items must not be null");
+		}
+
+		@JsonProperty("type")
+		public String type() {
+			return "array";
+		}
+
+		public static Builder builder(TitledMultiSelectItems items) {
+			return new Builder(items);
+		}
+
+		public static class Builder {
+
+			private String title;
+
+			private String description;
+
+			private TitledMultiSelectItems items;
+
+			private Integer minItems;
+
+			private Integer maxItems;
+
+			private List<String> defaultValue;
+
+			private Builder(TitledMultiSelectItems items) {
+				Assert.notNull(items, "items must not be null");
+				this.items = items;
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder items(TitledMultiSelectItems items) {
+				Assert.notNull(items, "items must not be null");
+				this.items = items;
+				return this;
+			}
+
+			public Builder minItems(Integer minItems) {
+				this.minItems = minItems;
+				return this;
+			}
+
+			public Builder maxItems(Integer maxItems) {
+				this.maxItems = maxItems;
+				return this;
+			}
+
+			public Builder defaultValue(List<String> defaultValue) {
+				this.defaultValue = defaultValue == null ? null : new ArrayList<>(defaultValue);
+				return this;
+			}
+
+			public Builder addDefaultValue(String defaultValue) {
+				if (this.defaultValue == null) {
+					this.defaultValue = new ArrayList<>();
+				}
+				this.defaultValue.add(defaultValue);
+				return this;
+			}
+
+			public TitledMultiSelectEnumSchema build() {
+				return new TitledMultiSelectEnumSchema(title, description, items, minItems, maxItems, defaultValue);
+			}
+
+		}
+	}
+
 	/**
 	 * A request from the server to elicit additional information from the user, either
 	 * through the client or out-of-band.
@@ -3930,13 +4561,47 @@ public final class McpSchema {
 	/**
 	 * A request from the server to elicit additional information from the user via the
 	 * client, using {@code form} mode.
+	 * <p>
+	 * The requested schema is flexible, but for standard schemas, consider using one the
+	 * following types:
+	 * <ul>
+	 * <li>{@link LegacyTitledEnumSchema}
+	 * <li>{@link TitledSingleSelectEnumSchema}
+	 * <li>{@link TitledMultiSelectEnumSchema}
+	 * <li>{@link UntitledSingleSelectEnumSchema}
+	 * <li>{@link UntitledMultiSelectEnumSchema}
+	 * </ul>
+	 *
+	 * These can be used with a JSON mapper:
+	 *
+	 * <pre>
+	 * var mapper = McpJsonDefaults.getMapper();
+	 * TypeRef&lt;Map&lt;String, Object&gt;&gt; mapType = new TypeRef<>() { };
+	 * var first = UntitledSingleSelectEnumSchema.builder()
+	 *           .enumValues("option1", "option2", "option3")
+	 *           .build();
+	 * var second = TitledMultiSelectEnumSchema
+	 *           .builder(TitledMultiSelectItems.builder()
+	 *             .anyOf(
+	 *               EnumSchemaOption.builder("value1", "First Choice").build(),
+	 *               EnumSchemaOption.builder("value2", "Second Choice").build(),
+	 *               EnumSchemaOption.builder("value3", "Third Choice").build()
+	 *             ).build()).build();
+	 * Map&lt;String, Object&gt; requestedSchema = Map.of(
+	 *     "type", "object",
+	 *     "properties", Map.of(
+	 *         "first-thing", mapper.convertValue(first, mapType),
+	 *         "second-thing", mapper.convertValue(second, mapType)),
+	 *     "required", List.of("first-thing", "second-thing"));
+	 * </pre>
 	 *
 	 * @param message The message to present to the user
 	 * @param requestedSchema A restricted subset of JSON Schema. Only top-level
 	 * properties are allowed, without nesting. Per SEP-1613, the dialect defaults to JSON
 	 * Schema 2020-12 ({@link #JSON_SCHEMA_DIALECT_2020_12}) when no explicit
 	 * {@code $schema} entry is present. To declare a different dialect, include a
-	 * {@code "$schema"} key in the map.
+	 * {@code "$schema"} key in the map. For type-safety in the schemas, use one of the
+	 * supported schema types.
 	 * @param meta See specification for notes on _meta usage
 	 * <p>
 	 * Note: {@code message} and {@code requestedSchema} are required by the MCP
