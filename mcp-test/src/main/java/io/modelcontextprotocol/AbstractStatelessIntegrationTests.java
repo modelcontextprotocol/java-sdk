@@ -4,8 +4,6 @@
 
 package io.modelcontextprotocol;
 
-import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -31,9 +29,9 @@ import io.modelcontextprotocol.spec.McpSchema.Tool;
 import net.javacrumbs.jsonunit.core.Option;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -128,7 +126,7 @@ public abstract class AbstractStatelessIntegrationTests {
 			assertThat(response).isNotNull().isEqualTo(callResponse);
 		}
 		finally {
-			mcpServer.closeGracefully().block();
+			mcpServer.closeGracefully();
 		}
 	}
 
