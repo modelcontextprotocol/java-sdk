@@ -43,7 +43,7 @@ public final class ToolInputValidator {
 		var validation = validator.validate(tool.inputSchema(), args);
 		if (!validation.valid()) {
 			String message = "Tool (" + tool.name() + ") input validation failed: " + validation.errorMessage();
-			logger.warn("'{}' {}", tool.name(), message);
+			logger.warn(message);
 			return CallToolResult.builder()
 				.content(List.of(McpSchema.TextContent.builder(message).build()))
 				.isError(true)
