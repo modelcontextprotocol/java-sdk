@@ -82,7 +82,8 @@ public interface McpServerTransportProviderBase {
 	 * @return the protocol version as a string
 	 */
 	default List<String> protocolVersions() {
-		return List.of(ProtocolVersions.MCP_2024_11_05);
+		return List.of(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26,
+				ProtocolVersions.MCP_2025_06_18, ProtocolVersions.MCP_2025_11_25);
 	}
 
 }
