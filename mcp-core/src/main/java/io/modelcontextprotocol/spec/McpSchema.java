@@ -3903,28 +3903,30 @@ public final class McpSchema {
 		@JsonProperty("const") String constValue,
 		@JsonProperty("title") String title) { // @formatter:on
 
-		public static Builder builder(String constValue, String title) {
-			return new Builder(constValue, title);
+		public EnumSchemaOption {
+			Assert.notNull(constValue, "constValue must not be null");
+			Assert.notNull(title, "title must not be null");
 		}
 
-		public static class Builder {
-
-			private final String constValue;
-
-			private final String title;
-
-			private Builder(String constValue, String title) {
-				Assert.notNull(constValue, "constValue must not be null");
-				Assert.notNull(title, "title must not be null");
-				this.constValue = constValue;
-				this.title = title;
+		@JsonCreator
+		static EnumSchemaOption fromJson(@JsonProperty("const") String constValue,
+				@JsonProperty("title") String title) {
+			if (constValue == null || title == null) {
+				List<String> missing = new ArrayList<>();
+				if (constValue == null) {
+					missing.add("constValue -> ''");
+					constValue = "";
+				}
+				if (title == null) {
+					missing.add("title -> ''");
+					title = "";
+				}
+				logger.warn("EnumSchemaOption: missing required fields during deserialization: {}",
+						String.join(", ", missing));
 			}
-
-			public EnumSchemaOption build() {
-				return new EnumSchemaOption(constValue, title);
-			}
-
+			return new EnumSchemaOption(constValue, title);
 		}
+
 	}
 
 	/**
@@ -3950,7 +3952,7 @@ public final class McpSchema {
 		@JsonProperty("default") String defaultValue) { // @formatter:on
 
 		public LegacyTitledEnumSchema {
-			Assert.notNull(enumValues, "enum must not be null");
+			Assert.notNull(enumValues, "enumValues must not be null");
 		}
 
 		@JsonProperty("type")
@@ -3988,40 +3990,26 @@ public final class McpSchema {
 			}
 
 			public Builder enumValues(List<String> enumValues) {
-				Assert.notNull(enumValues, "enum must not be null");
+				Assert.notNull(enumValues, "enumValues must not be null");
 				this.enumValues = new ArrayList<>(enumValues);
 				return this;
 			}
 
 			public Builder enumValues(String... enumValues) {
-				Assert.notNull(enumValues, "enum must not be null");
-				this.enumValues = new ArrayList<>(Arrays.asList(enumValues));
-				return this;
-			}
-
-			public Builder enumValue(String enumValue) {
-				if (this.enumValues == null) {
-					this.enumValues = new ArrayList<>();
-				}
-				this.enumValues.add(enumValue);
+				Assert.notNull(enumValues, "enumValues must not be null");
+				this.enumValues = Arrays.asList(enumValues);
 				return this;
 			}
 
 			public Builder enumNames(List<String> enumNames) {
-				this.enumNames = enumNames == null ? null : new ArrayList<>(enumNames);
+				Assert.notNull(enumNames, "enumNames must not be null");
+				this.enumNames = new ArrayList<>(enumNames);
 				return this;
 			}
 
 			public Builder enumNames(String... enumNames) {
-				this.enumNames = enumNames == null ? null : new ArrayList<>(Arrays.asList(enumNames));
-				return this;
-			}
-
-			public Builder enumName(String enumName) {
-				if (this.enumNames == null) {
-					this.enumNames = new ArrayList<>();
-				}
-				this.enumNames.add(enumName);
+				Assert.notNull(enumNames, "enumNames must not be null");
+				this.enumNames = Arrays.asList(enumNames);
 				return this;
 			}
 
@@ -4031,7 +4019,7 @@ public final class McpSchema {
 			}
 
 			public LegacyTitledEnumSchema build() {
-				Assert.notEmpty(enumValues, "enum must not be empty");
+				Assert.notEmpty(enumValues, "enumValues must not be empty");
 				return new LegacyTitledEnumSchema(title, description, enumValues, enumNames, defaultValue);
 			}
 
@@ -4055,7 +4043,7 @@ public final class McpSchema {
 		@JsonProperty("default") String defaultValue) { // @formatter:on
 
 		public UntitledSingleSelectEnumSchema {
-			Assert.notNull(enumValues, "enum must not be null");
+			Assert.notNull(enumValues, "enumValues must not be null");
 		}
 
 		@JsonProperty("type")
@@ -4091,22 +4079,14 @@ public final class McpSchema {
 			}
 
 			public Builder enumValues(List<String> enumValues) {
-				Assert.notNull(enumValues, "enum must not be null");
+				Assert.notNull(enumValues, "enumValues must not be null");
 				this.enumValues = new ArrayList<>(enumValues);
 				return this;
 			}
 
 			public Builder enumValues(String... enumValues) {
-				Assert.notNull(enumValues, "enum must not be null");
-				this.enumValues = new ArrayList<>(Arrays.asList(enumValues));
-				return this;
-			}
-
-			public Builder enumValue(String enumValue) {
-				if (this.enumValues == null) {
-					this.enumValues = new ArrayList<>();
-				}
-				this.enumValues.add(enumValue);
+				Assert.notNull(enumValues, "enumValues must not be null");
+				this.enumValues = Arrays.asList(enumValues);
 				return this;
 			}
 
@@ -4116,7 +4096,7 @@ public final class McpSchema {
 			}
 
 			public UntitledSingleSelectEnumSchema build() {
-				Assert.notEmpty(enumValues, "enum must not be empty");
+				Assert.notEmpty(enumValues, "enumValues must not be empty");
 				return new UntitledSingleSelectEnumSchema(title, description, enumValues, defaultValue);
 			}
 
@@ -4184,15 +4164,7 @@ public final class McpSchema {
 
 			public Builder oneOf(EnumSchemaOption... oneOf) {
 				Assert.notNull(oneOf, "oneOf must not be null");
-				this.oneOf = new ArrayList<>(Arrays.asList(oneOf));
-				return this;
-			}
-
-			public Builder addOneOf(EnumSchemaOption option) {
-				if (this.oneOf == null) {
-					this.oneOf = new ArrayList<>();
-				}
-				this.oneOf.add(option);
+				this.oneOf = Arrays.asList(oneOf);
 				return this;
 			}
 
@@ -4221,7 +4193,7 @@ public final class McpSchema {
 		@JsonProperty("enum") List<String> enumValues) { // @formatter:on
 
 		public UntitledMultiSelectItems {
-			Assert.notNull(enumValues, "enum must not be null");
+			Assert.notNull(enumValues, "enumValues must not be null");
 		}
 
 		@JsonProperty("type")
@@ -4241,27 +4213,19 @@ public final class McpSchema {
 			}
 
 			public Builder enumValues(List<String> enumValues) {
-				Assert.notNull(enumValues, "enum must not be null");
+				Assert.notNull(enumValues, "enumValues must not be null");
 				this.enumValues = new ArrayList<>(enumValues);
 				return this;
 			}
 
 			public Builder enumValues(String... enumValues) {
-				Assert.notNull(enumValues, "enum must not be null");
-				this.enumValues = new ArrayList<>(Arrays.asList(enumValues));
-				return this;
-			}
-
-			public Builder enumValue(String enumValue) {
-				if (this.enumValues == null) {
-					this.enumValues = new ArrayList<>();
-				}
-				this.enumValues.add(enumValue);
+				Assert.notNull(enumValues, "enumValues must not be null");
+				this.enumValues = Arrays.asList(enumValues);
 				return this;
 			}
 
 			public UntitledMultiSelectItems build() {
-				Assert.notEmpty(enumValues, "enum must not be empty");
+				Assert.notEmpty(enumValues, "enumValues must not be empty");
 				return new UntitledMultiSelectItems(enumValues);
 			}
 
@@ -4346,16 +4310,15 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder defaultValue(List<String> defaultValue) {
-				this.defaultValue = defaultValue == null ? null : new ArrayList<>(defaultValue);
+			public Builder defaults(String... defaultValue) {
+				Assert.notNull(defaultValue, "defaultValue must not be null");
+				this.defaultValue = Arrays.asList(defaultValue);
 				return this;
 			}
 
-			public Builder addDefaultValue(String defaultValue) {
-				if (this.defaultValue == null) {
-					this.defaultValue = new ArrayList<>();
-				}
-				this.defaultValue.add(defaultValue);
+			public Builder defaults(List<String> defaultValue) {
+				Assert.notNull(defaultValue, "defaultValue must not be null");
+				this.defaultValue = new ArrayList<>(defaultValue);
 				return this;
 			}
 
@@ -4401,15 +4364,7 @@ public final class McpSchema {
 
 			public Builder anyOf(EnumSchemaOption... anyOf) {
 				Assert.notNull(anyOf, "anyOf must not be null");
-				this.anyOf = new ArrayList<>(Arrays.asList(anyOf));
-				return this;
-			}
-
-			public Builder addAnyOf(EnumSchemaOption option) {
-				if (this.anyOf == null) {
-					this.anyOf = new ArrayList<>();
-				}
-				this.anyOf.add(option);
+				this.anyOf = Arrays.asList(anyOf);
 				return this;
 			}
 
@@ -4499,16 +4454,15 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder defaultValue(List<String> defaultValue) {
-				this.defaultValue = defaultValue == null ? null : new ArrayList<>(defaultValue);
+			public Builder defaults(List<String> defaultValue) {
+				Assert.notNull(defaultValue, "defaultValue must not be null");
+				this.defaultValue = new ArrayList<>(defaultValue);
 				return this;
 			}
 
-			public Builder addDefaultValue(String defaultValue) {
-				if (this.defaultValue == null) {
-					this.defaultValue = new ArrayList<>();
-				}
-				this.defaultValue.add(defaultValue);
+			public Builder defaults(String... defaultValue) {
+				Assert.notNull(defaultValue, "defaultValue must not be null");
+				this.defaultValue = Arrays.asList(defaultValue);
 				return this;
 			}
 

@@ -456,9 +456,9 @@ public class ConformanceServlet {
 							.build();
 						// 2. Titled single-select using oneOf with const/title
 						var titledSingle = TitledSingleSelectEnumSchema.builder()
-							.oneOf(EnumSchemaOption.builder("value1", "First Option").build(),
-									EnumSchemaOption.builder("value2", "Second Option").build(),
-									EnumSchemaOption.builder("value3", "Third Option").build())
+							.oneOf(new EnumSchemaOption("value1", "First Option"),
+									new EnumSchemaOption("value2", "Second Option"),
+									new EnumSchemaOption("value3", "Third Option"))
 							.build();
 						// 3. Legacy titled using enumNames (deprecated)
 						var legacyEnum = LegacyTitledEnumSchema.builder()
@@ -472,9 +472,9 @@ public class ConformanceServlet {
 						// 5. Titled multi-select using items.anyOf with const/title
 						var titledMulti = TitledMultiSelectEnumSchema
 							.builder(TitledMultiSelectItems.builder()
-								.anyOf(EnumSchemaOption.builder("value1", "First Choice").build(),
-										EnumSchemaOption.builder("value2", "Second Choice").build(),
-										EnumSchemaOption.builder("value3", "Third Choice").build())
+								.anyOf(new EnumSchemaOption("value1", "First Choice"),
+										new EnumSchemaOption("value2", "Second Choice"),
+										new EnumSchemaOption("value3", "Third Choice"))
 								.build())
 							.build();
 

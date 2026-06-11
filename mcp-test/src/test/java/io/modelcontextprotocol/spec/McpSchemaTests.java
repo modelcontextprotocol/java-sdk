@@ -1732,6 +1732,26 @@ public class McpSchemaTests {
 	// Enum Schema Tests
 
 	@Test
+	void testEnumSchemaOptionDeserialization() throws Exception {
+		var option = JSON_MAPPER.readValue("""
+				{
+				  "const": "low",
+				  "title": "Low Priority"
+				}""", McpSchema.EnumSchemaOption.class);
+
+		assertThat(option.constValue()).isEqualTo("low");
+		assertThat(option.title()).isEqualTo("Low Priority");
+	}
+
+	@Test
+	void testEnumSchemaOptionDeserializationWithBothFieldsMissing() throws Exception {
+		var option = JSON_MAPPER.readValue("{}", McpSchema.EnumSchemaOption.class);
+
+		assertThat(option.constValue()).isEqualTo("");
+		assertThat(option.title()).isEqualTo("");
+	}
+
+	@Test
 	void testUntitledSingleSelectEnumSchemaSerialization() throws Exception {
 		var schema = new McpSchema.UntitledSingleSelectEnumSchema(null, "Choose a color",
 				List.of("red", "green", "blue"), null);
@@ -1894,14 +1914,14 @@ public class McpSchemaTests {
 	void testUntitledSingleSelectEnumSchemaBuilderRequiresEnumValues() {
 		assertThatThrownBy(() -> McpSchema.UntitledSingleSelectEnumSchema.builder().build())
 			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("enum must not be empty");
+			.hasMessageContaining("enumValues must not be empty");
 	}
 
 	@Test
 	void testUntitledSingleSelectEnumSchemaBuilderRejectsEmptyEnumValues() {
 		assertThatThrownBy(() -> McpSchema.UntitledSingleSelectEnumSchema.builder().enumValues(List.of()).build())
 			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("enum must not be empty");
+			.hasMessageContaining("enumValues must not be empty");
 	}
 
 	@Test
@@ -1923,7 +1943,7 @@ public class McpSchemaTests {
 	void testLegacyTitledEnumSchemaBuilderRequiresEnumValues() {
 		assertThatThrownBy(() -> McpSchema.LegacyTitledEnumSchema.builder().build())
 			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("enum must not be empty");
+			.hasMessageContaining("enumValues must not be empty");
 	}
 
 	@Test
@@ -1931,21 +1951,21 @@ public class McpSchemaTests {
 	void testLegacyTitledEnumSchemaBuilderRejectsEmptyEnumValues() {
 		assertThatThrownBy(() -> McpSchema.LegacyTitledEnumSchema.builder().enumValues(List.of()).build())
 			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("enum must not be empty");
+			.hasMessageContaining("enumValues must not be empty");
 	}
 
 	@Test
 	void testUntitledMultiSelectItemsBuilderRequiresEnumValues() {
 		assertThatThrownBy(() -> McpSchema.UntitledMultiSelectItems.builder().build())
 			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("enum must not be empty");
+			.hasMessageContaining("enumValues must not be empty");
 	}
 
 	@Test
 	void testUntitledMultiSelectItemsBuilderRejectsEmptyEnumValues() {
 		assertThatThrownBy(() -> McpSchema.UntitledMultiSelectItems.builder().enumValues(List.of()).build())
 			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("enum must not be empty");
+			.hasMessageContaining("enumValues must not be empty");
 	}
 
 	@Test
@@ -1964,9 +1984,9 @@ public class McpSchemaTests {
 
 	@Test
 	void testUntitledSingleSelectEnumSchemaBuilderSingularAdd() {
-		var schema = McpSchema.UntitledSingleSelectEnumSchema.builder().enumValues("a", "b").enumValue("c").build();
+		var schema = McpSchema.UntitledSingleSelectEnumSchema.builder().enumValues("a", "b").build();
 
-		assertThat(schema.enumValues()).containsExactly("a", "b", "c");
+		assertThat(schema.enumValues()).containsExactly("a", "b");
 	}
 
 	@Test
@@ -1985,40 +2005,29 @@ public class McpSchemaTests {
 
 	@Test
 	void testTitledSingleSelectEnumSchemaBuilderSingularAdd() {
-		var opt1 = McpSchema.EnumSchemaOption.builder("v1", "Option 1").build();
-		var opt2 = McpSchema.EnumSchemaOption.builder("v2", "Option 2").build();
-		var schema = McpSchema.TitledSingleSelectEnumSchema.builder().oneOf(opt1).addOneOf(opt2).build();
+		var opt1 = new McpSchema.EnumSchemaOption("v1", "Option 1");
+		var schema = McpSchema.TitledSingleSelectEnumSchema.builder().oneOf(opt1).build();
 
-		assertThat(schema.oneOf()).hasSize(2);
-		assertThat(schema.oneOf().get(1).constValue()).isEqualTo("v2");
+		assertThat(schema.oneOf()).hasSize(1)
+			.first()
+			.extracting(McpSchema.EnumSchemaOption::constValue)
+			.isEqualTo("v1");
 	}
 
 	@Test
 	@SuppressWarnings("deprecation")
 	void testLegacyTitledEnumSchemaBuilderSingularAdds() {
-		var schema = McpSchema.LegacyTitledEnumSchema.builder()
-			.enumValues("a", "b")
-			.enumValue("c")
-			.enumNames("Alpha", "Beta")
-			.enumName("Gamma")
-			.build();
+		var schema = McpSchema.LegacyTitledEnumSchema.builder().enumValues("a", "b").enumNames("Alpha", "Beta").build();
 
-		assertThat(schema.enumValues()).containsExactly("a", "b", "c");
-		assertThat(schema.enumNames()).containsExactly("Alpha", "Beta", "Gamma");
-	}
-
-	@Test
-	void testUntitledMultiSelectItemsBuilderSingularAdd() {
-		var items = McpSchema.UntitledMultiSelectItems.builder().enumValues("x", "y").enumValue("z").build();
-
-		assertThat(items.enumValues()).containsExactly("x", "y", "z");
+		assertThat(schema.enumValues()).containsExactly("a", "b");
+		assertThat(schema.enumNames()).containsExactly("Alpha", "Beta");
 	}
 
 	@Test
 	void testTitledMultiSelectItemsBuilderSingularAdd() {
-		var opt1 = McpSchema.EnumSchemaOption.builder("v1", "First").build();
-		var opt2 = McpSchema.EnumSchemaOption.builder("v2", "Second").build();
-		var items = McpSchema.TitledMultiSelectItems.builder().anyOf(opt1).addAnyOf(opt2).build();
+		var opt1 = new McpSchema.EnumSchemaOption("v1", "First");
+		var opt2 = new McpSchema.EnumSchemaOption("v2", "Second");
+		var items = McpSchema.TitledMultiSelectItems.builder().anyOf(opt1, opt2).build();
 
 		assertThat(items.anyOf()).hasSize(2);
 		assertThat(items.anyOf().get(1).constValue()).isEqualTo("v2");
@@ -2032,8 +2041,7 @@ public class McpSchemaTests {
 			.description("Select tags")
 			.minItems(1)
 			.maxItems(2)
-			.defaultValue(List.of("a"))
-			.addDefaultValue("b")
+			.defaults("a", "b")
 			.build();
 
 		assertThat(schema.title()).isEqualTo("Tags");
