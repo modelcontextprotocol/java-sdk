@@ -1744,11 +1744,31 @@ public class McpSchemaTests {
 	}
 
 	@Test
+	void testEnumSchemaOptionDeserializationWithUnknownField() throws Exception {
+		var option = JSON_MAPPER.readValue("""
+				{
+					"futureField": 42
+				}""", McpSchema.EnumSchemaOption.class);
+
+		assertThat(option).isNotNull();
+	}
+
+	@Test
 	void testEnumSchemaOptionDeserializationWithBothFieldsMissing() throws Exception {
 		var option = JSON_MAPPER.readValue("{}", McpSchema.EnumSchemaOption.class);
 
 		assertThat(option.constValue()).isEqualTo("");
 		assertThat(option.title()).isEqualTo("");
+	}
+
+	@Test
+	void testEnumSchemaOptionsRequiredField() {
+		assertThatThrownBy(() -> new McpSchema.EnumSchemaOption("~~~", null))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("title must not be null");
+		assertThatThrownBy(() -> new McpSchema.EnumSchemaOption(null, "~~~"))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("constValue must not be null");
 	}
 
 	@Test
