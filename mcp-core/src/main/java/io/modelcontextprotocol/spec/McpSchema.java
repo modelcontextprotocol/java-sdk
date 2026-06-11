@@ -4520,6 +4520,233 @@ public final class McpSchema {
 	}
 
 	/**
+	 * Schema for a boolean field in a form-based elicitation request.
+	 *
+	 * @param title Optional title for the boolean field
+	 * @param description Optional description for the boolean field
+	 * @param defaultValue Optional default value
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record BooleanSchema( // @formatter:off
+		@JsonProperty("title") String title,
+		@JsonProperty("description") String description,
+		@JsonProperty("default") Boolean defaultValue) { // @formatter:on
+
+		@JsonProperty("type")
+		public String type() {
+			return "boolean";
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+
+			private String title;
+
+			private String description;
+
+			private Boolean defaultValue;
+
+			private Builder() {
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder defaultValue(Boolean defaultValue) {
+				this.defaultValue = defaultValue;
+				return this;
+			}
+
+			public BooleanSchema build() {
+				return new BooleanSchema(title, description, defaultValue);
+			}
+
+		}
+	}
+
+	/**
+	 * Schema for a numeric field in a form-based elicitation request, supporting both
+	 * {@code "number"} (floating-point) and {@code "integer"} types.
+	 *
+	 * @param title Optional title for the numeric field
+	 * @param description Optional description for the numeric field
+	 * @param type The JSON Schema type, either {@code "number"} or {@code "integer"};
+	 * defaults to {@code "number"} in the builder
+	 * @param minimum Optional minimum value (inclusive)
+	 * @param maximum Optional maximum value (inclusive)
+	 * @param defaultValue Optional default value
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record NumberSchema( // @formatter:off
+		@JsonProperty("title") String title,
+		@JsonProperty("description") String description,
+		@JsonProperty("type") String type,
+		@JsonProperty("minimum") Number minimum,
+		@JsonProperty("maximum") Number maximum,
+		@JsonProperty("default") Number defaultValue) { // @formatter:on
+
+		public NumberSchema {
+			Assert.notNull(type, "type must not be null");
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+
+			private String title;
+
+			private String description;
+
+			private String type = "number";
+
+			private Number minimum;
+
+			private Number maximum;
+
+			private Number defaultValue;
+
+			private Builder() {
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder integer() {
+				this.type = "integer";
+				return this;
+			}
+
+			public Builder minimum(Number minimum) {
+				this.minimum = minimum;
+				return this;
+			}
+
+			public Builder maximum(Number maximum) {
+				this.maximum = maximum;
+				return this;
+			}
+
+			public Builder defaultValue(Number defaultValue) {
+				this.defaultValue = defaultValue;
+				return this;
+			}
+
+			public NumberSchema build() {
+				return new NumberSchema(title, description, type, minimum, maximum, defaultValue);
+			}
+
+		}
+	}
+
+	/**
+	 * Schema for a text input field in a form-based elicitation request.
+	 *
+	 * @param title Optional title for the text field
+	 * @param description Optional description for the text field
+	 * @param minLength Optional minimum string length
+	 * @param maxLength Optional maximum string length
+	 * @param format Optional format hint (e.g. {@code "email"}, {@code "uri"})
+	 * @param defaultValue Optional default value
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record StringSchema( // @formatter:off
+		@JsonProperty("title") String title,
+		@JsonProperty("description") String description,
+		@JsonProperty("minLength") Integer minLength,
+		@JsonProperty("maxLength") Integer maxLength,
+		@JsonProperty("format") String format,
+		@JsonProperty("default") String defaultValue) { // @formatter:on
+
+		@JsonProperty("type")
+		public String type() {
+			return "string";
+		}
+
+		public static Builder builder() {
+			return new Builder();
+		}
+
+		public static class Builder {
+
+			private String title;
+
+			private String description;
+
+			private Integer minLength;
+
+			private Integer maxLength;
+
+			private String format;
+
+			private String defaultValue;
+
+			private Builder() {
+			}
+
+			public Builder title(String title) {
+				this.title = title;
+				return this;
+			}
+
+			public Builder description(String description) {
+				this.description = description;
+				return this;
+			}
+
+			public Builder minLength(Integer minLength) {
+				this.minLength = minLength;
+				return this;
+			}
+
+			public Builder maxLength(Integer maxLength) {
+				this.maxLength = maxLength;
+				return this;
+			}
+
+			public Builder format(String format) {
+				this.format = format;
+				return this;
+			}
+
+			public Builder defaultValue(String defaultValue) {
+				this.defaultValue = defaultValue;
+				return this;
+			}
+
+			public StringSchema build() {
+				Assert.isTrue(
+						format == null || format.equals("uri") || format.equals("email") || format.equals("date")
+								|| format.equals("date-time"),
+						"format must be one of: null, \"uri\", \"email\", \"date\", \"date-time\"");
+				return new StringSchema(title, description, minLength, maxLength, format, defaultValue);
+			}
+
+		}
+	}
+
+	/**
 	 * A request from the server to elicit additional information from the user, either
 	 * through the client or out-of-band.
 	 *
@@ -4565,6 +4792,9 @@ public final class McpSchema {
 	 * The requested schema is flexible, but for standard schemas, consider using one the
 	 * following types:
 	 * <ul>
+	 * <li>{@link BooleanSchema}
+	 * <li>{@link NumberSchema}
+	 * <li>{@link StringSchema}
 	 * <li>{@link LegacyTitledEnumSchema}
 	 * <li>{@link TitledSingleSelectEnumSchema}
 	 * <li>{@link TitledMultiSelectEnumSchema}
@@ -4580,13 +4810,11 @@ public final class McpSchema {
 	 * var first = UntitledSingleSelectEnumSchema.builder()
 	 *           .enumValues("option1", "option2", "option3")
 	 *           .build();
-	 * var second = TitledMultiSelectEnumSchema
-	 *           .builder(TitledMultiSelectItems.builder()
-	 *             .anyOf(
-	 *               EnumSchemaOption.builder("value1", "First Choice").build(),
-	 *               EnumSchemaOption.builder("value2", "Second Choice").build(),
-	 *               EnumSchemaOption.builder("value3", "Third Choice").build()
-	 *             ).build()).build();
+	 * var second = BooleanSchema
+	 *           .builder()
+	 *           .title("Say yes")
+	 *           .description("By selecting this, you say yes to the thing")
+	 *           .build();
 	 * Map&lt;String, Object&gt; requestedSchema = Map.of(
 	 *     "type", "object",
 	 *     "properties", Map.of(
