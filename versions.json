@@ -7,18 +7,11 @@
   {
     "version": "2.0.0",
     "title": "2.0.0",
-    "aliases": [
-      "latest"
-    ]
+    "aliases": []
   },
   {
     "version": "1.1.4-SNAPSHOT",
     "title": "1.1.4-SNAPSHOT",
-    "aliases": []
-  },
-  {
-    "version": "v1.1.3",
-    "title": "v1.1.3",
     "aliases": []
   },
   {
@@ -27,7 +20,19 @@
     "aliases": [
       "latest-snapshot"
     ]
-  },  
+  },
+  {
+    "version": "v2.0.0",
+    "title": "v2.0.0",
+    "aliases": [
+      "latest"
+    ]
+  },
+  {
+    "version": "v1.1.3",
+    "title": "v1.1.3",
+    "aliases": []
+  },
   {
     "version": "v0.18.3",
     "title": "v0.18.3",
