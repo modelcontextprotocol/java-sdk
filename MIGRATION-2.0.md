@@ -168,6 +168,16 @@ JSONRPCResponse.error(id, new JSONRPCError(code, message));  // 2-arg error
 
 The 1.x canonical 4-arg constructors continue to compile.
 
+### `McpStatelessSyncServer#closeGracefully` returns `void`
+
+In 1.x, `McpStatelessSyncServer.closeGracefully()` accidentally leaked the reactive signature from the underlying async server and returned `Mono<Void>`. The sync API is intentionally blocking, so returning a `Mono` was an oversight — callers had to call `.block()` themselves to get any actual shutdown behaviour.
+
+In 2.0 the return type is corrected to `void`; the blocking call is performed internally.
+
+**Action:** Remove any `.block()` (or `.subscribe()`) call you had appended to `closeGracefully()`. The method now blocks until the server has shut down and returns normally.
+
+---
+
 ### Optional JSON Schema validation on `tools/call` (server)
 
 When a `JsonSchemaValidator` is available (including the default from `McpJsonDefaults.getSchemaValidator()` when you do not configure one explicitly) and `validateToolInputs` is left at its default of `true`, the server validates incoming tool arguments against `tool.inputSchema()` before invoking the tool. Failed validation produces a `CallToolResult` with `isError` set and a textual error in the content.
