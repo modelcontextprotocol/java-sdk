@@ -111,7 +111,7 @@ Create process-based transport using stdin/stdout:
 
 ```java
 StdioServerTransportProvider transportProvider =
-    new StdioServerTransportProvider(new ObjectMapper());
+    new StdioServerTransportProvider(McpJsonDefaults.getMapper());
 ```
 
 Provides bidirectional JSON-RPC message handling over standard input/output streams with non-blocking message processing, serialization/deserialization, and graceful shutdown support.
@@ -237,7 +237,9 @@ Key features:
 
         @Bean
         public HttpServletSseServerTransportProvider servletSseServerTransportProvider() {
-            return new HttpServletSseServerTransportProvider(new ObjectMapper(), "/mcp/message");
+            return HttpServletSseServerTransportProvider.builder()
+                .messageEndpoint("/mcp/message")
+                .build();
         }
 
         @Bean
@@ -340,10 +342,8 @@ The recommended approach is to use the builder pattern and `CallToolRequest` as 
     ```java
     // Sync tool specification using builder
     var syncToolSpecification = SyncToolSpecification.builder()
-        .tool(Tool.builder()
-            .name("calculator")
+        .tool(Tool.builder("calculator", schema)
             .description("Basic calculator")
-            .inputSchema(schema)
             .build())
         .callHandler((exchange, request) -> {
             // Access arguments via request.arguments()
@@ -363,10 +363,8 @@ The recommended approach is to use the builder pattern and `CallToolRequest` as 
     ```java
     // Async tool specification using builder
     var asyncToolSpecification = AsyncToolSpecification.builder()
-        .tool(Tool.builder()
-            .name("calculator")
+        .tool(Tool.builder("calculator", schema)
             .description("Basic calculator")
-            .inputSchema(schema)
             .build())
         .callHandler((exchange, request) -> {
             // Access arguments via request.arguments()
@@ -389,13 +387,25 @@ You can also register tools directly on the server builder using the `toolCall` 
 ```java
 var server = McpServer.sync(transportProvider)
     .toolCall(
-        Tool.builder().name("echo").description("Echoes input").inputSchema(schema).build(),
+        Tool.builder("echo", schema).description("Echoes input").build(),
         (exchange, request) -> CallToolResult.builder()
             .content(List.of(new McpSchema.TextContent(request.arguments().get("text").toString())))
             .build()
     )
     .build();
 ```
+
+#### Tool Input Validation
+
+By default the server validates incoming tool arguments against the tool's `inputSchema` before invoking the handler. When validation fails, the call returns a `CallToolResult` with `isError` set and a textual error, rather than reaching your handler. Validation uses the configured `JsonSchemaValidator` (or the default from `McpJsonDefaults.getSchemaValidator()`), and can be turned off on the server builder:
+
+```java
+var server = McpServer.sync(transportProvider)
+    .validateToolInputs(false)   // default is true
+    .build();
+```
+
+The embedded JSON Schema documents themselves (`Tool.inputSchema`, `Tool.outputSchema`, and elicitation `requestedSchema`) are validated against the JSON Schema 2020-12 meta-schema (SEP-1613). Malformed schemas are rejected at build time (`McpServer.build()`) and when calling `addTool()`, throwing an `IllegalArgumentException` that names the offending field. A schema that declares a different dialect via `$schema` is accepted without meta-schema validation.
 
 ### Resource Specification
 
@@ -407,15 +417,13 @@ Resources provide context to AI models by exposing data such as: File contents, 
     ```java
     // Sync resource specification
     var syncResourceSpecification = new McpServerFeatures.SyncResourceSpecification(
-        Resource.builder()
-            .uri("custom://resource")
-            .name("name")
+        Resource.builder("custom://resource", "name")
             .description("description")
             .mimeType("text/plain")
             .build(),
         (exchange, request) -> {
             // Resource read implementation
-            return new ReadResourceResult(contents);
+            return ReadResourceResult.builder(contents).build();
         }
     );
     ```
@@ -425,15 +433,13 @@ Resources provide context to AI models by exposing data such as: File contents, 
     ```java
     // Async resource specification
     var asyncResourceSpecification = new McpServerFeatures.AsyncResourceSpecification(
-        Resource.builder()
-            .uri("custom://resource")
-            .name("name")
+        Resource.builder("custom://resource", "name")
             .description("description")
             .mimeType("text/plain")
             .build(),
         (exchange, request) -> {
             // Resource read implementation
-            return Mono.just(new ReadResourceResult(contents));
+            return Mono.just(ReadResourceResult.builder(contents).build());
         }
     );
     ```
@@ -481,15 +487,13 @@ Resource templates allow servers to expose parameterized resources using URI tem
 ```java
 // Resource template specification
 var resourceTemplateSpec = new McpServerFeatures.SyncResourceTemplateSpecification(
-    ResourceTemplate.builder()
-        .uriTemplate("file://{path}")
-        .name("File Resource")
+    ResourceTemplate.builder("file://{path}", "File Resource")
         .description("Access files by path")
         .mimeType("application/octet-stream")
         .build(),
     (exchange, request) -> {
         // Read the file at the requested URI
-        return new ReadResourceResult(contents);
+        return ReadResourceResult.builder(contents).build();
     }
 );
 ```
@@ -504,12 +508,18 @@ The Prompt Specification is a structured template for AI model interactions that
     ```java
     // Sync prompt specification
     var syncPromptSpecification = new McpServerFeatures.SyncPromptSpecification(
-        new Prompt("greeting", "description", List.of(
-            new PromptArgument("name", "description", true)
-        )),
+        Prompt.builder("greeting")
+            .description("description")
+            .arguments(List.of(
+                PromptArgument.builder("name")
+                    .description("description")
+                    .required(true)
+                    .build()
+            ))
+            .build(),
         (exchange, request) -> {
             // Prompt implementation
-            return new GetPromptResult(description, messages);
+            return GetPromptResult.builder(messages).description(description).build();
         }
     );
     ```
@@ -519,12 +529,18 @@ The Prompt Specification is a structured template for AI model interactions that
     ```java
     // Async prompt specification
     var asyncPromptSpecification = new McpServerFeatures.AsyncPromptSpecification(
-        new Prompt("greeting", "description", List.of(
-            new PromptArgument("name", "description", true)
-        )),
+        Prompt.builder("greeting")
+            .description("description")
+            .arguments(List.of(
+                PromptArgument.builder("name")
+                    .description("description")
+                    .required(true)
+                    .build()
+            ))
+            .build(),
         (exchange, request) -> {
             // Prompt implementation
-            return Mono.just(new GetPromptResult(description, messages));
+            return Mono.just(GetPromptResult.builder(messages).description(description).build());
         }
     );
     ```
@@ -592,10 +608,8 @@ Once connected to a compatible client, the server can request language model gen
 
     // Define a tool that uses sampling
     var calculatorTool = SyncToolSpecification.builder()
-        .tool(Tool.builder()
-            .name("ai-calculator")
+        .tool(Tool.builder("ai-calculator", schema)
             .description("Performs calculations using AI")
-            .inputSchema(schema)
             .build())
         .callHandler((exchange, request) -> {
             // Check if client supports sampling
@@ -606,9 +620,10 @@ Once connected to a compatible client, the server can request language model gen
             }
 
             // Create a sampling request
-            CreateMessageRequest samplingRequest = CreateMessageRequest.builder()
-                .messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
-                    new McpSchema.TextContent("Calculate: " + request.arguments().get("expression")))))
+            CreateMessageRequest samplingRequest = CreateMessageRequest.builder(
+                    List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
+                        new McpSchema.TextContent("Calculate: " + request.arguments().get("expression")))),
+                    100)
                 .modelPreferences(McpSchema.ModelPreferences.builder()
                     .hints(List.of(
                         McpSchema.ModelHint.of("claude-3-sonnet"),
@@ -618,7 +633,6 @@ Once connected to a compatible client, the server can request language model gen
                     .speedPriority(0.5)
                     .build())
                 .systemPrompt("You are a helpful calculator assistant. Provide only the numerical answer.")
-                .maxTokens(100)
                 .build();
 
             // Request sampling from the client
@@ -646,10 +660,8 @@ Once connected to a compatible client, the server can request language model gen
 
     // Define a tool that uses sampling
     var calculatorTool = AsyncToolSpecification.builder()
-        .tool(Tool.builder()
-            .name("ai-calculator")
+        .tool(Tool.builder("ai-calculator", schema)
             .description("Performs calculations using AI")
-            .inputSchema(schema)
             .build())
         .callHandler((exchange, request) -> {
             // Check if client supports sampling
@@ -660,9 +672,10 @@ Once connected to a compatible client, the server can request language model gen
             }
 
             // Create a sampling request
-            CreateMessageRequest samplingRequest = CreateMessageRequest.builder()
-                .messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
-                    new McpSchema.TextContent("Calculate: " + request.arguments().get("expression")))))
+            CreateMessageRequest samplingRequest = CreateMessageRequest.builder(
+                    List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
+                        new McpSchema.TextContent("Calculate: " + request.arguments().get("expression")))),
+                    100)
                 .modelPreferences(McpSchema.ModelPreferences.builder()
                     .hints(List.of(
                         McpSchema.ModelHint.of("claude-3-sonnet"),
@@ -672,7 +685,6 @@ Once connected to a compatible client, the server can request language model gen
                     .speedPriority(0.5)
                     .build())
                 .systemPrompt("You are a helpful calculator assistant. Provide only the numerical answer.")
-                .maxTokens(100)
                 .build();
 
             // Request sampling from the client
@@ -701,10 +713,8 @@ Servers can request user input from connected clients that support elicitation:
 
 ```java
 var tool = SyncToolSpecification.builder()
-    .tool(Tool.builder()
-        .name("confirm-action")
+    .tool(Tool.builder("confirm-action", schema)
         .description("Confirms an action with the user")
-        .inputSchema(schema)
         .build())
     .callHandler((exchange, request) -> {
         // Check if client supports elicitation
@@ -741,10 +751,8 @@ To request out-of-band URL elicitation, such as a user authorizing an OAuth flow
 
 ```java
 var urlTool = SyncToolSpecification.builder()
-    .tool(Tool.builder()
-        .name("oauth-auth")
+    .tool(Tool.builder("oauth-auth", schema)
         .description("Authenticates via OAuth")
-        .inputSchema(schema)
         .build())
     .callHandler((exchange, request) -> {
         // Request URL elicitation from client
@@ -779,23 +787,17 @@ Log notifications can only be sent from within an existing client session, such 
 The server can send log messages using the `McpAsyncServerExchange`/`McpSyncServerExchange` object in the tool/resource/prompt handler function:
 
 ```java
-var tool = new McpServerFeatures.AsyncToolSpecification(
-    Tool.builder().name("logging-test").description("Test logging notifications").inputSchema(emptyJsonSchema).build(),
-    null,
-    (exchange, request) -> {
-
-      exchange.loggingNotification( // Use the exchange to send log messages
-          McpSchema.LoggingMessageNotification.builder()
-            .level(McpSchema.LoggingLevel.DEBUG)
-            .logger("test-logger")
-            .data("Debug message")
-            .build())
-        .block();
-
-      return Mono.just(CallToolResult.builder()
-          .content(List.of(new McpSchema.TextContent("Logging test completed")))
-          .build());
-    });
+var tool = AsyncToolSpecification.builder()
+    .tool(Tool.builder("logging-test", emptyJsonSchema).description("Test logging notifications").build())
+    .callHandler((exchange, request) ->
+        exchange.loggingNotification( // Use the exchange to send log messages
+            McpSchema.LoggingMessageNotification.builder(McpSchema.LoggingLevel.DEBUG, "Debug message")
+              .logger("test-logger")
+              .build())
+          .then(Mono.just(CallToolResult.builder()
+              .content(List.of(new McpSchema.TextContent("Logging test completed")))
+              .build())))
+    .build();
 
 var mcpServer = McpServer.async(mcpServerTransportProvider)
   .serverInfo("test-server", "1.0.0")

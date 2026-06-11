@@ -16,6 +16,9 @@ import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
 import net.javacrumbs.jsonunit.core.Option;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
@@ -1724,6 +1727,633 @@ public class McpSchemaTests {
 				{"message":"hello","requestedSchema":{"type":"object"},"futureField":42}""",
 				McpSchema.ElicitRequest.class);
 		assertThat(request.message()).isEqualTo("hello");
+	}
+
+	// Enum Schema Tests
+
+	@Test
+	void testEnumSchemaOptionDeserialization() throws Exception {
+		var option = JSON_MAPPER.readValue("""
+				{
+				  "const": "low",
+				  "title": "Low Priority"
+				}""", McpSchema.EnumSchemaOption.class);
+
+		assertThat(option.constValue()).isEqualTo("low");
+		assertThat(option.title()).isEqualTo("Low Priority");
+	}
+
+	@Test
+	void testEnumSchemaOptionDeserializationWithUnknownField() throws Exception {
+		var option = JSON_MAPPER.readValue("""
+				{
+					"futureField": 42
+				}""", McpSchema.EnumSchemaOption.class);
+
+		assertThat(option).isNotNull();
+	}
+
+	@Test
+	void testEnumSchemaOptionDeserializationWithBothFieldsMissing() throws Exception {
+		var option = JSON_MAPPER.readValue("{}", McpSchema.EnumSchemaOption.class);
+
+		assertThat(option.constValue()).isEqualTo("");
+		assertThat(option.title()).isEqualTo("");
+	}
+
+	@Test
+	void testEnumSchemaOptionsRequiredField() {
+		assertThatThrownBy(() -> new McpSchema.EnumSchemaOption("~~~", null))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("title must not be null");
+		assertThatThrownBy(() -> new McpSchema.EnumSchemaOption(null, "~~~"))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("constValue must not be null");
+	}
+
+	@Test
+	void testUntitledSingleSelectEnumSchemaSerialization() throws Exception {
+		var schema = new McpSchema.UntitledSingleSelectEnumSchema(null, "Choose a color",
+				List.of("red", "green", "blue"), null);
+
+		String json = JSON_MAPPER.writeValueAsString(schema);
+		assertThatJson(json).when(Option.IGNORING_ARRAY_ORDER).isObject().isEqualTo(json("""
+				{"type":"string","description":"Choose a color","enum":["red","green","blue"]}"""));
+	}
+
+	@Test
+	void testUntitledSingleSelectEnumSchemaDeserialization() throws Exception {
+		var schema = JSON_MAPPER.readValue("""
+				{"type":"string","description":"Pick one","enum":["a","b","c"],"default":"a"}""",
+				McpSchema.UntitledSingleSelectEnumSchema.class);
+
+		assertThat(schema.type()).isEqualTo("string");
+		assertThat(schema.description()).isEqualTo("Pick one");
+		assertThat(schema.enumValues()).containsExactly("a", "b", "c");
+		assertThat(schema.defaultValue()).isEqualTo("a");
+	}
+
+	@Test
+	void testTitledSingleSelectEnumSchemaSerialization() throws Exception {
+		var schema = new McpSchema.TitledSingleSelectEnumSchema("Priority", "Select a priority",
+				List.of(new McpSchema.EnumSchemaOption("low", "Low"), new McpSchema.EnumSchemaOption("high", "High")),
+				null);
+
+		String json = JSON_MAPPER.writeValueAsString(schema);
+		assertThatJson(json).when(Option.IGNORING_ARRAY_ORDER).isObject().isEqualTo(json("""
+				{
+				  "type": "string",
+				  "title": "Priority",
+				  "description": "Select a priority",
+				  "oneOf": [
+				    {"const": "low", "title": "Low"},
+				    {"const": "high", "title": "High"}
+				  ]
+				}"""));
+	}
+
+	@Test
+	void testTitledSingleSelectEnumSchemaDeserialization() throws Exception {
+		var schema = JSON_MAPPER.readValue("""
+				{
+				  "type": "string",
+				  "title": "Color",
+				  "oneOf": [
+				    {"const": "red", "title": "Red"},
+				    {"const": "blue", "title": "Blue"}
+				  ],
+				  "default": "red"
+				}""", McpSchema.TitledSingleSelectEnumSchema.class);
+
+		assertThat(schema.type()).isEqualTo("string");
+		assertThat(schema.title()).isEqualTo("Color");
+		assertThat(schema.oneOf()).hasSize(2);
+		assertThat(schema.oneOf().get(0).constValue()).isEqualTo("red");
+		assertThat(schema.oneOf().get(0).title()).isEqualTo("Red");
+		assertThat(schema.defaultValue()).isEqualTo("red");
+	}
+
+	@Test
+	@SuppressWarnings("deprecation")
+	void testLegacyTitledEnumSchemaSerialization() throws Exception {
+		var schema = new McpSchema.LegacyTitledEnumSchema(null, null, List.of("a", "b"),
+				List.of("Option A", "Option B"), null);
+
+		String json = JSON_MAPPER.writeValueAsString(schema);
+		assertThatJson(json).when(Option.IGNORING_ARRAY_ORDER).isObject().isEqualTo(json("""
+				{"type":"string","enum":["a","b"],"enumNames":["Option A","Option B"]}"""));
+	}
+
+	@Test
+	@SuppressWarnings("deprecation")
+	void testLegacyTitledEnumSchemaDeserialization() throws Exception {
+		var schema = JSON_MAPPER.readValue("""
+				{"type":"string","enum":["x","y"],"enumNames":["Ex","Why"]}""", McpSchema.LegacyTitledEnumSchema.class);
+
+		assertThat(schema.type()).isEqualTo("string");
+		assertThat(schema.enumValues()).containsExactly("x", "y");
+		assertThat(schema.enumNames()).containsExactly("Ex", "Why");
+	}
+
+	@Test
+	void testUntitledMultiSelectEnumSchemaSerialization() throws Exception {
+		var items = new McpSchema.UntitledMultiSelectItems(List.of("js", "java", "python"));
+		var schema = new McpSchema.UntitledMultiSelectEnumSchema("Languages", null, items, 1, 3, null);
+
+		String json = JSON_MAPPER.writeValueAsString(schema);
+		assertThatJson(json).when(Option.IGNORING_ARRAY_ORDER).isObject().isEqualTo(json("""
+				{
+				  "type": "array",
+				  "title": "Languages",
+				  "items": {"type": "string", "enum": ["js", "java", "python"]},
+				  "minItems": 1,
+				  "maxItems": 3
+				}"""));
+	}
+
+	@Test
+	void testUntitledMultiSelectEnumSchemaDeserialization() throws Exception {
+		var schema = JSON_MAPPER.readValue("""
+				{
+				  "type": "array",
+				  "items": {"type": "string", "enum": ["a", "b", "c"]},
+				  "default": ["a"]
+				}""", McpSchema.UntitledMultiSelectEnumSchema.class);
+
+		assertThat(schema.type()).isEqualTo("array");
+		assertThat(schema.items().enumValues()).containsExactly("a", "b", "c");
+		assertThat(schema.defaultValue()).containsExactly("a");
+	}
+
+	@Test
+	void testTitledMultiSelectEnumSchemaSerialization() throws Exception {
+		var options = List.of(new McpSchema.EnumSchemaOption("js", "JavaScript"),
+				new McpSchema.EnumSchemaOption("java", "Java"));
+		var items = new McpSchema.TitledMultiSelectItems(options);
+		var schema = new McpSchema.TitledMultiSelectEnumSchema("Languages", "Pick languages", items, null, null, null);
+
+		String json = JSON_MAPPER.writeValueAsString(schema);
+		assertThatJson(json).when(Option.IGNORING_ARRAY_ORDER).isObject().isEqualTo(json("""
+				{
+				  "type": "array",
+				  "title": "Languages",
+				  "description": "Pick languages",
+				  "items": {
+				    "anyOf": [
+				      {"const": "js", "title": "JavaScript"},
+				      {"const": "java", "title": "Java"}
+				    ]
+				  }
+				}"""));
+	}
+
+	@Test
+	void testTitledMultiSelectEnumSchemaDeserialization() throws Exception {
+		var schema = JSON_MAPPER.readValue("""
+				{
+				  "type": "array",
+				  "title": "Flavors",
+				  "items": {
+				    "anyOf": [
+				      {"const": "vanilla", "title": "Vanilla"},
+				      {"const": "chocolate", "title": "Chocolate"}
+				    ]
+				  },
+				  "default": ["vanilla"]
+				}""", McpSchema.TitledMultiSelectEnumSchema.class);
+
+		assertThat(schema.type()).isEqualTo("array");
+		assertThat(schema.title()).isEqualTo("Flavors");
+		assertThat(schema.items().anyOf()).hasSize(2);
+		assertThat(schema.items().anyOf().get(0).constValue()).isEqualTo("vanilla");
+		assertThat(schema.items().anyOf().get(0).title()).isEqualTo("Vanilla");
+		assertThat(schema.defaultValue()).containsExactly("vanilla");
+	}
+
+	@Test
+	void testUntitledSingleSelectEnumSchemaBuilderRequiresEnumValues() {
+		assertThatThrownBy(() -> McpSchema.UntitledSingleSelectEnumSchema.builder().build())
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("enumValues must not be empty");
+	}
+
+	@Test
+	void testUntitledSingleSelectEnumSchemaBuilderRejectsEmptyEnumValues() {
+		assertThatThrownBy(() -> McpSchema.UntitledSingleSelectEnumSchema.builder().enumValues(List.of()).build())
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("enumValues must not be empty");
+	}
+
+	@Test
+	void testTitledSingleSelectEnumSchemaBuilderRequiresOneOf() {
+		assertThatThrownBy(() -> McpSchema.TitledSingleSelectEnumSchema.builder().build())
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("oneOf must not be empty");
+	}
+
+	@Test
+	void testTitledSingleSelectEnumSchemaBuilderRejectsEmptyOneOf() {
+		assertThatThrownBy(() -> McpSchema.TitledSingleSelectEnumSchema.builder().oneOf(List.of()).build())
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("oneOf must not be empty");
+	}
+
+	@Test
+	@SuppressWarnings("deprecation")
+	void testLegacyTitledEnumSchemaBuilderRequiresEnumValues() {
+		assertThatThrownBy(() -> McpSchema.LegacyTitledEnumSchema.builder().build())
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("enumValues must not be empty");
+	}
+
+	@Test
+	@SuppressWarnings("deprecation")
+	void testLegacyTitledEnumSchemaBuilderRejectsEmptyEnumValues() {
+		assertThatThrownBy(() -> McpSchema.LegacyTitledEnumSchema.builder().enumValues(List.of()).build())
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("enumValues must not be empty");
+	}
+
+	@Test
+	void testUntitledMultiSelectItemsBuilderRequiresEnumValues() {
+		assertThatThrownBy(() -> McpSchema.UntitledMultiSelectItems.builder().build())
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("enumValues must not be empty");
+	}
+
+	@Test
+	void testUntitledMultiSelectItemsBuilderRejectsEmptyEnumValues() {
+		assertThatThrownBy(() -> McpSchema.UntitledMultiSelectItems.builder().enumValues(List.of()).build())
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("enumValues must not be empty");
+	}
+
+	@Test
+	void testTitledMultiSelectItemsBuilderRequiresAnyOf() {
+		assertThatThrownBy(() -> McpSchema.TitledMultiSelectItems.builder().build())
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("anyOf must not be empty");
+	}
+
+	@Test
+	void testTitledMultiSelectItemsBuilderRejectsEmptyAnyOf() {
+		assertThatThrownBy(() -> McpSchema.TitledMultiSelectItems.builder().anyOf(List.of()).build())
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("anyOf must not be empty");
+	}
+
+	@Test
+	void testUntitledSingleSelectEnumSchemaBuilderSingularAdd() {
+		var schema = McpSchema.UntitledSingleSelectEnumSchema.builder().enumValues("a", "b").build();
+
+		assertThat(schema.enumValues()).containsExactly("a", "b");
+	}
+
+	@Test
+	void testUntitledSingleSelectEnumSchemaBuilderOptionalFields() {
+		var schema = McpSchema.UntitledSingleSelectEnumSchema.builder()
+			.title("Color")
+			.description("Pick a color")
+			.enumValues("red", "blue")
+			.defaultValue("red")
+			.build();
+
+		assertThat(schema.title()).isEqualTo("Color");
+		assertThat(schema.description()).isEqualTo("Pick a color");
+		assertThat(schema.defaultValue()).isEqualTo("red");
+	}
+
+	@Test
+	void testTitledSingleSelectEnumSchemaBuilderSingularAdd() {
+		var opt1 = new McpSchema.EnumSchemaOption("v1", "Option 1");
+		var schema = McpSchema.TitledSingleSelectEnumSchema.builder().oneOf(opt1).build();
+
+		assertThat(schema.oneOf()).hasSize(1)
+			.first()
+			.extracting(McpSchema.EnumSchemaOption::constValue)
+			.isEqualTo("v1");
+	}
+
+	@Test
+	@SuppressWarnings("deprecation")
+	void testLegacyTitledEnumSchemaBuilderSingularAdds() {
+		var schema = McpSchema.LegacyTitledEnumSchema.builder().enumValues("a", "b").enumNames("Alpha", "Beta").build();
+
+		assertThat(schema.enumValues()).containsExactly("a", "b");
+		assertThat(schema.enumNames()).containsExactly("Alpha", "Beta");
+	}
+
+	@Test
+	void testTitledMultiSelectItemsBuilderSingularAdd() {
+		var opt1 = new McpSchema.EnumSchemaOption("v1", "First");
+		var opt2 = new McpSchema.EnumSchemaOption("v2", "Second");
+		var items = McpSchema.TitledMultiSelectItems.builder().anyOf(opt1, opt2).build();
+
+		assertThat(items.anyOf()).hasSize(2);
+		assertThat(items.anyOf().get(1).constValue()).isEqualTo("v2");
+	}
+
+	@Test
+	void testUntitledMultiSelectEnumSchemaBuilderOptionalFields() {
+		var items = McpSchema.UntitledMultiSelectItems.builder().enumValues("a", "b").build();
+		var schema = McpSchema.UntitledMultiSelectEnumSchema.builder(items)
+			.title("Tags")
+			.description("Select tags")
+			.minItems(1)
+			.maxItems(2)
+			.defaults("a", "b")
+			.build();
+
+		assertThat(schema.title()).isEqualTo("Tags");
+		assertThat(schema.minItems()).isEqualTo(1);
+		assertThat(schema.maxItems()).isEqualTo(2);
+		assertThat(schema.defaultValue()).containsExactly("a", "b");
+	}
+
+	// Primitive Elicitation Schema Tests (BooleanSchema, NumberSchema, StringSchema)
+
+	@Test
+	void testBooleanSchemaSerialization() throws Exception {
+		var schema = new McpSchema.BooleanSchema(null, "Enable feature", true);
+
+		String json = JSON_MAPPER.writeValueAsString(schema);
+		assertThatJson(json).when(Option.IGNORING_ARRAY_ORDER).isObject().isEqualTo(json("""
+				{
+				  "type": "boolean",
+				  "description": "Enable feature",
+				  "default": true
+				}"""));
+	}
+
+	@Test
+	void testBooleanSchemaSerializationOmitsNullFields() throws Exception {
+		var schema = new McpSchema.BooleanSchema(null, null, null);
+
+		String json = JSON_MAPPER.writeValueAsString(schema);
+		assertThatJson(json).when(Option.IGNORING_ARRAY_ORDER).isObject().isEqualTo(json("""
+				{
+				  "type": "boolean"
+				}"""));
+	}
+
+	@Test
+	void testBooleanSchemaDeserialization() throws Exception {
+		var schema = JSON_MAPPER.readValue("""
+				{
+				  "type": "boolean",
+				  "title": "Subscribe",
+				  "description": "Opt in",
+				  "default": false
+				}""", McpSchema.BooleanSchema.class);
+
+		assertThat(schema.type()).isEqualTo("boolean");
+		assertThat(schema.title()).isEqualTo("Subscribe");
+		assertThat(schema.description()).isEqualTo("Opt in");
+		assertThat(schema.defaultValue()).isEqualTo(false);
+	}
+
+	@Test
+	void testBooleanSchemaBuilderAllFields() {
+		var schema = McpSchema.BooleanSchema.builder()
+			.title("Send notifications")
+			.description("Receive email updates")
+			.defaultValue(true)
+			.build();
+
+		assertThat(schema.title()).isEqualTo("Send notifications");
+		assertThat(schema.description()).isEqualTo("Receive email updates");
+		assertThat(schema.defaultValue()).isTrue();
+		assertThat(schema.type()).isEqualTo("boolean");
+	}
+
+	@Test
+	void testBooleanSchemaToleratesUnknownFields() throws Exception {
+		var schema = JSON_MAPPER.readValue("""
+				{
+				  "type": "boolean",
+				  "futureField": 42
+				}""", McpSchema.BooleanSchema.class);
+
+		assertThat(schema.type()).isEqualTo("boolean");
+	}
+
+	@Test
+	void testNumberSchemaSerialization() throws Exception {
+		var schema = new McpSchema.NumberSchema(null, "Enter a score", "number", 0.0, 100.0, 50.0);
+
+		String json = JSON_MAPPER.writeValueAsString(schema);
+		assertThatJson(json).when(Option.IGNORING_ARRAY_ORDER).isObject().isEqualTo(json("""
+				{
+				  "type": "number",
+				  "description": "Enter a score",
+				  "minimum": 0.0,
+				  "maximum": 100.0,
+				  "default": 50.0
+				}"""));
+	}
+
+	@Test
+	void testNumberSchemaSerializationIntegerType() throws Exception {
+		var schema = McpSchema.NumberSchema.builder()
+			.integer()
+			.description("Enter age")
+			.minimum(0)
+			.maximum(150)
+			.build();
+
+		String json = JSON_MAPPER.writeValueAsString(schema);
+		assertThatJson(json).when(Option.IGNORING_ARRAY_ORDER).isObject().isEqualTo(json("""
+				{
+				  "type": "integer",
+				  "description": "Enter age",
+				  "minimum": 0,
+				  "maximum": 150
+				}"""));
+	}
+
+	@Test
+	void testNumberSchemaSerializationOmitsNullFields() throws Exception {
+		var schema = McpSchema.NumberSchema.builder().build();
+
+		String json = JSON_MAPPER.writeValueAsString(schema);
+		assertThatJson(json).when(Option.IGNORING_ARRAY_ORDER).isObject().isEqualTo(json("""
+				{
+				  "type": "number"
+				}"""));
+	}
+
+	@Test
+	void testNumberSchemaDeserialization() throws Exception {
+		var schema = JSON_MAPPER.readValue("""
+				{
+				  "type": "number",
+				  "title": "Score",
+				  "minimum": 0,
+				  "maximum": 10,
+				  "default": 5.5
+				}""", McpSchema.NumberSchema.class);
+
+		assertThat(schema.type()).isEqualTo("number");
+		assertThat(schema.title()).isEqualTo("Score");
+		assertThat(schema.minimum()).isEqualTo(0);
+		assertThat(schema.maximum()).isEqualTo(10);
+		assertThat(schema.defaultValue()).isEqualTo(5.5);
+	}
+
+	@Test
+	void testNumberSchemaDeserializationIntegerType() throws Exception {
+		var schema = JSON_MAPPER.readValue("""
+				{
+				  "type": "integer",
+				  "description": "Age",
+				  "minimum": 18
+				}""", McpSchema.NumberSchema.class);
+
+		assertThat(schema.type()).isEqualTo("integer");
+		assertThat(schema.description()).isEqualTo("Age");
+		assertThat(schema.minimum()).isEqualTo(18);
+	}
+
+	@Test
+	void testNumberSchemaBuilderDefaultsToNumberType() {
+		var schema = McpSchema.NumberSchema.builder().build();
+
+		assertThat(schema.type()).isEqualTo("number");
+	}
+
+	@Test
+	void testNumberSchemaBuilderIntegerType() {
+		var schema = McpSchema.NumberSchema.builder().integer().build();
+
+		assertThat(schema.type()).isEqualTo("integer");
+	}
+
+	@Test
+	void testNumberSchemaBuilderAllFields() {
+		var schema = McpSchema.NumberSchema.builder()
+			.title("Price")
+			.description("Item price")
+			.minimum(0.01)
+			.maximum(9999.99)
+			.defaultValue(19.99)
+			.build();
+
+		assertThat(schema.title()).isEqualTo("Price");
+		assertThat(schema.description()).isEqualTo("Item price");
+		assertThat(schema.minimum()).isEqualTo(0.01);
+		assertThat(schema.maximum()).isEqualTo(9999.99);
+		assertThat(schema.defaultValue()).isEqualTo(19.99);
+	}
+
+	@Test
+	void testNumberSchemaToleratesUnknownFields() throws Exception {
+		var schema = JSON_MAPPER.readValue("""
+				{
+				  "type": "number",
+				  "futureField": "ignored"
+				}""", McpSchema.NumberSchema.class);
+
+		assertThat(schema.type()).isEqualTo("number");
+	}
+
+	@Test
+	void testStringSchemaSerialization() throws Exception {
+		var schema = new McpSchema.StringSchema("Email", "Your email address", 5, 255, "email", "user@example.com");
+
+		String json = JSON_MAPPER.writeValueAsString(schema);
+		assertThatJson(json).when(Option.IGNORING_ARRAY_ORDER).isObject().isEqualTo(json("""
+				{
+				  "type": "string",
+				  "title": "Email",
+				  "description": "Your email address",
+				  "minLength": 5,
+				  "maxLength": 255,
+				  "format": "email",
+				  "default": "user@example.com"
+				}"""));
+	}
+
+	@Test
+	void testStringSchemaSerializationOmitsNullFields() throws Exception {
+		var schema = new McpSchema.StringSchema(null, null, null, null, null, null);
+
+		String json = JSON_MAPPER.writeValueAsString(schema);
+		assertThatJson(json).when(Option.IGNORING_ARRAY_ORDER).isObject().isEqualTo(json("""
+				{
+				  "type": "string"
+				}"""));
+	}
+
+	@Test
+	void testStringSchemaDeserialization() throws Exception {
+		var schema = JSON_MAPPER.readValue("""
+				{
+				  "type": "string",
+				  "title": "Name",
+				  "description": "Your name",
+				  "minLength": 1,
+				  "maxLength": 100,
+				  "default": "Alice"
+				}""", McpSchema.StringSchema.class);
+
+		assertThat(schema.type()).isEqualTo("string");
+		assertThat(schema.title()).isEqualTo("Name");
+		assertThat(schema.description()).isEqualTo("Your name");
+		assertThat(schema.minLength()).isEqualTo(1);
+		assertThat(schema.maxLength()).isEqualTo(100);
+		assertThat(schema.defaultValue()).isEqualTo("Alice");
+	}
+
+	@Test
+	void testStringSchemaBuilderAllFields() {
+		var schema = McpSchema.StringSchema.builder()
+			.title("Website")
+			.description("Your website URL")
+			.minLength(10)
+			.maxLength(200)
+			.format("uri")
+			.defaultValue("https://example.com")
+			.build();
+
+		assertThat(schema.title()).isEqualTo("Website");
+		assertThat(schema.description()).isEqualTo("Your website URL");
+		assertThat(schema.minLength()).isEqualTo(10);
+		assertThat(schema.maxLength()).isEqualTo(200);
+		assertThat(schema.format()).isEqualTo("uri");
+		assertThat(schema.defaultValue()).isEqualTo("https://example.com");
+		assertThat(schema.type()).isEqualTo("string");
+	}
+
+	@Test
+	void testStringSchemaToleratesUnknownFields() throws Exception {
+		var schema = JSON_MAPPER.readValue("""
+				{
+				  "type": "string",
+				  "futureField": "ignored"
+				}""", McpSchema.StringSchema.class);
+
+		assertThat(schema.type()).isEqualTo("string");
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "uri", "email", "date", "date-time" })
+	@NullSource
+	void testStringSchemaBuilderAcceptsValidFormats(String format) {
+		var schema = McpSchema.StringSchema.builder().format(format).build();
+		assertThat(schema.format()).isEqualTo(format);
+	}
+
+	@Test
+	void testStringSchemaBuilderAcceptsNullFormat() {
+		var schema = McpSchema.StringSchema.builder().build();
+		assertThat(schema.format()).isNull();
+	}
+
+	@Test
+	void testStringSchemaBuilderRejectsInvalidFormat() {
+		assertThatThrownBy(() -> McpSchema.StringSchema.builder().format("uuid").build())
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("format must be one of");
 	}
 
 	// Pagination Tests
