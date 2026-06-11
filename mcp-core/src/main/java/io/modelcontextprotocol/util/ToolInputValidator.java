@@ -42,9 +42,10 @@ public final class ToolInputValidator {
 		Map<String, Object> args = arguments != null ? arguments : Map.of();
 		var validation = validator.validate(tool.inputSchema(), args);
 		if (!validation.valid()) {
-			logger.warn("Tool '{}' input validation failed: {}", tool.name(), validation.errorMessage());
+			String message = "Tool input validation failed: " + validation.errorMessage();
+			logger.warn("Tool '{}' {}", tool.name(), message);
 			return CallToolResult.builder()
-				.content(List.of(McpSchema.TextContent.builder(validation.errorMessage()).build()))
+				.content(List.of(McpSchema.TextContent.builder(message).build()))
 				.isError(true)
 				.build();
 		}

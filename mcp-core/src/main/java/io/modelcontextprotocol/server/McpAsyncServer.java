@@ -433,9 +433,10 @@ public class McpAsyncServer {
 				var validation = this.jsonSchemaValidator.validate(outputSchema, result.structuredContent());
 
 				if (!validation.valid()) {
-					logger.warn("Tool call result validation failed: {}", validation.errorMessage());
+					String message = "Tool output validation failed: " + validation.errorMessage();
+					logger.warn(message);
 					return CallToolResult.builder()
-						.content(List.of(McpSchema.TextContent.builder(validation.errorMessage()).build()))
+						.content(List.of(McpSchema.TextContent.builder(message).build()))
 						.isError(true)
 						.build();
 				}
