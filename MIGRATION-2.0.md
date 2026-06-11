@@ -214,6 +214,18 @@ The deprecated `Builder.customizeRequest(Consumer<HttpRequest.Builder>)` method 
 
 **Action:** Use `requestBuilder(HttpRequest.Builder)` for static request setup, or `httpRequestCustomizer(McpSyncHttpClientRequestCustomizer)` for per-request customization.
 
+### `protocolVersions()` default now advertises all known versions
+
+The default implementation of `protocolVersions()` on `McpTransport` and `McpServerTransportProviderBase` previously returned only `["2024-11-05"]`. It now returns all four versions the SDK understands:
+
+```
+["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"]
+```
+
+**Impact for transport implementors:** If your custom `McpClientTransport` or `McpServerTransportProvider` did not override `protocolVersions()`, it will now advertise all four versions during protocol negotiation instead of just `2024-11-05`. This is the intended upgrade path for most transports, but if you need to restrict your transport to a specific set of versions, override `protocolVersions()` explicitly and return the desired list.
+
+**Impact for users of built-in transports:** No action is required. `StdioClientTransport`, `StdioServerTransportProvider`, and `HttpServletStreamableServerTransportProvider` all advertise the full version list.
+
 ### SSE transports are deprecated
 
 The HTTP+SSE client and server transports (and their supporting validator/exception types) are deprecated in favour of Streamable HTTP — `HttpClientStreamableHttpTransport` on the client, and `HttpServletStreamableServerTransportProvider` on the server. They still work; plan a move to Streamable HTTP.
