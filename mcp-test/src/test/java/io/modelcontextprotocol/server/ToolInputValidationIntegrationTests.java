@@ -182,7 +182,7 @@ class ToolInputValidationIntegrationTests {
 
 			assertThat(result.isError()).isTrue();
 			String errorMessage = ((TextContent) result.content().get(0)).text();
-			assertThat(errorMessage).startsWith("Tool input validation failed:");
+			assertThat(errorMessage).startsWith("Tool (test-tool) input validation failed:");
 			assertThat(errorMessage).containsIgnoringCase("Validation failed");
 			assertThat(errorMessage).containsIgnoringCase("JSON schema validation errors");
 			assertThat(errorMessage).containsIgnoringCase(expectedErrorSubstring);

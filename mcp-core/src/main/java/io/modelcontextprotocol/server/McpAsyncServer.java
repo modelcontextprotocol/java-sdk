@@ -26,7 +26,6 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.CompleteResult.CompleteCompletion;
 import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
-import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
 import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
@@ -433,7 +432,8 @@ public class McpAsyncServer {
 				var validation = this.jsonSchemaValidator.validate(outputSchema, result.structuredContent());
 
 				if (!validation.valid()) {
-					String message = "Tool output validation failed: " + validation.errorMessage();
+					String message = "Tool (" + request.name() + ") output validation failed: "
+							+ validation.errorMessage();
 					logger.warn(message);
 					return CallToolResult.builder()
 						.content(List.of(McpSchema.TextContent.builder(message).build()))

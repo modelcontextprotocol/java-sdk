@@ -4,9 +4,19 @@
 
 package io.modelcontextprotocol.server;
 
-import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.json.McpJsonMapper;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiFunction;
+
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.server.McpStatelessServerFeatures.AsyncResourceTemplateSpecification;
 import io.modelcontextprotocol.spec.McpError;
@@ -27,16 +37,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.function.BiFunction;
 
 import static io.modelcontextprotocol.spec.McpError.RESOURCE_NOT_FOUND;
 
@@ -293,7 +293,8 @@ public class McpStatelessAsyncServer {
 				var validation = this.jsonSchemaValidator.validate(outputSchema, result.structuredContent());
 
 				if (!validation.valid()) {
-					String message = "Tool output validation failed: " + validation.errorMessage();
+					String message = "Tool (" + request.name() + ") output validation failed: "
+							+ validation.errorMessage();
 					logger.warn(message);
 					return CallToolResult.builder()
 						.content(List.of(McpSchema.TextContent.builder(message).build()))
