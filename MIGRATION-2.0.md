@@ -9,6 +9,7 @@ The changes fall into these areas:
 - [JSON serialization behaviour](#json-serialization-behaviour) — wire-format changes.
 - [Server-side validation](#server-side-validation) — runtime validation of tool arguments and embedded schemas.
 - [Transport changes](#transport-changes) — removed methods and the SSE deprecation.
+- [Server API changes](#server-api-changes) — sync server method signature corrections.
 - [New features](#new-features) — additive, backward-compatible capabilities.
 
 ---
@@ -217,6 +218,18 @@ The deprecated `Builder.customizeRequest(Consumer<HttpRequest.Builder>)` method 
 ### SSE transports are deprecated
 
 The HTTP+SSE client and server transports (and their supporting validator/exception types) are deprecated in favour of Streamable HTTP — `HttpClientStreamableHttpTransport` on the client, and `HttpServletStreamableServerTransportProvider` on the server. They still work; plan a move to Streamable HTTP.
+
+---
+
+## Server API changes
+
+### `McpStatelessSyncServer#closeGracefully` returns `void`
+
+In 1.x, `McpStatelessSyncServer.closeGracefully()` accidentally leaked the reactive signature from the underlying async server and returned `Mono<Void>`. The sync API is intentionally blocking, so returning a `Mono` was an oversight — callers had to call `.block()` themselves to get any actual shutdown behaviour.
+
+In 2.0 the return type is corrected to `void`; the blocking call is performed internally.
+
+**Action:** Remove any `.block()` (or `.subscribe()`) call you had appended to `closeGracefully()`. The method now blocks until the server has shut down and returns normally.
 
 ---
 
