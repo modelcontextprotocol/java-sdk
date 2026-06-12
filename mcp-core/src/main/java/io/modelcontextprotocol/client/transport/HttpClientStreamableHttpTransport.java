@@ -503,6 +503,13 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 							transportSession.sessionId().get());
 				}
 
+				if (sentMessage instanceof McpSchema.JSONRPCRequest request) {
+					requestBuilder = requestBuilder.header(HttpHeaders.MCP_METHOD, request.method());
+				}
+				else if (sentMessage instanceof McpSchema.JSONRPCNotification notification) {
+					requestBuilder = requestBuilder.header(HttpHeaders.MCP_METHOD, notification.method());
+				}
+
 				var builder = requestBuilder.uri(uri)
 					.header(HttpHeaders.ACCEPT, APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
 					.header(HttpHeaders.CONTENT_TYPE, APPLICATION_JSON_UTF8)
