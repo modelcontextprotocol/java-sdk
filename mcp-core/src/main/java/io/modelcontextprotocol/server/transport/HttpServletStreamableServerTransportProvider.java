@@ -32,6 +32,8 @@ import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.util.KeepAliveScheduler;
 import jakarta.servlet.AsyncContext;
+import jakarta.servlet.AsyncEvent;
+import jakarta.servlet.AsyncListener;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -317,6 +319,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			// Check if this is a replay request
 			if (request.getHeader(HttpHeaders.LAST_EVENT_ID) != null) {
 				String lastId = request.getHeader(HttpHeaders.LAST_EVENT_ID);
+				registerAsyncLifecycle(asyncContext, sessionId, sessionTransport::close);
 
 				try {
 					session.replay(lastId)
@@ -330,13 +333,13 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 							}
 							catch (Exception e) {
 								logger.error("Failed to replay message: {}", e.getMessage());
-								asyncContext.complete();
+								sessionTransport.close();
 							}
 						});
 				}
 				catch (Exception e) {
 					logger.error("Failed to replay messages: {}", e.getMessage());
-					asyncContext.complete();
+					sessionTransport.close();
 				}
 			}
 			else {
@@ -344,30 +347,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
 					.listeningStream(sessionTransport);
 
-				asyncContext.addListener(new jakarta.servlet.AsyncListener() {
-					@Override
-					public void onComplete(jakarta.servlet.AsyncEvent event) throws IOException {
-						logger.debug("SSE connection completed for session: {}", sessionId);
-						listeningStream.close();
-					}
-
-					@Override
-					public void onTimeout(jakarta.servlet.AsyncEvent event) throws IOException {
-						logger.debug("SSE connection timed out for session: {}", sessionId);
-						listeningStream.close();
-					}
-
-					@Override
-					public void onError(jakarta.servlet.AsyncEvent event) throws IOException {
-						logger.debug("SSE connection error for session: {}", sessionId);
-						listeningStream.close();
-					}
-
-					@Override
-					public void onStartAsync(jakarta.servlet.AsyncEvent event) throws IOException {
-						// No action needed
-					}
-				});
+				registerAsyncLifecycle(asyncContext, sessionId, listeningStream::close);
 			}
 		}
 		catch (Exception e) {
@@ -519,6 +499,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 				HttpServletStreamableMcpSessionTransport sessionTransport = new HttpServletStreamableMcpSessionTransport(
 						sessionId, asyncContext, response.getWriter());
+				registerAsyncLifecycle(asyncContext, sessionId, sessionTransport::close);
 
 				try {
 					session.responseStream(jsonrpcRequest, sessionTransport)
@@ -527,7 +508,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				}
 				catch (Exception e) {
 					logger.error("Failed to handle request stream: {}", e.getMessage());
-					asyncContext.complete();
+					sessionTransport.close();
 				}
 			}
 			else {
@@ -555,6 +536,32 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error processing message");
 			}
 		}
+	}
+
+	private void registerAsyncLifecycle(AsyncContext asyncContext, String sessionId, Runnable onClose) {
+		asyncContext.addListener(new AsyncListener() {
+			@Override
+			public void onComplete(AsyncEvent event) throws IOException {
+				logger.debug("SSE async context completed for session: {}", sessionId);
+				onClose.run();
+			}
+
+			@Override
+			public void onTimeout(AsyncEvent event) throws IOException {
+				logger.debug("SSE async context timed out for session: {}", sessionId);
+				onClose.run();
+			}
+
+			@Override
+			public void onError(AsyncEvent event) throws IOException {
+				logger.debug("SSE async context errored for session: {}", sessionId);
+				onClose.run();
+			}
+
+			@Override
+			public void onStartAsync(AsyncEvent event) throws IOException {
+			}
+		});
 	}
 
 	/**
@@ -747,8 +754,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				}
 				catch (Exception e) {
 					logger.error("Failed to send message to session {}: {}", this.sessionId, e.getMessage());
-					HttpServletStreamableServerTransportProvider.this.sessions.remove(this.sessionId);
-					this.asyncContext.complete();
+					this.close();
 				}
 				finally {
 					lock.unlock();
@@ -792,8 +798,6 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				}
 
 				this.closed = true;
-
-				// HttpServletStreamableServerTransportProvider.this.sessions.remove(this.sessionId);
 				this.asyncContext.complete();
 				logger.debug("Successfully completed async context for session {}", sessionId);
 			}
