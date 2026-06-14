@@ -6,6 +6,8 @@ package io.modelcontextprotocol.util;
 
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import org.slf4j.Logger;
@@ -57,6 +59,10 @@ public class KeepAliveScheduler {
 	/** Supplier for reactive McpSession instances */
 	private final Supplier<Flux<McpSession>> mcpSessions;
 
+	private final Consumer<McpSession> onSuccess;
+
+	private final BiConsumer<McpSession, Throwable> onFailure;
+
 	/**
 	 * Creates a KeepAliveScheduler with a custom scheduler, initial delay, interval and a
 	 * supplier for McpSession instances.
@@ -66,11 +72,14 @@ public class KeepAliveScheduler {
 	 * @param mcpSessions Supplier for McpSession instances
 	 */
 	KeepAliveScheduler(Scheduler scheduler, Duration initialDelay, Duration interval,
-			Supplier<Flux<McpSession>> mcpSessions) {
+			Supplier<Flux<McpSession>> mcpSessions, Consumer<McpSession> onSuccess,
+			BiConsumer<McpSession, Throwable> onFailure) {
 		this.scheduler = scheduler;
 		this.initialDelay = initialDelay;
 		this.interval = interval;
 		this.mcpSessions = mcpSessions;
+		this.onSuccess = onSuccess;
+		this.onFailure = onFailure;
 	}
 
 	/**
@@ -92,8 +101,12 @@ public class KeepAliveScheduler {
 				.doOnNext(tick -> {
 					this.mcpSessions.get()
 						.flatMap(session -> session.sendRequest(McpSchema.METHOD_PING, null, OBJECT_TYPE_REF)
-							.doOnError(e -> logger.warn("Failed to send keep-alive ping to session {}: {}", session,
-									e.getMessage()))
+							.doOnSuccess(result -> this.notifySuccess(session))
+							.doOnError(e -> {
+								logger.warn("Failed to send keep-alive ping to session {}: {}", session,
+										e.getMessage());
+								this.notifyFailure(session, e);
+							})
 							.onErrorComplete())
 						.subscribe();
 				})
@@ -131,6 +144,24 @@ public class KeepAliveScheduler {
 		return this.isRunning.get();
 	}
 
+	private void notifySuccess(McpSession session) {
+		try {
+			this.onSuccess.accept(session);
+		}
+		catch (Exception e) {
+			logger.warn("Keep-alive success callback failed for session {}: {}", session, e.getMessage());
+		}
+	}
+
+	private void notifyFailure(McpSession session, Throwable error) {
+		try {
+			this.onFailure.accept(session, error);
+		}
+		catch (Exception e) {
+			logger.warn("Keep-alive failure callback failed for session {}: {}", session, e.getMessage());
+		}
+	}
+
 	/**
 	 * Shuts down the scheduler and releases resources.
 	 */
@@ -153,6 +184,12 @@ public class KeepAliveScheduler {
 		private Duration interval = Duration.ofSeconds(30);
 
 		private Supplier<Flux<McpSession>> mcpSessions;
+
+		private Consumer<McpSession> onSuccess = session -> {
+		};
+
+		private BiConsumer<McpSession, Throwable> onFailure = (session, error) -> {
+		};
 
 		/**
 		 * Creates a new Builder instance with a supplier for McpSession instances.
@@ -205,11 +242,33 @@ public class KeepAliveScheduler {
 		}
 
 		/**
+		 * Sets the callback invoked after a keep-alive ping completes successfully.
+		 * @param onSuccess The success callback. Must not be null.
+		 * @return This builder instance for method chaining
+		 */
+		public Builder onSuccess(Consumer<McpSession> onSuccess) {
+			Assert.notNull(onSuccess, "OnSuccess callback must not be null");
+			this.onSuccess = onSuccess;
+			return this;
+		}
+
+		/**
+		 * Sets the callback invoked after a keep-alive ping fails.
+		 * @param onFailure The failure callback. Must not be null.
+		 * @return This builder instance for method chaining
+		 */
+		public Builder onFailure(BiConsumer<McpSession, Throwable> onFailure) {
+			Assert.notNull(onFailure, "OnFailure callback must not be null");
+			this.onFailure = onFailure;
+			return this;
+		}
+
+		/**
 		 * Builds and returns a new KeepAliveScheduler instance.
 		 * @return A new KeepAliveScheduler configured with the builder's settings
 		 */
 		public KeepAliveScheduler build() {
-			return new KeepAliveScheduler(scheduler, initialDelay, interval, mcpSessions);
+			return new KeepAliveScheduler(scheduler, initialDelay, interval, mcpSessions, onSuccess, onFailure);
 		}
 
 	}
