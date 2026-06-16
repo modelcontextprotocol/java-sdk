@@ -10,10 +10,13 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.IntStream;
 
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.McpJsonMapper;
@@ -40,6 +43,15 @@ import reactor.core.scheduler.Schedulers;
 public class StdioClientTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(StdioClientTransport.class);
+
+	// @formatter:off
+	private static final Set<Integer> EXIT_SUCCESS_CODES = Set.of(
+			0,   // success
+			130, // interrupted (SIGINT)
+			141, // pipeline shortcut (SIGPIPE)
+			143  // graceful termination (SIGTERM)
+	);
+	// @formatter:on
 
 	private final Sinks.Many<JSONRPCMessage> inboundSink;
 
@@ -356,11 +368,12 @@ public class StdioClientTransport implements McpClientTransport {
 				return Mono.<Process>empty();
 			}
 		})).doOnNext(process -> {
-			if (process.exitValue() != 0) {
-				logger.warn("Process terminated with code {}", process.exitValue());
+			int exitValue = process.exitValue();
+			if (EXIT_SUCCESS_CODES.contains(exitValue)) {
+				logger.info("MCP server completed successfully with code {}", exitValue);
 			}
 			else {
-				logger.info("MCP server process stopped");
+				logger.warn("MCP server process failed with code {}", exitValue);
 			}
 		}).then(Mono.fromRunnable(() -> {
 			try {

@@ -47,20 +47,21 @@ The client provides both synchronous and asynchronous APIs for flexibility in di
 
     // Call a tool
     CallToolResult result = client.callTool(
-        new CallToolRequest("calculator",
-            Map.of("operation", "add", "a", 2, "b", 3))
+        CallToolRequest.builder("calculator")
+            .arguments(Map.of("operation", "add", "a", 2, "b", 3))
+            .build()
     );
 
     // List and read resources
     ListResourcesResult resources = client.listResources();
     ReadResourceResult resource = client.readResource(
-        new ReadResourceRequest("resource://uri")
+        ReadResourceRequest.builder("resource://uri").build()
     );
 
     // List and use prompts
     ListPromptsResult prompts = client.listPrompts();
     GetPromptResult prompt = client.getPrompt(
-        new GetPromptRequest("greeting", Map.of("name", "Spring"))
+        GetPromptRequest.builder("greeting").arguments(Map.of("name", "Spring")).build()
     );
 
     // Add/remove roots
@@ -102,24 +103,22 @@ The client provides both synchronous and asynchronous APIs for flexibility in di
     client.initialize()
         .flatMap(initResult -> client.listTools())
         .flatMap(tools -> {
-            return client.callTool(new CallToolRequest(
-                "calculator",
-                Map.of("operation", "add", "a", 2, "b", 3)
-            ));
+            return client.callTool(CallToolRequest.builder("calculator")
+                .arguments(Map.of("operation", "add", "a", 2, "b", 3))
+                .build());
         })
         .flatMap(result -> {
             return client.listResources()
                 .flatMap(resources ->
-                    client.readResource(new ReadResourceRequest("resource://uri"))
+                    client.readResource(ReadResourceRequest.builder("resource://uri").build())
                 );
         })
         .flatMap(resource -> {
             return client.listPrompts()
                 .flatMap(prompts ->
-                    client.getPrompt(new GetPromptRequest(
-                        "greeting",
-                        Map.of("name", "Spring")
-                    ))
+                    client.getPrompt(GetPromptRequest.builder("greeting")
+                        .arguments(Map.of("name", "Spring"))
+                        .build())
                 );
         })
         .flatMap(prompt -> {
@@ -144,7 +143,7 @@ Creates transport for process-based communication using stdin/stdout:
 ServerParameters params = ServerParameters.builder("npx")
     .args("-y", "@modelcontextprotocol/server-everything", "dir")
     .build();
-McpTransport transport = new StdioClientTransport(params);
+McpTransport transport = new StdioClientTransport(params, McpJsonDefaults.getMapper());
 ```
 
 ### Streamable HTTP
@@ -184,7 +183,7 @@ McpTransport transport = new StdioClientTransport(params);
     Creates a framework-agnostic (pure Java API) SSE client transport. Included in the core `mcp` module:
 
     ```java
-    McpTransport transport = new HttpClientSseClientTransport("http://your-mcp-server");
+    McpTransport transport = HttpClientSseClientTransport.builder("http://your-mcp-server").build();
     ```
 === "SSE WebClient (external)"
 
@@ -270,20 +269,28 @@ This capability allows:
 Elicitation enables servers to request additional information or user input through the client. This is useful when a server needs clarification or confirmation during an operation:
 
 ```java
-// Configure elicitation handler
-Function<ElicitRequest, ElicitResult> elicitationHandler = request -> {
+// Configure form elicitation handler
+Function<ElicitFormRequest, ElicitResult> formElicitationHandler = request -> {
     // Present the request to the user and collect their response
     // The request contains a message and a schema describing the expected input
     Map<String, Object> userResponse = collectUserInput(request.message(), request.requestedSchema());
     return new ElicitResult(ElicitResult.Action.ACCEPT, userResponse);
 };
 
+// Configure URL elicitation handler
+Function<ElicitUrlRequest, ElicitResult> urlElicitationHandler = request -> {
+    // Prompt the user to visit the URL
+    // e.g. openBrowser(request.url());
+    return new ElicitResult(ElicitResult.Action.ACCEPT, Map.of());
+};
+
 // Create client with elicitation support
 var client = McpClient.sync(transport)
     .capabilities(ClientCapabilities.builder()
-        .elicitation()
+        .elicitation(true, true) // enables both form and URL elicitation
         .build())
-    .elicitation(elicitationHandler)
+    .elicitation(formElicitationHandler)
+    .urlElicitation(urlElicitationHandler)
     .build();
 ```
 
@@ -292,6 +299,39 @@ The `ElicitResult` supports three actions:
 - `ACCEPT` - The user accepted and provided the requested information
 - `DECLINE` - The user declined to provide the information
 - `CANCEL` - The operation was cancelled
+
+You can optionally have the client fill in missing values from the schema's `default` declarations before returning an accepted result to the server:
+
+```java
+var client = McpClient.sync(transport)
+    .applyElicitationDefaults(true)   // default is false
+    .elicitation(formElicitationHandler)
+    .build();
+```
+
+When enabled, any keys absent from an accepted `ElicitResult.content` are populated with the `default` values declared in the request's `requestedSchema`.
+
+#### URL Elicitation Required Handling
+
+When a server requires out-of-band URL elicitation but the client has not negotiated support for it (or the server strictly requires out-of-band handling), the server may return a `URL_ELICITATION_REQUIRED` error during tool execution or prompt retrieval.
+
+```java
+try {
+    mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+} catch (McpError e) {
+    if (e.getJsonRpcError().code() == McpSchema.ErrorCodes.URL_ELICITATION_REQUIRED) {
+        // Extract elicitation requests from the error data
+        Map<String, Object> data = (Map<String, Object>) e.getJsonRpcError().data();
+        TypeRef<List<McpSchema.ElicitUrlRequest>> typeRef = new TypeRef<>() {};
+        var requests = McpJsonDefaults.getMapper()
+                .convertValue(data.get("elicitations"), typeRef);
+
+		for (var req : requests) {
+            // handle elicitation requests
+        }
+    }
+}
+```
 
 ### Logging Support
 
@@ -309,7 +349,7 @@ mcpClient.initialize();
 mcpClient.setLoggingLevel(McpSchema.LoggingLevel.INFO);
 
 // Call the tool that sends logging notifications
-CallToolResult result = mcpClient.callTool(new CallToolRequest("logging-test", Map.of()));
+CallToolResult result = mcpClient.callTool(CallToolRequest.builder("logging-test").build());
 ```
 
 Clients can control the minimum logging level they receive through the `mcpClient.setLoggingLevel(level)` request. Messages below the set level will be filtered out.
@@ -341,11 +381,13 @@ Tools are server-side functions that clients can discover and execute. The MCP c
 
     // Call a tool with a CallToolRequest
     CallToolResult result = client.callTool(
-        new CallToolRequest("calculator", Map.of(
-            "operation", "add",
-            "a", 1,
-            "b", 2
-        ))
+        CallToolRequest.builder("calculator")
+            .arguments(Map.of(
+                "operation", "add",
+                "a", 1,
+                "b", 2
+            ))
+            .build()
     );
     ```
 
@@ -359,11 +401,13 @@ Tools are server-side functions that clients can discover and execute. The MCP c
         .subscribe();
 
     // Call a tool asynchronously
-    client.callTool(new CallToolRequest("calculator", Map.of(
-            "operation", "add",
-            "a", 1,
-            "b", 2
-        )))
+    client.callTool(CallToolRequest.builder("calculator")
+            .arguments(Map.of(
+                "operation", "add",
+                "a", 1,
+                "b", 2
+            ))
+            .build())
         .subscribe();
     ```
 
@@ -390,7 +434,7 @@ Resources represent server-side data sources that clients can access using URI t
 
     // Read a resource
     ReadResourceResult resource = client.readResource(
-        new ReadResourceRequest("resource://uri")
+        ReadResourceRequest.builder("resource://uri").build()
     );
     ```
 
@@ -404,7 +448,7 @@ Resources represent server-side data sources that clients can access using URI t
         .subscribe();
 
     // Read a resource asynchronously
-    client.readResource(new ReadResourceRequest("resource://uri"))
+    client.readResource(ReadResourceRequest.builder("resource://uri").build())
         .subscribe();
     ```
 
@@ -427,10 +471,10 @@ Register a consumer on the client builder, then subscribe/unsubscribe at any tim
     client.initialize();
 
     // Subscribe to a specific resource URI
-    client.subscribeResource(new McpSchema.SubscribeRequest("custom://resource"));
+    client.subscribeResource(McpSchema.SubscribeRequest.builder("custom://resource").build());
 
     // ... later, stop receiving updates
-    client.unsubscribeResource(new McpSchema.UnsubscribeRequest("custom://resource"));
+    client.unsubscribeResource(McpSchema.UnsubscribeRequest.builder("custom://resource").build());
     ```
 
 === "Async API"
@@ -443,11 +487,11 @@ Register a consumer on the client builder, then subscribe/unsubscribe at any tim
         .build();
 
     client.initialize()
-        .then(client.subscribeResource(new McpSchema.SubscribeRequest("custom://resource")))
+        .then(client.subscribeResource(McpSchema.SubscribeRequest.builder("custom://resource").build()))
         .subscribe();
 
     // ... later, stop receiving updates
-    client.unsubscribeResource(new McpSchema.UnsubscribeRequest("custom://resource"))
+    client.unsubscribeResource(McpSchema.UnsubscribeRequest.builder("custom://resource").build())
         .subscribe();
     ```
 
@@ -463,7 +507,7 @@ The prompt system enables interaction with server-side prompt templates. These t
 
     // Get a prompt with parameters
     GetPromptResult prompt = client.getPrompt(
-        new GetPromptRequest("greeting", Map.of("name", "World"))
+        GetPromptRequest.builder("greeting").arguments(Map.of("name", "World")).build()
     );
     ```
 
@@ -477,6 +521,6 @@ The prompt system enables interaction with server-side prompt templates. These t
         .subscribe();
 
     // Get a prompt asynchronously
-    client.getPrompt(new GetPromptRequest("greeting", Map.of("name", "World")))
+    client.getPrompt(GetPromptRequest.builder("greeting").arguments(Map.of("name", "World")).build())
         .subscribe();
     ```

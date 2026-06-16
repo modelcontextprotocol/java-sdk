@@ -11,7 +11,10 @@ import java.net.URI;
  * {@link InvalidSseMessageEndpointException} when then endpoint is not valid.
  *
  * @author Daniel Garnier-Moiroux
+ * @deprecated This validator is part of the deprecated SSE transport.
+ * @see HttpClientSseClientTransport
  */
+@Deprecated
 @FunctionalInterface
 public interface SseMessageEndpointValidator {
 

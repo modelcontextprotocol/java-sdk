@@ -14,7 +14,10 @@ import io.modelcontextprotocol.util.Assert;
  * SSE uri, or be a relative uri.
  *
  * @author Daniel Garnier-Moiroux
+ * @deprecated This validator is part of the deprecated SSE transport.
+ * @see HttpClientSseClientTransport
  */
+@Deprecated
 public final class DefaultSseMessageEndpointValidator implements SseMessageEndpointValidator {
 
 	@Override

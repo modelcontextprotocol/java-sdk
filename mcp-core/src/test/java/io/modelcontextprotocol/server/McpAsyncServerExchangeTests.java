@@ -4,17 +4,17 @@
 
 package io.modelcontextprotocol.server;
 
-import io.modelcontextprotocol.common.McpTransportContext;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
+import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
-import io.modelcontextprotocol.json.TypeRef;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -529,6 +529,149 @@ class McpAsyncServerExchangeTests {
 
 		verify(mockSession, times(1)).sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitRequest),
 				any(TypeRef.class));
+	}
+
+	@Test
+	void testCreateElicitationWithUrlRequest() {
+		McpSchema.ClientCapabilities capabilitiesWithUrlElicitation = McpSchema.ClientCapabilities.builder()
+			.elicitation(false, true)
+			.build();
+
+		McpAsyncServerExchange exchangeWithElicitation = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithUrlElicitation, clientInfo, McpTransportContext.EMPTY);
+
+		McpSchema.ElicitUrlRequest elicitUrlRequest = McpSchema.ElicitUrlRequest
+			.builder("Please authenticate via URL", "https://example.com/auth", "elicit-url-123")
+			.build();
+
+		McpSchema.ElicitResult expectedResult = McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT)
+			.build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitUrlRequest), any(TypeRef.class)))
+			.thenReturn(Mono.just(expectedResult));
+
+		StepVerifier.create(exchangeWithElicitation.createElicitation(elicitUrlRequest)).assertNext(result -> {
+			assertThat(result).isEqualTo(expectedResult);
+			assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+		}).verifyComplete();
+	}
+
+	@Test
+	void testCreateElicitationWithUrlRequestBypassesValidator() {
+		McpSchema.ClientCapabilities capabilitiesWithElicitation = McpSchema.ClientCapabilities.builder()
+			.elicitation(false, true)
+			.build();
+
+		JsonSchemaValidator rejectingValidator = new JsonSchemaValidator() {
+			@Override
+			public ValidationResponse validate(Map<String, Object> schema, Object content) {
+				return ValidationResponse.asInvalid("should not be called");
+			}
+
+			@Override
+			public ValidationResponse validateSchema(Map<String, Object> schema) {
+				return ValidationResponse.asInvalid("should not be called");
+			}
+		};
+
+		McpAsyncServerExchange exchangeWithValidator = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY, rejectingValidator);
+
+		McpSchema.ElicitUrlRequest elicitUrlRequest = McpSchema.ElicitUrlRequest
+			.builder("Please visit the URL", "https://example.com/oauth", "elicit-oauth-123")
+			.build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitUrlRequest), any(TypeRef.class)))
+			.thenReturn(Mono.just(McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT).build()));
+
+		StepVerifier.create(exchangeWithValidator.createElicitation(elicitUrlRequest)).assertNext(result -> {
+			assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+		}).verifyComplete();
+
+		verify(mockSession, times(1)).sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitUrlRequest),
+				any(TypeRef.class));
+	}
+
+	@Test
+	void testElicitationCapabilitiesEmptyObject() {
+		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder().elicitation().build();
+		McpAsyncServerExchange exchangeEmpty = new McpAsyncServerExchange("testSessionId", mockSession, capabilities,
+				clientInfo, McpTransportContext.EMPTY);
+
+		McpSchema.ElicitFormRequest formRequest = McpSchema.ElicitRequest.builder("form", Map.of("type", "object"))
+			.build();
+		McpSchema.ElicitUrlRequest urlRequest = McpSchema.ElicitUrlRequest.builder("url", "http", "123").build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(formRequest), any(TypeRef.class)))
+			.thenReturn(Mono.just(McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT).build()));
+
+		StepVerifier.create(exchangeEmpty.createElicitation(formRequest)).expectNextCount(1).verifyComplete();
+		StepVerifier.create(exchangeEmpty.createElicitation(urlRequest))
+			.verifyErrorSatisfies(e -> assertThat(e).isInstanceOf(IllegalStateException.class)
+				.hasMessage("Client must be configured with URL elicitation capabilities"));
+	}
+
+	@Test
+	void testElicitationCapabilitiesFormOnly() {
+		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder()
+			.elicitation(true, false)
+			.build();
+		McpAsyncServerExchange exchangeForm = new McpAsyncServerExchange("testSessionId", mockSession, capabilities,
+				clientInfo, McpTransportContext.EMPTY);
+
+		McpSchema.ElicitFormRequest formRequest = McpSchema.ElicitRequest.builder("form", Map.of("type", "object"))
+			.build();
+		McpSchema.ElicitUrlRequest urlRequest = McpSchema.ElicitUrlRequest.builder("url", "http", "123").build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(formRequest), any(TypeRef.class)))
+			.thenReturn(Mono.just(McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT).build()));
+
+		StepVerifier.create(exchangeForm.createElicitation(formRequest)).expectNextCount(1).verifyComplete();
+		StepVerifier.create(exchangeForm.createElicitation(urlRequest))
+			.verifyErrorSatisfies(e -> assertThat(e).isInstanceOf(IllegalStateException.class)
+				.hasMessage("Client must be configured with URL elicitation capabilities"));
+	}
+
+	@Test
+	void testElicitationCapabilitiesUrlOnly() {
+		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder()
+			.elicitation(false, true)
+			.build();
+		McpAsyncServerExchange exchangeUrl = new McpAsyncServerExchange("testSessionId", mockSession, capabilities,
+				clientInfo, McpTransportContext.EMPTY);
+
+		McpSchema.ElicitFormRequest formRequest = McpSchema.ElicitRequest.builder("form", Map.of("type", "object"))
+			.build();
+		McpSchema.ElicitUrlRequest urlRequest = McpSchema.ElicitUrlRequest.builder("url", "http", "123").build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(urlRequest), any(TypeRef.class)))
+			.thenReturn(Mono.just(McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT).build()));
+
+		StepVerifier.create(exchangeUrl.createElicitation(urlRequest)).expectNextCount(1).verifyComplete();
+		StepVerifier.create(exchangeUrl.createElicitation(formRequest))
+			.verifyErrorSatisfies(e -> assertThat(e).isInstanceOf(IllegalStateException.class)
+				.hasMessage("Client must be configured with form elicitation capabilities"));
+	}
+
+	@Test
+	void testElicitationCapabilitiesBoth() {
+		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder()
+			.elicitation(true, true)
+			.build();
+		McpAsyncServerExchange exchangeBoth = new McpAsyncServerExchange("testSessionId", mockSession, capabilities,
+				clientInfo, McpTransportContext.EMPTY);
+
+		McpSchema.ElicitFormRequest formRequest = McpSchema.ElicitRequest.builder("form", Map.of("type", "object"))
+			.build();
+		McpSchema.ElicitUrlRequest urlRequest = McpSchema.ElicitUrlRequest.builder("url", "http", "123").build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(formRequest), any(TypeRef.class)))
+			.thenReturn(Mono.just(McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT).build()));
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(urlRequest), any(TypeRef.class)))
+			.thenReturn(Mono.just(McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT).build()));
+
+		StepVerifier.create(exchangeBoth.createElicitation(formRequest)).expectNextCount(1).verifyComplete();
+		StepVerifier.create(exchangeBoth.createElicitation(urlRequest)).expectNextCount(1).verifyComplete();
 	}
 
 	// ---------------------------------------

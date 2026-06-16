@@ -256,8 +256,8 @@ public class McpServerSession implements McpLoggableSession {
 				// happening first
 				logger.debug("Received notification: {}", notification);
 				// TODO: in case of error, should the POST request be signalled?
-				return handleIncomingNotification(notification, transportContext)
-					.doOnError(error -> logger.error("Error handling notification: {}", error.getMessage()));
+				return handleIncomingNotification(notification, transportContext).doOnError(
+						error -> logger.warn("Error handling notification {}: {}", notification, error.getMessage()));
 			}
 			else {
 				logger.warn("Received unknown message type: {}", message);
