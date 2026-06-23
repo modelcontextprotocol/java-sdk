@@ -4,6 +4,12 @@
 
 package io.modelcontextprotocol.server;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +36,7 @@ import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.ProtocolVersions;
+import jakarta.servlet.http.HttpServletResponse;
 import net.javacrumbs.jsonunit.core.Option;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
@@ -52,6 +59,7 @@ import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 @Timeout(15)
@@ -60,6 +68,8 @@ class HttpServletStatelessIntegrationTests {
 	private static final int PORT = TomcatTestUtil.findAvailablePort();
 
 	private static final String CUSTOM_MESSAGE_ENDPOINT = "/otherPath/mcp/message";
+
+	private static final int MAX_REQUEST_SIZE = 2048;
 
 	private HttpServletStatelessServerTransport mcpStatelessServerTransport;
 
@@ -71,6 +81,7 @@ class HttpServletStatelessIntegrationTests {
 	public void before() {
 		this.mcpStatelessServerTransport = HttpServletStatelessServerTransport.builder()
 			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
+			.maxRequestSize(MAX_REQUEST_SIZE)
 			.build();
 
 		tomcat = TomcatTestUtil.createTomcatServer("", PORT, mcpStatelessServerTransport);
@@ -637,6 +648,103 @@ class HttpServletStatelessIntegrationTests {
 		assertThat(jsonrpcResponse.error().message()).isEqualTo("testing");
 
 		mcpServer.close();
+	}
+
+	// ---------------------------------------
+	// Bounded read
+	// ---------------------------------------
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@ValueSource(strings = { "httpclient" })
+	void testRejectsWhenContentLengthHeaderExceedsLimit(String clientType) {
+		String inputSchema = """
+					{
+						"type": "object",
+						"properties": {
+							"message": { "type": "string" }
+						},
+						"required": ["message"]
+					}
+				""";
+
+		McpStatelessServerFeatures.SyncToolSpecification tool1 = McpStatelessServerFeatures.SyncToolSpecification
+			.builder()
+			.tool(Tool.builder()
+				.name("tool1")
+				.inputSchema(JSON_MAPPER, inputSchema)
+				.description("tool1 description")
+				.build())
+			.callHandler((transportContext, request) -> CallToolResult.builder()
+				.addContent(new TextContent(request.arguments().get("message").toString()))
+				.build())
+			.build();
+
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().tools(false).build())
+			.tools(tool1)
+			.build();
+
+		try (var mcpClient = clientBuilders.get(clientType).build()) {
+			String oversizedBody = "a".repeat(MAX_REQUEST_SIZE + 1);
+
+			mcpClient.initialize();
+			assertThat(mcpClient.listTools().tools()).contains(tool1.tool());
+
+			assertThatThrownBy(() -> mcpClient.callTool(McpSchema.CallToolRequest.builder()
+				.name("tool1")
+				.arguments(Map.of("message", oversizedBody))
+				.build())).isInstanceOf(RuntimeException.class).hasMessageContaining("413");
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	@Test
+	void rejectsWhenBodyBytesExceedLimitWithoutContentLengthHeader() throws Exception {
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport).build();
+
+		try {
+			var httpClient = HttpClient.newHttpClient();
+
+			// A publisher with unknown content length forces chunked transfer
+			// encoding, bypassing the Content-Length header check and exercising the
+			// body byte count
+			byte[] oversizedBody = "a".repeat(MAX_REQUEST_SIZE + 1).getBytes(StandardCharsets.UTF_8);
+			HttpRequest.BodyPublisher chunkedPublisher = new HttpRequest.BodyPublisher() {
+				@Override
+				public long contentLength() {
+					return -1;
+				}
+
+				@Override
+				public void subscribe(java.util.concurrent.Flow.Subscriber<? super ByteBuffer> subscriber) {
+					subscriber.onSubscribe(new java.util.concurrent.Flow.Subscription() {
+						@Override
+						public void request(long n) {
+							subscriber.onNext(ByteBuffer.wrap(oversizedBody));
+							subscriber.onComplete();
+						}
+
+						@Override
+						public void cancel() {
+						}
+					});
+				}
+			};
+
+			var request = HttpRequest.newBuilder()
+				.uri(URI.create("http://localhost:" + PORT + CUSTOM_MESSAGE_ENDPOINT))
+				.header("Content-Type", "application/json")
+				.header("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
+				.POST(chunkedPublisher)
+				.build();
+
+			var response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
+			assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	private double evaluateExpression(String expression) {

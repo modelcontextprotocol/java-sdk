@@ -70,6 +70,8 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 	abstract protected void prepareClients(int port, String mcpEndpoint);
 
+	protected static final int MAX_REQUEST_SIZE = 2048;
+
 	abstract protected McpServer.AsyncSpecification<?> prepareAsyncServerBuilder();
 
 	abstract protected McpServer.SyncSpecification<?> prepareSyncServerBuilder();
