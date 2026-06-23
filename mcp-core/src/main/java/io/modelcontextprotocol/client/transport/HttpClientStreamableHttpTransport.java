@@ -631,6 +631,10 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
 							"Bad Request. Status code:" + statusCode + ", response-event:" + responseEvent));
 				}
+				else if (statusCode >= 400 && statusCode < 500) {
+					return Flux.<McpSchema.JSONRPCMessage>error(
+							new McpTransportException("Invalid request. Status code: " + statusCode));
+				}
 
 				return Flux.<McpSchema.JSONRPCMessage>error(
 						new RuntimeException("Failed to send message: " + responseEvent));

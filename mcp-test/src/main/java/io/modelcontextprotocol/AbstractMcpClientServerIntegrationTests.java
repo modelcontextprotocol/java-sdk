@@ -48,7 +48,6 @@ import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
-import io.modelcontextprotocol.util.McpJsonMapperUtils;
 import io.modelcontextprotocol.util.Utils;
 import net.javacrumbs.jsonunit.core.Option;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -61,6 +60,7 @@ import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertWith;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
@@ -70,6 +70,8 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 	protected ConcurrentHashMap<String, McpClient.SyncSpec> clientBuilders = new ConcurrentHashMap<>();
 
 	abstract protected void prepareClients(int port, String mcpEndpoint);
+
+	protected static final int MAX_REQUEST_SIZE = 2048;
 
 	abstract protected McpServer.AsyncSpecification<?> prepareAsyncServerBuilder();
 
@@ -1889,6 +1891,53 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			mcpServer.notifyResourcesUpdated(new McpSchema.ResourcesUpdatedNotification(resourceUri));
 
 			assertThat(notificationCount.get()).as("no notification should be received after unsubscribing").isZero();
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	// Bounded read
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testRejectsWhenContentLengthHeaderExceedsLimit(String clientType) throws Exception {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		String inputSchema = """
+					{
+						"type": "object",
+						"properties": {
+							"message": { "type": "string" }
+						},
+						"required": ["message"]
+					}
+				""";
+
+		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
+			.tool(Tool.builder()
+				.name("tool1")
+				.inputSchema(McpJsonDefaults.getMapper(), inputSchema)
+				.description("tool1 description")
+				.build())
+			.callHandler((exchange, request) -> CallToolResult.builder()
+				.addContent(new TextContent(request.arguments().get("message").toString()))
+				.build())
+			.build();
+
+		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().tools(false).build())
+			.tools(tool1)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			String oversizedBody = "a".repeat(MAX_REQUEST_SIZE + 1);
+
+			mcpClient.initialize();
+			assertThat(mcpClient.listTools().tools()).contains(tool1.tool());
+
+			assertThatThrownBy(() -> mcpClient.callTool(McpSchema.CallToolRequest.builder()
+				.name("tool1")
+				.arguments(Map.of("message", oversizedBody))
+				.build())).isInstanceOf(RuntimeException.class).hasMessageContaining("413");
 		}
 		finally {
 			mcpServer.closeGracefully();
