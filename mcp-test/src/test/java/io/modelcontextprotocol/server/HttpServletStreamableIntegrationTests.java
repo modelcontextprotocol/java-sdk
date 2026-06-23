@@ -59,12 +59,6 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 		catch (Exception e) {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
-
-		clientBuilders
-			.put("httpclient",
-					McpClient.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
-						.endpoint(MESSAGE_ENDPOINT)
-						.build()).requestTimeout(Duration.ofHours(10)));
 	}
 
 	@Override
@@ -75,6 +69,15 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 	@Override
 	protected SyncSpecification<?> prepareSyncServerBuilder() {
 		return McpServer.sync(this.mcpServerTransportProvider);
+	}
+
+	@Override
+	protected McpClient.SyncSpec getMcpClientBuilder() {
+		return McpClient
+			.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
+				.endpoint(MESSAGE_ENDPOINT)
+				.build())
+			.requestTimeout(Duration.ofHours(10));
 	}
 
 	@AfterEach
@@ -91,10 +94,6 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 				throw new RuntimeException("Failed to stop Tomcat", e);
 			}
 		}
-	}
-
-	@Override
-	protected void prepareClients(int port, String mcpEndpoint) {
 	}
 
 	static McpTransportContextExtractor<HttpServletRequest> TEST_CONTEXT_EXTRACTOR = (r) -> McpTransportContext
