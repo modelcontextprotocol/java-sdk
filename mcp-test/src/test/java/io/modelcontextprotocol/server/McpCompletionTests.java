@@ -21,6 +21,7 @@ import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.server.transport.HttpServletSseServerTransportProvider;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
+import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CompleteRequest;
 import io.modelcontextprotocol.spec.McpSchema.CompleteResult;
@@ -28,16 +29,17 @@ import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.Prompt;
 import io.modelcontextprotocol.spec.McpSchema.PromptArgument;
+import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
 import io.modelcontextprotocol.spec.McpSchema.Resource;
 import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
 import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
-import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
-import io.modelcontextprotocol.spec.McpError;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.InstanceOfAssertFactories.type;
 
 /**
  * Tests for completion functionality with context support.
@@ -268,6 +270,59 @@ class McpCompletionTests {
 			assertThat(result.completion().values()).isEmpty();
 			assertThat(result.completion().total()).isZero();
 			assertThat(result.completion().hasMore()).isFalse();
+		}
+
+		mcpServer.close();
+	}
+
+	@Test
+	void testCompletionForNonExistentPromptReturnsInvalidParams() {
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.build();
+
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample " + "client", "0.0.0").build())
+			.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = CompleteRequest
+				.builder(new PromptReference("nonexistent-prompt"), new CompleteRequest.CompleteArgument("arg", "val"))
+				.build();
+
+			assertThatThrownBy(() -> mcpClient.completeCompletion(request)).isInstanceOf(McpError.class)
+				.asInstanceOf(type(McpError.class))
+				.extracting(McpError::getJsonRpcError)
+				.extracting(McpSchema.JSONRPCResponse.JSONRPCError::code)
+				.isEqualTo(ErrorCodes.INVALID_PARAMS);
+		}
+
+		mcpServer.close();
+	}
+
+	@Test
+	void testCompletionForNonExistentResourceReturnsResourceNotFound() {
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.build();
+
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample " + "client", "0.0.0").build())
+			.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = CompleteRequest
+				.builder(new ResourceReference("test://nonexistent/{param}"),
+						new CompleteRequest.CompleteArgument("param", "val"))
+				.build();
+
+			assertThatThrownBy(() -> mcpClient.completeCompletion(request)).isInstanceOf(McpError.class)
+				.asInstanceOf(type(McpError.class))
+				.extracting(McpError::getJsonRpcError)
+				.extracting(McpSchema.JSONRPCResponse.JSONRPCError::code)
+				.isEqualTo(McpSchema.ErrorCodes.RESOURCE_NOT_FOUND);
 		}
 
 		mcpServer.close();

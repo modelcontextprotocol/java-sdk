@@ -4,8 +4,6 @@
 
 package io.modelcontextprotocol.server;
 
-import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
-
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +17,7 @@ import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.spec.HttpHeaders;
+import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.CompleteRequest;
@@ -53,9 +52,12 @@ import org.springframework.web.client.RestClient;
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.APPLICATION_JSON;
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.TEXT_EVENT_STREAM;
 import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.awaitility.Awaitility.await;
 
 @Timeout(15)
@@ -331,6 +333,63 @@ class HttpServletStatelessIntegrationTests {
 			assertThat(result.completion().values()).isEmpty();
 			assertThat(result.completion().total()).isZero();
 			assertThat(result.completion().hasMore()).isFalse();
+		}
+		finally {
+			mcpServer.close();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : Completion call for non-existent prompt")
+	@ValueSource(strings = { "httpclient" })
+	void testCompletionForNonExistentPromptReturnsInvalidParams(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = CompleteRequest
+				.builder(new PromptReference("nonexistent-prompt"), new CompleteRequest.CompleteArgument("arg", "val"))
+				.build();
+
+			assertThatThrownBy(() -> mcpClient.completeCompletion(request)).isInstanceOf(McpError.class)
+				.asInstanceOf(type(McpError.class))
+				.extracting(McpError::getJsonRpcError)
+				.extracting(McpSchema.JSONRPCResponse.JSONRPCError::code)
+				.isEqualTo(McpSchema.ErrorCodes.RESOURCE_NOT_FOUND);
+		}
+		finally {
+			mcpServer.close();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : Completion call for non-existent resource")
+	@ValueSource(strings = { "httpclient" })
+	void testCompletionForNonExistentResourceReturnsResourceNotFound(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = CompleteRequest
+				.builder(new ResourceReference("test://nonexistent/{param}"),
+						new CompleteRequest.CompleteArgument("param", "val"))
+				.build();
+
+			assertThatThrownBy(() -> mcpClient.completeCompletion(request)).isInstanceOf(McpError.class)
+				.asInstanceOf(type(McpError.class))
+				.extracting(McpError::getJsonRpcError)
+				.extracting(McpSchema.JSONRPCResponse.JSONRPCError::code)
+				.isEqualTo(McpSchema.ErrorCodes.RESOURCE_NOT_FOUND);
 		}
 		finally {
 			mcpServer.close();
