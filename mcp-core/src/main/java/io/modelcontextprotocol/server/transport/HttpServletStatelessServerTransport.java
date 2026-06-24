@@ -66,7 +66,7 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 	 */
 	private final ServerTransportSecurityValidator securityValidator;
 
-	private HttpServletStatelessServerTransport(McpJsonMapper jsonMapper, String mcpEndpoint,
+	protected HttpServletStatelessServerTransport(McpJsonMapper jsonMapper, String mcpEndpoint,
 			McpTransportContextExtractor<HttpServletRequest> contextExtractor,
 			ServerTransportSecurityValidator securityValidator) {
 		Assert.notNull(jsonMapper, "jsonMapper must not be null");
