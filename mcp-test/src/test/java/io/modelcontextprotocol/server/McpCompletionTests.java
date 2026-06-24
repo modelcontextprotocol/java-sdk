@@ -31,6 +31,7 @@ import io.modelcontextprotocol.spec.McpSchema.PromptArgument;
 import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
 import io.modelcontextprotocol.spec.McpSchema.Resource;
 import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
+import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpError;
@@ -174,6 +175,99 @@ class McpCompletionTests {
 			// Verify context was null
 			assertThat(contextWasNull.get()).isTrue();
 			assertThat(result.completion().values()).containsExactly("no-context-completion");
+		}
+
+		mcpServer.close();
+	}
+
+	@Test
+	void testCompletionWithoutMatchingHandlerReturnsEmptyResult() {
+		BiFunction<McpSyncServerExchange, CompleteRequest, CompleteResult> completionHandler = (exchange,
+				request) -> new CompleteResult(new CompleteResult.CompleteCompletion(List.of("java"), 1, false));
+
+		McpSchema.Prompt prompt = Prompt.builder("code_review")
+			.description("this is a code review prompt")
+			.arguments(List.of(PromptArgument.builder("language").description("string").required(false).build()))
+			.build();
+
+		McpSchema.Prompt otherPrompt = Prompt.builder("other_prompt")
+			.description("this prompt has completions")
+			.arguments(List.of(PromptArgument.builder("topic").description("string").required(false).build()))
+			.build();
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.prompts(
+					new McpServerFeatures.SyncPromptSpecification(prompt,
+							(mcpSyncServerExchange, getPromptRequest) -> null),
+					new McpServerFeatures.SyncPromptSpecification(otherPrompt,
+							(mcpSyncServerExchange, getPromptRequest) -> null))
+			.completions(new McpServerFeatures.SyncCompletionSpecification(new PromptReference("other_prompt"),
+					completionHandler))
+			.build();
+
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample " + "client", "0.0.0").build())
+			.build();) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = CompleteRequest
+				.builder(new PromptReference("code_review"), new CompleteRequest.CompleteArgument("language", "ja"))
+				.build();
+
+			CompleteResult result = mcpClient.completeCompletion(request);
+
+			assertThat(result.completion().values()).isEmpty();
+			assertThat(result.completion().total()).isZero();
+			assertThat(result.completion().hasMore()).isFalse();
+		}
+
+		mcpServer.close();
+	}
+
+	@Test
+	void testResourceTemplateCompletionWithoutMatchingHandlerReturnsEmptyResult() {
+		BiFunction<McpSyncServerExchange, CompleteRequest, CompleteResult> completionHandler = (exchange,
+				request) -> new CompleteResult(new CompleteResult.CompleteCompletion(List.of("java"), 1, false));
+
+		ResourceTemplate template = ResourceTemplate.builder("test://resource/{param}", "Test Resource")
+			.description("A resource template for testing")
+			.mimeType("text/plain")
+			.build();
+
+		ResourceTemplate otherTemplate = ResourceTemplate.builder("test://other/{param}", "Other Resource")
+			.description("A resource template with completions")
+			.mimeType("text/plain")
+			.build();
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.resourceTemplates(
+					new McpServerFeatures.SyncResourceTemplateSpecification(template,
+							(exchange, req) -> ReadResourceResult.builder(List.of()).build()),
+					new McpServerFeatures.SyncResourceTemplateSpecification(otherTemplate,
+							(exchange, req) -> ReadResourceResult.builder(List.of()).build()))
+			.completions(new McpServerFeatures.SyncCompletionSpecification(
+					new ResourceReference("test://other/{param}"), completionHandler))
+			.build();
+
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample " + "client", "0.0.0").build())
+			.build();) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = CompleteRequest
+				.builder(new ResourceReference("test://resource/{param}"),
+						new CompleteRequest.CompleteArgument("param", "ja"))
+				.build();
+
+			CompleteResult result = mcpClient.completeCompletion(request);
+
+			assertThat(result.completion().values()).isEmpty();
+			assertThat(result.completion().total()).isZero();
+			assertThat(result.completion().hasMore()).isFalse();
 		}
 
 		mcpServer.close();

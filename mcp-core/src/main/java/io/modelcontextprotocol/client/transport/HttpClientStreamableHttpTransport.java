@@ -38,6 +38,7 @@ import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.McpTransportSession;
+import io.modelcontextprotocol.spec.McpTransportSessionClosedException;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.spec.McpTransportStream;
 import io.modelcontextprotocol.spec.ProtocolVersions;
@@ -189,14 +190,6 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		return new DefaultMcpTransportSession(onClose);
 	}
 
-	private McpTransportSession<Disposable> createClosedSession(McpTransportSession<Disposable> existingSession) {
-		var existingSessionId = Optional.ofNullable(existingSession)
-			.filter(session -> !(session instanceof ClosedMcpTransportSession<Disposable>))
-			.flatMap(McpTransportSession::sessionId)
-			.orElse(null);
-		return new ClosedMcpTransportSession<>(existingSessionId);
-	}
-
 	private Publisher<Void> createDelete(String sessionId) {
 
 		var uri = Utils.resolveUri(this.baseUri, this.endpoint);
@@ -240,7 +233,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	public Mono<Void> closeGracefully() {
 		return Mono.defer(() -> {
 			logger.debug("Graceful close triggered");
-			McpTransportSession<Disposable> currentSession = this.activeSession.getAndUpdate(this::createClosedSession);
+			McpTransportSession<Disposable> currentSession = this.activeSession
+				.getAndSet(ClosedMcpTransportSession.INSTANCE);
 			if (currentSession != null) {
 				return Mono.from(currentSession.closeGracefully());
 			}
@@ -250,6 +244,19 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private Mono<Disposable> reconnect(McpTransportStream<Disposable> stream) {
 		return Mono.deferContextual(ctx -> {
+			var rh = this.handler.get();
+			if (rh == null) {
+				logger.warn("Transport has no request handler registered. Remember to call connect!");
+			}
+
+			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> requestHandler = rh != null
+					? rh : msg -> Mono.error(new IllegalStateException("No request handler"));
+
+			final McpTransportSession<Disposable> transportSession = this.activeSession.get();
+
+			if (ClosedMcpTransportSession.INSTANCE.equals(transportSession)) {
+				throw new McpTransportSessionClosedException();
+			}
 
 			if (stream != null) {
 				logger.debug("Reconnecting stream {} with lastId {}", stream.streamId(), stream.lastId());
@@ -259,7 +266,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			}
 
 			final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
-			final McpTransportSession<Disposable> transportSession = this.activeSession.get();
+
 			var uri = Utils.resolveUri(this.baseUri, this.endpoint);
 
 			Disposable connection = Mono.deferContextual(connectionCtx -> {
@@ -389,18 +396,18 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 								"Received unrecognized SSE event type: " + sseResponseEvent.sseEvent().event()));
 					})
 					.retryWhen(authorizationErrorRetrySpec())
-					.flatMap(jsonrpcMessage -> this.handler.get().apply(Mono.just(jsonrpcMessage)))
+					.flatMap(jsonrpcMessage -> requestHandler.apply(Mono.just(jsonrpcMessage)))
 					.onErrorMap(CompletionException.class, t -> t.getCause())
-					.onErrorComplete(t -> {
-						this.handleException(t);
-						return true;
-					})
 					.doFinally(s -> {
 						Disposable ref = disposableRef.getAndSet(null);
 						if (ref != null) {
 							transportSession.removeConnection(ref);
 						}
 					}))
+				.onErrorComplete(t -> {
+					this.handleException(t);
+					return true;
+				})
 				.contextWrite(ctx)
 				.subscribe();
 
@@ -467,10 +474,23 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	public Mono<Void> sendMessage(McpSchema.JSONRPCMessage sentMessage) {
 		return Mono.create(deliveredSink -> {
+			var rh = this.handler.get();
+			if (rh == null) {
+				logger.warn("Transport has no request handler registered. Remember to call connect!");
+			}
+
+			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> requestHandler = rh != null
+					? rh : msg -> Mono.error(new IllegalStateException("No request handler"));
+
+			var transportSession = this.activeSession.get();
+
+			if (ClosedMcpTransportSession.INSTANCE.equals(transportSession)) {
+				throw new McpTransportSessionClosedException();
+			}
+
 			logger.debug("Sending message {}", sentMessage);
 
 			final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
-			final McpTransportSession<Disposable> transportSession = this.activeSession.get();
 
 			var uri = Utils.resolveUri(this.baseUri, this.endpoint);
 			String jsonBody = this.toString(sentMessage);
@@ -663,22 +683,26 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						new RuntimeException("Failed to send message: " + responseEvent));
 			})
 				.retryWhen(authorizationErrorRetrySpec())
-				.flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage)))
+				.flatMap(jsonRpcMessage -> requestHandler.apply(Mono.just(jsonRpcMessage)))
 				.onErrorMap(CompletionException.class, t -> t.getCause())
-				.onErrorComplete(t -> {
-					// handle the error first
-					this.handleException(t);
-					// inform the caller of sendMessage
-					deliveredSink.error(t);
-					return true;
-				})
 				.doFinally(s -> {
 					logger.debug("SendMessage finally: {}", s);
 					Disposable ref = disposableRef.getAndSet(null);
 					if (ref != null) {
 						transportSession.removeConnection(ref);
 					}
-				})).contextWrite(deliveredSink.contextView()).subscribe();
+				})).onErrorComplete(t -> {
+					// handle the error first
+					try {
+						this.handleException(t);
+					}
+					catch (Exception e) {
+						logger.error("Error handling exception {}", t.getMessage(), e);
+					}
+					// inform the caller of sendMessage
+					deliveredSink.error(t);
+					return true;
+				}).contextWrite(deliveredSink.contextView()).subscribe();
 
 			disposableRef.set(connection);
 			transportSession.addConnection(connection);

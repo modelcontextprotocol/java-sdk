@@ -402,7 +402,7 @@ class McpAsyncClientResponseHandlerTests {
 		MockMcpClientTransport transport = initializationEnabledTransport();
 
 		// Create a test elicitation handler that echoes back the input
-		Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler = request -> {
+		Function<McpSchema.ElicitFormRequest, Mono<McpSchema.ElicitResult>> elicitationHandler = request -> {
 			assertThat(request.message()).isNotEmpty();
 			assertThat(request.requestedSchema()).isInstanceOf(Map.class);
 			assertThat(request.requestedSchema().get("type")).isEqualTo("object");
@@ -458,7 +458,7 @@ class McpAsyncClientResponseHandlerTests {
 		MockMcpClientTransport transport = initializationEnabledTransport();
 
 		// Create a test elicitation handler to decline the request
-		Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler = request -> Mono
+		Function<McpSchema.ElicitFormRequest, Mono<McpSchema.ElicitResult>> elicitationHandler = request -> Mono
 			.just(McpSchema.ElicitResult.builder(action).build());
 
 		// Create client with elicitation capability and handler
@@ -532,17 +532,6 @@ class McpAsyncClientResponseHandlerTests {
 		assertThat(response.error().message()).contains("Method not found: elicitation/create");
 
 		asyncMcpClient.closeGracefully();
-	}
-
-	@Test
-	void testElicitationCreateRequestHandlingWithNullHandler() {
-		MockMcpClientTransport transport = new MockMcpClientTransport();
-
-		// Create client with elicitation capability but null handler
-		assertThatThrownBy(() -> McpClient.async(transport)
-			.capabilities(ClientCapabilities.builder().elicitation().build())
-			.build()).isInstanceOf(IllegalArgumentException.class)
-			.hasMessage("Elicitation handler must not be null when client capabilities include elicitation");
 	}
 
 	@Test

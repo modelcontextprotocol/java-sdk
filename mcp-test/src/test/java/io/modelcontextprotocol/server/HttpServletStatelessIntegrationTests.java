@@ -28,6 +28,9 @@ import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.Prompt;
 import io.modelcontextprotocol.spec.McpSchema.PromptArgument;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
+import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
+import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
+import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
@@ -224,6 +227,110 @@ class HttpServletStatelessIntegrationTests {
 			assertThat(completeRequest.get().argument().name()).isEqualTo("language");
 			assertThat(completeRequest.get().argument().value()).isEqualTo("py");
 			assertThat(completeRequest.get().ref().type()).isEqualTo(PromptReference.TYPE);
+		}
+		finally {
+			mcpServer.close();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : Completion call without matching handler")
+	@ValueSource(strings = { "httpclient" })
+	void testCompletionWithoutMatchingHandlerReturnsEmptyResult(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		BiFunction<McpTransportContext, CompleteRequest, CompleteResult> completionHandler = (transportContext,
+				request) -> new CompleteResult(new CompleteResult.CompleteCompletion(List.of("java"), 1, false));
+
+		var prompt = Prompt.builder("code_review")
+			.title("Code review")
+			.description("this is code review prompt")
+			.arguments(List
+				.of(PromptArgument.builder("language").title("Language").description("string").required(false).build()))
+			.build();
+
+		var otherPrompt = Prompt.builder("other_prompt")
+			.title("Other prompt")
+			.description("this prompt has completions")
+			.arguments(List
+				.of(PromptArgument.builder("topic").title("Topic").description("string").required(false).build()))
+			.build();
+
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.prompts(
+					new McpStatelessServerFeatures.SyncPromptSpecification(prompt,
+							(transportContext, getPromptRequest) -> null),
+					new McpStatelessServerFeatures.SyncPromptSpecification(otherPrompt,
+							(transportContext, getPromptRequest) -> null))
+			.completions(new McpStatelessServerFeatures.SyncCompletionSpecification(
+					PromptReference.builder("other_prompt").title("Other prompt").build(), completionHandler))
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = CompleteRequest
+				.builder(PromptReference.builder("code_review").title("Code review").build(),
+						new CompleteRequest.CompleteArgument("language", "ja"))
+				.build();
+
+			CompleteResult result = mcpClient.completeCompletion(request);
+
+			assertThat(result.completion().values()).isEmpty();
+			assertThat(result.completion().total()).isZero();
+			assertThat(result.completion().hasMore()).isFalse();
+		}
+		finally {
+			mcpServer.close();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : Resource template completion call without matching handler")
+	@ValueSource(strings = { "httpclient" })
+	void testResourceTemplateCompletionWithoutMatchingHandlerReturnsEmptyResult(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+
+		BiFunction<McpTransportContext, CompleteRequest, CompleteResult> completionHandler = (transportContext,
+				request) -> new CompleteResult(new CompleteResult.CompleteCompletion(List.of("java"), 1, false));
+
+		var template = ResourceTemplate.builder("test://resource/{param}", "Test Resource")
+			.title("Test resource")
+			.description("A resource template for testing")
+			.mimeType("text/plain")
+			.build();
+
+		var otherTemplate = ResourceTemplate.builder("test://other/{param}", "Other Resource")
+			.title("Other resource")
+			.description("A resource template with completions")
+			.mimeType("text/plain")
+			.build();
+
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.resourceTemplates(
+					new McpStatelessServerFeatures.SyncResourceTemplateSpecification(template,
+							(transportContext, req) -> ReadResourceResult.builder(List.of()).build()),
+					new McpStatelessServerFeatures.SyncResourceTemplateSpecification(otherTemplate,
+							(transportContext, req) -> ReadResourceResult.builder(List.of()).build()))
+			.completions(new McpStatelessServerFeatures.SyncCompletionSpecification(
+					new ResourceReference("test://other/{param}"), completionHandler))
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = CompleteRequest
+				.builder(new ResourceReference("test://resource/{param}"),
+						new CompleteRequest.CompleteArgument("param", "ja"))
+				.build();
+
+			CompleteResult result = mcpClient.completeCompletion(request);
+
+			assertThat(result.completion().values()).isEmpty();
+			assertThat(result.completion().total()).isZero();
+			assertThat(result.completion().hasMore()).isFalse();
 		}
 		finally {
 			mcpServer.close();
