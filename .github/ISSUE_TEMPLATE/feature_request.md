@@ -2,7 +2,7 @@
 name: Feature request
 about: Suggest an idea for this project
 title: ''
-labels: 'status: waiting-for-triage, type: feature'
+labels: status/waiting for triage
 assignees: ''
 
 ---

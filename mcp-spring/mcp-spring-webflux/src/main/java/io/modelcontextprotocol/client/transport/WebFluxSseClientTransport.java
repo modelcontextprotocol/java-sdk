@@ -1,18 +1,25 @@
 /*
  * Copyright 2024 - 2024 the original author or authors.
  */
+
 package io.modelcontextprotocol.client.transport;
 
 import java.io.IOException;
+import java.net.URI;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.McpJsonDefaults;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
+
+import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,6 +69,8 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebFluxSseClientTransport.class);
 
+	private static final String MCP_PROTOCOL_VERSION = ProtocolVersions.MCP_2024_11_05;
+
 	/**
 	 * Event type for JSON-RPC messages received through the SSE connection. The server
 	 * sends messages with this event type to transmit JSON-RPC protocol data.
@@ -94,10 +103,10 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	private final WebClient webClient;
 
 	/**
-	 * ObjectMapper for serializing outbound messages and deserializing inbound messages.
+	 * JSON mapper for serializing outbound messages and deserializing inbound messages.
 	 * Handles conversion between JSON-RPC messages and their string representation.
 	 */
-	protected ObjectMapper objectMapper;
+	protected McpJsonMapper jsonMapper;
 
 	/**
 	 * Subscription for the SSE connection handling inbound messages. Used for cleanup
@@ -121,29 +130,28 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 * The SSE endpoint URI provided by the server. Used for sending outbound messages via
 	 * HTTP POST requests.
 	 */
-	private String sseEndpoint;
+	private final String sseEndpoint;
 
 	/**
-	 * Constructs a new SseClientTransport with the specified WebClient builder. Uses a
-	 * default ObjectMapper instance for JSON processing.
-	 * @param webClientBuilder the WebClient.Builder to use for creating the WebClient
-	 * instance
-	 * @throws IllegalArgumentException if webClientBuilder is null
+	 * Used to capture the full SSE URI from the web client when connecting.
 	 */
-	public WebFluxSseClientTransport(WebClient.Builder webClientBuilder) {
-		this(webClientBuilder, new ObjectMapper());
-	}
+	private final AtomicReference<URI> sseUri = new AtomicReference<>();
+
+	/**
+	 * Validator for the message endpoint.
+	 */
+	private final SseMessageEndpointValidator messageEndpointValidator;
 
 	/**
 	 * Constructs a new SseClientTransport with the specified WebClient builder and
 	 * ObjectMapper. Initializes both inbound and outbound message processing pipelines.
 	 * @param webClientBuilder the WebClient.Builder to use for creating the WebClient
 	 * instance
-	 * @param objectMapper the ObjectMapper to use for JSON processing
+	 * @param jsonMapper the ObjectMapper to use for JSON processing
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
-	public WebFluxSseClientTransport(WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
-		this(webClientBuilder, objectMapper, DEFAULT_SSE_ENDPOINT);
+	public WebFluxSseClientTransport(WebClient.Builder webClientBuilder, McpJsonMapper jsonMapper) {
+		this(webClientBuilder, jsonMapper, DEFAULT_SSE_ENDPOINT);
 	}
 
 	/**
@@ -151,19 +159,40 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 * ObjectMapper. Initializes both inbound and outbound message processing pipelines.
 	 * @param webClientBuilder the WebClient.Builder to use for creating the WebClient
 	 * instance
-	 * @param objectMapper the ObjectMapper to use for JSON processing
+	 * @param jsonMapper the ObjectMapper to use for JSON processing
 	 * @param sseEndpoint the SSE endpoint URI to use for establishing the connection
 	 * @throws IllegalArgumentException if either parameter is null
 	 */
-	public WebFluxSseClientTransport(WebClient.Builder webClientBuilder, ObjectMapper objectMapper,
-			String sseEndpoint) {
-		Assert.notNull(objectMapper, "ObjectMapper must not be null");
+	public WebFluxSseClientTransport(WebClient.Builder webClientBuilder, McpJsonMapper jsonMapper, String sseEndpoint) {
+		this(webClientBuilder, jsonMapper, sseEndpoint, new DefaultSseMessageEndpointValidator());
+	}
+
+	/**
+	 * Constructs a new SseClientTransport with the specified WebClient builder and
+	 * ObjectMapper. Initializes both inbound and outbound message processing pipelines.
+	 * @param webClientBuilder the WebClient.Builder to use for creating the WebClient
+	 * instance
+	 * @param jsonMapper the ObjectMapper to use for JSON processing
+	 * @param sseEndpoint the SSE endpoint URI to use for establishing the connection
+	 * @param messageEndpointValidator validator for the message endpoint
+	 * @throws IllegalArgumentException if either parameter is null
+	 */
+	public WebFluxSseClientTransport(WebClient.Builder webClientBuilder, McpJsonMapper jsonMapper, String sseEndpoint,
+			SseMessageEndpointValidator messageEndpointValidator) {
+		Assert.notNull(jsonMapper, "jsonMapper must not be null");
 		Assert.notNull(webClientBuilder, "WebClient.Builder must not be null");
+		Assert.notNull(messageEndpointValidator, "messageEndpointValidator must not be null");
 		Assert.hasText(sseEndpoint, "SSE endpoint must not be null or empty");
 
-		this.objectMapper = objectMapper;
+		this.jsonMapper = jsonMapper;
 		this.webClient = webClientBuilder.build();
 		this.sseEndpoint = sseEndpoint;
+		this.messageEndpointValidator = messageEndpointValidator;
+	}
+
+	@Override
+	public List<String> protocolVersions() {
+		return List.of(MCP_PROTOCOL_VERSION);
 	}
 
 	/**
@@ -185,27 +214,36 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 * @param handler a function that processes incoming JSON-RPC messages and returns
 	 * responses
 	 * @return a Mono that completes when the connection is fully established
-	 * @throws McpError if there's an error processing SSE events or if an unrecognized
-	 * event type is received
 	 */
 	@Override
 	public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
+		// TODO: Avoid eager connection opening and enable resilience
+		// -> upon disconnects, re-establish connection
+		// -> allow optimizing for eager connection start using a constructor flag
 		Flux<ServerSentEvent<String>> events = eventStream();
 		this.inboundSubscription = events.concatMap(event -> Mono.just(event).<JSONRPCMessage>handle((e, s) -> {
 			if (ENDPOINT_EVENT_TYPE.equals(event.event())) {
 				String messageEndpointUri = event.data();
+				try {
+					this.messageEndpointValidator.validate(this.sseUri.get(), messageEndpointUri);
+				}
+				catch (InvalidSseMessageEndpointException ex) {
+					messageEndpointSink.tryEmitError(ex);
+					s.error(ex);
+					return;
+				}
 				if (messageEndpointSink.tryEmitValue(messageEndpointUri).isSuccess()) {
 					s.complete();
 				}
 				else {
 					// TODO: clarify with the spec if multiple events can be
 					// received
-					s.error(new McpError("Failed to handle SSE endpoint event"));
+					s.error(new RuntimeException("Failed to handle SSE endpoint event"));
 				}
 			}
 			else if (MESSAGE_EVENT_TYPE.equals(event.event())) {
 				try {
-					JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.objectMapper, event.data());
+					JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.jsonMapper, event.data());
 					s.next(message);
 				}
 				catch (IOException ioException) {
@@ -213,7 +251,8 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 				}
 			}
 			else {
-				s.error(new McpError("Received unrecognized SSE event type: " + event.event()));
+				logger.debug("Received unrecognized SSE event type: {}", event);
+				s.complete();
 			}
 		}).transform(handler)).subscribe();
 
@@ -242,10 +281,11 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 				return Mono.empty();
 			}
 			try {
-				String jsonText = this.objectMapper.writeValueAsString(message);
+				String jsonText = this.jsonMapper.writeValueAsString(message);
 				return webClient.post()
 					.uri(messageEndpointUri)
 					.contentType(MediaType.APPLICATION_JSON)
+					.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 					.bodyValue(jsonText)
 					.retrieve()
 					.toBodilessEntity()
@@ -273,15 +313,17 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 * Includes automatic retry logic for handling transient connection failures.
 	 */
 	// visible for tests
-	protected Flux<ServerSentEvent<String>> eventStream() {// @formatter:off
-		return this.webClient
-			.get()
+	protected Flux<ServerSentEvent<String>> eventStream() {
+		return this.webClient.get()
 			.uri(this.sseEndpoint)
 			.accept(MediaType.TEXT_EVENT_STREAM)
-			.retrieve()
-			.bodyToFlux(SSE_TYPE)
+			.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
+			.exchangeToFlux(exchange -> {
+				this.sseUri.set(exchange.request().getURI());
+				return exchange.bodyToFlux(SSE_TYPE);
+			})
 			.retryWhen(Retry.from(retrySignal -> retrySignal.handle(inboundRetryHandler)));
-	} // @formatter:on
+	}
 
 	/**
 	 * Retry handler for the inbound SSE stream. Implements the retry logic for handling
@@ -334,13 +376,13 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 	 * type conversion capabilities to handle complex object structures.
 	 * @param <T> the target type to convert the data into
 	 * @param data the source object to convert
-	 * @param typeRef the TypeReference describing the target type
+	 * @param typeRef the TypeRef describing the target type
 	 * @return the unmarshalled object of type T
 	 * @throws IllegalArgumentException if the conversion cannot be performed
 	 */
 	@Override
-	public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-		return this.objectMapper.convertValue(data, typeRef);
+	public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+		return this.jsonMapper.convertValue(data, typeRef);
 	}
 
 	/**
@@ -362,7 +404,9 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 
 		private String sseEndpoint = DEFAULT_SSE_ENDPOINT;
 
-		private ObjectMapper objectMapper = new ObjectMapper();
+		private McpJsonMapper jsonMapper;
+
+		private SseMessageEndpointValidator messageEndpointValidator = new DefaultSseMessageEndpointValidator();
 
 		/**
 		 * Creates a new builder with the specified WebClient.Builder.
@@ -385,13 +429,25 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 		}
 
 		/**
-		 * Sets the object mapper for JSON serialization/deserialization.
-		 * @param objectMapper the object mapper
+		 * Sets the JSON mapper for serialization/deserialization.
+		 * @param jsonMapper the JsonMapper to use
 		 * @return this builder
 		 */
-		public Builder objectMapper(ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "objectMapper must not be null");
-			this.objectMapper = objectMapper;
+		public Builder jsonMapper(McpJsonMapper jsonMapper) {
+			Assert.notNull(jsonMapper, "jsonMapper must not be null");
+			this.jsonMapper = jsonMapper;
+			return this;
+		}
+
+		/**
+		 * Sets the validator that ensure the message endpoint returned over the SSE
+		 * connection is valid.
+		 * @param messageEndpointValidator the validator
+		 * @return this builder
+		 */
+		public Builder messageEndpointValidator(SseMessageEndpointValidator messageEndpointValidator) {
+			Assert.notNull(messageEndpointValidator, "messageEndpointValidator must not be null");
+			this.messageEndpointValidator = messageEndpointValidator;
 			return this;
 		}
 
@@ -400,7 +456,9 @@ public class WebFluxSseClientTransport implements McpClientTransport {
 		 * @return a new transport instance
 		 */
 		public WebFluxSseClientTransport build() {
-			return new WebFluxSseClientTransport(webClientBuilder, objectMapper, sseEndpoint);
+			return new WebFluxSseClientTransport(webClientBuilder,
+					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, sseEndpoint,
+					messageEndpointValidator);
 		}
 
 	}

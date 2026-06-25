@@ -2,7 +2,7 @@ name: Publish Snapshot
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "0.18.x" ]
 
 jobs:
   build:
@@ -31,6 +31,9 @@ jobs:
 
       - name: Generate Java docs
         run: mvn -Pjavadoc -B javadoc:aggregate
+
+      - name: Jackson 2 Integration Tests
+        run: mvn -pl mcp-test -am -Pjackson2 test
 
       - name: Build with Maven and deploy to Sonatype snapshot repository
         env:
