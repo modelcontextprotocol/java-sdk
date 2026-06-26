@@ -4,12 +4,9 @@
 
 package io.modelcontextprotocol.server;
 
-import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
-
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 
@@ -19,6 +16,7 @@ import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.spec.HttpHeaders;
+import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.CompleteRequest;
@@ -43,8 +41,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -53,9 +49,12 @@ import org.springframework.web.client.RestClient;
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.APPLICATION_JSON;
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.TEXT_EVENT_STREAM;
 import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.awaitility.Awaitility.await;
 
 @Timeout(15)
@@ -67,7 +66,12 @@ class HttpServletStatelessIntegrationTests {
 
 	private HttpServletStatelessServerTransport mcpStatelessServerTransport;
 
-	ConcurrentHashMap<String, McpClient.SyncSpec> clientBuilders = new ConcurrentHashMap<>();
+	private final McpClient.SyncSpec clientBuilder = McpClient
+		.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
+			.endpoint(CUSTOM_MESSAGE_ENDPOINT)
+			.build())
+		.initializationTimeout(Duration.ofHours(10))
+		.requestTimeout(Duration.ofHours(10));
 
 	private Tomcat tomcat;
 
@@ -85,12 +89,6 @@ class HttpServletStatelessIntegrationTests {
 		catch (Exception e) {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
-
-		clientBuilders
-			.put("httpclient",
-					McpClient.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
-						.endpoint(CUSTOM_MESSAGE_ENDPOINT)
-						.build()).initializationTimeout(Duration.ofHours(10)).requestTimeout(Duration.ofHours(10)));
 	}
 
 	@AfterEach
@@ -112,12 +110,8 @@ class HttpServletStatelessIntegrationTests {
 	// ---------------------------------------
 	// Tools Tests
 	// ---------------------------------------
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
-	void testToolCallSuccess(String clientType) {
-
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testToolCallSuccess() {
 		var callResponse = CallToolResult.builder()
 			.content(List.of(McpSchema.TextContent.builder("CALL RESPONSE").build()))
 			.isError(false)
@@ -158,12 +152,8 @@ class HttpServletStatelessIntegrationTests {
 		}
 	}
 
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
-	void testInitialize(String clientType) {
-
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testInitialize() {
 		var mcpServer = McpServer.sync(mcpStatelessServerTransport).build();
 
 		try (var mcpClient = clientBuilder.build()) {
@@ -178,11 +168,8 @@ class HttpServletStatelessIntegrationTests {
 	// ---------------------------------------
 	// Completion Tests
 	// ---------------------------------------
-	@ParameterizedTest(name = "{0} : Completion call")
-	@ValueSource(strings = { "httpclient" })
-	void testCompletionShouldReturnExpectedSuggestions(String clientType) {
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testCompletionShouldReturnExpectedSuggestions() {
 		var expectedValues = List.of("python", "pytorch", "pyside");
 		var completionResponse = new CompleteResult(new CompleteResult.CompleteCompletion(expectedValues, 10, // total
 				true // hasMore
@@ -233,11 +220,8 @@ class HttpServletStatelessIntegrationTests {
 		}
 	}
 
-	@ParameterizedTest(name = "{0} : Completion call without matching handler")
-	@ValueSource(strings = { "httpclient" })
-	void testCompletionWithoutMatchingHandlerReturnsEmptyResult(String clientType) {
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testCompletionWithoutMatchingHandlerReturnsEmptyResult() {
 		BiFunction<McpTransportContext, CompleteRequest, CompleteResult> completionHandler = (transportContext,
 				request) -> new CompleteResult(new CompleteResult.CompleteCompletion(List.of("java"), 1, false));
 
@@ -286,11 +270,8 @@ class HttpServletStatelessIntegrationTests {
 		}
 	}
 
-	@ParameterizedTest(name = "{0} : Resource template completion call without matching handler")
-	@ValueSource(strings = { "httpclient" })
-	void testResourceTemplateCompletionWithoutMatchingHandlerReturnsEmptyResult(String clientType) {
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testResourceTemplateCompletionWithoutMatchingHandlerReturnsEmptyResult() {
 		BiFunction<McpTransportContext, CompleteRequest, CompleteResult> completionHandler = (transportContext,
 				request) -> new CompleteResult(new CompleteResult.CompleteCompletion(List.of("java"), 1, false));
 
@@ -337,14 +318,62 @@ class HttpServletStatelessIntegrationTests {
 		}
 	}
 
+	@Test
+	void testCompletionForNonExistentPromptReturnsInvalidParams() {
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = CompleteRequest
+				.builder(new PromptReference("nonexistent-prompt"), new CompleteRequest.CompleteArgument("arg", "val"))
+				.build();
+
+			assertThatThrownBy(() -> mcpClient.completeCompletion(request)).isInstanceOf(McpError.class)
+				.asInstanceOf(type(McpError.class))
+				.extracting(McpError::getJsonRpcError)
+				.extracting(McpSchema.JSONRPCResponse.JSONRPCError::code)
+				.isEqualTo(ErrorCodes.INVALID_PARAMS);
+		}
+		finally {
+			mcpServer.close();
+		}
+	}
+
+	@Test
+	void testCompletionForNonExistentResourceReturnsResourceNotFound() {
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = CompleteRequest
+				.builder(new ResourceReference("test://nonexistent/{param}"),
+						new CompleteRequest.CompleteArgument("param", "val"))
+				.build();
+
+			assertThatThrownBy(() -> mcpClient.completeCompletion(request)).isInstanceOf(McpError.class)
+				.asInstanceOf(type(McpError.class))
+				.extracting(McpError::getJsonRpcError)
+				.extracting(McpSchema.JSONRPCResponse.JSONRPCError::code)
+				.isEqualTo(McpSchema.ErrorCodes.RESOURCE_NOT_FOUND);
+		}
+		finally {
+			mcpServer.close();
+		}
+	}
+
 	// ---------------------------------------
 	// Tool Structured Output Schema Tests
 	// ---------------------------------------
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
-	void testStructuredOutputValidationSuccess(String clientType) {
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testStructuredOutputValidationSuccess() {
 		// Create a tool with output schema
 		Map<String, Object> outputSchema = Map.of(
 				"type", "object", "properties", Map.of("result", Map.of("type", "number"), "operation",
@@ -409,11 +438,8 @@ class HttpServletStatelessIntegrationTests {
 		}
 	}
 
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
-	void testStructuredOutputOfObjectArrayValidationSuccess(String clientType) {
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testStructuredOutputOfObjectArrayValidationSuccess() {
 		// Create a tool with output schema that returns an array of objects
 		Map<String, Object> outputSchema = Map
 			.of( // @formatter:off
@@ -470,11 +496,8 @@ class HttpServletStatelessIntegrationTests {
 		}
 	}
 
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
-	void testStructuredOutputWithInHandlerError(String clientType) {
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testStructuredOutputWithInHandlerError() {
 		// Create a tool with output schema
 		Map<String, Object> outputSchema = Map.of(
 				"type", "object", "properties", Map.of("result", Map.of("type", "number"), "operation",
@@ -528,11 +551,8 @@ class HttpServletStatelessIntegrationTests {
 		}
 	}
 
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
-	void testStructuredOutputValidationFailure(String clientType) {
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testStructuredOutputValidationFailure() {
 		// Create a tool with output schema
 		Map<String, Object> outputSchema = Map.of("type", "object", "properties",
 				Map.of("result", Map.of("type", "number"), "operation", Map.of("type", "string")), "required",
@@ -580,11 +600,8 @@ class HttpServletStatelessIntegrationTests {
 		}
 	}
 
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
-	void testStructuredOutputMissingStructuredContent(String clientType) {
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testStructuredOutputMissingStructuredContent() {
 		// Create a tool with output schema
 		Map<String, Object> outputSchema = Map.of("type", "object", "properties",
 				Map.of("result", Map.of("type", "number")), "required", List.of("result"));
@@ -629,11 +646,8 @@ class HttpServletStatelessIntegrationTests {
 		}
 	}
 
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
-	void testStructuredOutputRuntimeToolAddition(String clientType) {
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testStructuredOutputRuntimeToolAddition() {
 		// Start server without tools
 		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
 			.serverInfo("test-server", "1.0.0")
