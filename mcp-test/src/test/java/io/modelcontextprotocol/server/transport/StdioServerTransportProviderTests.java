@@ -17,15 +17,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -98,7 +98,7 @@ class StdioServerTransportProviderTests {
 	}
 
 	@Test
-	void shouldHandleIncomingMessages() throws Exception {
+	void shouldHandleIncomingMessages() {
 
 		String jsonMessage = "{\"jsonrpc\":\"2.0\",\"method\":\"test\",\"params\":{},\"id\":1}\n";
 		InputStream stream = new ByteArrayInputStream(jsonMessage.getBytes(StandardCharsets.UTF_8));
@@ -228,7 +228,7 @@ class StdioServerTransportProviderTests {
 	}
 
 	@Test
-	void shouldHandleInvalidJsonMessage() throws Exception {
+	void shouldHandleInvalidJsonMessage() {
 
 		// Write an invalid JSON message to the input stream
 		String jsonMessage = "{invalid json}\n";
@@ -247,7 +247,7 @@ class StdioServerTransportProviderTests {
 	}
 
 	@Test
-	void shouldHandleSessionClose() throws Exception {
+	void shouldHandleSessionClose() {
 		// Set session factory
 		transportProvider.setSessionFactory(sessionFactory);
 
@@ -256,6 +256,49 @@ class StdioServerTransportProviderTests {
 
 		// Verify session was closed
 		verify(mockSession).closeGracefully();
+	}
+
+	@Test
+	void shouldHandleConcurrentSendMessage() {
+		// Redirect the transport output to a buffer so we can verify every message lands
+		ByteArrayOutputStream output = new ByteArrayOutputStream();
+		PrintStream outputPrintStream = new PrintStream(output, true, StandardCharsets.UTF_8);
+		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getMapper(), System.in, outputPrintStream);
+
+		// Capture the inner McpServerTransport handed to the session factory
+		AtomicReference<McpServerTransport> transportRef = new AtomicReference<>();
+		McpServerSession.Factory capturingFactory = transport -> {
+			transportRef.set(transport);
+			return mockSession;
+		};
+
+		// Set session factory
+		transportProvider.setSessionFactory(capturingFactory);
+
+		McpServerTransport transport = transportRef.get();
+		assertThat(transport).isNotNull();
+
+		// Fan sendMessage out across 16 parallel rails to race against the unicast sink
+		int messageCount = 500;
+		Flux<Integer> concurrentSends = Flux.range(0, messageCount)
+			.parallel(16)
+			.runOn(Schedulers.parallel())
+			.flatMap(i -> transport
+				.sendMessage(
+						new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION, "test/notification", Map.of()))
+				.thenReturn(i))
+			.sequential();
+
+		// Every send should complete successfully (no FAIL_NON_SERIALIZED errors)
+		StepVerifier.create(concurrentSends).expectNextCount(messageCount).verifyComplete();
+
+		// Writes happen asynchronously on the outbound scheduler; wait briefly for drain
+		// and verify every message was written as its own newline-delimited JSON line
+		StepVerifier
+			.create(Mono.delay(java.time.Duration.ofMillis(500))
+				.then(Mono.fromCallable(() -> output.toString(StandardCharsets.UTF_8).lines().count())))
+			.assertNext(lineCount -> assertThat(lineCount).isEqualTo(messageCount))
+			.verifyComplete();
 	}
 
 }
