@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.client;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +55,7 @@ class McpClientFeatures {
 	 *
 	 * @param clientInfo the client implementation information.
 	 * @param clientCapabilities the client capabilities.
+	 * @param initializeRequestMeta metadata to include in the initialize request.
 	 * @param roots the roots.
 	 * @param toolsChangeConsumers the tools change consumers.
 	 * @param resourcesChangeConsumers the resources change consumers.
@@ -68,7 +70,8 @@ class McpClientFeatures {
 	 * in the {@code requestedSchema}.
 	 */
 	record Async(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
-			Map<String, McpSchema.Root> roots, List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers,
+			Map<String, Object> initializeRequestMeta, Map<String, McpSchema.Root> roots,
+			List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers,
 			List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers,
 			List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers,
 			List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers,
@@ -110,6 +113,43 @@ class McpClientFeatures {
 				Function<McpSchema.ElicitUrlRequest, Mono<McpSchema.ElicitResult>> urlElicitationHandler,
 				boolean enableCallToolSchemaCaching, boolean applyElicitationDefaults) {
 
+			this(clientInfo, clientCapabilities, null, roots, toolsChangeConsumers, resourcesChangeConsumers,
+					resourcesUpdateConsumers, promptsChangeConsumers, loggingConsumers, progressConsumers,
+					elicitationCompleteConsumers, samplingHandler, formElicitationHandler, urlElicitationHandler,
+					enableCallToolSchemaCaching, applyElicitationDefaults);
+		}
+
+		/**
+		 * Create an instance and validate the arguments.
+		 * @param clientCapabilities the client capabilities.
+		 * @param initializeRequestMeta metadata to include in the initialize request.
+		 * @param roots the roots.
+		 * @param toolsChangeConsumers the tools change consumers.
+		 * @param resourcesChangeConsumers the resources change consumers.
+		 * @param promptsChangeConsumers the prompts change consumers.
+		 * @param loggingConsumers the logging consumers.
+		 * @param progressConsumers the progress consumers.
+		 * @param samplingHandler the sampling handler.
+		 * @param formElicitationHandler the elicitation handler.
+		 * @param enableCallToolSchemaCaching whether to enable call tool schema caching.
+		 * @param applyElicitationDefaults whether the client should fill in missing
+		 * fields of an accepted {@code ElicitResult.content} with the {@code default}
+		 * values declared in the {@code requestedSchema}.
+		 */
+		public Async(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
+				Map<String, Object> initializeRequestMeta, Map<String, McpSchema.Root> roots,
+				List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers,
+				List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers,
+				List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers,
+				List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers,
+				List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers,
+				List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers,
+				List<Function<McpSchema.ElicitationCompleteNotification, Mono<Void>>> elicitationCompleteConsumers,
+				Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler,
+				Function<McpSchema.ElicitFormRequest, Mono<McpSchema.ElicitResult>> formElicitationHandler,
+				Function<McpSchema.ElicitUrlRequest, Mono<McpSchema.ElicitResult>> urlElicitationHandler,
+				boolean enableCallToolSchemaCaching, boolean applyElicitationDefaults) {
+
 			Assert.notNull(clientInfo, "Client info must not be null");
 			this.clientInfo = clientInfo;
 			this.clientCapabilities = (clientCapabilities != null) ? clientCapabilities
@@ -117,6 +157,7 @@ class McpClientFeatures {
 							!Utils.isEmpty(roots) ? new McpSchema.ClientCapabilities.RootCapabilities(false) : null,
 							samplingHandler != null ? new McpSchema.ClientCapabilities.Sampling() : null,
 							elicitationCapabilities(formElicitationHandler, urlElicitationHandler));
+			this.initializeRequestMeta = copyInitializeRequestMeta(initializeRequestMeta);
 			this.roots = roots != null ? new ConcurrentHashMap<>(roots) : new ConcurrentHashMap<>();
 
 			this.toolsChangeConsumers = toolsChangeConsumers != null ? toolsChangeConsumers : List.of();
@@ -219,11 +260,11 @@ class McpClientFeatures {
 							.subscribeOn(Schedulers.boundedElastic())
 						: null;
 
-			return new Async(syncSpec.clientInfo(), syncSpec.clientCapabilities(), syncSpec.roots(),
-					toolsChangeConsumers, resourcesChangeConsumers, resourcesUpdateConsumers, promptsChangeConsumers,
-					loggingConsumers, progressConsumers, elicitationCompleteConsumers, samplingHandler,
-					formElicitationHandler, urlElicitationHandler, syncSpec.enableCallToolSchemaCaching,
-					syncSpec.applyElicitationDefaults);
+			return new Async(syncSpec.clientInfo(), syncSpec.clientCapabilities(), syncSpec.initializeRequestMeta(),
+					syncSpec.roots(), toolsChangeConsumers, resourcesChangeConsumers, resourcesUpdateConsumers,
+					promptsChangeConsumers, loggingConsumers, progressConsumers, elicitationCompleteConsumers,
+					samplingHandler, formElicitationHandler, urlElicitationHandler,
+					syncSpec.enableCallToolSchemaCaching, syncSpec.applyElicitationDefaults);
 		}
 
 	}
@@ -234,6 +275,7 @@ class McpClientFeatures {
 	 *
 	 * @param clientInfo the client implementation information.
 	 * @param clientCapabilities the client capabilities.
+	 * @param initializeRequestMeta metadata to include in the initialize request.
 	 * @param roots the roots.
 	 * @param toolsChangeConsumers the tools change consumers.
 	 * @param resourcesChangeConsumers the resources change consumers.
@@ -248,7 +290,8 @@ class McpClientFeatures {
 	 * in the {@code requestedSchema}.
 	 */
 	public record Sync(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
-			Map<String, McpSchema.Root> roots, List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers,
+			Map<String, Object> initializeRequestMeta, Map<String, McpSchema.Root> roots,
+			List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers,
 			List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers,
 			List<Consumer<List<McpSchema.ResourceContents>>> resourcesUpdateConsumers,
 			List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers,
@@ -291,6 +334,45 @@ class McpClientFeatures {
 				Function<McpSchema.ElicitUrlRequest, McpSchema.ElicitResult> urlElicitationHandler,
 				boolean enableCallToolSchemaCaching, boolean applyElicitationDefaults) {
 
+			this(clientInfo, clientCapabilities, null, roots, toolsChangeConsumers, resourcesChangeConsumers,
+					resourcesUpdateConsumers, promptsChangeConsumers, loggingConsumers, progressConsumers,
+					elicitationCompleteConsumers, samplingHandler, formElicitationHandler, urlElicitationHandler,
+					enableCallToolSchemaCaching, applyElicitationDefaults);
+		}
+
+		/**
+		 * Create an instance and validate the arguments.
+		 * @param clientInfo the client implementation information.
+		 * @param clientCapabilities the client capabilities.
+		 * @param initializeRequestMeta metadata to include in the initialize request.
+		 * @param roots the roots.
+		 * @param toolsChangeConsumers the tools change consumers.
+		 * @param resourcesChangeConsumers the resources change consumers.
+		 * @param resourcesUpdateConsumers the resource update consumers.
+		 * @param promptsChangeConsumers the prompts change consumers.
+		 * @param loggingConsumers the logging consumers.
+		 * @param progressConsumers the progress consumers.
+		 * @param samplingHandler the sampling handler.
+		 * @param formElicitationHandler the elicitation handler.
+		 * @param enableCallToolSchemaCaching whether to enable call tool schema caching.
+		 * @param applyElicitationDefaults whether the client should fill in missing
+		 * fields of an accepted {@code ElicitResult.content} with the {@code default}
+		 * values declared in the {@code requestedSchema}.
+		 */
+		public Sync(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
+				Map<String, Object> initializeRequestMeta, Map<String, McpSchema.Root> roots,
+				List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers,
+				List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers,
+				List<Consumer<List<McpSchema.ResourceContents>>> resourcesUpdateConsumers,
+				List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers,
+				List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers,
+				List<Consumer<McpSchema.ProgressNotification>> progressConsumers,
+				List<Consumer<McpSchema.ElicitationCompleteNotification>> elicitationCompleteConsumers,
+				Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler,
+				Function<McpSchema.ElicitFormRequest, McpSchema.ElicitResult> formElicitationHandler,
+				Function<McpSchema.ElicitUrlRequest, McpSchema.ElicitResult> urlElicitationHandler,
+				boolean enableCallToolSchemaCaching, boolean applyElicitationDefaults) {
+
 			Assert.notNull(clientInfo, "Client info must not be null");
 			this.clientInfo = clientInfo;
 			this.clientCapabilities = (clientCapabilities != null) ? clientCapabilities
@@ -298,6 +380,7 @@ class McpClientFeatures {
 							!Utils.isEmpty(roots) ? new McpSchema.ClientCapabilities.RootCapabilities(false) : null,
 							samplingHandler != null ? new McpSchema.ClientCapabilities.Sampling() : null,
 							elicitationCapabilities(formElicitationHandler, urlElicitationHandler));
+			this.initializeRequestMeta = copyInitializeRequestMeta(initializeRequestMeta);
 			this.roots = roots != null ? new HashMap<>(roots) : new HashMap<>();
 
 			this.toolsChangeConsumers = toolsChangeConsumers != null ? toolsChangeConsumers : List.of();
@@ -331,6 +414,10 @@ class McpClientFeatures {
 					resourcesUpdateConsumers, promptsChangeConsumers, loggingConsumers, List.of(), List.of(),
 					samplingHandler, formElicitationHandler, urlElicitationHandler, false, false);
 		}
+	}
+
+	private static Map<String, Object> copyInitializeRequestMeta(Map<String, Object> initializeRequestMeta) {
+		return initializeRequestMeta != null ? Collections.unmodifiableMap(new HashMap<>(initializeRequestMeta)) : null;
 	}
 
 	private static McpSchema.ClientCapabilities.Elicitation elicitationCapabilities(

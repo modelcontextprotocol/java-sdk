@@ -5,7 +5,9 @@
 package io.modelcontextprotocol.client;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -147,6 +149,34 @@ class LifecycleInitializerTests {
 				assertThat(capturedRequest.get().clientInfo()).isEqualTo(CLIENT_INFO);
 			})
 			.verifyComplete();
+	}
+
+	@Test
+	void shouldIncludeInitializeRequestMeta() {
+		Map<String, Object> initializeRequestMeta = new HashMap<>();
+		initializeRequestMeta.put("traceId", "abc-123");
+		initializeRequestMeta.put("client", Map.of("name", "test-client"));
+
+		LifecycleInitializer initializerWithMeta = new LifecycleInitializer(CLIENT_CAPABILITIES, CLIENT_INFO,
+				initializeRequestMeta, PROTOCOL_VERSIONS, INITIALIZATION_TIMEOUT, mockSessionSupplier,
+				mockPostInitializationHook);
+		initializeRequestMeta.put("traceId", "changed");
+
+		AtomicReference<McpSchema.InitializeRequest> capturedRequest = new AtomicReference<>();
+
+		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenAnswer(invocation -> {
+			capturedRequest.set((McpSchema.InitializeRequest) invocation.getArgument(1));
+			return Mono.just(MOCK_INIT_RESULT);
+		});
+
+		StepVerifier.create(initializerWithMeta.withInitialization("test", init -> Mono.just(init.initializeResult())))
+			.expectNext(MOCK_INIT_RESULT)
+			.verifyComplete();
+
+		assertThat(capturedRequest.get().meta()).containsEntry("traceId", "abc-123")
+			.containsEntry("client", Map.of("name", "test-client"));
+		assertThatThrownBy(() -> capturedRequest.get().meta().put("new", "value"))
+			.isInstanceOf(UnsupportedOperationException.class);
 	}
 
 	@Test

@@ -6,6 +6,7 @@ package io.modelcontextprotocol.client;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -172,6 +173,8 @@ public interface McpClient {
 
 		private Implementation clientInfo = Implementation.builder("Java SDK MCP Client", "0.15.0").build();
 
+		private Map<String, Object> initializeRequestMeta;
+
 		private final Map<String, Root> roots = new HashMap<>();
 
 		private final List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers = new ArrayList<>();
@@ -260,6 +263,20 @@ public interface McpClient {
 		public SyncSpec clientInfo(Implementation clientInfo) {
 			Assert.notNull(clientInfo, "Client info must not be null");
 			this.clientInfo = clientInfo;
+			return this;
+		}
+
+		/**
+		 * Sets optional metadata to include in the initialization request's {@code _meta}
+		 * field.
+		 * @param initializeRequestMeta Metadata to send with the initialize request. Must
+		 * not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if initializeRequestMeta is null
+		 */
+		public SyncSpec initializeRequestMeta(Map<String, Object> initializeRequestMeta) {
+			Assert.notNull(initializeRequestMeta, "Initialize request metadata must not be null");
+			this.initializeRequestMeta = Collections.unmodifiableMap(new HashMap<>(initializeRequestMeta));
 			return this;
 		}
 
@@ -551,10 +568,11 @@ public interface McpClient {
 		 */
 		public McpSyncClient build() {
 			McpClientFeatures.Sync syncFeatures = new McpClientFeatures.Sync(this.clientInfo, this.capabilities,
-					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
-					this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
-					this.elicitationCompleteConsumers, this.samplingHandler, this.formElicitationHandler,
-					this.urlElicitationHandler, this.enableCallToolSchemaCaching, this.applyElicitationDefaults);
+					this.initializeRequestMeta, this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers,
+					this.resourcesUpdateConsumers, this.promptsChangeConsumers, this.loggingConsumers,
+					this.progressConsumers, this.elicitationCompleteConsumers, this.samplingHandler,
+					this.formElicitationHandler, this.urlElicitationHandler, this.enableCallToolSchemaCaching,
+					this.applyElicitationDefaults);
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
@@ -592,6 +610,8 @@ public interface McpClient {
 		private ClientCapabilities capabilities;
 
 		private Implementation clientInfo = Implementation.builder("Java SDK MCP Client", "0.15.0").build();
+
+		private Map<String, Object> initializeRequestMeta;
 
 		private final Map<String, Root> roots = new HashMap<>();
 
@@ -679,6 +699,20 @@ public interface McpClient {
 		public AsyncSpec clientInfo(Implementation clientInfo) {
 			Assert.notNull(clientInfo, "Client info must not be null");
 			this.clientInfo = clientInfo;
+			return this;
+		}
+
+		/**
+		 * Sets optional metadata to include in the initialization request's {@code _meta}
+		 * field.
+		 * @param initializeRequestMeta Metadata to send with the initialize request. Must
+		 * not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if initializeRequestMeta is null
+		 */
+		public AsyncSpec initializeRequestMeta(Map<String, Object> initializeRequestMeta) {
+			Assert.notNull(initializeRequestMeta, "Initialize request metadata must not be null");
+			this.initializeRequestMeta = Collections.unmodifiableMap(new HashMap<>(initializeRequestMeta));
 			return this;
 		}
 
@@ -960,11 +994,11 @@ public interface McpClient {
 					: McpJsonDefaults.getSchemaValidator();
 			return new McpAsyncClient(this.transport, this.requestTimeout, this.initializationTimeout,
 					jsonSchemaValidator,
-					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
-							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
-							this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
-							this.elicitationCompleteConsumers, this.samplingHandler, this.formElicitationHandler,
-							this.urlElicitationHandler, this.enableCallToolSchemaCaching,
+					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.initializeRequestMeta,
+							this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers,
+							this.resourcesUpdateConsumers, this.promptsChangeConsumers, this.loggingConsumers,
+							this.progressConsumers, this.elicitationCompleteConsumers, this.samplingHandler,
+							this.formElicitationHandler, this.urlElicitationHandler, this.enableCallToolSchemaCaching,
 							this.applyElicitationDefaults));
 		}
 

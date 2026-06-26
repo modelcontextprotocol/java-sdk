@@ -7,7 +7,9 @@ package io.modelcontextprotocol.client;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
@@ -89,6 +91,8 @@ class LifecycleInitializer {
 
 	private final McpSchema.Implementation clientInfo;
 
+	private final Map<String, Object> initializeRequestMeta;
+
 	private List<String> protocolVersions;
 
 	private final AtomicReference<DefaultInitialization> initializationRef = new AtomicReference<>();
@@ -109,6 +113,15 @@ class LifecycleInitializer {
 			Function<ContextView, McpClientSession> sessionSupplier,
 			Function<Initialization, Mono<Void>> postInitializationHook) {
 
+		this(clientCapabilities, clientInfo, null, protocolVersions, initializationTimeout, sessionSupplier,
+				postInitializationHook);
+	}
+
+	public LifecycleInitializer(McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
+			Map<String, Object> initializeRequestMeta, List<String> protocolVersions, Duration initializationTimeout,
+			Function<ContextView, McpClientSession> sessionSupplier,
+			Function<Initialization, Mono<Void>> postInitializationHook) {
+
 		Assert.notNull(sessionSupplier, "Session supplier must not be null");
 		Assert.notNull(clientCapabilities, "Client capabilities must not be null");
 		Assert.notNull(clientInfo, "Client info must not be null");
@@ -119,9 +132,14 @@ class LifecycleInitializer {
 		this.sessionSupplier = sessionSupplier;
 		this.clientCapabilities = clientCapabilities;
 		this.clientInfo = clientInfo;
+		this.initializeRequestMeta = copyInitializeRequestMeta(initializeRequestMeta);
 		this.protocolVersions = Collections.unmodifiableList(new ArrayList<>(protocolVersions));
 		this.initializationTimeout = initializationTimeout;
 		this.postInitializationHook = postInitializationHook;
+	}
+
+	private static Map<String, Object> copyInitializeRequestMeta(Map<String, Object> initializeRequestMeta) {
+		return initializeRequestMeta != null ? Collections.unmodifiableMap(new HashMap<>(initializeRequestMeta)) : null;
 	}
 
 	/**
@@ -301,9 +319,12 @@ class LifecycleInitializer {
 
 		String latestVersion = this.protocolVersions.get(this.protocolVersions.size() - 1);
 
-		McpSchema.InitializeRequest initializeRequest = McpSchema.InitializeRequest
-			.builder(latestVersion, this.clientCapabilities, this.clientInfo)
-			.build();
+		McpSchema.InitializeRequest.Builder initializeRequestBuilder = McpSchema.InitializeRequest
+			.builder(latestVersion, this.clientCapabilities, this.clientInfo);
+		if (this.initializeRequestMeta != null) {
+			initializeRequestBuilder.meta(this.initializeRequestMeta);
+		}
+		McpSchema.InitializeRequest initializeRequest = initializeRequestBuilder.build();
 
 		Mono<McpSchema.InitializeResult> result = mcpClientSession.sendRequest(McpSchema.METHOD_INITIALIZE,
 				initializeRequest, McpAsyncClient.INITIALIZE_RESULT_TYPE_REF);

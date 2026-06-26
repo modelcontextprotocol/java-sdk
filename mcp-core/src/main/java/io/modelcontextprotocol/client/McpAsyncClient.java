@@ -351,9 +351,9 @@ public class McpAsyncClient {
 			}).then();
 		};
 
-		this.initializer = new LifecycleInitializer(clientCapabilities, clientInfo, transport.protocolVersions(),
-				initializationTimeout, ctx -> new McpClientSession(requestTimeout, transport, requestHandlers,
-						notificationHandlers, con -> con.contextWrite(ctx)),
+		this.initializer = new LifecycleInitializer(clientCapabilities, clientInfo, features.initializeRequestMeta(),
+				transport.protocolVersions(), initializationTimeout, ctx -> new McpClientSession(requestTimeout,
+						transport, requestHandlers, notificationHandlers, con -> con.contextWrite(ctx)),
 				postInitializationHook);
 
 		this.transport.setExceptionHandler(this.initializer::handleException);

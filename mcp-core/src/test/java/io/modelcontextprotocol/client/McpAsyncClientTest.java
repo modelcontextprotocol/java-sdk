@@ -4,14 +4,20 @@
 
 package io.modelcontextprotocol.client;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
+import io.modelcontextprotocol.MockMcpClientTransport;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -26,6 +32,36 @@ class McpAsyncClientTest {
 
 	@Nested
 	class ClientBuilder {
+
+		@Test
+		void initializeRequestMetaIsPropagatedToInitializeRequest() {
+			AtomicReference<McpSchema.InitializeRequest> capturedRequest = new AtomicReference<>();
+			McpSchema.InitializeResult initializeResult = McpSchema.InitializeResult
+				.builder(ProtocolVersions.MCP_2025_11_25, McpSchema.ServerCapabilities.builder().build(),
+						McpSchema.Implementation.builder("test-server", "1.0.0").build())
+				.build();
+			MockMcpClientTransport transport = new MockMcpClientTransport((mockTransport, message) -> {
+				if (message instanceof McpSchema.JSONRPCRequest request
+						&& McpSchema.METHOD_INITIALIZE.equals(request.method())) {
+					capturedRequest.set((McpSchema.InitializeRequest) request.params());
+					mockTransport
+						.simulateIncomingMessage(McpSchema.JSONRPCResponse.result(request.id(), initializeResult));
+				}
+			});
+
+			Map<String, Object> initializeRequestMeta = new HashMap<>();
+			initializeRequestMeta.put("traceId", "abc-123");
+
+			McpAsyncClient client = McpClient.async(transport)
+				.initializeRequestMeta(initializeRequestMeta)
+				.jsonSchemaValidator(mock(JsonSchemaValidator.class))
+				.build();
+			initializeRequestMeta.put("traceId", "changed");
+
+			StepVerifier.create(client.initialize()).expectNext(initializeResult).verifyComplete();
+
+			assertThat(capturedRequest.get().meta()).containsEntry("traceId", "abc-123");
+		}
 
 		@Nested
 		class ElicitationHandlers {
