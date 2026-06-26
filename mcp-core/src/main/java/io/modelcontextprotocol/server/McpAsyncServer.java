@@ -100,6 +100,8 @@ public class McpAsyncServer {
 
 	private final boolean validateToolInputs;
 
+	private final boolean duplicateStructuredContent;
+
 	private final McpSchema.ServerCapabilities serverCapabilities;
 
 	private final McpSchema.Implementation serverInfo;
@@ -132,13 +134,14 @@ public class McpAsyncServer {
 	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
-			boolean validateToolInputs) {
+			boolean validateToolInputs, boolean duplicateStructuredContent) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
 		this.serverCapabilities = features.serverCapabilities().mutate().logging().build();
 		this.instructions = features.instructions();
-		this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, features.tools()));
+		this.tools
+			.addAll(withStructuredOutputHandling(jsonSchemaValidator, duplicateStructuredContent, features.tools()));
 		this.resources.putAll(features.resources());
 		this.resourceTemplates.putAll(features.resourceTemplates());
 		this.prompts.putAll(features.prompts());
@@ -146,6 +149,7 @@ public class McpAsyncServer {
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
 		this.validateToolInputs = validateToolInputs;
+		this.duplicateStructuredContent = duplicateStructuredContent;
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
@@ -163,13 +167,14 @@ public class McpAsyncServer {
 	McpAsyncServer(McpStreamableServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
-			boolean validateToolInputs) {
+			boolean validateToolInputs, boolean duplicateStructuredContent) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
 		this.serverCapabilities = features.serverCapabilities().mutate().logging().build();
 		this.instructions = features.instructions();
-		this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, features.tools()));
+		this.tools
+			.addAll(withStructuredOutputHandling(jsonSchemaValidator, duplicateStructuredContent, features.tools()));
 		this.resources.putAll(features.resources());
 		this.resourceTemplates.putAll(features.resourceTemplates());
 		this.prompts.putAll(features.prompts());
@@ -177,6 +182,7 @@ public class McpAsyncServer {
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
 		this.validateToolInputs = validateToolInputs;
+		this.duplicateStructuredContent = duplicateStructuredContent;
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
@@ -356,7 +362,8 @@ public class McpAsyncServer {
 			return Mono.error(e);
 		}
 
-		var wrappedToolSpecification = withStructuredOutputHandling(this.jsonSchemaValidator, toolSpecification);
+		var wrappedToolSpecification = withStructuredOutputHandling(this.jsonSchemaValidator,
+				this.duplicateStructuredContent, toolSpecification);
 
 		return Mono.defer(() -> {
 			// Remove tools with duplicate tool names first
@@ -383,8 +390,10 @@ public class McpAsyncServer {
 
 		private final Map<String, Object> outputSchema;
 
+		private final boolean duplicateStructuredContent;
+
 		public StructuredOutputCallToolHandler(JsonSchemaValidator jsonSchemaValidator,
-				Map<String, Object> outputSchema,
+				Map<String, Object> outputSchema, boolean duplicateStructuredContent,
 				BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> delegateHandler) {
 
 			Assert.notNull(jsonSchemaValidator, "JsonSchemaValidator must not be null");
@@ -392,6 +401,7 @@ public class McpAsyncServer {
 
 			this.delegateCallToolResult = delegateHandler;
 			this.outputSchema = outputSchema;
+			this.duplicateStructuredContent = duplicateStructuredContent;
 			this.jsonSchemaValidator = jsonSchemaValidator;
 		}
 
@@ -441,7 +451,7 @@ public class McpAsyncServer {
 						.build();
 				}
 
-				if (Utils.isEmpty(result.content())) {
+				if (this.duplicateStructuredContent && Utils.isEmpty(result.content())) {
 					// For backwards compatibility, a tool that returns structured
 					// content SHOULD also return functionally equivalent unstructured
 					// content. (For example, serialized JSON can be returned in a
@@ -462,17 +472,21 @@ public class McpAsyncServer {
 	}
 
 	private static List<McpServerFeatures.AsyncToolSpecification> withStructuredOutputHandling(
-			JsonSchemaValidator jsonSchemaValidator, List<McpServerFeatures.AsyncToolSpecification> tools) {
+			JsonSchemaValidator jsonSchemaValidator, boolean duplicateStructuredContent,
+			List<McpServerFeatures.AsyncToolSpecification> tools) {
 
 		if (Utils.isEmpty(tools)) {
 			return tools;
 		}
 
-		return tools.stream().map(tool -> withStructuredOutputHandling(jsonSchemaValidator, tool)).toList();
+		return tools.stream()
+			.map(tool -> withStructuredOutputHandling(jsonSchemaValidator, duplicateStructuredContent, tool))
+			.toList();
 	}
 
 	private static McpServerFeatures.AsyncToolSpecification withStructuredOutputHandling(
-			JsonSchemaValidator jsonSchemaValidator, McpServerFeatures.AsyncToolSpecification toolSpecification) {
+			JsonSchemaValidator jsonSchemaValidator, boolean duplicateStructuredContent,
+			McpServerFeatures.AsyncToolSpecification toolSpecification) {
 
 		if (toolSpecification.callHandler() instanceof StructuredOutputCallToolHandler) {
 			// If the tool is already wrapped, return it as is
@@ -486,8 +500,9 @@ public class McpAsyncServer {
 
 		return McpServerFeatures.AsyncToolSpecification.builder()
 			.tool(toolSpecification.tool())
-			.callHandler(new StructuredOutputCallToolHandler(jsonSchemaValidator,
-					toolSpecification.tool().outputSchema(), toolSpecification.callHandler()))
+			.callHandler(
+					new StructuredOutputCallToolHandler(jsonSchemaValidator, toolSpecification.tool().outputSchema(),
+							duplicateStructuredContent, toolSpecification.callHandler()))
 			.build();
 	}
 

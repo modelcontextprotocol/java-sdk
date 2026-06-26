@@ -246,7 +246,8 @@ public interface McpServer {
 			validateAsyncToolSchemas(jsonSchemaValidator, this.tools);
 
 			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs,
+					duplicateStructuredContent);
 		}
 
 	}
@@ -275,7 +276,8 @@ public interface McpServer {
 			validateAsyncToolSchemas(jsonSchemaValidator, this.tools);
 
 			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs,
+					duplicateStructuredContent);
 		}
 
 	}
@@ -300,6 +302,8 @@ public interface McpServer {
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
 
 		boolean validateToolInputs = true;
+
+		boolean duplicateStructuredContent = true;
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -437,6 +441,25 @@ public interface McpServer {
 		 */
 		public AsyncSpecification<S> validateToolInputs(boolean validate) {
 			this.validateToolInputs = validate;
+			return this;
+		}
+
+		/**
+		 * Sets whether to automatically duplicate structured content into text content
+		 * for backwards compatibility. When enabled (the default), tools that return
+		 * structured content will also have the serialized JSON added as a
+		 * {@link McpSchema.TextContent} block in the {@code content} field, as
+		 * recommended by the MCP specification. Disabling this can reduce response
+		 * payload size when clients fully support {@code structuredContent}.
+		 * @param duplicate true to duplicate structured content into text content
+		 * (default), false to skip duplication
+		 * @return This builder instance for method chaining
+		 * @see <a href=
+		 * "https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content">MCP
+		 * Structured Content</a>
+		 */
+		public AsyncSpecification<S> duplicateStructuredContent(boolean duplicate) {
+			this.duplicateStructuredContent = duplicate;
 			return this;
 		}
 
@@ -841,7 +864,7 @@ public interface McpServer {
 
 			var asyncServer = new McpAsyncServer(transportProvider,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, requestTimeout,
-					uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
+					uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs, duplicateStructuredContent);
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -875,7 +898,8 @@ public interface McpServer {
 
 			var asyncServer = new McpAsyncServer(transportProvider,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
+					this.uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs,
+					duplicateStructuredContent);
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -899,6 +923,8 @@ public interface McpServer {
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
 
 		boolean validateToolInputs = true;
+
+		boolean duplicateStructuredContent = true;
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -1040,6 +1066,25 @@ public interface McpServer {
 		 */
 		public SyncSpecification<S> validateToolInputs(boolean validate) {
 			this.validateToolInputs = validate;
+			return this;
+		}
+
+		/**
+		 * Sets whether to automatically duplicate structured content into text content
+		 * for backwards compatibility. When enabled (the default), tools that return
+		 * structured content will also have the serialized JSON added as a
+		 * {@link McpSchema.TextContent} block in the {@code content} field, as
+		 * recommended by the MCP specification. Disabling this can reduce response
+		 * payload size when clients fully support {@code structuredContent}.
+		 * @param duplicate true to duplicate structured content into text content
+		 * (default), false to skip duplication
+		 * @return This builder instance for method chaining
+		 * @see <a href=
+		 * "https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content">MCP
+		 * Structured Content</a>
+		 */
+		public SyncSpecification<S> duplicateStructuredContent(boolean duplicate) {
+			this.duplicateStructuredContent = duplicate;
 			return this;
 		}
 
@@ -1442,6 +1487,8 @@ public interface McpServer {
 
 		boolean validateToolInputs = true;
 
+		boolean duplicateStructuredContent = true;
+
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
 		 * invoked by language models. Tools enable models to interact with external
@@ -1579,6 +1626,25 @@ public interface McpServer {
 		 */
 		public StatelessAsyncSpecification validateToolInputs(boolean validate) {
 			this.validateToolInputs = validate;
+			return this;
+		}
+
+		/**
+		 * Sets whether to automatically duplicate structured content into text content
+		 * for backwards compatibility. When enabled (the default), tools that return
+		 * structured content will also have the serialized JSON added as a
+		 * {@link McpSchema.TextContent} block in the {@code content} field, as
+		 * recommended by the MCP specification. Disabling this can reduce response
+		 * payload size when clients fully support {@code structuredContent}.
+		 * @param duplicate true to duplicate structured content into text content
+		 * (default), false to skip duplication
+		 * @return This builder instance for method chaining
+		 * @see <a href=
+		 * "https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content">MCP
+		 * Structured Content</a>
+		 */
+		public StatelessAsyncSpecification duplicateStructuredContent(boolean duplicate) {
+			this.duplicateStructuredContent = duplicate;
 			return this;
 		}
 
@@ -1915,7 +1981,8 @@ public interface McpServer {
 			validateStatelessAsyncToolSchemas(jsonSchemaValidator, this.tools);
 
 			return new McpStatelessAsyncServer(transport, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs,
+					duplicateStructuredContent);
 		}
 
 	}
@@ -1941,6 +2008,8 @@ public interface McpServer {
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
 
 		boolean validateToolInputs = true;
+
+		boolean duplicateStructuredContent = true;
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -2079,6 +2148,25 @@ public interface McpServer {
 		 */
 		public StatelessSyncSpecification validateToolInputs(boolean validate) {
 			this.validateToolInputs = validate;
+			return this;
+		}
+
+		/**
+		 * Sets whether to automatically duplicate structured content into text content
+		 * for backwards compatibility. When enabled (the default), tools that return
+		 * structured content will also have the serialized JSON added as a
+		 * {@link McpSchema.TextContent} block in the {@code content} field, as
+		 * recommended by the MCP specification. Disabling this can reduce response
+		 * payload size when clients fully support {@code structuredContent}.
+		 * @param duplicate true to duplicate structured content into text content
+		 * (default), false to skip duplication
+		 * @return This builder instance for method chaining
+		 * @see <a href=
+		 * "https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content">MCP
+		 * Structured Content</a>
+		 */
+		public StatelessSyncSpecification duplicateStructuredContent(boolean duplicate) {
+			this.duplicateStructuredContent = duplicate;
 			return this;
 		}
 
@@ -2433,7 +2521,7 @@ public interface McpServer {
 
 			var asyncServer = new McpStatelessAsyncServer(transport,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, requestTimeout,
-					uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
+					uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs, duplicateStructuredContent);
 			return new McpStatelessSyncServer(asyncServer, this.immediateExecution);
 		}
 
