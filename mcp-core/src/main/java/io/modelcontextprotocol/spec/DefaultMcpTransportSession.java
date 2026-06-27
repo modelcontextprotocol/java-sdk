@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Disposable;
 import reactor.core.Disposables;
+import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 
 import java.util.Optional;
@@ -77,8 +78,36 @@ public class DefaultMcpTransportSession implements McpTransportSession<Disposabl
 
 	@Override
 	public Mono<Void> closeGracefully() {
-		return Mono.from(this.onClose.apply(this.sessionId.get()))
-			.then(Mono.fromRunnable(this.openConnections::dispose));
+		return Mono.defer(() -> {
+			final String sessionId = this.sessionId.get();
+
+			final AtomicReference<Throwable> primary = new AtomicReference<>(null);
+
+			// Subscribe to onClose publisher and capture any error
+			return Mono.from(this.onClose.apply(sessionId)).onErrorResume(err -> {
+				primary.set(err);
+				return Mono.empty();
+			})
+				// Always dispose openConnections
+				.then(Mono.defer(() -> {
+					try {
+						this.openConnections.dispose();
+					}
+					catch (Throwable disposeEx) {
+						if (primary.get() != null) {
+							primary.get().addSuppressed(disposeEx);
+						}
+						else {
+							primary.set(disposeEx);
+						}
+					}
+
+					// Re-emit the original error (with suppressed dispose error),
+					// complete
+					Throwable throwable = primary.get();
+					return (throwable == null) ? Mono.empty() : Mono.error(Exceptions.propagate(throwable));
+				}));
+		});
 	}
 
 }
