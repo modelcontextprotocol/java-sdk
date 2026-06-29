@@ -7,11 +7,13 @@ package io.modelcontextprotocol.client.transport;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportSessionClosedException;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.http.HttpRequest;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -19,11 +21,13 @@ import java.util.function.Function;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
@@ -164,6 +168,101 @@ class HttpClientStreamableHttpTransportTest {
 			.expectErrorMatches(err -> err instanceof McpTransportSessionClosedException
 					&& err.getMessage().contains("Transport has already been closed"))
 			.verify();
+	}
+
+	@Test
+	void testMcpMethodHeaderOnRequest() throws URISyntaxException {
+		var uri = new URI(host + "/mcp");
+		var mockRequestCustomizer = mock(McpSyncHttpClientRequestCustomizer.class);
+
+		var transport = HttpClientStreamableHttpTransport.builder(host)
+			.httpRequestCustomizer(mockRequestCustomizer)
+			.build();
+
+		withTransport(transport, (t) -> {
+			var initializeRequest = McpSchema.InitializeRequest
+				.builder(ProtocolVersions.MCP_2025_11_25, McpSchema.ClientCapabilities.builder().roots(true).build(),
+						McpSchema.Implementation.builder("MCP Client", "0.3.1").build())
+				.build();
+			var testMessage = new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, "test-id", initializeRequest);
+
+			StepVerifier
+				.create(t.sendMessage(testMessage).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)))
+				.verifyComplete();
+
+			var requestCaptor = ArgumentCaptor.forClass(HttpRequest.Builder.class);
+			verify(mockRequestCustomizer, atLeastOnce()).customize(requestCaptor.capture(), eq("POST"), eq(uri), any(),
+					eq(context));
+			assertThat(requestCaptor.getValue().build().headers().firstValue(HttpHeaders.MCP_METHOD))
+				.hasValue(McpSchema.METHOD_INITIALIZE);
+		});
+	}
+
+	@Test
+	void testMcpMethodHeaderOnNotification() throws URISyntaxException {
+		var uri = new URI(host + "/mcp");
+		var mockRequestCustomizer = mock(McpSyncHttpClientRequestCustomizer.class);
+
+		var transport = HttpClientStreamableHttpTransport.builder(host)
+			.httpRequestCustomizer(mockRequestCustomizer)
+			.build();
+
+		withTransport(transport, (t) -> {
+			var initializeRequest = McpSchema.InitializeRequest
+				.builder(ProtocolVersions.MCP_2025_11_25, McpSchema.ClientCapabilities.builder().roots(true).build(),
+						McpSchema.Implementation.builder("MCP Client", "0.3.1").build())
+				.build();
+			var initializeMessage = new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, "test-id",
+					initializeRequest);
+			StepVerifier
+				.create(t.sendMessage(initializeMessage).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)))
+				.verifyComplete();
+
+			var testMessage = new McpSchema.JSONRPCNotification(McpSchema.METHOD_NOTIFICATION_INITIALIZED);
+
+			StepVerifier
+				.create(t.sendMessage(testMessage).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)))
+				.verifyComplete();
+
+			var requestCaptor = ArgumentCaptor.forClass(HttpRequest.Builder.class);
+			verify(mockRequestCustomizer, atLeastOnce()).customize(requestCaptor.capture(), eq("POST"), eq(uri), any(),
+					eq(context));
+			assertThat(requestCaptor.getValue().build().headers().firstValue(HttpHeaders.MCP_METHOD))
+				.hasValue(McpSchema.METHOD_NOTIFICATION_INITIALIZED);
+		});
+	}
+
+	@Test
+	void testNoMcpMethodHeaderOnResponse() throws URISyntaxException {
+		var uri = new URI(host + "/mcp");
+		var mockRequestCustomizer = mock(McpSyncHttpClientRequestCustomizer.class);
+
+		var transport = HttpClientStreamableHttpTransport.builder(host)
+			.httpRequestCustomizer(mockRequestCustomizer)
+			.build();
+
+		withTransport(transport, (t) -> {
+			var initializeRequest = McpSchema.InitializeRequest
+				.builder(ProtocolVersions.MCP_2025_11_25, McpSchema.ClientCapabilities.builder().roots(true).build(),
+						McpSchema.Implementation.builder("MCP Client", "0.3.1").build())
+				.build();
+			var initializeMessage = new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, "test-id",
+					initializeRequest);
+			StepVerifier
+				.create(t.sendMessage(initializeMessage).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)))
+				.verifyComplete();
+
+			var testMessage = McpSchema.JSONRPCResponse.result("test-id-2", Map.of());
+
+			StepVerifier
+				.create(t.sendMessage(testMessage).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)))
+				.verifyComplete();
+
+			var requestCaptor = ArgumentCaptor.forClass(HttpRequest.Builder.class);
+			verify(mockRequestCustomizer, atLeastOnce()).customize(requestCaptor.capture(), eq("POST"), eq(uri), any(),
+					eq(context));
+			assertThat(requestCaptor.getValue().build().headers().firstValue(HttpHeaders.MCP_METHOD)).isEmpty();
+		});
 	}
 
 }
