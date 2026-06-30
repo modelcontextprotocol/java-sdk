@@ -22,7 +22,6 @@ import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
-import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import org.slf4j.Logger;
@@ -80,11 +79,6 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 		this.jsonMapper = jsonMapper;
 		this.inputStream = inputStream;
 		this.outputStream = outputStream;
-	}
-
-	@Override
-	public List<String> protocolVersions() {
-		return List.of(ProtocolVersions.MCP_2024_11_05);
 	}
 
 	@Override

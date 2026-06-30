@@ -27,7 +27,6 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.CompleteResult.CompleteCompletion;
 import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
-import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
 import io.modelcontextprotocol.spec.McpSchema.SetLevelRequest;
@@ -439,9 +438,11 @@ public class McpAsyncServer {
 				var validation = this.jsonSchemaValidator.validate(outputSchema, result.structuredContent());
 
 				if (!validation.valid()) {
-					logger.warn("Tool call result validation failed: {}", validation.errorMessage());
+					String message = "Tool (" + request.name() + ") output validation failed: "
+							+ validation.errorMessage();
+					logger.warn(message);
 					return CallToolResult.builder()
-						.content(List.of(McpSchema.TextContent.builder(validation.errorMessage()).build()))
+						.content(List.of(McpSchema.TextContent.builder(message).build()))
 						.isError(true)
 						.build();
 				}
@@ -519,14 +520,13 @@ public class McpAsyncServer {
 
 		return Mono.defer(() -> {
 			if (this.tools.removeIf(toolSpecification -> toolSpecification.tool().name().equals(toolName))) {
-
 				logger.debug("Removed tool handler: {}", toolName);
 				if (this.serverCapabilities.tools().listChanged()) {
 					return notifyToolsListChanged();
 				}
 			}
 			else {
-				logger.warn("Ignore as a Tool with name '{}' not found", toolName);
+				logger.warn("Failed to remove tool with name '{}' (not found)", toolName);
 			}
 
 			return Mono.empty();
@@ -660,7 +660,7 @@ public class McpAsyncServer {
 				return Mono.empty();
 			}
 			else {
-				logger.warn("Ignore as a Resource with URI '{}' not found", resourceUri);
+				logger.warn("Failed to remove resource with URI '{}' (not found)", resourceUri);
 			}
 			return Mono.empty();
 		});
@@ -724,7 +724,7 @@ public class McpAsyncServer {
 				logger.debug("Removed resource template: {}", uriTemplate);
 			}
 			else {
-				logger.warn("Ignore as a Resource Template with URI '{}' not found", uriTemplate);
+				logger.warn("Failed to remove a resource template with URI '{}' (not found)", uriTemplate);
 			}
 			return Mono.empty();
 		});
@@ -962,7 +962,7 @@ public class McpAsyncServer {
 				return Mono.empty();
 			}
 			else {
-				logger.warn("Ignore as a Prompt with name '{}' not found", promptName);
+				logger.warn("Failed to remove a prompt with name '{}' (not found)", promptName);
 			}
 			return Mono.empty();
 		});
@@ -974,6 +974,25 @@ public class McpAsyncServer {
 	 */
 	public Mono<Void> notifyPromptsListChanged() {
 		return this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED, null);
+	}
+
+	/**
+	 * Sends an elicitation complete notification to a specific client session, indicating
+	 * that an out-of-band URL elicitation interaction has completed.
+	 * @param sessionId The ID of the session to notify
+	 * @param notification The notification containing the elicitation ID
+	 * @return A Mono that completes when the notification has been sent
+	 */
+	public Mono<Void> sendElicitationComplete(String sessionId,
+			McpSchema.ElicitationCompleteNotification notification) {
+		if (sessionId == null) {
+			return Mono.error(new IllegalArgumentException("Session ID must not be null"));
+		}
+		if (notification == null) {
+			return Mono.error(new IllegalArgumentException("Notification must not be null"));
+		}
+		return this.mcpTransportProvider.notifyClient(sessionId, McpSchema.METHOD_NOTIFICATION_ELICITATION_COMPLETE,
+				notification);
 	}
 
 	private McpRequestHandler<McpSchema.ListPromptsResult> promptsListRequestHandler() {
@@ -1136,9 +1155,7 @@ public class McpAsyncServer {
 			McpServerFeatures.AsyncCompletionSpecification specification = this.completions.get(request.ref());
 
 			if (specification == null) {
-				return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
-					.message("AsyncCompletionSpecification not found: " + request.ref())
-					.build());
+				return EMPTY_COMPLETION_RESULT;
 			}
 
 			return Mono.defer(() -> specification.completionHandler().apply(exchange, request));

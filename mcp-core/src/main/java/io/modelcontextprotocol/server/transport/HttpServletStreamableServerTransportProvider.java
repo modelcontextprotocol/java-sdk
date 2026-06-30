@@ -27,7 +27,6 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpStreamableServerSession;
 import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
-import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
@@ -167,12 +166,6 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	}
 
 	@Override
-	public List<String> protocolVersions() {
-		return List.of(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26,
-				ProtocolVersions.MCP_2025_06_18, ProtocolVersions.MCP_2025_11_25);
-	}
-
-	@Override
 	public void setSessionFactory(McpStreamableServerSession.Factory sessionFactory) {
 		this.sessionFactory = sessionFactory;
 	}
@@ -200,7 +193,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 					session.sendNotification(method, params).block();
 				}
 				catch (Exception e) {
-					logger.error("Failed to send message to session {}: {}", session.getId(), e.getMessage());
+					logger.info("Failed to send message to session {}: {}", session.getId(), e.getMessage());
 				}
 			});
 		});
@@ -233,12 +226,11 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 					session.closeGracefully().block();
 				}
 				catch (Exception e) {
-					logger.error("Failed to close session {}: {}", session.getId(), e.getMessage());
+					logger.warn("Failed to close session {}: {}", session.getId(), e.getMessage());
 				}
 			});
 
 			this.sessions.clear();
-			logger.debug("Graceful shutdown completed");
 		}).then().doOnSuccess(v -> {
 			sessions.clear();
 			logger.debug("Graceful shutdown completed");
