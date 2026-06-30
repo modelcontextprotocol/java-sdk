@@ -383,6 +383,42 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * @throws ServletException If a servlet-specific error occurs
 	 * @throws IOException If an I/O error occurs
 	 */
+	private String extractNameFromParams(String method, Object params) {
+		if (params == null) {
+			return null;
+		}
+
+		try {
+			switch (method) {
+				case McpSchema.METHOD_TOOLS_CALL -> {
+					McpSchema.CallToolRequest request = jsonMapper.convertValue(params,
+							new TypeRef<McpSchema.CallToolRequest>() {
+							});
+					return request.name();
+				}
+				case McpSchema.METHOD_RESOURCES_READ -> {
+					McpSchema.ReadResourceRequest request = jsonMapper.convertValue(params,
+							new TypeRef<McpSchema.ReadResourceRequest>() {
+							});
+					return request.uri();
+				}
+				case McpSchema.METHOD_PROMPT_GET -> {
+					McpSchema.GetPromptRequest request = jsonMapper.convertValue(params,
+							new TypeRef<McpSchema.GetPromptRequest>() {
+							});
+					return request.name();
+				}
+				default -> {
+					return null;
+				}
+			}
+		}
+		catch (Exception e) {
+			logger.debug("Failed to extract name from params for method {}: {}", method, e.getMessage());
+			return null;
+		}
+	}
+
 	@Override
 	protected void doPost(HttpServletRequest request, HttpServletResponse response)
 			throws ServletException, IOException {
@@ -428,6 +464,32 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			}
 
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body.toString());
+
+			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
+				String method = jsonrpcRequest.method();
+				if (McpSchema.METHOD_TOOLS_CALL.equals(method) || McpSchema.METHOD_RESOURCES_READ.equals(method)
+						|| McpSchema.METHOD_PROMPT_GET.equals(method)) {
+					String expectedName = extractNameFromParams(method, jsonrpcRequest.params());
+					String headerName = request.getHeader(HttpHeaders.MCP_NAME);
+
+					if (headerName == null || headerName.isBlank()) {
+						this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+								McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+									.message("Mcp-Name header required for method " + method)
+									.build());
+						return;
+					}
+
+					if (expectedName == null || !headerName.equals(expectedName)) {
+						this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+								McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+									.message("Mcp-Name header mismatch: expected '" + expectedName + "' but was '"
+											+ headerName + "'")
+									.build());
+						return;
+					}
+				}
+			}
 
 			// Handle initialization request
 			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest
