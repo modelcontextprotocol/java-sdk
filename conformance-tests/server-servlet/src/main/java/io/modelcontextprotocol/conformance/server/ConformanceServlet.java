@@ -5,11 +5,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import io.modelcontextprotocol.json.McpJsonDefaults;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.transport.DefaultServerTransportSecurityValidator;
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
-import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.AudioContent;
 import io.modelcontextprotocol.spec.McpSchema.BlobResourceContents;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -42,6 +43,16 @@ import org.apache.catalina.LifecycleException;
 import org.apache.catalina.startup.Tomcat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static io.modelcontextprotocol.spec.McpSchema.EnumSchemaOption;
+import static io.modelcontextprotocol.spec.McpSchema.JSON_SCHEMA_DIALECT_2020_12;
+import static io.modelcontextprotocol.spec.McpSchema.LegacyTitledEnumSchema;
+import static io.modelcontextprotocol.spec.McpSchema.TitledMultiSelectEnumSchema;
+import static io.modelcontextprotocol.spec.McpSchema.TitledMultiSelectItems;
+import static io.modelcontextprotocol.spec.McpSchema.TitledSingleSelectEnumSchema;
+import static io.modelcontextprotocol.spec.McpSchema.UntitledMultiSelectEnumSchema;
+import static io.modelcontextprotocol.spec.McpSchema.UntitledMultiSelectItems;
+import static io.modelcontextprotocol.spec.McpSchema.UntitledSingleSelectEnumSchema;
 
 public class ConformanceServlet {
 
@@ -141,6 +152,7 @@ public class ConformanceServlet {
 		return tomcat;
 	}
 
+	@SuppressWarnings("deprecation")
 	private static List<McpServerFeatures.SyncToolSpecification> createToolSpecs() {
 		return List.of(
 				// test_simple_text - Returns simple text content
@@ -406,8 +418,8 @@ public class ConformanceServlet {
 				// json_schema_2020_12_tool - SEP-1613 dialect/keyword preservation
 				McpServerFeatures.SyncToolSpecification.builder()
 					.tool(Tool
-						.builder("json_schema_2020_12_tool", Map.of("$schema", McpSchema.JSON_SCHEMA_DIALECT_2020_12,
-								"type", "object", "$defs",
+						.builder("json_schema_2020_12_tool", Map.of("$schema", JSON_SCHEMA_DIALECT_2020_12, "type",
+								"object", "$defs",
 								Map.of("address",
 										Map.of("type", "object", "properties",
 												Map.of("street", Map.of("type", "string"), "city",
@@ -434,33 +446,44 @@ public class ConformanceServlet {
 					.callHandler((exchange, request) -> {
 						logger.info("Tool 'test_elicitation_sep1330_enums' called");
 
-						// Create schema with all 5 enum variants
-						Map<String, Object> requestedSchema = Map.of("type", "object", "properties", Map.of(
-								// 1. Untitled single-select
-								"untitledSingle",
-								Map.of("type", "string", "enum", List.of("option1", "option2", "option3")),
-								// 2. Titled single-select using oneOf with const/title
-								"titledSingle",
-								Map.of("type", "string", "oneOf",
-										List.of(Map.of("const", "value1", "title", "First Option"),
-												Map.of("const", "value2", "title", "Second Option"),
-												Map.of("const", "value3", "title", "Third Option"))),
-								// 3. Legacy titled using enumNames (deprecated)
-								"legacyEnum",
-								Map.of("type", "string", "enum", List.of("opt1", "opt2", "opt3"), "enumNames",
-										List.of("Option One", "Option Two", "Option Three")),
-								// 4. Untitled multi-select
-								"untitledMulti",
-								Map.of("type", "array", "items",
-										Map.of("type", "string", "enum", List.of("option1", "option2", "option3"))),
-								// 5. Titled multi-select using items.anyOf with
-								// const/title
-								"titledMulti",
-								Map.of("type", "array", "items",
-										Map.of("anyOf",
-												List.of(Map.of("const", "value1", "title", "First Choice"),
-														Map.of("const", "value2", "title", "Second Choice"),
-														Map.of("const", "value3", "title", "Third Choice"))))),
+						TypeRef<Map<String, Object>> mapType = new TypeRef<>() {
+						};
+						var mapper = McpJsonDefaults.getMapper();
+
+						// 1. Untitled single-select
+						var untitledSingle = UntitledSingleSelectEnumSchema.builder()
+							.enumValues("option1", "option2", "option3")
+							.build();
+						// 2. Titled single-select using oneOf with const/title
+						var titledSingle = TitledSingleSelectEnumSchema.builder()
+							.oneOf(new EnumSchemaOption("value1", "First Option"),
+									new EnumSchemaOption("value2", "Second Option"),
+									new EnumSchemaOption("value3", "Third Option"))
+							.build();
+						// 3. Legacy titled using enumNames (deprecated)
+						var legacyEnum = LegacyTitledEnumSchema.builder()
+							.enumValues("opt1", "opt2", "opt3")
+							.enumNames("Option One", "Option Two", "Option Three")
+							.build();
+						// 4. Untitled multi-select
+						var untitledMulti = UntitledMultiSelectEnumSchema.builder(
+								UntitledMultiSelectItems.builder().enumValues("option1", "option2", "option3").build())
+							.build();
+						// 5. Titled multi-select using items.anyOf with const/title
+						var titledMulti = TitledMultiSelectEnumSchema
+							.builder(TitledMultiSelectItems.builder()
+								.anyOf(new EnumSchemaOption("value1", "First Choice"),
+										new EnumSchemaOption("value2", "Second Choice"),
+										new EnumSchemaOption("value3", "Third Choice"))
+								.build())
+							.build();
+
+						Map<String, Object> requestedSchema = Map.of("type", "object", "properties",
+								Map.of("untitledSingle", mapper.convertValue(untitledSingle, mapType), "titledSingle",
+										mapper.convertValue(titledSingle, mapType), "legacyEnum",
+										mapper.convertValue(legacyEnum, mapType), "untitledMulti",
+										mapper.convertValue(untitledMulti, mapType), "titledMulti",
+										mapper.convertValue(titledMulti, mapType)),
 								"required", List.of("untitledSingle", "titledSingle", "legacyEnum", "untitledMulti",
 										"titledMulti"));
 

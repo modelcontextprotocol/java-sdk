@@ -62,9 +62,15 @@ import reactor.core.publisher.Sinks;
  * </ul>
  *
  * @author Christian Tzolov
+ * @deprecated This SSE transport is deprecated. Use Streamable HTTP instead, with
+ * {@link HttpClientStreamableHttpTransport}.
  * @see io.modelcontextprotocol.spec.McpTransport
  * @see io.modelcontextprotocol.spec.McpClientTransport
+ * @see <a href=
+ * "https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#backwards-compatibility">Transports
+ * backwards compatibility</a>
  */
+@Deprecated
 public class HttpClientSseClientTransport implements McpClientTransport {
 
 	private static final String MCP_PROTOCOL_VERSION = ProtocolVersions.MCP_2024_11_05;

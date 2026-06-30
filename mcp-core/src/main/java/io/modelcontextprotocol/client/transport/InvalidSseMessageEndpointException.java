@@ -9,7 +9,10 @@ package io.modelcontextprotocol.client.transport;
  * not valid.
  *
  * @author Daniel Garnier-Moiroux
+ * @deprecated This exception is part of the deprecated SSE transport.
+ * @see HttpClientSseClientTransport
  */
+@Deprecated
 public class InvalidSseMessageEndpointException extends Exception {
 
 	private final String messageEndpoint;
