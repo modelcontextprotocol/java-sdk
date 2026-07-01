@@ -439,6 +439,15 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 					return;
 				}
 
+				String sessionId = request.getHeader(HttpHeaders.MCP_SESSION_ID);
+				if (sessionId != null && this.sessions.containsKey(sessionId)) {
+					this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+							McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+								.message("Duplicate initialize request for active session: " + sessionId)
+								.build());
+					return;
+				}
+
 				McpSchema.InitializeRequest initializeRequest = jsonMapper.convertValue(jsonrpcRequest.params(),
 						new TypeRef<McpSchema.InitializeRequest>() {
 						});
