@@ -747,7 +747,6 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				}
 				catch (Exception e) {
 					logger.error("Failed to send message to session {}: {}", this.sessionId, e.getMessage());
-					HttpServletStreamableServerTransportProvider.this.sessions.remove(this.sessionId);
 					this.asyncContext.complete();
 				}
 				finally {
