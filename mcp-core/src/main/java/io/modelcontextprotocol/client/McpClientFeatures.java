@@ -68,14 +68,15 @@ class McpClientFeatures {
 	 * in the {@code requestedSchema}.
 	 */
 	record Async(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
-			Map<String, McpSchema.Root> roots, List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers,
+			@Deprecated Map<String, McpSchema.Root> roots,
+			List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers,
 			List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers,
 			List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers,
 			List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers,
-			List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers,
+			@Deprecated List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers,
 			List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers,
 			List<Function<McpSchema.ElicitationCompleteNotification, Mono<Void>>> elicitationCompleteConsumers,
-			Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler,
+			@Deprecated Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler,
 			Function<McpSchema.ElicitFormRequest, Mono<McpSchema.ElicitResult>> formElicitationHandler,
 			Function<McpSchema.ElicitUrlRequest, Mono<McpSchema.ElicitResult>> urlElicitationHandler,
 			boolean enableCallToolSchemaCaching, boolean applyElicitationDefaults) {
@@ -95,7 +96,10 @@ class McpClientFeatures {
 		 * @param applyElicitationDefaults whether the client should fill in missing
 		 * fields of an accepted {@code ElicitResult.content} with the {@code default}
 		 * values declared in the {@code requestedSchema}.
+		 * @deprecated Roots, sampling, and logging are deprecated in the 2026-07-28 MCP
+		 * specification.
 		 */
+		@Deprecated
 		public Async(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 				Map<String, McpSchema.Root> roots,
 				List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers,
@@ -137,6 +141,7 @@ class McpClientFeatures {
 		/**
 		 * @deprecated Only exists for backwards-compatibility purposes.
 		 */
+		@Deprecated
 		public Async(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 				Map<String, McpSchema.Root> roots,
 				List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers,
@@ -248,14 +253,14 @@ class McpClientFeatures {
 	 * in the {@code requestedSchema}.
 	 */
 	public record Sync(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
-			Map<String, McpSchema.Root> roots, List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers,
+			@Deprecated Map<String, McpSchema.Root> roots, List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers,
 			List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers,
 			List<Consumer<List<McpSchema.ResourceContents>>> resourcesUpdateConsumers,
 			List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers,
-			List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers,
+			@Deprecated List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers,
 			List<Consumer<McpSchema.ProgressNotification>> progressConsumers,
 			List<Consumer<McpSchema.ElicitationCompleteNotification>> elicitationCompleteConsumers,
-			Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler,
+			@Deprecated Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler,
 			Function<McpSchema.ElicitFormRequest, McpSchema.ElicitResult> formElicitationHandler,
 			Function<McpSchema.ElicitUrlRequest, McpSchema.ElicitResult> urlElicitationHandler,
 			boolean enableCallToolSchemaCaching, boolean applyElicitationDefaults) {
@@ -277,7 +282,10 @@ class McpClientFeatures {
 		 * @param applyElicitationDefaults whether the client should fill in missing
 		 * fields of an accepted {@code ElicitResult.content} with the {@code default}
 		 * values declared in the {@code requestedSchema}.
+		 * @deprecated Roots, sampling, and logging are deprecated in the 2026-07-28 MCP
+		 * specification.
 		 */
+		@Deprecated
 		public Sync(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 				Map<String, McpSchema.Root> roots, List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers,
 				List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers,
@@ -318,6 +326,7 @@ class McpClientFeatures {
 		/**
 		 * @deprecated Only exists for backwards-compatibility purposes.
 		 */
+		@Deprecated
 		public Sync(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
 				Map<String, McpSchema.Root> roots, List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers,
 				List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers,
