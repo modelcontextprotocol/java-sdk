@@ -15,7 +15,6 @@ import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.modelcontextprotocol.spec.McpTransportException;
 import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.FluxSink;
 
@@ -180,10 +179,11 @@ class ResponseSubscribers {
 					upstream().request(1);
 				}
 				else {
-					// If the response is not successful, emit an error
-					this.sink.error(new McpTransportException(
-							"Invalid SSE response. Status code: " + this.responseInfo.statusCode() + " Line: " + line));
-
+					// Per the SSE spec, fields the client does not recognize (e.g.
+					// "retry:")
+					// must be ignored rather than treated as an invalid response.
+					logger.debug("Ignoring unrecognized SSE line: {}", line);
+					upstream().request(1);
 				}
 			}
 		}
