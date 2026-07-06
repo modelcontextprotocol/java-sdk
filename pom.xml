@@ -68,9 +68,9 @@
 
 		<slf4j-api.version>2.0.16</slf4j-api.version>
 		<logback.version>1.5.15</logback.version>
-		<jackson-annotations.version>2.20</jackson-annotations.version>
+		<jackson-annotations.version>2.21</jackson-annotations.version>
 		<jackson2.version>2.20.1</jackson2.version>
-		<jackson3.version>3.0.3</jackson3.version>
+		<jackson3.version>3.1.4</jackson3.version>
 		<springframework.version>6.2.1</springframework.version>
 
 		<!-- plugin versions -->
