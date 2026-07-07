@@ -95,7 +95,7 @@ jobs:
         run: mvn clean install -DskipTests
 
       - name: Run conformance test
-        uses: modelcontextprotocol/conformance@v0.1.15
+        uses: modelcontextprotocol/conformance@v0.1.16
         with:
           node-version: '22' # see https://github.com/modelcontextprotocol/conformance/pull/162
           mode: client

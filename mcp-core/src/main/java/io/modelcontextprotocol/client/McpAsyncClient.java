@@ -15,9 +15,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import io.modelcontextprotocol.client.LifecycleInitializer.Initialization;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
@@ -29,8 +26,10 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
 import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
+import io.modelcontextprotocol.spec.McpSchema.ElicitFormRequest;
 import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
 import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
+import io.modelcontextprotocol.spec.McpSchema.ElicitUrlRequest;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
 import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
@@ -41,6 +40,8 @@ import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.ToolNameValidator;
 import io.modelcontextprotocol.util.Utils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -108,6 +109,9 @@ public class McpAsyncClient {
 	public static final TypeRef<McpSchema.ProgressNotification> PROGRESS_NOTIFICATION_TYPE_REF = new TypeRef<>() {
 	};
 
+	public static final TypeRef<McpSchema.ElicitationCompleteNotification> ELICITATION_COMPLETE_NOTIFICATION_TYPE_REF = new TypeRef<>() {
+	};
+
 	public static final String NEGOTIATED_PROTOCOL_VERSION = "io.modelcontextprotocol.client.negotiated-protocol-version";
 
 	/**
@@ -145,7 +149,14 @@ public class McpAsyncClient {
 	 * necessary information dynamically. Servers can request structured data from users
 	 * with optional JSON schemas to validate responses.
 	 */
-	private Function<ElicitRequest, Mono<ElicitResult>> elicitationHandler;
+	private Function<ElicitFormRequest, Mono<ElicitResult>> formElicitationHandler;
+
+	/**
+	 * MCP provides a standardized way for servers to request additional information from
+	 * users out-of-band during interactions. This flow allows users to share information
+	 * with the server without sharing it with the client.
+	 */
+	private Function<ElicitUrlRequest, Mono<ElicitResult>> urlElicitationHandler;
 
 	/**
 	 * Client transport implementation.
@@ -226,11 +237,21 @@ public class McpAsyncClient {
 
 		// Elicitation Handler
 		if (this.clientCapabilities.elicitation() != null) {
-			if (features.elicitationHandler() == null) {
+			// elicitation: {} is equivalent to elicitation: { form: {} } for
+			// backwards-compatiblity
+			var supportsForm = this.clientCapabilities.elicitation().form() != null
+					|| this.clientCapabilities.elicitation().url() == null;
+			var supportsUrl = this.clientCapabilities.elicitation().url() != null;
+			if (supportsForm && features.formElicitationHandler() == null) {
 				throw new IllegalArgumentException(
-						"Elicitation handler must not be null when client capabilities include elicitation");
+						"Form elicitation handler must not be null when client capabilities include form elicitation");
 			}
-			this.elicitationHandler = features.elicitationHandler();
+			if (supportsUrl && features.urlElicitationHandler() == null) {
+				throw new IllegalArgumentException(
+						"URL elicitation handler must not be null when client capabilities include URL elicitation");
+			}
+			this.formElicitationHandler = features.formElicitationHandler();
+			this.urlElicitationHandler = features.urlElicitationHandler();
 			requestHandlers.put(McpSchema.METHOD_ELICITATION_CREATE, elicitationCreateHandler());
 		}
 
@@ -300,6 +321,16 @@ public class McpAsyncClient {
 		}
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_PROGRESS,
 				asyncProgressNotificationHandler(progressConsumersFinal));
+
+		// Elicitation Complete Notification
+		List<Function<McpSchema.ElicitationCompleteNotification, Mono<Void>>> elicitationCompleteConsumersFinal = new ArrayList<>();
+		elicitationCompleteConsumersFinal
+			.add((notification) -> Mono.fromRunnable(() -> logger.debug("Elicitation complete: {}", notification)));
+		if (!Utils.isEmpty(features.elicitationCompleteConsumers())) {
+			elicitationCompleteConsumersFinal.addAll(features.elicitationCompleteConsumers());
+		}
+		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_ELICITATION_COMPLETE,
+				asyncElicitationCompleteNotificationHandler(elicitationCompleteConsumersFinal));
 
 		Function<Initialization, Mono<Void>> postInitializationHook = init -> {
 
@@ -552,23 +583,47 @@ public class McpAsyncClient {
 		};
 	}
 
-	// --------------------------
-	// Elicitation
-	// --------------------------
 	private RequestHandler<ElicitResult> elicitationCreateHandler() {
 		return params -> {
-			ElicitRequest request = transport.unmarshalFrom(params, new TypeRef<>() {
+			McpSchema.ElicitRequest request = transport.unmarshalFrom(params, new TypeRef<>() {
 			});
 
-			return this.elicitationHandler.apply(request).map(result -> {
-				if (this.applyElicitationDefaults && result.action() == ElicitResult.Action.ACCEPT
-						&& result.content() != null) {
-					Map<String, Object> merged = new HashMap<>(result.content());
-					applyElicitationDefaults(request.requestedSchema(), merged);
-					return new ElicitResult(result.action(), merged, result.meta());
+			if (request instanceof ElicitUrlRequest urlRequest) {
+				if (this.urlElicitationHandler == null) {
+					return Mono.error(new IllegalStateException(
+							"Received URL elicitation request, but urlElicitation handler is null"));
 				}
-				return result;
-			});
+				return this.urlElicitationHandler.apply(urlRequest);
+			}
+			else if (request instanceof ElicitFormRequest formRequest) {
+				if (this.formElicitationHandler == null) {
+					return Mono.error(new IllegalStateException(
+							"Received FORM elicitation request, but formElicitationHandler handler is null"));
+				}
+				return this.formElicitationHandler.apply(formRequest).map(result -> {
+					if (this.applyElicitationDefaults && result.action() == ElicitResult.Action.ACCEPT
+							&& result.content() != null) {
+						Map<String, Object> merged = new HashMap<>(result.content());
+						applyElicitationDefaults(formRequest.requestedSchema(), merged);
+						return new ElicitResult(result.action(), merged, result.meta());
+					}
+					return result;
+				});
+			}
+
+			return Mono.error(new IllegalStateException("Unknown elictation type deserialized"));
+		};
+	}
+
+	private NotificationHandler asyncElicitationCompleteNotificationHandler(
+			List<Function<McpSchema.ElicitationCompleteNotification, Mono<Void>>> elicitationCompleteConsumers) {
+		return params -> {
+			McpSchema.ElicitationCompleteNotification notification = transport.unmarshalFrom(params,
+					ELICITATION_COMPLETE_NOTIFICATION_TYPE_REF);
+
+			return Flux.fromIterable(elicitationCompleteConsumers)
+				.flatMap(consumer -> consumer.apply(notification))
+				.then();
 		};
 	}
 
