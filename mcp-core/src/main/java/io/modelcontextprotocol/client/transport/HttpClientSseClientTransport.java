@@ -82,6 +82,11 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	/** Default SSE endpoint path */
 	private static final String DEFAULT_SSE_ENDPOINT = "/sse";
 
+	/**
+	 * Default maximum number of bytes read for a single inbound message.
+	 */
+	private static final int DEFAULT_MAX_RESPONSE_SIZE = 16 * 1024 * 1024; // 16MiB
+
 	/** Base URI for the MCP server */
 	private final URI baseUri;
 
@@ -123,6 +128,12 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	private final SseMessageEndpointValidator messageEndpointValidator;
 
 	/**
+	 * Maximum number of bytes read for a single inbound message, whether it arrives on
+	 * the SSE stream or as the response to a posted message.
+	 */
+	private final int maxResponseSize;
+
+	/**
 	 * Creates a new transport instance with custom HTTP client builder, object mapper,
 	 * and headers.
 	 * @param httpClient the HTTP client to use
@@ -133,11 +144,13 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 	 * @param httpRequestCustomizer customizer for the requestBuilder before executing
 	 * requests
 	 * @param messageEndpointValidator validator for the message endpoint
+	 * @param maxResponseSize the maximum number of bytes read for a single inbound
+	 * message
 	 * @throws IllegalArgumentException if objectMapper, clientBuilder, or headers is null
 	 */
 	HttpClientSseClientTransport(HttpClient httpClient, HttpRequest.Builder requestBuilder, String baseUri,
 			String sseEndpoint, McpJsonMapper jsonMapper, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer,
-			SseMessageEndpointValidator messageEndpointValidator) {
+			SseMessageEndpointValidator messageEndpointValidator, int maxResponseSize) {
 		Assert.notNull(jsonMapper, "jsonMapper must not be null");
 		Assert.hasText(baseUri, "baseUri must not be empty");
 		Assert.hasText(sseEndpoint, "sseEndpoint must not be empty");
@@ -145,6 +158,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		Assert.notNull(requestBuilder, "requestBuilder must not be null");
 		Assert.notNull(httpRequestCustomizer, "httpRequestCustomizer must not be null");
 		Assert.notNull(messageEndpointValidator, "messageEndpointValidator must not be null");
+		Assert.isTrue(maxResponseSize > 0, "maxResponseSize must be positive");
 		this.baseUri = URI.create(baseUri);
 		this.sseEndpoint = sseEndpoint;
 		this.jsonMapper = jsonMapper;
@@ -152,6 +166,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		this.requestBuilder = requestBuilder;
 		this.httpRequestCustomizer = httpRequestCustomizer;
 		this.messageEndpointValidator = messageEndpointValidator;
+		this.maxResponseSize = maxResponseSize;
 	}
 
 	@Override
@@ -188,6 +203,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		private Duration connectTimeout = Duration.ofSeconds(10);
 
 		private SseMessageEndpointValidator messageEndpointValidator = new DefaultSseMessageEndpointValidator();
+
+		private int maxResponseSize = DEFAULT_MAX_RESPONSE_SIZE;
 
 		/**
 		 * Creates a new builder instance.
@@ -339,6 +356,26 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		}
 
 		/**
+		 * Sets the maximum number of bytes read for a single inbound message, whether it
+		 * arrives on the SSE stream or as the response to a posted message. A peer that
+		 * sends a larger message (or never terminates one) has its stream aborted instead
+		 * of forcing the transport to buffer it in memory. Defaults to 16MiB.
+		 *
+		 * <p>
+		 * The bound applies per message, not to the stream as a whole: a long-lived SSE
+		 * stream may deliver any number of messages, each up to this size. SSE field
+		 * framing is allowed a small amount of headroom on top of this size, so a message
+		 * of exactly this many bytes is still accepted.
+		 * @param maxResponseSize the maximum inbound message size, in bytes
+		 * @return this builder
+		 */
+		public Builder maxResponseSize(int maxResponseSize) {
+			Assert.isTrue(maxResponseSize > 0, "maxResponseSize must be positive");
+			this.maxResponseSize = maxResponseSize;
+			return this;
+		}
+
+		/**
 		 * Builds a new {@link HttpClientSseClientTransport} instance.
 		 * @return a new transport instance
 		 */
@@ -346,7 +383,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
 			return new HttpClientSseClientTransport(httpClient, requestBuilder, baseUri, sseEndpoint,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, httpRequestCustomizer,
-					messageEndpointValidator);
+					messageEndpointValidator, maxResponseSize);
 		}
 
 	}
@@ -365,13 +402,15 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
 		}).flatMap(requestBuilder -> Mono.create(sink -> {
-			Disposable connection = Flux.<ResponseEvent>create(sseSink -> this.httpClient
-				.sendAsync(requestBuilder.build(),
-						responseInfo -> ResponseSubscribers.sseToBodySubscriber(responseInfo, sseSink))
-				.exceptionallyCompose(e -> {
-					sseSink.error(e);
-					return CompletableFuture.failedFuture(e);
-				}))
+			Disposable connection = Flux.<ResponseEvent>create(
+					sseSink -> this.httpClient
+						.sendAsync(requestBuilder.build(),
+								responseInfo -> ResponseSubscribers.sseToBodySubscriber(responseInfo, sseSink,
+										this.maxResponseSize))
+						.exceptionallyCompose(e -> {
+							sseSink.error(e);
+							return CompletableFuture.failedFuture(e);
+						}))
 				.map(responseEvent -> (ResponseSubscribers.SseResponseEvent) responseEvent)
 				.flatMap(responseEvent -> {
 					if (isClosing) {
@@ -502,7 +541,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", requestUri, body, transportContext));
 		}).flatMap(customizedBuilder -> {
 			var request = customizedBuilder.build();
-			return Mono.fromFuture(httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()));
+			return Mono.fromFuture(
+					httpClient.sendAsync(request, ResponseSubscribers.boundedStringBodyHandler(this.maxResponseSize)));
 		});
 	}
 

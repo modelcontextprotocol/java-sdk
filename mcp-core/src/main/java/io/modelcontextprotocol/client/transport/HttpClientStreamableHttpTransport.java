@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandler;
 import java.time.Duration;
 import java.util.Collections;
@@ -86,6 +85,11 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	private static final String DEFAULT_ENDPOINT = "/mcp";
 
 	/**
+	 * Default maximum number of bytes read for a single inbound message.
+	 */
+	private static final int DEFAULT_MAX_RESPONSE_SIZE = 16 * 1024 * 1024; // 16MiB
+
+	/**
 	 * HTTP client for sending messages to the server. Uses HTTP POST over the message
 	 * endpoint
 	 */
@@ -136,10 +140,18 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private final String latestSupportedProtocolVersion;
 
+	/**
+	 * Maximum number of bytes read for a single inbound message, whether it arrives on an
+	 * SSE stream or as a JSON response body.
+	 */
+	private final int maxResponseSize;
+
 	private HttpClientStreamableHttpTransport(McpJsonMapper jsonMapper, HttpClient httpClient,
 			HttpRequest.Builder requestBuilder, String baseUri, String endpoint, boolean resumableStreams,
 			boolean openConnectionOnStartup, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer,
-			McpHttpClientAuthorizationErrorHandler authorizationErrorHandler, List<String> supportedProtocolVersions) {
+			McpHttpClientAuthorizationErrorHandler authorizationErrorHandler, List<String> supportedProtocolVersions,
+			int maxResponseSize) {
+		Assert.isTrue(maxResponseSize > 0, "maxResponseSize must be positive");
 		this.jsonMapper = jsonMapper;
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
@@ -155,6 +167,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			.sorted(Comparator.reverseOrder())
 			.findFirst()
 			.get();
+		this.maxResponseSize = maxResponseSize;
 	}
 
 	@Override
@@ -211,7 +224,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "DELETE", uri, null, transportContext));
 		}).flatMap(requestBuilder -> {
 			var request = requestBuilder.build();
-			return Mono.fromFuture(() -> this.httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()));
+			return Mono.fromFuture(() -> this.httpClient.sendAsync(request,
+					ResponseSubscribers.boundedStringBodyHandler(this.maxResponseSize)));
 		}).then();
 	}
 
@@ -434,16 +448,16 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			if (contentType.contains(TEXT_EVENT_STREAM)) {
 				// For SSE streams, use line subscriber that returns Void
 				logger.debug("Received SSE stream response, using line subscriber");
-				return ResponseSubscribers.sseToBodySubscriber(responseInfo, sink);
+				return ResponseSubscribers.sseToBodySubscriber(responseInfo, sink, this.maxResponseSize);
 			}
 			else if (contentType.contains(APPLICATION_JSON)) {
 				// For JSON responses and others, use string subscriber
 				logger.debug("Received response, using string subscriber");
-				return ResponseSubscribers.aggregateBodySubscriber(responseInfo, sink);
+				return ResponseSubscribers.aggregateBodySubscriber(responseInfo, sink, this.maxResponseSize);
 			}
 
 			logger.debug("Received Bodyless response, using discarding subscriber");
-			return ResponseSubscribers.bodilessBodySubscriber(responseInfo, sink);
+			return ResponseSubscribers.bodilessBodySubscriber(responseInfo, sink, this.maxResponseSize);
 		};
 
 		return responseBodyHandler;
@@ -701,6 +715,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 		private McpHttpClientAuthorizationErrorHandler authorizationErrorHandler = McpHttpClientAuthorizationErrorHandler.NOOP;
 
+		private int maxResponseSize = DEFAULT_MAX_RESPONSE_SIZE;
+
 		/**
 		 * Creates a new builder with the specified base URI.
 		 * @param baseUri the base URI of the MCP server
@@ -892,6 +908,26 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		}
 
 		/**
+		 * Sets the maximum number of bytes read for a single inbound message, whether it
+		 * arrives on an SSE stream or as a JSON response body. A peer that sends a larger
+		 * message (or never terminates one) has its stream aborted instead of forcing the
+		 * transport to buffer it in memory. Defaults to 16MiB.
+		 *
+		 * <p>
+		 * The bound applies per message, not to the stream as a whole: a long-lived SSE
+		 * stream may deliver any number of messages, each up to this size. SSE field
+		 * framing is allowed a small amount of headroom on top of this size, so a message
+		 * of exactly this many bytes is still accepted.
+		 * @param maxResponseSize the maximum inbound message size, in bytes
+		 * @return this builder
+		 */
+		public Builder maxResponseSize(int maxResponseSize) {
+			Assert.isTrue(maxResponseSize > 0, "maxResponseSize must be positive");
+			this.maxResponseSize = maxResponseSize;
+			return this;
+		}
+
+		/**
 		 * Construct a fresh instance of {@link HttpClientStreamableHttpTransport} using
 		 * the current builder configuration.
 		 * @return a new instance of {@link HttpClientStreamableHttpTransport}
@@ -900,7 +936,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
 			return new HttpClientStreamableHttpTransport(jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
 					httpClient, requestBuilder, baseUri, endpoint, resumableStreams, openConnectionOnStartup,
-					httpRequestCustomizer, authorizationErrorHandler, supportedProtocolVersions);
+					httpRequestCustomizer, authorizationErrorHandler, supportedProtocolVersions, maxResponseSize);
 		}
 
 	}
