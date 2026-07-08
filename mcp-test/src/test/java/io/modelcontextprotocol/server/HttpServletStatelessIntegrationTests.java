@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
@@ -45,6 +46,8 @@ import org.junit.jupiter.api.Timeout;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.client.RestClient;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.APPLICATION_JSON;
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.TEXT_EVENT_STREAM;
@@ -448,7 +451,7 @@ class HttpServletStatelessIntegrationTests {
 				"type", "object",
 				"properties", Map.of(
 					"name", Map.of("type", "string"),
-					"age", Map.of("type", "number")),					
+					"age", Map.of("type", "number")),
 				"required", List.of("name", "age"))); // @formatter:on
 
 		Tool calculatorTool = Tool.builder("getMembers")
@@ -763,6 +766,48 @@ class HttpServletStatelessIntegrationTests {
 		assertThat(jsonrpcResponse.error().message()).isEqualTo("testing");
 
 		mcpServer.close();
+	}
+
+	@Test
+	void testMissingHandlerReturnsMethodNotFoundError() {
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().build())
+			.build();
+		var clientTransport = HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
+			.endpoint(CUSTOM_MESSAGE_ENDPOINT)
+			.build();
+
+		try (var mcpClient = McpClient.sync(clientTransport).build()) {
+			// Create a session using an MCP client
+			McpSchema.InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Override the response handler in the client to capture responses
+			AtomicReference<McpSchema.JSONRPCResponse> response = new AtomicReference<>();
+			var handler = (Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>>) (
+					message) -> message.doOnNext(r -> {
+						if (r instanceof McpSchema.JSONRPCResponse resp) {
+							response.set(resp);
+						}
+					});
+			StepVerifier.create(clientTransport.connect(handler)).verifyComplete();
+
+			// Send a request for a non-existent method through the transport, bypassing
+			// the client's capability checks
+			StepVerifier
+				.create(clientTransport.sendMessage(new McpSchema.JSONRPCRequest("foo/bar", "test-request-123")))
+				.verifyComplete();
+
+			// Wait until we've received the response
+			await().atMost(Duration.ofSeconds(1)).until(() -> response.get() != null);
+
+			assertThat(response.get().error().code()).isEqualTo(McpSchema.ErrorCodes.METHOD_NOT_FOUND);
+			assertThat(response.get().error().message()).isEqualTo("Method not found: foo/bar");
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	private double evaluateExpression(String expression) {
