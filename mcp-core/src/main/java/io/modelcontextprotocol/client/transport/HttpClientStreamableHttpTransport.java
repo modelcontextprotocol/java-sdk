@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandler;
 import java.time.Duration;
 import java.util.Collections;
@@ -83,6 +82,11 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	private static final String DEFAULT_ENDPOINT = "/mcp";
 
 	/**
+	 * Default maximum number of bytes read for a single inbound message.
+	 */
+	private static final int DEFAULT_MAX_RESPONSE_SIZE = 16 * 1024 * 1024; // 16MiB
+
+	/**
 	 * HTTP client for sending messages to the server. Uses HTTP POST over the message
 	 * endpoint
 	 */
@@ -129,10 +133,17 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private final String latestSupportedProtocolVersion;
 
+	/**
+	 * Maximum number of bytes read for a single inbound message, whether it arrives on an
+	 * SSE stream or as a JSON response body.
+	 */
+	private final int maxResponseSize;
+
 	private HttpClientStreamableHttpTransport(McpJsonMapper jsonMapper, HttpClient httpClient,
 			HttpRequest.Builder requestBuilder, String baseUri, String endpoint, boolean resumableStreams,
 			boolean openConnectionOnStartup, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer,
-			List<String> supportedProtocolVersions) {
+			List<String> supportedProtocolVersions, int maxResponseSize) {
+		Assert.isTrue(maxResponseSize > 0, "maxResponseSize must be positive");
 		this.jsonMapper = jsonMapper;
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
@@ -147,6 +158,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			.sorted(Comparator.reverseOrder())
 			.findFirst()
 			.get();
+		this.maxResponseSize = maxResponseSize;
 	}
 
 	@Override
@@ -203,7 +215,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "DELETE", uri, null, transportContext));
 		}).flatMap(requestBuilder -> {
 			var request = requestBuilder.build();
-			return Mono.fromFuture(() -> this.httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()));
+			return Mono.fromFuture(() -> this.httpClient.sendAsync(request,
+					ResponseSubscribers.boundedStringBodyHandler(this.maxResponseSize)));
 		}).then();
 	}
 
@@ -275,121 +288,116 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				var transportContext = connectionCtx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 				return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
 			})
-				.flatMapMany(
-						requestBuilder -> Flux.<ResponseEvent>create(
-								sseSink -> this.httpClient
-									.sendAsync(requestBuilder.build(),
-											responseInfo -> ResponseSubscribers.sseToBodySubscriber(responseInfo,
-													sseSink))
-									.whenComplete((response, throwable) -> {
-										if (throwable != null) {
-											sseSink.error(throwable);
-										}
-										else {
-											logger.debug("SSE connection established successfully");
-										}
-									}))
-							.map(responseEvent -> (ResponseSubscribers.SseResponseEvent) responseEvent)
-							.flatMap(responseEvent -> {
-								int statusCode = responseEvent.responseInfo().statusCode();
-
-								if (statusCode >= 200 && statusCode < 300) {
-
-									if (MESSAGE_EVENT_TYPE.equals(responseEvent.sseEvent().event())) {
-										String data = responseEvent.sseEvent().data();
-										// Per 2025-11-25 spec (SEP-1699), servers may
-										// send SSE events
-										// with empty data to prime the client for
-										// reconnection.
-										// Skip these events as they contain no JSON-RPC
-										// message.
-										if (data == null || data.isBlank()) {
-											logger.debug("Skipping SSE event with empty data (stream primer)");
-											return Flux.empty();
-										}
-										try {
-											// We don't support batching ATM and probably
-											// won't since the next version considers
-											// removing it.
-											McpSchema.JSONRPCMessage message = McpSchema
-												.deserializeJsonRpcMessage(this.jsonMapper, data);
-
-											Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> idWithMessages = Tuples
-												.of(Optional.ofNullable(responseEvent.sseEvent().id()),
-														List.of(message));
-
-											McpTransportStream<Disposable> sessionStream = stream != null ? stream
-													: new DefaultMcpTransportStream<>(this.resumableStreams,
-															this::reconnect);
-											logger.debug("Connected stream {}", sessionStream.streamId());
-
-											return Flux.from(sessionStream.consumeSseStream(Flux.just(idWithMessages)));
-
-										}
-										catch (IOException ioException) {
-											return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
-													"Error parsing JSON-RPC message: " + responseEvent, ioException));
-										}
-									}
-									else {
-										logger.debug("Received SSE event with type: {}", responseEvent.sseEvent());
-										return Flux.empty();
-									}
+				.flatMapMany(requestBuilder -> Flux.<ResponseEvent>create(
+						sseSink -> this.httpClient
+							.sendAsync(requestBuilder.build(),
+									responseInfo -> ResponseSubscribers.sseToBodySubscriber(responseInfo, sseSink,
+											maxResponseSize))
+							.whenComplete((response, throwable) -> {
+								if (throwable != null) {
+									sseSink.error(throwable);
 								}
-								else if (statusCode == METHOD_NOT_ALLOWED) { // NotAllowed
-									logger
-										.debug("The server does not support SSE streams, using request-response mode.");
-									return Flux.empty();
-								}
-								else if (statusCode == NOT_FOUND) {
-
-									if (transportSession != null && transportSession.sessionId().isPresent()) {
-										// only if the request was sent with a session id
-										// and the response is 404, we consider it a
-										// session not found error.
-										logger.debug("Session not found for session ID: {}",
-												transportSession.sessionId().get());
-										String sessionIdRepresentation = sessionIdOrPlaceholder(transportSession);
-										McpTransportSessionNotFoundException exception = new McpTransportSessionNotFoundException(
-												"Session not found for session ID: " + sessionIdRepresentation);
-										return Flux.<McpSchema.JSONRPCMessage>error(exception);
-									}
-									return Flux.<McpSchema.JSONRPCMessage>error(
-											new McpTransportException("Server Not Found. Status code:" + statusCode
-													+ ", response-event:" + responseEvent));
-								}
-								else if (statusCode == BAD_REQUEST) {
-									if (transportSession != null && transportSession.sessionId().isPresent()) {
-										// only if the request was sent with a session id
-										// and thre response is 404, we consider it a
-										// session not found error.
-										String sessionIdRepresentation = sessionIdOrPlaceholder(transportSession);
-										McpTransportSessionNotFoundException exception = new McpTransportSessionNotFoundException(
-												"Session not found for session ID: " + sessionIdRepresentation);
-										return Flux.<McpSchema.JSONRPCMessage>error(exception);
-									}
-									return Flux.<McpSchema.JSONRPCMessage>error(
-											new McpTransportException("Bad Request. Status code:" + statusCode
-													+ ", response-event:" + responseEvent));
-
-								}
-
-								return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
-										"Received unrecognized SSE event type: " + responseEvent.sseEvent().event()));
-							}).<McpSchema
-									.JSONRPCMessage>flatMap(
-											jsonrpcMessage -> this.handler.get().apply(Mono.just(jsonrpcMessage)))
-							.onErrorMap(CompletionException.class, t -> t.getCause())
-							.onErrorComplete(t -> {
-								this.handleException(t);
-								return true;
-							})
-							.doFinally(s -> {
-								Disposable ref = disposableRef.getAndSet(null);
-								if (ref != null) {
-									transportSession.removeConnection(ref);
+								else {
+									logger.debug("SSE connection established successfully");
 								}
 							}))
+					.map(responseEvent -> (ResponseSubscribers.SseResponseEvent) responseEvent)
+					.flatMap(responseEvent -> {
+						int statusCode = responseEvent.responseInfo().statusCode();
+
+						if (statusCode >= 200 && statusCode < 300) {
+
+							if (MESSAGE_EVENT_TYPE.equals(responseEvent.sseEvent().event())) {
+								String data = responseEvent.sseEvent().data();
+								// Per 2025-11-25 spec (SEP-1699), servers may
+								// send SSE events
+								// with empty data to prime the client for
+								// reconnection.
+								// Skip these events as they contain no JSON-RPC
+								// message.
+								if (data == null || data.isBlank()) {
+									logger.debug("Skipping SSE event with empty data (stream primer)");
+									return Flux.empty();
+								}
+								try {
+									// We don't support batching ATM and probably
+									// won't since the next version considers
+									// removing it.
+									McpSchema.JSONRPCMessage message = McpSchema
+										.deserializeJsonRpcMessage(this.jsonMapper, data);
+
+									Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> idWithMessages = Tuples
+										.of(Optional.ofNullable(responseEvent.sseEvent().id()), List.of(message));
+
+									McpTransportStream<Disposable> sessionStream = stream != null ? stream
+											: new DefaultMcpTransportStream<>(this.resumableStreams, this::reconnect);
+									logger.debug("Connected stream {}", sessionStream.streamId());
+
+									return Flux.from(sessionStream.consumeSseStream(Flux.just(idWithMessages)));
+
+								}
+								catch (IOException ioException) {
+									return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
+											"Error parsing JSON-RPC message: " + responseEvent, ioException));
+								}
+							}
+							else {
+								logger.debug("Received SSE event with type: {}", responseEvent.sseEvent());
+								return Flux.empty();
+							}
+						}
+						else if (statusCode == METHOD_NOT_ALLOWED) { // NotAllowed
+							logger.debug("The server does not support SSE streams, using request-response mode.");
+							return Flux.empty();
+						}
+						else if (statusCode == NOT_FOUND) {
+
+							if (transportSession != null && transportSession.sessionId().isPresent()) {
+								// only if the request was sent with a session id
+								// and the response is 404, we consider it a
+								// session not found error.
+								logger.debug("Session not found for session ID: {}",
+										transportSession.sessionId().get());
+								String sessionIdRepresentation = sessionIdOrPlaceholder(transportSession);
+								McpTransportSessionNotFoundException exception = new McpTransportSessionNotFoundException(
+										"Session not found for session ID: " + sessionIdRepresentation);
+								return Flux.<McpSchema.JSONRPCMessage>error(exception);
+							}
+							return Flux.<McpSchema.JSONRPCMessage>error(
+									new McpTransportException("Server Not Found. Status code:" + statusCode
+											+ ", response-event:" + responseEvent));
+						}
+						else if (statusCode == BAD_REQUEST) {
+							if (transportSession != null && transportSession.sessionId().isPresent()) {
+								// only if the request was sent with a session id
+								// and thre response is 404, we consider it a
+								// session not found error.
+								String sessionIdRepresentation = sessionIdOrPlaceholder(transportSession);
+								McpTransportSessionNotFoundException exception = new McpTransportSessionNotFoundException(
+										"Session not found for session ID: " + sessionIdRepresentation);
+								return Flux.<McpSchema.JSONRPCMessage>error(exception);
+							}
+							return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
+									"Bad Request. Status code:" + statusCode + ", response-event:" + responseEvent));
+
+						}
+
+						return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
+								"Received unrecognized SSE event type: " + responseEvent.sseEvent().event()));
+					}).<McpSchema
+							.JSONRPCMessage>flatMap(
+									jsonrpcMessage -> this.handler.get().apply(Mono.just(jsonrpcMessage)))
+					.onErrorMap(CompletionException.class, t -> t.getCause())
+					.onErrorComplete(t -> {
+						this.handleException(t);
+						return true;
+					})
+					.doFinally(s -> {
+						Disposable ref = disposableRef.getAndSet(null);
+						if (ref != null) {
+							transportSession.removeConnection(ref);
+						}
+					}))
 				.contextWrite(ctx)
 				.subscribe();
 
@@ -409,16 +417,16 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			if (contentType.contains(TEXT_EVENT_STREAM)) {
 				// For SSE streams, use line subscriber that returns Void
 				logger.debug("Received SSE stream response, using line subscriber");
-				return ResponseSubscribers.sseToBodySubscriber(responseInfo, sink);
+				return ResponseSubscribers.sseToBodySubscriber(responseInfo, sink, this.maxResponseSize);
 			}
 			else if (contentType.contains(APPLICATION_JSON)) {
 				// For JSON responses and others, use string subscriber
 				logger.debug("Received response, using string subscriber");
-				return ResponseSubscribers.aggregateBodySubscriber(responseInfo, sink);
+				return ResponseSubscribers.aggregateBodySubscriber(responseInfo, sink, this.maxResponseSize);
 			}
 
 			logger.debug("Received Bodyless response, using discarding subscriber");
-			return ResponseSubscribers.bodilessBodySubscriber(responseInfo, sink);
+			return ResponseSubscribers.bodilessBodySubscriber(responseInfo, sink, this.maxResponseSize);
 		};
 
 		return responseBodyHandler;
@@ -668,6 +676,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		private List<String> supportedProtocolVersions = List.of(ProtocolVersions.MCP_2024_11_05,
 				ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18, ProtocolVersions.MCP_2025_11_25);
 
+		private int maxResponseSize = DEFAULT_MAX_RESPONSE_SIZE;
+
 		/**
 		 * Creates a new builder with the specified base URI.
 		 * @param baseUri the base URI of the MCP server
@@ -841,6 +851,26 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		}
 
 		/**
+		 * Sets the maximum number of bytes read for a single inbound message, whether it
+		 * arrives on an SSE stream or as a JSON response body. A peer that sends a larger
+		 * message (or never terminates one) has its stream aborted instead of forcing the
+		 * transport to buffer it in memory. Defaults to 16MiB.
+		 *
+		 * <p>
+		 * The bound applies per message, not to the stream as a whole: a long-lived SSE
+		 * stream may deliver any number of messages, each up to this size. SSE field
+		 * framing is allowed a small amount of headroom on top of this size, so a message
+		 * of exactly this many bytes is still accepted.
+		 * @param maxResponseSize the maximum inbound message size, in bytes
+		 * @return this builder
+		 */
+		public Builder maxResponseSize(int maxResponseSize) {
+			Assert.isTrue(maxResponseSize > 0, "maxResponseSize must be positive");
+			this.maxResponseSize = maxResponseSize;
+			return this;
+		}
+
+		/**
 		 * Construct a fresh instance of {@link HttpClientStreamableHttpTransport} using
 		 * the current builder configuration.
 		 * @return a new instance of {@link HttpClientStreamableHttpTransport}
@@ -849,7 +879,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
 			return new HttpClientStreamableHttpTransport(jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
 					httpClient, requestBuilder, baseUri, endpoint, resumableStreams, openConnectionOnStartup,
-					httpRequestCustomizer, supportedProtocolVersions);
+					httpRequestCustomizer, supportedProtocolVersions, maxResponseSize);
 		}
 
 	}
