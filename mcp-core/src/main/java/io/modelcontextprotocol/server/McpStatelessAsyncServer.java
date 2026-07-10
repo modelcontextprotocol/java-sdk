@@ -980,8 +980,9 @@ public class McpStatelessAsyncServer {
 						return this.repositoryCallAdapter
 							.invoke(() -> this.completionsRepository.complete(request, ctx));
 					}
-					return resolveCompletionSpecification(request.ref())
-						.flatMap(specification -> specification.completionHandler().apply(ctx, request));
+					return resolveCompletionSpecification(request.ref()).flatMap(
+							specification -> specification.map(value -> value.completionHandler().apply(ctx, request))
+								.orElse(EMPTY_COMPLETION_RESULT));
 				}));
 		};
 	}
@@ -1088,16 +1089,10 @@ public class McpStatelessAsyncServer {
 			.map(McpStatelessServerFeatures.AsyncResourceTemplateSpecification::resourceTemplate));
 	}
 
-	private Mono<McpStatelessServerFeatures.AsyncCompletionSpecification> resolveCompletionSpecification(
+	private Mono<Optional<McpStatelessServerFeatures.AsyncCompletionSpecification>> resolveCompletionSpecification(
 			McpSchema.CompleteReference reference) {
 
-		McpStatelessServerFeatures.AsyncCompletionSpecification specification = this.completions.get(reference);
-		if (specification == null) {
-			return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
-				.message("AsyncCompletionSpecification not found: " + reference)
-				.build());
-		}
-		return Mono.just(specification);
+		return Mono.just(Optional.ofNullable(this.completions.get(reference)));
 	}
 
 	/**

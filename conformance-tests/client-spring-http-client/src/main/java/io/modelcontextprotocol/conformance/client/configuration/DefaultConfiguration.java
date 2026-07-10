@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.conformance.client.configuration;
 
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
+import io.modelcontextprotocol.conformance.client.condition.ConditionalOnScenario;
 import io.modelcontextprotocol.conformance.client.scenario.DefaultScenario;
 import org.springaicommunity.mcp.security.client.sync.config.McpClientOAuth2Configurer;
 import org.springaicommunity.mcp.security.client.sync.oauth2.http.client.OAuth2CimdHttpClientTransportCustomizer;
@@ -16,7 +17,6 @@ import org.springaicommunity.mcp.security.client.sync.oauth2.registration.cimd.M
 
 import org.springframework.ai.mcp.customizer.McpClientCustomizer;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.web.server.servlet.context.ServletWebServerApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,7 +26,7 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
-@ConditionalOnExpression("#{environment['MCP_CONFORMANCE_SCENARIO'] != 'auth/pre-registration'}")
+@ConditionalOnScenario(excluded = { "auth/pre-registration", "auth/client-credentials-basic" })
 public class DefaultConfiguration {
 
 	private final String TEST_CLIENT_ID_URL = "https://conformance-test.local/client-metadata.json";
