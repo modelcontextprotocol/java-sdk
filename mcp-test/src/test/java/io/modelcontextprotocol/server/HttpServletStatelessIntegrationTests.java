@@ -11,6 +11,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -42,13 +46,13 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.client.RestClient;
-import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
-
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.APPLICATION_JSON;
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.TEXT_EVENT_STREAM;
 import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
@@ -808,6 +812,63 @@ class HttpServletStatelessIntegrationTests {
 		finally {
 			mcpServer.closeGracefully();
 		}
+	}
+
+	@Test
+	void testInitializedNotificationDoesNotLogWarn() {
+		Logger handlerLogger = (Logger) LoggerFactory.getLogger(DefaultMcpStatelessServerHandler.class);
+		ListAppender<ILoggingEvent> logAppender = new ListAppender<>();
+		logAppender.start();
+		handlerLogger.addAppender(logAppender);
+
+		try {
+			var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+				.serverInfo("test-server", "1.0.0")
+				.capabilities(ServerCapabilities.builder().build())
+				.build();
+
+			try (var mcpClient = clientBuilder.build()) {
+				mcpClient.initialize(); // automatically sends notifications/initialized
+			}
+			finally {
+				mcpServer.close();
+			}
+		}
+		finally {
+			handlerLogger.detachAppender(logAppender);
+			logAppender.stop();
+		}
+
+		assertThat(logAppender.list).noneMatch(event -> event.getLevel() == Level.WARN);
+	}
+
+	@Test
+	void testRootsListChangedNotificationDoesNotLogWarn() {
+		Logger handlerLogger = (Logger) LoggerFactory.getLogger(DefaultMcpStatelessServerHandler.class);
+		ListAppender<ILoggingEvent> logAppender = new ListAppender<>();
+		logAppender.start();
+		handlerLogger.addAppender(logAppender);
+
+		try {
+			var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+				.serverInfo("test-server", "1.0.0")
+				.capabilities(ServerCapabilities.builder().build())
+				.build();
+
+			try (var mcpClient = clientBuilder.build()) {
+				mcpClient.initialize();
+				mcpClient.rootsListChangedNotification();
+			}
+			finally {
+				mcpServer.close();
+			}
+		}
+		finally {
+			handlerLogger.detachAppender(logAppender);
+			logAppender.stop();
+		}
+
+		assertThat(logAppender.list).noneMatch(event -> event.getLevel() == Level.WARN);
 	}
 
 	private double evaluateExpression(String expression) {
