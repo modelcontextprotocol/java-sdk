@@ -745,7 +745,9 @@ public interface McpServer {
 		 * interact with the connected client. The second argument is the list of roots.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumer is null
+		 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		public AsyncSpecification<S> rootsChangeHandler(
 				BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>> handler) {
 			Assert.notNull(handler, "Consumer must not be null");
@@ -761,7 +763,9 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumers is null
 		 * @see #rootsChangeHandler(BiFunction)
+		 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		public AsyncSpecification<S> rootsChangeHandlers(
 				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> handlers) {
 			Assert.notNull(handlers, "Handlers list must not be null");
@@ -777,7 +781,9 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumers is null
 		 * @see #rootsChangeHandlers(List)
+		 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		public AsyncSpecification<S> rootsChangeHandlers(
 				@SuppressWarnings("unchecked") BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>... handlers) {
 			Assert.notNull(handlers, "Handlers list must not be null");
@@ -1347,7 +1353,9 @@ public interface McpServer {
 		 * with the connected client. The second argument is the list of roots.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumer is null
+		 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		public SyncSpecification<S> rootsChangeHandler(
 				BiConsumer<McpSyncServerExchange, List<McpSchema.Root>> handler) {
 			Assert.notNull(handler, "Consumer must not be null");
@@ -1363,7 +1371,9 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumers is null
 		 * @see #rootsChangeHandler(BiConsumer)
+		 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		public SyncSpecification<S> rootsChangeHandlers(
 				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> handlers) {
 			Assert.notNull(handlers, "Handlers list must not be null");
@@ -1379,7 +1389,9 @@ public interface McpServer {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if consumers is null
 		 * @see #rootsChangeHandlers(List)
+		 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		public SyncSpecification<S> rootsChangeHandlers(
 				BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>... handlers) {
 			Assert.notNull(handlers, "Handlers list must not be null");

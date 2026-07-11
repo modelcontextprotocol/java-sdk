@@ -234,7 +234,9 @@ public class McpAsyncServerExchange {
 	 * minimum logging level will be filtered out.
 	 * @param loggingMessageNotification The logging message to send
 	 * @return A Mono that completes when the notification has been sent
+	 * @deprecated Logging is deprecated in the 2026-07-28 MCP specification.
 	 */
+	@Deprecated
 	public Mono<Void> loggingNotification(LoggingMessageNotification loggingMessageNotification) {
 
 		if (loggingMessageNotification == null) {
