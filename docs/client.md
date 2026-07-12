@@ -131,6 +131,26 @@ The client provides both synchronous and asynchronous APIs for flexibility in di
         .subscribe();
     ```
 
+### Custom Initialize Request
+
+By default, `initialize()` builds the request from client builder settings (protocol version, capabilities, client info). To control the full initialize payload — including the optional `_meta` field — use the `initialize(InitializeRequest)` overload:
+
+```java
+InitializeRequest request = InitializeRequest
+    .builder(ProtocolVersions.MCP_2025_11_25, client.getClientCapabilities(), client.getClientInfo())
+    .meta(Map.of("server_id", "proxy-1", "invocation_id", "abc-123"))
+    .build();
+
+// Call before any other client operation so the custom request is sent.
+client.initialize(request);
+```
+
+The async client exposes the same overload and returns `Mono<InitializeResult>`.
+
+If another client method triggers lazy initialization first, the default request is sent instead. Call `initialize(request)` before `listTools()`, `callTool()`, or similar operations when custom initialize metadata is required.
+
+After a successful `initialize(InitializeRequest)`, the client remembers that request and resends it when the transport session is re-established (for example after a `McpTransportSessionNotFoundException`). The stored request is cleared when the client is closed.
+
 ## Client Transport
 
 The transport layer handles the communication between MCP clients and servers, providing different implementations for various use cases. The client transport manages message serialization, connection establishment, and protocol-specific communication patterns.

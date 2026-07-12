@@ -471,6 +471,25 @@ public class McpAsyncClient {
 		return this.initializer.withInitialization("by explicit API call", init -> Mono.just(init.initializeResult()));
 	}
 
+	/**
+	 * Initializes the client using a caller-provided initialize request.
+	 * <p>
+	 * Use this overload to control the full initialize request payload, including the
+	 * optional {@code _meta} field. Call this method before any other client operation to
+	 * ensure the custom request is sent; lazy initialization triggered by other methods
+	 * uses the default request built from client builder settings. After a successful
+	 * call, the custom request is remembered and resent on transport session recovery; it
+	 * is cleared when the client is closed.
+	 * @param initializeRequest the initialize request to send
+	 * @return the initialize result
+	 * @see #initialize()
+	 */
+	public Mono<McpSchema.InitializeResult> initialize(McpSchema.InitializeRequest initializeRequest) {
+		Assert.notNull(initializeRequest, "InitializeRequest must not be null");
+		return this.initializer.withInitialization(initializeRequest, "by explicit API call with custom request",
+				init -> Mono.just(init.initializeResult()));
+	}
+
 	// --------------------------
 	// Basic Utilities
 	// --------------------------
