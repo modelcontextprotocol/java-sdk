@@ -392,6 +392,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		}
 
 		try {
+			request.setCharacterEncoding(UTF_8);
 			BufferedReader reader = request.getReader();
 			StringBuilder body = new StringBuilder();
 			String line;
