@@ -83,6 +83,20 @@ class KeepAliveSchedulerTests {
 	}
 
 	@Test
+	void testBuilderWithNullOnSuccess() {
+		assertThatThrownBy(() -> KeepAliveScheduler.builder(mockSessionsSupplier).onSuccess(null))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("OnSuccess callback must not be null");
+	}
+
+	@Test
+	void testBuilderWithNullOnFailure() {
+		assertThatThrownBy(() -> KeepAliveScheduler.builder(mockSessionsSupplier).onFailure(null))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("OnFailure callback must not be null");
+	}
+
+	@Test
 	void testBuilderDefaults() {
 		KeepAliveScheduler scheduler = KeepAliveScheduler.builder(mockSessionsSupplier).build();
 
@@ -157,6 +171,30 @@ class KeepAliveSchedulerTests {
 	}
 
 	@Test
+	void testPingSuccessInvokesSuccessHook() {
+		AtomicInteger successCount = new AtomicInteger();
+		AtomicInteger failureCount = new AtomicInteger();
+
+		KeepAliveScheduler scheduler = KeepAliveScheduler.builder(mockSessionsSupplier)
+			.scheduler(virtualTimeScheduler)
+			.initialDelay(Duration.ofSeconds(1))
+			.interval(Duration.ofSeconds(2))
+			.onSuccess(session -> successCount.incrementAndGet())
+			.onFailure((session, error) -> failureCount.incrementAndGet())
+			.build();
+
+		scheduler.start();
+
+		virtualTimeScheduler.advanceTimeBy(Duration.ofSeconds(1));
+
+		assertThat(mockSession1.getPingCount()).isEqualTo(1);
+		assertThat(successCount).hasValue(1);
+		assertThat(failureCount).hasValue(0);
+
+		scheduler.stop();
+	}
+
+	@Test
 	void testStartWhenAlreadyRunning() {
 		KeepAliveScheduler scheduler = KeepAliveScheduler.builder(mockSessionsSupplier)
 			.scheduler(virtualTimeScheduler)
@@ -226,6 +264,85 @@ class KeepAliveSchedulerTests {
 		assertThat(scheduler.isRunning()).isTrue();
 
 		// Clean up
+		scheduler.stop();
+	}
+
+	@Test
+	void testPingFailureInvokesFailureHook() {
+		mockSession1.setShouldFailPing(true);
+		AtomicInteger successCount = new AtomicInteger();
+		AtomicInteger failureCount = new AtomicInteger();
+
+		KeepAliveScheduler scheduler = KeepAliveScheduler.builder(mockSessionsSupplier)
+			.scheduler(virtualTimeScheduler)
+			.initialDelay(Duration.ofSeconds(1))
+			.interval(Duration.ofSeconds(2))
+			.onSuccess(session -> successCount.incrementAndGet())
+			.onFailure((session, error) -> failureCount.incrementAndGet())
+			.build();
+
+		scheduler.start();
+
+		virtualTimeScheduler.advanceTimeBy(Duration.ofSeconds(1));
+
+		assertThat(mockSession1.getPingCount()).isEqualTo(1);
+		assertThat(successCount).hasValue(0);
+		assertThat(failureCount).hasValue(1);
+		assertThat(scheduler.isRunning()).isTrue();
+
+		scheduler.stop();
+	}
+
+	@Test
+	void testSuccessHookExceptionDoesNotStopScheduler() {
+		AtomicInteger successAttempts = new AtomicInteger();
+
+		KeepAliveScheduler scheduler = KeepAliveScheduler.builder(mockSessionsSupplier)
+			.scheduler(virtualTimeScheduler)
+			.initialDelay(Duration.ofSeconds(1))
+			.interval(Duration.ofSeconds(2))
+			.onSuccess(session -> {
+				successAttempts.incrementAndGet();
+				throw new IllegalStateException("success callback failed");
+			})
+			.build();
+
+		scheduler.start();
+
+		virtualTimeScheduler.advanceTimeBy(Duration.ofSeconds(1));
+		virtualTimeScheduler.advanceTimeBy(Duration.ofSeconds(2));
+
+		assertThat(mockSession1.getPingCount()).isEqualTo(2);
+		assertThat(successAttempts).hasValue(2);
+		assertThat(scheduler.isRunning()).isTrue();
+
+		scheduler.stop();
+	}
+
+	@Test
+	void testFailureHookExceptionDoesNotStopScheduler() {
+		mockSession1.setShouldFailPing(true);
+		AtomicInteger failureAttempts = new AtomicInteger();
+
+		KeepAliveScheduler scheduler = KeepAliveScheduler.builder(mockSessionsSupplier)
+			.scheduler(virtualTimeScheduler)
+			.initialDelay(Duration.ofSeconds(1))
+			.interval(Duration.ofSeconds(2))
+			.onFailure((session, error) -> {
+				failureAttempts.incrementAndGet();
+				throw new IllegalStateException("failure callback failed");
+			})
+			.build();
+
+		scheduler.start();
+
+		virtualTimeScheduler.advanceTimeBy(Duration.ofSeconds(1));
+		virtualTimeScheduler.advanceTimeBy(Duration.ofSeconds(2));
+
+		assertThat(mockSession1.getPingCount()).isEqualTo(2);
+		assertThat(failureAttempts).hasValue(2);
+		assertThat(scheduler.isRunning()).isTrue();
+
 		scheduler.stop();
 	}
 

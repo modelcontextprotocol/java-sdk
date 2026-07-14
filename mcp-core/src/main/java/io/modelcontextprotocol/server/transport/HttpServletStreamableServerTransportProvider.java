@@ -24,6 +24,7 @@ import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSession;
 import io.modelcontextprotocol.spec.McpStreamableServerSession;
 import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
@@ -87,6 +88,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 	public static final String FAILED_TO_SEND_ERROR_RESPONSE = "Failed to send error response: {}";
 
+	private static final int KEEP_ALIVE_FAILURE_THRESHOLD = 3;
+
 	/**
 	 * The endpoint URI where clients should send their JSON-RPC messages. Defaults to
 	 * "/mcp".
@@ -106,6 +109,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * Map of active client sessions, keyed by mcp-session-id.
 	 */
 	private final ConcurrentHashMap<String, McpStreamableServerSession> sessions = new ConcurrentHashMap<>();
+
+	private final ConcurrentHashMap<String, Integer> keepAliveFailureCounts = new ConcurrentHashMap<>();
 
 	private McpTransportContextExtractor<HttpServletRequest> contextExtractor;
 
@@ -158,6 +163,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				.builder(() -> (isClosing) ? Flux.empty() : Flux.fromIterable(sessions.values()))
 				.initialDelay(keepAliveInterval)
 				.interval(keepAliveInterval)
+				.onSuccess(this::resetKeepAliveFailures)
+				.onFailure(this::handleKeepAliveFailure)
 				.build();
 
 			this.keepAliveScheduler.start();
@@ -231,8 +238,10 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			});
 
 			this.sessions.clear();
+			this.keepAliveFailureCounts.clear();
 		}).then().doOnSuccess(v -> {
 			sessions.clear();
+			keepAliveFailureCounts.clear();
 			logger.debug("Graceful shutdown completed");
 			if (this.keepAliveScheduler != null) {
 				this.keepAliveScheduler.shutdown();
@@ -445,6 +454,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				McpStreamableServerSession.McpStreamableServerSessionInit init = this.sessionFactory
 					.startSession(initializeRequest);
 				this.sessions.put(init.session().getId(), init.session());
+				this.keepAliveFailureCounts.remove(init.session().getId());
 
 				try {
 					McpSchema.InitializeResult initResult = init.initResult().block();
@@ -614,6 +624,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		try {
 			session.delete().contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext)).block();
 			this.sessions.remove(sessionId);
+			this.keepAliveFailureCounts.remove(sessionId);
 			response.setStatus(HttpServletResponse.SC_OK);
 		}
 		catch (Exception e) {
@@ -638,6 +649,42 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		writer.write(jsonError);
 		writer.flush();
 		return;
+	}
+
+	void resetKeepAliveFailures(McpSession session) {
+		if (session instanceof McpStreamableServerSession streamableSession) {
+			String sessionId = streamableSession.getId();
+			if (this.sessions.get(sessionId) == streamableSession) {
+				this.keepAliveFailureCounts.remove(sessionId);
+			}
+		}
+	}
+
+	void handleKeepAliveFailure(McpSession session, Throwable error) {
+		if (!(session instanceof McpStreamableServerSession streamableSession)) {
+			return;
+		}
+
+		String sessionId = streamableSession.getId();
+		if (this.sessions.get(sessionId) != streamableSession) {
+			return;
+		}
+
+		int failures = this.keepAliveFailureCounts.merge(sessionId, 1, Integer::sum);
+		if (failures < KEEP_ALIVE_FAILURE_THRESHOLD) {
+			logger.debug("Keep-alive ping failed for session {} ({}/{} consecutive failures): {}", sessionId, failures,
+					KEEP_ALIVE_FAILURE_THRESHOLD, error.getMessage());
+			return;
+		}
+
+		if (this.sessions.remove(sessionId, streamableSession)) {
+			this.keepAliveFailureCounts.remove(sessionId);
+			streamableSession.close();
+			logger.info("Evicted session {} after {} failed keep-alive attempts", sessionId, failures);
+		}
+		else {
+			this.keepAliveFailureCounts.remove(sessionId);
+		}
 	}
 
 	/**
@@ -748,6 +795,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				catch (Exception e) {
 					logger.error("Failed to send message to session {}: {}", this.sessionId, e.getMessage());
 					HttpServletStreamableServerTransportProvider.this.sessions.remove(this.sessionId);
+					HttpServletStreamableServerTransportProvider.this.keepAliveFailureCounts.remove(this.sessionId);
 					this.asyncContext.complete();
 				}
 				finally {
