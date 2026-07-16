@@ -190,6 +190,21 @@ public final class McpSchema {
 
 	}
 
+	/**
+	 * Indicates the intended scope of a cached response, analogous to HTTP
+	 * {@code Cache-Control: public} vs {@code Cache-Control: private}.
+	 *
+	 * @see <a href=
+	 * "https://spec.modelcontextprotocol.io/specification/draft/server/utilities/caching/">Specification:
+	 * Caching</a>
+	 */
+	public enum CacheScope {
+
+	// @formatter:off
+		@JsonProperty("private") PRIVATE,
+		@JsonProperty("public") PUBLIC
+	} // @formatter:on
+
 	public interface Notification extends Meta {
 
 	}
@@ -1604,13 +1619,18 @@ public final class McpSchema {
 	 * @param nextCursor An opaque token representing the pagination position after the
 	 * last returned result. If present, there may be more results available
 	 * @param meta See specification for notes on _meta usage
+	 * @param ttlMs A hint from the server indicating how long (in milliseconds) the
+	 * client may cache this response before re-fetching
+	 * @param cacheScope Indicates the intended scope of the cached response
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ListResourcesResult( // @formatter:off
 		@JsonProperty("resources") List<Resource> resources,
 		@JsonProperty("nextCursor") String nextCursor,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta,
+		@JsonProperty("ttlMs") Integer ttlMs,
+		@JsonProperty("cacheScope") CacheScope cacheScope) implements Result { // @formatter:on
 
 		public ListResourcesResult {
 			Assert.notNull(resources, "resources must not be null");
@@ -1618,13 +1638,19 @@ public final class McpSchema {
 
 		@JsonCreator
 		static ListResourcesResult fromJson(@JsonProperty("resources") List<Resource> resources,
-				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
+				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta,
+				@JsonProperty("ttlMs") Integer ttlMs, @JsonProperty("cacheScope") CacheScope cacheScope) {
 			if (resources == null) {
 				logger.warn(
 						"ListResourcesResult: missing required field 'resources' during deserialization, using default []");
 				resources = List.of();
 			}
-			return new ListResourcesResult(resources, nextCursor, meta);
+			return new ListResourcesResult(resources, nextCursor, meta, ttlMs, cacheScope);
+		}
+
+		@Deprecated
+		public ListResourcesResult(List<Resource> resources, String nextCursor, Map<String, Object> meta) {
+			this(resources, nextCursor, meta, null, null);
 		}
 
 		@Deprecated
@@ -1644,6 +1670,10 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
+			private Integer ttlMs;
+
+			private CacheScope cacheScope;
+
 			private Builder(List<Resource> resources) {
 				Assert.notNull(resources, "resources must not be null");
 				this.resources = resources;
@@ -1659,8 +1689,18 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder ttlMs(Integer ttlMs) {
+				this.ttlMs = ttlMs;
+				return this;
+			}
+
+			public Builder cacheScope(CacheScope cacheScope) {
+				this.cacheScope = cacheScope;
+				return this;
+			}
+
 			public ListResourcesResult build() {
-				return new ListResourcesResult(resources, nextCursor, meta);
+				return new ListResourcesResult(resources, nextCursor, meta, ttlMs, cacheScope);
 			}
 
 		}
@@ -1673,13 +1713,18 @@ public final class McpSchema {
 	 * @param nextCursor An opaque token representing the pagination position after the
 	 * last returned result. If present, there may be more results available
 	 * @param meta See specification for notes on _meta usage
+	 * @param ttlMs A hint from the server indicating how long (in milliseconds) the
+	 * client may cache this response before re-fetching
+	 * @param cacheScope Indicates the intended scope of the cached response
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ListResourceTemplatesResult( // @formatter:off
 		@JsonProperty("resourceTemplates") List<ResourceTemplate> resourceTemplates,
 		@JsonProperty("nextCursor") String nextCursor,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta,
+		@JsonProperty("ttlMs") Integer ttlMs,
+		@JsonProperty("cacheScope") CacheScope cacheScope) implements Result { // @formatter:on
 
 		public ListResourceTemplatesResult {
 			Assert.notNull(resourceTemplates, "resourceTemplates must not be null");
@@ -1688,13 +1733,20 @@ public final class McpSchema {
 		@JsonCreator
 		static ListResourceTemplatesResult fromJson(
 				@JsonProperty("resourceTemplates") List<ResourceTemplate> resourceTemplates,
-				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
+				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta,
+				@JsonProperty("ttlMs") Integer ttlMs, @JsonProperty("cacheScope") CacheScope cacheScope) {
 			if (resourceTemplates == null) {
 				logger.warn(
 						"ListResourceTemplatesResult: missing required field 'resourceTemplates' during deserialization, using default []");
 				resourceTemplates = List.of();
 			}
-			return new ListResourceTemplatesResult(resourceTemplates, nextCursor, meta);
+			return new ListResourceTemplatesResult(resourceTemplates, nextCursor, meta, ttlMs, cacheScope);
+		}
+
+		@Deprecated
+		public ListResourceTemplatesResult(List<ResourceTemplate> resourceTemplates, String nextCursor,
+				Map<String, Object> meta) {
+			this(resourceTemplates, nextCursor, meta, null, null);
 		}
 
 		@Deprecated
@@ -1714,6 +1766,10 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
+			private Integer ttlMs;
+
+			private CacheScope cacheScope;
+
 			private Builder(List<ResourceTemplate> resourceTemplates) {
 				Assert.notNull(resourceTemplates, "resourceTemplates must not be null");
 				this.resourceTemplates = resourceTemplates;
@@ -1729,8 +1785,18 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder ttlMs(Integer ttlMs) {
+				this.ttlMs = ttlMs;
+				return this;
+			}
+
+			public Builder cacheScope(CacheScope cacheScope) {
+				this.cacheScope = cacheScope;
+				return this;
+			}
+
 			public ListResourceTemplatesResult build() {
-				return new ListResourceTemplatesResult(resourceTemplates, nextCursor, meta);
+				return new ListResourceTemplatesResult(resourceTemplates, nextCursor, meta, ttlMs, cacheScope);
 			}
 
 		}
@@ -1801,12 +1867,17 @@ public final class McpSchema {
 	 *
 	 * @param contents The contents of the resource
 	 * @param meta See specification for notes on _meta usage
+	 * @param ttlMs A hint from the server indicating how long (in milliseconds) the
+	 * client may cache this response before re-fetching
+	 * @param cacheScope Indicates the intended scope of the cached response
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ReadResourceResult( // @formatter:off
 		@JsonProperty("contents") List<ResourceContents> contents,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta,
+		@JsonProperty("ttlMs") Integer ttlMs,
+		@JsonProperty("cacheScope") CacheScope cacheScope) implements Result { // @formatter:on
 
 		public ReadResourceResult {
 			Assert.notNull(contents, "contents must not be null");
@@ -1814,13 +1885,19 @@ public final class McpSchema {
 
 		@JsonCreator
 		static ReadResourceResult fromJson(@JsonProperty("contents") List<ResourceContents> contents,
-				@JsonProperty("_meta") Map<String, Object> meta) {
+				@JsonProperty("_meta") Map<String, Object> meta, @JsonProperty("ttlMs") Integer ttlMs,
+				@JsonProperty("cacheScope") CacheScope cacheScope) {
 			if (contents == null) {
 				logger.warn(
 						"ReadResourceResult: missing required field 'contents' during deserialization, using default []");
 				contents = List.of();
 			}
-			return new ReadResourceResult(contents, meta);
+			return new ReadResourceResult(contents, meta, ttlMs, cacheScope);
+		}
+
+		@Deprecated
+		public ReadResourceResult(List<ResourceContents> contents, Map<String, Object> meta) {
+			this(contents, meta, null, null);
 		}
 
 		@Deprecated
@@ -1838,6 +1915,10 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
+			private Integer ttlMs;
+
+			private CacheScope cacheScope;
+
 			private Builder(List<ResourceContents> contents) {
 				Assert.notNull(contents, "contents must not be null");
 				this.contents = contents;
@@ -1848,8 +1929,18 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder ttlMs(Integer ttlMs) {
+				this.ttlMs = ttlMs;
+				return this;
+			}
+
+			public Builder cacheScope(CacheScope cacheScope) {
+				this.cacheScope = cacheScope;
+				return this;
+			}
+
 			public ReadResourceResult build() {
-				return new ReadResourceResult(contents, meta);
+				return new ReadResourceResult(contents, meta, ttlMs, cacheScope);
 			}
 
 		}
@@ -2411,13 +2502,18 @@ public final class McpSchema {
 	 * @param nextCursor An optional cursor for pagination. If present, indicates there
 	 * are more prompts available.
 	 * @param meta See specification for notes on _meta usage
+	 * @param ttlMs A hint from the server indicating how long (in milliseconds) the
+	 * client may cache this response before re-fetching
+	 * @param cacheScope Indicates the intended scope of the cached response
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ListPromptsResult( // @formatter:off
 		@JsonProperty("prompts") List<Prompt> prompts,
 		@JsonProperty("nextCursor") String nextCursor,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result  { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta,
+		@JsonProperty("ttlMs") Integer ttlMs,
+		@JsonProperty("cacheScope") CacheScope cacheScope) implements Result  { // @formatter:on
 
 		public ListPromptsResult {
 			Assert.notNull(prompts, "prompts must not be null");
@@ -2425,13 +2521,19 @@ public final class McpSchema {
 
 		@JsonCreator
 		static ListPromptsResult fromJson(@JsonProperty("prompts") List<Prompt> prompts,
-				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
+				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta,
+				@JsonProperty("ttlMs") Integer ttlMs, @JsonProperty("cacheScope") CacheScope cacheScope) {
 			if (prompts == null) {
 				logger.warn(
 						"ListPromptsResult: missing required field 'prompts' during deserialization, using default []");
 				prompts = List.of();
 			}
-			return new ListPromptsResult(prompts, nextCursor, meta);
+			return new ListPromptsResult(prompts, nextCursor, meta, ttlMs, cacheScope);
+		}
+
+		@Deprecated
+		public ListPromptsResult(List<Prompt> prompts, String nextCursor, Map<String, Object> meta) {
+			this(prompts, nextCursor, meta, null, null);
 		}
 
 		@Deprecated
@@ -2451,6 +2553,10 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
+			private Integer ttlMs;
+
+			private CacheScope cacheScope;
+
 			private Builder(List<Prompt> prompts) {
 				Assert.notNull(prompts, "prompts must not be null");
 				this.prompts = prompts;
@@ -2466,8 +2572,18 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder ttlMs(Integer ttlMs) {
+				this.ttlMs = ttlMs;
+				return this;
+			}
+
+			public Builder cacheScope(CacheScope cacheScope) {
+				this.cacheScope = cacheScope;
+				return this;
+			}
+
 			public ListPromptsResult build() {
-				return new ListPromptsResult(prompts, nextCursor, meta);
+				return new ListPromptsResult(prompts, nextCursor, meta, ttlMs, cacheScope);
 			}
 
 		}
@@ -2620,13 +2736,18 @@ public final class McpSchema {
 	 * @param nextCursor An optional cursor for pagination. If present, indicates there
 	 * are more tools available.
 	 * @param meta See specification for notes on _meta usage
+	 * @param ttlMs A hint from the server indicating how long (in milliseconds) the
+	 * client may cache this response before re-fetching
+	 * @param cacheScope Indicates the intended scope of the cached response
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ListToolsResult( // @formatter:off
 		@JsonProperty("tools") List<Tool> tools,
 		@JsonProperty("nextCursor") String nextCursor,
-		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+		@JsonProperty("_meta") Map<String, Object> meta,
+		@JsonProperty("ttlMs") Integer ttlMs,
+		@JsonProperty("cacheScope") CacheScope cacheScope) implements Result { // @formatter:on
 
 		public ListToolsResult {
 			Assert.notNull(tools, "tools must not be null");
@@ -2634,12 +2755,18 @@ public final class McpSchema {
 
 		@JsonCreator
 		static ListToolsResult fromJson(@JsonProperty("tools") List<Tool> tools,
-				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
+				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta,
+				@JsonProperty("ttlMs") Integer ttlMs, @JsonProperty("cacheScope") CacheScope cacheScope) {
 			if (tools == null) {
 				logger.warn("ListToolsResult: missing required field 'tools' during deserialization, using default []");
 				tools = List.of();
 			}
-			return new ListToolsResult(tools, nextCursor, meta);
+			return new ListToolsResult(tools, nextCursor, meta, ttlMs, cacheScope);
+		}
+
+		@Deprecated
+		public ListToolsResult(List<Tool> tools, String nextCursor, Map<String, Object> meta) {
+			this(tools, nextCursor, meta, null, null);
 		}
 
 		@Deprecated
@@ -2659,6 +2786,10 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
+			private Integer ttlMs;
+
+			private CacheScope cacheScope;
+
 			private Builder(List<Tool> tools) {
 				Assert.notNull(tools, "tools must not be null");
 				this.tools = tools;
@@ -2674,8 +2805,18 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder ttlMs(Integer ttlMs) {
+				this.ttlMs = ttlMs;
+				return this;
+			}
+
+			public Builder cacheScope(CacheScope cacheScope) {
+				this.cacheScope = cacheScope;
+				return this;
+			}
+
 			public ListToolsResult build() {
-				return new ListToolsResult(tools, nextCursor, meta);
+				return new ListToolsResult(tools, nextCursor, meta, ttlMs, cacheScope);
 			}
 
 		}
