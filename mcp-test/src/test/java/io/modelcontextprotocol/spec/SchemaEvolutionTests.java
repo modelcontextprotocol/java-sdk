@@ -161,16 +161,15 @@ class SchemaEvolutionTests {
 
 	@Test
 	void serverCapabilitiesExtensionsRoundTrip() throws IOException {
-		McpSchema.ServerCapabilities caps = McpSchema.ServerCapabilities.builder()
-			.extension("com.example/ext-with-settings", Map.of("maxDepth", 3))
-			.extension("com.example/ext-without-settings", null)
-			.build();
+		Map<String, Object> extensions = Map.of("com.example/ext-with-settings", Map.of("maxDepth", 3),
+				"com.example/ext-without-settings", Map.of());
+		McpSchema.ServerCapabilities caps = McpSchema.ServerCapabilities.builder().extensions(extensions).build();
 
 		String json = mapper.writeValueAsString(caps);
 		assertThat(json).contains("\"com.example/ext-without-settings\":{}");
 
 		McpSchema.ServerCapabilities parsed = mapper.readValue(json, McpSchema.ServerCapabilities.class);
-		assertThat(parsed.extensions()).isEqualTo(caps.extensions());
+		assertThat(parsed.extensions()).isEqualTo(extensions);
 	}
 
 	// -----------------------------------------------------------------------
@@ -203,16 +202,15 @@ class SchemaEvolutionTests {
 
 	@Test
 	void clientCapabilitiesExtensionsRoundTrip() throws IOException {
-		McpSchema.ClientCapabilities caps = McpSchema.ClientCapabilities.builder()
-			.extension("com.example/ext-with-settings", Map.of("maxDepth", 3))
-			.extension("com.example/ext-without-settings", null)
-			.build();
+		Map<String, Object> extensions = Map.of("com.example/ext-with-settings", Map.of("maxDepth", 3),
+				"com.example/ext-without-settings", Map.of());
+		McpSchema.ClientCapabilities caps = McpSchema.ClientCapabilities.builder().extensions(extensions).build();
 
 		String json = mapper.writeValueAsString(caps);
 		assertThat(json).contains("\"com.example/ext-without-settings\":{}");
 
 		McpSchema.ClientCapabilities parsed = mapper.readValue(json, McpSchema.ClientCapabilities.class);
-		assertThat(parsed.extensions()).isEqualTo(caps.extensions());
+		assertThat(parsed.extensions()).isEqualTo(extensions);
 	}
 
 	// -----------------------------------------------------------------------
