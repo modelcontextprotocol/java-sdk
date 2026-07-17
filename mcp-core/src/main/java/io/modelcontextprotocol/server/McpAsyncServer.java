@@ -539,7 +539,10 @@ public class McpAsyncServer {
 		return (exchange, params) -> {
 			List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList();
 
-			return Mono.just(McpSchema.ListToolsResult.builder(tools).build());
+			return Mono.just(McpSchema.ListToolsResult.builder(tools)
+				.ttlMs(0)
+				.cacheScope(McpSchema.CacheScope.PUBLIC)
+				.build());
 		};
 	}
 
@@ -791,7 +794,10 @@ public class McpAsyncServer {
 				.stream()
 				.map(McpServerFeatures.AsyncResourceSpecification::resource)
 				.toList();
-			return Mono.just(McpSchema.ListResourcesResult.builder(resourceList).build());
+			return Mono.just(McpSchema.ListResourcesResult.builder(resourceList)
+				.ttlMs(0)
+				.cacheScope(McpSchema.CacheScope.PUBLIC)
+				.build());
 		};
 	}
 
@@ -801,7 +807,10 @@ public class McpAsyncServer {
 				.stream()
 				.map(McpServerFeatures.AsyncResourceTemplateSpecification::resourceTemplate)
 				.toList();
-			return Mono.just(McpSchema.ListResourceTemplatesResult.builder(resourceList).build());
+			return Mono.just(McpSchema.ListResourceTemplatesResult.builder(resourceList)
+				.ttlMs(0)
+				.cacheScope(McpSchema.CacheScope.PUBLIC)
+				.build());
 		};
 	}
 
@@ -822,8 +831,20 @@ public class McpAsyncServer {
 					return this.findResourceTemplateSpecification(resourceUri)
 						.map(spec -> spec.readHandler().apply(ex, resourceRequest))
 						.orElseGet(() -> Mono.error(RESOURCE_NOT_FOUND.apply(resourceUri)));
-				});
+				})
+				.map(McpAsyncServer::withCacheDefaults);
 		};
+	}
+
+	private static McpSchema.ReadResourceResult withCacheDefaults(McpSchema.ReadResourceResult result) {
+		if (result.ttlMs() == null || result.cacheScope() == null) {
+			return McpSchema.ReadResourceResult.builder(result.contents())
+				.meta(result.meta())
+				.ttlMs(result.ttlMs() != null ? result.ttlMs() : 0)
+				.cacheScope(result.cacheScope() != null ? result.cacheScope() : McpSchema.CacheScope.PUBLIC)
+				.build();
+		}
+		return result;
 	}
 
 	private Optional<McpServerFeatures.AsyncResourceSpecification> findResourceSpecification(String uri) {
@@ -952,7 +973,10 @@ public class McpAsyncServer {
 				.map(McpServerFeatures.AsyncPromptSpecification::prompt)
 				.toList();
 
-			return Mono.just(McpSchema.ListPromptsResult.builder(promptList).build());
+			return Mono.just(McpSchema.ListPromptsResult.builder(promptList)
+				.ttlMs(0)
+				.cacheScope(McpSchema.CacheScope.PUBLIC)
+				.build());
 		};
 	}
 
