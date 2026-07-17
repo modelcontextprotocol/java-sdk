@@ -144,6 +144,35 @@ class SchemaEvolutionTests {
 		assertThat(caps.tools().listChanged()).isTrue();
 	}
 
+	@Test
+	void serverCapabilitiesWithoutExtensionsDeserializesAsNull() throws IOException {
+		String json = """
+				{"tools":{"listChanged":true}}
+				""";
+		McpSchema.ServerCapabilities caps = mapper.readValue(json, McpSchema.ServerCapabilities.class);
+		assertThat(caps.extensions()).isNull();
+	}
+
+	@Test
+	void serverCapabilitiesWithNullExtensionsOmitsFieldOnWire() throws IOException {
+		String json = mapper.writeValueAsString(McpSchema.ServerCapabilities.builder().tools(true).build());
+		assertThat(json).doesNotContain("extensions");
+	}
+
+	@Test
+	void serverCapabilitiesExtensionsRoundTrip() throws IOException {
+		McpSchema.ServerCapabilities caps = McpSchema.ServerCapabilities.builder()
+			.extension("com.example/ext-with-settings", Map.of("maxDepth", 3))
+			.extension("com.example/ext-without-settings", null)
+			.build();
+
+		String json = mapper.writeValueAsString(caps);
+		assertThat(json).contains("\"com.example/ext-without-settings\":{}");
+
+		McpSchema.ServerCapabilities parsed = mapper.readValue(json, McpSchema.ServerCapabilities.class);
+		assertThat(parsed.extensions()).isEqualTo(caps.extensions());
+	}
+
 	// -----------------------------------------------------------------------
 	// ClientCapabilities.extensions
 	// -----------------------------------------------------------------------
