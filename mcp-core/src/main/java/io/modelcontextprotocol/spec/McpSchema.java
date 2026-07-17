@@ -781,22 +781,6 @@ public final class McpSchema {
 				return this;
 			}
 
-			/**
-			 * Adds support for a single extension; {@code null} settings are sent as an
-			 * empty JSON object.
-			 * @param id the extension identifier
-			 * @param settings the per-extension settings, or {@code null}
-			 * @return this builder
-			 */
-			public Builder extension(String id, Map<String, Object> settings) {
-				Assert.hasText(id, "id must not be null or empty");
-				Map<String, Object> merged = (this.extensions != null) ? new HashMap<>(this.extensions)
-						: new HashMap<>();
-				merged.put(id, settings != null ? settings : Map.of());
-				this.extensions = merged;
-				return this;
-			}
-
 			public ClientCapabilities build() {
 				return new ClientCapabilities(experimental, roots, sampling, elicitation, extensions);
 			}
@@ -1021,22 +1005,6 @@ public final class McpSchema {
 
 			public Builder extensions(Map<String, Object> extensions) {
 				this.extensions = extensions;
-				return this;
-			}
-
-			/**
-			 * Adds support for a single extension; {@code null} settings are sent as an
-			 * empty JSON object.
-			 * @param id the extension identifier
-			 * @param settings the per-extension settings, or {@code null}
-			 * @return this builder
-			 */
-			public Builder extension(String id, Map<String, Object> settings) {
-				Assert.hasText(id, "id must not be null or empty");
-				Map<String, Object> merged = (this.extensions != null) ? new HashMap<>(this.extensions)
-						: new HashMap<>();
-				merged.put(id, settings != null ? settings : Map.of());
-				this.extensions = merged;
 				return this;
 			}
 
