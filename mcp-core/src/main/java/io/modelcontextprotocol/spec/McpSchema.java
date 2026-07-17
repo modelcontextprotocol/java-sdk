@@ -817,6 +817,8 @@ public final class McpSchema {
 	 * @param prompts Present if the server offers any prompt templates
 	 * @param resources Present if the server offers any resources to read
 	 * @param tools Present if the server offers any tools to call
+	 * @param extensions Present if the server supports MCP extensions, keyed by extension
+	 * identifier
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -826,7 +828,15 @@ public final class McpSchema {
 		@JsonProperty("logging") LoggingCapabilities logging,
 		@JsonProperty("prompts") PromptCapabilities prompts,
 		@JsonProperty("resources") ResourceCapabilities resources,
-		@JsonProperty("tools") ToolCapabilities tools) { // @formatter:on
+		@JsonProperty("tools") ToolCapabilities tools,
+		@JsonProperty("extensions") Map<String, Object> extensions) { // @formatter:on
+
+		// Keep the old constructor so existing callers still compile
+		public ServerCapabilities(CompletionCapabilities completions, Map<String, Object> experimental,
+				LoggingCapabilities logging, PromptCapabilities prompts, ResourceCapabilities resources,
+				ToolCapabilities tools) {
+			this(completions, experimental, logging, prompts, resources, tools, null);
+		}
 
 		/**
 		 * Present if the server supports argument autocompletion suggestions.
@@ -955,6 +965,7 @@ public final class McpSchema {
 			builder.prompts = this.prompts;
 			builder.resources = this.resources;
 			builder.tools = this.tools;
+			builder.extensions = this.extensions;
 			return builder;
 		}
 
@@ -975,6 +986,8 @@ public final class McpSchema {
 			private ResourceCapabilities resources;
 
 			private ToolCapabilities tools;
+
+			private Map<String, Object> extensions;
 
 			public Builder completions() {
 				this.completions = new CompletionCapabilities();
@@ -1006,8 +1019,30 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder extensions(Map<String, Object> extensions) {
+				this.extensions = extensions;
+				return this;
+			}
+
+			/**
+			 * Adds support for a single extension; {@code null} settings are sent as an
+			 * empty JSON object.
+			 * @param id the extension identifier
+			 * @param settings the per-extension settings, or {@code null}
+			 * @return this builder
+			 */
+			public Builder extension(String id, Map<String, Object> settings) {
+				Assert.hasText(id, "id must not be null or empty");
+				Map<String, Object> merged = (this.extensions != null) ? new HashMap<>(this.extensions)
+						: new HashMap<>();
+				merged.put(id, settings != null ? settings : Map.of());
+				this.extensions = merged;
+				return this;
+			}
+
 			public ServerCapabilities build() {
-				return new ServerCapabilities(completions, experimental, logging, prompts, resources, tools);
+				return new ServerCapabilities(completions, experimental, logging, prompts, resources, tools,
+						extensions);
 			}
 
 		}
