@@ -577,6 +577,8 @@ public final class McpSchema {
 	 * @param roots Present if the client supports listing roots
 	 * @param sampling Present if the client supports sampling from an LLM
 	 * @param elicitation Present if the client supports elicitation from the server
+	 * @param extensions Present if the client supports MCP extensions, keyed by extension
+	 * identifier
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -584,7 +586,14 @@ public final class McpSchema {
 		@JsonProperty("experimental") Map<String, Object> experimental,
 		@JsonProperty("roots") RootCapabilities roots,
 		@JsonProperty("sampling") Sampling sampling,
-		@JsonProperty("elicitation") Elicitation elicitation) { // @formatter:on
+		@JsonProperty("elicitation") Elicitation elicitation,
+		@JsonProperty("extensions") Map<String, Object> extensions) { // @formatter:on
+
+		// Keep the old constructor so existing callers still compile
+		public ClientCapabilities(Map<String, Object> experimental, RootCapabilities roots, Sampling sampling,
+				Elicitation elicitation) {
+			this(experimental, roots, sampling, elicitation, null);
+		}
 
 		/**
 		 * Present if the client supports listing roots.
@@ -723,6 +732,8 @@ public final class McpSchema {
 
 			private Elicitation elicitation;
 
+			private Map<String, Object> extensions;
+
 			public Builder experimental(Map<String, Object> experimental) {
 				this.experimental = experimental;
 				return this;
@@ -765,8 +776,29 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder extensions(Map<String, Object> extensions) {
+				this.extensions = extensions;
+				return this;
+			}
+
+			/**
+			 * Adds support for a single extension; {@code null} settings are sent as an
+			 * empty JSON object.
+			 * @param id the extension identifier
+			 * @param settings the per-extension settings, or {@code null}
+			 * @return this builder
+			 */
+			public Builder extension(String id, Map<String, Object> settings) {
+				Assert.hasText(id, "id must not be null or empty");
+				Map<String, Object> merged = (this.extensions != null) ? new HashMap<>(this.extensions)
+						: new HashMap<>();
+				merged.put(id, settings != null ? settings : Map.of());
+				this.extensions = merged;
+				return this;
+			}
+
 			public ClientCapabilities build() {
-				return new ClientCapabilities(experimental, roots, sampling, elicitation);
+				return new ClientCapabilities(experimental, roots, sampling, elicitation, extensions);
 			}
 
 		}
