@@ -1,15 +1,14 @@
 /*
- * Copyright 2024-2024 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server;
 
+import java.util.List;
+
 import io.modelcontextprotocol.spec.McpSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.publisher.Mono;
-
-import java.util.List;
 
 /**
  * A stateless MCP server implementation for use with Streamable HTTP transport types. It
@@ -18,6 +17,7 @@ import java.util.List;
  * knowledge and can serve the clients with the capabilities it supports.
  *
  * @author Dariusz Jędrzejczyk
+ * @author Taewoong Kim
  */
 public class McpStatelessSyncServer {
 
@@ -25,11 +25,8 @@ public class McpStatelessSyncServer {
 
 	private final McpStatelessAsyncServer asyncServer;
 
-	private final boolean immediateExecution;
-
-	McpStatelessSyncServer(McpStatelessAsyncServer asyncServer, boolean immediateExecution) {
+	McpStatelessSyncServer(McpStatelessAsyncServer asyncServer) {
 		this.asyncServer = asyncServer;
-		this.immediateExecution = immediateExecution;
 	}
 
 	/**
@@ -68,15 +65,12 @@ public class McpStatelessSyncServer {
 	 * @param toolSpecification The tool specification to add
 	 */
 	public void addTool(McpStatelessServerFeatures.SyncToolSpecification toolSpecification) {
-		this.asyncServer
-			.addTool(McpStatelessServerFeatures.AsyncToolSpecification.fromSync(toolSpecification,
-					this.immediateExecution))
-			.block();
+		this.asyncServer.addTool(toolSpecification).block();
 	}
 
 	/**
-	 * List all registered tools.
-	 * @return A list of all registered tools
+	 * List tools without a client request context.
+	 * @return A list of context-free visible tools
 	 */
 	public List<McpSchema.Tool> listTools() {
 		return this.asyncServer.listTools().collectList().block();
@@ -95,15 +89,12 @@ public class McpStatelessSyncServer {
 	 * @param resourceSpecification The resource handler to add
 	 */
 	public void addResource(McpStatelessServerFeatures.SyncResourceSpecification resourceSpecification) {
-		this.asyncServer
-			.addResource(McpStatelessServerFeatures.AsyncResourceSpecification.fromSync(resourceSpecification,
-					this.immediateExecution))
-			.block();
+		this.asyncServer.addResource(resourceSpecification).block();
 	}
 
 	/**
-	 * List all registered resources.
-	 * @return A list of all registered resources
+	 * List resources without a client request context.
+	 * @return A list of context-free visible resources
 	 */
 	public List<McpSchema.Resource> listResources() {
 		return this.asyncServer.listResources().collectList().block();
@@ -123,15 +114,12 @@ public class McpStatelessSyncServer {
 	 */
 	public void addResourceTemplate(
 			McpStatelessServerFeatures.SyncResourceTemplateSpecification resourceTemplateSpecification) {
-		this.asyncServer
-			.addResourceTemplate(McpStatelessServerFeatures.AsyncResourceTemplateSpecification
-				.fromSync(resourceTemplateSpecification, this.immediateExecution))
-			.block();
+		this.asyncServer.addResourceTemplate(resourceTemplateSpecification).block();
 	}
 
 	/**
-	 * List all registered resource templates.
-	 * @return A list of all registered resource templates
+	 * List resource templates without a client request context.
+	 * @return A list of context-free visible resource templates
 	 */
 	public List<McpSchema.ResourceTemplate> listResourceTemplates() {
 		return this.asyncServer.listResourceTemplates().collectList().block();
@@ -150,15 +138,12 @@ public class McpStatelessSyncServer {
 	 * @param promptSpecification The prompt handler to add
 	 */
 	public void addPrompt(McpStatelessServerFeatures.SyncPromptSpecification promptSpecification) {
-		this.asyncServer
-			.addPrompt(McpStatelessServerFeatures.AsyncPromptSpecification.fromSync(promptSpecification,
-					this.immediateExecution))
-			.block();
+		this.asyncServer.addPrompt(promptSpecification).block();
 	}
 
 	/**
-	 * List all registered prompts.
-	 * @return A list of all registered prompts
+	 * List prompts without a client request context.
+	 * @return A list of context-free visible prompts
 	 */
 	public List<McpSchema.Prompt> listPrompts() {
 		return this.asyncServer.listPrompts().collectList().block();

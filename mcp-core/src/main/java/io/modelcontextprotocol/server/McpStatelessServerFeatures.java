@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server;
@@ -24,6 +24,7 @@ import reactor.core.scheduler.Schedulers;
  *
  * @author Dariusz Jędrzejczyk
  * @author Christian Tzolov
+ * @author Taewoong Kim
  */
 public class McpStatelessServerFeatures {
 
@@ -36,6 +37,17 @@ public class McpStatelessServerFeatures {
 	 * @param resources The map of resource specifications
 	 * @param resourceTemplates The map of resource templates
 	 * @param prompts The map of prompt specifications
+	 * @param completions The map of completion specifications
+	 * @param toolsRepository The repository used to resolve tools from the request
+	 * context
+	 * @param resourcesRepository The repository used to resolve resources from the
+	 * request context
+	 * @param promptsRepository The repository used to resolve prompts from the request
+	 * context
+	 * @param completionsRepository The repository used to handle completion requests from
+	 * the request context
+	 * @param immediateExecution Whether repository and synchronous specification calls
+	 * should execute immediately instead of being offloaded
 	 * @param instructions The server instructions text
 	 */
 	record Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
@@ -44,7 +56,9 @@ public class McpStatelessServerFeatures {
 			Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions,
-			String instructions) {
+			ToolsRepository toolsRepository, ResourcesRepository resourcesRepository,
+			PromptsRepository promptsRepository, CompletionsRepository completionsRepository,
+			boolean immediateExecution, String instructions) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -54,6 +68,17 @@ public class McpStatelessServerFeatures {
 		 * @param resources The map of resource specifications
 		 * @param resourceTemplates The map of resource templates
 		 * @param prompts The map of prompt specifications
+		 * @param completions The map of completion specifications
+		 * @param toolsRepository The repository used to resolve tools from the request
+		 * context
+		 * @param resourcesRepository The repository used to resolve resources from the
+		 * request context
+		 * @param promptsRepository The repository used to resolve prompts from the
+		 * request context
+		 * @param completionsRepository The repository used to handle completion requests
+		 * from the request context
+		 * @param immediateExecution Whether repository and synchronous specification
+		 * calls should execute immediately instead of being offloaded
 		 * @param instructions The server instructions text
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
@@ -62,33 +87,42 @@ public class McpStatelessServerFeatures {
 				Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
 				Map<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions,
-				String instructions) {
+				ToolsRepository toolsRepository, ResourcesRepository resourcesRepository,
+				PromptsRepository promptsRepository, CompletionsRepository completionsRepository,
+				boolean immediateExecution, String instructions) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
 			this.serverInfo = serverInfo;
 			this.serverCapabilities = (serverCapabilities != null) ? serverCapabilities
-					: new McpSchema.ServerCapabilities(null, // completions
-							null, // experimental
-							null, // currently statless server doesn't support set logging
-							!Utils.isEmpty(prompts) ? McpSchema.ServerCapabilities.PromptCapabilities.builder().build()
+					: new McpSchema.ServerCapabilities(
+							(completionsRepository != null) ? new McpSchema.ServerCapabilities.CompletionCapabilities()
 									: null,
-							!Utils.isEmpty(resources)
+							null, // experimental
+							null, // currently stateless server does not support logging
+							(!Utils.isEmpty(prompts) || promptsRepository != null)
+									? McpSchema.ServerCapabilities.PromptCapabilities.builder().build() : null,
+							(!Utils.isEmpty(resources) || resourcesRepository != null)
 									? McpSchema.ServerCapabilities.ResourceCapabilities.builder().build() : null,
-							!Utils.isEmpty(tools) ? McpSchema.ServerCapabilities.ToolCapabilities.builder().build()
-									: null);
+							(!Utils.isEmpty(tools) || toolsRepository != null)
+									? McpSchema.ServerCapabilities.ToolCapabilities.builder().build() : null);
 
 			this.tools = (tools != null) ? tools : List.of();
 			this.resources = (resources != null) ? resources : Map.of();
 			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : Map.of();
 			this.prompts = (prompts != null) ? prompts : Map.of();
 			this.completions = (completions != null) ? completions : Map.of();
+			this.toolsRepository = toolsRepository;
+			this.resourcesRepository = resourcesRepository;
+			this.promptsRepository = promptsRepository;
+			this.completionsRepository = completionsRepository;
+			this.immediateExecution = immediateExecution;
 			this.instructions = instructions;
 		}
 
 		/**
-		 * Convert a synchronous specification into an asynchronous one and provide
-		 * blocking code offloading to prevent accidental blocking of the non-blocking
+		 * Convert a synchronous specification into an asynchronous one, optionally
+		 * offloading blocking code to prevent accidental blocking of the non-blocking
 		 * transport.
 		 * @param syncSpec a potentially blocking, synchronous specification.
 		 * @param immediateExecution when true, do not offload. Do NOT set to true when
@@ -123,7 +157,9 @@ public class McpStatelessServerFeatures {
 			});
 
 			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources, resourceTemplates,
-					prompts, completions, syncSpec.instructions());
+					prompts, completions, syncSpec.toolsRepository(), syncSpec.resourcesRepository(),
+					syncSpec.promptsRepository(), syncSpec.completionsRepository(), immediateExecution,
+					syncSpec.instructions());
 		}
 	}
 
@@ -136,6 +172,15 @@ public class McpStatelessServerFeatures {
 	 * @param resources The map of resource specifications
 	 * @param resourceTemplates The map of resource templates
 	 * @param prompts The map of prompt specifications
+	 * @param completions The map of completion specifications
+	 * @param toolsRepository The repository used to resolve tools from the request
+	 * context
+	 * @param resourcesRepository The repository used to resolve resources from the
+	 * request context
+	 * @param promptsRepository The repository used to resolve prompts from the request
+	 * context
+	 * @param completionsRepository The repository used to handle completion requests from
+	 * the request context
 	 * @param instructions The server instructions text
 	 */
 	record Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
@@ -144,7 +189,8 @@ public class McpStatelessServerFeatures {
 			Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpStatelessServerFeatures.SyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpStatelessServerFeatures.SyncCompletionSpecification> completions,
-			String instructions) {
+			ToolsRepository toolsRepository, ResourcesRepository resourcesRepository,
+			PromptsRepository promptsRepository, CompletionsRepository completionsRepository, String instructions) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -154,6 +200,15 @@ public class McpStatelessServerFeatures {
 		 * @param resources The map of resource specifications
 		 * @param resourceTemplates The map of resource templates
 		 * @param prompts The map of prompt specifications
+		 * @param completions The map of completion specifications
+		 * @param toolsRepository The repository used to resolve tools from the request
+		 * context
+		 * @param resourcesRepository The repository used to resolve resources from the
+		 * request context
+		 * @param promptsRepository The repository used to resolve prompts from the
+		 * request context
+		 * @param completionsRepository The repository used to handle completion requests
+		 * from the request context
 		 * @param instructions The server instructions text
 		 */
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
@@ -162,30 +217,37 @@ public class McpStatelessServerFeatures {
 				Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
 				Map<String, McpStatelessServerFeatures.SyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpStatelessServerFeatures.SyncCompletionSpecification> completions,
-				String instructions) {
+				ToolsRepository toolsRepository, ResourcesRepository resourcesRepository,
+				PromptsRepository promptsRepository, CompletionsRepository completionsRepository, String instructions) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
 			this.serverInfo = serverInfo;
 			this.serverCapabilities = (serverCapabilities != null) ? serverCapabilities
-					: new McpSchema.ServerCapabilities(null, // completions
+					: new McpSchema.ServerCapabilities(
+							(completionsRepository != null) ? new McpSchema.ServerCapabilities.CompletionCapabilities()
+									: null,
 							null, // experimental
 							new McpSchema.ServerCapabilities.LoggingCapabilities(), // Enable
 																					// logging
 																					// by
 																					// default
-							!Utils.isEmpty(prompts) ? McpSchema.ServerCapabilities.PromptCapabilities.builder().build()
-									: null,
-							!Utils.isEmpty(resources)
+							(!Utils.isEmpty(prompts) || promptsRepository != null)
+									? McpSchema.ServerCapabilities.PromptCapabilities.builder().build() : null,
+							(!Utils.isEmpty(resources) || resourcesRepository != null)
 									? McpSchema.ServerCapabilities.ResourceCapabilities.builder().build() : null,
-							!Utils.isEmpty(tools) ? McpSchema.ServerCapabilities.ToolCapabilities.builder().build()
-									: null);
+							(!Utils.isEmpty(tools) || toolsRepository != null)
+									? McpSchema.ServerCapabilities.ToolCapabilities.builder().build() : null);
 
 			this.tools = (tools != null) ? tools : new ArrayList<>();
 			this.resources = (resources != null) ? resources : new HashMap<>();
 			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : Map.of();
 			this.prompts = (prompts != null) ? prompts : new HashMap<>();
 			this.completions = (completions != null) ? completions : new HashMap<>();
+			this.toolsRepository = toolsRepository;
+			this.resourcesRepository = resourcesRepository;
+			this.promptsRepository = promptsRepository;
+			this.completionsRepository = completionsRepository;
 			this.instructions = instructions;
 		}
 
@@ -197,8 +259,9 @@ public class McpStatelessServerFeatures {
 	 * represents a specific capability.
 	 *
 	 * @param tool The tool definition including name, description, and parameter schema
-	 * @param callHandler The function that implements the tool's logic, receiving a
-	 * {@link CallToolRequest} and returning the result.
+	 * @param callHandler The function that implements the tool's logic. The first
+	 * argument is the {@link McpTransportContext}; the second argument is the
+	 * {@link CallToolRequest}.
 	 */
 	public record AsyncToolSpecification(McpSchema.Tool tool,
 			BiFunction<McpTransportContext, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler) {
@@ -290,7 +353,8 @@ public class McpStatelessServerFeatures {
 	 *
 	 * @param resource The resource definition including name, description, and MIME type
 	 * @param readHandler The function that handles resource read requests. The function's
-	 * argument is a {@link McpSchema.ReadResourceRequest}.
+	 * first argument is the {@link McpTransportContext}; the second argument is the
+	 * {@link McpSchema.ReadResourceRequest}.
 	 */
 	public record AsyncResourceSpecification(McpSchema.Resource resource,
 			BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
@@ -308,7 +372,7 @@ public class McpStatelessServerFeatures {
 	}
 
 	/**
-	 * Specification of a resource template with its synchronous handler function.
+	 * Specification of a resource template with its asynchronous handler function.
 	 * Resource templates allow servers to expose parameterized resources using URI
 	 * templates: <a href=https://datatracker.ietf.org/doc/html/rfc6570> URI
 	 * templates.</a>. Arguments may be auto-completed through <a href=
@@ -326,10 +390,8 @@ public class McpStatelessServerFeatures {
 	 * @param resourceTemplate The resource template definition including name,
 	 * description, and parameter schema
 	 * @param readHandler The function that handles resource read requests. The function's
-	 * first argument is an {@link McpTransportContext} upon which the server can interact
-	 * with the connected client. The second arguments is a
-	 * {@link McpSchema.ReadResourceRequest}. {@link McpSchema.ResourceTemplate}
-	 * {@link McpSchema.ReadResourceResult}
+	 * first argument is the {@link McpTransportContext}; the second argument is the
+	 * {@link McpSchema.ReadResourceRequest}.
 	 */
 	public record AsyncResourceTemplateSpecification(McpSchema.ResourceTemplate resourceTemplate,
 			BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
@@ -360,8 +422,8 @@ public class McpStatelessServerFeatures {
 	 *
 	 * @param prompt The prompt definition including name and description
 	 * @param promptHandler The function that processes prompt requests and returns
-	 * formatted templates. The function's argument is a
-	 * {@link McpSchema.GetPromptRequest}.
+	 * formatted templates. The first argument is the {@link McpTransportContext}; the
+	 * second argument is the {@link McpSchema.GetPromptRequest}.
 	 */
 	public record AsyncPromptSpecification(McpSchema.Prompt prompt,
 			BiFunction<McpTransportContext, McpSchema.GetPromptRequest, Mono<McpSchema.GetPromptResult>> promptHandler) {
@@ -385,12 +447,13 @@ public class McpStatelessServerFeatures {
 	 * <ul>
 	 * <li>Customizable response generation logic
 	 * <li>Parameter-driven template expansion
-	 * <li>Dynamic interaction with connected clients
+	 * <li>Context-aware completion logic
 	 * </ul>
 	 *
 	 * @param referenceKey The unique key representing the completion reference.
 	 * @param completionHandler The asynchronous function that processes completion
-	 * requests and returns results. The function's argument is a
+	 * requests and returns results. The first argument is the
+	 * {@link McpTransportContext}; the second argument is the
 	 * {@link McpSchema.CompleteRequest}.
 	 */
 	public record AsyncCompletionSpecification(McpSchema.CompleteReference referenceKey,
@@ -398,9 +461,10 @@ public class McpStatelessServerFeatures {
 
 		/**
 		 * Converts a synchronous {@link SyncCompletionSpecification} into an
-		 * {@link AsyncCompletionSpecification} by wrapping the handler in a bounded
-		 * elastic scheduler for safe non-blocking execution.
+		 * {@link AsyncCompletionSpecification}, optionally offloading the handler to a
+		 * bounded elastic scheduler for safe non-blocking execution.
 		 * @param completion the synchronous completion specification
+		 * @param immediateExecution whether the handler should execute immediately
 		 * @return an asynchronous wrapper of the provided sync specification, or
 		 * {@code null} if input is null
 		 */
@@ -422,8 +486,9 @@ public class McpStatelessServerFeatures {
 	 * primary way for MCP servers to expose functionality to AI models.
 	 *
 	 * @param tool The tool definition including name, description, and parameter schema
-	 * @param callHandler The function that implements the tool's logic, receiving a
-	 * {@link CallToolRequest} and returning results.
+	 * @param callHandler The function that implements the tool's logic. The first
+	 * argument is the {@link McpTransportContext}; the second argument is the
+	 * {@link CallToolRequest}.
 	 */
 	public record SyncToolSpecification(McpSchema.Tool tool,
 			BiFunction<McpTransportContext, CallToolRequest, McpSchema.CallToolResult> callHandler) {
@@ -491,7 +556,8 @@ public class McpStatelessServerFeatures {
 	 *
 	 * @param resource The resource definition including name, description, and MIME type
 	 * @param readHandler The function that handles resource read requests. The function's
-	 * argument is a {@link McpSchema.ReadResourceRequest}.
+	 * first argument is the {@link McpTransportContext}; the second argument is the
+	 * {@link McpSchema.ReadResourceRequest}.
 	 */
 	public record SyncResourceSpecification(McpSchema.Resource resource,
 			BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
@@ -516,10 +582,8 @@ public class McpStatelessServerFeatures {
 	 * @param resourceTemplate The resource template definition including name,
 	 * description, and parameter schema
 	 * @param readHandler The function that handles resource read requests. The function's
-	 * first argument is an {@link McpTransportContext} upon which the server can interact
-	 * with the connected client. The second arguments is a
-	 * {@link McpSchema.ReadResourceRequest}. {@link McpSchema.ResourceTemplate}
-	 * {@link McpSchema.ReadResourceResult}
+	 * first argument is the {@link McpTransportContext}; the second argument is the
+	 * {@link McpSchema.ReadResourceRequest}.
 	 */
 	public record SyncResourceTemplateSpecification(McpSchema.ResourceTemplate resourceTemplate,
 			BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
@@ -538,8 +602,8 @@ public class McpStatelessServerFeatures {
 	 *
 	 * @param prompt The prompt definition including name and description
 	 * @param promptHandler The function that processes prompt requests and returns
-	 * formatted templates. The function's argument is a
-	 * {@link McpSchema.GetPromptRequest}.
+	 * formatted templates. The first argument is the {@link McpTransportContext}; the
+	 * second argument is the {@link McpSchema.GetPromptRequest}.
 	 */
 	public record SyncPromptSpecification(McpSchema.Prompt prompt,
 			BiFunction<McpTransportContext, McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler) {
@@ -550,7 +614,9 @@ public class McpStatelessServerFeatures {
 	 *
 	 * @param referenceKey The unique key representing the completion reference.
 	 * @param completionHandler The synchronous function that processes completion
-	 * requests and returns results. The argument is a {@link McpSchema.CompleteRequest}.
+	 * requests and returns results. The first argument is the
+	 * {@link McpTransportContext}; the second argument is the
+	 * {@link McpSchema.CompleteRequest}.
 	 */
 	public record SyncCompletionSpecification(McpSchema.CompleteReference referenceKey,
 			BiFunction<McpTransportContext, McpSchema.CompleteRequest, McpSchema.CompleteResult> completionHandler) {
