@@ -171,7 +171,7 @@ class HttpClientStreamableHttpTransportTest {
 	}
 
 	@Test
-	void testMcpMethodHeaderIsAddedForInitializeRequest() throws IOException {
+	void sendsMcpMethodHeaderForInitializeRequests() throws IOException {
 		HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
 		try {
 			server.createContext("/mcp", exchange -> {
@@ -207,6 +207,50 @@ class HttpClientStreamableHttpTransportTest {
 					.build();
 				var testMessage = new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, "test-id",
 						initializeRequest);
+
+				StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
+			}
+			finally {
+				StepVerifier.create(transport.closeGracefully()).verifyComplete();
+			}
+		}
+		finally {
+			server.stop(0);
+		}
+	}
+
+	@Test
+	void sendsMcpMethodHeaderForNotifications() throws IOException {
+		HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+		try {
+			server.createContext("/mcp", exchange -> {
+				try (exchange) {
+					if (!"POST".equals(exchange.getRequestMethod())) {
+						exchange.sendResponseHeaders(405, -1);
+						return;
+					}
+
+					String methodHeader = exchange.getRequestHeaders().getFirst("Mcp-Method");
+					byte[] requestBody = exchange.getRequestBody().readAllBytes();
+					String body = new String(requestBody, StandardCharsets.UTF_8);
+
+					if (!McpSchema.METHOD_NOTIFICATION_INITIALIZED.equals(methodHeader)
+							|| !body.contains("\"method\":\"notifications/initialized\"")) {
+						exchange.sendResponseHeaders(400, 0);
+						return;
+					}
+
+					exchange.sendResponseHeaders(202, -1);
+				}
+			});
+			server.start();
+
+			int port = server.getAddress().getPort();
+			var transport = HttpClientStreamableHttpTransport.builder("http://localhost:" + port)
+				.endpoint("/mcp")
+				.build();
+			try {
+				var testMessage = new McpSchema.JSONRPCNotification(McpSchema.METHOD_NOTIFICATION_INITIALIZED);
 
 				StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 			}

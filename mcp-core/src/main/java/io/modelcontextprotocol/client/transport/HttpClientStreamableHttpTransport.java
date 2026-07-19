@@ -503,19 +503,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 							transportSession.sessionId().get());
 				}
 
-				// Extract method and params for Mcp-Name header
-				String method = null;
-				Object params = null;
-				if (sentMessage instanceof McpSchema.JSONRPCRequest request) {
-					method = request.method();
-					params = request.params();
-				}
-				else if (sentMessage instanceof McpSchema.JSONRPCNotification notification) {
-					method = notification.method();
-					params = notification.params();
-				}
-
-				// Extract method and params for Mcp-Name header
+				// Extract method and params for MCP headers.
 				String method = null;
 				Object params = null;
 				if (sentMessage instanceof McpSchema.JSONRPCRequest request) {
