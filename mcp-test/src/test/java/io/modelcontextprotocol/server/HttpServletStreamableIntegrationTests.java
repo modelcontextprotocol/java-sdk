@@ -6,6 +6,8 @@ package io.modelcontextprotocol.server;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 import io.modelcontextprotocol.AbstractMcpClientServerIntegrationTests;
@@ -16,14 +18,19 @@ import io.modelcontextprotocol.server.McpServer.AsyncSpecification;
 import io.modelcontextprotocol.server.McpServer.SyncSpecification;
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
+import io.modelcontextprotocol.spec.McpSchema;
 import jakarta.servlet.http.HttpServletRequest;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.provider.Arguments;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -94,6 +101,47 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 				throw new RuntimeException("Failed to stop Tomcat", e);
 			}
 		}
+	}
+
+	@Test
+	void testMissingHandlerReturnsMethodNotFoundError() {
+		var mcpServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
+			.build();
+		var clientTransport = HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
+			.endpoint(MESSAGE_ENDPOINT)
+			.build();
+
+		try (var mcpClient = McpClient.sync(clientTransport).build()) {
+			// Create a session using an MCP client
+			McpSchema.InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Override the response handler in the client to capture responses
+			AtomicReference<McpSchema.JSONRPCResponse> response = new AtomicReference<>();
+			var handler = (Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>>) (
+					message) -> message.doOnNext(r -> {
+						if (r instanceof McpSchema.JSONRPCResponse resp) {
+							response.set(resp);
+						}
+					});
+			StepVerifier.create(clientTransport.connect(handler)).verifyComplete();
+
+			// Send an incorrect request through the transport
+			StepVerifier
+				.create(clientTransport.sendMessage(new McpSchema.JSONRPCRequest("foo/bar", "test-request-123")))
+				.verifyComplete();
+
+			// Wait until we've received the response
+			Awaitility.await().atMost(Duration.ofSeconds(1)).until(() -> response.get() != null);
+
+			assertThat(response.get().error().code()).isEqualTo(McpSchema.ErrorCodes.METHOD_NOT_FOUND);
+			assertThat(response.get().error().message()).isEqualTo("Method not found: foo/bar");
+		}
+		finally {
+			mcpServer.close();
+		}
+
 	}
 
 	static McpTransportContextExtractor<HttpServletRequest> TEST_CONTEXT_EXTRACTOR = (r) -> McpTransportContext
