@@ -421,7 +421,7 @@ public class McpStatelessAsyncServer {
 				.map(McpStatelessServerFeatures.AsyncToolSpecification::tool)
 				.toList();
 			return Mono.just(McpSchema.ListToolsResult.builder(tools)
-				.ttlMs(0)
+				.ttlMs(0L)
 				.cacheScope(McpSchema.CacheScope.PUBLIC)
 				.build());
 		};
@@ -588,7 +588,7 @@ public class McpStatelessAsyncServer {
 				.map(McpStatelessServerFeatures.AsyncResourceSpecification::resource)
 				.toList();
 			return Mono.just(McpSchema.ListResourcesResult.builder(resourceList)
-				.ttlMs(0)
+				.ttlMs(0L)
 				.cacheScope(McpSchema.CacheScope.PUBLIC)
 				.build());
 		};
@@ -601,7 +601,7 @@ public class McpStatelessAsyncServer {
 				.map(AsyncResourceTemplateSpecification::resourceTemplate)
 				.toList();
 			return Mono.just(McpSchema.ListResourceTemplatesResult.builder(resourceList)
-				.ttlMs(0)
+				.ttlMs(0L)
 				.cacheScope(McpSchema.CacheScope.PUBLIC)
 				.build());
 		};
@@ -633,8 +633,8 @@ public class McpStatelessAsyncServer {
 		if (result.ttlMs() == null || result.cacheScope() == null) {
 			return McpSchema.ReadResourceResult.builder(result.contents())
 				.meta(result.meta())
-				.ttlMs(result.ttlMs() != null ? result.ttlMs() : 0)
-				.cacheScope(result.cacheScope() != null ? result.cacheScope() : McpSchema.CacheScope.PUBLIC)
+				.ttlMs(result.ttlMs() != null ? result.ttlMs() : 0L)
+				.cacheScope(result.cacheScope() != null ? result.cacheScope() : McpSchema.CacheScope.PRIVATE)
 				.build();
 		}
 		return result;
@@ -736,7 +736,7 @@ public class McpStatelessAsyncServer {
 				.toList();
 
 			return Mono.just(McpSchema.ListPromptsResult.builder(promptList)
-				.ttlMs(0)
+				.ttlMs(0L)
 				.cacheScope(McpSchema.CacheScope.PUBLIC)
 				.build());
 		};
