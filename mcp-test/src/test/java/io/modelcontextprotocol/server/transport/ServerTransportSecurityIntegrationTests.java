@@ -6,6 +6,7 @@ package io.modelcontextprotocol.server.transport;
 
 import java.net.URI;
 import java.net.http.HttpRequest;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.stream.Stream;
 
@@ -17,6 +18,7 @@ import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequ
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
+import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpSchema;
 import jakarta.servlet.http.HttpServlet;
 import org.apache.catalina.LifecycleException;
@@ -26,6 +28,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.junit.jupiter.params.BeforeParameterizedClassInvocation;
 import org.junit.jupiter.params.Parameter;
 import org.junit.jupiter.params.ParameterizedClass;
@@ -127,6 +131,86 @@ class ServerTransportSecurityIntegrationTests {
 
 		assertThat(result.protocolVersion()).isNotEmpty();
 		assertThat(tools.tools()).isEmpty();
+	}
+
+	@Test
+	void rejectsInitializeRequestWithoutMcpMethodHeaderWhenRequired() throws Exception {
+		var provider = HttpServletStreamableServerTransportProvider.builder()
+			.mcpEndpoint("/mcp")
+			.requireMcpMethodHeader(true)
+			.build();
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/mcp");
+		request.setContent(
+				"{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test-client\",\"version\":\"1.0.0\"}}}"
+					.getBytes(StandardCharsets.UTF_8));
+		request.addHeader("Accept", "application/json, text/event-stream");
+		MockHttpServletResponse response = new MockHttpServletResponse();
+
+		provider.doPost(request, response);
+
+		assertThat(response.getStatus()).isEqualTo(400);
+		assertThat(response.getContentAsString()).contains("Mcp-Method header required");
+	}
+
+	@Test
+	void rejectsNotificationWithoutMcpMethodHeaderWhenRequired() throws Exception {
+		var provider = HttpServletStreamableServerTransportProvider.builder()
+			.mcpEndpoint("/mcp")
+			.requireMcpMethodHeader(true)
+			.build();
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/mcp");
+		request.setContent(
+				"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}".getBytes(StandardCharsets.UTF_8));
+		request.addHeader("Accept", "application/json, text/event-stream");
+		MockHttpServletResponse response = new MockHttpServletResponse();
+
+		provider.doPost(request, response);
+
+		assertThat(response.getStatus()).isEqualTo(400);
+		assertThat(response.getContentAsString()).contains("Mcp-Method header required");
+	}
+
+	@Test
+	void rejectsToolCallRequestWithoutMcpNameHeaderWhenRequired() throws Exception {
+		var provider = HttpServletStreamableServerTransportProvider.builder()
+			.mcpEndpoint("/mcp")
+			.requireMcpMethodHeader(true)
+			.requireMcpNameHeader(true)
+			.build();
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/mcp");
+		request.setContent(
+				"{\"jsonrpc\":\"2.0\",\"id\":\"2\",\"method\":\"tools/call\",\"params\":{\"name\":\"echo\",\"arguments\":{\"message\":\"hello\"}}}"
+					.getBytes(StandardCharsets.UTF_8));
+		request.addHeader(HttpHeaders.MCP_METHOD, McpSchema.METHOD_TOOLS_CALL);
+		request.addHeader("Accept", "application/json, text/event-stream");
+		MockHttpServletResponse response = new MockHttpServletResponse();
+
+		provider.doPost(request, response);
+
+		assertThat(response.getStatus()).isEqualTo(400);
+		assertThat(response.getContentAsString()).contains("Mcp-Name header required");
+	}
+
+	@Test
+	void rejectsToolCallRequestWithMismatchedMcpNameHeaderWhenRequired() throws Exception {
+		var provider = HttpServletStreamableServerTransportProvider.builder()
+			.mcpEndpoint("/mcp")
+			.requireMcpMethodHeader(true)
+			.requireMcpNameHeader(true)
+			.build();
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", "/mcp");
+		request.setContent(
+				"{\"jsonrpc\":\"2.0\",\"id\":\"2\",\"method\":\"tools/call\",\"params\":{\"name\":\"echo\",\"arguments\":{\"message\":\"hello\"}}}"
+					.getBytes(StandardCharsets.UTF_8));
+		request.addHeader(HttpHeaders.MCP_METHOD, McpSchema.METHOD_TOOLS_CALL);
+		request.addHeader(HttpHeaders.MCP_NAME, "wrong-name");
+		request.addHeader("Accept", "application/json, text/event-stream");
+		MockHttpServletResponse response = new MockHttpServletResponse();
+
+		provider.doPost(request, response);
+
+		assertThat(response.getStatus()).isEqualTo(400);
+		assertThat(response.getContentAsString()).contains("Mcp-Name header mismatch");
 	}
 
 	@Test

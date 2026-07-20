@@ -125,6 +125,10 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 */
 	private final ServerTransportSecurityValidator securityValidator;
 
+	private final boolean requireMcpNameHeader;
+
+	private final boolean requireMcpMethodHeader;
+
 	/**
 	 * Constructs a new HttpServletStreamableServerTransportProvider instance.
 	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization of
@@ -140,7 +144,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 */
 	private HttpServletStreamableServerTransportProvider(McpJsonMapper jsonMapper, String mcpEndpoint,
 			boolean disallowDelete, McpTransportContextExtractor<HttpServletRequest> contextExtractor,
-			Duration keepAliveInterval, ServerTransportSecurityValidator securityValidator) {
+			Duration keepAliveInterval, ServerTransportSecurityValidator securityValidator,
+			boolean requireMcpNameHeader, boolean requireMcpMethodHeader) {
 		Assert.notNull(jsonMapper, "JsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "MCP endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
@@ -151,6 +156,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		this.disallowDelete = disallowDelete;
 		this.contextExtractor = contextExtractor;
 		this.securityValidator = securityValidator;
+		this.requireMcpNameHeader = requireMcpNameHeader;
+		this.requireMcpMethodHeader = requireMcpMethodHeader;
 
 		if (keepAliveInterval != null) {
 
@@ -383,6 +390,101 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * @throws ServletException If a servlet-specific error occurs
 	 * @throws IOException If an I/O error occurs
 	 */
+	private String extractNameFromParams(String method, Object params) {
+		if (params == null) {
+			return null;
+		}
+
+		try {
+			switch (method) {
+				case McpSchema.METHOD_TOOLS_CALL -> {
+					McpSchema.CallToolRequest request = jsonMapper.convertValue(params,
+							new TypeRef<McpSchema.CallToolRequest>() {
+							});
+					return request.name();
+				}
+				case McpSchema.METHOD_RESOURCES_READ -> {
+					McpSchema.ReadResourceRequest request = jsonMapper.convertValue(params,
+							new TypeRef<McpSchema.ReadResourceRequest>() {
+							});
+					return request.uri();
+				}
+				case McpSchema.METHOD_PROMPT_GET -> {
+					McpSchema.GetPromptRequest request = jsonMapper.convertValue(params,
+							new TypeRef<McpSchema.GetPromptRequest>() {
+							});
+					return request.name();
+				}
+				default -> {
+					return null;
+				}
+			}
+		}
+		catch (Exception e) {
+			logger.debug("Failed to extract name from params for method {}: {}", method, e.getMessage());
+			return null;
+		}
+	}
+
+	private boolean validateMcpMethodHeader(HttpServletRequest request, HttpServletResponse response, String method)
+			throws IOException {
+		if (!this.requireMcpMethodHeader) {
+			return true;
+		}
+
+		String headerMethod = request.getHeader(HttpHeaders.MCP_METHOD);
+		if (headerMethod == null || headerMethod.isBlank()) {
+			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+					McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+						.message("Mcp-Method header required for method " + method)
+						.build());
+			return false;
+		}
+
+		if (!method.equals(headerMethod)) {
+			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+					McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+						.message("Mcp-Method header mismatch: expected '" + method + "' but was '" + headerMethod + "'")
+						.build());
+			return false;
+		}
+
+		return true;
+	}
+
+	private boolean validateMcpNameHeader(HttpServletRequest request, HttpServletResponse response, String method,
+			Object params) throws IOException {
+		if (!this.requireMcpNameHeader) {
+			return true;
+		}
+
+		String expectedName = extractNameFromParams(method, params);
+		String headerName = request.getHeader(HttpHeaders.MCP_NAME);
+		if (headerName == null || headerName.isBlank()) {
+			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+					McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+						.message("Mcp-Name header required for method " + method)
+						.build());
+			return false;
+		}
+
+		if (expectedName == null || !headerName.equals(expectedName)) {
+			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+					McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+						.message("Mcp-Name header mismatch: expected '" + expectedName + "' but was '" + headerName
+								+ "'")
+						.build());
+			return false;
+		}
+
+		return true;
+	}
+
+	private boolean isNameHeaderMethod(String method) {
+		return McpSchema.METHOD_TOOLS_CALL.equals(method) || McpSchema.METHOD_RESOURCES_READ.equals(method)
+				|| McpSchema.METHOD_PROMPT_GET.equals(method);
+	}
+
 	@Override
 	protected void doPost(HttpServletRequest request, HttpServletResponse response)
 			throws ServletException, IOException {
@@ -428,6 +530,23 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			}
 
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body.toString());
+
+			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
+				String method = jsonrpcRequest.method();
+				if (!validateMcpMethodHeader(request, response, method)) {
+					return;
+				}
+				if (isNameHeaderMethod(method)
+						&& !validateMcpNameHeader(request, response, method, jsonrpcRequest.params())) {
+					return;
+				}
+			}
+			else if (message instanceof McpSchema.JSONRPCNotification jsonrpcNotification) {
+				String method = jsonrpcNotification.method();
+				if (!validateMcpMethodHeader(request, response, method)) {
+					return;
+				}
+			}
 
 			// Handle initialization request
 			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest
@@ -823,6 +942,10 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		private boolean disallowDelete = false;
 
+		private boolean requireMcpNameHeader = false;
+
+		private boolean requireMcpMethodHeader = false;
+
 		private McpTransportContextExtractor<HttpServletRequest> contextExtractor = (
 				serverRequest) -> McpTransportContext.EMPTY;
 
@@ -902,6 +1025,30 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		/**
+		 * Sets whether the server should reject requests that do not include the
+		 * {@code Mcp-Name} header for methods that may include it.
+		 * @param requireMcpNameHeader true to reject missing headers, false to accept
+		 * requests from older clients by default
+		 * @return this builder instance
+		 */
+		public Builder requireMcpNameHeader(boolean requireMcpNameHeader) {
+			this.requireMcpNameHeader = requireMcpNameHeader;
+			return this;
+		}
+
+		/**
+		 * Sets whether the server should reject requests that do not include the
+		 * {@code Mcp-Method} header for requests and notifications.
+		 * @param requireMcpMethodHeader true to reject missing or mismatched method
+		 * headers, false to accept requests from older clients by default
+		 * @return this builder instance
+		 */
+		public Builder requireMcpMethodHeader(boolean requireMcpMethodHeader) {
+			this.requireMcpMethodHeader = requireMcpMethodHeader;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link HttpServletStreamableServerTransportProvider}
 		 * with the configured settings.
 		 * @return A new HttpServletStreamableServerTransportProvider instance
@@ -911,7 +1058,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 			return new HttpServletStreamableServerTransportProvider(
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, mcpEndpoint, disallowDelete,
-					contextExtractor, keepAliveInterval, securityValidator);
+					contextExtractor, keepAliveInterval, securityValidator, requireMcpNameHeader,
+					requireMcpMethodHeader);
 		}
 
 	}

@@ -503,14 +503,35 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 							transportSession.sessionId().get());
 				}
 
+				// Extract method and params for MCP headers.
+				String method = null;
+				Object params = null;
+				if (sentMessage instanceof McpSchema.JSONRPCRequest request) {
+					method = request.method();
+					params = request.params();
+				}
+				else if (sentMessage instanceof McpSchema.JSONRPCNotification notification) {
+					method = notification.method();
+					params = notification.params();
+				}
+
 				var builder = requestBuilder.uri(uri)
 					.header(HttpHeaders.ACCEPT, APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
 					.header(HttpHeaders.CONTENT_TYPE, APPLICATION_JSON_UTF8)
 					.header(HttpHeaders.CACHE_CONTROL, "no-cache")
-					.header(HttpHeaders.PROTOCOL_VERSION,
-							ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
-									this.latestSupportedProtocolVersion))
-					.POST(HttpRequest.BodyPublishers.ofString(jsonBody));
+					.header(HttpHeaders.PROTOCOL_VERSION, ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
+							this.latestSupportedProtocolVersion));
+
+				// Add MCP-specific headers if applicable
+				if (method != null) {
+					builder = builder.header(HttpHeaders.MCP_METHOD, method);
+					String name = extractNameFromParams(method, params);
+					if (name != null) {
+						builder = builder.header(HttpHeaders.MCP_NAME, name);
+					}
+				}
+
+				builder = builder.POST(HttpRequest.BodyPublishers.ofString(jsonBody));
 				var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 				return Mono
 					.from(this.httpRequestCustomizer.customize(builder, "POST", uri, jsonBody, transportContext));
@@ -697,6 +718,48 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	@Override
 	public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
 		return this.jsonMapper.convertValue(data, typeRef);
+	}
+
+	/**
+	 * Extracts the name/URI from the request params based on the method type.
+	 * @param method the MCP method name
+	 * @param params the request parameters
+	 * @return the name/URI if applicable for the method, or null otherwise
+	 */
+	private String extractNameFromParams(String method, Object params) {
+		if (params == null) {
+			return null;
+		}
+
+		try {
+			switch (method) {
+				case McpSchema.METHOD_TOOLS_CALL -> {
+					McpSchema.CallToolRequest request = this.jsonMapper.convertValue(params,
+							new TypeRef<McpSchema.CallToolRequest>() {
+							});
+					return request.name();
+				}
+				case McpSchema.METHOD_RESOURCES_READ -> {
+					McpSchema.ReadResourceRequest request = this.jsonMapper.convertValue(params,
+							new TypeRef<McpSchema.ReadResourceRequest>() {
+							});
+					return request.uri();
+				}
+				case McpSchema.METHOD_PROMPT_GET -> {
+					McpSchema.GetPromptRequest request = this.jsonMapper.convertValue(params,
+							new TypeRef<McpSchema.GetPromptRequest>() {
+							});
+					return request.name();
+				}
+				default -> {
+					return null;
+				}
+			}
+		}
+		catch (Exception e) {
+			logger.debug("Failed to extract name from params for method {}: {}", method, e.getMessage());
+			return null;
+		}
 	}
 
 	/**
