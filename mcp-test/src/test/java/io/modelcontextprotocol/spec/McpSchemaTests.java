@@ -3093,7 +3093,7 @@ public class McpSchemaTests {
 
 		McpSchema.ListResourcesResult result = McpSchema.ListResourcesResult.builder(List.of(resource))
 			.nextCursor("next")
-			.ttlMs(60000)
+			.ttlMs(60000L)
 			.cacheScope(McpSchema.CacheScope.PUBLIC)
 			.build();
 
@@ -3105,7 +3105,7 @@ public class McpSchemaTests {
 
 		McpSchema.ListResourcesResult deserialized = JSON_MAPPER.readValue(value,
 				McpSchema.ListResourcesResult.class);
-		assertThat(deserialized.ttlMs()).isEqualTo(60000);
+		assertThat(deserialized.ttlMs()).isEqualTo(60000L);
 		assertThat(deserialized.cacheScope()).isEqualTo(McpSchema.CacheScope.PUBLIC);
 		assertThat(deserialized.resources()).hasSize(1);
 	}
@@ -3135,7 +3135,7 @@ public class McpSchemaTests {
 
 		McpSchema.ListResourceTemplatesResult result = McpSchema.ListResourceTemplatesResult
 			.builder(List.of(template))
-			.ttlMs(30000)
+			.ttlMs(30000L)
 			.cacheScope(McpSchema.CacheScope.PRIVATE)
 			.build();
 
@@ -3144,7 +3144,7 @@ public class McpSchemaTests {
 
 		McpSchema.ListResourceTemplatesResult deserialized = JSON_MAPPER.readValue(value,
 				McpSchema.ListResourceTemplatesResult.class);
-		assertThat(deserialized.ttlMs()).isEqualTo(30000);
+		assertThat(deserialized.ttlMs()).isEqualTo(30000L);
 		assertThat(deserialized.cacheScope()).isEqualTo(McpSchema.CacheScope.PRIVATE);
 	}
 
@@ -3173,7 +3173,7 @@ public class McpSchemaTests {
 			.build();
 
 		McpSchema.ReadResourceResult result = McpSchema.ReadResourceResult.builder(List.of(contents))
-			.ttlMs(0)
+			.ttlMs(0L)
 			.cacheScope(McpSchema.CacheScope.PRIVATE)
 			.build();
 
@@ -3182,7 +3182,7 @@ public class McpSchemaTests {
 
 		McpSchema.ReadResourceResult deserialized = JSON_MAPPER.readValue(value,
 				McpSchema.ReadResourceResult.class);
-		assertThat(deserialized.ttlMs()).isEqualTo(0);
+		assertThat(deserialized.ttlMs()).isEqualTo(0L);
 		assertThat(deserialized.cacheScope()).isEqualTo(McpSchema.CacheScope.PRIVATE);
 	}
 
@@ -3210,7 +3210,7 @@ public class McpSchemaTests {
 			.build();
 
 		McpSchema.ListPromptsResult result = McpSchema.ListPromptsResult.builder(List.of(prompt))
-			.ttlMs(120000)
+			.ttlMs(120000L)
 			.cacheScope(McpSchema.CacheScope.PUBLIC)
 			.build();
 
@@ -3219,7 +3219,7 @@ public class McpSchemaTests {
 
 		McpSchema.ListPromptsResult deserialized = JSON_MAPPER.readValue(value,
 				McpSchema.ListPromptsResult.class);
-		assertThat(deserialized.ttlMs()).isEqualTo(120000);
+		assertThat(deserialized.ttlMs()).isEqualTo(120000L);
 		assertThat(deserialized.cacheScope()).isEqualTo(McpSchema.CacheScope.PUBLIC);
 	}
 
@@ -3249,7 +3249,7 @@ public class McpSchemaTests {
 
 		McpSchema.ListToolsResult result = McpSchema.ListToolsResult.builder(List.of(tool))
 			.nextCursor("cursor")
-			.ttlMs(300000)
+			.ttlMs(300000L)
 			.cacheScope(McpSchema.CacheScope.PUBLIC)
 			.build();
 
@@ -3260,7 +3260,7 @@ public class McpSchemaTests {
 			.containsEntry("nextCursor", "cursor");
 
 		McpSchema.ListToolsResult deserialized = JSON_MAPPER.readValue(value, McpSchema.ListToolsResult.class);
-		assertThat(deserialized.ttlMs()).isEqualTo(300000);
+		assertThat(deserialized.ttlMs()).isEqualTo(300000L);
 		assertThat(deserialized.cacheScope()).isEqualTo(McpSchema.CacheScope.PUBLIC);
 		assertThat(deserialized.tools()).hasSize(1);
 		assertThat(deserialized.nextCursor()).isEqualTo("cursor");
@@ -3302,7 +3302,7 @@ public class McpSchemaTests {
 		McpSchema.ListResourcesResult result = JSON_MAPPER.readValue("""
 				{"resources":[],"ttlMs":5000,"cacheScope":"public","futureField":"ignored"}""",
 				McpSchema.ListResourcesResult.class);
-		assertThat(result.ttlMs()).isEqualTo(5000);
+		assertThat(result.ttlMs()).isEqualTo(5000L);
 		assertThat(result.cacheScope()).isEqualTo(McpSchema.CacheScope.PUBLIC);
 	}
 
@@ -3311,7 +3311,7 @@ public class McpSchemaTests {
 		McpSchema.ListResourceTemplatesResult result = JSON_MAPPER.readValue("""
 				{"resourceTemplates":[],"ttlMs":5000,"cacheScope":"private","futureField":"ignored"}""",
 				McpSchema.ListResourceTemplatesResult.class);
-		assertThat(result.ttlMs()).isEqualTo(5000);
+		assertThat(result.ttlMs()).isEqualTo(5000L);
 		assertThat(result.cacheScope()).isEqualTo(McpSchema.CacheScope.PRIVATE);
 	}
 
@@ -3329,7 +3329,7 @@ public class McpSchemaTests {
 		McpSchema.ListPromptsResult result = JSON_MAPPER.readValue("""
 				{"prompts":[],"ttlMs":10000,"cacheScope":"public","futureField":"ignored"}""",
 				McpSchema.ListPromptsResult.class);
-		assertThat(result.ttlMs()).isEqualTo(10000);
+		assertThat(result.ttlMs()).isEqualTo(10000L);
 		assertThat(result.cacheScope()).isEqualTo(McpSchema.CacheScope.PUBLIC);
 	}
 
@@ -3338,7 +3338,7 @@ public class McpSchemaTests {
 		McpSchema.ListToolsResult result = JSON_MAPPER.readValue("""
 				{"tools":[],"ttlMs":60000,"cacheScope":"public","futureField":"ignored"}""",
 				McpSchema.ListToolsResult.class);
-		assertThat(result.ttlMs()).isEqualTo(60000);
+		assertThat(result.ttlMs()).isEqualTo(60000L);
 		assertThat(result.cacheScope()).isEqualTo(McpSchema.CacheScope.PUBLIC);
 	}
 
