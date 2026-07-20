@@ -1629,7 +1629,7 @@ public final class McpSchema {
 		@JsonProperty("resources") List<Resource> resources,
 		@JsonProperty("nextCursor") String nextCursor,
 		@JsonProperty("_meta") Map<String, Object> meta,
-		@JsonProperty("ttlMs") Integer ttlMs,
+		@JsonProperty("ttlMs") Long ttlMs,
 		@JsonProperty("cacheScope") CacheScope cacheScope) implements Result { // @formatter:on
 
 		public ListResourcesResult {
@@ -1639,7 +1639,7 @@ public final class McpSchema {
 		@JsonCreator
 		static ListResourcesResult fromJson(@JsonProperty("resources") List<Resource> resources,
 				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta,
-				@JsonProperty("ttlMs") Integer ttlMs, @JsonProperty("cacheScope") CacheScope cacheScope) {
+				@JsonProperty("ttlMs") Long ttlMs, @JsonProperty("cacheScope") CacheScope cacheScope) {
 			if (resources == null) {
 				logger.warn(
 						"ListResourcesResult: missing required field 'resources' during deserialization, using default []");
@@ -1670,7 +1670,7 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
-			private Integer ttlMs;
+			private Long ttlMs;
 
 			private CacheScope cacheScope;
 
@@ -1689,7 +1689,7 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder ttlMs(Integer ttlMs) {
+			public Builder ttlMs(Long ttlMs) {
 				this.ttlMs = ttlMs;
 				return this;
 			}
@@ -1723,7 +1723,7 @@ public final class McpSchema {
 		@JsonProperty("resourceTemplates") List<ResourceTemplate> resourceTemplates,
 		@JsonProperty("nextCursor") String nextCursor,
 		@JsonProperty("_meta") Map<String, Object> meta,
-		@JsonProperty("ttlMs") Integer ttlMs,
+		@JsonProperty("ttlMs") Long ttlMs,
 		@JsonProperty("cacheScope") CacheScope cacheScope) implements Result { // @formatter:on
 
 		public ListResourceTemplatesResult {
@@ -1734,7 +1734,7 @@ public final class McpSchema {
 		static ListResourceTemplatesResult fromJson(
 				@JsonProperty("resourceTemplates") List<ResourceTemplate> resourceTemplates,
 				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta,
-				@JsonProperty("ttlMs") Integer ttlMs, @JsonProperty("cacheScope") CacheScope cacheScope) {
+				@JsonProperty("ttlMs") Long ttlMs, @JsonProperty("cacheScope") CacheScope cacheScope) {
 			if (resourceTemplates == null) {
 				logger.warn(
 						"ListResourceTemplatesResult: missing required field 'resourceTemplates' during deserialization, using default []");
@@ -1766,7 +1766,7 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
-			private Integer ttlMs;
+			private Long ttlMs;
 
 			private CacheScope cacheScope;
 
@@ -1785,7 +1785,7 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder ttlMs(Integer ttlMs) {
+			public Builder ttlMs(Long ttlMs) {
 				this.ttlMs = ttlMs;
 				return this;
 			}
@@ -1876,7 +1876,7 @@ public final class McpSchema {
 	public record ReadResourceResult( // @formatter:off
 		@JsonProperty("contents") List<ResourceContents> contents,
 		@JsonProperty("_meta") Map<String, Object> meta,
-		@JsonProperty("ttlMs") Integer ttlMs,
+		@JsonProperty("ttlMs") Long ttlMs,
 		@JsonProperty("cacheScope") CacheScope cacheScope) implements Result { // @formatter:on
 
 		public ReadResourceResult {
@@ -1885,7 +1885,7 @@ public final class McpSchema {
 
 		@JsonCreator
 		static ReadResourceResult fromJson(@JsonProperty("contents") List<ResourceContents> contents,
-				@JsonProperty("_meta") Map<String, Object> meta, @JsonProperty("ttlMs") Integer ttlMs,
+				@JsonProperty("_meta") Map<String, Object> meta, @JsonProperty("ttlMs") Long ttlMs,
 				@JsonProperty("cacheScope") CacheScope cacheScope) {
 			if (contents == null) {
 				logger.warn(
@@ -1915,7 +1915,7 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
-			private Integer ttlMs;
+			private Long ttlMs;
 
 			private CacheScope cacheScope;
 
@@ -1929,7 +1929,7 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder ttlMs(Integer ttlMs) {
+			public Builder ttlMs(Long ttlMs) {
 				this.ttlMs = ttlMs;
 				return this;
 			}
@@ -2512,7 +2512,7 @@ public final class McpSchema {
 		@JsonProperty("prompts") List<Prompt> prompts,
 		@JsonProperty("nextCursor") String nextCursor,
 		@JsonProperty("_meta") Map<String, Object> meta,
-		@JsonProperty("ttlMs") Integer ttlMs,
+		@JsonProperty("ttlMs") Long ttlMs,
 		@JsonProperty("cacheScope") CacheScope cacheScope) implements Result  { // @formatter:on
 
 		public ListPromptsResult {
@@ -2522,7 +2522,7 @@ public final class McpSchema {
 		@JsonCreator
 		static ListPromptsResult fromJson(@JsonProperty("prompts") List<Prompt> prompts,
 				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta,
-				@JsonProperty("ttlMs") Integer ttlMs, @JsonProperty("cacheScope") CacheScope cacheScope) {
+				@JsonProperty("ttlMs") Long ttlMs, @JsonProperty("cacheScope") CacheScope cacheScope) {
 			if (prompts == null) {
 				logger.warn(
 						"ListPromptsResult: missing required field 'prompts' during deserialization, using default []");
@@ -2553,7 +2553,7 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
-			private Integer ttlMs;
+			private Long ttlMs;
 
 			private CacheScope cacheScope;
 
@@ -2572,7 +2572,7 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder ttlMs(Integer ttlMs) {
+			public Builder ttlMs(Long ttlMs) {
 				this.ttlMs = ttlMs;
 				return this;
 			}
@@ -2746,7 +2746,7 @@ public final class McpSchema {
 		@JsonProperty("tools") List<Tool> tools,
 		@JsonProperty("nextCursor") String nextCursor,
 		@JsonProperty("_meta") Map<String, Object> meta,
-		@JsonProperty("ttlMs") Integer ttlMs,
+		@JsonProperty("ttlMs") Long ttlMs,
 		@JsonProperty("cacheScope") CacheScope cacheScope) implements Result { // @formatter:on
 
 		public ListToolsResult {
@@ -2756,7 +2756,7 @@ public final class McpSchema {
 		@JsonCreator
 		static ListToolsResult fromJson(@JsonProperty("tools") List<Tool> tools,
 				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta,
-				@JsonProperty("ttlMs") Integer ttlMs, @JsonProperty("cacheScope") CacheScope cacheScope) {
+				@JsonProperty("ttlMs") Long ttlMs, @JsonProperty("cacheScope") CacheScope cacheScope) {
 			if (tools == null) {
 				logger.warn("ListToolsResult: missing required field 'tools' during deserialization, using default []");
 				tools = List.of();
@@ -2786,7 +2786,7 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
-			private Integer ttlMs;
+			private Long ttlMs;
 
 			private CacheScope cacheScope;
 
@@ -2805,7 +2805,7 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder ttlMs(Integer ttlMs) {
+			public Builder ttlMs(Long ttlMs) {
 				this.ttlMs = ttlMs;
 				return this;
 			}
