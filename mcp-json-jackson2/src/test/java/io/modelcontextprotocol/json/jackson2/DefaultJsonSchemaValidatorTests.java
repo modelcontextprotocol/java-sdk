@@ -308,7 +308,7 @@ class DefaultJsonSchemaValidatorTests {
 		assertFalse(response.valid());
 		assertNotNull(response.errorMessage());
 		assertTrue(response.errorMessage().contains("Validation failed"));
-		assertTrue(response.errorMessage().contains("structuredContent does not match tool outputSchema"));
+		assertTrue(response.errorMessage().contains("JSON schema validation errors"));
 	}
 
 	@Test

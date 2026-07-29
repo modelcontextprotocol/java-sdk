@@ -214,9 +214,13 @@ public class McpStreamableServerSession implements McpLoggableSession {
 			// (sink)
 			if (requestHandler == null) {
 				MethodNotFoundError error = getMethodNotFoundError(jsonrpcRequest.method());
-				return transport.sendMessage(
-						McpSchema.JSONRPCResponse.error(jsonrpcRequest.id(), new McpSchema.JSONRPCResponse.JSONRPCError(
-								McpSchema.ErrorCodes.METHOD_NOT_FOUND, error.message(), error.data())));
+				return transport
+					.sendMessage(
+							McpSchema.JSONRPCResponse
+								.error(jsonrpcRequest.id(),
+										new McpSchema.JSONRPCResponse.JSONRPCError(
+												McpSchema.ErrorCodes.METHOD_NOT_FOUND, error.message(), error.data())))
+					.then(transport.closeGracefully());
 			}
 			return requestHandler
 				.handle(new McpAsyncServerExchange(this.id, stream, clientCapabilities.get(), clientInfo.get(),

@@ -64,7 +64,7 @@ npx @modelcontextprotocol/conformance server --url http://localhost:8080/mcp --s
 ./mvnw clean package -DskipTests -pl conformance-tests/client-jdk-http-client -am
 for scenario in initialize tools_call elicitation-sep1034-client-defaults sse-retry; do
   npx @modelcontextprotocol/conformance client \
-    --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-2.0.0-SNAPSHOT.jar" \
+    --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-2.0.1-SNAPSHOT.jar" \
     --scenario $scenario
 done
 
@@ -72,7 +72,7 @@ done
 ./mvnw clean package -DskipTests -pl conformance-tests/client-spring-http-client -am
 npx @modelcontextprotocol/conformance@0.1.15 client \
   --spec-version 2025-11-25 \
-  --command "java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.0-SNAPSHOT.jar" \
+  --command "java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.1-SNAPSHOT.jar" \
   --suite auth
 ```
 
