@@ -213,7 +213,7 @@ class LifecycleInitializer {
 
 		private void complete(McpSchema.InitializeResult initializeResult) {
 			// inform all the subscribers waiting for the initialization
-			this.initSink.emitValue(initializeResult, Sinks.EmitFailureHandler.FAIL_FAST);
+			this.initSink.tryEmitValue(initializeResult);
 		}
 
 		private void cacheResult(McpSchema.InitializeResult initializeResult) {
@@ -222,7 +222,7 @@ class LifecycleInitializer {
 		}
 
 		private void error(Throwable t) {
-			this.initSink.emitError(t, Sinks.EmitFailureHandler.FAIL_FAST);
+			this.initSink.tryEmitError(t);
 		}
 
 		private void close() {
@@ -230,6 +230,10 @@ class LifecycleInitializer {
 		}
 
 		private void terminate(Throwable cause) {
+			// Initialization has a single shared outcome. Publish the terminal failure
+			// even when the session has not been installed yet so that both the owner
+			// and all concurrent joiners observe it immediately.
+			this.initSink.tryEmitError(cause);
 			McpClientSession mcpClientSession = this.mcpSession();
 			if (mcpClientSession != null) {
 				mcpClientSession.terminate(cause);
@@ -304,8 +308,20 @@ class LifecycleInitializer {
 			boolean needsToInitialize = previous == null;
 			logger.debug(needsToInitialize ? "Initialization process started" : "Joining previous initialization");
 
-			Mono<McpSchema.InitializeResult> initializationJob = needsToInitialize
-					? this.doInitialize(newInit, this.postInitializationHook, ctx) : previous.await();
+			Mono<McpSchema.InitializeResult> initializationJob;
+			if (needsToInitialize) {
+				// The work branch only publishes into the shared sink. Keeping it from
+				// winning directly makes the owner and all joiners consume the same
+				// first terminal signal.
+				Mono<McpSchema.InitializeResult> initializationWork = this
+					.doInitialize(newInit, this.postInitializationHook, ctx)
+					.onErrorComplete()
+					.then(Mono.never());
+				initializationJob = Mono.firstWithSignal(newInit.await(), initializationWork);
+			}
+			else {
+				initializationJob = previous.await();
+			}
 
 			return initializationJob.map(initializeResult -> this.initializationRef.get())
 				.timeout(this.initializationTimeout)
@@ -322,46 +338,45 @@ class LifecycleInitializer {
 	private Mono<McpSchema.InitializeResult> doInitialize(DefaultInitialization initialization,
 			Function<Initialization, Mono<Void>> postInitOperation, ContextView ctx) {
 
-		initialization.setMcpClientSession(this.sessionSupplier.apply(ctx));
+		return Mono.defer(() -> {
+			initialization.setMcpClientSession(this.sessionSupplier.apply(ctx));
 
-		McpClientSession mcpClientSession = initialization.mcpSession();
-		Throwable terminal = this.terminalFailure.get();
-		if (terminal != null) {
-			mcpClientSession.terminate(terminal);
-			return Mono.error(terminal);
-		}
-
-		String latestVersion = this.protocolVersions.get(this.protocolVersions.size() - 1);
-
-		McpSchema.InitializeRequest initializeRequest = McpSchema.InitializeRequest
-			.builder(latestVersion, this.clientCapabilities, this.clientInfo)
-			.build();
-
-		Mono<McpSchema.InitializeResult> result = mcpClientSession.sendRequest(McpSchema.METHOD_INITIALIZE,
-				initializeRequest, McpAsyncClient.INITIALIZE_RESULT_TYPE_REF);
-
-		return result.flatMap(initializeResult -> {
-			logger.info("Server response with Protocol: {}, Capabilities: {}, Info: {} and Instructions {}",
-					initializeResult.protocolVersion(), initializeResult.capabilities(), initializeResult.serverInfo(),
-					initializeResult.instructions());
-
-			if (!this.protocolVersions.contains(initializeResult.protocolVersion())) {
-				return Mono.error(McpError.builder(-32602)
-					.message("Unsupported protocol version")
-					.data("Unsupported protocol version from the server: " + initializeResult.protocolVersion())
-					.build());
+			McpClientSession mcpClientSession = initialization.mcpSession();
+			Throwable terminal = this.terminalFailure.get();
+			if (terminal != null) {
+				mcpClientSession.terminate(terminal);
+				return Mono.error(terminal);
 			}
 
-			return mcpClientSession.sendNotification(McpSchema.METHOD_NOTIFICATION_INITIALIZED, null)
-				.contextWrite(
-						c -> c.put(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION, initializeResult.protocolVersion()))
-				.thenReturn(initializeResult);
-		}).flatMap(initializeResult -> {
-			initialization.cacheResult(initializeResult);
-			return postInitOperation.apply(initialization).thenReturn(initializeResult);
-		}).doOnNext(initialization::complete).onErrorResume(ex -> {
-			initialization.error(ex);
-			return Mono.error(ex);
+			String latestVersion = this.protocolVersions.get(this.protocolVersions.size() - 1);
+
+			McpSchema.InitializeRequest initializeRequest = McpSchema.InitializeRequest
+				.builder(latestVersion, this.clientCapabilities, this.clientInfo)
+				.build();
+
+			Mono<McpSchema.InitializeResult> result = mcpClientSession.sendRequest(McpSchema.METHOD_INITIALIZE,
+					initializeRequest, McpAsyncClient.INITIALIZE_RESULT_TYPE_REF);
+
+			return result.flatMap(initializeResult -> {
+				logger.info("Server response with Protocol: {}, Capabilities: {}, Info: {} and Instructions {}",
+						initializeResult.protocolVersion(), initializeResult.capabilities(),
+						initializeResult.serverInfo(), initializeResult.instructions());
+
+				if (!this.protocolVersions.contains(initializeResult.protocolVersion())) {
+					return Mono.error(McpError.builder(-32602)
+						.message("Unsupported protocol version")
+						.data("Unsupported protocol version from the server: " + initializeResult.protocolVersion())
+						.build());
+				}
+
+				return mcpClientSession.sendNotification(McpSchema.METHOD_NOTIFICATION_INITIALIZED, null)
+					.contextWrite(
+							c -> c.put(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION, initializeResult.protocolVersion()))
+					.thenReturn(initializeResult);
+			}).flatMap(initializeResult -> {
+				initialization.cacheResult(initializeResult);
+				return postInitOperation.apply(initialization).thenReturn(initializeResult);
+			}).doOnNext(initialization::complete).doOnError(initialization::error);
 		});
 	}
 
