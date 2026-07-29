@@ -306,6 +306,14 @@ class LifecycleInitializer {
 			DefaultInitialization previous = this.initializationRef.compareAndExchange(null, newInit);
 
 			boolean needsToInitialize = previous == null;
+			DefaultInitialization activeInitialization = needsToInitialize ? newInit : previous;
+			// Complete the handoff with handleException(): if termination won before
+			// registration, this check publishes it; if registration won first, the
+			// exception handler observes the active initialization.
+			Throwable terminalAfterRegistration = this.terminalFailure.get();
+			if (terminalAfterRegistration != null) {
+				activeInitialization.terminate(terminalAfterRegistration);
+			}
 			logger.debug(needsToInitialize ? "Initialization process started" : "Joining previous initialization");
 
 			Mono<McpSchema.InitializeResult> initializationJob;
@@ -317,10 +325,10 @@ class LifecycleInitializer {
 					.doInitialize(newInit, this.postInitializationHook, ctx)
 					.onErrorComplete()
 					.then(Mono.never());
-				initializationJob = Mono.firstWithSignal(newInit.await(), initializationWork);
+				initializationJob = Mono.firstWithSignal(activeInitialization.await(), initializationWork);
 			}
 			else {
-				initializationJob = previous.await();
+				initializationJob = activeInitialization.await();
 			}
 
 			return initializationJob.map(initializeResult -> this.initializationRef.get())
@@ -376,8 +384,8 @@ class LifecycleInitializer {
 			}).flatMap(initializeResult -> {
 				initialization.cacheResult(initializeResult);
 				return postInitOperation.apply(initialization).thenReturn(initializeResult);
-			}).doOnNext(initialization::complete).doOnError(initialization::error);
-		});
+			});
+		}).doOnNext(initialization::complete).doOnError(initialization::error);
 	}
 
 	/**

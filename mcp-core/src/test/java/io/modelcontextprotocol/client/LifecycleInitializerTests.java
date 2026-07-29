@@ -391,6 +391,43 @@ class LifecycleInitializerTests {
 	}
 
 	@Test
+	void shouldShareSynchronousSessionSupplierFailureBetweenWinnerAndJoiner() throws Exception {
+		var cause = new IllegalStateException("Session supplier failed");
+		var supplierEntered = new CountDownLatch(1);
+		var releaseSupplier = new CountDownLatch(1);
+
+		when(mockSessionSupplier.apply(any(ContextView.class))).thenAnswer(invocation -> {
+			supplierEntered.countDown();
+			if (!releaseSupplier.await(5, TimeUnit.SECONDS)) {
+				throw new IllegalStateException("Timed out waiting to release session supplier");
+			}
+			throw cause;
+		});
+
+		var winner = initializer.withInitialization("winner", init -> Mono.just(init.initializeResult()))
+			.subscribeOn(Schedulers.boundedElastic())
+			.materialize()
+			.toFuture();
+		assertThat(supplierEntered.await(1, TimeUnit.SECONDS)).isTrue();
+
+		var joiner = initializer.withInitialization("joiner", init -> Mono.just(init.initializeResult()))
+			.materialize()
+			.toFuture();
+
+		releaseSupplier.countDown();
+
+		var winnerSignal = winner.get(1, TimeUnit.SECONDS);
+		var joinerSignal = joiner.get(1, TimeUnit.SECONDS);
+
+		assertThat(winnerSignal.isOnError()).isTrue();
+		assertThat(winnerSignal.getThrowable()).hasCause(cause);
+		assertThat(joinerSignal.isOnError()).isTrue();
+		assertThat(joinerSignal.getThrowable()).hasCause(cause);
+		verify(mockSessionSupplier, times(1)).apply(any(ContextView.class));
+		verify(mockClientSession, never()).sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any());
+	}
+
+	@Test
 	void shouldIgnoreGenericTransportExceptionDuringInitialization() {
 		var cause = new McpTransportException("Transport closed");
 		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenReturn(Mono.never());
