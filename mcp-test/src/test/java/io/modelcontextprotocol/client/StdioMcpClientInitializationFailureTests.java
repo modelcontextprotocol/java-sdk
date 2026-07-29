@@ -4,12 +4,13 @@
 
 package io.modelcontextprotocol.client;
 
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
+import io.modelcontextprotocol.client.transport.McpStdioServerProcessExitException;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import org.junit.jupiter.api.Test;
@@ -41,21 +42,50 @@ class StdioMcpClientInitializationFailureTests {
 			.build();
 
 		Throwable failure;
+		Throwable retryFailure;
 		long elapsedMillis;
+		long retryElapsedMillis;
 		try {
 			long startNanos = System.nanoTime();
 			failure = catchThrowable(client::initialize);
 			elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+
+			long retryStartNanos = System.nanoTime();
+			retryFailure = catchThrowable(client::initialize);
+			retryElapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - retryStartNanos);
 		}
 		finally {
 			client.closeGracefully();
 		}
 
 		assertThat(failure).isNotNull();
-		String stackTrace = stackTraceOf(failure);
 		assertThat(elapsedMillis).isLessThan(requestTimeout.toMillis());
-		assertThat(stackTrace).contains("MCP server process exited", "with code 127")
-			.doesNotContain("TimeoutException");
+		McpStdioServerProcessExitException processExit = findCause(failure, McpStdioServerProcessExitException.class);
+		assertThat(processExit).isNotNull();
+		assertThat(processExit.getExitCode()).isEqualTo(127);
+		assertThat(processExit.getCommand()).isEqualTo(javaExecutable());
+
+		assertThat(retryFailure).isNotNull();
+		assertThat(retryElapsedMillis).isLessThan(requestTimeout.toMillis());
+		McpStdioServerProcessExitException retryProcessExit = findCause(retryFailure,
+				McpStdioServerProcessExitException.class);
+		assertThat(retryProcessExit).isSameAs(processExit);
+	}
+
+	@Test
+	void gracefulCloseShouldNotReportUnexpectedProcessExit() {
+		String classpath = System.getProperty("java.class.path");
+		ServerParameters stdioParams = ServerParameters.builder(javaExecutable())
+			.args("-cp", classpath, WaitingStdioServer.class.getName())
+			.build();
+		StdioClientTransport transport = new StdioClientTransport(stdioParams, JSON_MAPPER);
+		AtomicReference<Throwable> transportFailure = new AtomicReference<>();
+		transport.setExceptionHandler(transportFailure::set);
+
+		transport.connect(Function.identity()).block(Duration.ofSeconds(3));
+		transport.closeGracefully().block(Duration.ofSeconds(5));
+
+		assertThat(transportFailure).hasValue(null);
 	}
 
 	private String javaExecutable() {
@@ -63,10 +93,15 @@ class StdioMcpClientInitializationFailureTests {
 		return Path.of(System.getProperty("java.home"), "bin", executable).toString();
 	}
 
-	private String stackTraceOf(Throwable failure) {
-		StringWriter writer = new StringWriter();
-		failure.printStackTrace(new PrintWriter(writer));
-		return writer.toString();
+	private <T extends Throwable> T findCause(Throwable failure, Class<T> type) {
+		Throwable current = failure;
+		while (current != null) {
+			if (type.isInstance(current)) {
+				return type.cast(current);
+			}
+			current = current.getCause();
+		}
+		return null;
 	}
 
 }

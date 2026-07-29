@@ -11,11 +11,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import io.modelcontextprotocol.client.LifecycleInitializer.Initialization;
-import io.modelcontextprotocol.client.transport.McpStdioServerProcessExitException;
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
+import io.modelcontextprotocol.spec.McpTransportTerminatedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -305,24 +305,41 @@ class LifecycleInitializerTests {
 	}
 
 	@Test
-	void shouldCloseInProgressInitializationOnStdioProcessExit() {
-		var cause = new McpStdioServerProcessExitException(127, "java");
-		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenReturn(Mono.never())
-			.thenReturn(Mono.just(MOCK_INIT_RESULT));
+	void shouldTerminateInProgressInitializationOnTransportTermination() {
+		var cause = new McpTransportTerminatedException("Transport terminated");
+		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenReturn(Mono.never());
 
 		var subscription = initializer.withInitialization("test", init -> Mono.just(init.initializeResult()))
 			.subscribe();
 
 		initializer.handleException(cause);
-		subscription.dispose();
 
-		verify(mockClientSession).close(cause);
+		verify(mockClientSession).terminate(cause);
+		assertThat(initializer.isInitialized()).isFalse();
+		assertThat(initializer.currentInitializationResult()).isNull();
 
 		StepVerifier.create(initializer.withInitialization("retry", init -> Mono.just(init.initializeResult())))
-			.expectNext(MOCK_INIT_RESULT)
-			.verifyComplete();
+			.expectErrorSatisfies(error -> assertThat(error).isSameAs(cause))
+			.verify();
 
-		verify(mockSessionSupplier, times(2)).apply(any(ContextView.class));
+		verify(mockSessionSupplier, times(1)).apply(any(ContextView.class));
+		subscription.dispose();
+	}
+
+	@Test
+	void shouldApplyTerminationThatArrivesBeforeSessionRegistration() {
+		var cause = new McpTransportTerminatedException("Transport terminated early");
+		when(mockSessionSupplier.apply(any(ContextView.class))).thenAnswer(invocation -> {
+			initializer.handleException(cause);
+			return mockClientSession;
+		});
+
+		StepVerifier.create(initializer.withInitialization("test", init -> Mono.just(init.initializeResult())))
+			.expectErrorSatisfies(error -> assertThat(error).hasCause(cause))
+			.verify();
+
+		verify(mockClientSession).terminate(cause);
+		verify(mockClientSession, never()).sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any());
 	}
 
 	@Test
@@ -336,7 +353,7 @@ class LifecycleInitializerTests {
 		initializer.handleException(cause);
 		subscription.dispose();
 
-		verify(mockClientSession, never()).close(cause);
+		verify(mockClientSession, never()).terminate(cause);
 	}
 
 	@Test
@@ -350,7 +367,26 @@ class LifecycleInitializerTests {
 		initializer.handleException(cause);
 
 		assertThat(initializer.isInitialized()).isTrue();
-		verify(mockClientSession, never()).close(cause);
+		verify(mockClientSession, never()).terminate(cause);
+		verify(mockSessionSupplier, times(1)).apply(any(ContextView.class));
+	}
+
+	@Test
+	void shouldBecomeTerminalAfterInitializationCompletes() {
+		StepVerifier.create(initializer.withInitialization("test", init -> Mono.just(init.initializeResult())))
+			.expectNext(MOCK_INIT_RESULT)
+			.verifyComplete();
+
+		var cause = new McpTransportTerminatedException("Transport terminated");
+		initializer.handleException(cause);
+
+		assertThat(initializer.isInitialized()).isFalse();
+		assertThat(initializer.currentInitializationResult()).isNull();
+		verify(mockClientSession).terminate(cause);
+
+		StepVerifier.create(initializer.withInitialization("retry", init -> Mono.just(init.initializeResult())))
+			.expectErrorSatisfies(error -> assertThat(error).isSameAs(cause))
+			.verify();
 		verify(mockSessionSupplier, times(1)).apply(any(ContextView.class));
 	}
 

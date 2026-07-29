@@ -4,7 +4,7 @@
 
 package io.modelcontextprotocol.client.transport;
 
-import io.modelcontextprotocol.spec.McpTransportException;
+import io.modelcontextprotocol.spec.McpTransportTerminatedException;
 import io.modelcontextprotocol.util.Assert;
 
 /**
@@ -12,7 +12,7 @@ import io.modelcontextprotocol.util.Assert;
  *
  * @author Dongliang Xie
  */
-public class McpStdioServerProcessExitException extends McpTransportException {
+public class McpStdioServerProcessExitException extends McpTransportTerminatedException {
 
 	private static final long serialVersionUID = 1L;
 

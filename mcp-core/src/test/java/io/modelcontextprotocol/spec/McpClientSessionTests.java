@@ -108,7 +108,7 @@ class McpClientSessionTests {
 	}
 
 	@Test
-	void testPendingRequestFailsWithCloseCause() {
+	void testPendingRequestFailsWithTerminalCause() {
 		var transport = new MockMcpClientTransport();
 		var session = new McpClientSession(TIMEOUT, transport, Map.of(),
 				Map.of(TEST_NOTIFICATION, params -> Mono.fromRunnable(() -> logger.info("Status update: {}", params))),
@@ -117,9 +117,50 @@ class McpClientSessionTests {
 
 		Mono<String> responseMono = session.sendRequest(TEST_METHOD, "test", responseType);
 
-		StepVerifier.create(responseMono).then(() -> session.close(cause)).expectErrorSatisfies(error -> {
+		StepVerifier.create(responseMono).then(() -> session.terminate(cause)).expectErrorSatisfies(error -> {
 			assertThat(error).isSameAs(cause);
 		}).verify();
+	}
+
+	@Test
+	void testRequestFailsImmediatelyAfterTermination() {
+		var transport = new MockMcpClientTransport();
+		var session = new McpClientSession(TIMEOUT, transport, Map.of(), Map.of(), Function.identity());
+		var cause = new McpTransportTerminatedException("Transport terminated");
+
+		session.terminate(cause);
+
+		StepVerifier.create(session.sendRequest(TEST_METHOD, "test", responseType))
+			.expectErrorSatisfies(error -> assertThat(error).isSameAs(cause))
+			.verify();
+	}
+
+	@Test
+	void testNotificationFailsImmediatelyAfterTermination() {
+		var transport = new MockMcpClientTransport();
+		var session = new McpClientSession(TIMEOUT, transport, Map.of(), Map.of(), Function.identity());
+		var cause = new McpTransportTerminatedException("Transport terminated");
+
+		session.terminate(cause);
+
+		StepVerifier.create(session.sendNotification(TEST_NOTIFICATION, Map.of()))
+			.expectErrorSatisfies(error -> assertThat(error).isSameAs(cause))
+			.verify();
+	}
+
+	@Test
+	void testFirstTerminalCauseWins() {
+		var transport = new MockMcpClientTransport();
+		var session = new McpClientSession(TIMEOUT, transport, Map.of(), Map.of(), Function.identity());
+		var firstCause = new McpTransportTerminatedException("First failure");
+		var secondCause = new McpTransportTerminatedException("Second failure");
+
+		session.terminate(firstCause);
+		session.terminate(secondCause);
+
+		StepVerifier.create(session.sendRequest(TEST_METHOD, "test", responseType))
+			.expectErrorSatisfies(error -> assertThat(error).isSameAs(firstCause))
+			.verify();
 	}
 
 	@Test

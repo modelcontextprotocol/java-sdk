@@ -11,11 +11,11 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
-import io.modelcontextprotocol.client.transport.McpStdioServerProcessExitException;
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
+import io.modelcontextprotocol.spec.McpTransportTerminatedException;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -93,6 +93,9 @@ class LifecycleInitializer {
 	private List<String> protocolVersions;
 
 	private final AtomicReference<DefaultInitialization> initializationRef = new AtomicReference<>();
+
+	/** Permanent transport failure that prevents any further initialization attempt. */
+	private final AtomicReference<Throwable> terminalFailure = new AtomicReference<>();
 
 	/**
 	 * The max timeout to await for the client-server connection to be initialized.
@@ -226,13 +229,10 @@ class LifecycleInitializer {
 			this.mcpSession().close();
 		}
 
-		private void close(Throwable cause) {
+		private void terminate(Throwable cause) {
 			McpClientSession mcpClientSession = this.mcpSession();
 			if (mcpClientSession != null) {
-				mcpClientSession.close(cause);
-			}
-			else {
-				this.error(cause);
+				mcpClientSession.terminate(cause);
 			}
 		}
 
@@ -243,10 +243,13 @@ class LifecycleInitializer {
 	}
 
 	public boolean isInitialized() {
-		return this.currentInitializationResult() != null;
+		return this.terminalFailure.get() == null && this.currentInitializationResult() != null;
 	}
 
 	public McpSchema.InitializeResult currentInitializationResult() {
+		if (this.terminalFailure.get() != null) {
+			return null;
+		}
 		DefaultInitialization current = this.initializationRef.get();
 		McpSchema.InitializeResult initializeResult = current != null ? current.result.get() : null;
 		return initializeResult;
@@ -261,7 +264,15 @@ class LifecycleInitializer {
 	 * @param t The exception to handle
 	 */
 	public void handleException(Throwable t) {
-		if (t instanceof McpTransportSessionNotFoundException) {
+		if (t instanceof McpTransportTerminatedException) {
+			if (this.terminalFailure.compareAndSet(null, t)) {
+				DefaultInitialization current = this.initializationRef.get();
+				if (current != null) {
+					current.terminate(t);
+				}
+			}
+		}
+		else if (t instanceof McpTransportSessionNotFoundException && this.terminalFailure.get() == null) {
 			DefaultInitialization previous = this.initializationRef.getAndSet(null);
 			if (previous != null) {
 				previous.close();
@@ -269,13 +280,6 @@ class LifecycleInitializer {
 			// Providing an empty operation since we are only interested in triggering
 			// the implicit initialization step.
 			this.withInitialization("re-initializing", result -> Mono.empty()).subscribe();
-		}
-		else if (t instanceof McpStdioServerProcessExitException) {
-			DefaultInitialization previous = this.initializationRef.get();
-			if (previous != null && previous.initializeResult() == null
-					&& this.initializationRef.compareAndSet(previous, null)) {
-				previous.close(t);
-			}
 		}
 	}
 
@@ -289,6 +293,11 @@ class LifecycleInitializer {
 	 */
 	public <T> Mono<T> withInitialization(String actionName, Function<Initialization, Mono<T>> operation) {
 		return Mono.deferContextual(ctx -> {
+			Throwable terminal = this.terminalFailure.get();
+			if (terminal != null) {
+				return Mono.error(terminal);
+			}
+
 			DefaultInitialization newInit = new DefaultInitialization();
 			DefaultInitialization previous = this.initializationRef.compareAndExchange(null, newInit);
 
@@ -316,6 +325,11 @@ class LifecycleInitializer {
 		initialization.setMcpClientSession(this.sessionSupplier.apply(ctx));
 
 		McpClientSession mcpClientSession = initialization.mcpSession();
+		Throwable terminal = this.terminalFailure.get();
+		if (terminal != null) {
+			mcpClientSession.terminate(terminal);
+			return Mono.error(terminal);
+		}
 
 		String latestVersion = this.protocolVersions.get(this.protocolVersions.size() - 1);
 
