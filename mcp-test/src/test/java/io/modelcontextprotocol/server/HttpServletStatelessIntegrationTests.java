@@ -50,6 +50,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.client.RestClient;
@@ -773,45 +774,74 @@ class HttpServletStatelessIntegrationTests {
 	}
 
 	@Test
-	void testMissingHandlerReturnsMethodNotFoundError() {
+	void testMissingHandlerReturnsMethodNotFoundError() throws Exception {
 		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().build())
 			.build();
-		var clientTransport = HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
-			.endpoint(CUSTOM_MESSAGE_ENDPOINT)
+
+		// Use MockHttpServletRequest/Response to directly verify the HTTP 404 status
+		// and JSON-RPC METHOD_NOT_FOUND error, since a real HTTP client treats 404
+		// as a transport-level error per the spec.
+		McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest("foo/bar", "test-request-123");
+
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", CUSTOM_MESSAGE_ENDPOINT);
+		MockHttpServletResponse response = new MockHttpServletResponse();
+
+		byte[] content = JSON_MAPPER.writeValueAsBytes(jsonrpcRequest);
+		request.setContent(content);
+		request.addHeader("Content-Type", APPLICATION_JSON);
+		request.addHeader("Content-Length", Integer.toString(content.length));
+		request.addHeader("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM);
+		request.addHeader(HttpHeaders.PROTOCOL_VERSION, ProtocolVersions.MCP_2025_03_26);
+
+		mcpStatelessServerTransport.service(request, response);
+
+		assertThat(response.getStatus()).isEqualTo(HttpServletResponse.SC_NOT_FOUND);
+
+		McpSchema.JSONRPCResponse jsonrpcResponse = JSON_MAPPER.readValue(response.getContentAsByteArray(),
+				McpSchema.JSONRPCResponse.class);
+
+		assertThat(jsonrpcResponse).isNotNull();
+		assertThat(jsonrpcResponse.error()).isNotNull();
+		assertThat(jsonrpcResponse.error().code()).isEqualTo(McpSchema.ErrorCodes.METHOD_NOT_FOUND);
+		assertThat(jsonrpcResponse.error().message()).isEqualTo("Method not found: foo/bar");
+
+		mcpServer.closeGracefully();
+	}
+
+	@Test
+	void testUnknownMethodReturnsHttp404WithMethodNotFoundError() throws Exception {
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().build())
 			.build();
 
-		try (var mcpClient = McpClient.sync(clientTransport).build()) {
-			// Create a session using an MCP client
-			McpSchema.InitializeResult initResult = mcpClient.initialize();
-			assertThat(initResult).isNotNull();
+		McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest("server/discover", "discover-1");
 
-			// Override the response handler in the client to capture responses
-			AtomicReference<McpSchema.JSONRPCResponse> response = new AtomicReference<>();
-			var handler = (Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>>) (
-					message) -> message.doOnNext(r -> {
-						if (r instanceof McpSchema.JSONRPCResponse resp) {
-							response.set(resp);
-						}
-					});
-			StepVerifier.create(clientTransport.connect(handler)).verifyComplete();
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", CUSTOM_MESSAGE_ENDPOINT);
+		MockHttpServletResponse response = new MockHttpServletResponse();
 
-			// Send a request for a non-existent method through the transport, bypassing
-			// the client's capability checks
-			StepVerifier
-				.create(clientTransport.sendMessage(new McpSchema.JSONRPCRequest("foo/bar", "test-request-123")))
-				.verifyComplete();
+		byte[] content = JSON_MAPPER.writeValueAsBytes(jsonrpcRequest);
+		request.setContent(content);
+		request.addHeader("Content-Type", APPLICATION_JSON);
+		request.addHeader("Content-Length", Integer.toString(content.length));
+		request.addHeader("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM);
+		request.addHeader(HttpHeaders.PROTOCOL_VERSION, ProtocolVersions.MCP_2025_03_26);
 
-			// Wait until we've received the response
-			await().atMost(Duration.ofSeconds(1)).until(() -> response.get() != null);
+		mcpStatelessServerTransport.service(request, response);
 
-			assertThat(response.get().error().code()).isEqualTo(McpSchema.ErrorCodes.METHOD_NOT_FOUND);
-			assertThat(response.get().error().message()).isEqualTo("Method not found: foo/bar");
-		}
-		finally {
-			mcpServer.closeGracefully();
-		}
+		assertThat(response.getStatus()).isEqualTo(HttpServletResponse.SC_NOT_FOUND);
+
+		McpSchema.JSONRPCResponse jsonrpcResponse = JSON_MAPPER.readValue(response.getContentAsByteArray(),
+				McpSchema.JSONRPCResponse.class);
+
+		assertThat(jsonrpcResponse).isNotNull();
+		assertThat(jsonrpcResponse.error()).isNotNull();
+		assertThat(jsonrpcResponse.error().code()).isEqualTo(ErrorCodes.METHOD_NOT_FOUND);
+		assertThat(jsonrpcResponse.error().message()).isEqualTo("Method not found: server/discover");
+
+		mcpServer.close();
 	}
 
 	@Test
