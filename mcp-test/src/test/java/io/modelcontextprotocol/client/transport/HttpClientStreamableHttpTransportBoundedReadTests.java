@@ -41,6 +41,16 @@ class HttpClientStreamableHttpTransportBoundedReadTests extends HttpClientBounde
 	}
 
 	@Test
+	void shouldRejectCarriageReturnTerminatedRunsExceedingMaxSize() {
+		// The line decoder only flushes on LF, so CR-terminated runs keep its buffer
+		// growing. A lone CR must not be treated as the start of a fresh line's budget.
+		respondWith(endpoint(), "text/event-stream", carriageReturnTerminatedRuns(8));
+
+		StepVerifier.create(sendMessage())
+			.verifyErrorMatches(t -> messageContains(t, "Inbound line exceeds the maximum allowed size"));
+	}
+
+	@Test
 	void shouldRejectEventExceedingMaxSize() {
 		// Many short, terminated "data:" lines with no blank line to end the event. Each
 		// line is small, but the accumulated event data would grow without limit.
