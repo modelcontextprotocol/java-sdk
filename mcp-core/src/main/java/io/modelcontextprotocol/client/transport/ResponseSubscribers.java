@@ -1,325 +1,270 @@
 /*
-* Copyright 2024 - 2024 the original author or authors.
-*/
+ * Copyright 2024 - 2026 the original author or authors.
+ */
 
 package io.modelcontextprotocol.client.transport;
 
-import java.net.http.HttpResponse;
-import java.net.http.HttpResponse.BodySubscriber;
-import java.net.http.HttpResponse.ResponseInfo;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Pattern;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CoderResult;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.Flow.Publisher;
 
-import org.reactivestreams.FlowAdapters;
-import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.modelcontextprotocol.spec.McpTransportException;
-import reactor.core.publisher.BaseSubscriber;
-import reactor.core.publisher.FluxSink;
+import reactor.adapter.JdkFlowAdapter;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 /**
- * Utility class providing various {@link BodySubscriber} implementations for handling
- * different types of HTTP response bodies in the context of Model Context Protocol (MCP)
- * clients.
+ * Utility class providing various operations for handling different types of HTTP
+ * response bodies in the context of Model Context Protocol (MCP) clients.
  *
  * <p>
- * Defines subscribers for processing Server-Sent Events (SSE), aggregate responses, and
- * bodiless responses.
+ * Defines Flux operators for processing Server-Sent Events (SSE), aggregate responses,
+ * and bodiless responses.
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
  */
 class ResponseSubscribers {
 
-	private static final Logger logger = LoggerFactory.getLogger(ResponseSubscribers.class);
-
 	record SseEvent(String id, String event, String data) {
 	}
 
-	sealed interface ResponseEvent permits SseResponseEvent, AggregateResponseEvent, DummyEvent {
-
-		ResponseInfo responseInfo();
-
+	/**
+	 * Converts a publisher of byte-buffer chunks into a flux of decoded string lines.
+	 */
+	static Flux<String> decodeLines(Publisher<List<ByteBuffer>> publisher) {
+		return Flux.defer(() -> {
+			Utf8LineDecoder dec = new Utf8LineDecoder();
+			return JdkFlowAdapter.flowPublisherToFlux(publisher)
+				.concatMapIterable(dec::decode)
+				.concatWith(Flux.defer(() -> Flux.fromIterable(dec.flush())));
+		});
 	}
 
-	record DummyEvent(ResponseInfo responseInfo) implements ResponseEvent {
-
+	/**
+	 * Parses a flux of SSE-formatted lines into a flux of {@link SseEvent}.
+	 */
+	static Flux<SseEvent> decodeSseResponse(Flux<String> lines) {
+		return Flux.defer(() -> {
+			SseEventParser parser = new SseEventParser();
+			return lines.<SseEvent>handle((line, sink) -> parser.feed(line).ifPresent(sink::next))
+				.concatWith(Mono.defer(() -> parser.flush().map(Mono::just).orElseGet(Mono::empty)));
+		});
 	}
 
-	record SseResponseEvent(ResponseInfo responseInfo, SseEvent sseEvent) implements ResponseEvent {
+	/**
+	 * Collects all byte-buffer chunks from the publisher into a single UTF-8 decoded
+	 * string.
+	 */
+	static Mono<String> decodeAggregateResponse(Publisher<List<ByteBuffer>> publisher) {
+		return JdkFlowAdapter.flowPublisherToFlux(publisher)
+			.flatMapIterable(list -> list)
+			.collectList()
+			.map(buffers -> {
+				int totalSize = buffers.stream().mapToInt(ByteBuffer::remaining).sum();
+				ByteBuffer combined = ByteBuffer.allocate(totalSize);
+				buffers.forEach(combined::put);
+				combined.flip();
+				return StandardCharsets.UTF_8.decode(combined).toString();
+			})
+			.defaultIfEmpty("");
 	}
 
-	record AggregateResponseEvent(ResponseInfo responseInfo, String data) implements ResponseEvent {
+	/**
+	 * Subscribes to the body publisher to release the underlying connection, discarding
+	 * all bytes, then propagates the given error.
+	 */
+	static <T> Flux<T> drainThenError(Publisher<List<ByteBuffer>> body, Throwable error) {
+		return JdkFlowAdapter.flowPublisherToFlux(body).thenMany(Flux.error(error));
 	}
 
-	static BodySubscriber<Void> sseToBodySubscriber(ResponseInfo responseInfo, FluxSink<ResponseEvent> sink) {
-		return HttpResponse.BodySubscribers
-			.fromLineSubscriber(FlowAdapters.toFlowSubscriber(new SseLineSubscriber(responseInfo, sink)));
+	/**
+	 * Subscribes to the body publisher to release the underlying connection, discarding
+	 * all bytes, then completes empty.
+	 */
+	static <T> Flux<T> drain(Publisher<List<ByteBuffer>> body) {
+		return JdkFlowAdapter.flowPublisherToFlux(body).thenMany(Flux.empty());
 	}
 
-	static BodySubscriber<Void> aggregateBodySubscriber(ResponseInfo responseInfo, FluxSink<ResponseEvent> sink) {
-		return HttpResponse.BodySubscribers
-			.fromLineSubscriber(FlowAdapters.toFlowSubscriber(new AggregateSubscriber(responseInfo, sink)));
-	}
+	/**
+	 * Stateful UTF-8 decoder that splits a stream of byte-buffer chunks into complete
+	 * lines. Handles multi-byte characters split across chunk boundaries, and both
+	 * {@code "\n"} and {@code "\r\n"} terminators.
+	 */
+	static final class Utf8LineDecoder {
 
-	static BodySubscriber<Void> bodilessBodySubscriber(ResponseInfo responseInfo, FluxSink<ResponseEvent> sink) {
-		return HttpResponse.BodySubscribers
-			.fromLineSubscriber(FlowAdapters.toFlowSubscriber(new BodilessResponseLineSubscriber(responseInfo, sink)));
-	}
+		private final CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder();
 
-	static class SseLineSubscriber extends BaseSubscriber<String> {
+		private final CharBuffer charBuffer = CharBuffer.allocate(4096);
 
-		/**
-		 * Pattern to extract data content from SSE "data:" lines.
-		 */
-		private static final Pattern EVENT_DATA_PATTERN = Pattern.compile("^data:(.+)$", Pattern.MULTILINE);
+		private final StringBuilder leftover = new StringBuilder();
 
-		/**
-		 * Pattern to extract event ID from SSE "id:" lines.
-		 */
-		private static final Pattern EVENT_ID_PATTERN = Pattern.compile("^id:(.+)$", Pattern.MULTILINE);
+		// Holds partial UTF-8 sequences left over from a previous chunk (max 3 bytes
+		// for a BMP code point; 4 bytes for a supplementary one).
+		private ByteBuffer pendingBytes = ByteBuffer.allocate(0);
 
-		/**
-		 * Pattern to extract event type from SSE "event:" lines.
-		 */
-		private static final Pattern EVENT_TYPE_PATTERN = Pattern.compile("^event:(.+)$", Pattern.MULTILINE);
-
-		/**
-		 * The sink for emitting parsed response events.
-		 */
-		private final FluxSink<ResponseEvent> sink;
-
-		/**
-		 * StringBuilder for accumulating multi-line event data.
-		 */
-		private final StringBuilder eventBuilder;
-
-		/**
-		 * Current event's ID, if specified.
-		 */
-		private final AtomicReference<String> currentEventId;
-
-		/**
-		 * Current event's type, if specified.
-		 */
-		private final AtomicReference<String> currentEventType;
-
-		/**
-		 * The response information from the HTTP response. Send with each event to
-		 * provide context.
-		 */
-		private ResponseInfo responseInfo;
-
-		/**
-		 * Creates a new LineSubscriber that will emit parsed SSE events to the provided
-		 * sink.
-		 * @param sink the {@link FluxSink} to emit parsed {@link ResponseEvent} objects
-		 * to
-		 */
-		public SseLineSubscriber(ResponseInfo responseInfo, FluxSink<ResponseEvent> sink) {
-			this.sink = sink;
-			this.eventBuilder = new StringBuilder();
-			this.currentEventId = new AtomicReference<>();
-			this.currentEventType = new AtomicReference<>();
-			this.responseInfo = responseInfo;
-		}
-
-		@Override
-		protected void hookOnSubscribe(Subscription subscription) {
-
-			sink.onRequest(n -> {
-				subscription.request(n);
-			});
-
-			// Register disposal callback to cancel subscription when Flux is disposed
-			sink.onDispose(() -> {
-				subscription.cancel();
-			});
-		}
-
-		@Override
-		protected void hookOnNext(String line) {
-			if (line.isEmpty()) {
-				// Empty line means end of event
-				if (this.eventBuilder.length() > 0) {
-					String eventData = this.eventBuilder.toString();
-					SseEvent sseEvent = new SseEvent(currentEventId.get(), currentEventType.get(), eventData.trim());
-
-					this.sink.next(new SseResponseEvent(responseInfo, sseEvent));
-					this.eventBuilder.setLength(0);
+		List<String> decode(List<ByteBuffer> chunk) {
+			List<String> lines = new ArrayList<>();
+			for (ByteBuffer bb : chunk) {
+				ByteBuffer input = bb;
+				if (pendingBytes.hasRemaining()) {
+					ByteBuffer merged = ByteBuffer.allocate(pendingBytes.remaining() + bb.remaining());
+					merged.put(pendingBytes).put(bb);
+					merged.flip();
+					pendingBytes = ByteBuffer.allocate(0);
+					input = merged;
 				}
+				while (true) {
+					CoderResult result = decoder.decode(input, charBuffer, false);
+					drainCharBuffer();
+					extractCompletedLines(lines);
+					if (result.isError()) {
+						try {
+							result.throwException();
+						}
+						catch (CharacterCodingException e) {
+							throw new RuntimeException(e);
+						}
+					}
+					if (result.isUnderflow()) {
+						if (input.hasRemaining()) {
+							pendingBytes = ByteBuffer.allocate(input.remaining());
+							pendingBytes.put(input).flip();
+						}
+						break;
+					}
+				}
+			}
+			return lines;
+		}
+
+		List<String> flush() {
+			ByteBuffer tail = pendingBytes.hasRemaining() ? pendingBytes : ByteBuffer.allocate(0);
+			CoderResult result = decoder.decode(tail, charBuffer, true);
+			while (result.isOverflow()) {
+				drainCharBuffer();
+				result = decoder.decode(tail, charBuffer, true);
+			}
+			drainCharBuffer();
+			if (result.isError()) {
+				try {
+					result.throwException();
+				}
+				catch (CharacterCodingException e) {
+					throw new RuntimeException(e);
+				}
+			}
+
+			result = decoder.flush(charBuffer);
+			while (result.isOverflow()) {
+				drainCharBuffer();
+				result = decoder.flush(charBuffer);
+			}
+			drainCharBuffer();
+			pendingBytes = ByteBuffer.allocate(0);
+
+			List<String> lines = new ArrayList<>();
+			extractCompletedLines(lines);
+			if (leftover.length() > 0) {
+				String last = leftover.toString();
+				if (last.endsWith("\r")) {
+					last = last.substring(0, last.length() - 1);
+				}
+				leftover.setLength(0);
+				lines.add(last);
+			}
+			return lines;
+		}
+
+		private void drainCharBuffer() {
+			charBuffer.flip();
+			leftover.append(charBuffer);
+			charBuffer.clear();
+		}
+
+		private void extractCompletedLines(List<String> out) {
+			int newlineIdx;
+			while ((newlineIdx = leftover.indexOf("\n")) != -1) {
+				String line = leftover.substring(0, newlineIdx);
+				if (line.endsWith("\r")) {
+					line = line.substring(0, line.length() - 1);
+				}
+				out.add(line);
+				leftover.delete(0, newlineIdx + 1);
+			}
+		}
+
+	}
+
+	/**
+	 * Stateful SSE line parser. Accumulates {@code data:}, {@code id:} and {@code event:}
+	 * fields until a blank line dispatches the event. Per the SSE spec, {@code id} and
+	 * {@code event} persist across events until re-set; {@code data} is reset after each
+	 * dispatch.
+	 */
+	static final class SseEventParser {
+
+		private static final Logger logger = LoggerFactory.getLogger(SseEventParser.class);
+
+		private final StringBuilder data = new StringBuilder();
+
+		private String id;
+
+		private String event;
+
+		Optional<SseEvent> feed(String line) {
+			if (line.isEmpty()) {
+				if (data.length() == 0) {
+					return Optional.empty();
+				}
+				SseEvent result = new SseEvent(id, event, data.toString().trim());
+				data.setLength(0);
+				return Optional.of(result);
+			}
+			if (line.startsWith("data:")) {
+				String rest = line.substring(5);
+				if (!rest.isEmpty()) {
+					data.append(rest.trim()).append('\n');
+				}
+			}
+			else if (line.startsWith("id:")) {
+				String rest = line.substring(3);
+				if (!rest.isEmpty()) {
+					id = rest.trim();
+				}
+			}
+			else if (line.startsWith("event:")) {
+				String rest = line.substring(6);
+				if (!rest.isEmpty()) {
+					event = rest.trim();
+				}
+			}
+			else if (line.startsWith(":")) {
+				logger.debug("Ignoring comment line: {}", line);
 			}
 			else {
-				if (line.startsWith("data:")) {
-					var matcher = EVENT_DATA_PATTERN.matcher(line);
-					if (matcher.find()) {
-						this.eventBuilder.append(matcher.group(1).trim()).append("\n");
-					}
-					upstream().request(1);
-				}
-				else if (line.startsWith("id:")) {
-					var matcher = EVENT_ID_PATTERN.matcher(line);
-					if (matcher.find()) {
-						this.currentEventId.set(matcher.group(1).trim());
-					}
-					upstream().request(1);
-				}
-				else if (line.startsWith("event:")) {
-					var matcher = EVENT_TYPE_PATTERN.matcher(line);
-					if (matcher.find()) {
-						this.currentEventType.set(matcher.group(1).trim());
-					}
-					upstream().request(1);
-				}
-				else if (line.startsWith(":")) {
-					// Ignore comment lines starting with ":"
-					// This is a no-op, just to skip comments
-					logger.debug("Ignoring comment line: {}", line);
-					upstream().request(1);
-				}
-				else {
-					// If the response is not successful, emit an error
-					this.sink.error(new McpTransportException(
-							"Invalid SSE response. Status code: " + this.responseInfo.statusCode() + " Line: " + line));
-
-				}
+				throw new McpTransportException("Invalid SSE response line: " + line);
 			}
+			return Optional.empty();
 		}
 
-		@Override
-		protected void hookOnComplete() {
-			if (this.eventBuilder.length() > 0) {
-				String eventData = this.eventBuilder.toString();
-				SseEvent sseEvent = new SseEvent(currentEventId.get(), currentEventType.get(), eventData.trim());
-				this.sink.next(new SseResponseEvent(responseInfo, sseEvent));
+		Optional<SseEvent> flush() {
+			if (data.length() == 0) {
+				return Optional.empty();
 			}
-			this.sink.complete();
-		}
-
-		@Override
-		protected void hookOnError(Throwable throwable) {
-			this.sink.error(throwable);
-		}
-
-	}
-
-	static class AggregateSubscriber extends BaseSubscriber<String> {
-
-		/**
-		 * The sink for emitting parsed response events.
-		 */
-		private final FluxSink<ResponseEvent> sink;
-
-		/**
-		 * StringBuilder for accumulating multi-line event data.
-		 */
-		private final StringBuilder eventBuilder;
-
-		/**
-		 * The response information from the HTTP response. Send with each event to
-		 * provide context.
-		 */
-		private ResponseInfo responseInfo;
-
-		volatile boolean hasRequestedDemand = false;
-
-		/**
-		 * Creates a new JsonLineSubscriber that will emit parsed JSON-RPC messages.
-		 * @param sink the {@link FluxSink} to emit parsed {@link ResponseEvent} objects
-		 * to
-		 */
-		public AggregateSubscriber(ResponseInfo responseInfo, FluxSink<ResponseEvent> sink) {
-			this.sink = sink;
-			this.eventBuilder = new StringBuilder();
-			this.responseInfo = responseInfo;
-		}
-
-		@Override
-		protected void hookOnSubscribe(Subscription subscription) {
-
-			sink.onRequest(n -> {
-				if (!hasRequestedDemand) {
-					subscription.request(Long.MAX_VALUE);
-				}
-				hasRequestedDemand = true;
-			});
-
-			// Register disposal callback to cancel subscription when Flux is disposed
-			sink.onDispose(subscription::cancel);
-		}
-
-		@Override
-		protected void hookOnNext(String line) {
-			this.eventBuilder.append(line).append("\n");
-		}
-
-		@Override
-		protected void hookOnComplete() {
-
-			if (hasRequestedDemand) {
-				String data = this.eventBuilder.toString();
-				this.sink.next(new AggregateResponseEvent(responseInfo, data));
-			}
-
-			this.sink.complete();
-		}
-
-		@Override
-		protected void hookOnError(Throwable throwable) {
-			this.sink.error(throwable);
-		}
-
-	}
-
-	static class BodilessResponseLineSubscriber extends BaseSubscriber<String> {
-
-		/**
-		 * The sink for emitting parsed response events.
-		 */
-		private final FluxSink<ResponseEvent> sink;
-
-		private final ResponseInfo responseInfo;
-
-		volatile boolean hasRequestedDemand = false;
-
-		public BodilessResponseLineSubscriber(ResponseInfo responseInfo, FluxSink<ResponseEvent> sink) {
-			this.sink = sink;
-			this.responseInfo = responseInfo;
-		}
-
-		@Override
-		protected void hookOnSubscribe(Subscription subscription) {
-
-			sink.onRequest(n -> {
-				if (!hasRequestedDemand) {
-					subscription.request(Long.MAX_VALUE);
-				}
-				hasRequestedDemand = true;
-			});
-
-			// Register disposal callback to cancel subscription when Flux is disposed
-			sink.onDispose(() -> {
-				subscription.cancel();
-			});
-		}
-
-		@Override
-		protected void hookOnComplete() {
-			if (hasRequestedDemand) {
-				// emit dummy event to be able to inspect the response info
-				// this is a shortcut allowing for a more streamlined processing using
-				// operator composition instead of having to deal with the
-				// CompletableFuture along the Subscriber for inspecting the result
-				this.sink.next(new DummyEvent(responseInfo));
-			}
-			this.sink.complete();
-		}
-
-		@Override
-		protected void hookOnError(Throwable throwable) {
-			this.sink.error(throwable);
+			SseEvent result = new SseEvent(id, event, data.toString().trim());
+			data.setLength(0);
+			return Optional.of(result);
 		}
 
 	}
