@@ -37,7 +37,7 @@
 								Bundle-Name:            Bundle ${project.groupId} : ${project.artifactId}
 								Bundle-SymbolicName:    ${project.groupId}.${project.artifactId}
 								Bundle-Version:         ${project.version}
-								Automatic-Module-Name:  ${project.groupId}.${project.artifactId}
+								Automatic-Module-Name:  ${project.groupId}.${subst;${project.artifactId};-;.}
 								Import-Package:         jakarta.*;resolution:=optional, \
 								                        *;
 								Service-Component: 		OSGI-INF/io.modelcontextprotocol.json.McpJsonDefaults.xml
