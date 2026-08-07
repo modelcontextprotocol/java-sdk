@@ -5,13 +5,17 @@
 package io.modelcontextprotocol.client;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import io.modelcontextprotocol.client.LifecycleInitializer.Initialization;
 import io.modelcontextprotocol.spec.McpClientSession;
+import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -150,6 +154,111 @@ class LifecycleInitializerTests {
 	}
 
 	@Test
+	void shouldUseCustomInitializeRequest() {
+		AtomicReference<McpSchema.InitializeRequest> capturedRequest = new AtomicReference<>();
+
+		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenAnswer(invocation -> {
+			capturedRequest.set((McpSchema.InitializeRequest) invocation.getArgument(1));
+			return Mono.just(MOCK_INIT_RESULT);
+		});
+
+		McpSchema.InitializeRequest customRequest = McpSchema.InitializeRequest
+			.builder("2.0.0", CLIENT_CAPABILITIES, CLIENT_INFO)
+			.meta(Map.of("server_id", "proxy-1"))
+			.build();
+
+		StepVerifier
+			.create(initializer.withInitialization(customRequest, "test", init -> Mono.just(init.initializeResult())))
+			.assertNext(result -> {
+				assertThat(capturedRequest.get().protocolVersion()).isEqualTo("2.0.0");
+				assertThat(capturedRequest.get().capabilities()).isEqualTo(CLIENT_CAPABILITIES);
+				assertThat(capturedRequest.get().clientInfo()).isEqualTo(CLIENT_INFO);
+				assertThat(capturedRequest.get().meta()).containsEntry("server_id", "proxy-1");
+			})
+			.verifyComplete();
+	}
+
+	@Test
+	void shouldDefensivelyCopyMetaFromCustomInitializeRequest() {
+		Map<String, Object> meta = new HashMap<>();
+		meta.put("traceId", "abc-123");
+		meta.put("client", Map.of("name", "test-client"));
+
+		McpSchema.InitializeRequest customRequest = McpSchema.InitializeRequest
+			.builder("2.0.0", CLIENT_CAPABILITIES, CLIENT_INFO)
+			.meta(meta)
+			.build();
+
+		AtomicReference<McpSchema.InitializeRequest> capturedRequest = new AtomicReference<>();
+
+		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenAnswer(invocation -> {
+			capturedRequest.set((McpSchema.InitializeRequest) invocation.getArgument(1));
+			return Mono.just(MOCK_INIT_RESULT);
+		});
+
+		Mono<McpSchema.InitializeResult> initialization = initializer.withInitialization(customRequest, "test",
+				init -> Mono.just(init.initializeResult()));
+		meta.put("traceId", "changed");
+
+		StepVerifier.create(initialization).expectNext(MOCK_INIT_RESULT).verifyComplete();
+
+		assertThat(capturedRequest.get().meta()).containsEntry("traceId", "abc-123")
+			.containsEntry("client", Map.of("name", "test-client"));
+		assertThatThrownBy(() -> capturedRequest.get().meta().put("new", "value"))
+			.isInstanceOf(UnsupportedOperationException.class);
+	}
+
+	@Test
+	void shouldFailForUnsupportedProtocolVersionInCustomRequest() {
+		McpSchema.InitializeRequest customRequest = McpSchema.InitializeRequest
+			.builder("999.0.0", CLIENT_CAPABILITIES, CLIENT_INFO)
+			.build();
+
+		StepVerifier
+			.create(initializer.withInitialization(customRequest, "test", init -> Mono.just(init.initializeResult())))
+			.verifyErrorSatisfies(error -> assertThat(error).isInstanceOf(RuntimeException.class)
+				.cause()
+				.isInstanceOf(McpError.class)
+				.hasMessageContaining("Unsupported protocol version"));
+
+		verify(mockSessionSupplier, never()).apply(any(ContextView.class));
+		verify(mockClientSession, never()).sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any());
+		verify(mockClientSession, never()).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_INITIALIZED), any());
+	}
+
+	@Test
+	void shouldReuseExistingInitializationWhenCustomRequestProvided() {
+		AtomicReference<McpSchema.InitializeRequest> capturedRequest = new AtomicReference<>();
+
+		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenAnswer(invocation -> {
+			capturedRequest.set(invocation.getArgument(1));
+			return Mono.just(MOCK_INIT_RESULT);
+		});
+
+		McpSchema.InitializeRequest firstRequest = McpSchema.InitializeRequest
+			.builder("2.0.0", CLIENT_CAPABILITIES, CLIENT_INFO)
+			.meta(Map.of("server_id", "proxy-1"))
+			.build();
+		McpSchema.InitializeRequest secondRequest = McpSchema.InitializeRequest
+			.builder("2.0.0", CLIENT_CAPABILITIES, CLIENT_INFO)
+			.meta(Map.of("server_id", "proxy-2"))
+			.build();
+
+		StepVerifier.create(initializer.withInitialization(firstRequest, "test1", init -> Mono.just("result1")))
+			.expectNext("result1")
+			.verifyComplete();
+
+		StepVerifier.create(initializer.withInitialization(secondRequest, "test2", init -> Mono.just("result2")))
+			.expectNext("result2")
+			.verifyComplete();
+
+		verify(mockSessionSupplier, times(1)).apply(any(ContextView.class));
+		verify(mockClientSession, times(1)).sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any());
+		// Only the first request is sent; the second custom request is ignored.
+		assertThat(capturedRequest.get().meta()).containsEntry("server_id", "proxy-1");
+	}
+
+	@Test
 	void shouldFailForUnsupportedProtocolVersion() {
 		McpSchema.InitializeResult unsupportedResult = McpSchema.InitializeResult.builder("999.0.0", // Unsupported
 																										// version
@@ -281,6 +390,114 @@ class LifecycleInitializerTests {
 		// Verify session was created 2 times (once for initial and once for
 		// re-initialization)
 		verify(mockSessionSupplier, times(2)).apply(any(ContextView.class));
+	}
+
+	@Test
+	void shouldReuseCustomInitializeRequestOnReinitialization() {
+		List<McpSchema.InitializeRequest> capturedRequests = new ArrayList<>();
+
+		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenAnswer(invocation -> {
+			capturedRequests.add(invocation.getArgument(1));
+			return Mono.just(MOCK_INIT_RESULT);
+		});
+
+		McpSchema.InitializeRequest customRequest = McpSchema.InitializeRequest
+			.builder("2.0.0", CLIENT_CAPABILITIES, CLIENT_INFO)
+			.meta(Map.of("server_id", "proxy-1"))
+			.build();
+
+		StepVerifier
+			.create(initializer.withInitialization(customRequest, "test", init -> Mono.just(init.initializeResult())))
+			.expectNext(MOCK_INIT_RESULT)
+			.verifyComplete();
+
+		initializer.handleException(new McpTransportSessionNotFoundException("Session not found"));
+
+		assertThat(capturedRequests).hasSize(2);
+		assertThat(capturedRequests.get(0).meta()).containsEntry("server_id", "proxy-1");
+		assertThat(capturedRequests.get(1).meta()).containsEntry("server_id", "proxy-1");
+		verify(mockSessionSupplier, times(2)).apply(any(ContextView.class));
+	}
+
+	@Test
+	void shouldUseDefaultRequestOnReinitializationWhenNoCustomRequestStored() {
+		List<McpSchema.InitializeRequest> capturedRequests = new ArrayList<>();
+
+		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenAnswer(invocation -> {
+			capturedRequests.add(invocation.getArgument(1));
+			return Mono.just(MOCK_INIT_RESULT);
+		});
+
+		StepVerifier.create(initializer.withInitialization("test", init -> Mono.just(init.initializeResult())))
+			.expectNext(MOCK_INIT_RESULT)
+			.verifyComplete();
+
+		initializer.handleException(new McpTransportSessionNotFoundException("Session not found"));
+
+		assertThat(capturedRequests).hasSize(2);
+		assertThat(capturedRequests.get(1).protocolVersion()).isEqualTo("2.0.0");
+		assertThat(capturedRequests.get(1).capabilities()).isEqualTo(CLIENT_CAPABILITIES);
+		assertThat(capturedRequests.get(1).clientInfo()).isEqualTo(CLIENT_INFO);
+		assertThat(capturedRequests.get(1).meta()).isNull();
+	}
+
+	@Test
+	void shouldClearStoredCustomRequestOnClose() {
+		AtomicReference<McpSchema.InitializeRequest> capturedRequest = new AtomicReference<>();
+
+		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenAnswer(invocation -> {
+			capturedRequest.set(invocation.getArgument(1));
+			return Mono.just(MOCK_INIT_RESULT);
+		});
+
+		McpSchema.InitializeRequest customRequest = McpSchema.InitializeRequest
+			.builder("2.0.0", CLIENT_CAPABILITIES, CLIENT_INFO)
+			.meta(Map.of("server_id", "proxy-1"))
+			.build();
+
+		StepVerifier
+			.create(initializer.withInitialization(customRequest, "test", init -> Mono.just(init.initializeResult())))
+			.expectNext(MOCK_INIT_RESULT)
+			.verifyComplete();
+
+		initializer.close();
+
+		StepVerifier
+			.create(initializer.withInitialization("test after close", init -> Mono.just(init.initializeResult())))
+			.expectNext(MOCK_INIT_RESULT)
+			.verifyComplete();
+
+		assertThat(capturedRequest.get().meta()).isNull();
+		assertThat(capturedRequest.get().protocolVersion()).isEqualTo("2.0.0");
+	}
+
+	@Test
+	void shouldClearStoredCustomRequestOnCloseGracefully() {
+		AtomicReference<McpSchema.InitializeRequest> capturedRequest = new AtomicReference<>();
+
+		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenAnswer(invocation -> {
+			capturedRequest.set(invocation.getArgument(1));
+			return Mono.just(MOCK_INIT_RESULT);
+		});
+
+		McpSchema.InitializeRequest customRequest = McpSchema.InitializeRequest
+			.builder("2.0.0", CLIENT_CAPABILITIES, CLIENT_INFO)
+			.meta(Map.of("server_id", "proxy-1"))
+			.build();
+
+		StepVerifier
+			.create(initializer.withInitialization(customRequest, "test", init -> Mono.just(init.initializeResult())))
+			.expectNext(MOCK_INIT_RESULT)
+			.verifyComplete();
+
+		StepVerifier.create(initializer.closeGracefully()).verifyComplete();
+
+		StepVerifier
+			.create(initializer.withInitialization("test after close", init -> Mono.just(init.initializeResult())))
+			.expectNext(MOCK_INIT_RESULT)
+			.verifyComplete();
+
+		assertThat(capturedRequest.get().meta()).isNull();
 	}
 
 	@Test
