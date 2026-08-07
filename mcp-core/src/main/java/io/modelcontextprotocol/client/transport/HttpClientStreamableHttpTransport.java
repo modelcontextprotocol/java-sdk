@@ -145,6 +145,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private final boolean openConnectionOnStartup;
 
+	private final boolean openSseStream;
+
 	private final McpHttpClientTransportAuthorizationErrorHandler authorizationErrorHandler;
 
 	private final boolean resumableStreams;
@@ -163,7 +165,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private HttpClientStreamableHttpTransport(McpJsonMapper jsonMapper, HttpClient httpClient,
 			HttpRequest.Builder requestBuilder, String baseUri, String endpoint, boolean resumableStreams,
-			boolean openConnectionOnStartup, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer,
+			boolean openConnectionOnStartup, boolean openSseStream,
+			McpAsyncHttpClientRequestCustomizer httpRequestCustomizer,
 			McpHttpClientTransportAuthorizationErrorHandler authorizationErrorHandler,
 			List<String> supportedProtocolVersions) {
 		this.jsonMapper = jsonMapper;
@@ -173,6 +176,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		this.endpoint = endpoint;
 		this.resumableStreams = resumableStreams;
 		this.openConnectionOnStartup = openConnectionOnStartup;
+		this.openSseStream = openSseStream;
 		this.authorizationErrorHandler = authorizationErrorHandler;
 		this.activeSession.set(createTransportSession());
 		this.httpRequestCustomizer = httpRequestCustomizer;
@@ -196,7 +200,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	public Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
 		return Mono.deferContextual(ctx -> {
 			this.handler.set(handler);
-			if (this.openConnectionOnStartup) {
+			if (this.openConnectionOnStartup && this.openSseStream) {
 				logger.debug("Eagerly opening connection on startup");
 				return this.reconnect(null).onErrorComplete(t -> {
 					logger.warn("Eager connect failed ", t);
@@ -560,8 +564,10 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 							"Authorization error when sending message", requestSnapshot, responseEvent.responseInfo()));
 				}
 
-				if (transportSession.markInitialized(
-						responseEvent.responseInfo().headers().firstValue("mcp-session-id").orElseGet(() -> null))) {
+				if (transportSession.markInitialized(responseEvent.responseInfo()
+					.headers()
+					.firstValue("mcp-session-id")
+					.orElseGet(() -> null)) && this.openSseStream) {
 					// Once we have a session, we try to open an async stream for
 					// the server to send notifications and requests out-of-band.
 
@@ -739,6 +745,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 		private boolean openConnectionOnStartup = false;
 
+		private boolean openSseStream = true;
+
 		private HttpRequest.Builder requestBuilder = HttpRequest.newBuilder();
 
 		private McpAsyncHttpClientRequestCustomizer httpRequestCustomizer = McpAsyncHttpClientRequestCustomizer.NOOP;
@@ -838,6 +846,20 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 */
 		public Builder openConnectionOnStartup(boolean openConnectionOnStartup) {
 			this.openConnectionOnStartup = openConnectionOnStartup;
+			return this;
+		}
+
+		/**
+		 * Configure whether the client should open a standalone SSE stream using an HTTP
+		 * GET request. By default, this value is {@code true}. When disabled, the client
+		 * operates without a standalone SSE stream, but can still process SSE responses
+		 * returned by HTTP POST requests.
+		 * @param openSseStream if {@code true}, the client may open a standalone SSE
+		 * stream
+		 * @return the builder instance
+		 */
+		public Builder openSseStream(boolean openSseStream) {
+			this.openSseStream = openSseStream;
 			return this;
 		}
 
@@ -957,7 +979,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
 			return new HttpClientStreamableHttpTransport(jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
 					httpClient, requestBuilder, baseUri, endpoint, resumableStreams, openConnectionOnStartup,
-					httpRequestCustomizer, authorizationErrorHandler, supportedProtocolVersions);
+					openSseStream, httpRequestCustomizer, authorizationErrorHandler, supportedProtocolVersions);
 		}
 
 	}

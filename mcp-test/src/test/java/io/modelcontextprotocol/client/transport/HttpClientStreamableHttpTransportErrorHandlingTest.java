@@ -389,6 +389,29 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 		StepVerifier.create(transport.closeGracefully()).verifyComplete();
 	}
 
+	@Test
+	void shouldNotOpenSseStreamWhenDisabled() {
+		currentServerSessionId.set("test-session-123");
+		var getRequestCount = new AtomicInteger();
+		transport = HttpClientStreamableHttpTransport.builder(HOST)
+			.openConnectionOnStartup(true)
+			.openSseStream(false)
+			.asyncHttpRequestCustomizer((builder, method, uri, body, context) -> {
+				if ("GET".equals(method)) {
+					getRequestCount.incrementAndGet();
+				}
+				return Mono.just(builder);
+			})
+			.build();
+
+		StepVerifier.create(transport.connect(msg -> msg)).verifyComplete();
+		StepVerifier.create(transport.sendMessage(createTestRequestMessage())).verifyComplete();
+
+		assertThat(processedMessagesCount.get()).isEqualTo(1);
+		assertThat(getRequestCount.get()).isZero();
+		assertThat(processedSseConnectCount.get()).isZero();
+	}
+
 	@Nested
 	class AuthorizationError {
 

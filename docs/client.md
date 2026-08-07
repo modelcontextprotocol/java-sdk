@@ -156,12 +156,14 @@ McpTransport transport = new StdioClientTransport(params, McpJsonDefaults.getMap
     McpTransport transport = HttpClientStreamableHttpTransport
         .builder("http://your-mcp-server")
         .endpoint("/mcp")
+        .openSseStream(false) // Optional: use POST request-response mode only
         .build();
     ```
 
     The Streamable HTTP transport supports:
 
     - Resumable streams for connection recovery
+    - Optional standalone GET SSE stream for server-initiated messages
     - Configurable connect timeout
     - Custom HTTP request customization
     - Multiple protocol version negotiation
