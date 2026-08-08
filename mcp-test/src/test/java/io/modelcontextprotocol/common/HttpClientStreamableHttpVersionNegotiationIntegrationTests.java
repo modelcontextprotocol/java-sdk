@@ -104,11 +104,9 @@ class HttpClientStreamableHttpVersionNegotiationIntegrationTests {
 			.callTool(McpSchema.CallToolRequest.builder("test-tool").arguments(Map.of()).build());
 
 		var calls = requestRecordingFilter.getCalls();
-		// Initialize tells the server the Client's latest supported version
-		// FIXME: Set the correct protocol version on GET /mcp
-		assertThat(calls).filteredOn(c -> c.method().equals("POST") && !c.body().contains("\"method\":\"initialize\""))
-			// POST notification/initialized ; POST tools/call
-			.hasSize(2)
+		assertThat(calls).filteredOn(c -> !c.body().contains("\"method\":\"initialize\""))
+			// GET /mcp ; POST notification/initialized ; POST tools/call
+			.hasSize(3)
 			.map(McpTestRequestRecordingServletFilter.Call::headers)
 			.allSatisfy(headers -> assertThat(headers).containsEntry("mcp-protocol-version",
 					ProtocolVersions.MCP_2025_11_25));

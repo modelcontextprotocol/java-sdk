@@ -154,6 +154,7 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		}
 
 		try {
+			request.setCharacterEncoding(UTF_8);
 			BufferedReader reader = request.getReader();
 			StringBuilder body = new StringBuilder();
 			String line;
