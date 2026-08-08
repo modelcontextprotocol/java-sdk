@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 /**
@@ -49,6 +50,9 @@ public class McpClientSession implements McpSession {
 
 	/** Map of pending responses keyed by request ID */
 	private final ConcurrentHashMap<Object, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
+
+	/** Permanent failure that prevents this session from sending further messages. */
+	private final AtomicReference<Throwable> terminalCause = new AtomicReference<>();
 
 	/** Map of request handlers keyed by method name */
 	private final ConcurrentHashMap<String, RequestHandler<?>> requestHandlers = new ConcurrentHashMap<>();
@@ -123,12 +127,17 @@ public class McpClientSession implements McpSession {
 		}, error -> logger.warn("Client failed during connect", error));
 	}
 
-	private void dismissPendingResponses() {
+	private void dismissPendingResponses(Throwable cause) {
 		this.pendingResponses.forEach((id, sink) -> {
-			logger.info("Abruptly terminating exchange for request {}", id);
-			sink.error(new RuntimeException("MCP session with server terminated"));
+			if (this.pendingResponses.remove(id, sink)) {
+				logger.warn("Abruptly terminating exchange for request {}: {}", id, cause.toString());
+				sink.error(cause);
+			}
 		});
-		this.pendingResponses.clear();
+	}
+
+	private void dismissPendingResponses() {
+		dismissPendingResponses(new RuntimeException("MCP session with server terminated"));
 	}
 
 	private void handle(McpSchema.JSONRPCMessage message) {
@@ -256,13 +265,27 @@ public class McpClientSession implements McpSession {
 		String requestId = this.generateRequestId();
 
 		return Mono.deferContextual(ctx -> Mono.<McpSchema.JSONRPCResponse>create(pendingResponseSink -> {
+			Throwable terminal = this.terminalCause.get();
+			if (terminal != null) {
+				pendingResponseSink.error(terminal);
+				return;
+			}
+
 			logger.debug("Sending message for method {}", method);
 			this.pendingResponses.put(requestId, pendingResponseSink);
+
+			terminal = this.terminalCause.get();
+			if (terminal != null && this.pendingResponses.remove(requestId, pendingResponseSink)) {
+				pendingResponseSink.error(terminal);
+				return;
+			}
+
 			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(method, requestId, requestParams);
 			this.transport.sendMessage(jsonrpcRequest).contextWrite(ctx).subscribe(v -> {
 			}, error -> {
-				this.pendingResponses.remove(requestId);
-				pendingResponseSink.error(error);
+				if (this.pendingResponses.remove(requestId, pendingResponseSink)) {
+					pendingResponseSink.error(error);
+				}
 			});
 		})).timeout(this.requestTimeout).handle((jsonRpcResponse, deliveredResponseSink) -> {
 			if (jsonRpcResponse.error() != null) {
@@ -289,8 +312,14 @@ public class McpClientSession implements McpSession {
 	 */
 	@Override
 	public Mono<Void> sendNotification(String method, Object params) {
-		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(method, params);
-		return this.transport.sendMessage(jsonrpcNotification);
+		return Mono.defer(() -> {
+			Throwable terminal = this.terminalCause.get();
+			if (terminal != null) {
+				return Mono.error(terminal);
+			}
+			McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(method, params);
+			return this.transport.sendMessage(jsonrpcNotification);
+		});
 	}
 
 	/**
@@ -308,6 +337,18 @@ public class McpClientSession implements McpSession {
 	@Override
 	public void close() {
 		dismissPendingResponses();
+	}
+
+	/**
+	 * Permanently terminates the session because its transport can no longer be used.
+	 * Pending and future operations fail with the first terminal cause observed.
+	 * @param cause the permanent transport failure
+	 */
+	public void terminate(Throwable cause) {
+		Assert.notNull(cause, "The cause can not be null");
+		if (this.terminalCause.compareAndSet(null, cause)) {
+			dismissPendingResponses(cause);
+		}
 	}
 
 }

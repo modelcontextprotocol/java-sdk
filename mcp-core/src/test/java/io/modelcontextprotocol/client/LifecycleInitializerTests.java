@@ -6,6 +6,8 @@ package io.modelcontextprotocol.client;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -13,7 +15,9 @@ import java.util.function.Function;
 import io.modelcontextprotocol.client.LifecycleInitializer.Initialization;
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
+import io.modelcontextprotocol.spec.McpTransportTerminatedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -299,6 +303,175 @@ class LifecycleInitializerTests {
 		assertThat(initializer.isInitialized()).isTrue();
 		verify(mockClientSession, never()).close();
 		// Verify that the session was not re-created
+		verify(mockSessionSupplier, times(1)).apply(any(ContextView.class));
+	}
+
+	@Test
+	void shouldTerminateInProgressInitializationOnTransportTermination() throws Exception {
+		var cause = new McpTransportTerminatedException("Transport terminated");
+		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenReturn(Mono.never());
+
+		var initialization = initializer.withInitialization("test", init -> Mono.just(init.initializeResult()))
+			.materialize()
+			.toFuture();
+
+		initializer.handleException(cause);
+
+		var signal = initialization.get(1, TimeUnit.SECONDS);
+		assertThat(signal.isOnError()).isTrue();
+		assertThat(signal.getThrowable()).hasCause(cause);
+		verify(mockClientSession).terminate(cause);
+		assertThat(initializer.isInitialized()).isFalse();
+		assertThat(initializer.currentInitializationResult()).isNull();
+
+		StepVerifier.create(initializer.withInitialization("retry", init -> Mono.just(init.initializeResult())))
+			.expectErrorSatisfies(error -> assertThat(error).isSameAs(cause))
+			.verify();
+
+		verify(mockSessionSupplier, times(1)).apply(any(ContextView.class));
+	}
+
+	@Test
+	void shouldApplyTerminationThatArrivesBeforeSessionRegistration() {
+		var cause = new McpTransportTerminatedException("Transport terminated early");
+		when(mockSessionSupplier.apply(any(ContextView.class))).thenAnswer(invocation -> {
+			initializer.handleException(cause);
+			return mockClientSession;
+		});
+
+		StepVerifier.create(initializer.withInitialization("test", init -> Mono.just(init.initializeResult())))
+			.expectErrorSatisfies(error -> assertThat(error).hasCause(cause))
+			.verify();
+
+		verify(mockClientSession).terminate(cause);
+		verify(mockClientSession, never()).sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any());
+	}
+
+	@Test
+	void shouldTerminateWinnerAndJoinerWhenTerminationArrivesBeforeSessionRegistration() throws Exception {
+		var cause = new McpTransportTerminatedException("Transport terminated before session registration");
+		var supplierEntered = new CountDownLatch(1);
+		var releaseSupplier = new CountDownLatch(1);
+
+		when(mockSessionSupplier.apply(any(ContextView.class))).thenAnswer(invocation -> {
+			supplierEntered.countDown();
+			if (!releaseSupplier.await(5, TimeUnit.SECONDS)) {
+				throw new IllegalStateException("Timed out waiting to release session supplier");
+			}
+			return mockClientSession;
+		});
+
+		var winner = initializer.withInitialization("winner", init -> Mono.just(init.initializeResult()))
+			.subscribeOn(Schedulers.boundedElastic())
+			.materialize()
+			.toFuture();
+		assertThat(supplierEntered.await(1, TimeUnit.SECONDS)).isTrue();
+
+		var joiner = initializer.withInitialization("joiner", init -> Mono.just(init.initializeResult()))
+			.materialize()
+			.toFuture();
+
+		initializer.handleException(cause);
+
+		try {
+			var winnerSignal = winner.get(1, TimeUnit.SECONDS);
+			var joinerSignal = joiner.get(1, TimeUnit.SECONDS);
+
+			assertThat(winnerSignal.isOnError()).isTrue();
+			assertThat(winnerSignal.getThrowable()).hasCause(cause);
+			assertThat(joinerSignal.isOnError()).isTrue();
+			assertThat(joinerSignal.getThrowable()).hasCause(cause);
+		}
+		finally {
+			releaseSupplier.countDown();
+		}
+
+		verify(mockSessionSupplier, times(1)).apply(any(ContextView.class));
+		verify(mockClientSession, never()).sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any());
+	}
+
+	@Test
+	void shouldShareSynchronousSessionSupplierFailureBetweenWinnerAndJoiner() throws Exception {
+		var cause = new IllegalStateException("Session supplier failed");
+		var supplierEntered = new CountDownLatch(1);
+		var releaseSupplier = new CountDownLatch(1);
+
+		when(mockSessionSupplier.apply(any(ContextView.class))).thenAnswer(invocation -> {
+			supplierEntered.countDown();
+			if (!releaseSupplier.await(5, TimeUnit.SECONDS)) {
+				throw new IllegalStateException("Timed out waiting to release session supplier");
+			}
+			throw cause;
+		});
+
+		var winner = initializer.withInitialization("winner", init -> Mono.just(init.initializeResult()))
+			.subscribeOn(Schedulers.boundedElastic())
+			.materialize()
+			.toFuture();
+		assertThat(supplierEntered.await(1, TimeUnit.SECONDS)).isTrue();
+
+		var joiner = initializer.withInitialization("joiner", init -> Mono.just(init.initializeResult()))
+			.materialize()
+			.toFuture();
+
+		releaseSupplier.countDown();
+
+		var winnerSignal = winner.get(1, TimeUnit.SECONDS);
+		var joinerSignal = joiner.get(1, TimeUnit.SECONDS);
+
+		assertThat(winnerSignal.isOnError()).isTrue();
+		assertThat(winnerSignal.getThrowable()).hasCause(cause);
+		assertThat(joinerSignal.isOnError()).isTrue();
+		assertThat(joinerSignal.getThrowable()).hasCause(cause);
+		verify(mockSessionSupplier, times(1)).apply(any(ContextView.class));
+		verify(mockClientSession, never()).sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any());
+	}
+
+	@Test
+	void shouldIgnoreGenericTransportExceptionDuringInitialization() {
+		var cause = new McpTransportException("Transport closed");
+		when(mockClientSession.sendRequest(eq(McpSchema.METHOD_INITIALIZE), any(), any())).thenReturn(Mono.never());
+
+		var subscription = initializer.withInitialization("test", init -> Mono.just(init.initializeResult()))
+			.subscribe();
+
+		initializer.handleException(cause);
+		subscription.dispose();
+
+		verify(mockClientSession, never()).terminate(cause);
+	}
+
+	@Test
+	void shouldKeepInitializedAfterTransportException() {
+		StepVerifier.create(initializer.withInitialization("test", init -> Mono.just(init.initializeResult())))
+			.expectNext(MOCK_INIT_RESULT)
+			.verifyComplete();
+
+		var cause = new McpTransportException("Transport closed");
+
+		initializer.handleException(cause);
+
+		assertThat(initializer.isInitialized()).isTrue();
+		verify(mockClientSession, never()).terminate(cause);
+		verify(mockSessionSupplier, times(1)).apply(any(ContextView.class));
+	}
+
+	@Test
+	void shouldBecomeTerminalAfterInitializationCompletes() {
+		StepVerifier.create(initializer.withInitialization("test", init -> Mono.just(init.initializeResult())))
+			.expectNext(MOCK_INIT_RESULT)
+			.verifyComplete();
+
+		var cause = new McpTransportTerminatedException("Transport terminated");
+		initializer.handleException(cause);
+
+		assertThat(initializer.isInitialized()).isFalse();
+		assertThat(initializer.currentInitializationResult()).isNull();
+		verify(mockClientSession).terminate(cause);
+
+		StepVerifier.create(initializer.withInitialization("retry", init -> Mono.just(init.initializeResult())))
+			.expectErrorSatisfies(error -> assertThat(error).isSameAs(cause))
+			.verify();
 		verify(mockSessionSupplier, times(1)).apply(any(ContextView.class));
 	}
 
