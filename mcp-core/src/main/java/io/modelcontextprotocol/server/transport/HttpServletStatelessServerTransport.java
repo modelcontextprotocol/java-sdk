@@ -142,6 +142,12 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 			return;
 		}
 
+		String contentType = request.getContentType();
+		if (contentType == null || !contentType.startsWith(APPLICATION_JSON)) {
+			response.sendError(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE, "Content-Type must be application/json");
+			return;
+		}
+
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		String accept = request.getHeader(ACCEPT);
