@@ -9,6 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import org.junit.jupiter.api.Test;
@@ -141,6 +142,75 @@ class SchemaEvolutionTests {
 		McpSchema.ServerCapabilities caps = mapper.readValue(json, McpSchema.ServerCapabilities.class);
 		assertThat(caps.tools()).isNotNull();
 		assertThat(caps.tools().listChanged()).isTrue();
+	}
+
+	@Test
+	void serverCapabilitiesWithoutExtensionsDeserializesAsNull() throws IOException {
+		String json = """
+				{"tools":{"listChanged":true}}
+				""";
+		McpSchema.ServerCapabilities caps = mapper.readValue(json, McpSchema.ServerCapabilities.class);
+		assertThat(caps.extensions()).isNull();
+	}
+
+	@Test
+	void serverCapabilitiesWithNullExtensionsOmitsFieldOnWire() throws IOException {
+		String json = mapper.writeValueAsString(McpSchema.ServerCapabilities.builder().tools(true).build());
+		assertThat(json).doesNotContain("extensions");
+	}
+
+	@Test
+	void serverCapabilitiesExtensionsRoundTrip() throws IOException {
+		Map<String, Object> extensions = Map.of("com.example/ext-with-settings", Map.of("maxDepth", 3),
+				"com.example/ext-without-settings", Map.of());
+		McpSchema.ServerCapabilities caps = McpSchema.ServerCapabilities.builder().extensions(extensions).build();
+
+		String json = mapper.writeValueAsString(caps);
+		assertThat(json).contains("\"com.example/ext-without-settings\":{}");
+
+		McpSchema.ServerCapabilities parsed = mapper.readValue(json, McpSchema.ServerCapabilities.class);
+		assertThat(parsed.extensions()).isEqualTo(extensions);
+	}
+
+	// -----------------------------------------------------------------------
+	// ClientCapabilities.extensions
+	// -----------------------------------------------------------------------
+
+	@Test
+	void clientCapabilitiesWithoutExtensionsDeserializesAsNull() throws IOException {
+		String json = """
+				{"roots":{"listChanged":true},"sampling":{}}
+				""";
+		McpSchema.ClientCapabilities caps = mapper.readValue(json, McpSchema.ClientCapabilities.class);
+		assertThat(caps.extensions()).isNull();
+	}
+
+	@Test
+	void clientCapabilitiesWithNullExtensionsOmitsFieldOnWire() throws IOException {
+		String json = mapper.writeValueAsString(McpSchema.ClientCapabilities.builder().sampling().build());
+		assertThat(json).doesNotContain("extensions");
+	}
+
+	@Test
+	void clientCapabilitiesWithExtensionsUnknownFieldsIgnored() throws IOException {
+		String json = """
+				{"extensions":{"io.modelcontextprotocol/tasks":{}},"futureCapability":{"a":1}}
+				""";
+		McpSchema.ClientCapabilities caps = mapper.readValue(json, McpSchema.ClientCapabilities.class);
+		assertThat(caps.extensions()).containsOnlyKeys("io.modelcontextprotocol/tasks");
+	}
+
+	@Test
+	void clientCapabilitiesExtensionsRoundTrip() throws IOException {
+		Map<String, Object> extensions = Map.of("com.example/ext-with-settings", Map.of("maxDepth", 3),
+				"com.example/ext-without-settings", Map.of());
+		McpSchema.ClientCapabilities caps = McpSchema.ClientCapabilities.builder().extensions(extensions).build();
+
+		String json = mapper.writeValueAsString(caps);
+		assertThat(json).contains("\"com.example/ext-without-settings\":{}");
+
+		McpSchema.ClientCapabilities parsed = mapper.readValue(json, McpSchema.ClientCapabilities.class);
+		assertThat(parsed.extensions()).isEqualTo(extensions);
 	}
 
 	// -----------------------------------------------------------------------
