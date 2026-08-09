@@ -14,7 +14,7 @@ public interface HttpHeaders {
 	/**
 	 * Identifies individual MCP sessions.
 	 */
-	String MCP_SESSION_ID = "Mcp-Session-Id";
+	String MCP_SESSION_ID = "mcp-session-id";
 
 	/**
 	 * Identifies events within an SSE Stream.
@@ -25,6 +25,16 @@ public interface HttpHeaders {
 	 * Identifies the MCP protocol version.
 	 */
 	String PROTOCOL_VERSION = "MCP-Protocol-Version";
+
+	/**
+	 * The name or URI of the resource/tool/prompt being accessed.
+	 */
+	String MCP_NAME = "Mcp-Name";
+
+	/**
+	 * The MCP method name for the current request or notification.
+	 */
+	String MCP_METHOD = "Mcp-Method";
 
 	/**
 	 * The HTTP Content-Length header.
