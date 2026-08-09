@@ -179,6 +179,11 @@ class ResponseSubscribers {
 					logger.debug("Ignoring comment line: {}", line);
 					upstream().request(1);
 				}
+				else if (line.startsWith("retry:")) {
+					// Ignore SSE retry directive — only the server controls reconnection
+					logger.debug("Ignoring retry directive: {}", line);
+					upstream().request(1);
+				}
 				else {
 					// If the response is not successful, emit an error
 					this.sink.error(new McpTransportException(
