@@ -10,9 +10,9 @@
 | **Spec revision** | [`2026-07-28`](https://modelcontextprotocol.io/specification/2026-07-28) |
 | **Highest revision implemented today** | [`2025-11-25`](https://modelcontextprotocol.io/specification/2025-11-25) |
 | **Breaking change** | Yes — see [Compatibility, Deprecation, and Migration Plan](#compatibility-deprecation-and-migration-plan) |
-| **Affected modules** | `mcp-core`, `mcp-test`, `conformance-tests`, `mcp-bom`, `docs` |
+| **Affected modules** | `mcp-core`, `mcp-json-jackson2`, `mcp-json-jackson3`, `mcp-test`, `conformance-tests`, `mcp-bom`, `docs` |
 | **Reference implementation** | LangChain4j client-side implementation, [langchain4j/langchain4j#5881](https://github.com/langchain4j/langchain4j/pull/5881) |
-| **Related SEPs** | SEP-2567, SEP-2575, SEP-2322, SEP-2663, SEP-2243, SEP-2549, SEP-2577, SEP-2596, SEP-2106, SEP-414 |
+| **Related SEPs** | SEP-2567, SEP-2575, SEP-2322, SEP-2663, SEP-2243, SEP-2549, SEP-2577, SEP-2596, SEP-2106, SEP-2468, SEP-837, SEP-2352, SEP-414 |
 
 > **Note on process.** This document is a design proposal prepared for discussion. Per
 > `AGENTS.md` in this repository, no issue, pull request, or discussion has been or will be
@@ -124,7 +124,7 @@ The following table is the result of an audit of `mcp-core` on `main` at commit 
 | Per-request `_meta` envelope (`protocolVersion`, `clientInfo`, `clientCapabilities`, `logLevel`) | `McpSchema.Meta` exists and every request/result record carries `_meta`, but nothing populates or validates the `io.modelcontextprotocol/*` keys | **Additive plumbing, central** |
 | `server/discover` | Absent | **New feature** |
 | `subscriptions/listen` + `notifications/subscriptions/acknowledged` | Absent. `METHOD_RESOURCES_SUBSCRIBE` / `_UNSUBSCRIBE` present. `McpStatelessServerHandler` is strictly request→single-response (`Mono<JSONRPCResponse>`), so it *cannot* express a long-lived stream. | **New feature + SPI extension** |
-| MRTR (`InputRequiredResult`, `inputRequests`, `inputResponses`, `requestState`) | Absent. `McpAsyncClient` registers server→client request handlers at lines 225/235/255 for `roots/list`, `sampling/createMessage`, `elicitation/create` | **Structural** |
+| MRTR (`InputRequiredResult`, `inputRequests`, `inputResponses`, `requestState`) | Absent. `McpAsyncClient` registers server→client request handlers in its constructor (`rootsListRequestHandler()`, `samplingCreateMessageHandler()`, `elicitationCreateHandler()`) for `roots/list`, `sampling/createMessage`, `elicitation/create` | **Structural** |
 | `resultType` on every result | Absent from all `Result` records | **Wire-format, broad** |
 | `CacheableResult` (`ttlMs`, `cacheScope`) | Absent | **Wire-format, targeted** |
 | `Mcp-Method` / `Mcp-Name` request headers | Absent | **New feature** |
@@ -337,6 +337,10 @@ public record ServerDiscoverRequest(
  * @param ttlMs             freshness hint in milliseconds
  * @param cacheScope        "public" or "private"
  * @param meta              carries io.modelcontextprotocol/serverInfo
+ *
+ * Implements {@link CacheableResult}: the spec's {@code server/discover} page states the
+ * operation "supports caching" and its example result carries {@code ttlMs} /
+ * {@code cacheScope} — the cacheable set is those five list/read methods plus this one.
  */
 @JsonInclude(JsonInclude.Include.NON_ABSENT)
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -407,18 +411,12 @@ public static final class CacheScopes {
 
 ```java
 /**
- * A map of server-assigned identifier → server-to-client request. Values are
- * {@link ElicitFormRequest}, {@link ElicitUrlRequest}, {@link CreateMessageRequest},
- * or {@link ListRootsRequest}.
- * @since 2026-07-28
- */
-public record InputRequests(Map<String, InputRequest> requests) { … }
-
-/**
  * Request for the client's roots. New in 3.0.0: {@code roots/list} previously took no
  * params and had no request record — the client handler was registered against the bare
  * method name. MRTR requires it to be a first-class request object, because it appears as
- * a *value* inside {@link InputRequests}.
+ * a *value* inside {@code InputRequiredResult.inputRequests}. (The {@code cursor}
+ * component matches the pagination that {@code ListRootsResult.nextCursor} already
+ * documents today.)
  *
  * @since 2026-07-28
  */
@@ -426,13 +424,17 @@ public record ListRootsRequest(
         @JsonProperty("cursor") String cursor,
         @JsonProperty("_meta")  Map<String, Object> meta) implements Request { … }
 
-/** One entry of {@link InputRequests}: a {@code method} plus its {@code params}. */
+/**
+ * One entry of {@code InputRequiredResult.inputRequests}: a {@code method} plus its
+ * {@code params}, which deserialize as {@link ElicitFormRequest}, {@link ElicitUrlRequest},
+ * {@link CreateMessageRequest}, or {@link ListRootsRequest} according to {@code method}.
+ * The identifier-keyed maps ({@code inputRequests}, {@code inputResponses}) are carried
+ * as plain {@code Map} components on the owning records — no wrapper types, matching how
+ * {@code McpSchema} models every other keyed collection.
+ */
 public record InputRequest(
         @JsonProperty("method") String method,
         @JsonProperty("params") Object params) { … }
-
-/** A map of identifier → client result, keyed to match {@link InputRequests}. */
-public record InputResponses(Map<String, Object> responses) { … }
 
 /**
  * A {@link Result} indicating the server needs more input before it can complete.
@@ -540,11 +542,22 @@ public interface McpClient {
         SyncSpec protocolDetectionTimeout(Duration timeout);         // new
 
         /**
-         * Maximum MRTR round trips the SDK will transparently perform for one logical
-         * call before failing with {@link McpInputRequiredLimitExceededException}.
-         * Defaults to 5.
+         * Maximum MRTR round trips introducing *new* {@code inputRequests} that the SDK
+         * will transparently perform for one logical call before failing with
+         * {@link McpInputRequiredLimitExceededException}. Unchanged-state polling repeats
+         * (URL-mode elicitation) are bounded separately — see
+         * {@link #inputRequiredPollInterval(Duration)}. Defaults to 5.
          */
         SyncSpec maxInputRequiredRoundTrips(int max);                // new
+
+        /**
+         * Delay before retrying when the server repeats an {@code input_required} result
+         * whose {@code inputRequests} are unchanged — i.e. it is still waiting on an
+         * out-of-band action such as URL-mode elicitation. Exponential backoff from this
+         * value, capped at 30 seconds; the total wait is bounded by the per-request
+         * timeout, not by {@link #maxInputRequiredRoundTrips(int)}. Defaults to 2 s.
+         */
+        SyncSpec inputRequiredPollInterval(Duration interval);       // new
 
         /** Per-request log level, sent as io.modelcontextprotocol/logLevel. */
         SyncSpec logLevel(LoggingLevel level);                       // new
@@ -583,7 +596,12 @@ public interface McpSyncClient extends AutoCloseable {
     @Deprecated void addRoot(Root root);
 }
 
-/** Handle to an open {@code subscriptions/listen} stream. @since 2026-07-28 */
+/**
+ * Handle to an open {@code subscriptions/listen} stream, as returned by
+ * {@link McpSyncClient#listen}. Deliberately free of Reactor types, preserving the
+ * project's strict sync/async API split.
+ * @since 2026-07-28
+ */
 public interface McpSubscription extends AutoCloseable {              // new
 
     /** The subscription ID — the JSON-RPC id of the originating request. */
@@ -595,10 +613,19 @@ public interface McpSubscription extends AutoCloseable {              // new
     /** {@code true} until the stream ends. */
     boolean isActive();
 
-    /** Completes when the server sends the graceful-closure response. */
-    Mono<Void> closed();       // async variant
+    /** Blocks until the server's graceful-closure response, or until the stream drops. */
+    void awaitClosed();
 
     @Override void close();
+}
+
+/** Async variant, returned by {@code McpAsyncClient.listen}. @since 2026-07-28 */
+public interface McpAsyncSubscription extends McpSubscription {       // new
+
+    /** Completes when the server sends the graceful-closure response. */
+    Mono<Void> closed();
+
+    Mono<Void> closeGracefully();
 }
 ```
 
@@ -638,10 +665,52 @@ public interface McpStatelessServerHandler {
         return handleRequest(ctx, request).flux().cast(McpSchema.JSONRPCMessage.class);
     }
 
-    /** @return {@code true} if this request must be answered with a stream. */
+    /**
+     * @return {@code true} if this request must be answered with a stream. True for
+     * {@code subscriptions/listen}, and for any request whose {@code _meta} carries
+     * {@code io.modelcontextprotocol/logLevel} or {@code progressToken}: the spec routes
+     * request-scoped notifications onto the originating request's response stream, so
+     * such a request needs one even when its terminal result is a single message.
+     */
     default boolean isStreamingRequest(McpSchema.JSONRPCRequest request) {      // new
-        return McpSchema.METHOD_SUBSCRIPTIONS_LISTEN.equals(request.method());
+        Map<String, Object> meta = McpSchema.metaOf(request);   // static helper, new
+        return McpSchema.METHOD_SUBSCRIPTIONS_LISTEN.equals(request.method())
+                || meta.containsKey(McpMetaKeys.LOG_LEVEL)
+                || meta.containsKey(McpMetaKeys.PROGRESS_TOKEN);
     }
+}
+```
+
+Request-scoped notification emission — the stateless counterpart of the session-based
+`McpAsyncServerExchange`, which does not exist on the modern path:
+
+```java
+package io.modelcontextprotocol.server;
+
+/**
+ * Request-scoped emitter for notifications that must flow on the originating request's
+ * response stream ({@code notifications/progress}, {@code notifications/message}).
+ * Feature code obtains it via {@link McpRequestContext#sink()}; it is published in the
+ * Reactor context alongside {@code McpTransportContext}, so the
+ * {@code McpStatelessServerFeatures} handler signatures do not change shape.
+ *
+ * <p>When the request was dispatched on the non-streaming path (no {@code logLevel}, no
+ * {@code progressToken} — see {@code isStreamingRequest}), both methods are no-ops:
+ * handlers are written once and never need to know which path served them.
+ * @since 3.0.0
+ */
+public interface McpRequestSink {                                              // new
+
+    /** Emits {@code notifications/progress} on this request's response stream. */
+    Mono<Void> progress(McpSchema.ProgressNotification notification);
+
+    /**
+     * Emits {@code notifications/message} on this request's response stream. Drops the
+     * message — a spec MUST NOT — when the request omitted
+     * {@code io.modelcontextprotocol/logLevel}, or when the message is below the
+     * requested level.
+     */
+    Mono<Void> log(McpSchema.LoggingMessageNotification notification);
 }
 ```
 
@@ -657,11 +726,15 @@ public interface McpStatelessServerTransport {
     }
 
     /**
-     * Legacy revisions this transport will additionally serve when dual-era mode is
-     * enabled. Empty means modern-only.
+     * Legacy revisions this transport additionally serves. Defaults to all of them:
+     * the SDK is dual-era by default on both sides, so a stateless server that serves
+     * legacy clients today keeps serving them after the 3.0.0 upgrade with zero
+     * configuration. Override to return an empty list for modern-only mode.
      * @since 3.0.0
      */
-    default List<String> legacyProtocolVersions() { return List.of(); }   // new
+    default List<String> legacyProtocolVersions() {                        // new
+        return ProtocolVersions.LEGACY;
+    }
 
     Mono<Void> closeGracefully();
     default void close() { this.closeGracefully().subscribe(); }
@@ -693,8 +766,21 @@ package io.modelcontextprotocol.server;
 
 /**
  * Seals and verifies the opaque {@code requestState} that a server round-trips through
- * the client. The default implementation is AEAD (AES-GCM) over a compact CBOR payload
- * binding the authenticated principal, a TTL, and a digest of the originating request.
+ * the client. The AEAD implementation (AES-GCM over a compact CBOR payload) binds the
+ * authenticated principal, a TTL, and a digest of the originating request.
+ *
+ * <p><b>Key provisioning.</b> The SDK never generates a key implicitly: a per-process
+ * key would silently break MRTR behind a load balancer, where the retry may land on a
+ * different replica — exactly the horizontally scaled deployment the stateless model
+ * exists to serve. The key is operator-supplied and MUST be shared by every replica of
+ * the same logical server. A server whose feature handlers can return
+ * {@code InputRequiredResult} carrying {@code requestState} fails fast at build time
+ * unless a codec was configured: either {@link #aeadAesGcm} with an explicit key, or an
+ * explicit opt-out via {@link #unprotected}.
+ *
+ * <p><b>Request digest.</b> Computed over the originating method and params with the
+ * MRTR fields ({@code inputResponses}, {@code requestState}) removed — the retry differs
+ * from the original by exactly those fields, so its digest matches by construction.
  *
  * @since 3.0.0
  */
@@ -822,7 +908,7 @@ public class McpUnsupportedFeatureException extends McpError {                  
 
 ```text
 mcp-core/                     protocol types, schema, client/server, transports
-mcp-json/, mcp-json-jackson2/, mcp-json-jackson3/
+mcp-json-jackson2/, mcp-json-jackson3/
 mcp/                          aggregate dependency
 mcp-bom/
 mcp-test/
@@ -906,11 +992,14 @@ place.
 ```mermaid
 flowchart TD
     A["Inbound JSON-RPC message"] --> B{"method == 'initialize'?"}
-    B -->|yes| L["Legacy path:<br/>McpServerSession / McpStreamableServerSession"]
-    B -->|no| C{"_meta contains<br/>io.modelcontextprotocol/protocolVersion?"}
+    B -->|yes| L["Legacy path: new session<br/>McpServerSession / McpStreamableServerSession"]
+    B -->|no| S{"HTTP: Mcp-Session-Id<br/>header present?"}
+    S -->|yes| L2["Legacy path: route to that session<br/>(unknown id ⇒ 404, per legacy rules)"]
+    S -->|"no / not HTTP"| C{"_meta contains<br/>io.modelcontextprotocol/protocolVersion?"}
     C -->|no| D{"HTTP transport?"}
     D -->|"yes — modern-only mode"| E["400 + -32020 HeaderMismatch<br/>(required header missing)"]
-    D -->|"yes — dual-era, no MCP-Protocol-Version header"| F["Treat as 2025-03-26 (legacy)"]
+    D -->|"yes — dual-era, legacy<br/>MCP-Protocol-Version header"| F2["Legacy path at the header's version"]
+    D -->|"yes — dual-era, no<br/>MCP-Protocol-Version header"| F["Treat as 2025-03-26 (legacy)"]
     D -->|"no — stdio"| G["-32600 Invalid Request<br/>naming supported versions"]
     C -->|yes| H{"version in protocolVersions()?"}
     H -->|no| I["-32022 UnsupportedProtocolVersion<br/>data.supported = […]"]
@@ -918,6 +1007,12 @@ flowchart TD
     J -->|no| K["400 + -32020 HeaderMismatch"]
     J -->|yes| M["Modern path:<br/>McpStatelessServerHandler"]
 ```
+
+The `Mcp-Session-Id` branch covers the common legacy-HTTP case — every non-`initialize`
+request of an established `2025-03-26`+ session — and the legacy-header branch covers a
+sessionless legacy request (`2025-06-18`+ clients send `MCP-Protocol-Version` on every
+POST). The routing table is exhaustive on purpose: D1's whole argument is that this is
+*one* decision made in *one* place, so no inbound shape may be left implicit.
 
 Rejected alternative: a boolean `modern` field on the existing sessions
 ([RA-1](#ra-1-an-era-flag-on-the-existing-session-types)).
@@ -927,10 +1022,14 @@ Rejected alternative: a boolean `modern` field on the existing sessions
 **Decision.** `_meta` envelope injection (client) and extraction/validation (server) happen
 once, in the session/handler layer — never per request record.
 
-Every modern request must carry `io.modelcontextprotocol/protocolVersion`,
-`io.modelcontextprotocol/clientInfo`, and `io.modelcontextprotocol/clientCapabilities`, and
-may carry `io.modelcontextprotocol/logLevel`. Threading these through ~20 request records
-would be an enormous, repetitive change and would put protocol concerns in data types.
+Every modern request must carry `io.modelcontextprotocol/protocolVersion` and
+`io.modelcontextprotocol/clientCapabilities`; per the changelog, clients **SHOULD** — not
+must — also send `io.modelcontextprotocol/clientInfo` (the SDK always does), and may carry
+`io.modelcontextprotocol/logLevel`. Server-side validation is calibrated to exactly that:
+a missing `protocolVersion` is rejected by the router, an absent `clientCapabilities` is
+read as the empty capability set, and an absent `clientInfo` is simply absent — never a
+rejection. Threading these through ~20 request records would be an enormous, repetitive
+change and would put protocol concerns in data types.
 
 Instead:
 
@@ -954,11 +1053,18 @@ public interface McpRequestContext {                                           /
     String KEY = "MCP_REQUEST_CONTEXT";
 
     String protocolVersion();
-    McpSchema.Implementation clientInfo();
+
+    /** Present when the client identified itself — a spec SHOULD, not a MUST. */
+    Optional<McpSchema.Implementation> clientInfo();
+
+    /** Never {@code null}; an absent key is read as the empty capability set. */
     McpSchema.ClientCapabilities clientCapabilities();
 
     /** Empty unless the client asked for logs on this request. */
     Optional<McpSchema.LoggingLevel> logLevel();
+
+    /** Emitter for request-scoped notifications — see {@link McpRequestSink}. */
+    McpRequestSink sink();
 
     /** Extension identifier → settings, from the client's declared capabilities. */
     Map<String, Object> extensions();
@@ -968,11 +1074,13 @@ public interface McpRequestContext {                                           /
 ```
 
 **Consequence for logging.** Because servers "**MUST NOT** emit `notifications/message` for
-requests that did not include this field", the log sink handed to feature code becomes
-request-scoped and defaults to a no-op. `McpAsyncServerExchange.loggingNotification(...)` is
-reimplemented on the modern path to check `requestContext.logLevel()` and drop the
-notification when absent — a silent, spec-mandated behaviour change that must be called out
-in the migration guide.
+requests that did not include this field", the log emitter handed to feature code is
+request-scoped and defaults to a no-op. On the modern path that emitter is
+`McpRequestSink.log(...)`, which consults `requestContext.logLevel()` and drops the message
+when absent — the session-scoped `McpAsyncServerExchange` exists only on the legacy path,
+where its behaviour is unchanged. A modern client that never sets `logLevel` therefore
+receives no log notifications: a silent, spec-mandated behaviour change that must be called
+out in the migration guide.
 
 #### D3: MRTR is resolved inside the client session layer
 
@@ -980,8 +1088,8 @@ in the migration guide.
 sampling / elicitation / roots handlers. Public client method signatures do not change.
 
 This is the highest-leverage decision in the proposal. MRTR replaces server-initiated
-requests, which in `mcp-core` are handled by request handlers registered in `McpAsyncClient`
-(lines 225/235/255). The naive translation would surface MRTR to the user: `callTool()` would
+requests, which in `mcp-core` are handled by request handlers registered in
+`McpAsyncClient`'s constructor. The naive translation would surface MRTR to the user: `callTool()` would
 return a union type, and every caller would write a retry loop. That would be a gratuitous
 break for every existing user, and would push protocol mechanics into application code.
 
@@ -1017,8 +1125,16 @@ Implementation rules encoded in the resolver:
 | Client MUST NOT include `requestState` if absent | Retry builder copies the field only when present |
 | JSON-RPC `id` MUST differ between attempt and retry | Retry always allocates a fresh id from `McpClientSession`'s counter |
 | MRTR fields affect only the retry of *that* request | Resolver state is per-call, held on the stack; nothing is stored on the client |
-| Server MAY return `InputRequiredResult` repeatedly | Loop, bounded by `maxInputRequiredRoundTrips` (default 5) |
+| Server MAY return `InputRequiredResult` repeatedly | Loop, bounded by `maxInputRequiredRoundTrips` (default 5) — counting only rounds that introduce *new* `inputRequests` |
 | Only `prompts/get`, `resources/read`, `tools/call` may return it | Resolver is installed only on those three call paths; an `input_required` result on any other method is a protocol error |
+| URL-mode elicitation completes out of band | The URL elicitation handler returns once the URL has been handed to the user; the resolver then retries the original request. A repeated `input_required` whose `inputRequests` are *unchanged* is treated as polling, not as a new round trip: the resolver backs off per `inputRequiredPollInterval` (exponential, capped at 30 s), bounds the total wait by the per-request timeout, and does not charge it against `maxInputRequiredRoundTrips` |
+
+The polling rule is what makes MRTR-transparency survive its hardest case. A URL
+elicitation cannot produce its input synchronously — the user completes it in a browser —
+and under MRTR the client only learns the outcome by retrying the original request. Without
+distinguishing unchanged-state repeats from genuine new rounds, a user who takes a minute to
+finish an OAuth consent page would burn the entire round-trip budget and surface a spurious
+`McpInputRequiredLimitExceededException`.
 
 **Server side.** A feature handler opts into MRTR by returning `InputRequiredResult` instead
 of its normal result type — hence the widened
@@ -1074,7 +1190,13 @@ response.
 
 `handleRequestStreaming` also subsumes the ordinary case — a request that emits
 `notifications/progress` or `notifications/message` before its response is the same shape —
-which is why the SPI is defined generally rather than as a `subscriptions`-only hook.
+which is why the SPI is defined generally rather than as a `subscriptions`-only hook. The
+dispatch predicate agrees with that claim: `isStreamingRequest` returns `true` for
+`subscriptions/listen` *and* for any request whose `_meta` carries `logLevel` or
+`progressToken`, because the spec routes request-scoped notifications onto the originating
+request's response stream. Feature code emits onto that stream only through
+`McpRequestSink` (never the transport directly); on the non-streaming path the sink is a
+no-op, so handlers are written once and are oblivious to which path served them.
 
 ```mermaid
 sequenceDiagram
@@ -1110,7 +1232,7 @@ Rules encoded:
   `subscriptionId` in `_meta`) before closing, so the client can distinguish a graceful end
   from a dropped transport.
 - On stdio reconnect the client MUST re-send `subscriptions/listen`; `McpSubscription`
-  therefore exposes `closed()` so callers can re-establish, and the SDK does **not**
+  therefore exposes `awaitClosed()` / `closed()` so callers can re-establish, and the SDK does **not**
   auto-resubscribe (no server-side subscription state exists to resume).
 - Request-scoped notifications (`notifications/progress`, `notifications/message`) are routed
   to the originating request's stream and are **never** emitted on a listen stream.
@@ -1162,9 +1284,9 @@ revision. Phases 1–2 are non-breaking and could ship in a `2.x` minor.
 | Phase | Scope | Breaking | Depends on |
 | --- | --- | --- | --- |
 | **P1 — Foundations** | `ProtocolVersions.MCP_2026_07_28`, `MODERN`/`LEGACY`/`isModern`, `McpMetaKeys`, new `ErrorCodes`, new exceptions, `McpHeaderCodec`, `McpRequestContext` | No | — |
-| **P2 — Schema** | `resultType` (Case B) across all result records; `CacheableResult`; `extensions` on both capabilities; `DiscoverResult`; `InputRequiredResult` / `InputRequests` / `InputResponses`; `SubscriptionsListenRequest` / ack / result; error `data` records | No | P1 |
-| **P3 — Modern server** | `McpEraRouter`; `handleRequestStreaming` SPI; `server/discover`; `subscriptions/listen` + `McpSubscriptionSink`; per-request log gating; MRTR-returning feature handlers; `McpRequestStateCodec`; header↔body validation and `-32020`; `405` on `GET`/`DELETE` | Yes | P2 |
-| **P4 — Modern client** | `ProtocolEraResolver` (probe + cache); envelope injection; `McpInputRequiredResolver`; `McpToolDefinitionCache`; `McpParamHeaderExtractor`; `listen()` / `McpSubscription`; `discover()`; header mirroring | Yes | P2 |
+| **P2 — Schema** | `resultType` (Case B) across all result records; `CacheableResult`; `extensions` on both capabilities; `DiscoverResult`; `InputRequiredResult` / `InputRequest`; `SubscriptionsListenRequest` / ack / result; error `data` records; `JsonSchemaValidator` conformance to SEP-2106 (`$ref` resolution, composition-keyword resource bounds) in `mcp-json-jackson2/3` | No | P1 |
+| **P3 — Modern server** | `McpEraRouter`; `handleRequestStreaming` SPI; `server/discover`; `subscriptions/listen` + `McpSubscriptionSink`; `McpRequestSink` (request-scoped progress/log emission); per-request log gating; MRTR-returning feature handlers; `McpRequestStateCodec`; header↔body validation and `-32020`; `405` on `GET`/`DELETE` | Yes | P2 |
+| **P4 — Modern client** | `ProtocolEraResolver` (probe + cache); envelope injection; `McpInputRequiredResolver`; `McpToolDefinitionCache`; `McpParamHeaderExtractor`; `listen()` / `McpSubscription`; `discover()`; header mirroring; authorization-hook updates (RFC 9207 `iss` validation, `application_type` during DCR, issuer-keyed credentials) in the transport customizer layer | Yes | P2 |
 | **P5 — Removals & relocation** | Deprecate legacy-only API; delete `notifications/elicitation/complete` and `elicitationId`; `mcp-ext-tasks`; delete HTTP+SSE transport classes; `MIGRATION-3.0.md`; docs | Yes | P3, P4 |
 
 ### Behaviour Matrix
@@ -1197,7 +1319,7 @@ that behaviour verbatim, gated on `protocolDetectionTimeout`.
 
 | Control | Behaviour |
 | --- | --- |
-| **`requestState` integrity** | `McpRequestStateCodec.aeadAesGcm` is the default for server-side MRTR. It binds the authenticated principal, a TTL, and a digest of the originating method plus its salient params, and rejects state that fails any check. `unprotected()` exists but must be selected explicitly, and its Javadoc states the only condition under which the spec permits it: tampering can cause nothing worse than request failure. |
+| **`requestState` integrity** | `McpRequestStateCodec.aeadAesGcm` is the recommended codec for server-side MRTR. It binds the authenticated principal, a TTL, and a digest of the originating request (computed with the MRTR fields `inputResponses` / `requestState` removed, so the retry's digest matches the original's by construction), and rejects state that fails any check. The key is operator-supplied and shared across replicas — the SDK never generates one implicitly, because a per-process key breaks MRTR behind a load balancer. A server whose features use `requestState` fails fast at build time unless a codec was configured. `unprotected()` exists but must be selected explicitly, and its Javadoc states the only condition under which the spec permits it: tampering can cause nothing worse than request failure. |
 | **`requestState` is opaque to clients** | Modelled as `String`, round-tripped verbatim. There is no SDK code path that parses it, so the client cannot violate the MUST NOT even by accident. |
 | **Replay bounding** | Default TTL 5 minutes. The codec rejects state presented by a different principal, or on a request whose digest does not match. The Javadoc states plainly that these measures bound the replay window but do not guarantee single use; servers needing at-most-once must enforce it themselves. |
 | **Header↔body validation** | Mandatory on the server, not opt-in. `Mcp-Name` and `Mcp-Param-*` are Base64-decoded before comparison. Integers compare numerically (`42` ≡ `42.0`). Mismatch ⇒ `400` + `-32020`. |
@@ -1206,7 +1328,7 @@ that behaviour verbatim, gated on `protocolDetectionTimeout`.
 | **`Origin` validation** | Retained and required on all Streamable HTTP connections; invalid ⇒ `403`. |
 | **Capability confinement** | The server refuses to emit an `inputRequests` entry for a capability the client did not declare, returning `-32021` rather than a request the client cannot answer. |
 | **`serverInfo` is untrusted** | `DiscoverResult.serverInfo()` Javadoc records that it is self-reported and unverified: for display, logging and debugging only, never for behaviour or security decisions. |
-| **OAuth** | `iss` (RFC 9207) validated against the recorded issuer before code redemption; `application_type` sent during DCR; credentials keyed by issuer, never reused across authorization servers, re-registered when the AS changes. |
+| **OAuth** | `iss` (RFC 9207) validated against the recorded issuer before code redemption; `application_type` sent during DCR; credentials keyed by issuer, never reused across authorization servers, re-registered when the AS changes. **Scope:** the SDK's OAuth surface is the client-transport authorization hooks (`McpHttpClientTransportAuthorizationErrorHandler` and the transport customizers) — these rules land there and in the conformance scenarios (P4); flows the SDK does not own (full token acquisition) are documented as integrator responsibilities in `docs/client.md`. |
 
 ### Threat-Model Boundaries
 
@@ -1231,7 +1353,7 @@ version that require client/server code changes", "removing support for a transp
 | --- | --- |
 | **Wire compatibility with legacy peers** | Preserved. Dual-era is the default on both sides; `2024-11-05` through `2025-11-25` remain fully supported. |
 | **Source compatibility for the common path** | Preserved for `tools/call`, `tools/list`, `resources/*`, `prompts/*`, `completion/complete`, and the sampling / elicitation / roots handler registrations ([D3](#d3-mrtr-is-resolved-inside-the-client-session-layer)). |
-| **Binary compatibility** | **Not** preserved. Result records gain components; `Result` gains a default method; feature-specification return types widen. Recompilation is required. |
+| **Binary compatibility** | **Not** preserved across the release as a whole — but the break is confined to P3/P4 (feature-specification return types widen; the client builder SPI grows). The P2 record changes are binary-compatible on their own: appended components retain the previous canonical constructors as delegating overloads, and `Result`'s new default method is binary-safe — which is what makes it possible for P1–P2 to ship in a `2.x` minor. Recompilation is still recommended. |
 | **Behavioural change** | `notifications/message` is suppressed on the modern path for requests that omit `io.modelcontextprotocol/logLevel`. This is spec-mandated and is the one silent behaviour change; it is the lead item in the migration guide. |
 
 ### Deprecations Introduced in `3.0.0`
@@ -1343,10 +1465,12 @@ McpToolsStreamableHttpLegacyIT  → 2025-11-25 over Streamable HTTP
 | `McpHeaderCodec` | plain ASCII passthrough; non-ASCII; leading/trailing space and tab; embedded CR / LF; sentinel-shaped literal; empty string; decode round-trip; malformed sentinel |
 | `McpParamHeaderExtractor.validate` | empty name; non-`tchar`; CR/LF; case-insensitive duplicate; `number` type rejected; integer outside ±(2⁵³−1); reachability through `items` / `oneOf` / `anyOf` / `allOf` / `not` / `if` / `$ref` all rejected; nested `properties` chain accepted |
 | `McpParamHeaderExtractor.extract` | value present; value `null` ⇒ header omitted; parameter absent ⇒ header omitted; nested path; boolean lowercasing; integer decimal form |
-| `McpRequestContext` | full envelope; missing each required key; malformed `clientCapabilities`; `logLevel` present and absent; extensions map |
+| `McpRequestContext` | full envelope; missing `protocolVersion` ⇒ rejected; missing `clientInfo` ⇒ accepted with empty `Optional` (spec SHOULD, not MUST); missing `clientCapabilities` ⇒ empty capability set; malformed `clientCapabilities`; `logLevel` present and absent; extensions map |
+| `McpRequestSink` | no-op on the non-streaming path; `log` dropped when the request omitted `logLevel`; `log` dropped below the requested level; `progress` routed to the originating request's stream, never a listen stream |
+| JSON Schema validation (SEP-2106) | `$ref` resolution per the spec's requirements; composition-keyword resource bounds enforced; arbitrary JSON Schema 2020-12 keywords tolerated in `inputSchema` / `outputSchema` (both `mcp-json-jackson2` and `-jackson3` validators) |
 | `McpRequestStateCodec` | seal/open round-trip; tampered ciphertext rejected; expired TTL rejected; wrong principal rejected; wrong request digest rejected; `unprotected` round-trip |
 | `ProtocolVersions.isModern` | each known version; unknown future version; `null` |
-| `McpInputRequiredResolver` | single round trip; two round trips; exceeds `maxInputRequiredRoundTrips`; `requestState` echoed byte-identical; `requestState` absent ⇒ omitted on retry; fresh JSON-RPC id per attempt; `inputRequests` for an undeclared capability ⇒ fail fast; `input_required` on a method that may not return it ⇒ protocol error |
+| `McpInputRequiredResolver` | single round trip; two round trips; exceeds `maxInputRequiredRoundTrips`; `requestState` echoed byte-identical; `requestState` absent ⇒ omitted on retry; fresh JSON-RPC id per attempt; `inputRequests` for an undeclared capability ⇒ fail fast; `input_required` on a method that may not return it ⇒ protocol error; unchanged-state repeat ⇒ polling backoff, not charged against the round-trip bound; polling bounded by the per-request timeout |
 
 ### Integration Tests
 
@@ -1358,7 +1482,10 @@ Per transport (stdio, Streamable HTTP) and per era:
 - Era auto-detection: modern server; legacy server; silent server (timeout ⇒ legacy + `WARN`);
   era cached across calls; re-probe after a cached assumption fails.
 - MRTR end-to-end: elicitation; sampling; roots; two entries in one `inputRequests`; repeated
-  `InputRequiredResult`; `prompts/get` and `resources/read` as well as `tools/call`.
+  `InputRequiredResult`; URL-mode elicitation resolved by polling with unchanged
+  `requestState`; `prompts/get` and `resources/read` as well as `tools/call`.
+- Dual-era default: a stateless server built with zero configuration serves a `2025-06-18`
+  legacy client and a `2026-07-28` modern client in the same process.
 - `subscriptions/listen`: acknowledgement is first; narrowed acknowledgement honoured;
   `subscriptionId` on every message; two concurrent subscriptions demultiplexed (especially on
   stdio); client close ⇒ server teardown; server graceful closure emits the empty result;
@@ -1517,6 +1644,15 @@ One thing: `notifications/message` is suppressed on the modern path for requests
 `io.modelcontextprotocol/logLevel`. This is a spec MUST NOT, so the SDK cannot preserve the
 old behaviour. It leads the migration guide, and `logLevel` is settable once on the client
 builder to restore log flow with a one-line change.
+
+**How does a stateless handler emit progress or log notifications?**
+Through `McpRequestSink`, reached via `McpRequestContext.sink()`. The session-based
+`McpAsyncServerExchange` does not exist on the modern path, and the stateless feature
+signatures deliberately keep their shape — the sink travels in the Reactor context, the
+same way `McpTransportContext` already does. Requests whose `_meta` carries `logLevel` or
+`progressToken` are dispatched on the streaming path so the notifications have a stream to
+ride; for all other requests the sink is a no-op, which is exactly the spec's MUST NOT for
+unrequested log messages.
 
 **Why are `ttlMs` and `cacheScope` optional in Java when the spec calls them required?**
 Because the SDK must also deserialize legacy results, which never carry them. `null` means
