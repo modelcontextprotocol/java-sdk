@@ -262,6 +262,10 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			return;
 		}
 
+		if (!validateProtocolVersion(request, response)) {
+			return;
+		}
+
 		try {
 			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
 			this.securityValidator.validateHeaders(headers);
@@ -395,6 +399,10 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		if (this.isClosing) {
 			response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Server is shutting down");
+			return;
+		}
+
+		if (!validateProtocolVersion(request, response)) {
 			return;
 		}
 
@@ -579,6 +587,10 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			return;
 		}
 
+		if (!validateProtocolVersion(request, response)) {
+			return;
+		}
+
 		try {
 			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
 			this.securityValidator.validateHeaders(headers);
@@ -638,6 +650,31 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		writer.write(jsonError);
 		writer.flush();
 		return;
+	}
+
+	/**
+	 * Validates the {@code MCP-Protocol-Version} header against the protocol versions
+	 * supported by this provider. A missing header is allowed and falls back to the
+	 * negotiated protocol version, while a header carrying an unsupported version is
+	 * rejected with a 400 Bad Request.
+	 * @param request the HTTP servlet request
+	 * @param response the HTTP servlet response
+	 * @return true if the header is missing or contains a supported version, false if a
+	 * 400 error response has been written
+	 * @throws IOException if an I/O error occurs
+	 */
+	private boolean validateProtocolVersion(HttpServletRequest request, HttpServletResponse response)
+			throws IOException {
+		String protocolVersion = request.getHeader(HttpHeaders.PROTOCOL_VERSION);
+		if (protocolVersion == null || this.protocolVersions().contains(protocolVersion)) {
+			return true;
+		}
+		this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+				McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND)
+					.message("Unsupported protocol version (supported versions: "
+							+ String.join(", ", this.protocolVersions()) + ")")
+					.build());
+		return false;
 	}
 
 	/**
