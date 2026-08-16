@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.slf4j.Logger;
@@ -317,12 +318,14 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			// Check if this is a replay request
 			if (request.getHeader(HttpHeaders.LAST_EVENT_ID) != null) {
 				String lastId = request.getHeader(HttpHeaders.LAST_EVENT_ID);
+				AtomicBoolean eventSent = new AtomicBoolean(false);
 
 				try {
 					session.replay(lastId)
 						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
 						.toIterable()
 						.forEach(message -> {
+							eventSent.set(true);
 							try {
 								sessionTransport.sendMessage(message)
 									.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
@@ -333,6 +336,13 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 								asyncContext.complete();
 							}
 						});
+
+					if (!eventSent.get()) {
+						logger.debug("Session {} does not support replaying messages for Last-Event-ID: {}", sessionId,
+								lastId);
+						response.setStatus(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
+						asyncContext.complete();
+					}
 				}
 				catch (Exception e) {
 					logger.error("Failed to replay messages: {}", e.getMessage());
