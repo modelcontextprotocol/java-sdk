@@ -6,40 +6,35 @@ The SDK tracks implementation of MCP spec components via GitHub Projects, with a
 
 ## Current Focus Areas
 
-### 2025-11-25 Spec Implementation
+### 2.x — Stable Line (2025-11-25 spec)
 
-The Java SDK is actively implementing the [2025-11-25 MCP specification revision](https://github.com/orgs/modelcontextprotocol/projects/26/views/1).
+The current stable release line is **2.x** ([2.0.0](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v2.0.0), June 2026), implementing the [2025-11-25 MCP specification revision](https://modelcontextprotocol.io/specification/2025-11-25), including:
 
-Key features in this revision include:
+- **Spec-accurate schema**: enforced required fields with lenient wire deserialization, and a JSON compatibility foundation for forward/backward wire compatibility
+- **Enhanced schemas**: JSON Schema 2020-12 validation of tool inputs and embedded schema documents (SEP-1613)
+- **Richer elicitation**: client-side schema defaults (SEP-1034), URL mode elicitation (SEP-1036), form-based elicitation schemas
+- **Icons metadata** (SEP-973): icons for tools, resources, resource templates, and prompts
+- **Streamable HTTP first**: SSE transports deprecated in favor of Streamable HTTP
+- **Pluggable JSON serialization**: Jackson 2 and Jackson 3 modules
 
-- **Tasks**: Experimental support for tracking durable requests with polling and deferred result retrieval
-- **Tool calling in sampling**: Support for `tools` and `toolChoice` parameters
-- **URL mode elicitation**: Client-side URL elicitation requests
-- **Icons metadata**: Servers can expose icons for tools, resources, resource templates, and prompts
-- **Enhanced schemas**: JSON Schema 2020-12 as default, improved enum support, default values for elicitation
-- **Security improvements**: Updated security best practices, enhanced authorization flows, enabling OAuth integrations
+2.x development continues with patch and minor releases for bug fixes, conformance improvements, and non-breaking features. See [CHANGELOG.md](CHANGELOG.md) for the release history.
 
-See the full [changelog](https://modelcontextprotocol.io/specification/2025-11-25/changelog) for details.
+The earlier **1.x and 0.x release lines receive security patches only** — no feature or bug-fix backports. Users on those lines are encouraged to upgrade via the [v2 migration guide](MIGRATION-2.0.md).
 
-### Tier 1 SDK Support
+### 3.x — 2026-07-28 Spec Support
 
-Once we catch up on the most recent MCP specification revision we aim to fully support all the upcoming specification features on the day of its release.
+The next major version, **3.x**, will implement the [2026-07-28 MCP specification revision](https://modelcontextprotocol.io/specification/2026-07-28), including `server/discover` and the SEP-2575 stateless lifecycle. The first 3.0.0 milestone releases are planned for **September 2026**, tracked via a dedicated spec revision project board.
 
-### v1.x Development
+### SDK Tiering
 
-The Java SDK is currently in active development as v1.x, following a recent stable 1.0.0 release. The SDK provides:
+The Java SDK is an official [Tier 2 SDK](https://modelcontextprotocol.io/community/sdk-tiers) committed to full protocol support: new spec revisions are implemented within the Tier 2 six-month window, with conformance continuously verified against the [MCP conformance suite](https://github.com/modelcontextprotocol/conformance) in CI. Once caught up on the most recent specification revision, we aim for Tier 1: fully supporting new specification features on the day of their release.
 
-- MCP protocol implementation
-- Synchronous and asynchronous programming models
-- Multiple transport options (STDIO, HTTP/SSE, Servlet)
-- Pluggable JSON serialization (Jackson 2 and Jackson 3)
-
-Development is tracked via [GitHub Issues](https://github.com/modelcontextprotocol/java-sdk/issues) and [GitHub Projects](https://github.com/orgs/modelcontextprotocol/projects).
-
-### Future Versions
+### Future Directions
 
 Major version updates will align with MCP specification changes and breaking API changes as needed. The SDK is designed to evolve with the Java ecosystem, including:
 
 - Virtual Threads and Structured Concurrency support
 - Additional transport implementations
 - Performance optimizations
+
+Development is tracked via [GitHub Issues](https://github.com/modelcontextprotocol/java-sdk/issues) and [GitHub Projects](https://github.com/orgs/modelcontextprotocol/projects).
