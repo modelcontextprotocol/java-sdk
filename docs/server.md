@@ -407,6 +407,40 @@ var server = McpServer.sync(transportProvider)
 
 The embedded JSON Schema documents themselves (`Tool.inputSchema`, `Tool.outputSchema`, and elicitation `requestedSchema`) are validated against the JSON Schema 2020-12 meta-schema (SEP-1613). Malformed schemas are rejected at build time (`McpServer.build()`) and when calling `addTool()`, throwing an `IllegalArgumentException` that names the offending field. A schema that declares a different dialect via `$schema` is accepted without meta-schema validation.
 
+#### Tool Result Content Types
+
+Besides `TextContent`, a `CallToolResult` can return images, audio, and embedded resources — any combination of these can appear in the same result's `content` list:
+
+```java
+var syncToolSpecification = SyncToolSpecification.builder()
+    .tool(Tool.builder("generate-report", schema)
+        .description("Generates a report with mixed content")
+        .build())
+    .callHandler((exchange, request) -> {
+        var text = TextContent.builder("Report summary:").build();
+
+        // Image content: base64-encoded data + MIME type
+        var image = ImageContent.builder(base64PngData, "image/png").build();
+
+        // Audio content: base64-encoded data + MIME type
+        var audio = AudioContent.builder(base64WavData, "audio/wav").build();
+
+        // Embedded resource: wraps a TextResourceContents or BlobResourceContents
+        var resourceContents = TextResourceContents.builder("report://details", "Full details...")
+            .mimeType("text/plain")
+            .build();
+        var embeddedResource = EmbeddedResource.builder(resourceContents).build();
+
+        return CallToolResult.builder()
+            .content(List.of(text, image, audio, embeddedResource))
+            .isError(false)
+            .build();
+    })
+    .build();
+```
+
+`ImageContent.builder(data, mimeType)` and `AudioContent.builder(data, mimeType)` both take base64-encoded binary data. `EmbeddedResource.builder(resourceContents)` wraps either a `TextResourceContents` (for text data) or a `BlobResourceContents` (for base64-encoded binary data) — see [Reading Binary Resources](#reading-binary-resources) for the `BlobResourceContents` shape.
+
 ### Resource Specification
 
 Specification of a resource with its handler function.
@@ -443,6 +477,29 @@ Resources provide context to AI models by exposing data such as: File contents, 
         }
     );
     ```
+
+#### Reading Binary Resources
+
+Binary resources (images, PDFs, audio, etc.) are returned as `BlobResourceContents`, which carries base64-encoded data instead of the plain `text` field used by `TextResourceContents`:
+
+```java
+var binaryResourceSpecification = new McpServerFeatures.SyncResourceSpecification(
+    Resource.builder("file:///logo.png", "Logo")
+        .description("Application logo")
+        .mimeType("image/png")
+        .build(),
+    (exchange, request) -> {
+        String base64Data = Base64.getEncoder().encodeToString(readLogoBytes());
+        return ReadResourceResult.builder(List.of(
+                BlobResourceContents.builder(request.uri(), base64Data)
+                    .mimeType("image/png")
+                    .build()))
+            .build();
+    }
+);
+```
+
+`ReadResourceResult` accepts a list mixing `TextResourceContents` and `BlobResourceContents`, so a single resource read can return multiple representations if needed.
 
 ### Resource Subscriptions
 
@@ -549,6 +606,44 @@ The prompt definition includes name (identifier for the prompt), description (pu
 The handler function processes requests and returns formatted templates.
 The first argument is `McpSyncServerExchange`/`McpAsyncServerExchange` for client interaction, and the second argument is a `GetPromptRequest` instance.
 
+#### Prompts with Embedded Resources and Images
+
+A prompt's messages can carry `EmbeddedResource` or `ImageContent` instead of plain text by passing them as the `content` argument of `PromptMessage.builder(role, content)`:
+
+```java
+// Prompt that embeds a resource's content in one of its messages
+var promptWithResource = new McpServerFeatures.SyncPromptSpecification(
+    Prompt.builder("review-file")
+        .description("Reviews a file, embedding its content in the prompt")
+        .arguments(List.of(PromptArgument.builder("resourceUri").required(true).build()))
+        .build(),
+    (exchange, request) -> {
+        String resourceUri = (String) request.arguments().get("resourceUri");
+        var resourceContents = TextResourceContents.builder(resourceUri, loadFileContent(resourceUri))
+            .mimeType("text/plain")
+            .build();
+        var embeddedResource = EmbeddedResource.builder(resourceContents).build();
+
+        return GetPromptResult.builder(List.of(
+                PromptMessage.builder(Role.USER, embeddedResource).build(),
+                PromptMessage.builder(Role.USER, TextContent.builder("Please review the file above.").build()).build()))
+            .build();
+    }
+);
+
+// Prompt that embeds an image in one of its messages
+var promptWithImage = new McpServerFeatures.SyncPromptSpecification(
+    Prompt.builder("describe-image")
+        .description("Asks the model to describe an embedded image")
+        .arguments(List.of())
+        .build(),
+    (exchange, request) -> GetPromptResult.builder(List.of(
+            PromptMessage.builder(Role.USER, ImageContent.builder(base64PngData, "image/png").build()).build(),
+            PromptMessage.builder(Role.USER, TextContent.builder("Describe the image above.").build()).build()))
+        .build()
+);
+```
+
 ### Completion Specification
 
 Completions allow servers to provide argument autocompletion suggestions for prompts and resources:
@@ -588,7 +683,42 @@ Completions allow servers to provide argument autocompletion suggestions for pro
     );
     ```
 
-Completions can be registered for both `PromptReference` and `ResourceReference` types.
+Completions can be registered for both `PromptReference` and `ResourceReference` types. A `ResourceReference` completion suggests values for a resource template's URI parameters instead of a prompt's arguments:
+
+=== "Sync"
+
+    ```java
+    // Sync completion specification for a resource template argument
+    var syncResourceCompletionSpec = new McpServerFeatures.SyncCompletionSpecification(
+        new McpSchema.ResourceReference("file://{path}"),  // Reference to a resource template
+        (exchange, request) -> {
+            String argName = request.argument().name();
+            String partial = request.argument().value();
+            // Return matching suggestions, e.g. matching file paths
+            List<String> suggestions = findMatchingPaths(partial);
+            return new McpSchema.CompleteResult(
+                new McpSchema.CompleteResult.CompleteCompletion(suggestions, suggestions.size(), false)
+            );
+        }
+    );
+    ```
+
+=== "Async"
+
+    ```java
+    // Async completion specification for a resource template argument
+    var asyncResourceCompletionSpec = new McpServerFeatures.AsyncCompletionSpecification(
+        new McpSchema.ResourceReference("file://{path}"),
+        (exchange, request) -> {
+            String argName = request.argument().name();
+            String partial = request.argument().value();
+            List<String> suggestions = findMatchingPaths(partial);
+            return Mono.just(new McpSchema.CompleteResult(
+                new McpSchema.CompleteResult.CompleteCompletion(suggestions, suggestions.size(), false)
+            ));
+        }
+    );
+    ```
 
 ### Using Sampling from a Server
 
@@ -778,6 +908,68 @@ var urlTool = SyncToolSpecification.builder()
     })
     .build();
 ```
+
+#### Elicitation with Enum Values (SEP-1330)
+
+For form elicitation, the SDK provides typed helpers to build `requestedSchema` properties that render as single-select or multi-select choices, with or without human-readable titles:
+
+```java
+// Untitled single-select: plain enum values, no separate display titles
+var untitledSingle = UntitledSingleSelectEnumSchema.builder()
+    .enumValues("small", "medium", "large")
+    .build();
+
+// Titled single-select: value/title pairs via oneOf+const
+var titledSingle = TitledSingleSelectEnumSchema.builder()
+    .oneOf(new EnumSchemaOption("sm", "Small"),
+           new EnumSchemaOption("md", "Medium"),
+           new EnumSchemaOption("lg", "Large"))
+    .build();
+
+// Untitled multi-select: an array property whose items are an enum
+var untitledMulti = UntitledMultiSelectEnumSchema
+    .builder(UntitledMultiSelectItems.builder().enumValues("red", "green", "blue").build())
+    .build();
+
+// Titled multi-select: array items with value/title pairs via anyOf+const
+var titledMulti = TitledMultiSelectEnumSchema
+    .builder(TitledMultiSelectItems.builder()
+        .anyOf(new EnumSchemaOption("red", "Red"), new EnumSchemaOption("green", "Green"))
+        .build())
+    .build();
+
+// Convert the typed schema helpers into the plain Map<String, Object> shape
+// expected by ElicitRequest.builder(message, requestedSchema)
+var mapper = McpJsonDefaults.getMapper();
+TypeRef<Map<String, Object>> mapType = new TypeRef<>() {};
+Map<String, Object> requestedSchema = Map.of("type", "object", "properties",
+        Map.of("size", mapper.convertValue(titledSingle, mapType),
+               "colors", mapper.convertValue(titledMulti, mapType)),
+        "required", List.of("size", "colors"));
+
+ElicitRequest elicitRequest = ElicitRequest.builder("Choose your options", requestedSchema).build();
+ElicitResult result = exchange.createElicitation(elicitRequest);
+```
+
+`LegacyTitledEnumSchema` (a value list plus a parallel `enumNames` list, built with `.enumValues(...)` and `.enumNames(...)`) is also available for clients that predate SEP-1330's `oneOf`/`anyOf` convention, but new schemas should prefer `TitledSingleSelectEnumSchema` / `TitledMultiSelectEnumSchema`.
+
+### Pinging the Client
+
+A server can check that a connected client is still responsive by sending a `ping` request through the exchange:
+
+```java
+var tool = SyncToolSpecification.builder()
+    .tool(Tool.builder("health-check", emptyJsonSchema).description("Verifies the client is reachable").build())
+    .callHandler((exchange, request) -> {
+        exchange.ping(); // blocks until the client responds, or the request times out
+        return CallToolResult.builder()
+            .content(List.of(new McpSchema.TextContent("Client is responsive")))
+            .build();
+    })
+    .build();
+```
+
+The async equivalent, `McpAsyncServerExchange.ping()`, returns a `Mono<Object>` that completes when the client responds. Ping requests are subject to the same `requestTimeout` configured on the server builder.
 
 ### Logging Support
 
