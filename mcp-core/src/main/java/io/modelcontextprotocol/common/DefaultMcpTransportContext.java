@@ -20,7 +20,7 @@ class DefaultMcpTransportContext implements McpTransportContext {
 
 	DefaultMcpTransportContext(Map<String, Object> metadata) {
 		Assert.notNull(metadata, "The metadata cannot be null");
-		this.metadata = metadata;
+		this.metadata = Map.copyOf(metadata);
 	}
 
 	@Override
