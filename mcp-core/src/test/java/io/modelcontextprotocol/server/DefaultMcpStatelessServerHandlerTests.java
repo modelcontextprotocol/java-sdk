@@ -77,4 +77,49 @@ class DefaultMcpStatelessServerHandlerTests {
 		}).verifyComplete();
 	}
 
+	@Test
+	void testHandleRequestWithEmptyHandlerResult() {
+		// handler that completes empty, without emitting a result or an error
+		McpStatelessRequestHandler<Object> emptyHandler = (transportContext, params) -> Mono.empty();
+		DefaultMcpStatelessServerHandler handler = new DefaultMcpStatelessServerHandler(
+				Map.of("custom/empty", emptyHandler), Collections.emptyMap());
+
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, "custom/empty",
+				"test-id-456", null);
+
+		StepVerifier.create(handler.handleRequest(McpTransportContext.EMPTY, request)).assertNext(response -> {
+			assertThat(response).isNotNull();
+			assertThat(response.id()).isEqualTo("test-id-456");
+			assertThat(response.result()).isNull();
+
+			// an empty completion must still yield exactly one JSON-RPC error response
+			assertThat(response.error()).isNotNull();
+			assertThat(response.error().code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
+			assertThat(response.error().message()).contains("without producing a result");
+		}).verifyComplete();
+	}
+
+	@Test
+	void testHandleRequestWithHandlerError() {
+		// handler that fails with an exception; the error must still be converted into a
+		// JSON-RPC error response
+		McpStatelessRequestHandler<Object> failingHandler = (transportContext, params) -> Mono
+			.error(new IllegalStateException("boom"));
+		DefaultMcpStatelessServerHandler handler = new DefaultMcpStatelessServerHandler(
+				Map.of("custom/failing", failingHandler), Collections.emptyMap());
+
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, "custom/failing",
+				"test-id-789", null);
+
+		StepVerifier.create(handler.handleRequest(McpTransportContext.EMPTY, request)).assertNext(response -> {
+			assertThat(response).isNotNull();
+			assertThat(response.id()).isEqualTo("test-id-789");
+			assertThat(response.result()).isNull();
+
+			assertThat(response.error()).isNotNull();
+			assertThat(response.error().code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
+			assertThat(response.error().message()).isEqualTo("boom");
+		}).verifyComplete();
+	}
+
 }

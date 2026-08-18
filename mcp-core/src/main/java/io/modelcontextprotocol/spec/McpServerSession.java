@@ -300,7 +300,16 @@ public class McpServerSession implements McpLoggableSession {
 			}
 			return resultMono.map(result -> McpSchema.JSONRPCResponse.result(request.id(), result))
 				.onErrorResume(error -> Mono
-					.just(McpSchema.JSONRPCResponse.error(request.id(), toJsonRpcError(request, error))));
+					.just(McpSchema.JSONRPCResponse.error(request.id(), toJsonRpcError(request, error))))
+				.switchIfEmpty(Mono.defer(() -> {
+					logger.warn("Request handler for method '{}' completed without producing a result. "
+							+ "Responding with an internal error to honor JSON-RPC 2.0's "
+							+ "one-response-per-request contract.", request.method());
+					return Mono.just(McpSchema.JSONRPCResponse.error(request.id(),
+							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+									"Request handler completed without producing a result for method: "
+											+ request.method())));
+				}));
 		});
 	}
 
