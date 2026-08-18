@@ -197,12 +197,16 @@ public class McpAsyncServer {
 			.rootsChangeConsumers();
 
 		if (Utils.isEmpty(rootsChangeConsumers)) {
-			rootsChangeConsumers = List.of((exchange, roots) -> Mono.fromRunnable(() -> logger
-				.warn("Roots list changed notification, but no consumers provided. Roots list changed: {}", roots)));
+			notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED, (exchange, params) -> {
+				logger.debug("Received {}", McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED);
+				return Mono.empty();
+			});
+		}
+		else {
+			notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED,
+					asyncRootsListChangedNotificationHandler(rootsChangeConsumers));
 		}
 
-		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED,
-				asyncRootsListChangedNotificationHandler(rootsChangeConsumers));
 		return notificationHandlers;
 	}
 
