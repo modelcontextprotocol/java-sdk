@@ -1493,7 +1493,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.build();
 
 		var mcpServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
-			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.capabilities(ServerCapabilities.builder().tools(true).logging().build())
 			.tools(tool)
 			.build();
 
