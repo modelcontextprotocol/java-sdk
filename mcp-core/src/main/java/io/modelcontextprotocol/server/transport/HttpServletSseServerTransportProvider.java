@@ -280,8 +280,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		}
 
 		try {
-			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
-			this.securityValidator.validateHeaders(headers);
+			this.securityValidator.validateHeaders(new HttpServletHeaderAccessor(request));
 		}
 		catch (ServerTransportSecurityException e) {
 			response.sendError(e.getStatusCode(), e.getMessage());
@@ -353,8 +352,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		}
 
 		try {
-			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
-			this.securityValidator.validateHeaders(headers);
+			this.securityValidator.validateHeaders(new HttpServletHeaderAccessor(request));
 		}
 		catch (ServerTransportSecurityException e) {
 			response.sendError(e.getStatusCode(), e.getMessage());

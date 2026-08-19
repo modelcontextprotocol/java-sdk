@@ -8,7 +8,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.List;
-import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -134,8 +133,7 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		}
 
 		try {
-			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
-			this.securityValidator.validateHeaders(headers);
+			this.securityValidator.validateHeaders(new HttpServletHeaderAccessor(request));
 		}
 		catch (ServerTransportSecurityException e) {
 			response.sendError(e.getStatusCode(), e.getMessage());
