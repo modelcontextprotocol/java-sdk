@@ -13,9 +13,15 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 | Line   | Latest | Spec revision | Status |
 |--------|--------|---------------|--------|
-| 2.0.x  | [2.0.0](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v2.0.0) (2026-06-11) | 2025-11-25 | Active development |
-| 1.1.x  | [1.1.3](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v1.1.3) (2026-05-21) | 2025-06-18 | Security patches only |
-| 0.18.x | [0.18.3](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v0.18.3) (2026-06-09) | 2025-06-18 | Security patches only |
+| 2.0.x  | [2.0.1](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v2.0.1) (2026-08-19) | 2025-11-25 | Active development |
+| 1.1.x  | [1.1.4](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v1.1.4) (2026-08-19) | 2025-06-18 | Security patches only |
+| 0.18.x | [0.18.4](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v0.18.4) (2026-08-19) | 2025-06-18 | Security patches only |
+
+## 2.0.1 — 2026-08-19
+
+- Bound STDIO and HTTP client/server reads to a configurable maximum size
+
+Full notes: [v2.0.1 release](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v2.0.1)
 
 ## 2.0.0 — 2026-06-11
 
@@ -42,6 +48,8 @@ Full notes: [v2.0.0 release](https://github.com/modelcontextprotocol/java-sdk/re
 
 ## 1.x
 
+- [1.1.4](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v1.1.4) — 2026-08-19:
+  bound HTTP client/server reads (backport)
 - [1.1.3](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v1.1.3) /
   [1.0.2](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v1.0.2) — 2026-05-21:
   SSE client transport message-endpoint validation (backports)
@@ -54,6 +62,8 @@ Full notes: [v2.0.0 release](https://github.com/modelcontextprotocol/java-sdk/re
 
 ## 0.x
 
+- [0.18.4](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v0.18.4) — 2026-08-19:
+  bound HTTP client/server reads (backport)
 - [0.18.3](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v0.18.3) — 2026-06-09:
   security fix for GHSA-hv2w-8mjj-jw22
 - [0.18.0](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v0.18.0) –

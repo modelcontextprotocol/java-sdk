@@ -45,9 +45,9 @@ The following are **not** considered breaking:
 
 | Line   | Latest | Spec revision | Status |
 |--------|--------|---------------|--------|
-| 2.0.x  | [2.0.0](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v2.0.0) (2026-06-11) | 2025-11-25 | Active development |
-| 1.1.x  | [1.1.3](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v1.1.3) (2026-05-21) | 2025-06-18 | Security patches only |
-| 0.18.x | [0.18.3](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v0.18.3) (2026-06-09) | 2025-06-18 | Security patches only |
+| 2.0.x  | [2.0.1](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v2.0.1) (2026-08-19) | 2025-11-25 | Active development |
+| 1.1.x  | [1.1.4](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v1.1.4) (2026-08-19) | 2025-06-18 | Security patches only |
+| 0.18.x | [0.18.4](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v0.18.4) (2026-08-19) | 2025-06-18 | Security patches only |
 
 ## Maven Coordinates
 

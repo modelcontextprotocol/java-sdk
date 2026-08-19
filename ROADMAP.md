@@ -8,7 +8,7 @@ The SDK tracks implementation of MCP spec components via GitHub Projects, with a
 
 ### 2.x — Stable Line (2025-11-25 spec)
 
-The current stable release line is **2.x** ([2.0.0](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v2.0.0), June 2026), implementing the [2025-11-25 MCP specification revision](https://modelcontextprotocol.io/specification/2025-11-25), including:
+The current stable release line is **2.x** (latest: [2.0.1](https://github.com/modelcontextprotocol/java-sdk/releases/tag/v2.0.1), August 2026), implementing the [2025-11-25 MCP specification revision](https://modelcontextprotocol.io/specification/2025-11-25), including:
 
 - **Spec-accurate schema**: enforced required fields with lenient wire deserialization, and a JSON compatibility foundation for forward/backward wire compatibility
 - **Enhanced schemas**: JSON Schema 2020-12 validation of tool inputs and embedded schema documents (SEP-1613)
