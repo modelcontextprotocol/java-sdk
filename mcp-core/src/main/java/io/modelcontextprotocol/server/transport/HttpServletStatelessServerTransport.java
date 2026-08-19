@@ -195,7 +195,12 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 
 					response.setContentType(APPLICATION_JSON);
 					response.setCharacterEncoding(UTF_8);
-					response.setStatus(HttpServletResponse.SC_OK);
+
+					int httpStatus = HttpServletResponse.SC_OK;
+					if (jsonrpcResponse.error() != null) {
+						httpStatus = mapJsonRpcErrorToHttpStatus(jsonrpcResponse.error().code());
+					}
+					response.setStatus(httpStatus);
 
 					String jsonResponseText = jsonMapper.writeValueAsString(jsonrpcResponse);
 					PrintWriter writer = response.getWriter();
@@ -247,6 +252,21 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 						.message("Unexpected error: " + e.getMessage())
 						.build());
 		}
+	}
+
+	/**
+	 * Maps a JSON-RPC error code to an appropriate HTTP status code per the MCP
+	 * Streamable HTTP specification (2026-07-28). Only METHOD_NOT_FOUND is mapped to a
+	 * non-200 status (HTTP 404) as specified by the protocol. All other JSON-RPC errors
+	 * are returned with HTTP 200 per standard JSON-RPC conventions.
+	 * @param jsonRpcErrorCode The JSON-RPC error code
+	 * @return The corresponding HTTP status code
+	 */
+	private static int mapJsonRpcErrorToHttpStatus(int jsonRpcErrorCode) {
+		if (jsonRpcErrorCode == McpSchema.ErrorCodes.METHOD_NOT_FOUND) {
+			return HttpServletResponse.SC_NOT_FOUND;
+		}
+		return HttpServletResponse.SC_OK;
 	}
 
 	/**
