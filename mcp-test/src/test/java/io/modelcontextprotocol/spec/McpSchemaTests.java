@@ -3027,4 +3027,264 @@ public class McpSchemaTests {
 		assertThat(tool.name()).isEqualTo("test-tool");
 	}
 
+	// TTL / CacheScope Tests (SEP-2549)
+
+	@Test
+	void testListResourcesResultWithTtl() throws Exception {
+		McpSchema.Resource resource = McpSchema.Resource.builder("resource://test", "Test Resource")
+			.description("A test resource")
+			.mimeType("text/plain")
+			.build();
+
+		McpSchema.ListResourcesResult result = McpSchema.ListResourcesResult.builder(List.of(resource))
+			.nextCursor("next")
+			.ttlMs(60000L)
+			.cacheScope(McpSchema.CacheScope.PUBLIC)
+			.build();
+
+		String value = JSON_MAPPER.writeValueAsString(result);
+		assertThatJson(value).isObject()
+			.containsEntry("ttlMs", 60000)
+			.containsEntry("cacheScope", "public")
+			.containsEntry("nextCursor", "next");
+
+		McpSchema.ListResourcesResult deserialized = JSON_MAPPER.readValue(value,
+				McpSchema.ListResourcesResult.class);
+		assertThat(deserialized.ttlMs()).isEqualTo(60000L);
+		assertThat(deserialized.cacheScope()).isEqualTo(McpSchema.CacheScope.PUBLIC);
+		assertThat(deserialized.resources()).hasSize(1);
+	}
+
+	@Test
+	void testListResourcesResultWithoutTtl() throws Exception {
+		String json = """
+				{"resources":[{"uri":"resource://test","name":"Test"}]}""";
+		McpSchema.ListResourcesResult result = JSON_MAPPER.readValue(json, McpSchema.ListResourcesResult.class);
+		assertThat(result.ttlMs()).isNull();
+		assertThat(result.cacheScope()).isNull();
+		assertThat(result.resources()).hasSize(1);
+	}
+
+	@Test
+	void testListResourcesResultNullTtlOmittedFromJson() throws Exception {
+		McpSchema.ListResourcesResult result = McpSchema.ListResourcesResult.builder(List.of()).build();
+		String value = JSON_MAPPER.writeValueAsString(result);
+		assertThatJson(value).isObject().doesNotContainKey("ttlMs").doesNotContainKey("cacheScope");
+	}
+
+	@Test
+	void testListResourceTemplatesResultWithTtl() throws Exception {
+		McpSchema.ResourceTemplate template = McpSchema.ResourceTemplate
+			.builder("resource://{id}/test", "Test Template")
+			.build();
+
+		McpSchema.ListResourceTemplatesResult result = McpSchema.ListResourceTemplatesResult
+			.builder(List.of(template))
+			.ttlMs(30000L)
+			.cacheScope(McpSchema.CacheScope.PRIVATE)
+			.build();
+
+		String value = JSON_MAPPER.writeValueAsString(result);
+		assertThatJson(value).isObject().containsEntry("ttlMs", 30000).containsEntry("cacheScope", "private");
+
+		McpSchema.ListResourceTemplatesResult deserialized = JSON_MAPPER.readValue(value,
+				McpSchema.ListResourceTemplatesResult.class);
+		assertThat(deserialized.ttlMs()).isEqualTo(30000L);
+		assertThat(deserialized.cacheScope()).isEqualTo(McpSchema.CacheScope.PRIVATE);
+	}
+
+	@Test
+	void testListResourceTemplatesResultWithoutTtl() throws Exception {
+		String json = """
+				{"resourceTemplates":[{"uriTemplate":"resource://{id}/test","name":"T"}]}""";
+		McpSchema.ListResourceTemplatesResult result = JSON_MAPPER.readValue(json,
+				McpSchema.ListResourceTemplatesResult.class);
+		assertThat(result.ttlMs()).isNull();
+		assertThat(result.cacheScope()).isNull();
+	}
+
+	@Test
+	void testListResourceTemplatesResultNullTtlOmittedFromJson() throws Exception {
+		McpSchema.ListResourceTemplatesResult result = McpSchema.ListResourceTemplatesResult.builder(List.of())
+			.build();
+		String value = JSON_MAPPER.writeValueAsString(result);
+		assertThatJson(value).isObject().doesNotContainKey("ttlMs").doesNotContainKey("cacheScope");
+	}
+
+	@Test
+	void testReadResourceResultWithTtl() throws Exception {
+		McpSchema.TextResourceContents contents = McpSchema.TextResourceContents
+			.builder("resource://test", "content")
+			.build();
+
+		McpSchema.ReadResourceResult result = McpSchema.ReadResourceResult.builder(List.of(contents))
+			.ttlMs(0L)
+			.cacheScope(McpSchema.CacheScope.PRIVATE)
+			.build();
+
+		String value = JSON_MAPPER.writeValueAsString(result);
+		assertThatJson(value).isObject().containsEntry("ttlMs", 0).containsEntry("cacheScope", "private");
+
+		McpSchema.ReadResourceResult deserialized = JSON_MAPPER.readValue(value,
+				McpSchema.ReadResourceResult.class);
+		assertThat(deserialized.ttlMs()).isEqualTo(0L);
+		assertThat(deserialized.cacheScope()).isEqualTo(McpSchema.CacheScope.PRIVATE);
+	}
+
+	@Test
+	void testReadResourceResultWithoutTtl() throws Exception {
+		String json = """
+				{"contents":[{"uri":"resource://test","text":"content"}]}""";
+		McpSchema.ReadResourceResult result = JSON_MAPPER.readValue(json, McpSchema.ReadResourceResult.class);
+		assertThat(result.ttlMs()).isNull();
+		assertThat(result.cacheScope()).isNull();
+	}
+
+	@Test
+	void testReadResourceResultNullTtlOmittedFromJson() throws Exception {
+		McpSchema.ReadResourceResult result = McpSchema.ReadResourceResult.builder(List.of()).build();
+		String value = JSON_MAPPER.writeValueAsString(result);
+		assertThatJson(value).isObject().doesNotContainKey("ttlMs").doesNotContainKey("cacheScope");
+	}
+
+	@Test
+	void testListPromptsResultWithTtl() throws Exception {
+		McpSchema.Prompt prompt = McpSchema.Prompt.builder("test-prompt")
+			.title("Test")
+			.description("A test prompt")
+			.build();
+
+		McpSchema.ListPromptsResult result = McpSchema.ListPromptsResult.builder(List.of(prompt))
+			.ttlMs(120000L)
+			.cacheScope(McpSchema.CacheScope.PUBLIC)
+			.build();
+
+		String value = JSON_MAPPER.writeValueAsString(result);
+		assertThatJson(value).isObject().containsEntry("ttlMs", 120000).containsEntry("cacheScope", "public");
+
+		McpSchema.ListPromptsResult deserialized = JSON_MAPPER.readValue(value,
+				McpSchema.ListPromptsResult.class);
+		assertThat(deserialized.ttlMs()).isEqualTo(120000L);
+		assertThat(deserialized.cacheScope()).isEqualTo(McpSchema.CacheScope.PUBLIC);
+	}
+
+	@Test
+	void testListPromptsResultWithoutTtl() throws Exception {
+		String json = """
+				{"prompts":[{"name":"p","title":"P","description":"A prompt"}]}""";
+		McpSchema.ListPromptsResult result = JSON_MAPPER.readValue(json, McpSchema.ListPromptsResult.class);
+		assertThat(result.ttlMs()).isNull();
+		assertThat(result.cacheScope()).isNull();
+	}
+
+	@Test
+	void testListPromptsResultNullTtlOmittedFromJson() throws Exception {
+		McpSchema.ListPromptsResult result = McpSchema.ListPromptsResult.builder(List.of()).build();
+		String value = JSON_MAPPER.writeValueAsString(result);
+		assertThatJson(value).isObject().doesNotContainKey("ttlMs").doesNotContainKey("cacheScope");
+	}
+
+	@Test
+	void testListToolsResultWithTtl() throws Exception {
+		McpSchema.Tool tool = McpSchema.Tool.builder("test-tool")
+			.title("Test Tool")
+			.description("A test tool")
+			.inputSchema(Map.of("type", "object"))
+			.build();
+
+		McpSchema.ListToolsResult result = McpSchema.ListToolsResult.builder(List.of(tool))
+			.nextCursor("cursor")
+			.ttlMs(300000L)
+			.cacheScope(McpSchema.CacheScope.PUBLIC)
+			.build();
+
+		String value = JSON_MAPPER.writeValueAsString(result);
+		assertThatJson(value).isObject()
+			.containsEntry("ttlMs", 300000)
+			.containsEntry("cacheScope", "public")
+			.containsEntry("nextCursor", "cursor");
+
+		McpSchema.ListToolsResult deserialized = JSON_MAPPER.readValue(value, McpSchema.ListToolsResult.class);
+		assertThat(deserialized.ttlMs()).isEqualTo(300000L);
+		assertThat(deserialized.cacheScope()).isEqualTo(McpSchema.CacheScope.PUBLIC);
+		assertThat(deserialized.tools()).hasSize(1);
+		assertThat(deserialized.nextCursor()).isEqualTo("cursor");
+	}
+
+	@Test
+	void testListToolsResultWithoutTtl() throws Exception {
+		String json = """
+				{"tools":[{"name":"t","inputSchema":{"type":"object"}}]}""";
+		McpSchema.ListToolsResult result = JSON_MAPPER.readValue(json, McpSchema.ListToolsResult.class);
+		assertThat(result.ttlMs()).isNull();
+		assertThat(result.cacheScope()).isNull();
+		assertThat(result.tools()).hasSize(1);
+	}
+
+	@Test
+	void testListToolsResultNullTtlOmittedFromJson() throws Exception {
+		McpSchema.ListToolsResult result = McpSchema.ListToolsResult.builder(List.of()).build();
+		String value = JSON_MAPPER.writeValueAsString(result);
+		assertThatJson(value).isObject().doesNotContainKey("ttlMs").doesNotContainKey("cacheScope");
+	}
+
+	@Test
+	void testCacheScopeSerialization() throws Exception {
+		assertThat(JSON_MAPPER.writeValueAsString(McpSchema.CacheScope.PUBLIC)).isEqualTo("\"public\"");
+		assertThat(JSON_MAPPER.writeValueAsString(McpSchema.CacheScope.PRIVATE)).isEqualTo("\"private\"");
+	}
+
+	@Test
+	void testCacheScopeDeserialization() throws Exception {
+		assertThat(JSON_MAPPER.readValue("\"public\"", McpSchema.CacheScope.class))
+			.isEqualTo(McpSchema.CacheScope.PUBLIC);
+		assertThat(JSON_MAPPER.readValue("\"private\"", McpSchema.CacheScope.class))
+			.isEqualTo(McpSchema.CacheScope.PRIVATE);
+	}
+
+	@Test
+	void testListResourcesResultToleratesUnknownFields() throws Exception {
+		McpSchema.ListResourcesResult result = JSON_MAPPER.readValue("""
+				{"resources":[],"ttlMs":5000,"cacheScope":"public","futureField":"ignored"}""",
+				McpSchema.ListResourcesResult.class);
+		assertThat(result.ttlMs()).isEqualTo(5000L);
+		assertThat(result.cacheScope()).isEqualTo(McpSchema.CacheScope.PUBLIC);
+	}
+
+	@Test
+	void testListResourceTemplatesResultToleratesUnknownFields() throws Exception {
+		McpSchema.ListResourceTemplatesResult result = JSON_MAPPER.readValue("""
+				{"resourceTemplates":[],"ttlMs":5000,"cacheScope":"private","futureField":"ignored"}""",
+				McpSchema.ListResourceTemplatesResult.class);
+		assertThat(result.ttlMs()).isEqualTo(5000L);
+		assertThat(result.cacheScope()).isEqualTo(McpSchema.CacheScope.PRIVATE);
+	}
+
+	@Test
+	void testReadResourceResultToleratesUnknownFields() throws Exception {
+		McpSchema.ReadResourceResult result = JSON_MAPPER.readValue("""
+				{"contents":[],"ttlMs":0,"cacheScope":"private","futureField":"ignored"}""",
+				McpSchema.ReadResourceResult.class);
+		assertThat(result.ttlMs()).isEqualTo(0);
+		assertThat(result.cacheScope()).isEqualTo(McpSchema.CacheScope.PRIVATE);
+	}
+
+	@Test
+	void testListPromptsResultToleratesUnknownFields() throws Exception {
+		McpSchema.ListPromptsResult result = JSON_MAPPER.readValue("""
+				{"prompts":[],"ttlMs":10000,"cacheScope":"public","futureField":"ignored"}""",
+				McpSchema.ListPromptsResult.class);
+		assertThat(result.ttlMs()).isEqualTo(10000L);
+		assertThat(result.cacheScope()).isEqualTo(McpSchema.CacheScope.PUBLIC);
+	}
+
+	@Test
+	void testListToolsResultToleratesUnknownFields() throws Exception {
+		McpSchema.ListToolsResult result = JSON_MAPPER.readValue("""
+				{"tools":[],"ttlMs":60000,"cacheScope":"public","futureField":"ignored"}""",
+				McpSchema.ListToolsResult.class);
+		assertThat(result.ttlMs()).isEqualTo(60000L);
+		assertThat(result.cacheScope()).isEqualTo(McpSchema.CacheScope.PUBLIC);
+	}
+
 }
