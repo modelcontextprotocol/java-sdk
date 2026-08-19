@@ -2,7 +2,9 @@
   {
     "version": "2.0.1-SNAPSHOT",
     "title": "2.0.1-SNAPSHOT",
-    "aliases": []
+    "aliases": [
+      "latest-snapshot"
+    ]
   },
   {
     "version": "2.0.0",
@@ -17,9 +19,7 @@
   {
     "version": "0.18.4-SNAPSHOT",
     "title": "0.18.4-SNAPSHOT",
-    "aliases": [
-      "latest-snapshot"
-    ]
+    "aliases": []
   },
   {
     "version": "v2.0.0",
