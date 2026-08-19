@@ -202,6 +202,10 @@ public interface McpClient {
 
 		private boolean applyElicitationDefaults = false; // Default to false
 
+		private int maxPaginationPages = 100; // Default limit
+
+		private Duration paginationTimeout;
+
 		private SyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
 			this.transport = transport;
@@ -545,6 +549,35 @@ public interface McpClient {
 		}
 
 		/**
+		 * Sets the maximum number of pages the no-arg list operations (e.g.
+		 * {@link McpSyncClient#listTools()}) will follow before aborting. This protects
+		 * against servers that return an endless stream of non-empty pagination cursors,
+		 * which would otherwise cause unbounded requests, unbounded memory growth and a
+		 * permanently blocked synchronous call. A value of {@code 0} disables the
+		 * page-count limit.
+		 * @param maxPaginationPages the maximum number of pages to fetch.
+		 * @return this builder
+		 */
+		public SyncSpec maxPaginationPages(int maxPaginationPages) {
+			Assert.isTrue(maxPaginationPages >= 0, "maxPaginationPages must not be negative");
+			this.maxPaginationPages = maxPaginationPages;
+			return this;
+		}
+
+		/**
+		 * Sets the total wall-clock time budget for the no-arg list operations to fetch
+		 * all pages. When the budget is exceeded the operation aborts with an
+		 * {@link McpPaginationException}.
+		 * @param paginationTimeout the total time budget, or {@code null} for no timeout.
+		 * @return this builder
+		 */
+		public SyncSpec paginationTimeout(Duration paginationTimeout) {
+			Assert.notNull(paginationTimeout, "paginationTimeout must not be null");
+			this.paginationTimeout = paginationTimeout;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpSyncClient} with the provided configurations or
 		 * sensible defaults.
 		 * @return a new instance of {@link McpSyncClient}.
@@ -558,9 +591,11 @@ public interface McpClient {
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
-			return new McpSyncClient(new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout,
-					jsonSchemaValidator != null ? jsonSchemaValidator : McpJsonDefaults.getSchemaValidator(),
-					asyncFeatures), this.contextProvider);
+			return new McpSyncClient(
+					new McpAsyncClient(transport, this.requestTimeout, this.initializationTimeout,
+							jsonSchemaValidator != null ? jsonSchemaValidator : McpJsonDefaults.getSchemaValidator(),
+							asyncFeatures, new PaginationConfig(this.maxPaginationPages, this.paginationTimeout)),
+					this.contextProvider);
 		}
 
 	}
@@ -620,6 +655,10 @@ public interface McpClient {
 		private boolean enableCallToolSchemaCaching = false; // Default to false
 
 		private boolean applyElicitationDefaults = false; // Default to false
+
+		private int maxPaginationPages = 100; // Default limit
+
+		private Duration paginationTimeout;
 
 		private AsyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
@@ -951,6 +990,35 @@ public interface McpClient {
 		}
 
 		/**
+		 * Sets the maximum number of pages the no-arg list operations (e.g.
+		 * {@link McpAsyncClient#listTools()}) will follow before aborting. This protects
+		 * against servers that return an endless stream of non-empty pagination cursors,
+		 * which would otherwise cause unbounded requests, unbounded memory growth and a
+		 * permanently blocked synchronous call. A value of {@code 0} disables the
+		 * page-count limit.
+		 * @param maxPaginationPages the maximum number of pages to fetch.
+		 * @return this builder
+		 */
+		public AsyncSpec maxPaginationPages(int maxPaginationPages) {
+			Assert.isTrue(maxPaginationPages >= 0, "maxPaginationPages must not be negative");
+			this.maxPaginationPages = maxPaginationPages;
+			return this;
+		}
+
+		/**
+		 * Sets the total wall-clock time budget for the no-arg list operations to fetch
+		 * all pages. When the budget is exceeded the operation aborts with an
+		 * {@link McpPaginationException}.
+		 * @param paginationTimeout the total time budget, or {@code null} for no timeout.
+		 * @return this builder
+		 */
+		public AsyncSpec paginationTimeout(Duration paginationTimeout) {
+			Assert.notNull(paginationTimeout, "paginationTimeout must not be null");
+			this.paginationTimeout = paginationTimeout;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpAsyncClient} with the provided configurations
 		 * or sensible defaults.
 		 * @return a new instance of {@link McpAsyncClient}.
@@ -965,7 +1033,8 @@ public interface McpClient {
 							this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
 							this.elicitationCompleteConsumers, this.samplingHandler, this.formElicitationHandler,
 							this.urlElicitationHandler, this.enableCallToolSchemaCaching,
-							this.applyElicitationDefaults));
+							this.applyElicitationDefaults),
+					new PaginationConfig(this.maxPaginationPages, this.paginationTimeout));
 		}
 
 	}
