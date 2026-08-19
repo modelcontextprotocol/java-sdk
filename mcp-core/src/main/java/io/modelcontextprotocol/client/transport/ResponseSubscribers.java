@@ -237,6 +237,11 @@ class ResponseSubscribers {
 
 					this.sink.next(new SseResponseEvent(responseInfo, sseEvent));
 					this.eventBuilder.setLength(0);
+					// Per the WHATWG SSE spec, both the data buffer and the event type
+					// buffer are reset when an event is dispatched, so a stale event type
+					// must not leak into the following events.
+					this.currentEventId.set(null);
+					this.currentEventType.set(null);
 				}
 			}
 			else {
@@ -293,6 +298,9 @@ class ResponseSubscribers {
 				String eventData = this.eventBuilder.toString();
 				SseEvent sseEvent = new SseEvent(currentEventId.get(), currentEventType.get(), eventData.trim());
 				this.sink.next(new SseResponseEvent(responseInfo, sseEvent));
+				this.eventBuilder.setLength(0);
+				this.currentEventId.set(null);
+				this.currentEventType.set(null);
 			}
 			this.sink.complete();
 		}
