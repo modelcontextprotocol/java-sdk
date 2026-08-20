@@ -81,7 +81,7 @@ class HttpClientSseClientTransportTests {
 				SseMessageEndpointValidator sseMessageEndpointValidator) {
 			super(HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build(),
 					HttpRequest.newBuilder().header("Content-Type", "application/json"), baseUri, "/sse", JSON_MAPPER,
-					McpAsyncHttpClientRequestCustomizer.NOOP, sseMessageEndpointValidator);
+					McpAsyncHttpClientRequestCustomizer.NOOP, sseMessageEndpointValidator, 16 * 1024 * 1024);
 		}
 
 		public int getInboundMessageCount() {

@@ -4,6 +4,12 @@
 
 package io.modelcontextprotocol.server;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -20,6 +26,7 @@ import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTrans
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.spec.McpSchema;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
@@ -56,6 +63,7 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
 			.mcpEndpoint(MESSAGE_ENDPOINT)
 			.keepAliveInterval(Duration.ofSeconds(1))
+			.maxRequestSize(MAX_REQUEST_SIZE)
 			.build();
 
 		tomcat = TomcatTestUtil.createTomcatServer("", PORT, mcpServerTransportProvider);
@@ -146,5 +154,45 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 
 	static McpTransportContextExtractor<HttpServletRequest> TEST_CONTEXT_EXTRACTOR = (r) -> McpTransportContext
 		.create(Map.of("important", "value"));
+
+	@Test
+	void rejectsWhenBodyBytesExceedLimitWithoutContentLengthHeader() throws Exception {
+		var httpClient = HttpClient.newHttpClient();
+		// A publisher with unknown content length forces chunked transfer encoding,
+		// bypassing the Content-Length header check and exercising the body byte
+		// count
+		byte[] oversizedBody = "a".repeat(MAX_REQUEST_SIZE + 1).getBytes(StandardCharsets.UTF_8);
+		HttpRequest.BodyPublisher chunkedPublisher = new HttpRequest.BodyPublisher() {
+			@Override
+			public long contentLength() {
+				return -1;
+			}
+
+			@Override
+			public void subscribe(java.util.concurrent.Flow.Subscriber<? super ByteBuffer> subscriber) {
+				subscriber.onSubscribe(new java.util.concurrent.Flow.Subscription() {
+					@Override
+					public void request(long n) {
+						subscriber.onNext(ByteBuffer.wrap(oversizedBody));
+						subscriber.onComplete();
+					}
+
+					@Override
+					public void cancel() {
+					}
+				});
+			}
+		};
+
+		var request = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + MESSAGE_ENDPOINT))
+			.header("Content-Type", "application/json")
+			.header("Accept", "text/event-stream, application/json")
+			.POST(chunkedPublisher)
+			.build();
+
+		var response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
+		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+	}
 
 }

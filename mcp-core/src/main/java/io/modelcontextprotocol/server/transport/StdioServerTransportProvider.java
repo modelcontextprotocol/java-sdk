@@ -41,6 +41,8 @@ import reactor.core.scheduler.Schedulers;
  */
 public class StdioServerTransportProvider implements McpServerTransportProvider {
 
+	private static final int DEFAULT_INPUT_MAX_SIZE = 16 * 1024 * 1024; // 16MB
+
 	private static final Logger logger = LoggerFactory.getLogger(StdioServerTransportProvider.class);
 
 	private final McpJsonMapper jsonMapper;
@@ -48,6 +50,8 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	private final InputStream inputStream;
 
 	private final OutputStream outputStream;
+
+	private final int inputMaxSize;
 
 	private McpServerSession session;
 
@@ -72,13 +76,29 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	 * @param outputStream The output stream to write to
 	 */
 	public StdioServerTransportProvider(McpJsonMapper jsonMapper, InputStream inputStream, OutputStream outputStream) {
+		this(jsonMapper, inputStream, outputStream, DEFAULT_INPUT_MAX_SIZE);
+	}
+
+	/**
+	 * Creates a new StdioServerTransportProvider.
+	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
+	 * @param inputStream The input stream to read from
+	 * @param outputStream The output stream to write to
+	 * @param inputMaxSize The maximum number of characters read for a single inbound
+	 * message. A peer that sends a longer message (or never terminates a line) has its
+	 * message rejected instead of forcing the transport to buffer it in memory.
+	 */
+	public StdioServerTransportProvider(McpJsonMapper jsonMapper, InputStream inputStream, OutputStream outputStream,
+			int inputMaxSize) {
 		Assert.notNull(jsonMapper, "The JsonMapper can not be null");
 		Assert.notNull(inputStream, "The InputStream can not be null");
 		Assert.notNull(outputStream, "The OutputStream can not be null");
+		Assert.isTrue(inputMaxSize > 0, "inputMaxSize must be positive");
 
 		this.jsonMapper = jsonMapper;
 		this.inputStream = inputStream;
 		this.outputStream = outputStream;
+		this.inputMaxSize = inputMaxSize;
 	}
 
 	@Override
@@ -211,7 +231,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 						reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
 						while (!isClosing.get()) {
 							try {
-								String line = reader.readLine();
+								String line = readLine(reader, inputMaxSize);
 								if (line == null || isClosing.get()) {
 									break;
 								}
@@ -231,6 +251,10 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 									logIfNotClosing("Error processing inbound message", e);
 									break;
 								}
+							}
+							catch (MaxSizeExceededException e) {
+								logIfNotClosing("Inbound message exceeds the maximum allowed size", e);
+								break;
 							}
 							catch (IOException e) {
 								logIfNotClosing("Error reading from stdin", e);
@@ -303,6 +327,36 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	
 				 outboundConsumer.apply(outboundSink.asFlux()).subscribe();
 		 } // @formatter:on
+
+		/**
+		 * Read line with a max size.
+		 */
+		private static String readLine(BufferedReader reader, int maxSize)
+				throws IOException, MaxSizeExceededException {
+			StringBuilder sb = new StringBuilder();
+			int c;
+			while ((c = reader.read()) != -1) {
+				if (c == '\n') {
+					return sb.toString();
+				}
+				if (c == '\r') {
+					// Consume an optional trailing '\n' so that "\r\n" is treated as a
+					// single terminator, mirroring BufferedReader#readLine().
+					reader.mark(1);
+					int next = reader.read();
+					if (next != '\n' && next != -1) {
+						reader.reset();
+					}
+					return sb.toString();
+				}
+				if (sb.length() >= maxSize) {
+					throw new MaxSizeExceededException(
+							"Inbound message exceeds the maximum allowed size of " + maxSize + " characters");
+				}
+				sb.append((char) c);
+			}
+			return sb.isEmpty() ? null : sb.toString();
+		}
 
 		private void logIfNotClosing(String message, Exception e) {
 			if (!isClosing.get()) {

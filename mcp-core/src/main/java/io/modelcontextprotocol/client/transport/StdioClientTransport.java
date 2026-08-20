@@ -44,6 +44,8 @@ public class StdioClientTransport implements McpClientTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(StdioClientTransport.class);
 
+	private static final int DEFAULT_INPUT_MAX_SIZE = 16 * 1024 * 1024; // 16MB
+
 	// @formatter:off
 	private static final Set<Integer> EXIT_SUCCESS_CODES = Set.of(
 			0,   // success
@@ -76,6 +78,8 @@ public class StdioClientTransport implements McpClientTransport {
 
 	private final Sinks.Many<String> errorSink;
 
+	private final int inputMaxSize;
+
 	private volatile boolean isClosing = false;
 
 	// visible for tests
@@ -87,8 +91,21 @@ public class StdioClientTransport implements McpClientTransport {
 	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
 	 */
 	public StdioClientTransport(ServerParameters params, McpJsonMapper jsonMapper) {
+		this(params, jsonMapper, DEFAULT_INPUT_MAX_SIZE);
+	}
+
+	/**
+	 * Creates a new StdioClientTransport with the specified parameters and JsonMapper.
+	 * @param params The parameters for configuring the server process
+	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
+	 * @param inputMaxSize The maximum number of characters read for a single inbound
+	 * message. A peer that sends a longer message (or never terminates a line) has its
+	 * message rejected instead of forcing the transport to buffer it in memory.
+	 */
+	public StdioClientTransport(ServerParameters params, McpJsonMapper jsonMapper, int inputMaxSize) {
 		Assert.notNull(params, "The params can not be null");
 		Assert.notNull(jsonMapper, "The JsonMapper can not be null");
+		Assert.isTrue(inputMaxSize > 0, "inputMaxSize must be positive");
 
 		this.inboundSink = Sinks.many().unicast().onBackpressureBuffer();
 		this.outboundSink = Sinks.many().unicast().onBackpressureBuffer();
@@ -96,6 +113,8 @@ public class StdioClientTransport implements McpClientTransport {
 		this.params = params;
 
 		this.jsonMapper = jsonMapper;
+
+		this.inputMaxSize = inputMaxSize;
 
 		this.errorSink = Sinks.many().unicast().onBackpressureBuffer();
 
@@ -260,7 +279,7 @@ public class StdioClientTransport implements McpClientTransport {
 		this.inboundScheduler.schedule(() -> {
 			try (BufferedReader processReader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
 				String line;
-				while (!isClosing && (line = processReader.readLine()) != null) {
+				while (!isClosing && (line = readLine(processReader, inputMaxSize)) != null) {
 					try {
 						JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.jsonMapper, line);
 						if (!this.inboundSink.tryEmitNext(message).isSuccess()) {
@@ -278,6 +297,11 @@ public class StdioClientTransport implements McpClientTransport {
 					}
 				}
 			}
+			catch (MaxSizeExceededException e) {
+				if (!isClosing) {
+					logger.error("Inbound message exceeds the maximum allowed size", e);
+				}
+			}
 			catch (IOException e) {
 				if (!isClosing) {
 					logger.error("Error reading from input stream", e);
@@ -288,6 +312,37 @@ public class StdioClientTransport implements McpClientTransport {
 				inboundSink.tryEmitComplete();
 			}
 		});
+	}
+
+	/**
+	 * Reads a single line, mirroring {@link BufferedReader#readLine()}, but aborting once
+	 * more than {@code maxSize} characters have been read without encountering a line
+	 * terminator. This bounds how much memory a single inbound message can occupy.
+	 */
+	static String readLine(BufferedReader reader, int maxSize) throws IOException, MaxSizeExceededException {
+		StringBuilder sb = new StringBuilder();
+		int c;
+		while ((c = reader.read()) != -1) {
+			if (c == '\n') {
+				return sb.toString();
+			}
+			if (c == '\r') {
+				// Consume an optional trailing '\n' so that "\r\n" is treated as a
+				// single terminator, mirroring BufferedReader#readLine().
+				reader.mark(1);
+				int next = reader.read();
+				if (next != '\n' && next != -1) {
+					reader.reset();
+				}
+				return sb.toString();
+			}
+			if (sb.length() >= maxSize) {
+				throw new MaxSizeExceededException(
+						"Inbound message exceeds the maximum allowed size of " + maxSize + " characters");
+			}
+			sb.append((char) c);
+		}
+		return sb.isEmpty() ? null : sb.toString();
 	}
 
 	/**
