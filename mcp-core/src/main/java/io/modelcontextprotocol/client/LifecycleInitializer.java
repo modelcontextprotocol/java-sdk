@@ -7,7 +7,9 @@ package io.modelcontextprotocol.client;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
@@ -92,6 +94,8 @@ class LifecycleInitializer {
 	private List<String> protocolVersions;
 
 	private final AtomicReference<DefaultInitialization> initializationRef = new AtomicReference<>();
+
+	private final AtomicReference<McpSchema.InitializeRequest> storedCustomInitializeRequest = new AtomicReference<>();
 
 	/**
 	 * The max timeout to await for the client-server connection to be initialized.
@@ -257,7 +261,8 @@ class LifecycleInitializer {
 			}
 			// Providing an empty operation since we are only interested in triggering
 			// the implicit initialization step.
-			this.withInitialization("re-initializing", result -> Mono.empty()).subscribe();
+			this.withInitialization(this.storedCustomInitializeRequest.get(), "re-initializing", result -> Mono.empty())
+				.subscribe();
 		}
 	}
 
@@ -270,6 +275,26 @@ class LifecycleInitializer {
 	 * @return A Mono that completes with the result of the operation
 	 */
 	public <T> Mono<T> withInitialization(String actionName, Function<Initialization, Mono<T>> operation) {
+		return this.withInitialization(null, actionName, operation);
+	}
+
+	/**
+	 * Utility method to ensure the initialization is established before executing an
+	 * operation, using a caller-provided initialize request.
+	 * @param <T> The type of the result Mono
+	 * @param initializeRequest The initialize request to send; may be null to use the
+	 * default. Only applied when this call triggers the initialization, otherwise
+	 * ignored.
+	 * @param actionName The action to perform when the client is initialized
+	 * @param operation The operation to execute when the client is initialized
+	 * @return A Mono that completes with the result of the operation
+	 */
+	public <T> Mono<T> withInitialization(McpSchema.InitializeRequest initializeRequest, String actionName,
+			Function<Initialization, Mono<T>> operation) {
+		// Snapshot eagerly so mutating the source _meta map before subscription cannot
+		// change what is sent.
+		McpSchema.InitializeRequest sanitizedRequest = initializeRequest != null
+				? sanitizeInitializeRequest(initializeRequest) : null;
 		return Mono.deferContextual(ctx -> {
 			DefaultInitialization newInit = new DefaultInitialization();
 			DefaultInitialization previous = this.initializationRef.compareAndExchange(null, newInit);
@@ -277,8 +302,16 @@ class LifecycleInitializer {
 			boolean needsToInitialize = previous == null;
 			logger.debug(needsToInitialize ? "Initialization process started" : "Joining previous initialization");
 
-			Mono<McpSchema.InitializeResult> initializationJob = needsToInitialize
-					? this.doInitialize(newInit, this.postInitializationHook, ctx) : previous.await();
+			Mono<McpSchema.InitializeResult> initializationJob;
+			if (needsToInitialize) {
+				initializationJob = this.doInitialize(newInit, sanitizedRequest, this.postInitializationHook, ctx);
+			}
+			else {
+				if (sanitizedRequest != null) {
+					logger.debug("Custom initialize request ignored; client is already initialized");
+				}
+				initializationJob = previous.await();
+			}
 
 			return initializationJob.map(initializeResult -> this.initializationRef.get())
 				.timeout(this.initializationTimeout)
@@ -292,18 +325,42 @@ class LifecycleInitializer {
 		});
 	}
 
+	private static McpSchema.InitializeRequest sanitizeInitializeRequest(McpSchema.InitializeRequest request) {
+		if (request.meta() == null) {
+			return request;
+		}
+		return McpSchema.InitializeRequest
+			.builder(request.protocolVersion(), request.capabilities(), request.clientInfo())
+			.meta(Collections.unmodifiableMap(new HashMap<>(request.meta())))
+			.build();
+	}
+
+	private McpSchema.InitializeRequest buildInitializeRequest(McpSchema.InitializeRequest customRequest) {
+		if (customRequest != null) {
+			return customRequest;
+		}
+		String latestVersion = this.protocolVersions.get(this.protocolVersions.size() - 1);
+		return McpSchema.InitializeRequest.builder(latestVersion, this.clientCapabilities, this.clientInfo).build();
+	}
+
 	private Mono<McpSchema.InitializeResult> doInitialize(DefaultInitialization initialization,
-			Function<Initialization, Mono<Void>> postInitOperation, ContextView ctx) {
+			McpSchema.InitializeRequest customRequest, Function<Initialization, Mono<Void>> postInitOperation,
+			ContextView ctx) {
+
+		McpSchema.InitializeRequest initializeRequest = this.buildInitializeRequest(customRequest);
+
+		if (!this.protocolVersions.contains(initializeRequest.protocolVersion())) {
+			McpError error = McpError.builder(-32602)
+				.message("Unsupported protocol version")
+				.data("Unsupported protocol version in initialize request: " + initializeRequest.protocolVersion())
+				.build();
+			initialization.error(error);
+			return Mono.error(error);
+		}
 
 		initialization.setMcpClientSession(this.sessionSupplier.apply(ctx));
 
 		McpClientSession mcpClientSession = initialization.mcpSession();
-
-		String latestVersion = this.protocolVersions.get(this.protocolVersions.size() - 1);
-
-		McpSchema.InitializeRequest initializeRequest = McpSchema.InitializeRequest
-			.builder(latestVersion, this.clientCapabilities, this.clientInfo)
-			.build();
 
 		Mono<McpSchema.InitializeResult> result = mcpClientSession.sendRequest(McpSchema.METHOD_INITIALIZE,
 				initializeRequest, McpAsyncClient.INITIALIZE_RESULT_TYPE_REF);
@@ -327,6 +384,10 @@ class LifecycleInitializer {
 		}).flatMap(initializeResult -> {
 			initialization.cacheResult(initializeResult);
 			return postInitOperation.apply(initialization).thenReturn(initializeResult);
+		}).doOnNext(initializeResult -> {
+			if (customRequest != null) {
+				this.storedCustomInitializeRequest.set(customRequest);
+			}
 		}).doOnNext(initialization::complete).onErrorResume(ex -> {
 			initialization.error(ex);
 			return Mono.error(ex);
@@ -341,6 +402,7 @@ class LifecycleInitializer {
 		if (current != null) {
 			current.close();
 		}
+		this.storedCustomInitializeRequest.set(null);
 	}
 
 	/**
@@ -350,6 +412,7 @@ class LifecycleInitializer {
 	public Mono<?> closeGracefully() {
 		return Mono.defer(() -> {
 			DefaultInitialization current = this.initializationRef.getAndSet(null);
+			this.storedCustomInitializeRequest.set(null);
 			Mono<?> sessionClose = current != null ? current.closeGracefully() : Mono.empty();
 			return sessionClose;
 		});
