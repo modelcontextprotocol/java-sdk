@@ -1059,12 +1059,10 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			assertThat(mcpClient.initialize()).isNotNull();
 
 			// Attempt to list roots should fail
-			try {
-				mcpClient.callTool(McpSchema.CallToolRequest.builder("tool1").arguments(Map.of()).build());
-			}
-			catch (McpError e) {
-				assertThat(e).isInstanceOf(McpError.class).hasMessage("Roots not supported");
-			}
+			assertThatThrownBy(
+					() -> mcpClient.callTool(McpSchema.CallToolRequest.builder("tool1").arguments(Map.of()).build()))
+				.isInstanceOf(McpError.class)
+				.hasMessage("Client must be configured with roots capabilities");
 		}
 		finally {
 			mcpServer.closeGracefully();
