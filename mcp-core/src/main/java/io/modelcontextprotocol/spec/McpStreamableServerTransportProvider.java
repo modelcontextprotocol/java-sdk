@@ -4,6 +4,8 @@
 
 package io.modelcontextprotocol.spec;
 
+import java.util.List;
+
 import reactor.core.publisher.Mono;
 
 /**
@@ -65,5 +67,17 @@ public interface McpStreamableServerTransportProvider extends McpServerTransport
 	 * @return a {@link Mono} that completes when the connections have been closed.
 	 */
 	Mono<Void> closeGracefully();
+
+	/**
+	 * Streamable HTTP was introduced in protocol version {@code 2025-03-26}, so providers
+	 * of this transport cannot serve {@code 2024-11-05} clients and must not advertise
+	 * that version.
+	 * @return the protocol versions supported by Streamable HTTP transport providers
+	 */
+	@Override
+	default List<String> protocolVersions() {
+		return List.of(ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18,
+				ProtocolVersions.MCP_2025_11_25);
+	}
 
 }
