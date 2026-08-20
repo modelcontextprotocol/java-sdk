@@ -6,6 +6,8 @@ package io.modelcontextprotocol.client;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -14,11 +16,13 @@ import io.modelcontextprotocol.client.LifecycleInitializer.Initialization;
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
+import io.modelcontextprotocol.spec.McpTransportTerminatedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 import reactor.util.context.ContextView;
@@ -162,6 +166,38 @@ class LifecycleInitializerPostInitializationHookTests {
 
 		// Verify the hook was called
 		verify(mockPostInitializationHook, times(1)).apply(any(Initialization.class));
+	}
+
+	@Test
+	void shouldFailInitializationWhenTransportTerminatesDuringPostInitializationHook() throws Exception {
+		var cause = new McpTransportTerminatedException("Transport terminated during post-initialization hook");
+		var hookEntered = new CountDownLatch(1);
+		var hookGate = Sinks.<Void>one();
+
+		when(mockPostInitializationHook.apply(any(Initialization.class))).thenAnswer(invocation -> Mono.defer(() -> {
+			hookEntered.countDown();
+			return hookGate.asMono();
+		}));
+
+		var initialization = initializer.withInitialization("test", init -> Mono.just(init.initializeResult()))
+			.materialize()
+			.toFuture();
+		assertThat(hookEntered.await(1, TimeUnit.SECONDS)).isTrue();
+
+		initializer.handleException(cause);
+
+		try {
+			var signal = initialization.get(1, TimeUnit.SECONDS);
+			assertThat(signal.isOnError()).isTrue();
+			assertThat(signal.getThrowable()).hasCause(cause);
+		}
+		finally {
+			hookGate.tryEmitEmpty();
+		}
+
+		assertThat(initializer.isInitialized()).isFalse();
+		assertThat(initializer.currentInitializationResult()).isNull();
+		verify(mockClientSession).terminate(cause);
 	}
 
 	@Test

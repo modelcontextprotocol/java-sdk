@@ -10,13 +10,12 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.stream.IntStream;
 
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.McpJsonMapper;
@@ -42,6 +41,16 @@ import reactor.core.scheduler.Schedulers;
  */
 public class StdioClientTransport implements McpClientTransport {
 
+	private enum State {
+
+		NEW, STARTING, RUNNING, CLOSING, TERMINATED
+
+	}
+
+	private record Lifecycle(State state, McpStdioServerProcessExitException terminalCause) {
+
+	}
+
 	private static final Logger logger = LoggerFactory.getLogger(StdioClientTransport.class);
 
 	private static final int DEFAULT_INPUT_MAX_SIZE = 16 * 1024 * 1024; // 16MB
@@ -60,7 +69,11 @@ public class StdioClientTransport implements McpClientTransport {
 	private final Sinks.Many<JSONRPCMessage> outboundSink;
 
 	/** The server process being communicated with */
-	private Process process;
+	private volatile Process process;
+
+	private final AtomicReference<Lifecycle> lifecycle = new AtomicReference<>(new Lifecycle(State.NEW, null));
+
+	private final AtomicReference<Consumer<Throwable>> exceptionHandler = new AtomicReference<>();
 
 	private McpJsonMapper jsonMapper;
 
@@ -134,9 +147,18 @@ public class StdioClientTransport implements McpClientTransport {
 	@Override
 	public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
 		return Mono.<Void>fromRunnable(() -> {
+			Lifecycle current = this.lifecycle.get();
+			Lifecycle starting = new Lifecycle(State.STARTING, null);
+			if (current.state() != State.NEW || !this.lifecycle.compareAndSet(current, starting)) {
+				current = this.lifecycle.get();
+				if (current.terminalCause() != null) {
+					throw current.terminalCause();
+				}
+				throw new IllegalStateException(
+						"Stdio client transport cannot be connected from state " + current.state());
+			}
+
 			logger.info("MCP server starting.");
-			handleIncomingMessages(handler);
-			handleIncomingErrors();
 
 			// Prepare command and environment
 			List<String> fullCommand = new ArrayList<>();
@@ -152,19 +174,41 @@ public class StdioClientTransport implements McpClientTransport {
 				this.process = processBuilder.start();
 			}
 			catch (IOException e) {
+				this.lifecycle.compareAndSet(starting, new Lifecycle(State.NEW, null));
 				throw new RuntimeException("Failed to start process with command: " + fullCommand, e);
 			}
 
 			// Validate process streams
 			if (this.process.getInputStream() == null || process.getOutputStream() == null) {
 				this.process.destroy();
+				this.lifecycle.compareAndSet(starting, new Lifecycle(State.NEW, null));
 				throw new RuntimeException("Process input or output stream is null");
 			}
+
+			Lifecycle running = new Lifecycle(State.RUNNING, null);
+			if (!this.lifecycle.compareAndSet(starting, running)) {
+				this.process.destroy();
+				current = this.lifecycle.get();
+				if (current.terminalCause() != null) {
+					throw current.terminalCause();
+				}
+				throw new IllegalStateException(
+						"Stdio client transport startup interrupted in state " + current.state());
+			}
+			handleIncomingMessages(handler);
+			handleIncomingErrors();
 
 			// Start threads
 			startInboundProcessing();
 			startOutboundProcessing();
 			startErrorProcessing();
+			startExitMonitoring();
+			if (!this.process.isAlive()) {
+				McpStdioServerProcessExitException terminal = signalUnexpectedProcessExit(this.process.exitValue());
+				if (terminal != null) {
+					throw terminal;
+				}
+			}
 			logger.info("MCP server started");
 		}).subscribeOn(Schedulers.boundedElastic());
 	}
@@ -189,6 +233,11 @@ public class StdioClientTransport implements McpClientTransport {
 	 */
 	public void setStdErrorHandler(Consumer<String> errorHandler) {
 		this.stdErrorHandler = errorHandler;
+	}
+
+	@Override
+	public void setExceptionHandler(Consumer<Throwable> handler) {
+		this.exceptionHandler.set(handler);
 	}
 
 	/**
@@ -258,6 +307,17 @@ public class StdioClientTransport implements McpClientTransport {
 
 	@Override
 	public Mono<Void> sendMessage(JSONRPCMessage message) {
+		Lifecycle current = this.lifecycle.get();
+		if (current.terminalCause() != null) {
+			return Mono.error(current.terminalCause());
+		}
+		if ((current.state() == State.STARTING || current.state() == State.RUNNING) && this.process != null
+				&& !this.process.isAlive()) {
+			McpStdioServerProcessExitException exitException = signalUnexpectedProcessExit(this.process.exitValue());
+			if (exitException != null) {
+				return Mono.error(exitException);
+			}
+		}
 		if (this.outboundSink.tryEmitNext(message).isSuccess()) {
 			// TODO: essentially we could reschedule ourselves in some time and make
 			// another attempt with the already read data but pause reading until
@@ -267,8 +327,65 @@ public class StdioClientTransport implements McpClientTransport {
 			return Mono.empty();
 		}
 		else {
+			current = this.lifecycle.get();
+			if (current.terminalCause() != null) {
+				return Mono.error(current.terminalCause());
+			}
 			return Mono.error(new RuntimeException("Failed to enqueue message"));
 		}
+	}
+
+	private void startExitMonitoring() {
+		this.process.onExit().thenAccept(process -> {
+			while (true) {
+				Lifecycle current = this.lifecycle.get();
+				if (current.state() == State.TERMINATED) {
+					return;
+				}
+				if (current.state() == State.CLOSING) {
+					if (this.lifecycle.compareAndSet(current, new Lifecycle(State.TERMINATED, null))) {
+						return;
+					}
+					continue;
+				}
+				signalUnexpectedProcessExit(process.exitValue());
+				return;
+			}
+		});
+	}
+
+	private McpStdioServerProcessExitException signalUnexpectedProcessExit(int exitCode) {
+		McpStdioServerProcessExitException exception = new McpStdioServerProcessExitException(exitCode,
+				this.params.getCommand());
+		while (true) {
+			Lifecycle current = this.lifecycle.get();
+			if (current.terminalCause() != null) {
+				return current.terminalCause();
+			}
+			if (current.state() == State.CLOSING || current.state() == State.TERMINATED) {
+				return null;
+			}
+			if (this.lifecycle.compareAndSet(current, new Lifecycle(State.TERMINATED, exception))) {
+				break;
+			}
+		}
+
+		logger.warn(exception.getMessage());
+		this.isClosing = true;
+		this.inboundSink.tryEmitComplete();
+		this.outboundSink.tryEmitComplete();
+		this.errorSink.tryEmitComplete();
+
+		Consumer<Throwable> handler = this.exceptionHandler.get();
+		if (handler != null) {
+			try {
+				handler.accept(exception);
+			}
+			catch (RuntimeException handlerFailure) {
+				logger.error("Transport exception handler failed", handlerFailure);
+			}
+		}
+		return exception;
 	}
 
 	/**
@@ -402,7 +519,9 @@ public class StdioClientTransport implements McpClientTransport {
 	@Override
 	public Mono<Void> closeGracefully() {
 		return Mono.fromRunnable(() -> {
-			isClosing = true;
+			this.lifecycle.updateAndGet(
+					current -> current.state() == State.TERMINATED ? current : new Lifecycle(State.CLOSING, null));
+			this.isClosing = true;
 			logger.debug("Initiating graceful shutdown");
 		}).then(Mono.<Void>defer(() -> {
 			// First complete all sinks to stop accepting new messages
@@ -443,7 +562,11 @@ public class StdioClientTransport implements McpClientTransport {
 			catch (Exception e) {
 				logger.error("Error during graceful shutdown", e);
 			}
-		})).then().subscribeOn(Schedulers.boundedElastic());
+		}))
+			.doFinally(signalType -> this.lifecycle.updateAndGet(
+					current -> current.state() == State.CLOSING ? new Lifecycle(State.TERMINATED, null) : current))
+			.then()
+			.subscribeOn(Schedulers.boundedElastic());
 	}
 
 	public Sinks.Many<String> getErrorSink() {
