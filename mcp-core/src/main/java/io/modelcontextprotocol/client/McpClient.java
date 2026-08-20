@@ -270,7 +270,9 @@ public interface McpClient {
 		 * @param roots A list of root definitions. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if roots is null
+		 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		public SyncSpec roots(List<Root> roots) {
 			Assert.notNull(roots, "Roots must not be null");
 			for (Root root : roots) {
@@ -286,7 +288,9 @@ public interface McpClient {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if roots is null
 		 * @see #roots(List)
+		 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		public SyncSpec roots(Root... roots) {
 			Assert.notNull(roots, "Roots must not be null");
 			for (Root root : roots) {
@@ -303,7 +307,9 @@ public interface McpClient {
 		 * results. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if samplingHandler is null
+		 * @deprecated Sampling is deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		public SyncSpec sampling(Function<CreateMessageRequest, CreateMessageResult> samplingHandler) {
 			Assert.notNull(samplingHandler, "Sampling handler must not be null");
 			this.samplingHandler = samplingHandler;
@@ -408,7 +414,9 @@ public interface McpClient {
 		 * @param loggingConsumer A consumer that receives logging messages. Must not be
 		 * null.
 		 * @return This builder instance for method chaining
+		 * @deprecated Logging is deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		public SyncSpec loggingConsumer(Consumer<McpSchema.LoggingMessageNotification> loggingConsumer) {
 			Assert.notNull(loggingConsumer, "Logging consumer must not be null");
 			this.loggingConsumers.add(loggingConsumer);
@@ -422,7 +430,9 @@ public interface McpClient {
 		 * @param loggingConsumers A list of consumers that receive logging messages. Must
 		 * not be null.
 		 * @return This builder instance for method chaining
+		 * @deprecated Logging is deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		public SyncSpec loggingConsumers(List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers) {
 			Assert.notNull(loggingConsumers, "Logging consumers must not be null");
 			this.loggingConsumers.addAll(loggingConsumers);
@@ -689,7 +699,9 @@ public interface McpClient {
 		 * @param roots A list of root definitions. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if roots is null
+		 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		public AsyncSpec roots(List<Root> roots) {
 			Assert.notNull(roots, "Roots must not be null");
 			for (Root root : roots) {
@@ -705,7 +717,9 @@ public interface McpClient {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if roots is null
 		 * @see #roots(List)
+		 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		public AsyncSpec roots(Root... roots) {
 			Assert.notNull(roots, "Roots must not be null");
 			for (Root root : roots) {
@@ -722,7 +736,9 @@ public interface McpClient {
 		 * results. Must not be null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if samplingHandler is null
+		 * @deprecated Sampling is deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		public AsyncSpec sampling(Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler) {
 			Assert.notNull(samplingHandler, "Sampling handler must not be null");
 			this.samplingHandler = samplingHandler;
@@ -829,7 +845,9 @@ public interface McpClient {
 		 * @param loggingConsumer A consumer that receives logging messages. Must not be
 		 * null.
 		 * @return This builder instance for method chaining
+		 * @deprecated Logging is deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		public AsyncSpec loggingConsumer(Function<McpSchema.LoggingMessageNotification, Mono<Void>> loggingConsumer) {
 			Assert.notNull(loggingConsumer, "Logging consumer must not be null");
 			this.loggingConsumers.add(loggingConsumer);
@@ -843,7 +861,9 @@ public interface McpClient {
 		 * @param loggingConsumers A list of consumers that receive logging messages. Must
 		 * not be null.
 		 * @return This builder instance for method chaining
+		 * @deprecated Logging is deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		public AsyncSpec loggingConsumers(
 				List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers) {
 			Assert.notNull(loggingConsumers, "Logging consumers must not be null");

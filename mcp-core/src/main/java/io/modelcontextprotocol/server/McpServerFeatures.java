@@ -44,7 +44,7 @@ public class McpServerFeatures {
 			Map<String, McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpServerFeatures.AsyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions,
-			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
+			@Deprecated List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers,
 			String instructions) {
 
 		/**
@@ -58,7 +58,10 @@ public class McpServerFeatures {
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
 		 * @param instructions The server instructions text
+		 * @deprecated Roots and logging are deprecated in the 2026-07-28 MCP
+		 * specification.
 		 */
+		@Deprecated
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpServerFeatures.AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
 				Map<String, McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
@@ -161,7 +164,8 @@ public class McpServerFeatures {
 			Map<String, McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpServerFeatures.SyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpServerFeatures.SyncCompletionSpecification> completions,
-			List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers, String instructions) {
+			@Deprecated List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers,
+			String instructions) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -174,7 +178,10 @@ public class McpServerFeatures {
 		 * @param rootsChangeConsumers The list of consumers that will be notified when
 		 * the roots list changes
 		 * @param instructions The server instructions text
+		 * @deprecated Roots and logging are deprecated in the 2026-07-28 MCP
+		 * specification.
 		 */
+		@Deprecated
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpServerFeatures.SyncToolSpecification> tools,
 				Map<String, McpServerFeatures.SyncResourceSpecification> resources,
