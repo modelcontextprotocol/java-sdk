@@ -211,7 +211,7 @@ public class StdioClientTransport implements McpClientTransport {
 	private void startErrorProcessing() {
 		this.errorScheduler.schedule(() -> {
 			try (BufferedReader processErrorReader = new BufferedReader(
-					new InputStreamReader(process.getErrorStream()))) {
+					new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
 				String line;
 				while (!isClosing && (line = processErrorReader.readLine()) != null) {
 					try {
@@ -277,7 +277,8 @@ public class StdioClientTransport implements McpClientTransport {
 	 */
 	private void startInboundProcessing() {
 		this.inboundScheduler.schedule(() -> {
-			try (BufferedReader processReader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+			try (BufferedReader processReader = new BufferedReader(
+					new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
 				String line;
 				while (!isClosing && (line = readLine(processReader, inputMaxSize)) != null) {
 					try {
