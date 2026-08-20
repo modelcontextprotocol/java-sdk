@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server;
@@ -139,6 +139,7 @@ import reactor.core.publisher.Mono;
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
  * @author Jihoon Kim
+ * @author Taewoong Kim
  * @see McpAsyncServer
  * @see McpSyncServer
  * @see McpServerTransportProvider
@@ -1605,13 +1606,13 @@ public interface McpServer {
 		/**
 		 * Adds a single tool with its implementation handler to the server. This is a
 		 * convenience method for registering individual tools without creating a
-		 * {@link McpServerFeatures.AsyncToolSpecification} explicitly.
+		 * {@link McpStatelessServerFeatures.AsyncToolSpecification} explicitly.
 		 * @param tool The tool definition including name, description, and schema. Must
 		 * not be null.
 		 * @param callHandler The function that implements the tool's logic. Must not be
-		 * null. The function's first argument is an {@link McpAsyncServerExchange} upon
-		 * which the server can interact with the connected client. The second argument is
-		 * the {@link McpSchema.CallToolRequest} object containing the tool call
+		 * null. The function's first argument is an {@link McpTransportContext} for the
+		 * current request. The second argument is the {@link McpSchema.CallToolRequest}
+		 * object containing the tool call
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
@@ -1658,9 +1659,9 @@ public interface McpServer {
 		 * <p>
 		 * Example usage: <pre>{@code
 		 * .tools(
-		 *     McpServerFeatures.AsyncToolSpecification.builder().tool(calculatorTool).callTool(calculatorHandler).build(),
-		 *     McpServerFeatures.AsyncToolSpecification.builder().tool(weatherTool).callTool(weatherHandler).build(),
-		 *     McpServerFeatures.AsyncToolSpecification.builder().tool(fileManagerTool).callTool(fileManagerHandler).build()
+		 *     McpStatelessServerFeatures.AsyncToolSpecification.builder().tool(calculatorTool).callTool(calculatorHandler).build(),
+		 *     McpStatelessServerFeatures.AsyncToolSpecification.builder().tool(weatherTool).callTool(weatherHandler).build(),
+		 *     McpStatelessServerFeatures.AsyncToolSpecification.builder().tool(fileManagerTool).callTool(fileManagerHandler).build()
 		 * )
 		 * }</pre>
 		 * @param toolSpecifications The tool specifications to add. Must not be null.
@@ -1731,9 +1732,9 @@ public interface McpServer {
 		 * <p>
 		 * Example usage: <pre>{@code
 		 * .resources(
-		 *     new McpServerFeatures.AsyncResourceSpecification(fileResource, fileHandler),
-		 *     new McpServerFeatures.AsyncResourceSpecification(dbResource, dbHandler),
-		 *     new McpServerFeatures.AsyncResourceSpecification(apiResource, apiHandler)
+		 *     new McpStatelessServerFeatures.AsyncResourceSpecification(fileResource, fileHandler),
+		 *     new McpStatelessServerFeatures.AsyncResourceSpecification(dbResource, dbHandler),
+		 *     new McpStatelessServerFeatures.AsyncResourceSpecification(apiResource, apiHandler)
 		 * )
 		 * }</pre>
 		 * @param resourceSpecifications The resource specifications to add. Must not be
@@ -1791,9 +1792,9 @@ public interface McpServer {
 		 *
 		 * <p>
 		 * Example usage: <pre>{@code
-		 * .prompts(Map.of("analysis", new McpServerFeatures.AsyncPromptSpecification(
+		 * .prompts(Map.of("analysis", new McpStatelessServerFeatures.AsyncPromptSpecification(
 		 *     new Prompt("analysis", "Code analysis template"),
-		 *     request -> Mono.fromSupplier(() -> generateAnalysisPrompt(request))
+		 *     (context, request) -> Mono.fromSupplier(() -> generateAnalysisPrompt(request))
 		 *         .map(GetPromptResult::new)
 		 * )));
 		 * }</pre>
@@ -1831,9 +1832,9 @@ public interface McpServer {
 		 * <p>
 		 * Example usage: <pre>{@code
 		 * .prompts(
-		 *     new McpServerFeatures.AsyncPromptSpecification(analysisPrompt, analysisHandler),
-		 *     new McpServerFeatures.AsyncPromptSpecification(summaryPrompt, summaryHandler),
-		 *     new McpServerFeatures.AsyncPromptSpecification(reviewPrompt, reviewHandler)
+		 *     new McpStatelessServerFeatures.AsyncPromptSpecification(analysisPrompt, analysisHandler),
+		 *     new McpStatelessServerFeatures.AsyncPromptSpecification(summaryPrompt, summaryHandler),
+		 *     new McpStatelessServerFeatures.AsyncPromptSpecification(reviewPrompt, reviewHandler)
 		 * )
 		 * }</pre>
 		 * @param prompts The prompt specifications to add. Must not be null.
@@ -1908,7 +1909,8 @@ public interface McpServer {
 
 		public McpStatelessAsyncServer build() {
 			var features = new McpStatelessServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
-					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions);
+					this.resources, this.resourceTemplates, this.prompts, this.completions, null, null, null, null,
+					false, this.instructions);
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
 					: McpJsonDefaults.getSchemaValidator();
 
@@ -1979,6 +1981,14 @@ public interface McpServer {
 		final Map<String, McpStatelessServerFeatures.SyncPromptSpecification> prompts = new HashMap<>();
 
 		final Map<McpSchema.CompleteReference, McpStatelessServerFeatures.SyncCompletionSpecification> completions = new HashMap<>();
+
+		ToolsRepository toolsRepository;
+
+		ResourcesRepository resourcesRepository;
+
+		PromptsRepository promptsRepository;
+
+		CompletionsRepository completionsRepository;
 
 		Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
 
@@ -2105,13 +2115,13 @@ public interface McpServer {
 		/**
 		 * Adds a single tool with its implementation handler to the server. This is a
 		 * convenience method for registering individual tools without creating a
-		 * {@link McpServerFeatures.SyncToolSpecification} explicitly.
+		 * {@link McpStatelessServerFeatures.SyncToolSpecification} explicitly.
 		 * @param tool The tool definition including name, description, and schema. Must
 		 * not be null.
 		 * @param callHandler The function that implements the tool's logic. Must not be
-		 * null. The function's first argument is an {@link McpSyncServerExchange} upon
-		 * which the server can interact with the connected client. The second argument is
-		 * the {@link McpSchema.CallToolRequest} object containing the tool call
+		 * null. The function's first argument is an {@link McpTransportContext} for the
+		 * current request. The second argument is the {@link McpSchema.CallToolRequest}
+		 * object containing the tool call
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
@@ -2120,6 +2130,7 @@ public interface McpServer {
 
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(callHandler, "Handler must not be null");
+			assertNoRepository(this.toolsRepository, "toolsRepository", "Static tool registrations");
 			validateToolName(tool.name());
 			assertNoDuplicateTool(tool.name());
 
@@ -2141,6 +2152,7 @@ public interface McpServer {
 		public StatelessSyncSpecification tools(
 				List<McpStatelessServerFeatures.SyncToolSpecification> toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
+			assertNoRepository(this.toolsRepository, "toolsRepository", "Static tool registrations");
 
 			for (var tool : toolSpecifications) {
 				validateToolName(tool.tool().name());
@@ -2158,9 +2170,9 @@ public interface McpServer {
 		 * <p>
 		 * Example usage: <pre>{@code
 		 * .tools(
-		 *     McpServerFeatures.SyncToolSpecification.builder().tool(calculatorTool).callTool(calculatorHandler).build(),
-		 *     McpServerFeatures.SyncToolSpecification.builder().tool(weatherTool).callTool(weatherHandler).build(),
-		 *     McpServerFeatures.SyncToolSpecification.builder().tool(fileManagerTool).callTool(fileManagerHandler).build()
+		 *     McpStatelessServerFeatures.SyncToolSpecification.builder().tool(calculatorTool).callTool(calculatorHandler).build(),
+		 *     McpStatelessServerFeatures.SyncToolSpecification.builder().tool(weatherTool).callTool(weatherHandler).build(),
+		 *     McpStatelessServerFeatures.SyncToolSpecification.builder().tool(fileManagerTool).callTool(fileManagerHandler).build()
 		 * )
 		 * }</pre>
 		 * @param toolSpecifications The tool specifications to add. Must not be null.
@@ -2170,6 +2182,7 @@ public interface McpServer {
 		public StatelessSyncSpecification tools(
 				McpStatelessServerFeatures.SyncToolSpecification... toolSpecifications) {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
+			assertNoRepository(this.toolsRepository, "toolsRepository", "Static tool registrations");
 
 			for (var tool : toolSpecifications) {
 				validateToolName(tool.tool().name());
@@ -2190,6 +2203,19 @@ public interface McpServer {
 		}
 
 		/**
+		 * Sets the repository used to list, resolve, and call tools for each stateless
+		 * request. Static tool registrations cannot be mixed with a tools repository.
+		 * @param toolsRepository The tools repository. Must not be null.
+		 * @return This builder instance for method chaining
+		 */
+		public StatelessSyncSpecification toolsRepository(ToolsRepository toolsRepository) {
+			Assert.notNull(toolsRepository, "Tools repository must not be null");
+			assertNoStaticRegistrations(!this.tools.isEmpty(), "toolsRepository", "static tool registrations");
+			this.toolsRepository = toolsRepository;
+			return this;
+		}
+
+		/**
 		 * Registers multiple resources with their handlers using a Map. This method is
 		 * useful when resources are dynamically generated or loaded from a configuration
 		 * source.
@@ -2202,6 +2228,7 @@ public interface McpServer {
 		public StatelessSyncSpecification resources(
 				Map<String, McpStatelessServerFeatures.SyncResourceSpecification> resourceSpecifications) {
 			Assert.notNull(resourceSpecifications, "Resource handlers map must not be null");
+			assertNoRepository(this.resourcesRepository, "resourcesRepository", "Static resource registrations");
 			this.resources.putAll(resourceSpecifications);
 			return this;
 		}
@@ -2218,6 +2245,7 @@ public interface McpServer {
 		public StatelessSyncSpecification resources(
 				List<McpStatelessServerFeatures.SyncResourceSpecification> resourceSpecifications) {
 			Assert.notNull(resourceSpecifications, "Resource handlers list must not be null");
+			assertNoRepository(this.resourcesRepository, "resourcesRepository", "Static resource registrations");
 			for (var resource : resourceSpecifications) {
 				this.resources.put(resource.resource().uri(), resource);
 			}
@@ -2231,9 +2259,9 @@ public interface McpServer {
 		 * <p>
 		 * Example usage: <pre>{@code
 		 * .resources(
-		 *     new McpServerFeatures.SyncResourceSpecification(fileResource, fileHandler),
-		 *     new McpServerFeatures.SyncResourceSpecification(dbResource, dbHandler),
-		 *     new McpServerFeatures.SyncResourceSpecification(apiResource, apiHandler)
+		 *     new McpStatelessServerFeatures.SyncResourceSpecification(fileResource, fileHandler),
+		 *     new McpStatelessServerFeatures.SyncResourceSpecification(dbResource, dbHandler),
+		 *     new McpStatelessServerFeatures.SyncResourceSpecification(apiResource, apiHandler)
 		 * )
 		 * }</pre>
 		 * @param resourceSpecifications The resource specifications to add. Must not be
@@ -2244,6 +2272,7 @@ public interface McpServer {
 		public StatelessSyncSpecification resources(
 				McpStatelessServerFeatures.SyncResourceSpecification... resourceSpecifications) {
 			Assert.notNull(resourceSpecifications, "Resource handlers list must not be null");
+			assertNoRepository(this.resourcesRepository, "resourcesRepository", "Static resource registrations");
 			for (var resource : resourceSpecifications) {
 				this.resources.put(resource.resource().uri(), resource);
 			}
@@ -2261,6 +2290,8 @@ public interface McpServer {
 		public StatelessSyncSpecification resourceTemplates(
 				List<McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplatesSpec) {
 			Assert.notNull(resourceTemplatesSpec, "Resource templates must not be null");
+			assertNoRepository(this.resourcesRepository, "resourcesRepository",
+					"Static resource template registrations");
 			for (var resourceTemplate : resourceTemplatesSpec) {
 				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
 			}
@@ -2278,9 +2309,26 @@ public interface McpServer {
 		public StatelessSyncSpecification resourceTemplates(
 				McpStatelessServerFeatures.SyncResourceTemplateSpecification... resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
+			assertNoRepository(this.resourcesRepository, "resourcesRepository",
+					"Static resource template registrations");
 			for (McpStatelessServerFeatures.SyncResourceTemplateSpecification resourceTemplate : resourceTemplates) {
 				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
 			}
+			return this;
+		}
+
+		/**
+		 * Sets the repository used to list, resolve, and read resources and resource
+		 * templates for each stateless request. Static resource and resource-template
+		 * registrations cannot be mixed with a resources repository.
+		 * @param resourcesRepository The resources repository. Must not be null.
+		 * @return This builder instance for method chaining
+		 */
+		public StatelessSyncSpecification resourcesRepository(ResourcesRepository resourcesRepository) {
+			Assert.notNull(resourcesRepository, "Resources repository must not be null");
+			assertNoStaticRegistrations(!this.resources.isEmpty() || !this.resourceTemplates.isEmpty(),
+					"resourcesRepository", "static resource or resource template registrations");
+			this.resourcesRepository = resourcesRepository;
 			return this;
 		}
 
@@ -2291,10 +2339,9 @@ public interface McpServer {
 		 *
 		 * <p>
 		 * Example usage: <pre>{@code
-		 * .prompts(Map.of("analysis", new McpServerFeatures.SyncPromptSpecification(
+		 * .prompts(Map.of("analysis", new McpStatelessServerFeatures.SyncPromptSpecification(
 		 *     new Prompt("analysis", "Code analysis template"),
-		 *     request -> Mono.fromSupplier(() -> generateAnalysisPrompt(request))
-		 *         .map(GetPromptResult::new)
+		 *     (context, request) -> generateAnalysisPrompt(request)
 		 * )));
 		 * }</pre>
 		 * @param prompts Map of prompt name to specification. Must not be null.
@@ -2304,6 +2351,7 @@ public interface McpServer {
 		public StatelessSyncSpecification prompts(
 				Map<String, McpStatelessServerFeatures.SyncPromptSpecification> prompts) {
 			Assert.notNull(prompts, "Prompts map must not be null");
+			assertNoRepository(this.promptsRepository, "promptsRepository", "Static prompt registrations");
 			this.prompts.putAll(prompts);
 			return this;
 		}
@@ -2318,6 +2366,7 @@ public interface McpServer {
 		 */
 		public StatelessSyncSpecification prompts(List<McpStatelessServerFeatures.SyncPromptSpecification> prompts) {
 			Assert.notNull(prompts, "Prompts list must not be null");
+			assertNoRepository(this.promptsRepository, "promptsRepository", "Static prompt registrations");
 			for (var prompt : prompts) {
 				this.prompts.put(prompt.prompt().name(), prompt);
 			}
@@ -2331,9 +2380,9 @@ public interface McpServer {
 		 * <p>
 		 * Example usage: <pre>{@code
 		 * .prompts(
-		 *     new McpServerFeatures.SyncPromptSpecification(analysisPrompt, analysisHandler),
-		 *     new McpServerFeatures.SyncPromptSpecification(summaryPrompt, summaryHandler),
-		 *     new McpServerFeatures.SyncPromptSpecification(reviewPrompt, reviewHandler)
+		 *     new McpStatelessServerFeatures.SyncPromptSpecification(analysisPrompt, analysisHandler),
+		 *     new McpStatelessServerFeatures.SyncPromptSpecification(summaryPrompt, summaryHandler),
+		 *     new McpStatelessServerFeatures.SyncPromptSpecification(reviewPrompt, reviewHandler)
 		 * )
 		 * }</pre>
 		 * @param prompts The prompt specifications to add. Must not be null.
@@ -2342,9 +2391,23 @@ public interface McpServer {
 		 */
 		public StatelessSyncSpecification prompts(McpStatelessServerFeatures.SyncPromptSpecification... prompts) {
 			Assert.notNull(prompts, "Prompts list must not be null");
+			assertNoRepository(this.promptsRepository, "promptsRepository", "Static prompt registrations");
 			for (var prompt : prompts) {
 				this.prompts.put(prompt.prompt().name(), prompt);
 			}
+			return this;
+		}
+
+		/**
+		 * Sets the repository used to list, resolve, and get prompts for each stateless
+		 * request. Static prompt registrations cannot be mixed with a prompts repository.
+		 * @param promptsRepository The prompts repository. Must not be null.
+		 * @return This builder instance for method chaining
+		 */
+		public StatelessSyncSpecification promptsRepository(PromptsRepository promptsRepository) {
+			Assert.notNull(promptsRepository, "Prompts repository must not be null");
+			assertNoStaticRegistrations(!this.prompts.isEmpty(), "promptsRepository", "static prompt registrations");
+			this.promptsRepository = promptsRepository;
 			return this;
 		}
 
@@ -2358,6 +2421,7 @@ public interface McpServer {
 		public StatelessSyncSpecification completions(
 				List<McpStatelessServerFeatures.SyncCompletionSpecification> completions) {
 			Assert.notNull(completions, "Completions list must not be null");
+			assertNoRepository(this.completionsRepository, "completionsRepository", "Static completion registrations");
 			for (var completion : completions) {
 				this.completions.put(completion.referenceKey(), completion);
 			}
@@ -2374,9 +2438,24 @@ public interface McpServer {
 		public StatelessSyncSpecification completions(
 				McpStatelessServerFeatures.SyncCompletionSpecification... completions) {
 			Assert.notNull(completions, "Completions list must not be null");
+			assertNoRepository(this.completionsRepository, "completionsRepository", "Static completion registrations");
 			for (var completion : completions) {
 				this.completions.put(completion.referenceKey(), completion);
 			}
+			return this;
+		}
+
+		/**
+		 * Sets the repository used to complete stateless completion requests. Static
+		 * completion registrations cannot be mixed with a completions repository.
+		 * @param completionsRepository The completions repository. Must not be null.
+		 * @return This builder instance for method chaining
+		 */
+		public StatelessSyncSpecification completionsRepository(CompletionsRepository completionsRepository) {
+			Assert.notNull(completionsRepository, "Completions repository must not be null");
+			assertNoStaticRegistrations(!this.completions.isEmpty(), "completionsRepository",
+					"static completion registrations");
+			this.completionsRepository = completionsRepository;
 			return this;
 		}
 
@@ -2407,7 +2486,7 @@ public interface McpServer {
 		}
 
 		/**
-		 * Enable on "immediate execution" of the operations on the underlying
+		 * Enables immediate execution of operations on the underlying
 		 * {@link McpStatelessAsyncServer}. Defaults to false, which does blocking code
 		 * offloading to prevent accidental blocking of the non-blocking transport.
 		 * <p>
@@ -2424,7 +2503,8 @@ public interface McpServer {
 
 		public McpStatelessSyncServer build() {
 			var syncFeatures = new McpStatelessServerFeatures.Sync(this.serverInfo, this.serverCapabilities, this.tools,
-					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions);
+					this.resources, this.resourceTemplates, this.prompts, this.completions, this.toolsRepository,
+					this.resourcesRepository, this.promptsRepository, this.completionsRepository, this.instructions);
 			var asyncFeatures = McpStatelessServerFeatures.Async.fromSync(syncFeatures, this.immediateExecution);
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
 					: McpJsonDefaults.getSchemaValidator();
@@ -2434,9 +2514,24 @@ public interface McpServer {
 			var asyncServer = new McpStatelessAsyncServer(transport,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, requestTimeout,
 					uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
-			return new McpStatelessSyncServer(asyncServer, this.immediateExecution);
+			return new McpStatelessSyncServer(asyncServer);
 		}
 
+	}
+
+	private static void assertNoStaticRegistrations(boolean hasStaticRegistrations, String repositoryName,
+			String registrationsName) {
+		if (hasStaticRegistrations) {
+			throw new IllegalStateException(
+					repositoryName + " cannot be configured together with " + registrationsName);
+		}
+	}
+
+	private static void assertNoRepository(Object repository, String repositoryName, String registrationsName) {
+		if (repository != null) {
+			throw new IllegalStateException(
+					registrationsName + " cannot be configured together with " + repositoryName);
+		}
 	}
 
 	private static void validateAsyncToolSchemas(JsonSchemaValidator validator,
