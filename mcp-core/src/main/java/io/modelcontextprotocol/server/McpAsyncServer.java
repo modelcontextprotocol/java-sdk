@@ -136,7 +136,7 @@ public class McpAsyncServer {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
-		this.serverCapabilities = features.serverCapabilities().mutate().logging().build();
+		this.serverCapabilities = features.serverCapabilities();
 		this.instructions = features.instructions();
 		this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, features.tools()));
 		this.resources.putAll(features.resources());
@@ -167,7 +167,7 @@ public class McpAsyncServer {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
-		this.serverCapabilities = features.serverCapabilities().mutate().logging().build();
+		this.serverCapabilities = features.serverCapabilities();
 		this.instructions = features.instructions();
 		this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, features.tools()));
 		this.resources.putAll(features.resources());
