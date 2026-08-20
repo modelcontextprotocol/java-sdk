@@ -32,7 +32,9 @@ class DefaultMcpStatelessServerHandler implements McpStatelessServerHandler {
 			McpSchema.JSONRPCRequest request) {
 		McpStatelessRequestHandler<?> requestHandler = this.requestHandlers.get(request.method());
 		if (requestHandler == null) {
-			return Mono.error(new McpError("Missing handler for request type: " + request.method()));
+			return Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
+					new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
+							"Method not found: " + request.method(), null)));
 		}
 		return requestHandler.handle(transportContext, request.params())
 			.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))

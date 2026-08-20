@@ -650,6 +650,46 @@ class HttpServletStatelessIntegrationTests {
 		mcpServer.close();
 	}
 
+	@Test
+	void testMissingHandlerReturnsMethodNotFoundError() throws Exception {
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().tools(true).build())
+			.build();
+
+		// "server/discover" has no registered handler, and neither do the capabilities
+		// this server does not advertise
+		McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
+				"server/discover", "test", null);
+
+		MockHttpServletRequest request = new MockHttpServletRequest("POST", CUSTOM_MESSAGE_ENDPOINT);
+		MockHttpServletResponse response = new MockHttpServletResponse();
+
+		byte[] content = JSON_MAPPER.writeValueAsBytes(jsonrpcRequest);
+		request.setContent(content);
+		request.addHeader("Content-Length", Integer.toString(content.length));
+		request.addHeader("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM);
+		request.addHeader("Content-Type", APPLICATION_JSON);
+		request.addHeader("Cache-Control", "no-cache");
+		request.addHeader(HttpHeaders.PROTOCOL_VERSION, ProtocolVersions.MCP_2025_03_26);
+
+		mcpStatelessServerTransport.service(request, response);
+
+		assertThat(response.getStatus()).isEqualTo(HttpServletResponse.SC_OK);
+
+		McpSchema.JSONRPCResponse jsonrpcResponse = JSON_MAPPER.readValue(response.getContentAsByteArray(),
+				McpSchema.JSONRPCResponse.class);
+
+		assertThat(jsonrpcResponse).isNotNull();
+		assertThat(jsonrpcResponse.id()).isEqualTo("test");
+		assertThat(jsonrpcResponse.result()).isNull();
+		assertThat(jsonrpcResponse.error()).isNotNull();
+		assertThat(jsonrpcResponse.error().code()).isEqualTo(ErrorCodes.METHOD_NOT_FOUND);
+		assertThat(jsonrpcResponse.error().message()).isEqualTo("Method not found: server/discover");
+
+		mcpServer.close();
+	}
+
 	// ---------------------------------------
 	// Bounded read
 	// ---------------------------------------
