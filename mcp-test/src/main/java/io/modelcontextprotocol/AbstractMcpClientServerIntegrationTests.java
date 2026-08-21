@@ -49,6 +49,7 @@ import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
+import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.util.Utils;
 import net.javacrumbs.jsonunit.core.Option;
 import org.junit.jupiter.api.Test;
@@ -68,6 +69,8 @@ import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 
 public abstract class AbstractMcpClientServerIntegrationTests {
+
+	protected static final int MAX_REQUEST_SIZE = 2048;
 
 	abstract protected McpServer.AsyncSpecification<?> prepareAsyncServerBuilder();
 
@@ -2192,6 +2195,48 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			mcpServer.notifyResourcesUpdated(new McpSchema.ResourcesUpdatedNotification(resourceUri));
 
 			assertThat(notificationCount.get()).as("no notification should be received after unsubscribing").isZero();
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	// Bounded read
+	@Test
+	void testRejectsWhenContentLengthHeaderExceedsLimit() throws Exception {
+		String inputSchema = """
+					{
+						"type": "object",
+						"properties": {
+							"message": { "type": "string" }
+						},
+						"required": ["message"]
+					}
+				""";
+
+		McpServerFeatures.SyncToolSpecification tool1 = McpServerFeatures.SyncToolSpecification.builder()
+			.tool(Tool.builder("tool1", McpJsonDefaults.getMapper(), inputSchema)
+				.description("tool1 description")
+				.build())
+			.callHandler((exchange, request) -> CallToolResult.builder()
+				.addContent(TextContent.builder(request.arguments().get("message").toString()).build())
+				.build())
+			.build();
+
+		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().tools(false).build())
+			.tools(tool1)
+			.build();
+
+		try (var mcpClient = getMcpClientBuilder().build()) {
+			String oversizedBody = "a".repeat(MAX_REQUEST_SIZE + 1);
+
+			mcpClient.initialize();
+			assertThat(mcpClient.listTools().tools()).contains(tool1.tool());
+
+			assertThatThrownBy(() -> mcpClient.callTool(
+					McpSchema.CallToolRequest.builder("tool1").arguments(Map.of("message", oversizedBody)).build()))
+				.isInstanceOf(RuntimeException.class)
+				.hasMessageContaining("413");
 		}
 		finally {
 			mcpServer.closeGracefully();

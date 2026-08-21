@@ -11,24 +11,25 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -244,6 +245,49 @@ class StdioServerTransportProviderTests {
 			.create(Mono.delay(java.time.Duration.ofMillis(500)).then(Mono.fromCallable(() -> testErr.toString())))
 			.assertNext(errorOutput -> assertThat(errorOutput).contains("Error processing inbound message"))
 			.verifyComplete();
+	}
+
+	@Test
+	void shouldRejectInboundMessageExceedingMaxSize() throws Exception {
+		// A line larger than the configured limit that never terminates with a newline.
+		// BufferedReader#readLine would buffer the whole thing; the bounded reader must
+		// abort instead.
+		int maxSize = 1024;
+		String oversized = "a".repeat(maxSize + 10);
+		InputStream stream = new ByteArrayInputStream(oversized.getBytes(StandardCharsets.UTF_8));
+
+		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getMapper(), stream, testOutPrintStream,
+				maxSize);
+
+		AtomicReference<McpSchema.JSONRPCMessage> capturedMessage = new AtomicReference<>();
+		McpServerSession.Factory realSessionFactory = transport -> {
+			McpServerSession session = mock(McpServerSession.class);
+			when(session.handle(any())).thenAnswer(invocation -> {
+				capturedMessage.set(invocation.getArgument(0));
+				return Mono.empty();
+			});
+			when(session.closeGracefully()).thenReturn(Mono.empty());
+			return session;
+		};
+
+		transportProvider.setSessionFactory(realSessionFactory);
+
+		Awaitility.await()
+			.atMost(Duration.ofSeconds(5))
+			.pollInterval(Duration.ofMillis(100))
+			.untilAsserted(
+					() -> assertThat(testErr.toString()).contains("Inbound message exceeds the maximum allowed size"));
+
+		// message is never processed
+		assertThat(capturedMessage.get()).isNull();
+	}
+
+	@Test
+	void shouldRejectNonPositiveMaxSize() {
+		assertThatThrownBy(
+				() -> new StdioServerTransportProvider(McpJsonDefaults.getMapper(), System.in, System.out, 0))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("inputMaxSize must be positive");
 	}
 
 	@Test
