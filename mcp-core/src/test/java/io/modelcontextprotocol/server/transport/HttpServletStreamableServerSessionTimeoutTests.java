@@ -4,10 +4,10 @@
 
 package io.modelcontextprotocol.server.transport;
 
-import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.PrintWriter;
-import java.io.StringReader;
 import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.Map;
@@ -20,6 +20,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import jakarta.servlet.AsyncContext;
 import jakarta.servlet.AsyncEvent;
 import jakarta.servlet.AsyncListener;
+import jakarta.servlet.ReadListener;
+import jakarta.servlet.ServletInputStream;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.Test;
@@ -269,8 +271,10 @@ class HttpServletStreamableServerSessionTimeoutTests {
 		when(request.getRequestURI()).thenReturn("/mcp");
 		when(request.getHeader("Accept")).thenReturn("text/event-stream, application/json");
 		when(request.getHeaderNames()).thenReturn(Collections.emptyEnumeration());
-		when(request.getReader()).thenReturn(new BufferedReader(new StringReader(this.jsonMapper.writeValueAsString(
-				new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, "init-1", testInitializeRequest())))));
+		when(request.getInputStream()).thenReturn(servletInputStream(this.jsonMapper
+			.writeValueAsString(
+					new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, "init-1", testInitializeRequest()))
+			.getBytes(StandardCharsets.UTF_8)));
 		when(response.getWriter()).thenReturn(new PrintWriter(new StringWriter(), true));
 
 		provider.doPost(request, response);
@@ -286,12 +290,44 @@ class HttpServletStreamableServerSessionTimeoutTests {
 		when(request.getHeader("Accept")).thenReturn("text/event-stream, application/json");
 		when(request.getHeader(HttpHeaders.MCP_SESSION_ID)).thenReturn(sessionId);
 		when(request.getHeaderNames()).thenReturn(Collections.emptyEnumeration());
-		when(request.getReader()).thenReturn(new BufferedReader(new StringReader(this.jsonMapper
-			.writeValueAsString(new McpSchema.JSONRPCNotification("notifications/test", Map.of("value", "test"))))));
+		when(request.getInputStream()).thenReturn(servletInputStream(this.jsonMapper
+			.writeValueAsString(new McpSchema.JSONRPCNotification("notifications/test", Map.of("value", "test")))
+			.getBytes(StandardCharsets.UTF_8)));
 
 		provider.doPost(request, response);
 
 		verify(response).setStatus(HttpServletResponse.SC_ACCEPTED);
+	}
+
+	private static ServletInputStream servletInputStream(byte[] data) {
+		ByteArrayInputStream delegate = new ByteArrayInputStream(data);
+		return new ServletInputStream() {
+
+			@Override
+			public boolean isFinished() {
+				return delegate.available() == 0;
+			}
+
+			@Override
+			public boolean isReady() {
+				return true;
+			}
+
+			@Override
+			public void setReadListener(ReadListener readListener) {
+			}
+
+			@Override
+			public int read() {
+				return delegate.read();
+			}
+
+			@Override
+			public int read(byte[] b, int off, int len) {
+				return delegate.read(b, off, len);
+			}
+
+		};
 	}
 
 	private McpStreamableServerSession createSession(String sessionId, AtomicBoolean closed,
