@@ -449,6 +449,14 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 					return;
 				}
 
+				String sessionId = request.getHeader(HttpHeaders.MCP_SESSION_ID);
+				if (sessionId != null && this.sessions.containsKey(sessionId)) {
+					this.responseJsonRpcError(response, HttpServletResponse.SC_BAD_REQUEST, jsonrpcRequest.id(),
+							McpSchema.ErrorCodes.INVALID_REQUEST,
+							"Duplicate initialize request for active session: " + sessionId);
+					return;
+				}
+
 				McpSchema.InitializeRequest initializeRequest = jsonMapper.convertValue(jsonrpcRequest.params(),
 						new TypeRef<McpSchema.InitializeRequest>() {
 						});
@@ -568,6 +576,18 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error processing message");
 			}
 		}
+	}
+
+	private void responseJsonRpcError(HttpServletResponse response, int httpCode, Object requestId, int errorCode,
+			String message) throws IOException {
+		response.setContentType(APPLICATION_JSON);
+		response.setCharacterEncoding(UTF_8);
+		response.setStatus(httpCode);
+		McpSchema.JSONRPCResponse errorResponse = McpSchema.JSONRPCResponse.error(requestId,
+				new McpSchema.JSONRPCResponse.JSONRPCError(errorCode, message));
+		PrintWriter writer = response.getWriter();
+		writer.write(this.jsonMapper.writeValueAsString(errorResponse));
+		writer.flush();
 	}
 
 	/**
