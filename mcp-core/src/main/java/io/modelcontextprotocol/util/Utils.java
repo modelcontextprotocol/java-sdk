@@ -8,7 +8,7 @@ import java.net.URI;
 import java.util.Collection;
 import java.util.Map;
 
-import reactor.util.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Miscellaneous utility methods.
