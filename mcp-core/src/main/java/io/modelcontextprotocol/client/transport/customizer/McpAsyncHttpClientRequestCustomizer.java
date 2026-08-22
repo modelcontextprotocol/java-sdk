@@ -8,9 +8,9 @@ import java.net.URI;
 import java.net.http.HttpRequest;
 
 import org.reactivestreams.Publisher;
+import org.jspecify.annotations.Nullable;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-import reactor.util.annotation.Nullable;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 

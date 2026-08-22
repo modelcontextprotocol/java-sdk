@@ -8,7 +8,6 @@ import java.util.Optional;
 import org.reactivestreams.Publisher;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
-import reactor.util.annotation.Nullable;
 
 /**
  * Represents a closed MCP session, which may not be reused.
