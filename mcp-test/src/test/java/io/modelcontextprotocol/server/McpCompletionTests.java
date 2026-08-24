@@ -13,16 +13,15 @@ import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.server.transport.HttpServletSseServerTransportProvider;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
+import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CompleteRequest;
 import io.modelcontextprotocol.spec.McpSchema.CompleteResult;
@@ -30,12 +29,17 @@ import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.Prompt;
 import io.modelcontextprotocol.spec.McpSchema.PromptArgument;
+import io.modelcontextprotocol.spec.McpSchema.PromptReference;
 import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
 import io.modelcontextprotocol.spec.McpSchema.Resource;
 import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
-import io.modelcontextprotocol.spec.McpSchema.PromptReference;
+import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
-import io.modelcontextprotocol.spec.McpError;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.InstanceOfAssertFactories.type;
 
 /**
  * Tests for completion functionality with context support.
@@ -97,11 +101,9 @@ class McpCompletionTests {
 			return new CompleteResult(new CompleteResult.CompleteCompletion(List.of("test-completion"), 1, false));
 		};
 
-		ResourceReference resourceRef = new ResourceReference(ResourceReference.TYPE, "test://resource/{param}");
+		ResourceReference resourceRef = new ResourceReference("test://resource/{param}");
 
-		var resource = Resource.builder()
-			.uri("test://resource/{param}")
-			.name("Test Resource")
+		var resource = Resource.builder("test://resource/{param}", "Test Resource")
 			.description("A resource for testing")
 			.mimeType("text/plain")
 			.size(123L)
@@ -110,19 +112,21 @@ class McpCompletionTests {
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.resources(new McpServerFeatures.SyncResourceSpecification(resource,
-					(exchange, req) -> new ReadResourceResult(List.of())))
+					(exchange, req) -> ReadResourceResult.builder(List.of()).build()))
 			.completions(new McpServerFeatures.SyncCompletionSpecification(resourceRef, completionHandler))
 			.build();
 
-		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample " + "client", "0.0.0").build())
 			.build();) {
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
 
 			// Test with context
-			CompleteRequest request = new CompleteRequest(resourceRef,
-					new CompleteRequest.CompleteArgument("param", "test"), null,
-					new CompleteRequest.CompleteContext(Map.of("previous", "value")));
+			CompleteRequest request = CompleteRequest
+				.builder(resourceRef, new CompleteRequest.CompleteArgument("param", "test"))
+				.context(new CompleteRequest.CompleteContext(Map.of("previous", "value")))
+				.build();
 
 			CompleteResult result = mcpClient.completeCompletion(request);
 
@@ -144,31 +148,181 @@ class McpCompletionTests {
 					new CompleteResult.CompleteCompletion(List.of("no-context-completion"), 1, false));
 		};
 
-		McpSchema.Prompt prompt = new Prompt("test-prompt", "this is a test prompt",
-				List.of(new PromptArgument("arg", "string", false)));
+		McpSchema.Prompt prompt = Prompt.builder("test-prompt")
+			.description("this is a test prompt")
+			.arguments(List.of(PromptArgument.builder("arg").description("string").required(false).build()))
+			.build();
 
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.prompts(new McpServerFeatures.SyncPromptSpecification(prompt,
 					(mcpSyncServerExchange, getPromptRequest) -> null))
-			.completions(new McpServerFeatures.SyncCompletionSpecification(
-					new PromptReference(PromptReference.TYPE, "test-prompt"), completionHandler))
+			.completions(new McpServerFeatures.SyncCompletionSpecification(new PromptReference("test-prompt"),
+					completionHandler))
 			.build();
 
-		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample " + "client", "0.0.0").build())
 			.build();) {
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
 
 			// Test without context
-			CompleteRequest request = new CompleteRequest(new PromptReference(PromptReference.TYPE, "test-prompt"),
-					new CompleteRequest.CompleteArgument("arg", "val"));
+			CompleteRequest request = CompleteRequest
+				.builder(new PromptReference("test-prompt"), new CompleteRequest.CompleteArgument("arg", "val"))
+				.build();
 
 			CompleteResult result = mcpClient.completeCompletion(request);
 
 			// Verify context was null
 			assertThat(contextWasNull.get()).isTrue();
 			assertThat(result.completion().values()).containsExactly("no-context-completion");
+		}
+
+		mcpServer.close();
+	}
+
+	@Test
+	void testCompletionWithoutMatchingHandlerReturnsEmptyResult() {
+		BiFunction<McpSyncServerExchange, CompleteRequest, CompleteResult> completionHandler = (exchange,
+				request) -> new CompleteResult(new CompleteResult.CompleteCompletion(List.of("java"), 1, false));
+
+		McpSchema.Prompt prompt = Prompt.builder("code_review")
+			.description("this is a code review prompt")
+			.arguments(List.of(PromptArgument.builder("language").description("string").required(false).build()))
+			.build();
+
+		McpSchema.Prompt otherPrompt = Prompt.builder("other_prompt")
+			.description("this prompt has completions")
+			.arguments(List.of(PromptArgument.builder("topic").description("string").required(false).build()))
+			.build();
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.prompts(
+					new McpServerFeatures.SyncPromptSpecification(prompt,
+							(mcpSyncServerExchange, getPromptRequest) -> null),
+					new McpServerFeatures.SyncPromptSpecification(otherPrompt,
+							(mcpSyncServerExchange, getPromptRequest) -> null))
+			.completions(new McpServerFeatures.SyncCompletionSpecification(new PromptReference("other_prompt"),
+					completionHandler))
+			.build();
+
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample " + "client", "0.0.0").build())
+			.build();) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = CompleteRequest
+				.builder(new PromptReference("code_review"), new CompleteRequest.CompleteArgument("language", "ja"))
+				.build();
+
+			CompleteResult result = mcpClient.completeCompletion(request);
+
+			assertThat(result.completion().values()).isEmpty();
+			assertThat(result.completion().total()).isZero();
+			assertThat(result.completion().hasMore()).isFalse();
+		}
+
+		mcpServer.close();
+	}
+
+	@Test
+	void testResourceTemplateCompletionWithoutMatchingHandlerReturnsEmptyResult() {
+		BiFunction<McpSyncServerExchange, CompleteRequest, CompleteResult> completionHandler = (exchange,
+				request) -> new CompleteResult(new CompleteResult.CompleteCompletion(List.of("java"), 1, false));
+
+		ResourceTemplate template = ResourceTemplate.builder("test://resource/{param}", "Test Resource")
+			.description("A resource template for testing")
+			.mimeType("text/plain")
+			.build();
+
+		ResourceTemplate otherTemplate = ResourceTemplate.builder("test://other/{param}", "Other Resource")
+			.description("A resource template with completions")
+			.mimeType("text/plain")
+			.build();
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.resourceTemplates(
+					new McpServerFeatures.SyncResourceTemplateSpecification(template,
+							(exchange, req) -> ReadResourceResult.builder(List.of()).build()),
+					new McpServerFeatures.SyncResourceTemplateSpecification(otherTemplate,
+							(exchange, req) -> ReadResourceResult.builder(List.of()).build()))
+			.completions(new McpServerFeatures.SyncCompletionSpecification(
+					new ResourceReference("test://other/{param}"), completionHandler))
+			.build();
+
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample " + "client", "0.0.0").build())
+			.build();) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = CompleteRequest
+				.builder(new ResourceReference("test://resource/{param}"),
+						new CompleteRequest.CompleteArgument("param", "ja"))
+				.build();
+
+			CompleteResult result = mcpClient.completeCompletion(request);
+
+			assertThat(result.completion().values()).isEmpty();
+			assertThat(result.completion().total()).isZero();
+			assertThat(result.completion().hasMore()).isFalse();
+		}
+
+		mcpServer.close();
+	}
+
+	@Test
+	void testCompletionForNonExistentPromptReturnsInvalidParams() {
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.build();
+
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample " + "client", "0.0.0").build())
+			.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = CompleteRequest
+				.builder(new PromptReference("nonexistent-prompt"), new CompleteRequest.CompleteArgument("arg", "val"))
+				.build();
+
+			assertThatThrownBy(() -> mcpClient.completeCompletion(request)).isInstanceOf(McpError.class)
+				.asInstanceOf(type(McpError.class))
+				.extracting(McpError::getJsonRpcError)
+				.extracting(McpSchema.JSONRPCResponse.JSONRPCError::code)
+				.isEqualTo(ErrorCodes.INVALID_PARAMS);
+		}
+
+		mcpServer.close();
+	}
+
+	@Test
+	void testCompletionForNonExistentResourceReturnsResourceNotFound() {
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.build();
+
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample " + "client", "0.0.0").build())
+			.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = CompleteRequest
+				.builder(new ResourceReference("test://nonexistent/{param}"),
+						new CompleteRequest.CompleteArgument("param", "val"))
+				.build();
+
+			assertThatThrownBy(() -> mcpClient.completeCompletion(request)).isInstanceOf(McpError.class)
+				.asInstanceOf(type(McpError.class))
+				.extracting(McpError::getJsonRpcError)
+				.extracting(McpSchema.JSONRPCResponse.JSONRPCError::code)
+				.isEqualTo(McpSchema.ErrorCodes.RESOURCE_NOT_FOUND);
 		}
 
 		mcpServer.close();
@@ -204,9 +358,7 @@ class McpCompletionTests {
 			return new CompleteResult(new CompleteResult.CompleteCompletion(List.of(), 0, false));
 		};
 
-		McpSchema.Resource resource = Resource.builder()
-			.uri("db://{database}/{table}")
-			.name("Database Table")
+		McpSchema.Resource resource = Resource.builder("db://{database}/{table}", "Database Table")
 			.description("Resource representing a table in a database")
 			.mimeType("application/json")
 			.size(456L)
@@ -215,38 +367,42 @@ class McpCompletionTests {
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.resources(new McpServerFeatures.SyncResourceSpecification(resource,
-					(exchange, req) -> new ReadResourceResult(List.of())))
+					(exchange, req) -> ReadResourceResult.builder(List.of()).build()))
 			.completions(new McpServerFeatures.SyncCompletionSpecification(
-					new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"), completionHandler))
+					new ResourceReference("db://{database}/{table}"), completionHandler))
 			.build();
 
-		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample " + "client", "0.0.0").build())
 			.build();) {
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
 
 			// First, complete database
-			CompleteRequest dbRequest = new CompleteRequest(
-					new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"),
-					new CompleteRequest.CompleteArgument("database", ""));
+			CompleteRequest dbRequest = CompleteRequest
+				.builder(new ResourceReference("db://{database}/{table}"),
+						new CompleteRequest.CompleteArgument("database", ""))
+				.build();
 
 			CompleteResult dbResult = mcpClient.completeCompletion(dbRequest);
 			assertThat(dbResult.completion().values()).contains("users_db", "products_db");
 
 			// Then complete table with database context
-			CompleteRequest tableRequest = new CompleteRequest(
-					new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"),
-					new CompleteRequest.CompleteArgument("table", ""),
-					new CompleteRequest.CompleteContext(Map.of("database", "users_db")));
+			CompleteRequest tableRequest = CompleteRequest
+				.builder(new ResourceReference("db://{database}/{table}"),
+						new CompleteRequest.CompleteArgument("table", ""))
+				.context(new CompleteRequest.CompleteContext(Map.of("database", "users_db")))
+				.build();
 
 			CompleteResult tableResult = mcpClient.completeCompletion(tableRequest);
 			assertThat(tableResult.completion().values()).containsExactly("users", "sessions", "permissions");
 
 			// Different database gives different tables
-			CompleteRequest tableRequest2 = new CompleteRequest(
-					new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"),
-					new CompleteRequest.CompleteArgument("table", ""),
-					new CompleteRequest.CompleteContext(Map.of("database", "products_db")));
+			CompleteRequest tableRequest2 = CompleteRequest
+				.builder(new ResourceReference("db://{database}/{table}"),
+						new CompleteRequest.CompleteArgument("table", ""))
+				.context(new CompleteRequest.CompleteContext(Map.of("database", "products_db")))
+				.build();
 
 			CompleteResult tableResult2 = mcpClient.completeCompletion(tableRequest2);
 			assertThat(tableResult2.completion().values()).containsExactly("products", "categories", "inventory");
@@ -281,9 +437,7 @@ class McpCompletionTests {
 			return new CompleteResult(new CompleteResult.CompleteCompletion(List.of(), 0, false));
 		};
 
-		McpSchema.Resource resource = Resource.builder()
-			.uri("db://{database}/{table}")
-			.name("Database Table")
+		McpSchema.Resource resource = Resource.builder("db://{database}/{table}", "Database Table")
 			.description("Resource representing a table in a database")
 			.mimeType("application/json")
 			.size(456L)
@@ -292,33 +446,69 @@ class McpCompletionTests {
 		var mcpServer = McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.resources(new McpServerFeatures.SyncResourceSpecification(resource,
-					(exchange, req) -> new ReadResourceResult(List.of())))
+					(exchange, req) -> ReadResourceResult.builder(List.of()).build()))
 			.completions(new McpServerFeatures.SyncCompletionSpecification(
-					new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"), completionHandler))
+					new ResourceReference("db://{database}/{table}"), completionHandler))
 			.build();
 
-		try (var mcpClient = clientBuilder.clientInfo(new McpSchema.Implementation("Sample" + "client", "0.0.0"))
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample" + "client", "0.0.0").build())
 			.build();) {
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
 
 			// Try to complete table without database context - should raise error
-			CompleteRequest requestWithoutContext = new CompleteRequest(
-					new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"),
-					new CompleteRequest.CompleteArgument("table", ""));
+			CompleteRequest requestWithoutContext = CompleteRequest
+				.builder(new ResourceReference("db://{database}/{table}"),
+						new CompleteRequest.CompleteArgument("table", ""))
+				.build();
 
 			assertThatExceptionOfType(McpError.class)
 				.isThrownBy(() -> mcpClient.completeCompletion(requestWithoutContext))
 				.withMessageContaining("Please select a database first");
 
 			// Now complete with proper context - should work normally
-			CompleteRequest requestWithContext = new CompleteRequest(
-					new ResourceReference(ResourceReference.TYPE, "db://{database}/{table}"),
-					new CompleteRequest.CompleteArgument("table", ""),
-					new CompleteRequest.CompleteContext(Map.of("database", "test_db")));
+			CompleteRequest requestWithContext = CompleteRequest
+				.builder(new ResourceReference("db://{database}/{table}"),
+						new CompleteRequest.CompleteArgument("table", ""))
+				.context(new CompleteRequest.CompleteContext(Map.of("database", "test_db")))
+				.build();
 
 			CompleteResult resultWithContext = mcpClient.completeCompletion(requestWithContext);
 			assertThat(resultWithContext.completion().values()).containsExactly("users", "orders", "products");
+		}
+
+		mcpServer.close();
+	}
+
+	@Test
+	void testPromptWithoutArgumentsCompletionForArgument() {
+		BiFunction<McpSyncServerExchange, CompleteRequest, CompleteResult> completionHandler = (exchange,
+				request) -> new CompleteResult(new CompleteResult.CompleteCompletion(List.of("test"), 1, false));
+
+		McpSchema.Prompt prompt = Prompt.builder("test-prompt").description("this is a test prompt").build();
+
+		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.prompts(new McpServerFeatures.SyncPromptSpecification(prompt,
+					(mcpSyncServerExchange, getPromptRequest) -> null))
+			.completions(new McpServerFeatures.SyncCompletionSpecification(new PromptReference("test-prompt"),
+					completionHandler))
+			.build();
+
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample " + "client", "0.0.0").build())
+			.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// try completing an argument knowing that the prompt is not parameterized
+			CompleteRequest request = CompleteRequest
+				.builder(new PromptReference("test-prompt"), new CompleteRequest.CompleteArgument("arg", "val"))
+				.build();
+
+			CompleteResult completeResult = mcpClient.completeCompletion(request);
+			assertThat(completeResult.completion().values()).isEmpty();
 		}
 
 		mcpServer.close();

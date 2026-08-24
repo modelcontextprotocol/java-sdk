@@ -55,8 +55,7 @@ class McpClientSessionTests {
 		// Verify response handling
 		StepVerifier.create(responseMono).then(() -> {
 			McpSchema.JSONRPCRequest request = transport.getLastSentMessageAsRequest();
-			transport.simulateIncomingMessage(
-					new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), responseData, null));
+			transport.simulateIncomingMessage(McpSchema.JSONRPCResponse.result(request.id(), responseData));
 		}).consumeNextWith(response -> {
 			// Verify the request was sent
 			McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessageAsRequest();
@@ -84,9 +83,8 @@ class McpClientSessionTests {
 			McpSchema.JSONRPCRequest request = transport.getLastSentMessageAsRequest();
 			// Simulate error response
 			McpSchema.JSONRPCResponse.JSONRPCError error = new McpSchema.JSONRPCResponse.JSONRPCError(
-					McpSchema.ErrorCodes.METHOD_NOT_FOUND, "Method not found", null);
-			transport.simulateIncomingMessage(
-					new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null, error));
+					McpSchema.ErrorCodes.METHOD_NOT_FOUND, "Method not found");
+			transport.simulateIncomingMessage(McpSchema.JSONRPCResponse.error(request.id(), error));
 		}).expectError(McpError.class).verify();
 
 		session.close();
@@ -140,8 +138,7 @@ class McpClientSessionTests {
 		var session = new McpClientSession(TIMEOUT, transport, requestHandlers, Map.of(), Function.identity());
 
 		// Simulate incoming request
-		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, ECHO_METHOD,
-				"test-id", echoMessage);
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(ECHO_METHOD, "test-id", echoMessage);
 		transport.simulateIncomingMessage(request);
 
 		// Verify response
@@ -166,8 +163,8 @@ class McpClientSessionTests {
 		// Simulate incoming notification from the server
 		Map<String, Object> notificationParams = Map.of("status", "ready");
 
-		McpSchema.JSONRPCNotification notification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
-				TEST_NOTIFICATION, notificationParams);
+		McpSchema.JSONRPCNotification notification = new McpSchema.JSONRPCNotification(TEST_NOTIFICATION,
+				notificationParams);
 
 		transport.simulateIncomingMessage(notification);
 
@@ -186,8 +183,7 @@ class McpClientSessionTests {
 				Function.identity());
 
 		// Simulate incoming request for unknown method
-		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, "unknown.method",
-				"test-id", null);
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest("unknown.method", "test-id");
 		transport.simulateIncomingMessage(request);
 
 		// Verify error response
@@ -214,8 +210,7 @@ class McpClientSessionTests {
 				Function.identity());
 
 		// Simulate incoming request that will trigger the error
-		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, testMethod,
-				"test-id", null);
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(testMethod, "test-id");
 		transport.simulateIncomingMessage(request);
 
 		// Verify: The response should contain the custom error from McpError
@@ -242,8 +237,7 @@ class McpClientSessionTests {
 				Function.identity());
 
 		// Simulate incoming request that will trigger the error
-		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, testMethod,
-				"test-id", null);
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(testMethod, "test-id");
 		transport.simulateIncomingMessage(request);
 
 		// Verify: The response should contain INTERNAL_ERROR with aggregated exception
@@ -276,8 +270,7 @@ class McpClientSessionTests {
 				Function.identity());
 
 		// Simulate incoming request that will trigger the error
-		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, testMethod,
-				"test-id", null);
+		McpSchema.JSONRPCRequest request = new McpSchema.JSONRPCRequest(testMethod, "test-id");
 		transport.simulateIncomingMessage(request);
 
 		// Verify: The response should contain INTERNAL_ERROR with full exception chain

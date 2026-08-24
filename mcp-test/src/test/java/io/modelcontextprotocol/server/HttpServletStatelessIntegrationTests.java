@@ -4,19 +4,35 @@
 
 package io.modelcontextprotocol.server;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.function.Function;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.spec.HttpHeaders;
+import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.CompleteRequest;
@@ -26,10 +42,14 @@ import io.modelcontextprotocol.spec.McpSchema.InitializeResult;
 import io.modelcontextprotocol.spec.McpSchema.Prompt;
 import io.modelcontextprotocol.spec.McpSchema.PromptArgument;
 import io.modelcontextprotocol.spec.McpSchema.PromptReference;
+import io.modelcontextprotocol.spec.McpSchema.ReadResourceResult;
+import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
+import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.ProtocolVersions;
+import jakarta.servlet.http.HttpServletResponse;
 import net.javacrumbs.jsonunit.core.Option;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
@@ -38,8 +58,12 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -52,6 +76,8 @@ import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.awaitility.Awaitility.await;
 
 @Timeout(15)
@@ -61,9 +87,16 @@ class HttpServletStatelessIntegrationTests {
 
 	private static final String CUSTOM_MESSAGE_ENDPOINT = "/otherPath/mcp/message";
 
+	private static final int MAX_REQUEST_SIZE = 2048;
+
 	private HttpServletStatelessServerTransport mcpStatelessServerTransport;
 
-	ConcurrentHashMap<String, McpClient.SyncSpec> clientBuilders = new ConcurrentHashMap<>();
+	private final McpClient.SyncSpec clientBuilder = McpClient
+		.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
+			.endpoint(CUSTOM_MESSAGE_ENDPOINT)
+			.build())
+		.initializationTimeout(Duration.ofHours(10))
+		.requestTimeout(Duration.ofHours(10));
 
 	private Tomcat tomcat;
 
@@ -71,6 +104,7 @@ class HttpServletStatelessIntegrationTests {
 	public void before() {
 		this.mcpStatelessServerTransport = HttpServletStatelessServerTransport.builder()
 			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
+			.maxRequestSize(MAX_REQUEST_SIZE)
 			.build();
 
 		tomcat = TomcatTestUtil.createTomcatServer("", PORT, mcpStatelessServerTransport);
@@ -81,12 +115,6 @@ class HttpServletStatelessIntegrationTests {
 		catch (Exception e) {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
-
-		clientBuilders
-			.put("httpclient",
-					McpClient.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
-						.endpoint(CUSTOM_MESSAGE_ENDPOINT)
-						.build()).initializationTimeout(Duration.ofHours(10)).requestTimeout(Duration.ofHours(10)));
 	}
 
 	@AfterEach
@@ -108,18 +136,14 @@ class HttpServletStatelessIntegrationTests {
 	// ---------------------------------------
 	// Tools Tests
 	// ---------------------------------------
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
-	void testToolCallSuccess(String clientType) {
-
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testToolCallSuccess() {
 		var callResponse = CallToolResult.builder()
-			.content(List.of(new McpSchema.TextContent("CALL RESPONSE")))
+			.content(List.of(McpSchema.TextContent.builder("CALL RESPONSE").build()))
 			.isError(false)
 			.build();
 		McpStatelessServerFeatures.SyncToolSpecification tool1 = new McpStatelessServerFeatures.SyncToolSpecification(
-				Tool.builder().name("tool1").title("tool1 description").inputSchema(EMPTY_JSON_SCHEMA).build(),
+				Tool.builder("tool1", EMPTY_JSON_SCHEMA).title("tool1 description").build(),
 				(transportContext, request) -> {
 					// perform a blocking call to a remote service
 					String response = RestClient.create()
@@ -143,7 +167,8 @@ class HttpServletStatelessIntegrationTests {
 
 			assertThat(mcpClient.listTools().tools()).contains(tool1.tool());
 
-			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("tool1", Map.of()));
+			CallToolResult response = mcpClient
+				.callTool(McpSchema.CallToolRequest.builder("tool1").arguments(Map.of()).build());
 
 			assertThat(response).isNotNull();
 			assertThat(response).isEqualTo(callResponse);
@@ -153,12 +178,8 @@ class HttpServletStatelessIntegrationTests {
 		}
 	}
 
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
-	void testInitialize(String clientType) {
-
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testInitialize() {
 		var mcpServer = McpServer.sync(mcpStatelessServerTransport).build();
 
 		try (var mcpClient = clientBuilder.build()) {
@@ -173,31 +194,33 @@ class HttpServletStatelessIntegrationTests {
 	// ---------------------------------------
 	// Completion Tests
 	// ---------------------------------------
-	@ParameterizedTest(name = "{0} : Completion call")
-	@ValueSource(strings = { "httpclient" })
-	void testCompletionShouldReturnExpectedSuggestions(String clientType) {
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testCompletionShouldReturnExpectedSuggestions() {
 		var expectedValues = List.of("python", "pytorch", "pyside");
 		var completionResponse = new CompleteResult(new CompleteResult.CompleteCompletion(expectedValues, 10, // total
 				true // hasMore
 		));
 
-		AtomicReference<CompleteRequest> samplingRequest = new AtomicReference<>();
+		AtomicReference<CompleteRequest> completeRequest = new AtomicReference<>();
 		BiFunction<McpTransportContext, CompleteRequest, CompleteResult> completionHandler = (transportContext,
 				request) -> {
-			samplingRequest.set(request);
+			completeRequest.set(request);
 			return completionResponse;
 		};
 
 		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
 			.capabilities(ServerCapabilities.builder().completions().build())
-			.prompts(new McpStatelessServerFeatures.SyncPromptSpecification(
-					new Prompt("code_review", "Code review", "this is code review prompt",
-							List.of(new PromptArgument("language", "Language", "string", false))),
-					(transportContext, getPromptRequest) -> null))
+			.prompts(new McpStatelessServerFeatures.SyncPromptSpecification(Prompt.builder("code_review")
+				.title("Code review")
+				.description("this is code review prompt")
+				.arguments(List.of(PromptArgument.builder("language")
+					.title("Language")
+					.description("string")
+					.required(false)
+					.build()))
+				.build(), (transportContext, getPromptRequest) -> null))
 			.completions(new McpStatelessServerFeatures.SyncCompletionSpecification(
-					new PromptReference(PromptReference.TYPE, "code_review", "Code review"), completionHandler))
+					PromptReference.builder("code_review").title("Code review").build(), completionHandler))
 			.build();
 
 		try (var mcpClient = clientBuilder.build()) {
@@ -205,17 +228,167 @@ class HttpServletStatelessIntegrationTests {
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
 
-			CompleteRequest request = new CompleteRequest(
-					new PromptReference(PromptReference.TYPE, "code_review", "Code review"),
-					new CompleteRequest.CompleteArgument("language", "py"));
+			CompleteRequest request = CompleteRequest
+				.builder(PromptReference.builder("code_review").title("Code review").build(),
+						new CompleteRequest.CompleteArgument("language", "py"))
+				.build();
 
 			CompleteResult result = mcpClient.completeCompletion(request);
 
 			assertThat(result).isNotNull();
 
-			assertThat(samplingRequest.get().argument().name()).isEqualTo("language");
-			assertThat(samplingRequest.get().argument().value()).isEqualTo("py");
-			assertThat(samplingRequest.get().ref().type()).isEqualTo(PromptReference.TYPE);
+			assertThat(completeRequest.get().argument().name()).isEqualTo("language");
+			assertThat(completeRequest.get().argument().value()).isEqualTo("py");
+			assertThat(completeRequest.get().ref().type()).isEqualTo(PromptReference.TYPE);
+		}
+		finally {
+			mcpServer.close();
+		}
+	}
+
+	@Test
+	void testCompletionWithoutMatchingHandlerReturnsEmptyResult() {
+		BiFunction<McpTransportContext, CompleteRequest, CompleteResult> completionHandler = (transportContext,
+				request) -> new CompleteResult(new CompleteResult.CompleteCompletion(List.of("java"), 1, false));
+
+		var prompt = Prompt.builder("code_review")
+			.title("Code review")
+			.description("this is code review prompt")
+			.arguments(List
+				.of(PromptArgument.builder("language").title("Language").description("string").required(false).build()))
+			.build();
+
+		var otherPrompt = Prompt.builder("other_prompt")
+			.title("Other prompt")
+			.description("this prompt has completions")
+			.arguments(List
+				.of(PromptArgument.builder("topic").title("Topic").description("string").required(false).build()))
+			.build();
+
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.prompts(
+					new McpStatelessServerFeatures.SyncPromptSpecification(prompt,
+							(transportContext, getPromptRequest) -> null),
+					new McpStatelessServerFeatures.SyncPromptSpecification(otherPrompt,
+							(transportContext, getPromptRequest) -> null))
+			.completions(new McpStatelessServerFeatures.SyncCompletionSpecification(
+					PromptReference.builder("other_prompt").title("Other prompt").build(), completionHandler))
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = CompleteRequest
+				.builder(PromptReference.builder("code_review").title("Code review").build(),
+						new CompleteRequest.CompleteArgument("language", "ja"))
+				.build();
+
+			CompleteResult result = mcpClient.completeCompletion(request);
+
+			assertThat(result.completion().values()).isEmpty();
+			assertThat(result.completion().total()).isZero();
+			assertThat(result.completion().hasMore()).isFalse();
+		}
+		finally {
+			mcpServer.close();
+		}
+	}
+
+	@Test
+	void testResourceTemplateCompletionWithoutMatchingHandlerReturnsEmptyResult() {
+		BiFunction<McpTransportContext, CompleteRequest, CompleteResult> completionHandler = (transportContext,
+				request) -> new CompleteResult(new CompleteResult.CompleteCompletion(List.of("java"), 1, false));
+
+		var template = ResourceTemplate.builder("test://resource/{param}", "Test Resource")
+			.title("Test resource")
+			.description("A resource template for testing")
+			.mimeType("text/plain")
+			.build();
+
+		var otherTemplate = ResourceTemplate.builder("test://other/{param}", "Other Resource")
+			.title("Other resource")
+			.description("A resource template with completions")
+			.mimeType("text/plain")
+			.build();
+
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.resourceTemplates(
+					new McpStatelessServerFeatures.SyncResourceTemplateSpecification(template,
+							(transportContext, req) -> ReadResourceResult.builder(List.of()).build()),
+					new McpStatelessServerFeatures.SyncResourceTemplateSpecification(otherTemplate,
+							(transportContext, req) -> ReadResourceResult.builder(List.of()).build()))
+			.completions(new McpStatelessServerFeatures.SyncCompletionSpecification(
+					new ResourceReference("test://other/{param}"), completionHandler))
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = CompleteRequest
+				.builder(new ResourceReference("test://resource/{param}"),
+						new CompleteRequest.CompleteArgument("param", "ja"))
+				.build();
+
+			CompleteResult result = mcpClient.completeCompletion(request);
+
+			assertThat(result.completion().values()).isEmpty();
+			assertThat(result.completion().total()).isZero();
+			assertThat(result.completion().hasMore()).isFalse();
+		}
+		finally {
+			mcpServer.close();
+		}
+	}
+
+	@Test
+	void testCompletionForNonExistentPromptReturnsInvalidParams() {
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = CompleteRequest
+				.builder(new PromptReference("nonexistent-prompt"), new CompleteRequest.CompleteArgument("arg", "val"))
+				.build();
+
+			assertThatThrownBy(() -> mcpClient.completeCompletion(request)).isInstanceOf(McpError.class)
+				.asInstanceOf(type(McpError.class))
+				.extracting(McpError::getJsonRpcError)
+				.extracting(McpSchema.JSONRPCResponse.JSONRPCError::code)
+				.isEqualTo(ErrorCodes.INVALID_PARAMS);
+		}
+		finally {
+			mcpServer.close();
+		}
+	}
+
+	@Test
+	void testCompletionForNonExistentResourceReturnsResourceNotFound() {
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().completions().build())
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			CompleteRequest request = CompleteRequest
+				.builder(new ResourceReference("test://nonexistent/{param}"),
+						new CompleteRequest.CompleteArgument("param", "val"))
+				.build();
+
+			assertThatThrownBy(() -> mcpClient.completeCompletion(request)).isInstanceOf(McpError.class)
+				.asInstanceOf(type(McpError.class))
+				.extracting(McpError::getJsonRpcError)
+				.extracting(McpSchema.JSONRPCResponse.JSONRPCError::code)
+				.isEqualTo(McpSchema.ErrorCodes.RESOURCE_NOT_FOUND);
 		}
 		finally {
 			mcpServer.close();
@@ -225,19 +398,15 @@ class HttpServletStatelessIntegrationTests {
 	// ---------------------------------------
 	// Tool Structured Output Schema Tests
 	// ---------------------------------------
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
-	void testStructuredOutputValidationSuccess(String clientType) {
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testStructuredOutputValidationSuccess() {
 		// Create a tool with output schema
 		Map<String, Object> outputSchema = Map.of(
 				"type", "object", "properties", Map.of("result", Map.of("type", "number"), "operation",
 						Map.of("type", "string"), "timestamp", Map.of("type", "string")),
 				"required", List.of("result", "operation"));
 
-		Tool calculatorTool = Tool.builder()
-			.name("calculator")
+		Tool calculatorTool = Tool.builder("calculator")
 			.description("Performs mathematical calculations")
 			.outputSchema(outputSchema)
 			.build();
@@ -269,8 +438,8 @@ class HttpServletStatelessIntegrationTests {
 			// Note: outputSchema might be null in sync server, but validation still works
 
 			// Call tool with valid structured output
-			CallToolResult response = mcpClient
-				.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3")));
+			CallToolResult response = mcpClient.callTool(
+					McpSchema.CallToolRequest.builder("calculator").arguments(Map.of("expression", "2 + 3")).build());
 
 			assertThat(response).isNotNull();
 			assertThat(response.isError()).isFalse();
@@ -295,11 +464,8 @@ class HttpServletStatelessIntegrationTests {
 		}
 	}
 
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
-	void testStructuredOutputOfObjectArrayValidationSuccess(String clientType) {
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testStructuredOutputOfObjectArrayValidationSuccess() {
 		// Create a tool with output schema that returns an array of objects
 		Map<String, Object> outputSchema = Map
 			.of( // @formatter:off
@@ -311,8 +477,7 @@ class HttpServletStatelessIntegrationTests {
 					"age", Map.of("type", "number")),					
 				"required", List.of("name", "age"))); // @formatter:on
 
-		Tool calculatorTool = Tool.builder()
-			.name("getMembers")
+		Tool calculatorTool = Tool.builder("getMembers")
 			.description("Returns a list of members")
 			.outputSchema(outputSchema)
 			.build();
@@ -337,7 +502,8 @@ class HttpServletStatelessIntegrationTests {
 			assertThat(mcpClient.initialize()).isNotNull();
 
 			// Call tool with valid structured output of type array
-			CallToolResult response = mcpClient.callTool(new McpSchema.CallToolRequest("getMembers", Map.of()));
+			CallToolResult response = mcpClient
+				.callTool(McpSchema.CallToolRequest.builder("getMembers").arguments(Map.of()).build());
 
 			assertThat(response).isNotNull();
 			assertThat(response.isError()).isFalse();
@@ -356,19 +522,15 @@ class HttpServletStatelessIntegrationTests {
 		}
 	}
 
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
-	void testStructuredOutputWithInHandlerError(String clientType) {
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testStructuredOutputWithInHandlerError() {
 		// Create a tool with output schema
 		Map<String, Object> outputSchema = Map.of(
 				"type", "object", "properties", Map.of("result", Map.of("type", "number"), "operation",
 						Map.of("type", "string"), "timestamp", Map.of("type", "string")),
 				"required", List.of("result", "operation"));
 
-		Tool calculatorTool = Tool.builder()
-			.name("calculator")
+		Tool calculatorTool = Tool.builder("calculator")
 			.description("Performs mathematical calculations")
 			.outputSchema(outputSchema)
 			.build();
@@ -379,7 +541,7 @@ class HttpServletStatelessIntegrationTests {
 			.tool(calculatorTool)
 			.callHandler((exchange, request) -> CallToolResult.builder()
 				.isError(true)
-				.content(List.of(new TextContent("Error calling tool: Simulated in-handler error")))
+				.content(List.of(TextContent.builder("Error calling tool: Simulated in-handler error").build()))
 				.build())
 			.build();
 
@@ -400,14 +562,14 @@ class HttpServletStatelessIntegrationTests {
 			// Note: outputSchema might be null in sync server, but validation still works
 
 			// Call tool with valid structured output
-			CallToolResult response = mcpClient
-				.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3")));
+			CallToolResult response = mcpClient.callTool(
+					McpSchema.CallToolRequest.builder("calculator").arguments(Map.of("expression", "2 + 3")).build());
 
 			assertThat(response).isNotNull();
 			assertThat(response.isError()).isTrue();
 			assertThat(response.content()).isNotEmpty();
-			assertThat(response.content())
-				.containsExactly(new McpSchema.TextContent("Error calling tool: Simulated in-handler error"));
+			assertThat(response.content()).containsExactly(
+					McpSchema.TextContent.builder("Error calling tool: Simulated in-handler error").build());
 			assertThat(response.structuredContent()).isNull();
 		}
 		finally {
@@ -415,18 +577,14 @@ class HttpServletStatelessIntegrationTests {
 		}
 	}
 
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
-	void testStructuredOutputValidationFailure(String clientType) {
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testStructuredOutputValidationFailure() {
 		// Create a tool with output schema
 		Map<String, Object> outputSchema = Map.of("type", "object", "properties",
 				Map.of("result", Map.of("type", "number"), "operation", Map.of("type", "string")), "required",
 				List.of("result", "operation"));
 
-		Tool calculatorTool = Tool.builder()
-			.name("calculator")
+		Tool calculatorTool = Tool.builder("calculator")
 			.description("Performs mathematical calculations")
 			.outputSchema(outputSchema)
 			.build();
@@ -452,8 +610,8 @@ class HttpServletStatelessIntegrationTests {
 			assertThat(initResult).isNotNull();
 
 			// Call tool with invalid structured output
-			CallToolResult response = mcpClient
-				.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3")));
+			CallToolResult response = mcpClient.callTool(
+					McpSchema.CallToolRequest.builder("calculator").arguments(Map.of("expression", "2 + 3")).build());
 
 			assertThat(response).isNotNull();
 			assertThat(response.isError()).isTrue();
@@ -468,17 +626,13 @@ class HttpServletStatelessIntegrationTests {
 		}
 	}
 
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
-	void testStructuredOutputMissingStructuredContent(String clientType) {
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testStructuredOutputMissingStructuredContent() {
 		// Create a tool with output schema
 		Map<String, Object> outputSchema = Map.of("type", "object", "properties",
 				Map.of("result", Map.of("type", "number")), "required", List.of("result"));
 
-		Tool calculatorTool = Tool.builder()
-			.name("calculator")
+		Tool calculatorTool = Tool.builder("calculator")
 			.description("Performs mathematical calculations")
 			.outputSchema(outputSchema)
 			.build();
@@ -501,8 +655,8 @@ class HttpServletStatelessIntegrationTests {
 			assertThat(initResult).isNotNull();
 
 			// Call tool that should return structured content but doesn't
-			CallToolResult response = mcpClient
-				.callTool(new McpSchema.CallToolRequest("calculator", Map.of("expression", "2 + 3")));
+			CallToolResult response = mcpClient.callTool(
+					McpSchema.CallToolRequest.builder("calculator").arguments(Map.of("expression", "2 + 3")).build());
 
 			assertThat(response).isNotNull();
 			assertThat(response.isError()).isTrue();
@@ -518,11 +672,8 @@ class HttpServletStatelessIntegrationTests {
 		}
 	}
 
-	@ParameterizedTest(name = "{0} : {displayName} ")
-	@ValueSource(strings = { "httpclient" })
-	void testStructuredOutputRuntimeToolAddition(String clientType) {
-		var clientBuilder = clientBuilders.get(clientType);
-
+	@Test
+	void testStructuredOutputRuntimeToolAddition() {
 		// Start server without tools
 		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
 			.serverInfo("test-server", "1.0.0")
@@ -541,8 +692,7 @@ class HttpServletStatelessIntegrationTests {
 					Map.of("message", Map.of("type", "string"), "count", Map.of("type", "integer")), "required",
 					List.of("message", "count"));
 
-			Tool dynamicTool = Tool.builder()
-				.name("dynamic-tool")
+			Tool dynamicTool = Tool.builder("dynamic-tool")
 				.description("Dynamically added tool")
 				.outputSchema(outputSchema)
 				.build();
@@ -572,7 +722,7 @@ class HttpServletStatelessIntegrationTests {
 
 			// Call dynamically added tool
 			CallToolResult response = mcpClient
-				.callTool(new McpSchema.CallToolRequest("dynamic-tool", Map.of("count", 3)));
+				.callTool(McpSchema.CallToolRequest.builder("dynamic-tool").arguments(Map.of("count", 3)).build());
 
 			assertThat(response).isNotNull();
 			assertThat(response.isError()).isFalse();
@@ -600,7 +750,7 @@ class HttpServletStatelessIntegrationTests {
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.build();
 
-		Tool testTool = Tool.builder().name("test").description("test").build();
+		Tool testTool = Tool.builder("test").description("test").build();
 
 		McpStatelessServerFeatures.SyncToolSpecification toolSpec = new McpStatelessServerFeatures.SyncToolSpecification(
 				testTool, (transportContext, request) -> {
@@ -609,9 +759,11 @@ class HttpServletStatelessIntegrationTests {
 
 		mcpServer.addTool(toolSpec);
 
-		McpSchema.CallToolRequest callToolRequest = new McpSchema.CallToolRequest("test", Map.of());
-		McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION,
-				McpSchema.METHOD_TOOLS_CALL, "test", callToolRequest);
+		McpSchema.CallToolRequest callToolRequest = McpSchema.CallToolRequest.builder("test")
+			.arguments(Map.of())
+			.build();
+		McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.METHOD_TOOLS_CALL, "test",
+				callToolRequest);
 
 		MockHttpServletRequest request = new MockHttpServletRequest("POST", CUSTOM_MESSAGE_ENDPOINT);
 		MockHttpServletResponse response = new MockHttpServletResponse();
@@ -637,6 +789,197 @@ class HttpServletStatelessIntegrationTests {
 		assertThat(jsonrpcResponse.error().message()).isEqualTo("testing");
 
 		mcpServer.close();
+	}
+
+	@Test
+	void testMissingHandlerReturnsMethodNotFoundError() {
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.serverInfo("test-server", "1.0.0")
+			.capabilities(ServerCapabilities.builder().build())
+			.build();
+		var clientTransport = HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
+			.endpoint(CUSTOM_MESSAGE_ENDPOINT)
+			.build();
+
+		try (var mcpClient = McpClient.sync(clientTransport).build()) {
+			// Create a session using an MCP client
+			McpSchema.InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			// Override the response handler in the client to capture responses
+			AtomicReference<McpSchema.JSONRPCResponse> response = new AtomicReference<>();
+			var handler = (Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>>) (
+					message) -> message.doOnNext(r -> {
+						if (r instanceof McpSchema.JSONRPCResponse resp) {
+							response.set(resp);
+						}
+					});
+			StepVerifier.create(clientTransport.connect(handler)).verifyComplete();
+
+			// Send a request for a non-existent method through the transport, bypassing
+			// the client's capability checks
+			StepVerifier
+				.create(clientTransport.sendMessage(new McpSchema.JSONRPCRequest("foo/bar", "test-request-123")))
+				.verifyComplete();
+
+			// Wait until we've received the response
+			await().atMost(Duration.ofSeconds(1)).until(() -> response.get() != null);
+
+			assertThat(response.get().error().code()).isEqualTo(McpSchema.ErrorCodes.METHOD_NOT_FOUND);
+			assertThat(response.get().error().message()).isEqualTo("Method not found: foo/bar");
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	@Test
+	void testInitializedNotificationDoesNotLogWarn() {
+		Logger handlerLogger = (Logger) LoggerFactory.getLogger(DefaultMcpStatelessServerHandler.class);
+		ListAppender<ILoggingEvent> logAppender = new ListAppender<>();
+		logAppender.start();
+		handlerLogger.addAppender(logAppender);
+
+		try {
+			var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+				.serverInfo("test-server", "1.0.0")
+				.capabilities(ServerCapabilities.builder().build())
+				.build();
+
+			try (var mcpClient = clientBuilder.build()) {
+				mcpClient.initialize(); // automatically sends notifications/initialized
+			}
+			finally {
+				mcpServer.close();
+			}
+		}
+		finally {
+			handlerLogger.detachAppender(logAppender);
+			logAppender.stop();
+		}
+
+		assertThat(logAppender.list).noneMatch(event -> event.getLevel() == Level.WARN);
+	}
+
+	@Test
+	void testRootsListChangedNotificationDoesNotLogWarn() {
+		Logger handlerLogger = (Logger) LoggerFactory.getLogger(DefaultMcpStatelessServerHandler.class);
+		ListAppender<ILoggingEvent> logAppender = new ListAppender<>();
+		logAppender.start();
+		handlerLogger.addAppender(logAppender);
+
+		try {
+			var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+				.serverInfo("test-server", "1.0.0")
+				.capabilities(ServerCapabilities.builder().build())
+				.build();
+
+			try (var mcpClient = clientBuilder.build()) {
+				mcpClient.initialize();
+				mcpClient.rootsListChangedNotification();
+			}
+			finally {
+				mcpServer.close();
+			}
+		}
+		finally {
+			handlerLogger.detachAppender(logAppender);
+			logAppender.stop();
+		}
+
+		assertThat(logAppender.list).noneMatch(event -> event.getLevel() == Level.WARN);
+	}
+
+	// ---------------------------------------
+	// Bounded read
+	// ---------------------------------------
+	@Test
+	void testRejectsWhenContentLengthHeaderExceedsLimit() {
+		String inputSchema = """
+					{
+						"type": "object",
+						"properties": {
+							"message": { "type": "string" }
+						},
+						"required": ["message"]
+					}
+				""";
+
+		McpStatelessServerFeatures.SyncToolSpecification tool1 = McpStatelessServerFeatures.SyncToolSpecification
+			.builder()
+			.tool(Tool.builder("tool1", JSON_MAPPER, inputSchema).description("tool1 description").build())
+			.callHandler((transportContext, request) -> CallToolResult.builder()
+				.addContent(TextContent.builder(request.arguments().get("message").toString()).build())
+				.build())
+			.build();
+
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().tools(false).build())
+			.tools(tool1)
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			String oversizedBody = "a".repeat(MAX_REQUEST_SIZE + 1);
+
+			mcpClient.initialize();
+			assertThat(mcpClient.listTools().tools()).contains(tool1.tool());
+
+			assertThatThrownBy(() -> mcpClient.callTool(
+					McpSchema.CallToolRequest.builder("tool1").arguments(Map.of("message", oversizedBody)).build()))
+				.isInstanceOf(RuntimeException.class)
+				.hasMessageContaining("413");
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	@Test
+	void rejectsWhenBodyBytesExceedLimitWithoutContentLengthHeader() throws Exception {
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport).build();
+
+		try {
+			var httpClient = HttpClient.newHttpClient();
+
+			// A publisher with unknown content length forces chunked transfer
+			// encoding, bypassing the Content-Length header check and exercising the
+			// body byte count
+			byte[] oversizedBody = "a".repeat(MAX_REQUEST_SIZE + 1).getBytes(StandardCharsets.UTF_8);
+			HttpRequest.BodyPublisher chunkedPublisher = new HttpRequest.BodyPublisher() {
+				@Override
+				public long contentLength() {
+					return -1;
+				}
+
+				@Override
+				public void subscribe(java.util.concurrent.Flow.Subscriber<? super ByteBuffer> subscriber) {
+					subscriber.onSubscribe(new java.util.concurrent.Flow.Subscription() {
+						@Override
+						public void request(long n) {
+							subscriber.onNext(ByteBuffer.wrap(oversizedBody));
+							subscriber.onComplete();
+						}
+
+						@Override
+						public void cancel() {
+						}
+					});
+				}
+			};
+
+			var request = HttpRequest.newBuilder()
+				.uri(URI.create("http://localhost:" + PORT + CUSTOM_MESSAGE_ENDPOINT))
+				.header("Content-Type", "application/json")
+				.header("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
+				.POST(chunkedPublisher)
+				.build();
+
+			var response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
+			assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
 	}
 
 	private double evaluateExpression(String expression) {

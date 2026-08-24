@@ -66,9 +66,9 @@ import reactor.core.publisher.Mono;
  * Example of creating a basic synchronous server: <pre>{@code
  * McpServer.sync(transportProvider)
  *     .serverInfo("my-server", "1.0.0")
- *     .toolCall(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
+ *     .toolCall(Tool.builder("calculator", schema).title("Performs calculations").build(),
  *           (exchange, request) -> CallToolResult.builder()
- *                   .content(List.of(new McpSchema.TextContent("Result: " + calculate(request.arguments()))))
+ *                   .content(List.of(McpSchema.TextContent.builder("Result: " + calculate(request.arguments())).build()))
  *                   .isError(false)
  *                   .build())
  *     .build();
@@ -77,10 +77,10 @@ import reactor.core.publisher.Mono;
  * Example of creating a basic asynchronous server: <pre>{@code
  * McpServer.async(transportProvider)
  *     .serverInfo("my-server", "1.0.0")
- *     .toolCall(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
+ *     .toolCall(Tool.builder("calculator", schema).title("Performs calculations").build(),
  *           (exchange, request) -> Mono.fromSupplier(() -> calculate(request.arguments()))
  *               .map(result -> CallToolResult.builder()
- *                   .content(List.of(new McpSchema.TextContent("Result: " + result)))
+ *                   .content(List.of(McpSchema.TextContent.builder("Result: " + result).build()))
  *                   .isError(false)
  *                   .build()))
  *     .build();
@@ -97,7 +97,7 @@ import reactor.core.publisher.Mono;
  * 			.tool(calculatorTool)
  *   	    .callTool((exchange, args) -> Mono.fromSupplier(() -> calculate(args.arguments()))
  *                 .map(result -> CallToolResult.builder()
- *                   .content(List.of(new McpSchema.TextContent("Result: " + result)))
+ *                   .content(List.of(McpSchema.TextContent.builder("Result: " + result).build()))
  *                   .isError(false)
  *                   .build()))
  *.         .build(),
@@ -105,7 +105,7 @@ import reactor.core.publisher.Mono;
  * 	        .tool((weatherTool)
  *          .callTool((exchange, args) -> Mono.fromSupplier(() -> getWeather(args.arguments()))
  *                 .map(result -> CallToolResult.builder()
- *                   .content(List.of(new McpSchema.TextContent("Weather: " + result)))
+ *                   .content(List.of(McpSchema.TextContent.builder("Weather: " + result).build()))
  *                   .isError(false)
  *                   .build()))
  *          .build()
@@ -145,7 +145,8 @@ import reactor.core.publisher.Mono;
  */
 public interface McpServer {
 
-	McpSchema.Implementation DEFAULT_SERVER_INFO = new McpSchema.Implementation("Java SDK MCP Server", "0.15.0");
+	McpSchema.Implementation DEFAULT_SERVER_INFO = McpSchema.Implementation.builder("Java SDK MCP Server", "0.15.0")
+		.build();
 
 	/**
 	 * Starts building a synchronous MCP server that provides blocking operations.
@@ -242,8 +243,10 @@ public interface McpServer {
 			var jsonSchemaValidator = (this.jsonSchemaValidator != null) ? this.jsonSchemaValidator
 					: McpJsonDefaults.getSchemaValidator();
 
+			validateAsyncToolSchemas(jsonSchemaValidator, this.tools);
+
 			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator);
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
 		}
 
 	}
@@ -268,8 +271,11 @@ public interface McpServer {
 					this.instructions);
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
 					: McpJsonDefaults.getSchemaValidator();
+
+			validateAsyncToolSchemas(jsonSchemaValidator, this.tools);
+
 			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator);
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
 		}
 
 	}
@@ -292,6 +298,8 @@ public interface McpServer {
 		String instructions;
 
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
+
+		boolean validateToolInputs = true;
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -393,7 +401,7 @@ public interface McpServer {
 		public AsyncSpecification<S> serverInfo(String name, String version) {
 			Assert.hasText(name, "Name must not be null or empty");
 			Assert.hasText(version, "Version must not be null or empty");
-			this.serverInfo = new McpSchema.Implementation(name, version);
+			this.serverInfo = McpSchema.Implementation.builder(name, version).build();
 			return this;
 		}
 
@@ -418,6 +426,17 @@ public interface McpServer {
 		 */
 		public AsyncSpecification<S> strictToolNameValidation(boolean strict) {
 			this.strictToolNameValidation = strict;
+			return this;
+		}
+
+		/**
+		 * Sets whether to validate tool inputs against the tool's input schema.
+		 * @param validate true to validate inputs and return error on validation failure,
+		 * false to skip validation. Defaults to true.
+		 * @return This builder instance for method chaining
+		 */
+		public AsyncSpecification<S> validateToolInputs(boolean validate) {
+			this.validateToolInputs = validate;
 			return this;
 		}
 
@@ -815,10 +834,14 @@ public interface McpServer {
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures,
 					this.immediateExecution);
 
+			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
+					: McpJsonDefaults.getSchemaValidator();
+
+			validateSyncToolSchemas(jsonSchemaValidator, this.tools);
+
 			var asyncServer = new McpAsyncServer(transportProvider,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, requestTimeout,
-					uriTemplateManagerFactory,
-					jsonSchemaValidator != null ? jsonSchemaValidator : McpJsonDefaults.getSchemaValidator());
+					uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -847,9 +870,12 @@ public interface McpServer {
 					this.immediateExecution);
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
 					: McpJsonDefaults.getSchemaValidator();
+
+			validateSyncToolSchemas(jsonSchemaValidator, this.tools);
+
 			var asyncServer = new McpAsyncServer(transportProvider,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator);
+					this.uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -871,6 +897,8 @@ public interface McpServer {
 		String instructions;
 
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
+
+		boolean validateToolInputs = true;
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -976,7 +1004,7 @@ public interface McpServer {
 		public SyncSpecification<S> serverInfo(String name, String version) {
 			Assert.hasText(name, "Name must not be null or empty");
 			Assert.hasText(version, "Version must not be null or empty");
-			this.serverInfo = new McpSchema.Implementation(name, version);
+			this.serverInfo = McpSchema.Implementation.builder(name, version).build();
 			return this;
 		}
 
@@ -1001,6 +1029,17 @@ public interface McpServer {
 		 */
 		public SyncSpecification<S> strictToolNameValidation(boolean strict) {
 			this.strictToolNameValidation = strict;
+			return this;
+		}
+
+		/**
+		 * Sets whether to validate tool inputs against the tool's input schema.
+		 * @param validate true to validate inputs and return error on validation failure,
+		 * false to skip validation. Defaults to true.
+		 * @return This builder instance for method chaining
+		 */
+		public SyncSpecification<S> validateToolInputs(boolean validate) {
+			this.validateToolInputs = validate;
 			return this;
 		}
 
@@ -1401,6 +1440,8 @@ public interface McpServer {
 
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
 
+		boolean validateToolInputs = true;
+
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
 		 * invoked by language models. Tools enable models to interact with external
@@ -1502,7 +1543,7 @@ public interface McpServer {
 		public StatelessAsyncSpecification serverInfo(String name, String version) {
 			Assert.hasText(name, "Name must not be null or empty");
 			Assert.hasText(version, "Version must not be null or empty");
-			this.serverInfo = new McpSchema.Implementation(name, version);
+			this.serverInfo = McpSchema.Implementation.builder(name, version).build();
 			return this;
 		}
 
@@ -1527,6 +1568,17 @@ public interface McpServer {
 		 */
 		public StatelessAsyncSpecification strictToolNameValidation(boolean strict) {
 			this.strictToolNameValidation = strict;
+			return this;
+		}
+
+		/**
+		 * Sets whether to validate tool inputs against the tool's input schema.
+		 * @param validate true to validate inputs and return error on validation failure,
+		 * false to skip validation. Defaults to true.
+		 * @return This builder instance for method chaining
+		 */
+		public StatelessAsyncSpecification validateToolInputs(boolean validate) {
+			this.validateToolInputs = validate;
 			return this;
 		}
 
@@ -1857,9 +1909,13 @@ public interface McpServer {
 		public McpStatelessAsyncServer build() {
 			var features = new McpStatelessServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions);
+			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
+					: McpJsonDefaults.getSchemaValidator();
+
+			validateStatelessAsyncToolSchemas(jsonSchemaValidator, this.tools);
+
 			return new McpStatelessAsyncServer(transport, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory,
-					jsonSchemaValidator != null ? jsonSchemaValidator : McpJsonDefaults.getSchemaValidator());
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
 		}
 
 	}
@@ -1883,6 +1939,8 @@ public interface McpServer {
 		String instructions;
 
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
+
+		boolean validateToolInputs = true;
 
 		/**
 		 * The Model Context Protocol (MCP) allows servers to expose tools that can be
@@ -1985,7 +2043,7 @@ public interface McpServer {
 		public StatelessSyncSpecification serverInfo(String name, String version) {
 			Assert.hasText(name, "Name must not be null or empty");
 			Assert.hasText(version, "Version must not be null or empty");
-			this.serverInfo = new McpSchema.Implementation(name, version);
+			this.serverInfo = McpSchema.Implementation.builder(name, version).build();
 			return this;
 		}
 
@@ -2010,6 +2068,17 @@ public interface McpServer {
 		 */
 		public StatelessSyncSpecification strictToolNameValidation(boolean strict) {
 			this.strictToolNameValidation = strict;
+			return this;
+		}
+
+		/**
+		 * Sets whether to validate tool inputs against the tool's input schema.
+		 * @param validate true to validate inputs and return error on validation failure,
+		 * false to skip validation. Defaults to true.
+		 * @return This builder instance for method chaining
+		 */
+		public StatelessSyncSpecification validateToolInputs(boolean validate) {
+			this.validateToolInputs = validate;
 			return this;
 		}
 
@@ -2357,13 +2426,42 @@ public interface McpServer {
 			var syncFeatures = new McpStatelessServerFeatures.Sync(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions);
 			var asyncFeatures = McpStatelessServerFeatures.Async.fromSync(syncFeatures, this.immediateExecution);
+			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
+					: McpJsonDefaults.getSchemaValidator();
+
+			validateStatelessSyncToolSchemas(jsonSchemaValidator, this.tools);
+
 			var asyncServer = new McpStatelessAsyncServer(transport,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, requestTimeout,
-					uriTemplateManagerFactory,
-					this.jsonSchemaValidator != null ? this.jsonSchemaValidator : McpJsonDefaults.getSchemaValidator());
+					uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
 			return new McpStatelessSyncServer(asyncServer, this.immediateExecution);
 		}
 
+	}
+
+	private static void validateAsyncToolSchemas(JsonSchemaValidator validator,
+			List<McpServerFeatures.AsyncToolSpecification> tools) {
+		tools.forEach(spec -> validateToolSchema(validator, spec.tool()));
+	}
+
+	private static void validateSyncToolSchemas(JsonSchemaValidator validator,
+			List<McpServerFeatures.SyncToolSpecification> tools) {
+		tools.forEach(spec -> validateToolSchema(validator, spec.tool()));
+	}
+
+	private static void validateStatelessAsyncToolSchemas(JsonSchemaValidator validator,
+			List<McpStatelessServerFeatures.AsyncToolSpecification> tools) {
+		tools.forEach(spec -> validateToolSchema(validator, spec.tool()));
+	}
+
+	private static void validateStatelessSyncToolSchemas(JsonSchemaValidator validator,
+			List<McpStatelessServerFeatures.SyncToolSpecification> tools) {
+		tools.forEach(spec -> validateToolSchema(validator, spec.tool()));
+	}
+
+	private static void validateToolSchema(JsonSchemaValidator validator, McpSchema.Tool tool) {
+		validator.assertConforms("Tool '" + tool.name() + "' inputSchema", tool.inputSchema());
+		validator.assertConforms("Tool '" + tool.name() + "' outputSchema", tool.outputSchema());
 	}
 
 }

@@ -16,9 +16,8 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 import com.sun.net.httpserver.HttpServer;
-import io.modelcontextprotocol.client.transport.customizer.McpHttpClientAuthorizationErrorHandler;
+import io.modelcontextprotocol.client.transport.customizer.McpHttpClientTransportAuthorizationErrorHandler;
 import io.modelcontextprotocol.common.McpTransportContext;
-import org.reactivestreams.Publisher;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpClientTransport;
@@ -34,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -369,6 +369,26 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 		StepVerifier.create(transport.closeGracefully()).verifyComplete();
 	}
 
+	@Test
+	void test405OnConnectReturnsEmptyFlux() {
+		serverSseResponseStatus.set(405);
+		AtomicReference<Throwable> capturedException = new AtomicReference<>();
+		var transport = HttpClientStreamableHttpTransport.builder(HOST).openConnectionOnStartup(true).build();
+		transport.setExceptionHandler(capturedException::set);
+
+		var messages = new ArrayList<McpSchema.JSONRPCMessage>();
+		StepVerifier.create(transport.connect(msg -> msg.doOnNext(messages::add))).verifyComplete();
+
+		Awaitility.await()
+			.atMost(Duration.ofSeconds(1))
+			.untilAsserted(() -> assertThat(processedSseConnectCount.get()).isEqualTo(1));
+
+		assertThat(messages).isEmpty();
+		assertThat(capturedException.get()).isNull();
+
+		StepVerifier.create(transport.closeGracefully()).verifyComplete();
+	}
+
 	@Nested
 	class AuthorizationError {
 
@@ -383,9 +403,12 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 				AtomicReference<HttpResponse.ResponseInfo> capturedResponseInfo = new AtomicReference<>();
 				AtomicReference<McpTransportContext> capturedContext = new AtomicReference<>();
 
+				AtomicReference<HttpRequestSnapshot> capturedSnapshot = new AtomicReference<>();
+
 				var authTransport = HttpClientStreamableHttpTransport.builder(HOST)
-					.authorizationErrorHandler((responseInfo, context) -> {
+					.authorizationErrorHandler((requestSnapshot, responseInfo, context) -> {
 						capturedResponseInfo.set(responseInfo);
+						capturedSnapshot.set(requestSnapshot);
 						capturedContext.set(context);
 						return Mono.just(false);
 					})
@@ -397,6 +420,8 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 				assertThat(processedMessagesCount.get()).isEqualTo(1);
 				assertThat(capturedResponseInfo.get()).isNotNull();
 				assertThat(capturedResponseInfo.get().statusCode()).isEqualTo(httpStatus);
+				assertThat(capturedSnapshot.get()).isNotNull();
+				assertThat(capturedSnapshot.get().requestUri().toString()).isEqualTo(HOST + "/mcp");
 				assertThat(capturedContext.get()).isNotNull();
 
 				StepVerifier.create(authTransport.closeGracefully()).verifyComplete();
@@ -420,7 +445,7 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 			void retry() {
 				serverResponseStatus.set(401);
 				var authTransport = HttpClientStreamableHttpTransport.builder(HOST)
-					.authorizationErrorHandler((responseInfo, context) -> {
+					.authorizationErrorHandler((requestSnapshot, responseInfo, context) -> {
 						serverResponseStatus.set(200);
 						return Mono.just(true);
 					})
@@ -436,7 +461,7 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 			void retryAtMostOnce() {
 				serverResponseStatus.set(401);
 				var authTransport = HttpClientStreamableHttpTransport.builder(HOST)
-					.authorizationErrorHandler((responseInfo, context) -> Mono.just(true))
+					.authorizationErrorHandler((requestSnapshot, responseInfo, context) -> Mono.just(true))
 					.build();
 				StepVerifier.create(authTransport.sendMessage(createTestRequestMessage()))
 					.expectErrorMatches(authorizationError(401))
@@ -451,10 +476,10 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 			void customMaxRetries() {
 				serverResponseStatus.set(401);
 				var authTransport = HttpClientStreamableHttpTransport.builder(HOST)
-					.authorizationErrorHandler(new McpHttpClientAuthorizationErrorHandler() {
+					.authorizationErrorHandler(new McpHttpClientTransportAuthorizationErrorHandler() {
 						@Override
-						public Publisher<Boolean> handle(HttpResponse.ResponseInfo responseInfo,
-								McpTransportContext context) {
+						public Publisher<Boolean> handle(HttpRequestSnapshot requestSnapshot,
+								HttpResponse.ResponseInfo responseInfo, McpTransportContext context) {
 							return Mono.just(true);
 						}
 
@@ -478,7 +503,7 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 				serverResponseStatus.set(401);
 
 				var authTransport = HttpClientStreamableHttpTransport.builder(HOST)
-					.authorizationErrorHandler((responseInfo, context) -> Mono.just(false))
+					.authorizationErrorHandler((requestSnapshot, responseInfo, context) -> Mono.just(false))
 					.build();
 
 				StepVerifier.create(authTransport.sendMessage(createTestRequestMessage()))
@@ -493,8 +518,8 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 			void propagateHandlerError() {
 				serverResponseStatus.set(401);
 				var authTransport = HttpClientStreamableHttpTransport.builder(HOST)
-					.authorizationErrorHandler(
-							(responseInfo, context) -> Mono.error(new IllegalStateException("handler error")))
+					.authorizationErrorHandler((requestUri, responseInfo, context) -> Mono
+						.error(new IllegalStateException("handler error")))
 					.build();
 
 				StepVerifier.create(authTransport.sendMessage(createTestRequestMessage()))
@@ -509,7 +534,7 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 			void emptyHandler() {
 				serverResponseStatus.set(401);
 				var authTransport = HttpClientStreamableHttpTransport.builder(HOST)
-					.authorizationErrorHandler((responseInfo, context) -> Mono.empty())
+					.authorizationErrorHandler((requestSnapshot, responseInfo, context) -> Mono.empty())
 					.build();
 
 				StepVerifier.create(authTransport.sendMessage(createTestRequestMessage()))
@@ -532,11 +557,13 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 				AtomicReference<Throwable> capturedException = new AtomicReference<>();
 
 				AtomicReference<HttpResponse.ResponseInfo> capturedResponseInfo = new AtomicReference<>();
+				AtomicReference<HttpRequestSnapshot> capturedSnapshot = new AtomicReference<>();
 				AtomicReference<McpTransportContext> capturedContext = new AtomicReference<>();
 
 				var authTransport = HttpClientStreamableHttpTransport.builder(HOST)
-					.authorizationErrorHandler((responseInfo, context) -> {
+					.authorizationErrorHandler((requestSnapshot, responseInfo, context) -> {
 						capturedResponseInfo.set(responseInfo);
+						capturedSnapshot.set(requestSnapshot);
 						capturedContext.set(context);
 						return Mono.just(false);
 					})
@@ -552,6 +579,8 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 				assertThat(messages).isEmpty();
 				assertThat(capturedResponseInfo.get()).isNotNull();
 				assertThat(capturedResponseInfo.get().statusCode()).isEqualTo(httpStatus);
+				assertThat(capturedSnapshot.get()).isNotNull();
+				assertThat(capturedSnapshot.get().requestUri().toString()).isEqualTo(HOST + "/mcp");
 				assertThat(capturedContext.get()).isNotNull();
 				assertThat(capturedException.get()).hasMessage("Authorization error connecting to SSE stream")
 					.asInstanceOf(type(McpHttpClientTransportAuthorizationException.class))
@@ -586,7 +615,7 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 				AtomicReference<Throwable> capturedException = new AtomicReference<>();
 				var authTransport = HttpClientStreamableHttpTransport.builder(HOST)
 					.openConnectionOnStartup(true)
-					.authorizationErrorHandler((responseInfo, context) -> {
+					.authorizationErrorHandler((requestSnapshot, responseInfo, context) -> {
 						serverSseResponseStatus.set(200);
 						return Mono.just(true);
 					})
@@ -616,7 +645,7 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 				AtomicReference<Throwable> capturedException = new AtomicReference<>();
 				var authTransport = HttpClientStreamableHttpTransport.builder(HOST)
 					.openConnectionOnStartup(true)
-					.authorizationErrorHandler((responseInfo, context) -> {
+					.authorizationErrorHandler((requestSnapshot, responseInfo, context) -> {
 						return Mono.just(true);
 					})
 					.build();
@@ -641,10 +670,10 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 				AtomicReference<Throwable> capturedException = new AtomicReference<>();
 				var authTransport = HttpClientStreamableHttpTransport.builder(HOST)
 					.openConnectionOnStartup(true)
-					.authorizationErrorHandler(new McpHttpClientAuthorizationErrorHandler() {
+					.authorizationErrorHandler(new McpHttpClientTransportAuthorizationErrorHandler() {
 						@Override
-						public Publisher<Boolean> handle(HttpResponse.ResponseInfo responseInfo,
-								McpTransportContext context) {
+						public Publisher<Boolean> handle(HttpRequestSnapshot requestSnapshot,
+								HttpResponse.ResponseInfo responseInfo, McpTransportContext context) {
 							return Mono.just(true);
 						}
 
@@ -675,7 +704,7 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 				AtomicReference<Throwable> capturedException = new AtomicReference<>();
 				var authTransport = HttpClientStreamableHttpTransport.builder(HOST)
 					.openConnectionOnStartup(true)
-					.authorizationErrorHandler((responseInfo, context) -> {
+					.authorizationErrorHandler((requestUri, responseInfo, context) -> {
 						// if there was a retry, the request would succeed.
 						serverSseResponseStatus.set(200);
 						return Mono.just(false);
@@ -700,7 +729,7 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 				AtomicReference<Throwable> capturedException = new AtomicReference<>();
 				var authTransport = HttpClientStreamableHttpTransport.builder(HOST)
 					.openConnectionOnStartup(true)
-					.authorizationErrorHandler((responseInfo, context) -> Mono.empty())
+					.authorizationErrorHandler((requestUri, responseInfo, context) -> Mono.empty())
 					.build();
 				authTransport.setExceptionHandler(capturedException::set);
 
@@ -721,8 +750,8 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 				AtomicReference<Throwable> capturedException = new AtomicReference<>();
 				var authTransport = HttpClientStreamableHttpTransport.builder(HOST)
 					.openConnectionOnStartup(true)
-					.authorizationErrorHandler(
-							(responseInfo, context) -> Mono.error(new IllegalStateException("handler error")))
+					.authorizationErrorHandler((requestUri, responseInfo, context) -> Mono
+						.error(new IllegalStateException("handler error")))
 					.build();
 				authTransport.setExceptionHandler(capturedException::set);
 
@@ -750,11 +779,11 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 	}
 
 	private McpSchema.JSONRPCRequest createTestRequestMessage() {
-		var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_03_26,
-				McpSchema.ClientCapabilities.builder().roots(true).build(),
-				new McpSchema.Implementation("Test Client", "1.0.0"));
-		return new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE, "test-id",
-				initializeRequest);
+		var initializeRequest = McpSchema.InitializeRequest
+			.builder(ProtocolVersions.MCP_2025_03_26, McpSchema.ClientCapabilities.builder().roots(true).build(),
+					McpSchema.Implementation.builder("Test Client", "1.0.0").build())
+			.build();
+		return new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, "test-id", initializeRequest);
 	}
 
 }

@@ -8,11 +8,14 @@ import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientReq
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpTransportSessionClosedException;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Function;
+
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -79,11 +82,11 @@ class HttpClientStreamableHttpTransportTest {
 
 		withTransport(transport, (t) -> {
 			// Send test message
-			var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_11_25,
-					McpSchema.ClientCapabilities.builder().roots(true).build(),
-					new McpSchema.Implementation("MCP Client", "0.3.1"));
-			var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
-					"test-id", initializeRequest);
+			var initializeRequest = McpSchema.InitializeRequest
+				.builder(ProtocolVersions.MCP_2025_11_25, McpSchema.ClientCapabilities.builder().roots(true).build(),
+						McpSchema.Implementation.builder("MCP Client", "0.3.1").build())
+				.build();
+			var testMessage = new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, "test-id", initializeRequest);
 
 			StepVerifier
 				.create(t.sendMessage(testMessage).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)))
@@ -109,11 +112,11 @@ class HttpClientStreamableHttpTransportTest {
 
 		withTransport(transport, (t) -> {
 			// Send test message
-			var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_11_25,
-					McpSchema.ClientCapabilities.builder().roots(true).build(),
-					new McpSchema.Implementation("MCP Client", "0.3.1"));
-			var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
-					"test-id", initializeRequest);
+			var initializeRequest = McpSchema.InitializeRequest
+				.builder(ProtocolVersions.MCP_2025_11_25, McpSchema.ClientCapabilities.builder().roots(true).build(),
+						McpSchema.Implementation.builder("MCP Client", "0.3.1").build())
+				.build();
+			var testMessage = new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, "test-id", initializeRequest);
 
 			StepVerifier
 				.create(t.sendMessage(testMessage).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context)))
@@ -132,32 +135,34 @@ class HttpClientStreamableHttpTransportTest {
 
 		StepVerifier.create(transport.closeGracefully()).verifyComplete();
 
-		var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_11_25,
-				McpSchema.ClientCapabilities.builder().roots(true).build(),
-				new McpSchema.Implementation("MCP Client", "0.3.1"));
-		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
-				"test-id", initializeRequest);
+		var initializeRequest = McpSchema.InitializeRequest
+			.builder(ProtocolVersions.MCP_2025_11_25, McpSchema.ClientCapabilities.builder().roots(true).build(),
+					McpSchema.Implementation.builder("MCP Client", "0.3.1").build())
+			.build();
+		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, "test-id", initializeRequest);
 
 		StepVerifier.create(transport.sendMessage(testMessage))
-			.expectErrorMessage("MCP session has been closed")
+			.expectErrorMessage("Transport has already been closed.")
 			.verify();
 	}
 
 	@Test
 	void testCloseInitialized() {
 		var transport = HttpClientStreamableHttpTransport.builder(host).build();
+		transport.connect(Function.identity()).block();
 
-		var initializeRequest = new McpSchema.InitializeRequest(ProtocolVersions.MCP_2025_11_25,
-				McpSchema.ClientCapabilities.builder().roots(true).build(),
-				new McpSchema.Implementation("MCP Client", "0.3.1"));
-		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, McpSchema.METHOD_INITIALIZE,
-				"test-id", initializeRequest);
+		var initializeRequest = McpSchema.InitializeRequest
+			.builder(ProtocolVersions.MCP_2025_11_25, McpSchema.ClientCapabilities.builder().roots(true).build(),
+					McpSchema.Implementation.builder("MCP Client", "0.3.1").build())
+			.build();
+		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, "test-id", initializeRequest);
 
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 		StepVerifier.create(transport.closeGracefully()).verifyComplete();
 
 		StepVerifier.create(transport.sendMessage(testMessage))
-			.expectErrorMatches(err -> err.getMessage().matches("MCP session with ID [a-zA-Z0-9-]* has been closed"))
+			.expectErrorMatches(err -> err instanceof McpTransportSessionClosedException
+					&& err.getMessage().contains("Transport has already been closed"))
 			.verify();
 	}
 

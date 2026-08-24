@@ -105,13 +105,13 @@ class GsonMcpJsonMapperTests {
 		var gsonMapper = new GsonMcpJsonMapper();
 
 		// Tool builder parsing of input/output schema strings
-		var tool = McpSchema.Tool.builder().name("echo").description("Echo tool").inputSchema(gsonMapper, """
+		var tool = McpSchema.Tool.builder("echo", gsonMapper, """
 				{
 				  "type": "object",
 				  "properties": { "x": { "type": "integer" } },
 				  "required": ["x"]
 				}
-				""").outputSchema(gsonMapper, """
+				""").description("Echo tool").outputSchema(gsonMapper, """
 				{
 				  "type": "object",
 				  "properties": { "y": { "type": "string" } }

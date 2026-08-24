@@ -119,12 +119,13 @@ public class McpClientSession implements McpSession {
 		this.requestHandlers.putAll(requestHandlers);
 		this.notificationHandlers.putAll(notificationHandlers);
 
-		this.transport.connect(mono -> mono.doOnNext(this::handle)).transform(connectHook).subscribe();
+		this.transport.connect(mono -> mono.doOnNext(this::handle)).transform(connectHook).subscribe(ignored -> {
+		}, error -> logger.warn("Client failed during connect", error));
 	}
 
 	private void dismissPendingResponses() {
 		this.pendingResponses.forEach((id, sink) -> {
-			logger.warn("Abruptly terminating exchange for request {}", id);
+			logger.info("Abruptly terminating exchange for request {}", id);
 			sink.error(new RuntimeException("MCP session with server terminated"));
 		});
 		this.pendingResponses.clear();
@@ -154,15 +155,21 @@ public class McpClientSession implements McpSession {
 
 				McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (error instanceof McpError mcpError
 						&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
-								// TODO: add error message through the data field
 								: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
 										error.getMessage(), McpError.aggregateExceptionMessages(error));
 
-				var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
-						jsonRpcError);
+				var errorResponse = McpSchema.JSONRPCResponse.error(request.id(), jsonRpcError);
 				return Mono.just(errorResponse);
 			}).flatMap(this.transport::sendMessage).onErrorComplete(t -> {
-				logger.warn("Issue sending response to the client, ", t);
+				if (t instanceof McpTransportSessionClosedException) {
+					logger.debug("Can't send response to request {} when the transport is closed", request.id());
+				}
+				else if (McpTransport.isPeerClosed(t)) {
+					logger.debug("Can't send response to request {}: connection closed by peer", request.id(), t);
+				}
+				else {
+					logger.warn("Failed to send response to the server", t);
+				}
 				return true;
 			}).subscribe();
 		}
@@ -188,13 +195,13 @@ public class McpClientSession implements McpSession {
 			var handler = this.requestHandlers.get(request.method());
 			if (handler == null) {
 				MethodNotFoundError error = getMethodNotFoundError(request.method());
-				return Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
-						new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
-								error.message(), error.data())));
+				return Mono
+					.just(McpSchema.JSONRPCResponse.error(request.id(), new McpSchema.JSONRPCResponse.JSONRPCError(
+							McpSchema.ErrorCodes.METHOD_NOT_FOUND, error.message(), error.data())));
 			}
 
 			return handler.handle(request.params())
-				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null));
+				.map(result -> McpSchema.JSONRPCResponse.result(request.id(), result));
 		});
 	}
 
@@ -251,8 +258,7 @@ public class McpClientSession implements McpSession {
 		return Mono.deferContextual(ctx -> Mono.<McpSchema.JSONRPCResponse>create(pendingResponseSink -> {
 			logger.debug("Sending message for method {}", method);
 			this.pendingResponses.put(requestId, pendingResponseSink);
-			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(McpSchema.JSONRPC_VERSION, method,
-					requestId, requestParams);
+			McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(method, requestId, requestParams);
 			this.transport.sendMessage(jsonrpcRequest).contextWrite(ctx).subscribe(v -> {
 			}, error -> {
 				this.pendingResponses.remove(requestId);
@@ -260,7 +266,8 @@ public class McpClientSession implements McpSession {
 			});
 		})).timeout(this.requestTimeout).handle((jsonRpcResponse, deliveredResponseSink) -> {
 			if (jsonRpcResponse.error() != null) {
-				logger.error("Error handling request: {}", jsonRpcResponse.error());
+				logger.info("Server returned a JSON-RPC error when calling method {}: {}", method,
+						jsonRpcResponse.error());
 				deliveredResponseSink.error(new McpError(jsonRpcResponse.error()));
 			}
 			else {
@@ -282,8 +289,7 @@ public class McpClientSession implements McpSession {
 	 */
 	@Override
 	public Mono<Void> sendNotification(String method, Object params) {
-		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
-				method, params);
+		McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(method, params);
 		return this.transport.sendMessage(jsonrpcNotification);
 	}
 

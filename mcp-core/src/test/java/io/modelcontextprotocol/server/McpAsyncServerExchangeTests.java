@@ -4,16 +4,17 @@
 
 package io.modelcontextprotocol.server;
 
-import io.modelcontextprotocol.common.McpTransportContext;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
+import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.TypeRef;
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
-import io.modelcontextprotocol.json.TypeRef;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
@@ -52,7 +53,7 @@ class McpAsyncServerExchangeTests {
 
 		clientCapabilities = McpSchema.ClientCapabilities.builder().roots(true).build();
 
-		clientInfo = new McpSchema.Implementation("test-client", "1.0.0");
+		clientInfo = McpSchema.Implementation.builder("test-client", "1.0.0").build();
 
 		exchange = new McpAsyncServerExchange("testSessionId", mockSession, clientCapabilities, clientInfo,
 				McpTransportContext.EMPTY);
@@ -61,9 +62,10 @@ class McpAsyncServerExchangeTests {
 	@Test
 	void testListRootsWithSinglePage() {
 
-		List<McpSchema.Root> roots = Arrays.asList(new McpSchema.Root("file:///home/user/project1", "Project 1"),
-				new McpSchema.Root("file:///home/user/project2", "Project 2"));
-		McpSchema.ListRootsResult singlePageResult = new McpSchema.ListRootsResult(roots, null);
+		List<McpSchema.Root> roots = Arrays.asList(
+				McpSchema.Root.builder("file:///home/user/project1").name("Project 1").build(),
+				McpSchema.Root.builder("file:///home/user/project2").name("Project 2").build());
+		McpSchema.ListRootsResult singlePageResult = McpSchema.ListRootsResult.builder(roots).build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), any(McpSchema.PaginatedRequest.class),
 				any(TypeRef.class)))
@@ -78,7 +80,7 @@ class McpAsyncServerExchangeTests {
 			assertThat(result.nextCursor()).isNull();
 
 			// Verify that the returned list is unmodifiable
-			assertThatThrownBy(() -> result.roots().add(new McpSchema.Root("file:///test", "Test")))
+			assertThatThrownBy(() -> result.roots().add(McpSchema.Root.builder("file:///test").name("Test").build()))
 				.isInstanceOf(UnsupportedOperationException.class);
 		}).verifyComplete();
 	}
@@ -86,14 +88,18 @@ class McpAsyncServerExchangeTests {
 	@Test
 	void testListRootsWithMultiplePages() {
 
-		List<McpSchema.Root> page1Roots = Arrays.asList(new McpSchema.Root("file:///home/user/project1", "Project 1"),
-				new McpSchema.Root("file:///home/user/project2", "Project 2"));
-		List<McpSchema.Root> page2Roots = Arrays.asList(new McpSchema.Root("file:///home/user/project3", "Project 3"));
+		List<McpSchema.Root> page1Roots = Arrays.asList(
+				McpSchema.Root.builder("file:///home/user/project1").name("Project 1").build(),
+				McpSchema.Root.builder("file:///home/user/project2").name("Project 2").build());
+		List<McpSchema.Root> page2Roots = Arrays
+			.asList(McpSchema.Root.builder("file:///home/user/project3").name("Project 3").build());
 
-		McpSchema.ListRootsResult page1Result = new McpSchema.ListRootsResult(page1Roots, "cursor1");
-		McpSchema.ListRootsResult page2Result = new McpSchema.ListRootsResult(page2Roots, null);
+		McpSchema.ListRootsResult page1Result = McpSchema.ListRootsResult.builder(page1Roots)
+			.nextCursor("cursor1")
+			.build();
+		McpSchema.ListRootsResult page2Result = McpSchema.ListRootsResult.builder(page2Roots).build();
 
-		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), eq(new McpSchema.PaginatedRequest(null)),
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), eq(new McpSchema.PaginatedRequest()),
 				any(TypeRef.class)))
 			.thenReturn(Mono.just(page1Result));
 
@@ -109,7 +115,7 @@ class McpAsyncServerExchangeTests {
 			assertThat(result.nextCursor()).isNull();
 
 			// Verify that the returned list is unmodifiable
-			assertThatThrownBy(() -> result.roots().add(new McpSchema.Root("file:///test", "Test")))
+			assertThatThrownBy(() -> result.roots().add(McpSchema.Root.builder("file:///test").name("Test").build()))
 				.isInstanceOf(UnsupportedOperationException.class);
 		}).verifyComplete();
 	}
@@ -117,7 +123,7 @@ class McpAsyncServerExchangeTests {
 	@Test
 	void testListRootsWithEmptyResult() {
 
-		McpSchema.ListRootsResult emptyResult = new McpSchema.ListRootsResult(new ArrayList<>(), null);
+		McpSchema.ListRootsResult emptyResult = McpSchema.ListRootsResult.builder(new ArrayList<>()).build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), any(McpSchema.PaginatedRequest.class),
 				any(TypeRef.class)))
@@ -128,7 +134,7 @@ class McpAsyncServerExchangeTests {
 			assertThat(result.nextCursor()).isNull();
 
 			// Verify that the returned list is unmodifiable
-			assertThatThrownBy(() -> result.roots().add(new McpSchema.Root("file:///test", "Test")))
+			assertThatThrownBy(() -> result.roots().add(McpSchema.Root.builder("file:///test").name("Test").build()))
 				.isInstanceOf(UnsupportedOperationException.class);
 		}).verifyComplete();
 	}
@@ -136,8 +142,9 @@ class McpAsyncServerExchangeTests {
 	@Test
 	void testListRootsWithSpecificCursor() {
 
-		List<McpSchema.Root> roots = Arrays.asList(new McpSchema.Root("file:///home/user/project3", "Project 3"));
-		McpSchema.ListRootsResult result = new McpSchema.ListRootsResult(roots, "nextCursor");
+		List<McpSchema.Root> roots = Arrays
+			.asList(McpSchema.Root.builder("file:///home/user/project3").name("Project 3").build());
+		McpSchema.ListRootsResult result = McpSchema.ListRootsResult.builder(roots).nextCursor("nextCursor").build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), eq(new McpSchema.PaginatedRequest("someCursor")),
 				any(TypeRef.class)))
@@ -167,12 +174,14 @@ class McpAsyncServerExchangeTests {
 	void testListRootsUnmodifiabilityAfterAccumulation() {
 
 		List<McpSchema.Root> page1Roots = new ArrayList<>(
-				Arrays.asList(new McpSchema.Root("file:///home/user/project1", "Project 1")));
+				Arrays.asList(McpSchema.Root.builder("file:///home/user/project1").name("Project 1").build()));
 		List<McpSchema.Root> page2Roots = new ArrayList<>(
-				Arrays.asList(new McpSchema.Root("file:///home/user/project2", "Project 2")));
+				Arrays.asList(McpSchema.Root.builder("file:///home/user/project2").name("Project 2").build()));
 
-		McpSchema.ListRootsResult page1Result = new McpSchema.ListRootsResult(page1Roots, "cursor1");
-		McpSchema.ListRootsResult page2Result = new McpSchema.ListRootsResult(page2Roots, null);
+		McpSchema.ListRootsResult page1Result = McpSchema.ListRootsResult.builder(page1Roots)
+			.nextCursor("cursor1")
+			.build();
+		McpSchema.ListRootsResult page2Result = McpSchema.ListRootsResult.builder(page2Roots).build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), eq(new McpSchema.PaginatedRequest(null)),
 				any(TypeRef.class)))
@@ -187,7 +196,7 @@ class McpAsyncServerExchangeTests {
 			assertThat(result.roots()).hasSize(2);
 
 			// Verify that the returned list is unmodifiable
-			assertThatThrownBy(() -> result.roots().add(new McpSchema.Root("file:///test", "Test")))
+			assertThatThrownBy(() -> result.roots().add(McpSchema.Root.builder("file:///test").name("Test").build()))
 				.isInstanceOf(UnsupportedOperationException.class);
 
 			// Verify that clear() also throws UnsupportedOperationException
@@ -227,10 +236,9 @@ class McpAsyncServerExchangeTests {
 
 	@Test
 	void testLoggingNotificationWithAllowedLevel() {
-		McpSchema.LoggingMessageNotification notification = McpSchema.LoggingMessageNotification.builder()
-			.level(McpSchema.LoggingLevel.ERROR)
+		McpSchema.LoggingMessageNotification notification = McpSchema.LoggingMessageNotification
+			.builder(McpSchema.LoggingLevel.ERROR, "Test error message")
 			.logger("test-logger")
-			.data("Test error message")
 			.build();
 
 		when(mockSession.isNotificationForLevelAllowed(any())).thenReturn(Boolean.TRUE);
@@ -248,10 +256,9 @@ class McpAsyncServerExchangeTests {
 		exchange.setMinLoggingLevel(McpSchema.LoggingLevel.DEBUG);
 		verify(mockSession, times(1)).setMinLoggingLevel(eq(McpSchema.LoggingLevel.DEBUG));
 
-		McpSchema.LoggingMessageNotification debugNotification = McpSchema.LoggingMessageNotification.builder()
-			.level(McpSchema.LoggingLevel.DEBUG)
+		McpSchema.LoggingMessageNotification debugNotification = McpSchema.LoggingMessageNotification
+			.builder(McpSchema.LoggingLevel.DEBUG, "Debug message that should be filtered")
 			.logger("test-logger")
-			.data("Debug message that should be filtered")
 			.build();
 
 		when(mockSession.isNotificationForLevelAllowed(eq(McpSchema.LoggingLevel.DEBUG))).thenReturn(Boolean.TRUE);
@@ -264,10 +271,9 @@ class McpAsyncServerExchangeTests {
 		verify(mockSession, times(1)).sendNotification(eq(McpSchema.METHOD_NOTIFICATION_MESSAGE),
 				eq(debugNotification));
 
-		McpSchema.LoggingMessageNotification warningNotification = McpSchema.LoggingMessageNotification.builder()
-			.level(McpSchema.LoggingLevel.WARNING)
+		McpSchema.LoggingMessageNotification warningNotification = McpSchema.LoggingMessageNotification
+			.builder(McpSchema.LoggingLevel.WARNING, "Debug message that should be filtered")
 			.logger("test-logger")
-			.data("Debug message that should be filtered")
 			.build();
 
 		StepVerifier.create(exchange.loggingNotification(warningNotification)).verifyComplete();
@@ -279,10 +285,9 @@ class McpAsyncServerExchangeTests {
 
 	@Test
 	void testLoggingNotificationWithSessionError() {
-		McpSchema.LoggingMessageNotification notification = McpSchema.LoggingMessageNotification.builder()
-			.level(McpSchema.LoggingLevel.ERROR)
+		McpSchema.LoggingMessageNotification notification = McpSchema.LoggingMessageNotification
+			.builder(McpSchema.LoggingLevel.ERROR, "Test error message")
 			.logger("test-logger")
-			.data("Test error message")
 			.build();
 
 		when(mockSession.isNotificationForLevelAllowed(any())).thenReturn(Boolean.TRUE);
@@ -304,8 +309,8 @@ class McpAsyncServerExchangeTests {
 		McpAsyncServerExchange exchangeWithNullCapabilities = new McpAsyncServerExchange("testSessionId", mockSession,
 				null, clientInfo, McpTransportContext.EMPTY);
 
-		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
-			.message("Please provide your name")
+		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest
+			.builder("Please provide your name", Map.of("type", "object"))
 			.build();
 
 		StepVerifier.create(exchangeWithNullCapabilities.createElicitation(elicitRequest))
@@ -328,8 +333,8 @@ class McpAsyncServerExchangeTests {
 		McpAsyncServerExchange exchangeWithoutElicitation = new McpAsyncServerExchange("testSessionId", mockSession,
 				capabilitiesWithoutElicitation, clientInfo, McpTransportContext.EMPTY);
 
-		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
-			.message("Please provide your name")
+		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest
+			.builder("Please provide your name", Map.of("type", "object"))
 			.build();
 
 		StepVerifier.create(exchangeWithoutElicitation.createElicitation(elicitRequest)).verifyErrorSatisfies(error -> {
@@ -359,17 +364,15 @@ class McpAsyncServerExchangeTests {
 				java.util.Map.of("type", "number")));
 		requestedSchema.put("required", java.util.List.of("name"));
 
-		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
-			.message("Please provide your personal information")
-			.requestedSchema(requestedSchema)
+		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest
+			.builder("Please provide your personal information", requestedSchema)
 			.build();
 
 		java.util.Map<String, Object> responseContent = new java.util.HashMap<>();
 		responseContent.put("name", "John Doe");
 		responseContent.put("age", 30);
 
-		McpSchema.ElicitResult expectedResult = McpSchema.ElicitResult.builder()
-			.message(McpSchema.ElicitResult.Action.ACCEPT)
+		McpSchema.ElicitResult expectedResult = McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT)
 			.content(responseContent)
 			.build();
 
@@ -395,12 +398,11 @@ class McpAsyncServerExchangeTests {
 		McpAsyncServerExchange exchangeWithElicitation = new McpAsyncServerExchange("testSessionId", mockSession,
 				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY);
 
-		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
-			.message("Please provide sensitive information")
+		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest
+			.builder("Please provide sensitive information", Map.of("type", "object"))
 			.build();
 
-		McpSchema.ElicitResult expectedResult = McpSchema.ElicitResult.builder()
-			.message(McpSchema.ElicitResult.Action.DECLINE)
+		McpSchema.ElicitResult expectedResult = McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.DECLINE)
 			.build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitRequest), any(TypeRef.class)))
@@ -422,12 +424,11 @@ class McpAsyncServerExchangeTests {
 		McpAsyncServerExchange exchangeWithElicitation = new McpAsyncServerExchange("testSessionId", mockSession,
 				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY);
 
-		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
-			.message("Please provide your information")
+		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest
+			.builder("Please provide your information", Map.of("type", "object"))
 			.build();
 
-		McpSchema.ElicitResult expectedResult = McpSchema.ElicitResult.builder()
-			.message(McpSchema.ElicitResult.Action.CANCEL)
+		McpSchema.ElicitResult expectedResult = McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.CANCEL)
 			.build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitRequest), any(TypeRef.class)))
@@ -449,8 +450,8 @@ class McpAsyncServerExchangeTests {
 		McpAsyncServerExchange exchangeWithElicitation = new McpAsyncServerExchange("testSessionId", mockSession,
 				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY);
 
-		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder()
-			.message("Please provide your name")
+		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest
+			.builder("Please provide your name", Map.of("type", "object"))
 			.build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitRequest), any(TypeRef.class)))
@@ -459,6 +460,218 @@ class McpAsyncServerExchangeTests {
 		StepVerifier.create(exchangeWithElicitation.createElicitation(elicitRequest)).verifyErrorSatisfies(error -> {
 			assertThat(error).isInstanceOf(RuntimeException.class).hasMessage("Session communication error");
 		});
+	}
+
+	@Test
+	void testCreateElicitationWithInvalidRequestedSchema() {
+		McpSchema.ClientCapabilities capabilitiesWithElicitation = McpSchema.ClientCapabilities.builder()
+			.elicitation()
+			.build();
+
+		JsonSchemaValidator rejectingValidator = new JsonSchemaValidator() {
+			@Override
+			public ValidationResponse validate(Map<String, Object> schema, Object content) {
+				return ValidationResponse.asValid(null);
+			}
+
+			@Override
+			public ValidationResponse validateSchema(Map<String, Object> schema) {
+				return ValidationResponse.asInvalid("bad schema");
+			}
+		};
+
+		McpAsyncServerExchange exchangeWithValidator = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY, rejectingValidator);
+
+		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest
+			.builder("Provide info", Map.of("type", "invalid-type"))
+			.build();
+
+		StepVerifier.create(exchangeWithValidator.createElicitation(elicitRequest)).verifyErrorSatisfies(error -> {
+			assertThat(error).isInstanceOf(IllegalArgumentException.class)
+				.hasMessageContaining("SEP-1613")
+				.hasMessageContaining("ElicitRequest requestedSchema");
+		});
+
+		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), any(), any(TypeRef.class));
+	}
+
+	@Test
+	void testCreateElicitationWithValidSchemaPassesThroughToSession() {
+		McpSchema.ClientCapabilities capabilitiesWithElicitation = McpSchema.ClientCapabilities.builder()
+			.elicitation()
+			.build();
+
+		JsonSchemaValidator acceptingValidator = new JsonSchemaValidator() {
+			@Override
+			public ValidationResponse validate(Map<String, Object> schema, Object content) {
+				return ValidationResponse.asValid(null);
+			}
+
+			@Override
+			public ValidationResponse validateSchema(Map<String, Object> schema) {
+				return ValidationResponse.asValid(null);
+			}
+		};
+
+		McpAsyncServerExchange exchangeWithValidator = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY, acceptingValidator);
+
+		Map<String, Object> validSchema = Map.of("type", "object");
+		McpSchema.ElicitRequest elicitRequest = McpSchema.ElicitRequest.builder("Provide info", validSchema).build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitRequest), any(TypeRef.class)))
+			.thenReturn(Mono.just(McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT).build()));
+
+		StepVerifier.create(exchangeWithValidator.createElicitation(elicitRequest)).assertNext(result -> {
+			assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+		}).verifyComplete();
+
+		verify(mockSession, times(1)).sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitRequest),
+				any(TypeRef.class));
+	}
+
+	@Test
+	void testCreateElicitationWithUrlRequest() {
+		McpSchema.ClientCapabilities capabilitiesWithUrlElicitation = McpSchema.ClientCapabilities.builder()
+			.elicitation(false, true)
+			.build();
+
+		McpAsyncServerExchange exchangeWithElicitation = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithUrlElicitation, clientInfo, McpTransportContext.EMPTY);
+
+		McpSchema.ElicitUrlRequest elicitUrlRequest = McpSchema.ElicitUrlRequest
+			.builder("Please authenticate via URL", "https://example.com/auth", "elicit-url-123")
+			.build();
+
+		McpSchema.ElicitResult expectedResult = McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT)
+			.build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitUrlRequest), any(TypeRef.class)))
+			.thenReturn(Mono.just(expectedResult));
+
+		StepVerifier.create(exchangeWithElicitation.createElicitation(elicitUrlRequest)).assertNext(result -> {
+			assertThat(result).isEqualTo(expectedResult);
+			assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+		}).verifyComplete();
+	}
+
+	@Test
+	void testCreateElicitationWithUrlRequestBypassesValidator() {
+		McpSchema.ClientCapabilities capabilitiesWithElicitation = McpSchema.ClientCapabilities.builder()
+			.elicitation(false, true)
+			.build();
+
+		JsonSchemaValidator rejectingValidator = new JsonSchemaValidator() {
+			@Override
+			public ValidationResponse validate(Map<String, Object> schema, Object content) {
+				return ValidationResponse.asInvalid("should not be called");
+			}
+
+			@Override
+			public ValidationResponse validateSchema(Map<String, Object> schema) {
+				return ValidationResponse.asInvalid("should not be called");
+			}
+		};
+
+		McpAsyncServerExchange exchangeWithValidator = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithElicitation, clientInfo, McpTransportContext.EMPTY, rejectingValidator);
+
+		McpSchema.ElicitUrlRequest elicitUrlRequest = McpSchema.ElicitUrlRequest
+			.builder("Please visit the URL", "https://example.com/oauth", "elicit-oauth-123")
+			.build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitUrlRequest), any(TypeRef.class)))
+			.thenReturn(Mono.just(McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT).build()));
+
+		StepVerifier.create(exchangeWithValidator.createElicitation(elicitUrlRequest)).assertNext(result -> {
+			assertThat(result.action()).isEqualTo(McpSchema.ElicitResult.Action.ACCEPT);
+		}).verifyComplete();
+
+		verify(mockSession, times(1)).sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(elicitUrlRequest),
+				any(TypeRef.class));
+	}
+
+	@Test
+	void testElicitationCapabilitiesEmptyObject() {
+		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder().elicitation().build();
+		McpAsyncServerExchange exchangeEmpty = new McpAsyncServerExchange("testSessionId", mockSession, capabilities,
+				clientInfo, McpTransportContext.EMPTY);
+
+		McpSchema.ElicitFormRequest formRequest = McpSchema.ElicitRequest.builder("form", Map.of("type", "object"))
+			.build();
+		McpSchema.ElicitUrlRequest urlRequest = McpSchema.ElicitUrlRequest.builder("url", "http", "123").build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(formRequest), any(TypeRef.class)))
+			.thenReturn(Mono.just(McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT).build()));
+
+		StepVerifier.create(exchangeEmpty.createElicitation(formRequest)).expectNextCount(1).verifyComplete();
+		StepVerifier.create(exchangeEmpty.createElicitation(urlRequest))
+			.verifyErrorSatisfies(e -> assertThat(e).isInstanceOf(IllegalStateException.class)
+				.hasMessage("Client must be configured with URL elicitation capabilities"));
+	}
+
+	@Test
+	void testElicitationCapabilitiesFormOnly() {
+		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder()
+			.elicitation(true, false)
+			.build();
+		McpAsyncServerExchange exchangeForm = new McpAsyncServerExchange("testSessionId", mockSession, capabilities,
+				clientInfo, McpTransportContext.EMPTY);
+
+		McpSchema.ElicitFormRequest formRequest = McpSchema.ElicitRequest.builder("form", Map.of("type", "object"))
+			.build();
+		McpSchema.ElicitUrlRequest urlRequest = McpSchema.ElicitUrlRequest.builder("url", "http", "123").build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(formRequest), any(TypeRef.class)))
+			.thenReturn(Mono.just(McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT).build()));
+
+		StepVerifier.create(exchangeForm.createElicitation(formRequest)).expectNextCount(1).verifyComplete();
+		StepVerifier.create(exchangeForm.createElicitation(urlRequest))
+			.verifyErrorSatisfies(e -> assertThat(e).isInstanceOf(IllegalStateException.class)
+				.hasMessage("Client must be configured with URL elicitation capabilities"));
+	}
+
+	@Test
+	void testElicitationCapabilitiesUrlOnly() {
+		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder()
+			.elicitation(false, true)
+			.build();
+		McpAsyncServerExchange exchangeUrl = new McpAsyncServerExchange("testSessionId", mockSession, capabilities,
+				clientInfo, McpTransportContext.EMPTY);
+
+		McpSchema.ElicitFormRequest formRequest = McpSchema.ElicitRequest.builder("form", Map.of("type", "object"))
+			.build();
+		McpSchema.ElicitUrlRequest urlRequest = McpSchema.ElicitUrlRequest.builder("url", "http", "123").build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(urlRequest), any(TypeRef.class)))
+			.thenReturn(Mono.just(McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT).build()));
+
+		StepVerifier.create(exchangeUrl.createElicitation(urlRequest)).expectNextCount(1).verifyComplete();
+		StepVerifier.create(exchangeUrl.createElicitation(formRequest))
+			.verifyErrorSatisfies(e -> assertThat(e).isInstanceOf(IllegalStateException.class)
+				.hasMessage("Client must be configured with form elicitation capabilities"));
+	}
+
+	@Test
+	void testElicitationCapabilitiesBoth() {
+		McpSchema.ClientCapabilities capabilities = McpSchema.ClientCapabilities.builder()
+			.elicitation(true, true)
+			.build();
+		McpAsyncServerExchange exchangeBoth = new McpAsyncServerExchange("testSessionId", mockSession, capabilities,
+				clientInfo, McpTransportContext.EMPTY);
+
+		McpSchema.ElicitFormRequest formRequest = McpSchema.ElicitRequest.builder("form", Map.of("type", "object"))
+			.build();
+		McpSchema.ElicitUrlRequest urlRequest = McpSchema.ElicitUrlRequest.builder("url", "http", "123").build();
+
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(formRequest), any(TypeRef.class)))
+			.thenReturn(Mono.just(McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT).build()));
+		when(mockSession.sendRequest(eq(McpSchema.METHOD_ELICITATION_CREATE), eq(urlRequest), any(TypeRef.class)))
+			.thenReturn(Mono.just(McpSchema.ElicitResult.builder(McpSchema.ElicitResult.Action.ACCEPT).build()));
+
+		StepVerifier.create(exchangeBoth.createElicitation(formRequest)).expectNextCount(1).verifyComplete();
+		StepVerifier.create(exchangeBoth.createElicitation(urlRequest)).expectNextCount(1).verifyComplete();
 	}
 
 	// ---------------------------------------
@@ -471,9 +684,10 @@ class McpAsyncServerExchangeTests {
 		McpAsyncServerExchange exchangeWithNullCapabilities = new McpAsyncServerExchange("testSessionId", mockSession,
 				null, clientInfo, McpTransportContext.EMPTY);
 
-		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
-			.messages(Arrays
-				.asList(new McpSchema.SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("Hello, world!"))))
+		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest
+			.builder(Arrays.asList(McpSchema.SamplingMessage
+				.builder(McpSchema.Role.USER, McpSchema.TextContent.builder("Hello, world!").build())
+				.build()), 1000)
 			.build();
 
 		StepVerifier.create(exchangeWithNullCapabilities.createMessage(createMessageRequest))
@@ -497,9 +711,10 @@ class McpAsyncServerExchangeTests {
 		McpAsyncServerExchange exchangeWithoutSampling = new McpAsyncServerExchange("testSessionId", mockSession,
 				capabilitiesWithoutSampling, clientInfo, McpTransportContext.EMPTY);
 
-		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
-			.messages(Arrays
-				.asList(new McpSchema.SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("Hello, world!"))))
+		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest
+			.builder(Arrays.asList(McpSchema.SamplingMessage
+				.builder(McpSchema.Role.USER, McpSchema.TextContent.builder("Hello, world!").build())
+				.build()), 1000)
 			.build();
 
 		StepVerifier.create(exchangeWithoutSampling.createMessage(createMessageRequest)).verifyErrorSatisfies(error -> {
@@ -522,15 +737,15 @@ class McpAsyncServerExchangeTests {
 		McpAsyncServerExchange exchangeWithSampling = new McpAsyncServerExchange("testSessionId", mockSession,
 				capabilitiesWithSampling, clientInfo, McpTransportContext.EMPTY);
 
-		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
-			.messages(Arrays
-				.asList(new McpSchema.SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("Hello, world!"))))
+		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest
+			.builder(Arrays.asList(McpSchema.SamplingMessage
+				.builder(McpSchema.Role.USER, McpSchema.TextContent.builder("Hello, world!").build())
+				.build()), 1000)
 			.build();
 
-		McpSchema.CreateMessageResult expectedResult = McpSchema.CreateMessageResult.builder()
-			.role(McpSchema.Role.ASSISTANT)
-			.content(new McpSchema.TextContent("Hello! How can I help you today?"))
-			.model("gpt-4")
+		McpSchema.CreateMessageResult expectedResult = McpSchema.CreateMessageResult
+			.builder(McpSchema.Role.ASSISTANT,
+					McpSchema.TextContent.builder("Hello! How can I help you today?").build(), "gpt-4")
 			.stopReason(McpSchema.CreateMessageResult.StopReason.END_TURN)
 			.build();
 
@@ -559,16 +774,20 @@ class McpAsyncServerExchangeTests {
 				capabilitiesWithSampling, clientInfo, McpTransportContext.EMPTY);
 
 		// Create request with image content
-		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
-			.messages(Arrays.asList(new McpSchema.SamplingMessage(McpSchema.Role.USER,
-					new McpSchema.ImageContent(null, "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD...",
-							"image/jpeg"))))
+		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder(Arrays.asList(
+				McpSchema.SamplingMessage
+					.builder(McpSchema.Role.USER,
+							McpSchema.ImageContent
+								.builder("data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD...", "image/jpeg")
+								.build())
+					.build()),
+				1000)
 			.build();
 
-		McpSchema.CreateMessageResult expectedResult = McpSchema.CreateMessageResult.builder()
-			.role(McpSchema.Role.ASSISTANT)
-			.content(new McpSchema.TextContent("I can see an image. It appears to be a photograph."))
-			.model("gpt-4-vision")
+		McpSchema.CreateMessageResult expectedResult = McpSchema.CreateMessageResult
+			.builder(McpSchema.Role.ASSISTANT,
+					McpSchema.TextContent.builder("I can see an image. It appears to be a photograph.").build(),
+					"gpt-4-vision")
 			.stopReason(McpSchema.CreateMessageResult.StopReason.END_TURN)
 			.build();
 
@@ -593,9 +812,10 @@ class McpAsyncServerExchangeTests {
 		McpAsyncServerExchange exchangeWithSampling = new McpAsyncServerExchange("testSessionId", mockSession,
 				capabilitiesWithSampling, clientInfo, McpTransportContext.EMPTY);
 
-		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
-			.messages(Arrays
-				.asList(new McpSchema.SamplingMessage(McpSchema.Role.USER, new McpSchema.TextContent("Hello"))))
+		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder(Arrays.asList(
+				McpSchema.SamplingMessage.builder(McpSchema.Role.USER, McpSchema.TextContent.builder("Hello").build())
+					.build()),
+				1000)
 			.build();
 
 		when(mockSession.sendRequest(eq(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE), eq(createMessageRequest),
@@ -617,16 +837,17 @@ class McpAsyncServerExchangeTests {
 		McpAsyncServerExchange exchangeWithSampling = new McpAsyncServerExchange("testSessionId", mockSession,
 				capabilitiesWithSampling, clientInfo, McpTransportContext.EMPTY);
 
-		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest.builder()
-			.messages(Arrays.asList(new McpSchema.SamplingMessage(McpSchema.Role.USER,
-					new McpSchema.TextContent("What files are available?"))))
+		McpSchema.CreateMessageRequest createMessageRequest = McpSchema.CreateMessageRequest
+			.builder(Arrays.asList(McpSchema.SamplingMessage
+				.builder(McpSchema.Role.USER, McpSchema.TextContent.builder("What files are available?").build())
+				.build()), 1000)
 			.includeContext(McpSchema.CreateMessageRequest.ContextInclusionStrategy.ALL_SERVERS)
 			.build();
 
-		McpSchema.CreateMessageResult expectedResult = McpSchema.CreateMessageResult.builder()
-			.role(McpSchema.Role.ASSISTANT)
-			.content(new McpSchema.TextContent("Based on the available context, I can see several files..."))
-			.model("gpt-4")
+		McpSchema.CreateMessageResult expectedResult = McpSchema.CreateMessageResult
+			.builder(McpSchema.Role.ASSISTANT,
+					McpSchema.TextContent.builder("Based on the available context, I can see several files...").build(),
+					"gpt-4")
 			.stopReason(McpSchema.CreateMessageResult.StopReason.END_TURN)
 			.build();
 

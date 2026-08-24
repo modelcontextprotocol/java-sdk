@@ -43,13 +43,16 @@ class LifecycleInitializerPostInitializationHookTests {
 	private static final McpSchema.ClientCapabilities CLIENT_CAPABILITIES = McpSchema.ClientCapabilities.builder()
 		.build();
 
-	private static final McpSchema.Implementation CLIENT_INFO = new McpSchema.Implementation("test-client", "1.0.0");
+	private static final McpSchema.Implementation CLIENT_INFO = McpSchema.Implementation.builder("test-client", "1.0.0")
+		.build();
 
 	private static final List<String> PROTOCOL_VERSIONS = List.of("1.0.0", "2.0.0");
 
-	private static final McpSchema.InitializeResult MOCK_INIT_RESULT = new McpSchema.InitializeResult("2.0.0",
-			McpSchema.ServerCapabilities.builder().build(), new McpSchema.Implementation("test-server", "1.0.0"),
-			"Test instructions");
+	private static final McpSchema.InitializeResult MOCK_INIT_RESULT = McpSchema.InitializeResult
+		.builder("2.0.0", McpSchema.ServerCapabilities.builder().build(),
+				McpSchema.Implementation.builder("test-server", "1.0.0").build())
+		.instructions("Test instructions")
+		.build();
 
 	@Mock
 	private McpClientSession mockClientSession;

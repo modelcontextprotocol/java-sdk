@@ -41,24 +41,12 @@ public class ResourceTemplateListingTest {
 	void testResourceListingWithMixedResources() {
 		// Create resource list with both regular and template resources
 		List<McpSchema.Resource> allResources = List.of(
-				McpSchema.Resource.builder()
-					.uri("file:///test/doc1.txt")
-					.name("Document 1")
+				McpSchema.Resource.builder("file:///test/doc1.txt", "Document 1").mimeType("text/plain").build(),
+				McpSchema.Resource.builder("file:///test/doc2.txt", "Document 2").mimeType("text/plain").build(),
+				McpSchema.Resource.builder("file:///test/{type}/document.txt", "Typed Document")
 					.mimeType("text/plain")
 					.build(),
-				McpSchema.Resource.builder()
-					.uri("file:///test/doc2.txt")
-					.name("Document 2")
-					.mimeType("text/plain")
-					.build(),
-				McpSchema.Resource.builder()
-					.uri("file:///test/{type}/document.txt")
-					.name("Typed Document")
-					.mimeType("text/plain")
-					.build(),
-				McpSchema.Resource.builder()
-					.uri("file:///users/{userId}/files/{fileId}")
-					.name("User File")
+				McpSchema.Resource.builder("file:///users/{userId}/files/{fileId}", "User File")
 					.mimeType("text/plain")
 					.build());
 
@@ -77,20 +65,18 @@ public class ResourceTemplateListingTest {
 	void testResourceTemplatesListedSeparately() {
 		// Create mixed resources
 		List<McpSchema.Resource> resources = List.of(
-				McpSchema.Resource.builder()
-					.uri("file:///test/regular.txt")
-					.name("Regular Resource")
+				McpSchema.Resource.builder("file:///test/regular.txt", "Regular Resource")
 					.mimeType("text/plain")
 					.build(),
-				McpSchema.Resource.builder()
-					.uri("file:///test/user/{userId}/profile.txt")
-					.name("User Profile")
+				McpSchema.Resource.builder("file:///test/user/{userId}/profile.txt", "User Profile")
 					.mimeType("text/plain")
 					.build());
 
 		// Create explicit resource template
-		McpSchema.ResourceTemplate explicitTemplate = new McpSchema.ResourceTemplate(
-				"file:///test/document/{docId}/content.txt", "Document Template", null, "text/plain", null);
+		McpSchema.ResourceTemplate explicitTemplate = McpSchema.ResourceTemplate
+			.builder("file:///test/document/{docId}/content.txt", "Document Template")
+			.mimeType("text/plain")
+			.build();
 
 		// Filter regular resources (those without template parameters)
 		List<McpSchema.Resource> regularResources = resources.stream()
@@ -100,8 +86,11 @@ public class ResourceTemplateListingTest {
 		// Extract template resources (those with template parameters)
 		List<McpSchema.ResourceTemplate> templateResources = resources.stream()
 			.filter(resource -> resource.uri().contains("{"))
-			.map(resource -> new McpSchema.ResourceTemplate(resource.uri(), resource.name(), resource.description(),
-					resource.mimeType(), resource.annotations()))
+			.map(resource -> McpSchema.ResourceTemplate.builder(resource.uri(), resource.name())
+				.description(resource.description())
+				.mimeType(resource.mimeType())
+				.annotations(resource.annotations())
+				.build())
 			.collect(Collectors.toList());
 
 		// Verify regular resources list

@@ -1,5 +1,5 @@
 /*
-* Copyright 2024 - 2024 the original author or authors.
+* Copyright 2024 - 2026 the original author or authors.
 */
 
 package io.modelcontextprotocol.spec;
@@ -19,6 +19,15 @@ public class McpError extends RuntimeException {
 	 */
 	public static final Function<String, McpError> RESOURCE_NOT_FOUND = resourceUri -> new McpError(new JSONRPCError(
 			McpSchema.ErrorCodes.RESOURCE_NOT_FOUND, "Resource not found", Map.of("uri", resourceUri)));
+
+	/**
+	 * <a href=
+	 * "https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation#url-elicitation-required-error">URL
+	 * Elicitation Required</a>
+	 */
+	public static final Function<java.util.List<McpSchema.ElicitUrlRequest>, McpError> URL_ELICITATION_REQUIRED = elicitations -> new McpError(
+			new JSONRPCError(McpSchema.ErrorCodes.URL_ELICITATION_REQUIRED, "URL elicitation required",
+					Map.of("elicitations", elicitations)));
 
 	private JSONRPCError jsonRpcError;
 

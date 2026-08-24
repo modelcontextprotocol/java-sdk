@@ -111,7 +111,7 @@ Create process-based transport using stdin/stdout:
 
 ```java
 StdioServerTransportProvider transportProvider =
-    new StdioServerTransportProvider(new ObjectMapper());
+    new StdioServerTransportProvider(McpJsonDefaults.getMapper());
 ```
 
 Provides bidirectional JSON-RPC message handling over standard input/output streams with non-blocking message processing, serialization/deserialization, and graceful shutdown support.
@@ -237,7 +237,9 @@ Key features:
 
         @Bean
         public HttpServletSseServerTransportProvider servletSseServerTransportProvider() {
-            return new HttpServletSseServerTransportProvider(new ObjectMapper(), "/mcp/message");
+            return HttpServletSseServerTransportProvider.builder()
+                .messageEndpoint("/mcp/message")
+                .build();
         }
 
         @Bean
@@ -340,10 +342,8 @@ The recommended approach is to use the builder pattern and `CallToolRequest` as 
     ```java
     // Sync tool specification using builder
     var syncToolSpecification = SyncToolSpecification.builder()
-        .tool(Tool.builder()
-            .name("calculator")
+        .tool(Tool.builder("calculator", schema)
             .description("Basic calculator")
-            .inputSchema(schema)
             .build())
         .callHandler((exchange, request) -> {
             // Access arguments via request.arguments()
@@ -363,10 +363,8 @@ The recommended approach is to use the builder pattern and `CallToolRequest` as 
     ```java
     // Async tool specification using builder
     var asyncToolSpecification = AsyncToolSpecification.builder()
-        .tool(Tool.builder()
-            .name("calculator")
+        .tool(Tool.builder("calculator", schema)
             .description("Basic calculator")
-            .inputSchema(schema)
             .build())
         .callHandler((exchange, request) -> {
             // Access arguments via request.arguments()
@@ -389,13 +387,59 @@ You can also register tools directly on the server builder using the `toolCall` 
 ```java
 var server = McpServer.sync(transportProvider)
     .toolCall(
-        Tool.builder().name("echo").description("Echoes input").inputSchema(schema).build(),
+        Tool.builder("echo", schema).description("Echoes input").build(),
         (exchange, request) -> CallToolResult.builder()
             .content(List.of(new McpSchema.TextContent(request.arguments().get("text").toString())))
             .build()
     )
     .build();
 ```
+
+#### Tool Input Validation
+
+By default the server validates incoming tool arguments against the tool's `inputSchema` before invoking the handler. When validation fails, the call returns a `CallToolResult` with `isError` set and a textual error, rather than reaching your handler. Validation uses the configured `JsonSchemaValidator` (or the default from `McpJsonDefaults.getSchemaValidator()`), and can be turned off on the server builder:
+
+```java
+var server = McpServer.sync(transportProvider)
+    .validateToolInputs(false)   // default is true
+    .build();
+```
+
+The embedded JSON Schema documents themselves (`Tool.inputSchema`, `Tool.outputSchema`, and elicitation `requestedSchema`) are validated against the JSON Schema 2020-12 meta-schema (SEP-1613). Malformed schemas are rejected at build time (`McpServer.build()`) and when calling `addTool()`, throwing an `IllegalArgumentException` that names the offending field. A schema that declares a different dialect via `$schema` is accepted without meta-schema validation.
+
+#### Tool Result Content Types
+
+Besides `TextContent`, a `CallToolResult` can return images, audio, and embedded resources — any combination of these can appear in the same result's `content` list:
+
+```java
+var syncToolSpecification = SyncToolSpecification.builder()
+    .tool(Tool.builder("generate-report", schema)
+        .description("Generates a report with mixed content")
+        .build())
+    .callHandler((exchange, request) -> {
+        var text = TextContent.builder("Report summary:").build();
+
+        // Image content: base64-encoded data + MIME type
+        var image = ImageContent.builder(base64PngData, "image/png").build();
+
+        // Audio content: base64-encoded data + MIME type
+        var audio = AudioContent.builder(base64WavData, "audio/wav").build();
+
+        // Embedded resource: wraps a TextResourceContents or BlobResourceContents
+        var resourceContents = TextResourceContents.builder("report://details", "Full details...")
+            .mimeType("text/plain")
+            .build();
+        var embeddedResource = EmbeddedResource.builder(resourceContents).build();
+
+        return CallToolResult.builder()
+            .content(List.of(text, image, audio, embeddedResource))
+            .isError(false)
+            .build();
+    })
+    .build();
+```
+
+`ImageContent.builder(data, mimeType)` and `AudioContent.builder(data, mimeType)` both take base64-encoded binary data. `EmbeddedResource.builder(resourceContents)` wraps either a `TextResourceContents` (for text data) or a `BlobResourceContents` (for base64-encoded binary data) — see [Reading Binary Resources](#reading-binary-resources) for the `BlobResourceContents` shape.
 
 ### Resource Specification
 
@@ -407,15 +451,13 @@ Resources provide context to AI models by exposing data such as: File contents, 
     ```java
     // Sync resource specification
     var syncResourceSpecification = new McpServerFeatures.SyncResourceSpecification(
-        Resource.builder()
-            .uri("custom://resource")
-            .name("name")
+        Resource.builder("custom://resource", "name")
             .description("description")
             .mimeType("text/plain")
             .build(),
         (exchange, request) -> {
             // Resource read implementation
-            return new ReadResourceResult(contents);
+            return ReadResourceResult.builder(contents).build();
         }
     );
     ```
@@ -425,18 +467,39 @@ Resources provide context to AI models by exposing data such as: File contents, 
     ```java
     // Async resource specification
     var asyncResourceSpecification = new McpServerFeatures.AsyncResourceSpecification(
-        Resource.builder()
-            .uri("custom://resource")
-            .name("name")
+        Resource.builder("custom://resource", "name")
             .description("description")
             .mimeType("text/plain")
             .build(),
         (exchange, request) -> {
             // Resource read implementation
-            return Mono.just(new ReadResourceResult(contents));
+            return Mono.just(ReadResourceResult.builder(contents).build());
         }
     );
     ```
+
+#### Reading Binary Resources
+
+Binary resources (images, PDFs, audio, etc.) are returned as `BlobResourceContents`, which carries base64-encoded data instead of the plain `text` field used by `TextResourceContents`:
+
+```java
+var binaryResourceSpecification = new McpServerFeatures.SyncResourceSpecification(
+    Resource.builder("file:///logo.png", "Logo")
+        .description("Application logo")
+        .mimeType("image/png")
+        .build(),
+    (exchange, request) -> {
+        String base64Data = Base64.getEncoder().encodeToString(readLogoBytes());
+        return ReadResourceResult.builder(List.of(
+                BlobResourceContents.builder(request.uri(), base64Data)
+                    .mimeType("image/png")
+                    .build()))
+            .build();
+    }
+);
+```
+
+`ReadResourceResult` accepts a list mixing `TextResourceContents` and `BlobResourceContents`, so a single resource read can return multiple representations if needed.
 
 ### Resource Subscriptions
 
@@ -481,15 +544,13 @@ Resource templates allow servers to expose parameterized resources using URI tem
 ```java
 // Resource template specification
 var resourceTemplateSpec = new McpServerFeatures.SyncResourceTemplateSpecification(
-    ResourceTemplate.builder()
-        .uriTemplate("file://{path}")
-        .name("File Resource")
+    ResourceTemplate.builder("file://{path}", "File Resource")
         .description("Access files by path")
         .mimeType("application/octet-stream")
         .build(),
     (exchange, request) -> {
         // Read the file at the requested URI
-        return new ReadResourceResult(contents);
+        return ReadResourceResult.builder(contents).build();
     }
 );
 ```
@@ -504,12 +565,18 @@ The Prompt Specification is a structured template for AI model interactions that
     ```java
     // Sync prompt specification
     var syncPromptSpecification = new McpServerFeatures.SyncPromptSpecification(
-        new Prompt("greeting", "description", List.of(
-            new PromptArgument("name", "description", true)
-        )),
+        Prompt.builder("greeting")
+            .description("description")
+            .arguments(List.of(
+                PromptArgument.builder("name")
+                    .description("description")
+                    .required(true)
+                    .build()
+            ))
+            .build(),
         (exchange, request) -> {
             // Prompt implementation
-            return new GetPromptResult(description, messages);
+            return GetPromptResult.builder(messages).description(description).build();
         }
     );
     ```
@@ -519,12 +586,18 @@ The Prompt Specification is a structured template for AI model interactions that
     ```java
     // Async prompt specification
     var asyncPromptSpecification = new McpServerFeatures.AsyncPromptSpecification(
-        new Prompt("greeting", "description", List.of(
-            new PromptArgument("name", "description", true)
-        )),
+        Prompt.builder("greeting")
+            .description("description")
+            .arguments(List.of(
+                PromptArgument.builder("name")
+                    .description("description")
+                    .required(true)
+                    .build()
+            ))
+            .build(),
         (exchange, request) -> {
             // Prompt implementation
-            return Mono.just(new GetPromptResult(description, messages));
+            return Mono.just(GetPromptResult.builder(messages).description(description).build());
         }
     );
     ```
@@ -532,6 +605,44 @@ The Prompt Specification is a structured template for AI model interactions that
 The prompt definition includes name (identifier for the prompt), description (purpose of the prompt), and list of arguments (parameters for templating).
 The handler function processes requests and returns formatted templates.
 The first argument is `McpSyncServerExchange`/`McpAsyncServerExchange` for client interaction, and the second argument is a `GetPromptRequest` instance.
+
+#### Prompts with Embedded Resources and Images
+
+A prompt's messages can carry `EmbeddedResource` or `ImageContent` instead of plain text by passing them as the `content` argument of `PromptMessage.builder(role, content)`:
+
+```java
+// Prompt that embeds a resource's content in one of its messages
+var promptWithResource = new McpServerFeatures.SyncPromptSpecification(
+    Prompt.builder("review-file")
+        .description("Reviews a file, embedding its content in the prompt")
+        .arguments(List.of(PromptArgument.builder("resourceUri").required(true).build()))
+        .build(),
+    (exchange, request) -> {
+        String resourceUri = (String) request.arguments().get("resourceUri");
+        var resourceContents = TextResourceContents.builder(resourceUri, loadFileContent(resourceUri))
+            .mimeType("text/plain")
+            .build();
+        var embeddedResource = EmbeddedResource.builder(resourceContents).build();
+
+        return GetPromptResult.builder(List.of(
+                PromptMessage.builder(Role.USER, embeddedResource).build(),
+                PromptMessage.builder(Role.USER, TextContent.builder("Please review the file above.").build()).build()))
+            .build();
+    }
+);
+
+// Prompt that embeds an image in one of its messages
+var promptWithImage = new McpServerFeatures.SyncPromptSpecification(
+    Prompt.builder("describe-image")
+        .description("Asks the model to describe an embedded image")
+        .arguments(List.of())
+        .build(),
+    (exchange, request) -> GetPromptResult.builder(List.of(
+            PromptMessage.builder(Role.USER, ImageContent.builder(base64PngData, "image/png").build()).build(),
+            PromptMessage.builder(Role.USER, TextContent.builder("Describe the image above.").build()).build()))
+        .build()
+);
+```
 
 ### Completion Specification
 
@@ -572,7 +683,42 @@ Completions allow servers to provide argument autocompletion suggestions for pro
     );
     ```
 
-Completions can be registered for both `PromptReference` and `ResourceReference` types.
+Completions can be registered for both `PromptReference` and `ResourceReference` types. A `ResourceReference` completion suggests values for a resource template's URI parameters instead of a prompt's arguments:
+
+=== "Sync"
+
+    ```java
+    // Sync completion specification for a resource template argument
+    var syncResourceCompletionSpec = new McpServerFeatures.SyncCompletionSpecification(
+        new McpSchema.ResourceReference("file://{path}"),  // Reference to a resource template
+        (exchange, request) -> {
+            String argName = request.argument().name();
+            String partial = request.argument().value();
+            // Return matching suggestions, e.g. matching file paths
+            List<String> suggestions = findMatchingPaths(partial);
+            return new McpSchema.CompleteResult(
+                new McpSchema.CompleteResult.CompleteCompletion(suggestions, suggestions.size(), false)
+            );
+        }
+    );
+    ```
+
+=== "Async"
+
+    ```java
+    // Async completion specification for a resource template argument
+    var asyncResourceCompletionSpec = new McpServerFeatures.AsyncCompletionSpecification(
+        new McpSchema.ResourceReference("file://{path}"),
+        (exchange, request) -> {
+            String argName = request.argument().name();
+            String partial = request.argument().value();
+            List<String> suggestions = findMatchingPaths(partial);
+            return Mono.just(new McpSchema.CompleteResult(
+                new McpSchema.CompleteResult.CompleteCompletion(suggestions, suggestions.size(), false)
+            ));
+        }
+    );
+    ```
 
 ### Using Sampling from a Server
 
@@ -592,10 +738,8 @@ Once connected to a compatible client, the server can request language model gen
 
     // Define a tool that uses sampling
     var calculatorTool = SyncToolSpecification.builder()
-        .tool(Tool.builder()
-            .name("ai-calculator")
+        .tool(Tool.builder("ai-calculator", schema)
             .description("Performs calculations using AI")
-            .inputSchema(schema)
             .build())
         .callHandler((exchange, request) -> {
             // Check if client supports sampling
@@ -606,9 +750,10 @@ Once connected to a compatible client, the server can request language model gen
             }
 
             // Create a sampling request
-            CreateMessageRequest samplingRequest = CreateMessageRequest.builder()
-                .messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
-                    new McpSchema.TextContent("Calculate: " + request.arguments().get("expression")))))
+            CreateMessageRequest samplingRequest = CreateMessageRequest.builder(
+                    List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
+                        new McpSchema.TextContent("Calculate: " + request.arguments().get("expression")))),
+                    100)
                 .modelPreferences(McpSchema.ModelPreferences.builder()
                     .hints(List.of(
                         McpSchema.ModelHint.of("claude-3-sonnet"),
@@ -618,7 +763,6 @@ Once connected to a compatible client, the server can request language model gen
                     .speedPriority(0.5)
                     .build())
                 .systemPrompt("You are a helpful calculator assistant. Provide only the numerical answer.")
-                .maxTokens(100)
                 .build();
 
             // Request sampling from the client
@@ -646,10 +790,8 @@ Once connected to a compatible client, the server can request language model gen
 
     // Define a tool that uses sampling
     var calculatorTool = AsyncToolSpecification.builder()
-        .tool(Tool.builder()
-            .name("ai-calculator")
+        .tool(Tool.builder("ai-calculator", schema)
             .description("Performs calculations using AI")
-            .inputSchema(schema)
             .build())
         .callHandler((exchange, request) -> {
             // Check if client supports sampling
@@ -660,9 +802,10 @@ Once connected to a compatible client, the server can request language model gen
             }
 
             // Create a sampling request
-            CreateMessageRequest samplingRequest = CreateMessageRequest.builder()
-                .messages(List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
-                    new McpSchema.TextContent("Calculate: " + request.arguments().get("expression")))))
+            CreateMessageRequest samplingRequest = CreateMessageRequest.builder(
+                    List.of(new McpSchema.SamplingMessage(McpSchema.Role.USER,
+                        new McpSchema.TextContent("Calculate: " + request.arguments().get("expression")))),
+                    100)
                 .modelPreferences(McpSchema.ModelPreferences.builder()
                     .hints(List.of(
                         McpSchema.ModelHint.of("claude-3-sonnet"),
@@ -672,7 +815,6 @@ Once connected to a compatible client, the server can request language model gen
                     .speedPriority(0.5)
                     .build())
                 .systemPrompt("You are a helpful calculator assistant. Provide only the numerical answer.")
-                .maxTokens(100)
                 .build();
 
             // Request sampling from the client
@@ -701,10 +843,8 @@ Servers can request user input from connected clients that support elicitation:
 
 ```java
 var tool = SyncToolSpecification.builder()
-    .tool(Tool.builder()
-        .name("confirm-action")
+    .tool(Tool.builder("confirm-action", schema)
         .description("Confirms an action with the user")
-        .inputSchema(schema)
         .build())
     .callHandler((exchange, request) -> {
         // Check if client supports elicitation
@@ -715,9 +855,7 @@ var tool = SyncToolSpecification.builder()
         }
 
         // Request user confirmation
-        ElicitRequest elicitRequest = ElicitRequest.builder()
-            .message("Do you want to proceed with this action?")
-            .requestedSchema(Map.of(
+        ElicitRequest elicitRequest = ElicitFormRequest.builder("Do you want to proceed with this action?", Map.of(
                 "type", "object",
                 "properties", Map.of("confirmed", Map.of("type", "boolean"))
             ))
@@ -739,6 +877,100 @@ var tool = SyncToolSpecification.builder()
     .build();
 ```
 
+To request out-of-band URL elicitation, such as a user authorizing an OAuth flow:
+
+```java
+var urlTool = SyncToolSpecification.builder()
+    .tool(Tool.builder("oauth-auth", schema)
+        .description("Authenticates via OAuth")
+        .build())
+    .callHandler((exchange, request) -> {
+        // Request URL elicitation from client
+        if (
+                exchange.getClientCapabilities().elicitation() != null 
+                && exchange.getClientCapabilities().elicitation().url() != null
+        ) {
+            ElicitRequest urlRequest = McpSchema.ElicitUrlRequest
+                    .builder("Please authenticate", "https://example.com/oauth", "oauth-123").build();
+            ElicitResult result = exchange.elicit(urlRequest);
+            // handle result.action == CANCELLED or DENIED
+            if (result.action() != ElicitResult.Action.ACCEPT) {
+                return CallToolResult.builder()
+                        .content(List.of(new McpSchema.TextContent("Authentication failed or cancelled")))
+                        .build();
+            }
+        }
+
+        // wait for user to visit the URL
+        return CallToolResult.builder()
+                .content(List.of(new McpSchema.TextContent("Authentication successful")))
+                .build();
+    })
+    .build();
+```
+
+#### Elicitation with Enum Values (SEP-1330)
+
+For form elicitation, the SDK provides typed helpers to build `requestedSchema` properties that render as single-select or multi-select choices, with or without human-readable titles:
+
+```java
+// Untitled single-select: plain enum values, no separate display titles
+var untitledSingle = UntitledSingleSelectEnumSchema.builder()
+    .enumValues("small", "medium", "large")
+    .build();
+
+// Titled single-select: value/title pairs via oneOf+const
+var titledSingle = TitledSingleSelectEnumSchema.builder()
+    .oneOf(new EnumSchemaOption("sm", "Small"),
+           new EnumSchemaOption("md", "Medium"),
+           new EnumSchemaOption("lg", "Large"))
+    .build();
+
+// Untitled multi-select: an array property whose items are an enum
+var untitledMulti = UntitledMultiSelectEnumSchema
+    .builder(UntitledMultiSelectItems.builder().enumValues("red", "green", "blue").build())
+    .build();
+
+// Titled multi-select: array items with value/title pairs via anyOf+const
+var titledMulti = TitledMultiSelectEnumSchema
+    .builder(TitledMultiSelectItems.builder()
+        .anyOf(new EnumSchemaOption("red", "Red"), new EnumSchemaOption("green", "Green"))
+        .build())
+    .build();
+
+// Convert the typed schema helpers into the plain Map<String, Object> shape
+// expected by ElicitRequest.builder(message, requestedSchema)
+var mapper = McpJsonDefaults.getMapper();
+TypeRef<Map<String, Object>> mapType = new TypeRef<>() {};
+Map<String, Object> requestedSchema = Map.of("type", "object", "properties",
+        Map.of("size", mapper.convertValue(titledSingle, mapType),
+               "colors", mapper.convertValue(titledMulti, mapType)),
+        "required", List.of("size", "colors"));
+
+ElicitRequest elicitRequest = ElicitRequest.builder("Choose your options", requestedSchema).build();
+ElicitResult result = exchange.createElicitation(elicitRequest);
+```
+
+`LegacyTitledEnumSchema` (a value list plus a parallel `enumNames` list, built with `.enumValues(...)` and `.enumNames(...)`) is also available for clients that predate SEP-1330's `oneOf`/`anyOf` convention, but new schemas should prefer `TitledSingleSelectEnumSchema` / `TitledMultiSelectEnumSchema`.
+
+### Pinging the Client
+
+A server can check that a connected client is still responsive by sending a `ping` request through the exchange:
+
+```java
+var tool = SyncToolSpecification.builder()
+    .tool(Tool.builder("health-check", emptyJsonSchema).description("Verifies the client is reachable").build())
+    .callHandler((exchange, request) -> {
+        exchange.ping(); // blocks until the client responds, or the request times out
+        return CallToolResult.builder()
+            .content(List.of(new McpSchema.TextContent("Client is responsive")))
+            .build();
+    })
+    .build();
+```
+
+The async equivalent, `McpAsyncServerExchange.ping()`, returns a `Mono<Object>` that completes when the client responds. Ping requests are subject to the same `requestTimeout` configured on the server builder.
+
 ### Logging Support
 
 The server provides structured logging capabilities that allow sending log messages to clients with different severity levels.
@@ -747,23 +979,17 @@ Log notifications can only be sent from within an existing client session, such 
 The server can send log messages using the `McpAsyncServerExchange`/`McpSyncServerExchange` object in the tool/resource/prompt handler function:
 
 ```java
-var tool = new McpServerFeatures.AsyncToolSpecification(
-    Tool.builder().name("logging-test").description("Test logging notifications").inputSchema(emptyJsonSchema).build(),
-    null,
-    (exchange, request) -> {
-
-      exchange.loggingNotification( // Use the exchange to send log messages
-          McpSchema.LoggingMessageNotification.builder()
-            .level(McpSchema.LoggingLevel.DEBUG)
-            .logger("test-logger")
-            .data("Debug message")
-            .build())
-        .block();
-
-      return Mono.just(CallToolResult.builder()
-          .content(List.of(new McpSchema.TextContent("Logging test completed")))
-          .build());
-    });
+var tool = AsyncToolSpecification.builder()
+    .tool(Tool.builder("logging-test", emptyJsonSchema).description("Test logging notifications").build())
+    .callHandler((exchange, request) ->
+        exchange.loggingNotification( // Use the exchange to send log messages
+            McpSchema.LoggingMessageNotification.builder(McpSchema.LoggingLevel.DEBUG, "Debug message")
+              .logger("test-logger")
+              .build())
+          .then(Mono.just(CallToolResult.builder()
+              .content(List.of(new McpSchema.TextContent("Logging test completed")))
+              .build())))
+    .build();
 
 var mcpServer = McpServer.async(mcpServerTransportProvider)
   .serverInfo("test-server", "1.0.0")
@@ -795,3 +1021,42 @@ Supported logging levels (in order of increasing severity): DEBUG (0), INFO (1),
 ## Error Handling
 
 The SDK provides comprehensive error handling through the McpError class, covering protocol compatibility, transport communication, JSON-RPC messaging, tool execution, resource management, prompt handling, timeouts, and connection issues. This unified error handling approach ensures consistent and reliable error management across both synchronous and asynchronous operations.
+
+### Error Handling in Tool Implementations
+
+#### Two Tiers of Errors
+
+MCP distinguishes between two categories of errors in tool execution:
+
+**1. Tool-Level Errors (Recoverable by the LLM)**
+
+Use `CallToolResult` with `isError(true)` for validation failures, missing arguments, or domain errors the LLM can act on and retry.
+
+```java
+// Example: Domain validation failure (e.g., invalid email format)
+if (!emailAddress.matches("^[A-Za-z0-9+_.-]+@(.+)$")) {
+        return CallToolResult.builder()
+        .content(List.of(new McpSchema.TextContent("Invalid argument: 'email' must be a valid email address.")))
+        .isError(true)
+        .build();
+}
+```
+
+The LLM receives this as part of the normal tool response and can self-correct in a subsequent interaction.
+
+**2. Protocol-Level Errors (Unrecoverable)**
+
+Uncaught exceptions from a tool handler are mapped to a JSON-RPC error response. Use this only for truly unexpected failures (e.g., infrastructure errors such as DB timeout), not for input validation.
+
+```java
+// This propagates as a JSON-RPC error — use sparingly
+throw new McpError(McpSchema.ErrorCodes.INTERNAL_ERROR, "Unexpected failure");
+```
+
+#### Decision Guide
+
+| Situation                          | Approach                              |
+|------------------------------------|---------------------------------------|
+| Domain validation failure          | `CallToolResult` with `isError=true`  |
+| Infrastructure / unexpected error  | Throw `McpError` or let it propagate  |
+| Partial success with a warning     | `CallToolResult` with warning in text |

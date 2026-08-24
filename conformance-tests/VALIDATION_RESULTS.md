@@ -1,116 +1,113 @@
 # MCP Java SDK Conformance Test Validation Results
 
+Last validated: **2026-08-17** against conformance suite
+**`@modelcontextprotocol/conformance@0.2.0-alpha.11`** (SDK at `main`, 2.0.1-SNAPSHOT), targetting
+version 2025-11-25 (`--spec-version 2025-11-25`).
+
 ## Summary
 
-**Server Tests:** 40/40 passed (100%)
-**Client Tests:** 3/4 scenarios passed (9/10 checks passed)
-**Auth Tests:** 12/14 scenarios fully passing (178 passed, 1 failed, 1 warning, 85.7% scenarios, 98.9% checks)
+**Server Tests (active suite):** 73/73 checks passed (31 scenarios, 100%)
+**Server Tests (SEP-1613 `json-schema-2020-12`):** 5/5 checks passed (SEP-2106 checks skipped — post-2025-11-25 spec additions)
+**Client Tests:** 3/4 scenarios passed; `sse-retry` fails (tracked in `conformance-baseline.yml`)
+**Auth Tests:** 14/14 scenarios passing (193 checks, 0 failed, 0 warnings)
+
+Baseline check passed on every run: all failures are expected per
+[`conformance-baseline.yml`](conformance-baseline.yml).
 
 ## Server Test Results
 
-### Passing (40/40)
+### Active Suite — Passing (31/31 scenarios, 73/73 checks)
 
-- **Lifecycle & Utilities (4/4):** initialize, ping, logging-set-level, completion-complete
-- **Tools (11/11):** All scenarios including progress notifications ✨
-- **Elicitation (10/10):** SEP-1034 defaults (5 checks), SEP-1330 enums (5 checks)
-- **Resources (6/6):** list, read-text, read-binary, templates-read, subscribe, unsubscribe
-- **Prompts (4/4):** list, simple, with-args, embedded-resource, with-image
-- **SSE Transport (2/2):** Multiple streams
-- **Security (2/2):** Localhost validation passes, DNS rebinding protection
+- **Lifecycle & Utilities:** initialize, ping, logging-set-level, completion-complete
+- **Tools (13/13):** all scenarios including progress notifications, sampling, elicitation
+- **Elicitation:** SEP-1034 defaults (6 checks), SEP-1330 enums (6 checks)
+- **Resources:** list, read-text, read-binary, templates-read, subscribe, unsubscribe
+- **Prompts:** list, simple, with-args, embedded-resource, with-image
+- **SSE Transport:** multiple streams
+- **Security:** DNS rebinding protection
+
+### SEP-1613 — JSON Schema 2020-12 (5/5 checks)
+
+- `json_schema_2020_12_tool` found; `$schema`, `$defs`, and `additionalProperties`
+  fields preserved; every JSON-RPC message valid per the spec JSON schema for the
+  negotiated spec version (`wire-schema-valid`)
+- SEP-2106 checks (composition/conditional/anchor keywords) reported SKIPPED:
+  they postdate the 2025-11-25 spec release and are excluded from scoring
 
 ## Client Test Results
 
-### Passing (3/4 scenarios, 9/10 checks)
+### Passing (3/4 scenarios)
 
-- **initialize (1/1):** Protocol negotiation, clientInfo, capabilities
-- **tools_call (1/1):** Tool discovery and invocation
-- **elicitation-sep1034-client-defaults (5/5):** Default values for string, integer, number, enum, boolean
+- **initialize (1/1):** protocol negotiation, clientInfo, capabilities
+- **tools_call (2/2):** tool discovery and invocation
+- **elicitation-sep1034-client-defaults (5/5):** default values for string, integer, number, enum, boolean
 
-### Partially Passing (1/4 scenarios, 1/2 checks)
+### Failing — in baseline (1/4 scenarios)
 
-- **sse-retry (1/2 + 1 warning):**
-  - ✅ Reconnects after stream closure
-  - ❌ Does not respect retry timing
-  - ⚠️ Does not send Last-Event-ID header (SHOULD requirement)
-
-**Issue:** Client treats `retry:` SSE field as invalid instead of parsing it for reconnection timing.
+- **sse-retry:** client does not parse/respect the `retry:` SSE field timing and
+  does not send the `Last-Event-ID` header (SHOULD requirement). Expected failure,
+  listed in `conformance-baseline.yml`.
 
 ## Auth Test Results (Spring HTTP Client)
 
-**Status: 178 passed, 1 failed, 1 warning across 14 scenarios**
+**Status: 193 checks passed, 0 failed, 0 warnings across 14 scenarios**
 
-Uses the `client-spring-http-client` module with Spring Security OAuth2 and the [mcp-client-security](https://github.com/springaicommunity/mcp-client-security) library.
+Uses the `client-spring-http-client` module with Spring Security OAuth2 and the
+[mcp-client-security](https://github.com/springaicommunity/mcp-client-security) library.
 
-### Fully Passing (12/14 scenarios)
+Fully passing: metadata-default, metadata-var1/2/3, basic-cimd,
+scope-from-www-authenticate, scope-from-scopes-supported, scope-omitted-when-undefined,
+scope-step-up, scope-retry-limit, token-endpoint-auth-basic/post/none, pre-registration.
 
-- **auth/metadata-default (12/12):** Default metadata discovery
-- **auth/metadata-var1 (12/12):** Metadata discovery variant 1
-- **auth/metadata-var2 (12/12):** Metadata discovery variant 2
-- **auth/metadata-var3 (12/12):** Metadata discovery variant 3
-- **auth/scope-from-www-authenticate (13/13):** Scope extraction from WWW-Authenticate header
-- **auth/scope-from-scopes-supported (13/13):** Scope extraction from scopes_supported
-- **auth/scope-omitted-when-undefined (13/13):** Scope omitted when not defined
-- **auth/scope-retry-limit (11/11):** Scope retry limit handling
-- **auth/token-endpoint-auth-basic (17/17):** Token endpoint with HTTP Basic auth
-- **auth/token-endpoint-auth-post (17/17):** Token endpoint with POST body auth
-- **auth/token-endpoint-auth-none (17/17):** Token endpoint with no client auth
-- **auth/pre-registration (6/6):** Pre-registered client credentials flow
-
-### Partially Passing (2/14 scenarios)
-
-- **auth/basic-cimd (12/12 + 1 warning):** Basic Client-Initiated Metadata Discovery — all checks pass, minor warning
-- **auth/scope-step-up (11/12):** Scope step-up challenge — 1 failure, client does not fully handle scope escalation after initial authorization
+Note: `auth/resource-mismatch` (present in earlier suite versions) is no longer part
+of the 0.2.0-alpha auth suite.
 
 ## Known Limitations
 
-1. **Client SSE Retry:** Client doesn't parse or respect the `retry:` field, reconnects immediately, and doesn't send Last-Event-ID header
-2. **Auth Scope Step-Up:** Client does not fully handle scope step-up challenges where the server requests additional scopes after initial authorization
-3. **Auth Basic CIMD:** Minor conformance warning in the basic Client-Initiated Metadata Discovery flow
+1. **Client SSE Retry:** client doesn't parse or respect the `retry:` field,
+   reconnects immediately, and doesn't send the `Last-Event-ID` header
 
 ## Running Tests
 
-### Server
+### Server (active suite)
 ```bash
-# Start server
-./mvnw compile -pl conformance-tests/server-servlet -am exec:java
+# Build and start server
+./mvnw clean install -DskipTests
+mvn exec:java -pl conformance-tests/server-servlet \
+  -Dexec.mainClass="io.modelcontextprotocol.conformance.server.ConformanceServlet"
 
-# Run tests (in another terminal)
-npx @modelcontextprotocol/conformance server --url http://localhost:8080/mcp --suite active
+# Run tests (in another terminal, from the repo root)
+npx @modelcontextprotocol/conformance@0.2.0-alpha.11 server \
+  --url http://localhost:8080/mcp --suite active \
+  --expected-failures ./conformance-tests/conformance-baseline.yml
+```
+
+### Server (SEP-1613 scenario)
+```bash
+npx @modelcontextprotocol/conformance@0.2.0-alpha.11 server \
+  --url http://localhost:8080/mcp --scenario json-schema-2020-12
 ```
 
 ### Client
 ```bash
-# Build
-cd conformance-tests/client-jdk-http-client
-../../mvnw clean package -DskipTests
-
-# Run all scenarios
 for scenario in initialize tools_call elicitation-sep1034-client-defaults sse-retry; do
-  npx @modelcontextprotocol/conformance client \
-    --command "java -jar target/client-jdk-http-client-1.1.0-SNAPSHOT.jar" \
-    --scenario $scenario
+  npx @modelcontextprotocol/conformance@0.2.0-alpha.11 client \
+    --command "java -jar conformance-tests/client-jdk-http-client/target/client-jdk-http-client-*.jar" \
+    --scenario $scenario \
+    --expected-failures ./conformance-tests/conformance-baseline.yml
 done
 ```
 
 ### Auth (Spring HTTP Client)
-
-Ensure you run with the conformance testing suite `0.1.15` or higher.
-
 ```bash
-# Build
-cd conformance-tests/client-spring-http-client
-../../mvnw clean package -DskipTests
-
-# Run auth suite
-npx @modelcontextprotocol/conformance@0.1.15 client \
+npx @modelcontextprotocol/conformance@0.2.0-alpha.11 client \
   --spec-version 2025-11-25 \
-  --command "java -jar target/client-spring-http-client-1.1.0-SNAPSHOT.jar" \
-  --suite auth
+  --command "java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-*.jar" \
+  --suite auth \
+  --expected-failures ./conformance-tests/conformance-baseline.yml
 ```
 
 ## Recommendations
 
 ### High Priority
 1. Fix client SSE retry field handling in `HttpClientStreamableHttpTransport`
-2. Implement CIMD
-3. Implement scope step up

@@ -205,7 +205,9 @@ public abstract class AbstractMcpAsyncClientResiliencyTests {
 
 			String name = tools.get().get(0).name();
 			// Assuming this is the echo tool
-			McpSchema.CallToolRequest request = new McpSchema.CallToolRequest(name, Map.of("message", "hello"));
+			McpSchema.CallToolRequest request = McpSchema.CallToolRequest.builder(name)
+				.arguments(Map.of("message", "hello"))
+				.build();
 			StepVerifier.create(mcpAsyncClient.callTool(request)).expectError().verify();
 
 			reconnect();
