@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE configuration>
+
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="DOCKER" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level [DOCKER] %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Testcontainers framework -->
+    <logger name="org.testcontainers" level="INFO" additivity="false">
+        <appender-ref ref="DOCKER"/>
+    </logger>
+
+    <!-- Docker Java client -->
+    <logger name="com.github.dockerjava" level="INFO" additivity="false">
+        <appender-ref ref="DOCKER"/>
+    </logger>
+
+    <!-- Container output (tc.<image-name> format used by Testcontainers) -->
+    <logger name="tc" level="INFO" additivity="false">
+        <appender-ref ref="DOCKER"/>
+    </logger>
+
+    <logger name="io.modelcontextprotocol" level="INFO"/>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>

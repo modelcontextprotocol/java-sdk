@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import io.modelcontextprotocol.spec.McpSchema.ElicitFormRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -463,7 +464,7 @@ public abstract class AbstractMcpAsyncClientTests {
 	void testInitializeWithRootsListProviders() {
 		withClient(createMcpTransport(),
 				builder -> builder.roots(Root.builder("file:///test/path").name("test-root").build()), client -> {
-					StepVerifier.create(client.initialize().then(client.closeGracefully())).verifyComplete();
+					StepVerifier.create(client.initialize()).expectNextCount(1).verifyComplete();
 				});
 	}
 
@@ -685,11 +686,13 @@ public abstract class AbstractMcpAsyncClientTests {
 		Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler = request -> Mono
 			.just(CreateMessageResult.builder(McpSchema.Role.ASSISTANT, "test", "test-model").build());
 
-		Function<ElicitRequest, Mono<ElicitResult>> elicitationHandler = request -> Mono
+		Function<ElicitFormRequest, Mono<ElicitResult>> formElicitationHandler = request -> Mono
 			.just(ElicitResult.builder(ElicitResult.Action.ACCEPT).content(Map.of("foo", "bar")).build());
 
 		withClient(createMcpTransport(),
-				builder -> builder.capabilities(capabilities).sampling(samplingHandler).elicitation(elicitationHandler),
+				builder -> builder.capabilities(capabilities)
+					.sampling(samplingHandler)
+					.elicitation(formElicitationHandler),
 				client ->
 
 				StepVerifier.create(client.initialize()).assertNext(result -> {
@@ -725,8 +728,6 @@ public abstract class AbstractMcpAsyncClientTests {
 				builder -> builder.loggingConsumer(notification -> Mono.fromRunnable(() -> logReceived.set(true))),
 				client -> {
 					StepVerifier.create(client.initialize()).expectNextMatches(Objects::nonNull).verifyComplete();
-					StepVerifier.create(client.closeGracefully()).verifyComplete();
-
 				});
 
 	}

@@ -4,7 +4,6 @@
 
 package io.modelcontextprotocol.server.transport;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.time.Duration;
@@ -77,6 +76,11 @@ import reactor.core.publisher.Mono;
 public class HttpServletSseServerTransportProvider extends HttpServlet implements McpServerTransportProvider {
 
 	/**
+	 * Default maximum size of a single request body: 16 MiB (16 * 1024 * 1024 bytes).
+	 */
+	private static final int DEFAULT_REQUEST_MAX_SIZE = 16 * 1024 * 1024;
+
+	/**
 	 * Logger for this class
 	 */
 	private static final Logger logger = LoggerFactory.getLogger(HttpServletSseServerTransportProvider.class);
@@ -110,6 +114,11 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 * JSON mapper for serialization/deserialization
 	 */
 	private final McpJsonMapper jsonMapper;
+
+	/**
+	 * Maximum size, in bytes, of a single request body accepted by this transport.
+	 */
+	private final int requestMaxSize;
 
 	/**
 	 * Base URL for the server transport
@@ -166,17 +175,20 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 	 * keep-alive functionality
 	 * @param contextExtractor The extractor for transport context from the request.
 	 * @param securityValidator The security validator for validating HTTP requests.
+	 * @param requestMaxSize The maximum size, in bytes, of a single request body. Must be
+	 * positive.
 	 */
 	private HttpServletSseServerTransportProvider(McpJsonMapper jsonMapper, String baseUrl, String messageEndpoint,
 			String sseEndpoint, Duration keepAliveInterval,
 			McpTransportContextExtractor<HttpServletRequest> contextExtractor,
-			ServerTransportSecurityValidator securityValidator) {
+			ServerTransportSecurityValidator securityValidator, int requestMaxSize) {
 
 		Assert.notNull(jsonMapper, "JsonMapper must not be null");
 		Assert.notNull(messageEndpoint, "messageEndpoint must not be null");
 		Assert.notNull(sseEndpoint, "sseEndpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
 		Assert.notNull(securityValidator, "Security validator must not be null");
+		Assert.isTrue(requestMaxSize > 0, "requestMaxSize must be positive");
 
 		this.jsonMapper = jsonMapper;
 		this.baseUrl = baseUrl;
@@ -184,6 +196,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		this.sseEndpoint = sseEndpoint;
 		this.contextExtractor = contextExtractor;
 		this.securityValidator = securityValidator;
+		this.requestMaxSize = requestMaxSize;
 
 		if (keepAliveInterval != null) {
 
@@ -346,6 +359,11 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			return;
 		}
 
+		if (request.getContentLengthLong() > this.requestMaxSize) {
+			response.sendError(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+			return;
+		}
+
 		String requestURI = request.getRequestURI();
 		if (!requestURI.endsWith(messageEndpoint)) {
 			response.sendError(HttpServletResponse.SC_NOT_FOUND);
@@ -383,15 +401,10 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 
 		Object requestId = null;
 		try {
-			BufferedReader reader = request.getReader();
-			StringBuilder body = new StringBuilder();
-			String line;
-			while ((line = reader.readLine()) != null) {
-				body.append(line);
-			}
+			String body = HttpServletRequestUtils.readBody(request, this.requestMaxSize);
 
 			final McpTransportContext transportContext = this.contextExtractor.extract(request);
-			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body.toString());
+			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
 			requestId = requestId(message);
 
 			// Process the message through the session's handle method
@@ -399,6 +412,9 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			session.handle(message).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext)).block();
 
 			response.setStatus(HttpServletResponse.SC_OK);
+		}
+		catch (MaxSizeExceededException e) {
+			response.sendError(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
 		}
 		catch (Exception e) {
 			logger.error("Error processing message: {}", e.getMessage());
@@ -600,6 +616,8 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 
 		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
 
+		private int requestMaxSize = DEFAULT_REQUEST_MAX_SIZE;
+
 		/**
 		 * Sets the JsonMapper implementation to use for serialization/deserialization. If
 		 * not specified, a JacksonJsonMapper will be created from the configured
@@ -687,6 +705,19 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		}
 
 		/**
+		 * Sets the maximum size, in bytes, of a single request body accepted by this
+		 * transport. Requests whose body exceeds this size are rejected with a 413
+		 * (Payload Too Large) response. Defaults to 16 MiB if not set.
+		 * @param requestMaxSize The maximum request body size, in bytes. Must be
+		 * positive.
+		 * @return This builder instance
+		 */
+		public Builder maxRequestSize(int requestMaxSize) {
+			this.requestMaxSize = requestMaxSize;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of HttpServletSseServerTransportProvider with the
 		 * configured settings.
 		 * @return A new HttpServletSseServerTransportProvider instance
@@ -698,7 +729,7 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			}
 			return new HttpServletSseServerTransportProvider(
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, baseUrl, messageEndpoint,
-					sseEndpoint, keepAliveInterval, contextExtractor, securityValidator);
+					sseEndpoint, keepAliveInterval, contextExtractor, securityValidator, requestMaxSize);
 		}
 
 	}

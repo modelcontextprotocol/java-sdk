@@ -4,10 +4,10 @@
 
 package io.modelcontextprotocol.server.transport;
 
-import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.PrintWriter;
-import java.io.StringReader;
 import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +23,8 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.json.gson.GsonMcpJsonMapper;
 import jakarta.servlet.AsyncContext;
+import jakarta.servlet.ReadListener;
+import jakarta.servlet.ServletInputStream;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.Test;
@@ -105,6 +107,27 @@ class HttpServletJsonRpcErrorTests {
 		assertThat(jsonResponse).containsEntry("jsonrpc", McpSchema.JSONRPC_VERSION);
 		assertThat(jsonResponse).doesNotContainKey("id");
 		assertThat(errorMap(jsonResponse)).containsEntry("code", (long) McpSchema.ErrorCodes.METHOD_NOT_FOUND);
+		assertNoThrowableFields(responseBody);
+	}
+
+	@Test
+	void statelessTransportSerializesMalformedPayloadAsJsonRpcResponse() throws Exception {
+		HttpServletStatelessServerTransport transport = HttpServletStatelessServerTransport.builder()
+			.jsonMapper(JSON_MAPPER)
+			.build();
+		StringWriter responseBody = new StringWriter();
+		HttpServletResponse response = response(responseBody);
+
+		transport.doPost(request("""
+				{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"
+				""", HttpServletStatelessServerTransport.APPLICATION_JSON + ", "
+				+ HttpServletStatelessServerTransport.TEXT_EVENT_STREAM), response);
+
+		verify(response).setStatus(HttpServletResponse.SC_BAD_REQUEST);
+		Map<String, Object> jsonResponse = readResponseMap(responseBody);
+		assertThat(jsonResponse).containsEntry("jsonrpc", McpSchema.JSONRPC_VERSION);
+		assertThat(jsonResponse).doesNotContainKey("id");
+		assertThat(errorMap(jsonResponse)).containsEntry("code", (long) McpSchema.ErrorCodes.INVALID_REQUEST);
 		assertNoThrowableFields(responseBody);
 	}
 
@@ -203,7 +226,7 @@ class HttpServletJsonRpcErrorTests {
 	private static HttpServletRequest request(String uri, String body, String acceptHeader) throws Exception {
 		HttpServletRequest request = mock(HttpServletRequest.class);
 		when(request.getRequestURI()).thenReturn(uri);
-		when(request.getReader()).thenReturn(new BufferedReader(new StringReader(body)));
+		when(request.getInputStream()).thenReturn(servletInputStream(body.getBytes(StandardCharsets.UTF_8)));
 		if (acceptHeader == null) {
 			when(request.getHeaderNames()).thenReturn(Collections.emptyEnumeration());
 		}
@@ -213,6 +236,37 @@ class HttpServletJsonRpcErrorTests {
 			when(request.getHeaders(HttpHeaders.ACCEPT)).thenReturn(Collections.enumeration(List.of(acceptHeader)));
 		}
 		return request;
+	}
+
+	private static ServletInputStream servletInputStream(byte[] data) {
+		ByteArrayInputStream delegate = new ByteArrayInputStream(data);
+		return new ServletInputStream() {
+
+			@Override
+			public boolean isFinished() {
+				return delegate.available() == 0;
+			}
+
+			@Override
+			public boolean isReady() {
+				return true;
+			}
+
+			@Override
+			public void setReadListener(ReadListener readListener) {
+			}
+
+			@Override
+			public int read() {
+				return delegate.read();
+			}
+
+			@Override
+			public int read(byte[] bytes, int offset, int length) {
+				return delegate.read(bytes, offset, length);
+			}
+
+		};
 	}
 
 	private static String connectLegacySseSession(HttpServletSseServerTransportProvider transport) throws Exception {

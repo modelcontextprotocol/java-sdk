@@ -14,23 +14,24 @@ Test with @modelcontextprotocol/conformance@0.1.15.
 
 ## Conformance Test Results
 
-**Status: 178 passed, 1 failed, 1 warning across 14 scenarios**
+**Status: 195 passed, 0 failed, 0 warnings across 15 scenarios**
 
 | Scenario | Result | Details |
 |---|---|---|
-| auth/metadata-default | ✅ Pass | 12/12 |
-| auth/metadata-var1 | ✅ Pass | 12/12 |
-| auth/metadata-var2 | ✅ Pass | 12/12 |
-| auth/metadata-var3 | ✅ Pass | 12/12 |
-| auth/basic-cimd | ⚠️ Warning | 12/12 passed, 1 warning |
-| auth/scope-from-www-authenticate | ✅ Pass | 13/13 |
-| auth/scope-from-scopes-supported | ✅ Pass | 13/13 |
-| auth/scope-omitted-when-undefined | ✅ Pass | 13/13 |
-| auth/scope-step-up | ✅ Pass | 12/12 |
+| auth/metadata-default | ✅ Pass | 13/13 |
+| auth/metadata-var1 | ✅ Pass | 13/13 |
+| auth/metadata-var2 | ✅ Pass | 13/13 |
+| auth/metadata-var3 | ✅ Pass | 13/13 |
+| auth/basic-cimd | ✅ Pass | 12/12 |
+| auth/scope-from-www-authenticate | ✅ Pass | 14/14 |
+| auth/scope-from-scopes-supported | ✅ Pass | 14/14 |
+| auth/scope-omitted-when-undefined | ✅ Pass | 14/14 |
+| auth/scope-step-up | ✅ Pass | 16/16 |
 | auth/scope-retry-limit | ✅ Pass | 11/11 |
-| auth/token-endpoint-auth-basic | ✅ Pass | 17/17 |
-| auth/token-endpoint-auth-post | ✅ Pass | 17/17 |
-| auth/token-endpoint-auth-none | ✅ Pass | 17/17 |
+| auth/token-endpoint-auth-basic | ✅ Pass | 18/18 |
+| auth/token-endpoint-auth-post | ✅ Pass | 18/18 |
+| auth/token-endpoint-auth-none | ✅ Pass | 18/18 |
+| auth/resource-mismatch | ✅ Pass | 2/2 |
 | auth/pre-registration | ✅ Pass | 6/6 |
 
 See [VALIDATION_RESULTS.md](../VALIDATION_RESULTS.md) for the full project validation results.
@@ -67,7 +68,7 @@ cd conformance-tests/client-spring-http-client
 
 This creates an executable JAR at:
 ```
-target/client-spring-http-client-2.0.0-SNAPSHOT.jar
+target/client-spring-http-client-2.0.1-SNAPSHOT.jar
 ```
 
 ## Running Tests
@@ -79,7 +80,7 @@ Run the full auth suite:
 ```bash
 npx @modelcontextprotocol/conformance@0.1.15 client \
   --spec-version 2025-11-25 \
-  --command "java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.0-SNAPSHOT.jar" \
+  --command "java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.1-SNAPSHOT.jar" \
   --suite auth
 ```
 
@@ -88,7 +89,7 @@ Run a single scenario:
 ```bash
 npx @modelcontextprotocol/conformance@0.1.15 client \
   --spec-version 2025-11-25 \
-  --command "java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.0-SNAPSHOT.jar" \
+  --command "java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.1-SNAPSHOT.jar" \
   --scenario auth/metadata-default
 ```
 
@@ -97,7 +98,7 @@ Run with verbose output:
 ```bash
 npx @modelcontextprotocol/conformance@0.1.15 client \
   --spec-version 2025-11-25 \
-  --command "java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.0-SNAPSHOT.jar" \
+  --command "java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.1-SNAPSHOT.jar" \
   --scenario auth/metadata-default \
   --verbose
 ```
@@ -108,13 +109,12 @@ You can also run the client manually if you have a test server:
 
 ```bash
 export MCP_CONFORMANCE_SCENARIO=auth/metadata-default
-java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.0-SNAPSHOT.jar http://localhost:3000/mcp
+java -jar conformance-tests/client-spring-http-client/target/client-spring-http-client-2.0.1-SNAPSHOT.jar http://localhost:3000/mcp
 ```
 
 ## Known Issues
 
-1. **auth/scope-step-up** (1 failure) — The client does not fully handle scope step-up challenges where the server requests additional scopes after initial authorization.
-2. **auth/basic-cimd** (1 warning) — Minor conformance warning in the basic Client-Initiated Metadata Discovery flow.
+Currently, there are no known issues in the auth suite implementation.
 
 ## References
 

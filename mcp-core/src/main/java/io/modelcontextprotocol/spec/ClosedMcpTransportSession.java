@@ -6,43 +6,41 @@ package io.modelcontextprotocol.spec;
 import java.util.Optional;
 
 import org.reactivestreams.Publisher;
+import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.util.annotation.Nullable;
 
 /**
- * Represents a closed MCP session, which may not be reused. All calls will throw a
- * {@link McpTransportSessionClosedException}.
+ * Represents a closed MCP session, which may not be reused.
  *
- * @param <CONNECTION> the resource representing the connection that the transport
- * manages.
  * @author Daniel Garnier-Moiroux
+ * @author Dariusz Jędrzejczyk
  */
-public class ClosedMcpTransportSession<CONNECTION> implements McpTransportSession<CONNECTION> {
+public final class ClosedMcpTransportSession implements McpTransportSession<Disposable> {
 
-	private final String sessionId;
+	public static final ClosedMcpTransportSession INSTANCE = new ClosedMcpTransportSession();
 
-	public ClosedMcpTransportSession(@Nullable String sessionId) {
-		this.sessionId = sessionId;
+	private ClosedMcpTransportSession() {
 	}
 
 	@Override
 	public Optional<String> sessionId() {
-		throw new McpTransportSessionClosedException(sessionId);
+		return Optional.empty();
 	}
 
 	@Override
 	public boolean markInitialized(String sessionId) {
-		throw new McpTransportSessionClosedException(sessionId);
+		throw new IllegalStateException("MCP Session is already closed");
 	}
 
 	@Override
-	public void addConnection(CONNECTION connection) {
-		throw new McpTransportSessionClosedException(sessionId);
+	public void addConnection(Disposable connection) {
+		throw new IllegalStateException("MCP Session is already closed");
 	}
 
 	@Override
-	public void removeConnection(CONNECTION connection) {
-		throw new McpTransportSessionClosedException(sessionId);
+	public void removeConnection(Disposable connection) {
+		throw new IllegalStateException("MCP Session is already closed");
 	}
 
 	@Override

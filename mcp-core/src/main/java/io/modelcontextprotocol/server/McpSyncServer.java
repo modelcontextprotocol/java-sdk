@@ -231,6 +231,16 @@ public class McpSyncServer {
 	}
 
 	/**
+	 * Sends an elicitation complete notification to a specific client session, indicating
+	 * that an out-of-band URL elicitation interaction has completed.
+	 * @param sessionId The ID of the session to notify
+	 * @param notification The notification containing the elicitation ID
+	 */
+	public void sendElicitationComplete(String sessionId, McpSchema.ElicitationCompleteNotification notification) {
+		this.asyncServer.sendElicitationComplete(sessionId, notification).block();
+	}
+
+	/**
 	 * Close the server gracefully.
 	 */
 	public void closeGracefully() {

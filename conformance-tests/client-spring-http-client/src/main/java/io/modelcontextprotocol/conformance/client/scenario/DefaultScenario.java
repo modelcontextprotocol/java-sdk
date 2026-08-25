@@ -17,14 +17,10 @@ import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springaicommunity.mcp.security.client.sync.AuthenticationMcpTransportContextProvider;
-import org.springaicommunity.mcp.security.client.sync.oauth2.http.client.OAuth2HttpClientTransportCustomizer;
-import org.springaicommunity.mcp.security.client.sync.oauth2.registration.McpClientRegistrationRepository;
-import org.springaicommunity.mcp.security.client.sync.oauth2.registration.McpOAuth2ClientManager;
 
+import org.springframework.ai.mcp.customizer.McpClientCustomizer;
 import org.springframework.boot.web.server.servlet.context.ServletWebServerApplicationContext;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
-import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizedClientManager;
-import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -34,23 +30,14 @@ public class DefaultScenario implements Scenario {
 
 	private final ServletWebServerApplicationContext serverCtx;
 
-	private final DefaultOAuth2AuthorizedClientManager authorizedClientManager;
-
-	private final McpClientRegistrationRepository clientRegistrationRepository;
-
-	private final McpOAuth2ClientManager mcpOAuth2ClientManager;
+	private final McpClientCustomizer<HttpClientStreamableHttpTransport.Builder> transportCustomizer;
 
 	private McpSyncClient client;
 
-	public DefaultScenario(McpClientRegistrationRepository clientRegistrationRepository,
-			ServletWebServerApplicationContext serverCtx,
-			OAuth2AuthorizedClientRepository oAuth2AuthorizedClientRepository,
-			McpOAuth2ClientManager mcpOAuth2ClientManager) {
+	public DefaultScenario(ServletWebServerApplicationContext serverCtx,
+			McpClientCustomizer<HttpClientStreamableHttpTransport.Builder> transportCustomizer) {
 		this.serverCtx = serverCtx;
-		this.clientRegistrationRepository = clientRegistrationRepository;
-		this.mcpOAuth2ClientManager = mcpOAuth2ClientManager;
-		this.authorizedClientManager = new DefaultOAuth2AuthorizedClientManager(clientRegistrationRepository,
-				oAuth2AuthorizedClientRepository);
+		this.transportCustomizer = transportCustomizer;
 	}
 
 	@Override
@@ -59,12 +46,10 @@ public class DefaultScenario implements Scenario {
 		var testServerUrl = "http://localhost:" + serverCtx.getWebServer().getPort();
 		var testClient = buildTestClient(testServerUrl);
 
-		var customizer = new OAuth2HttpClientTransportCustomizer(authorizedClientManager, clientRegistrationRepository,
-				mcpOAuth2ClientManager);
 		var baseUri = UriComponentsBuilder.fromUriString(serverUrl).replacePath(null).toUriString();
 		var path = UriComponentsBuilder.fromUriString(serverUrl).build().getPath();
 		var transportBuilder = HttpClientStreamableHttpTransport.builder(baseUri).endpoint(path);
-		customizer.customize("default-transport", transportBuilder);
+		transportCustomizer.customize("default-transport", transportBuilder);
 		HttpClientStreamableHttpTransport transport = transportBuilder.build();
 
 		this.client = McpClient.sync(transport)

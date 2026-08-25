@@ -7,5 +7,6 @@ client:
   # - Client does not parse or respect retry: field timing
   # - Client does not send Last-Event-ID header
   - sse-retry
-  # CIMD not implemented yet
-  - auth/basic-cimd
+  # Not supporting versions > 1 year old
+  - auth/2025-03-26-oauth-metadata-backcompat
+  - auth/2025-03-26-oauth-endpoint-fallback

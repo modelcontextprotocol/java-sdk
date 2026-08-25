@@ -81,6 +81,7 @@ class ServerTransportSecurityIntegrationTests {
 
 	@AfterEach
 	void tearDown() {
+		requestCustomizer.reset();
 		mcpClient.close();
 	}
 

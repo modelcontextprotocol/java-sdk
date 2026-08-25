@@ -4,9 +4,19 @@
 
 package io.modelcontextprotocol.server;
 
-import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.json.McpJsonMapper;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiFunction;
+
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.server.McpStatelessServerFeatures.AsyncResourceTemplateSpecification;
 import io.modelcontextprotocol.spec.McpError;
@@ -27,16 +37,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.function.BiFunction;
 
 import static io.modelcontextprotocol.spec.McpError.RESOURCE_NOT_FOUND;
 
@@ -133,8 +133,24 @@ public class McpStatelessAsyncServer {
 
 		this.protocolVersions = new ArrayList<>(mcpTransport.protocolVersions());
 
-		McpStatelessServerHandler handler = new DefaultMcpStatelessServerHandler(requestHandlers, Map.of());
+		Map<String, McpStatelessNotificationHandler> notificationHandlers = prepareNotificationHandlers();
+		McpStatelessServerHandler handler = new DefaultMcpStatelessServerHandler(requestHandlers, notificationHandlers);
 		mcpTransport.setMcpHandler(handler);
+	}
+
+	private Map<String, McpStatelessNotificationHandler> prepareNotificationHandlers() {
+		Map<String, McpStatelessNotificationHandler> notificationHandlers = new HashMap<>();
+
+		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_INITIALIZED, (exchange, params) -> {
+			logger.debug("Received {}", McpSchema.METHOD_NOTIFICATION_INITIALIZED);
+			return Mono.empty();
+		});
+		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED, (exchange, params) -> {
+			logger.debug("Received {}", McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED);
+			return Mono.empty();
+		});
+
+		return notificationHandlers;
 	}
 
 	// ---------------------------------------
@@ -293,9 +309,11 @@ public class McpStatelessAsyncServer {
 				var validation = this.jsonSchemaValidator.validate(outputSchema, result.structuredContent());
 
 				if (!validation.valid()) {
-					logger.warn("Tool call result validation failed: {}", validation.errorMessage());
+					String message = "Tool (" + request.name() + ") output validation failed: "
+							+ validation.errorMessage();
+					logger.warn(message);
 					return CallToolResult.builder()
-						.content(List.of(McpSchema.TextContent.builder(validation.errorMessage()).build()))
+						.content(List.of(McpSchema.TextContent.builder(message).build()))
 						.isError(true)
 						.build();
 				}
@@ -390,7 +408,7 @@ public class McpStatelessAsyncServer {
 				logger.debug("Removed tool handler: {}", toolName);
 			}
 			else {
-				logger.warn("Ignore as a Tool with name '{}' not found", toolName);
+				logger.warn("Failed to remove a tool with name '{}' (not found)", toolName);
 			}
 
 			return Mono.empty();
@@ -492,7 +510,7 @@ public class McpStatelessAsyncServer {
 				logger.debug("Removed resource handler: {}", resourceUri);
 			}
 			else {
-				logger.warn("Resource with URI '{}' not found", resourceUri);
+				logger.warn("Failed to remove a resource with URI '{}' (not found)", resourceUri);
 			}
 			return Mono.empty();
 		});
@@ -554,7 +572,7 @@ public class McpStatelessAsyncServer {
 				logger.debug("Removed resource template: {}", uriTemplate);
 			}
 			else {
-				logger.warn("Ignore as a Resource Template with URI '{}' not found", uriTemplate);
+				logger.warn("Failed to remove a resource template with URI '{}' (not found)", uriTemplate);
 			}
 			return Mono.empty();
 		});
@@ -677,7 +695,7 @@ public class McpStatelessAsyncServer {
 				return Mono.empty();
 			}
 			else {
-				logger.warn("Ignore as a Prompt with name '{}' not found", promptName);
+				logger.warn("Failed to remove a prompt with name '{}' (not found)", promptName);
 			}
 
 			return Mono.empty();
@@ -813,9 +831,7 @@ public class McpStatelessAsyncServer {
 			McpStatelessServerFeatures.AsyncCompletionSpecification specification = this.completions.get(request.ref());
 
 			if (specification == null) {
-				return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
-					.message("AsyncCompletionSpecification not found: " + request.ref())
-					.build());
+				return EMPTY_COMPLETION_RESULT;
 			}
 
 			return specification.completionHandler().apply(ctx, request);

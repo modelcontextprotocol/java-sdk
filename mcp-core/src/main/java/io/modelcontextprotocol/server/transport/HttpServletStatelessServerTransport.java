@@ -4,7 +4,6 @@
 
 package io.modelcontextprotocol.server.transport;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.List;
@@ -39,6 +38,11 @@ import reactor.core.publisher.Mono;
 @WebServlet(asyncSupported = true)
 public class HttpServletStatelessServerTransport extends HttpServlet implements McpStatelessServerTransport {
 
+	/**
+	 * Default maximum size of a single request body: 16 MiB (16 * 1024 * 1024 bytes).
+	 */
+	private static final int DEFAULT_REQUEST_MAX_SIZE = 16 * 1024 * 1024;
+
 	private static final Logger logger = LoggerFactory.getLogger(HttpServletStatelessServerTransport.class);
 
 	public static final String UTF_8 = "UTF-8";
@@ -66,18 +70,37 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 	 */
 	private final ServerTransportSecurityValidator securityValidator;
 
+	/**
+	 * Maximum size, in bytes, of a single request body accepted by this transport.
+	 */
+	private final int requestMaxSize;
+
+	/**
+	 * Constructs a new HttpServletStatelessServerTransport instance.
+	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization of
+	 * messages.
+	 * @param mcpEndpoint The endpoint URI where clients should send their JSON-RPC
+	 * messages.
+	 * @param contextExtractor The extractor for transport context from the request.
+	 * @param securityValidator The security validator for validating HTTP requests.
+	 * @param requestMaxSize The maximum size, in bytes, of a single request body. Must be
+	 * positive.
+	 * @throws IllegalArgumentException if any parameter is null
+	 */
 	private HttpServletStatelessServerTransport(McpJsonMapper jsonMapper, String mcpEndpoint,
 			McpTransportContextExtractor<HttpServletRequest> contextExtractor,
-			ServerTransportSecurityValidator securityValidator) {
+			ServerTransportSecurityValidator securityValidator, int requestMaxSize) {
 		Assert.notNull(jsonMapper, "jsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "mcpEndpoint must not be null");
 		Assert.notNull(contextExtractor, "contextExtractor must not be null");
 		Assert.notNull(securityValidator, "Security validator must not be null");
+		Assert.isTrue(requestMaxSize > 0, "requestMaxSize must be positive");
 
 		this.jsonMapper = jsonMapper;
 		this.mcpEndpoint = mcpEndpoint;
 		this.contextExtractor = contextExtractor;
 		this.securityValidator = securityValidator;
+		this.requestMaxSize = requestMaxSize;
 	}
 
 	@Override
@@ -133,6 +156,11 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 			return;
 		}
 
+		if (request.getContentLengthLong() > this.requestMaxSize) {
+			response.sendError(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+			return;
+		}
+
 		try {
 			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
 			this.securityValidator.validateHeaders(headers);
@@ -154,14 +182,9 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		}
 
 		try {
-			BufferedReader reader = request.getReader();
-			StringBuilder body = new StringBuilder();
-			String line;
-			while ((line = reader.readLine()) != null) {
-				body.append(line);
-			}
+			String body = HttpServletRequestUtils.readBody(request, this.requestMaxSize);
 
-			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body.toString());
+			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
 
 			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
 				try {
@@ -213,6 +236,9 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 							.message("The server accepts either requests or notifications")
 							.build());
 			}
+		}
+		catch (MaxSizeExceededException e) {
+			response.sendError(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
 		}
 		catch (IllegalArgumentException | IOException e) {
 			logger.error("Failed to deserialize message: {}", e.getMessage());
@@ -280,6 +306,8 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 
 		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
 
+		private int requestMaxSize = DEFAULT_REQUEST_MAX_SIZE;
+
 		private Builder() {
 			// used by a static method
 		}
@@ -338,6 +366,19 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		}
 
 		/**
+		 * Sets the maximum size, in bytes, of a single request body accepted by this
+		 * transport. Requests whose body exceeds this size are rejected with a 413
+		 * (Payload Too Large) response. Defaults to 16 MiB if not set.
+		 * @param requestMaxSize The maximum request body size, in bytes. Must be
+		 * positive.
+		 * @return this builder instance
+		 */
+		public Builder maxRequestSize(int requestMaxSize) {
+			this.requestMaxSize = requestMaxSize;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link HttpServletStatelessServerTransport} with the
 		 * configured settings.
 		 * @return A new HttpServletStatelessServerTransport instance
@@ -347,7 +388,7 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 			return new HttpServletStatelessServerTransport(
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, mcpEndpoint, contextExtractor,
-					securityValidator);
+					securityValidator, requestMaxSize);
 		}
 
 	}
