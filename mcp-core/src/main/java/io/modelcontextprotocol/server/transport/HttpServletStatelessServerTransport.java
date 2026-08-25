@@ -204,15 +204,10 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 				}
 				catch (Exception e) {
 					logger.error("Failed to handle request: {}", e.getMessage());
-					if (e instanceof McpError mcpError) {
-						this.responseError(response, HttpServletResponse.SC_OK, jsonrpcRequest.id(), mcpError);
-					}
-					else {
-						this.responseError(response, HttpServletResponse.SC_OK, jsonrpcRequest.id(),
-								McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
-									.message("Failed to handle request: " + e.getMessage())
-									.build());
-					}
+					this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, jsonrpcRequest.id(),
+							McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+								.message("Failed to handle request: " + e.getMessage())
+								.build());
 				}
 			}
 			else if (message instanceof McpSchema.JSONRPCNotification jsonrpcNotification) {

@@ -44,7 +44,7 @@ class HttpServletJsonRpcErrorTests {
 	private static final McpJsonMapper JSON_MAPPER = new GsonMcpJsonMapper();
 
 	@Test
-	void statelessTransportPreservesMcpErrorCodeAndRequestId() throws Exception {
+	void statelessTransportMapsEscapedMcpErrorsToJsonRpcInternalError() throws Exception {
 		HttpServletStatelessServerTransport transport = HttpServletStatelessServerTransport.builder()
 			.jsonMapper(JSON_MAPPER)
 			.build();
@@ -60,11 +60,11 @@ class HttpServletJsonRpcErrorTests {
 				""", HttpServletStatelessServerTransport.APPLICATION_JSON + ", "
 				+ HttpServletStatelessServerTransport.TEXT_EVENT_STREAM), response);
 
-		verify(response).setStatus(HttpServletResponse.SC_OK);
+		verify(response).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
 		McpSchema.JSONRPCResponse jsonResponse = readResponse(responseBody);
 		assertThat(jsonResponse.id()).isEqualTo("missing-handler");
 		assertThat(jsonResponse.error()).isNotNull();
-		assertThat(jsonResponse.error().code()).isEqualTo(McpSchema.ErrorCodes.METHOD_NOT_FOUND);
+		assertThat(jsonResponse.error().code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
 		assertNoThrowableFields(responseBody);
 	}
 
@@ -82,7 +82,7 @@ class HttpServletJsonRpcErrorTests {
 				""", HttpServletStatelessServerTransport.APPLICATION_JSON + ", "
 				+ HttpServletStatelessServerTransport.TEXT_EVENT_STREAM), response);
 
-		verify(response).setStatus(HttpServletResponse.SC_OK);
+		verify(response).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
 		McpSchema.JSONRPCResponse jsonResponse = readResponse(responseBody);
 		assertThat(jsonResponse.id()).isEqualTo("boom-request");
 		assertThat(jsonResponse.error()).isNotNull();
