@@ -80,6 +80,8 @@ public class McpStatelessAsyncServer {
 
 	private final boolean validateToolInputs;
 
+	private final McpAsyncListFilter<McpSchema.Tool> toolFilter;
+
 	McpStatelessAsyncServer(McpStatelessServerTransport mcpTransport, McpJsonMapper jsonMapper,
 			McpStatelessServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
@@ -97,6 +99,7 @@ public class McpStatelessAsyncServer {
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
 		this.validateToolInputs = validateToolInputs;
+		this.toolFilter = McpAsyncListFilter.and(features.toolFilters());
 
 		Map<String, McpStatelessRequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -417,10 +420,13 @@ public class McpStatelessAsyncServer {
 
 	private McpStatelessRequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
 		return (ctx, params) -> {
-			List<Tool> tools = this.tools.stream()
+			// TODO: Implement pagination. Cursors must be computed over the filtered
+			// view, otherwise page offsets leak the number of hidden tools.
+			return Flux.fromIterable(this.tools)
 				.map(McpStatelessServerFeatures.AsyncToolSpecification::tool)
-				.toList();
-			return Mono.just(McpSchema.ListToolsResult.builder(tools).build());
+				.filterWhen(tool -> this.toolFilter.isVisible(ctx, tool))
+				.collectList()
+				.map(tools -> McpSchema.ListToolsResult.builder(tools).build());
 		};
 	}
 

@@ -441,6 +441,88 @@ var syncToolSpecification = SyncToolSpecification.builder()
 
 `ImageContent.builder(data, mimeType)` and `AudioContent.builder(data, mimeType)` both take base64-encoded binary data. `EmbeddedResource.builder(resourceContents)` wraps either a `TextResourceContents` (for text data) or a `BlobResourceContents` (for base64-encoded binary data) — see [Reading Binary Resources](#reading-binary-resources) for the `BlobResourceContents` shape.
 
+### Filtering the Tool Listing per Request
+
+By default every registered tool is advertised to every caller. Over an HTTP transport you can
+vary the `tools/list` response per request — to hide tools the caller is not authorized to see,
+or to trim a large catalog down to a relevant subset — by registering one or more tool filters.
+
+The filter receives the `McpTransportContext` extracted from the current request, so it can key
+on HTTP headers, a token, a resolved principal, or anything else your
+`contextExtractor` puts there.
+
+=== "Sync"
+
+    ```java
+    McpServer.sync(transportProvider)
+        .tools(publicTool, adminTool)
+        .addToolFilter((transportContext, tool) ->
+            !tool.name().startsWith("admin-") || isAdmin(transportContext))
+        .build();
+    ```
+
+=== "Async"
+
+    ```java
+    McpServer.async(transportProvider)
+        .tools(publicTool, adminTool)
+        .addToolFilter((transportContext, tool) -> {
+            if (!tool.name().startsWith("admin-")) {
+                return Mono.just(true);
+            }
+            return isAdmin(transportContext); // Mono<Boolean>
+        })
+        .build();
+    ```
+
+The same `addToolFilter(...)` method is available on the stateless builders.
+
+!!! warning "Hiding a tool does not make it unreachable"
+
+    The filter controls **advertisement only**. A hidden tool called by name still executes:
+    you MUST enforce permissions in the tool's call handler. Use the filter to control what a
+    caller is told about, not what they are allowed to do.
+
+**Evaluation semantics**
+
+- The filter is consulted on **every** listing request and never cached, so the same session may
+  legitimately see different results for two successive requests carrying different credentials.
+- Registration order is preserved; only omissions happen.
+- Returning `Mono.empty()` from an async filter omits the tool. An error fails the whole listing
+  request rather than silently hiding tools.
+- Filters accumulate as a boolean **AND**: a tool is listed only when every registered filter accepts it, so a
+  later `addToolFilter(...)` can never widen access. Evaluation follows registration order and
+  short-circuits on the first filter that hides a tool.
+- `toolFilters(Consumer<List<...>>)` hands you the list of filters registered so far, so you can
+  inspect, reorder or clear them before building — useful when filters come from several places:
+
+    ```java
+    McpServer.sync(transportProvider)
+        .addToolFilter(tenantFilter)
+        .toolFilters(filters -> filters.add(0, cheapDenyAllForAnonymousFilter))
+        .build();
+    ```
+
+- Tools are tested one at a time, so a filter that performs I/O per tool costs one round trip per
+  tool. Resolve per-request state **once** in your `contextExtractor` and read it in the filter:
+
+    ```java
+    // one authorization lookup, shared by every tool tested in this request
+    .contextExtractor(request -> McpTransportContext.create(
+            Map.of("perms", introspect(request.getHeader("Authorization")))))
+
+    .addToolFilter((context, tool) -> 
+            ((Set<String>) context.get("perms")).contains(tool.name())
+    )
+    ```
+
+- `notifications/tools/list_changed` is **not** filtered. It is a server-initiated broadcast with
+  no request in flight, so there is no context to evaluate. A client may be told something changed
+  when its own visible set did not; it gets the correct view on its next `tools/list`. Consider disabling
+  this notification entirely when using tool filters.
+- With STDIO there is no per-request metadata, so the filter receives `McpTransportContext.EMPTY` and has nothing to key
+  on.
+
 ### Resource Specification
 
 Specification of a resource with its handler function.

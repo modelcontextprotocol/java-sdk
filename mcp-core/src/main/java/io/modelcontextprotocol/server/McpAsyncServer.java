@@ -118,6 +118,8 @@ public class McpAsyncServer {
 
 	private final ConcurrentHashMap<String, Set<String>> resourceSubscriptions = new ConcurrentHashMap<>();
 
+	private final McpAsyncListFilter<McpSchema.Tool> toolFilter;
+
 	private List<String> protocolVersions;
 
 	private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
@@ -146,6 +148,7 @@ public class McpAsyncServer {
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
 		this.validateToolInputs = validateToolInputs;
+		this.toolFilter = McpAsyncListFilter.and(features.toolFilters());
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
@@ -177,6 +180,7 @@ public class McpAsyncServer {
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
 		this.validateToolInputs = validateToolInputs;
+		this.toolFilter = McpAsyncListFilter.and(features.toolFilters());
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
@@ -537,9 +541,13 @@ public class McpAsyncServer {
 
 	private McpRequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
 		return (exchange, params) -> {
-			List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).toList();
-
-			return Mono.just(McpSchema.ListToolsResult.builder(tools).build());
+			// TODO: Implement pagination. Cursors must be computed over the filtered
+			// view, otherwise page offsets leak the number of hidden tools.
+			return Flux.fromIterable(this.tools)
+				.map(McpServerFeatures.AsyncToolSpecification::tool)
+				.filterWhen(tool -> this.toolFilter.isVisible(exchange.transportContext(), tool))
+				.collectList()
+				.map(tools -> McpSchema.ListToolsResult.builder(tools).build());
 		};
 	}
 
