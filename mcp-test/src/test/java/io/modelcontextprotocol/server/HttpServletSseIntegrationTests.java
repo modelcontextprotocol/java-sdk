@@ -70,6 +70,12 @@ class HttpServletSseIntegrationTests extends AbstractMcpClientServerIntegrationT
 		catch (Exception e) {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
+
+		clientBuilders
+			.put("httpclient",
+					McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
+						.sseEndpoint(CUSTOM_SSE_ENDPOINT)
+						.build()).requestTimeout(Duration.ofHours(10)));
 	}
 
 	@Override
@@ -80,15 +86,6 @@ class HttpServletSseIntegrationTests extends AbstractMcpClientServerIntegrationT
 	@Override
 	protected SyncSpecification<?> prepareSyncServerBuilder() {
 		return McpServer.sync(this.mcpServerTransportProvider);
-	}
-
-	@Override
-	protected McpClient.SyncSpec getMcpClientBuilder() {
-		return McpClient
-			.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT)
-				.sseEndpoint(CUSTOM_SSE_ENDPOINT)
-				.build())
-			.requestTimeout(Duration.ofHours(10));
 	}
 
 	@AfterEach
@@ -105,6 +102,10 @@ class HttpServletSseIntegrationTests extends AbstractMcpClientServerIntegrationT
 				throw new RuntimeException("Failed to stop Tomcat", e);
 			}
 		}
+	}
+
+	@Override
+	protected void prepareClients(int port, String mcpEndpoint) {
 	}
 
 	@Test
