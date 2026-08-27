@@ -167,6 +167,10 @@ Key features:
     - Configurable keep-alive intervals
     - Security validation support
     - Graceful shutdown support
+    - SEP-2243 validation: the servlet transport rejects requests whose present
+      `Mcp-Method` / `Mcp-Name` headers do not mirror the request body, and rejects
+      unsupported `MCP-Protocol-Version` values. Missing headers are tolerated so legacy
+      clients keep working.
 
 === "Streamable HTTP WebFlux (external)"
 
