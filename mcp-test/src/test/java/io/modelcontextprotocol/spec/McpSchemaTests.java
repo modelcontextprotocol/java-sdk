@@ -3048,8 +3048,7 @@ public class McpSchemaTests {
 			.containsEntry("cacheScope", "public")
 			.containsEntry("nextCursor", "next");
 
-		McpSchema.ListResourcesResult deserialized = JSON_MAPPER.readValue(value,
-				McpSchema.ListResourcesResult.class);
+		McpSchema.ListResourcesResult deserialized = JSON_MAPPER.readValue(value, McpSchema.ListResourcesResult.class);
 		assertThat(deserialized.ttlMs()).isEqualTo(60000L);
 		assertThat(deserialized.cacheScope()).isEqualTo(McpSchema.CacheScope.PUBLIC);
 		assertThat(deserialized.resources()).hasSize(1);
@@ -3078,8 +3077,7 @@ public class McpSchemaTests {
 			.builder("resource://{id}/test", "Test Template")
 			.build();
 
-		McpSchema.ListResourceTemplatesResult result = McpSchema.ListResourceTemplatesResult
-			.builder(List.of(template))
+		McpSchema.ListResourceTemplatesResult result = McpSchema.ListResourceTemplatesResult.builder(List.of(template))
 			.ttlMs(30000L)
 			.cacheScope(McpSchema.CacheScope.PRIVATE)
 			.build();
@@ -3105,16 +3103,14 @@ public class McpSchemaTests {
 
 	@Test
 	void testListResourceTemplatesResultNullTtlOmittedFromJson() throws Exception {
-		McpSchema.ListResourceTemplatesResult result = McpSchema.ListResourceTemplatesResult.builder(List.of())
-			.build();
+		McpSchema.ListResourceTemplatesResult result = McpSchema.ListResourceTemplatesResult.builder(List.of()).build();
 		String value = JSON_MAPPER.writeValueAsString(result);
 		assertThatJson(value).isObject().doesNotContainKey("ttlMs").doesNotContainKey("cacheScope");
 	}
 
 	@Test
 	void testReadResourceResultWithTtl() throws Exception {
-		McpSchema.TextResourceContents contents = McpSchema.TextResourceContents
-			.builder("resource://test", "content")
+		McpSchema.TextResourceContents contents = McpSchema.TextResourceContents.builder("resource://test", "content")
 			.build();
 
 		McpSchema.ReadResourceResult result = McpSchema.ReadResourceResult.builder(List.of(contents))
@@ -3125,8 +3121,7 @@ public class McpSchemaTests {
 		String value = JSON_MAPPER.writeValueAsString(result);
 		assertThatJson(value).isObject().containsEntry("ttlMs", 0).containsEntry("cacheScope", "private");
 
-		McpSchema.ReadResourceResult deserialized = JSON_MAPPER.readValue(value,
-				McpSchema.ReadResourceResult.class);
+		McpSchema.ReadResourceResult deserialized = JSON_MAPPER.readValue(value, McpSchema.ReadResourceResult.class);
 		assertThat(deserialized.ttlMs()).isEqualTo(0L);
 		assertThat(deserialized.cacheScope()).isEqualTo(McpSchema.CacheScope.PRIVATE);
 	}
@@ -3162,8 +3157,7 @@ public class McpSchemaTests {
 		String value = JSON_MAPPER.writeValueAsString(result);
 		assertThatJson(value).isObject().containsEntry("ttlMs", 120000).containsEntry("cacheScope", "public");
 
-		McpSchema.ListPromptsResult deserialized = JSON_MAPPER.readValue(value,
-				McpSchema.ListPromptsResult.class);
+		McpSchema.ListPromptsResult deserialized = JSON_MAPPER.readValue(value, McpSchema.ListPromptsResult.class);
 		assertThat(deserialized.ttlMs()).isEqualTo(120000L);
 		assertThat(deserialized.cacheScope()).isEqualTo(McpSchema.CacheScope.PUBLIC);
 	}
