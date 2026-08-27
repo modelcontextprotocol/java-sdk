@@ -117,6 +117,36 @@ class Utf8LineDecoderTests {
 	}
 
 	@Test
+	void resumesSearchAfterTerminatorWhenLineWasSplitAcrossManyChunks() {
+		// The decoder remembers how far it has searched for a terminator, so the chunk
+		// that finally terminates a long line must not leave that mark behind and hide
+		// the lines that follow it.
+		Utf8LineDecoder dec = new Utf8LineDecoder();
+		for (int i = 0; i < 10; i++) {
+			assertThat(dec.decode(chunk("aaaa"))).isEmpty();
+		}
+		assertThat(dec.decode(chunk("\nsecond\nthird\n"))).containsExactly("a".repeat(40), "second", "third");
+		assertThat(dec.flush()).isEmpty();
+	}
+
+	@Test
+	void resumesSearchAcrossChunkWhenTerminatorFollowsUnterminatedPrefix() {
+		Utf8LineDecoder dec = new Utf8LineDecoder();
+		assertThat(dec.decode(chunk("unterminated"))).isEmpty();
+		assertThat(dec.decode(chunk("-still-going"))).isEmpty();
+		assertThat(dec.decode(chunk("\n"))).containsExactly("unterminated-still-going");
+	}
+
+	@Test
+	void crLfSplitAcrossChunks() {
+		// The CR ends one chunk and the LF opens the next, so the terminator sits exactly
+		// at the point the previous search stopped.
+		Utf8LineDecoder dec = new Utf8LineDecoder();
+		assertThat(dec.decode(chunk("hello\r"))).isEmpty();
+		assertThat(dec.decode(chunk("\nworld\r\n"))).containsExactly("hello", "world");
+	}
+
+	@Test
 	void linesLongerThanInternalCharBuffer() {
 		// 4096 is the internal CharBuffer size; send a single line ~10k chars to force
 		// multiple overflow cycles.
