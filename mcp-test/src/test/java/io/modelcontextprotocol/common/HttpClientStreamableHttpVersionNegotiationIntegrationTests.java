@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.common;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -23,6 +24,7 @@ import io.modelcontextprotocol.spec.ProtocolVersions;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
+import static org.awaitility.Awaitility.await;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -74,6 +76,12 @@ class HttpClientStreamableHttpVersionNegotiationIntegrationTests {
 		client.initialize();
 		McpSchema.CallToolResult response = client
 			.callTool(McpSchema.CallToolRequest.builder("test-tool").arguments(Map.of()).build());
+
+		// The GET /mcp stream is opened asynchronously once the initialize response
+		// creates the session, so wait for it to be recorded before asserting.
+		await().atMost(Duration.ofSeconds(5))
+			.untilAsserted(() -> assertThat(requestRecordingFilter.getCalls()).filteredOn(c -> "GET".equals(c.method()))
+				.hasSize(1));
 
 		var calls = requestRecordingFilter.getCalls();
 
