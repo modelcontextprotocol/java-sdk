@@ -27,6 +27,7 @@ import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
+import reactor.util.retry.Retry;
 
 /**
  * Representation of a Streamable HTTP server session that keeps track of mapping
@@ -40,6 +41,24 @@ import reactor.core.publisher.MonoSink;
 public class McpStreamableServerSession implements McpLoggableSession {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpStreamableServerSession.class);
+
+	/**
+	 * Delay before the first retry of a server-initiated message whose listening stream
+	 * is not registered yet.
+	 */
+	private static final Duration MISSING_STREAM_RETRY_MIN_BACKOFF = Duration.ofMillis(50);
+
+	/**
+	 * Upper bound for the exponential backoff between retries.
+	 */
+	private static final Duration MISSING_STREAM_RETRY_MAX_BACKOFF = Duration.ofMillis(500);
+
+	/**
+	 * Number of retries tolerated for a server-initiated message whose listening stream
+	 * is not registered yet. With the backoff above this yields roughly a 5s grace
+	 * window, after which the last failure propagates to the caller.
+	 */
+	private static final int MISSING_STREAM_RETRY_MAX_ATTEMPTS = 12;
 
 	private final ConcurrentHashMap<Object, McpStreamableServerSessionStream> requestIdToStream = new ConcurrentHashMap<>();
 
@@ -156,18 +175,26 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	@Override
 	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeRef<T> typeRef) {
-		return Mono.defer(() -> {
-			McpLoggableSession listeningStream = this.listeningStreamRef.get();
-			return listeningStream.sendRequest(method, requestParams, typeRef);
-		});
+		return Mono.defer(() -> this.listeningStreamRef.get().sendRequest(method, requestParams, typeRef))
+			.retryWhen(missingStreamRetry());
 	}
 
 	@Override
 	public Mono<Void> sendNotification(String method, Object params) {
-		return Mono.defer(() -> {
-			McpLoggableSession listeningStream = this.listeningStreamRef.get();
-			return listeningStream.sendNotification(method, params);
-		});
+		return Mono.defer(() -> this.listeningStreamRef.get().sendNotification(method, params))
+			.retryWhen(missingStreamRetry());
+	}
+
+	/**
+	 * Retry specification tolerating a not-yet-registered listening stream: retries are
+	 * bounded by {@link #MISSING_STREAM_GRACE_PERIOD}, after which the last failure
+	 * propagates to the caller. Any other failure type propagates immediately.
+	 */
+	private Retry missingStreamRetry() {
+		return Retry.backoff(MISSING_STREAM_RETRY_MAX_ATTEMPTS, MISSING_STREAM_RETRY_MIN_BACKOFF)
+			.maxBackoff(MISSING_STREAM_RETRY_MAX_BACKOFF)
+			.filter(MissingListeningStreamException.class::isInstance)
+			.transientErrors(true);
 	}
 
 	public Mono<Void> delete() {
@@ -254,6 +281,13 @@ public class McpStreamableServerSession implements McpLoggableSession {
 				return Mono.empty();
 			}
 			McpLoggableSession listeningStream = this.listeningStreamRef.get();
+			if (listeningStream == this.missingMcpTransportSession) {
+				// The listening stream may not be registered yet (e.g. the client is
+				// still opening GET /mcp right after initialize). Delegate to this
+				// session so that server-initiated requests triggered by the handler
+				// retry until the stream shows up instead of failing immediately.
+				listeningStream = this;
+			}
 			return notificationHandler.handle(new McpAsyncServerExchange(this.id, listeningStream,
 					this.clientCapabilities.get(), this.clientInfo.get(), transportContext, this.jsonSchemaValidator),
 					notification.params());

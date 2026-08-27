@@ -32,12 +32,12 @@ public class MissingMcpTransportSession implements McpLoggableSession {
 
 	@Override
 	public <T> Mono<T> sendRequest(String method, Object requestParams, TypeRef<T> typeRef) {
-		return Mono.error(new IllegalStateException("Stream unavailable for session " + this.sessionId));
+		return Mono.error(new MissingListeningStreamException(this.sessionId));
 	}
 
 	@Override
 	public Mono<Void> sendNotification(String method, Object params) {
-		return Mono.error(new IllegalStateException("Stream unavailable for session " + this.sessionId));
+		return Mono.error(new MissingListeningStreamException(this.sessionId));
 	}
 
 	@Override
