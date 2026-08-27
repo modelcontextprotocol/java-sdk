@@ -6,6 +6,7 @@ package io.modelcontextprotocol.common;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.BiFunction;
 
 import io.modelcontextprotocol.client.McpClient;
@@ -37,8 +38,10 @@ class HttpClientStreamableHttpVersionNegotiationIntegrationTests {
 
 	private final HttpServletStreamableServerTransportProvider transport = HttpServletStreamableServerTransportProvider
 		.builder()
-		.contextExtractor(
-				req -> McpTransportContext.create(Map.of("protocol-version", req.getHeader("MCP-protocol-version"))))
+		// The MCP-Protocol-Version header may legitimately be absent on initialize
+		// requests, so a missing header must not break context extraction.
+		.contextExtractor(req -> McpTransportContext
+			.create(Map.of("protocol-version", Objects.requireNonNullElse(req.getHeader("MCP-protocol-version"), ""))))
 		.build();
 
 	private final McpSchema.Tool toolSpec = McpSchema.Tool.builder("test-tool")

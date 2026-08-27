@@ -543,9 +543,17 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				var builder = requestBuilder.uri(uri)
 					.header(HttpHeaders.ACCEPT, APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
 					.header(HttpHeaders.CONTENT_TYPE, APPLICATION_JSON_UTF8)
-					.header(HttpHeaders.CACHE_CONTROL, "no-cache")
-					.header(HttpHeaders.PROTOCOL_VERSION, ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
-							this.latestSupportedProtocolVersion));
+					.header(HttpHeaders.CACHE_CONTROL, "no-cache");
+				// Per the Streamable HTTP transport spec, the MCP-Protocol-Version header
+				// is required on all requests after initialization completes. The
+				// initialize request itself carries no negotiated version yet -- the
+				// client's supported versions are conveyed in the request body for
+				// server-side negotiation -- so the header must not be sent.
+				if (!(sentMessage instanceof McpSchema.JSONRPCRequest jsonrpcMessage
+						&& McpSchema.METHOD_INITIALIZE.equals(jsonrpcMessage.method()))) {
+					builder = builder.header(HttpHeaders.PROTOCOL_VERSION, ctx
+						.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION, this.latestSupportedProtocolVersion));
+				}
 				// Per SEP-2243, mirror the JSON-RPC method and, where applicable, the
 				// target name/URI in dedicated headers so the server can validate
 				// them without parsing the body.

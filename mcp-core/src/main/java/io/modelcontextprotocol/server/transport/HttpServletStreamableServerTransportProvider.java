@@ -417,10 +417,6 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			return;
 		}
 
-		if (!validateProtocolVersion(request, response)) {
-			return;
-		}
-
 		try {
 			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
 			this.securityValidator.validateHeaders(headers);
@@ -446,6 +442,16 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			String body = HttpServletRequestUtils.readBody(request, this.requestMaxSize);
 
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
+
+			// The MCP-Protocol-Version header can only be strictly validated once a
+			// version has been negotiated; during 'initialize' the client advertises its
+			// versions in the request body and any header value is resolved by the
+			// regular version negotiation below instead of being rejected.
+			boolean initializationRequest = message instanceof McpSchema.JSONRPCRequest initRequestCheck
+					&& McpSchema.METHOD_INITIALIZE.equals(initRequestCheck.method());
+			if (!initializationRequest && !validateProtocolVersion(request, response)) {
+				return;
+			}
 
 			// Per SEP-2243, reject header/body mismatches (missing headers are tolerated
 			// so
@@ -676,7 +682,9 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * Validates the {@code MCP-Protocol-Version} header against the protocol versions
 	 * supported by this transport. A missing header is allowed and falls back to the
 	 * negotiated protocol version, while a header carrying an unsupported version is
-	 * rejected with a 400 Bad Request.
+	 * rejected with a 400 Bad Request. Initialize requests are exempt: no version has
+	 * been negotiated yet, so any header value carried on them is resolved through
+	 * regular body-based version negotiation.
 	 * @param request the HTTP servlet request
 	 * @param response the HTTP servlet response
 	 * @return true if the header is missing or contains a supported version, false if a
