@@ -191,6 +191,17 @@ class ResponseSubscribers {
 
 		private final StringBuilder leftover = new StringBuilder();
 
+		/**
+		 * How many leading characters of {@link #leftover} are already known to hold no
+		 * line terminator, so that the search for one resumes where the previous search
+		 * ended instead of restarting at the beginning of the buffer. Without it, a long
+		 * line is searched again in full for every chunk that arrives, which makes
+		 * reading an event cost time proportional to the square of its length.
+		 * @see <a href=
+		 * "https://github.com/modelcontextprotocol/java-sdk/issues/1042">#1042</a>
+		 */
+		private int scannedForLineTerminator = 0;
+
 		// Holds partial UTF-8 sequences left over from a previous chunk (max 3 bytes
 		// for a BMP code point; 4 bytes for a supplementary one).
 		private ByteBuffer pendingBytes = ByteBuffer.allocate(0);
@@ -263,6 +274,7 @@ class ResponseSubscribers {
 					last = last.substring(0, last.length() - 1);
 				}
 				leftover.setLength(0);
+				this.scannedForLineTerminator = 0;
 				lines.add(last);
 			}
 			return lines;
@@ -276,14 +288,18 @@ class ResponseSubscribers {
 
 		private void extractCompletedLines(List<String> out) {
 			int newlineIdx;
-			while ((newlineIdx = leftover.indexOf("\n")) != -1) {
+			while ((newlineIdx = leftover.indexOf("\n", this.scannedForLineTerminator)) != -1) {
 				String line = leftover.substring(0, newlineIdx);
 				if (line.endsWith("\r")) {
 					line = line.substring(0, line.length() - 1);
 				}
 				out.add(line);
 				leftover.delete(0, newlineIdx + 1);
+				// What is left starts after the terminator, so none of it has been
+				// searched yet.
+				this.scannedForLineTerminator = 0;
 			}
+			this.scannedForLineTerminator = leftover.length();
 		}
 
 	}
