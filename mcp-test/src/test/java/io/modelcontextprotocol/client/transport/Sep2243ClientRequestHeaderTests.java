@@ -7,6 +7,7 @@ package io.modelcontextprotocol.client.transport;
 import com.sun.net.httpserver.HttpServer;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Map;
@@ -87,6 +88,45 @@ class Sep2243ClientRequestHeaderTests {
 			}
 
 			assertThat(seenMethodHeaders).contains(McpSchema.METHOD_NOTIFICATION_INITIALIZED);
+		}
+		finally {
+			server.stop(0);
+		}
+	}
+
+	@Test
+	void omitsMcpProtocolVersionHeaderOnInitializeRequest() throws IOException {
+		var seenProtocolVersions = new java.util.concurrent.CopyOnWriteArrayList<String>();
+		var server = HttpServer.create(new InetSocketAddress(0), 0);
+
+		try {
+			server.createContext("/mcp", exchange -> {
+				seenProtocolVersions.add(exchange.getRequestHeaders().getFirst(HttpHeaders.PROTOCOL_VERSION));
+				exchange.getRequestBody().readAllBytes();
+				exchange.sendResponseHeaders(202, -1);
+				exchange.close();
+			});
+			server.start();
+
+			var transport = HttpClientStreamableHttpTransport
+				.builder("http://localhost:" + server.getAddress().getPort())
+				.endpoint("/mcp")
+				.supportedProtocolVersions(java.util.List.of(ProtocolVersions.MCP_2025_11_25, "2263-03-18"))
+				.build();
+
+			try {
+				// The initialize request carries the client's latest supported version in
+				// its body for negotiation; sending an MCP-Protocol-Version header would
+				// make strict servers reject it before negotiation happens.
+				var initRequest = new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, "test-id",
+						Map.of("protocolVersion", "2263-03-18"));
+				StepVerifier.create(transport.sendMessage(initRequest)).verifyComplete();
+			}
+			finally {
+				StepVerifier.create(transport.closeGracefully()).verifyComplete();
+			}
+
+			assertThat(seenProtocolVersions).containsNull();
 		}
 		finally {
 			server.stop(0);

@@ -138,4 +138,33 @@ class Sep2243ServerHeaderValidationTests {
 				"Mcp-Name header");
 	}
 
+	// --- Initialize requests must not be rejected on MCP-Protocol-Version ------------
+
+	private static byte[] initializeBody() throws Exception {
+		var request = new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, "test-id",
+				Map.of("protocolVersion", "2263-03-18"));
+		return McpJsonMapperUtils.JSON_MAPPER.writeValueAsString(request).getBytes(StandardCharsets.UTF_8);
+	}
+
+	@Test
+	void streamableToleratesUnsupportedProtocolVersionOnInitialize() throws Exception {
+		var provider = HttpServletStreamableServerTransportProvider.builder().mcpEndpoint("/mcp").build();
+
+		// During initialization no protocol version has been negotiated yet, so any
+		// header value must be resolved through regular version negotiation instead of
+		// a hard 400.
+		var resp = invoke(provider, "/mcp", Map.of(HttpHeaders.PROTOCOL_VERSION, "junk"), initializeBody());
+
+		assertThat(resp.getContentAsString()).doesNotContain("Unsupported protocol version");
+	}
+
+	@Test
+	void statelessToleratesUnsupportedProtocolVersionOnInitialize() throws Exception {
+		var transport = HttpServletStatelessServerTransport.builder().messageEndpoint("/mcp").build();
+
+		var resp = invoke(transport, "/mcp", Map.of(HttpHeaders.PROTOCOL_VERSION, "junk"), initializeBody());
+
+		assertThat(resp.getContentAsString()).doesNotContain("Unsupported protocol version");
+	}
+
 }
