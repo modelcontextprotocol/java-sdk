@@ -1671,10 +1671,7 @@ public interface McpServer {
 		 * accepts it, so a later registration can never widen access.
 		 * <p>
 		 * A hidden tool is omitted from listings only. It remains callable by name, so
-		 * enforce permissions in the tool's call handler. Tools are NOT hidden from
-		 * {@code notifications/tools/list_changed}, as it is a per-client context rather
-		 * than per-request. Consider disabling list changed notifications entirely when
-		 * using filters.
+		 * enforce permissions in the tool's call handler.
 		 * <p>
 		 * @param toolFilter the filter to add, must not be null
 		 * @return This builder instance for method chaining
@@ -2211,10 +2208,7 @@ public interface McpServer {
 		 * accepts it, so a later registration can never widen access.
 		 * <p>
 		 * A hidden tool is omitted from listings only. It remains callable by name, so
-		 * enforce permissions in the tool's call handler. Tools are NOT hidden from
-		 * {@code notifications/tools/list_changed}, as it is a per-client context rather
-		 * than per-request. Consider disabling list changed notifications entirely when
-		 * using filters.
+		 * enforce permissions in the tool's call handler.
 		 * <p>
 		 * The filter is offloaded to a bounded elastic scheduler unless
 		 * {@link #immediateExecution(boolean)} is set.

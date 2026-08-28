@@ -65,10 +65,10 @@ public interface McpAsyncListFilter<T> {
 	 * contain {@code null} elements.
 	 */
 	static <T> McpAsyncListFilter<T> and(List<McpAsyncListFilter<T>> filters) {
-		Assert.noNullElements(filters, "filters must not contain null elements");
 		if (filters == null || filters.isEmpty()) {
 			return (transportContext, primitive) -> Mono.just(Boolean.TRUE);
 		}
+		Assert.noNullElements(filters, "filters must not contain null elements");
 		if (filters.size() == 1) {
 			return filters.get(0);
 		}

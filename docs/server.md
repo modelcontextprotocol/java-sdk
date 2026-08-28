@@ -489,7 +489,11 @@ The same `addToolFilter(...)` method is available on the stateless builders.
   legitimately see different results for two successive requests carrying different credentials.
 - Registration order is preserved; only omissions happen.
 - Returning `Mono.empty()` from an async filter omits the tool. An error fails the whole listing
-  request rather than silently hiding tools.
+  request rather than silently hiding tools: a client cannot tell a filtered-down listing from a
+  partial one, and MCP has no way to signal "this listing was incomplete, retry".
+- A filter that errors is logged server-side and reported to the client as an opaque
+  `-32603 Internal error` with no `data`. If you want the client to see a specific error, throw an
+  `McpError`, those are passed through.
 - Filters accumulate as a boolean **AND**: a tool is listed only when every registered filter accepts it, so a
   later `addToolFilter(...)` can never widen access. Evaluation follows registration order and
   short-circuits on the first filter that hides a tool.
@@ -504,16 +508,26 @@ The same `addToolFilter(...)` method is available on the stateless builders.
     ```
 
 - Tools are tested one at a time, so a filter that performs I/O per tool costs one round trip per
-  tool. Resolve per-request state **once** in your `contextExtractor` and read it in the filter:
+  tool. Sync filters also run on a shared scheduler thread — not the request thread — unless
+  `immediateExecution(true)` is set, so thread-bound request state (Spring Security's
+  `SecurityContextHolder`, MDC, custom `ThreadLocal` holders) is **not visible** inside the filter.
+  For both reasons, resolve per-request state **once** in the transport's `contextExtractor`,
+  which does run on the request thread, and read only the extracted context in the filter:
 
     ```java
-    // one authorization lookup, shared by every tool tested in this request
-    .contextExtractor(request -> McpTransportContext.create(
-            Map.of("perms", introspect(request.getHeader("Authorization")))))
+    // transport builder: one authorization lookup, on the request thread,
+    // shared by every tool tested in this request
+    var transportProvider = HttpServletStreamableServerTransportProvider.builder()
+        .contextExtractor(request -> McpTransportContext.create(
+                Map.of("perms", introspect(request.getHeader("Authorization")))))
+        // ...
+        .build();
 
-    .addToolFilter((context, tool) -> 
-            ((Set<String>) context.get("perms")).contains(tool.name())
-    )
+    // server builder: the filter reads only the extracted context
+    McpServer.sync(transportProvider)
+        .addToolFilter((context, tool) ->
+                ((Set<String>) context.get("perms")).contains(tool.name()))
+        .build();
     ```
 
 - `notifications/tools/list_changed` is **not** filtered. It is a server-initiated broadcast with

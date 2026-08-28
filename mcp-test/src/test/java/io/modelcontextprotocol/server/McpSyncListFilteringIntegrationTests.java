@@ -174,16 +174,52 @@ class McpSyncListFilteringIntegrationTests<SYNC_TOOL_SPEC, ASYNC_TOOL_SPEC> {
 	}
 
 	@Test
-	void filterErrorPropagates() {
+	void filterErrorFailsTheListingWithAnOpaqueInternalError() {
 		var toolSpec = serverFactory.namedAsyncTool("tool");
 
 		serverFactory.asyncServer()
 			.tools(List.of(toolSpec.spec()))
-			.addToolFilter((ctx, tool) -> Mono.error(new RuntimeException("filter error")))
+			.addToolFilter((ctx, tool) -> Mono.error(new RuntimeException("private information")))
 			.build();
 
 		mcpClient.initialize();
-		assertThatThrownBy(mcpClient::listTools).isInstanceOf(McpError.class).hasMessage("filter error");
+
+		// The listing fails, rather than silently omitting the tool: the client has no
+		// way to tell a filtered-down list from a partial one.
+		assertThatThrownBy(mcpClient::listTools).isInstanceOf(McpError.class)
+			.hasMessage("Internal error")
+			.extracting(error -> ((McpError) error).getJsonRpcError())
+			.satisfies(jsonRpcError -> {
+				assertThat(jsonRpcError.code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
+				// The filter's own diagnostics MUST NOT reach the client.
+				assertThat(jsonRpcError.message()).doesNotContain("private information");
+				assertThat(jsonRpcError.data()).isNull();
+			});
+	}
+
+	@Test
+	void filterMcpErrorIsPassedThroughVerbatim() {
+		var toolSpec = serverFactory.namedAsyncTool("tool");
+
+		serverFactory.asyncServer()
+			.tools(List.of(toolSpec.spec()))
+			.addToolFilter((ctx,
+					tool) -> Mono.error(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+						.message("Step-up authentication required")
+						.data(Map.of("scope", "tools:read"))
+						.build()))
+			.build();
+
+		mcpClient.initialize();
+
+		// An McpError is a deliberate choice by the filter author, so it is not scrubbed.
+		assertThatThrownBy(mcpClient::listTools).isInstanceOf(McpError.class)
+			.extracting(error -> ((McpError) error).getJsonRpcError())
+			.satisfies(jsonRpcError -> {
+				assertThat(jsonRpcError.code()).isEqualTo(McpSchema.ErrorCodes.INVALID_REQUEST);
+				assertThat(jsonRpcError.message()).isEqualTo("Step-up authentication required");
+				assertThat(jsonRpcError.data()).isEqualTo(Map.of("scope", "tools:read"));
+			});
 	}
 
 	@Test
