@@ -7,7 +7,6 @@ package io.modelcontextprotocol.common;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.BiFunction;
 
 import io.modelcontextprotocol.client.McpClient;
@@ -40,10 +39,8 @@ class HttpClientStreamableHttpVersionNegotiationIntegrationTests {
 
 	private final HttpServletStreamableServerTransportProvider transport = HttpServletStreamableServerTransportProvider
 		.builder()
-		// The MCP-Protocol-Version header may legitimately be absent on initialize
-		// requests, so a missing header must not break context extraction.
-		.contextExtractor(req -> McpTransportContext
-			.create(Map.of("protocol-version", Objects.requireNonNullElse(req.getHeader("MCP-protocol-version"), ""))))
+		.contextExtractor(
+				req -> McpTransportContext.create(Map.of("protocol-version", req.getHeader("MCP-protocol-version"))))
 		.build();
 
 	private final McpSchema.Tool toolSpec = McpSchema.Tool.builder("test-tool")
@@ -79,18 +76,15 @@ class HttpClientStreamableHttpVersionNegotiationIntegrationTests {
 
 		// The GET /mcp stream is opened asynchronously once the initialize response
 		// creates the session, so wait for it to be recorded before asserting.
-		await().atMost(Duration.ofSeconds(5))
-			.untilAsserted(() -> assertThat(requestRecordingFilter.getCalls()).filteredOn(c -> "GET".equals(c.method()))
-				.hasSize(1));
-
-		var calls = requestRecordingFilter.getCalls();
-
-		assertThat(calls).filteredOn(c -> !c.body().contains("\"method\":\"initialize\""))
-			// GET /mcp ; POST notification/initialized ; POST tools/call
-			.hasSize(3)
-			.map(McpTestRequestRecordingServletFilter.Call::headers)
-			.allSatisfy(headers -> assertThat(headers).containsEntry("mcp-protocol-version",
-					ProtocolVersions.MCP_2025_11_25));
+		await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+			var calls = requestRecordingFilter.getCalls();
+			assertThat(calls).filteredOn(c -> !c.body().contains("\"method\":\"initialize\""))
+				// GET /mcp ; POST notification/initialized ; POST tools/call
+				.hasSize(3)
+				.map(McpTestRequestRecordingServletFilter.Call::headers)
+				.allSatisfy(headers -> assertThat(headers).containsEntry("mcp-protocol-version",
+						ProtocolVersions.MCP_2025_11_25));
+		});
 
 		assertThat(response).isNotNull();
 		assertThat(response.content()).hasSize(1)
