@@ -192,21 +192,27 @@ public class McpSyncClient implements AutoCloseable {
 
 	/**
 	 * Send a roots/list_changed notification.
+	 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
 	 */
+	@Deprecated
 	public void rootsListChangedNotification() {
 		withProvidedContext(this.delegate.rootsListChangedNotification()).block();
 	}
 
 	/**
 	 * Add a roots dynamically.
+	 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
 	 */
+	@Deprecated
 	public void addRoot(McpSchema.Root root) {
 		this.delegate.addRoot(root).block();
 	}
 
 	/**
 	 * Remove a root dynamically.
+	 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
 	 */
+	@Deprecated
 	public void removeRoot(String rootUri) {
 		this.delegate.removeRoot(rootUri).block();
 	}
@@ -426,7 +432,9 @@ public class McpSyncClient implements AutoCloseable {
 	/**
 	 * Client can set the minimum logging level it wants to receive from the server.
 	 * @param loggingLevel the min logging level
+	 * @deprecated Logging is deprecated in the 2026-07-28 MCP specification.
 	 */
+	@Deprecated
 	public void setLoggingLevel(McpSchema.LoggingLevel loggingLevel) {
 		withProvidedContext(this.delegate.setLoggingLevel(loggingLevel)).block();
 

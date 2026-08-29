@@ -121,7 +121,9 @@ public class McpSyncServerExchange {
 	 * Send a logging message notification to the client. Messages below the current
 	 * minimum logging level will be filtered out.
 	 * @param loggingMessageNotification The logging message to send
+	 * @deprecated Logging is deprecated in the 2026-07-28 MCP specification.
 	 */
+	@Deprecated
 	public void loggingNotification(LoggingMessageNotification loggingMessageNotification) {
 		this.exchange.loggingNotification(loggingMessageNotification).block();
 	}

@@ -98,16 +98,32 @@ public final class McpSchema {
 	public static final String METHOD_COMPLETION_COMPLETE = "completion/complete";
 
 	// Logging Methods
+	/**
+	 * @deprecated Logging is deprecated in the 2026-07-28 MCP specification.
+	 */
+	@Deprecated
 	public static final String METHOD_LOGGING_SET_LEVEL = "logging/setLevel";
 
 	public static final String METHOD_NOTIFICATION_MESSAGE = "notifications/message";
 
 	// Roots Methods
+	/**
+	 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
+	 */
+	@Deprecated
 	public static final String METHOD_ROOTS_LIST = "roots/list";
 
+	/**
+	 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
+	 */
+	@Deprecated
 	public static final String METHOD_NOTIFICATION_ROOTS_LIST_CHANGED = "notifications/roots/list_changed";
 
 	// Sampling Methods
+	/**
+	 * @deprecated Sampling is deprecated in the 2026-07-28 MCP specification.
+	 */
+	@Deprecated
 	public static final String METHOD_SAMPLING_CREATE_MESSAGE = "sampling/createMessage";
 
 	// Elicitation Methods
@@ -582,7 +598,9 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ClientCapabilities( // @formatter:off
 		@JsonProperty("experimental") Map<String, Object> experimental,
+		@Deprecated
 		@JsonProperty("roots") RootCapabilities roots,
+		@Deprecated
 		@JsonProperty("sampling") Sampling sampling,
 		@JsonProperty("elicitation") Elicitation elicitation) { // @formatter:on
 
@@ -591,7 +609,9 @@ public final class McpSchema {
 		 *
 		 * @param listChanged Whether the client supports notifications for changes to the
 		 * roots list
+		 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record RootCapabilities(@JsonProperty("listChanged") Boolean listChanged) {
@@ -623,7 +643,10 @@ public final class McpSchema {
 		 * servers to leverage AI capabilities—with no server API keys necessary. Servers
 		 * can request text or image-based interactions and optionally include context
 		 * from MCP servers in their prompts.
+		 *
+		 * @deprecated Sampling is deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record Sampling() {
@@ -728,11 +751,19 @@ public final class McpSchema {
 				return this;
 			}
 
+			/**
+			 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
+			 */
+			@Deprecated
 			public Builder roots(Boolean listChanged) {
 				this.roots = new RootCapabilities(listChanged);
 				return this;
 			}
 
+			/**
+			 * @deprecated Sampling is deprecated in the 2026-07-28 MCP specification.
+			 */
+			@Deprecated
 			public Builder sampling() {
 				this.sampling = new Sampling();
 				return this;
@@ -791,6 +822,7 @@ public final class McpSchema {
 	public record ServerCapabilities( // @formatter:off
 		@JsonProperty("completions") CompletionCapabilities completions,
 		@JsonProperty("experimental") Map<String, Object> experimental,
+		@Deprecated
 		@JsonProperty("logging") LoggingCapabilities logging,
 		@JsonProperty("prompts") PromptCapabilities prompts,
 		@JsonProperty("resources") ResourceCapabilities resources,
@@ -806,7 +838,10 @@ public final class McpSchema {
 
 		/**
 		 * Present if the server supports sending log messages to the client.
+		 *
+		 * @deprecated Logging is deprecated in the 2026-07-28 MCP specification.
 		 */
+		@Deprecated
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record LoggingCapabilities() {
@@ -954,6 +989,10 @@ public final class McpSchema {
 				return this;
 			}
 
+			/**
+			 * @deprecated Logging is deprecated in the 2026-07-28 MCP specification.
+			 */
+			@Deprecated
 			public Builder logging() {
 				this.logging = new LoggingCapabilities();
 				return this;
@@ -3468,7 +3507,9 @@ public final class McpSchema {
 	 * Note: {@code role} and {@code content} are required by the MCP specification.
 	 * Deserialization accepts missing values and substitutes defaults to avoid breaking
 	 * existing integrations that may omit these fields.
+	 * @deprecated Sampling is deprecated in the 2026-07-28 MCP specification.
 	 */
+	@Deprecated
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record SamplingMessage( // @formatter:off
@@ -3547,7 +3588,9 @@ public final class McpSchema {
 	 * Note: {@code messages} and {@code maxTokens} are required by the MCP specification.
 	 * Deserialization accepts missing values and substitutes defaults to avoid breaking
 	 * existing integrations that may omit these fields.
+	 * @deprecated Sampling is deprecated in the 2026-07-28 MCP specification.
 	 */
+	@Deprecated
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record CreateMessageRequest( // @formatter:off
@@ -3730,7 +3773,9 @@ public final class McpSchema {
 	 * @param model The name of the model that generated the message
 	 * @param stopReason The reason why sampling stopped, if known
 	 * @param meta See specification for notes on _meta usage
+	 * @deprecated Sampling is deprecated in the 2026-07-28 MCP specification.
 	 */
+	@Deprecated
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record CreateMessageResult( // @formatter:off
@@ -5326,7 +5371,9 @@ public final class McpSchema {
 	 * Note: {@code level} and {@code data} are required by the MCP specification.
 	 * Deserialization accepts missing values and substitutes defaults to avoid breaking
 	 * existing integrations that may omit these fields.
+	 * @deprecated Logging is deprecated in the 2026-07-28 MCP specification.
 	 */
+	@Deprecated
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record LoggingMessageNotification( // @formatter:off
@@ -5440,7 +5487,10 @@ public final class McpSchema {
 	 * Severity levels for MCP log messages, ordered from least to most severe. The
 	 * numeric {@link #level()} can be used to compare severities. Deserialization is
 	 * case-insensitive and returns {@code null} for unrecognized values.
+	 *
+	 * @deprecated Logging is deprecated in the 2026-07-28 MCP specification.
 	 */
+	@Deprecated
 	public enum LoggingLevel {
 
 	// @formatter:off
@@ -5488,7 +5538,9 @@ public final class McpSchema {
 	 * @param level The level of logging that the client wants to receive from the server.
 	 * The server should send all logs at this level and higher (i.e., more severe) to the
 	 * client as notifications/message
+	 * @deprecated Logging is deprecated in the 2026-07-28 MCP specification.
 	 */
+	@Deprecated
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record SetLevelRequest(@JsonProperty("level") LoggingLevel level) {
@@ -6323,7 +6375,9 @@ public final class McpSchema {
 	 * human-readable identifier for the root, which may be useful for display purposes or
 	 * for referencing the root in other parts of the application.
 	 * @param meta See specification for notes on _meta usage
+	 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
 	 */
+	@Deprecated
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Root( // @formatter:off
@@ -6394,7 +6448,9 @@ public final class McpSchema {
 	 * are more roots available. The client can use this cursor to request the next page
 	 * of results by sending a roots/list request with the cursor parameter set to this
 	 * @param meta See specification for notes on _meta usage
+	 * @deprecated Roots are deprecated in the 2026-07-28 MCP specification.
 	 */
+	@Deprecated
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ListRootsResult( // @formatter:off
