@@ -57,6 +57,11 @@ public interface JsonSchemaValidator {
 
 	/**
 	 * Validates the structured content against the provided JSON schema.
+	 * <p>
+	 * If {@code structuredContent} is a {@link String}, it is treated as a serialized
+	 * JSON document and parsed before validation; quote embedded strings accordingly (for
+	 * example {@code "\"red\""} for the JSON string value {@code red}). Any other type is
+	 * converted to its JSON representation directly.
 	 * @param schema The JSON schema to validate against.
 	 * @param structuredContent The structured content to validate.
 	 * @return A ValidationResponse indicating whether the validation was successful or

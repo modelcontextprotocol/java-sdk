@@ -4,22 +4,6 @@
 
 package io.modelcontextprotocol.client;
 
-import io.modelcontextprotocol.common.McpTransportContext;
-import io.modelcontextprotocol.json.McpJsonDefaults;
-import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
-import io.modelcontextprotocol.spec.McpClientTransport;
-import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
-import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
-import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
-import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
-import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
-import io.modelcontextprotocol.spec.McpSchema.Implementation;
-import io.modelcontextprotocol.spec.McpSchema.Root;
-import io.modelcontextprotocol.spec.McpTransport;
-import io.modelcontextprotocol.util.Assert;
-import reactor.core.publisher.Mono;
-
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -28,6 +12,23 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+
+import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonDefaults;
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
+import io.modelcontextprotocol.spec.McpClientTransport;
+import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
+import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
+import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
+import io.modelcontextprotocol.spec.McpSchema.ElicitFormRequest;
+import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
+import io.modelcontextprotocol.spec.McpSchema.ElicitUrlRequest;
+import io.modelcontextprotocol.spec.McpSchema.Implementation;
+import io.modelcontextprotocol.spec.McpSchema.Root;
+import io.modelcontextprotocol.spec.McpTransport;
+import io.modelcontextprotocol.util.Assert;
+import reactor.core.publisher.Mono;
 
 /**
  * Factory class for creating Model Context Protocol (MCP) clients. MCP is a protocol that
@@ -185,9 +186,13 @@ public interface McpClient {
 
 		private final List<Consumer<McpSchema.ProgressNotification>> progressConsumers = new ArrayList<>();
 
+		private final List<Consumer<McpSchema.ElicitationCompleteNotification>> elicitationCompleteConsumers = new ArrayList<>();
+
 		private Function<CreateMessageRequest, CreateMessageResult> samplingHandler;
 
-		private Function<ElicitRequest, ElicitResult> elicitationHandler;
+		private Function<ElicitFormRequest, ElicitResult> formElicitationHandler;
+
+		private Function<ElicitUrlRequest, ElicitResult> urlElicitationHandler;
 
 		private Supplier<McpTransportContext> contextProvider = () -> McpTransportContext.EMPTY;
 
@@ -314,9 +319,24 @@ public interface McpClient {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if elicitationHandler is null
 		 */
-		public SyncSpec elicitation(Function<ElicitRequest, ElicitResult> elicitationHandler) {
+		public SyncSpec elicitation(Function<ElicitFormRequest, ElicitResult> elicitationHandler) {
 			Assert.notNull(elicitationHandler, "Elicitation handler must not be null");
-			this.elicitationHandler = elicitationHandler;
+			this.formElicitationHandler = elicitationHandler;
+			return this;
+		}
+
+		/**
+		 * Sets a custom elicitation handler for processing URL-mode elicitation message
+		 * requests. The elicitation handler can modify or validate messages before they
+		 * are sent to the server, enabling custom processing logic.
+		 * @param elicitationHandler A function that processes elicitation requests and
+		 * returns results. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if elicitationHandler is null
+		 */
+		public SyncSpec urlElicitation(Function<ElicitUrlRequest, ElicitResult> elicitationHandler) {
+			Assert.notNull(elicitationHandler, "Elicitation handler must not be null");
+			this.urlElicitationHandler = elicitationHandler;
 			return this;
 		}
 
@@ -440,13 +460,44 @@ public interface McpClient {
 		}
 
 		/**
+		 * Adds a consumer to be notified by the server when an URL elicitation is
+		 * complete.
+		 * @param elicitationCompleteConsumer A consumer that receives elicitation
+		 * complete notifications. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if elicitationCompleteConsumer is null
+		 */
+		public SyncSpec elicitationCompleteConsumer(
+				Consumer<McpSchema.ElicitationCompleteNotification> elicitationCompleteConsumer) {
+			Assert.notNull(elicitationCompleteConsumer, "Elicitation complete consumer must not be null");
+			this.elicitationCompleteConsumers.add(elicitationCompleteConsumer);
+			return this;
+		}
+
+		/**
+		 * Adds multiple consumers to be notified by the server when an URL elicitation is
+		 * complete.
+		 * @param elicitationCompleteConsumers A list of consumers that receives
+		 * elicitation complete notifications. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if elicitationCompleteConsumers is null
+		 */
+		public SyncSpec elicitationCompleteConsumers(
+				List<Consumer<McpSchema.ElicitationCompleteNotification>> elicitationCompleteConsumers) {
+			Assert.notNull(elicitationCompleteConsumers, "Elicitation complete consumers must not be null");
+			this.elicitationCompleteConsumers.addAll(elicitationCompleteConsumers);
+			return this;
+		}
+
+		/**
 		 * Add a provider of {@link McpTransportContext}, providing a context before
 		 * calling any client operation. This allows to extract thread-locals and hand
 		 * them over to the underlying transport.
 		 * <p>
-		 * There is no direct equivalent in {@link AsyncSpec}. To achieve the same result,
-		 * append {@code contextWrite(McpTransportContext.KEY, context)} to any
-		 * {@link McpAsyncClient} call.
+		 * The supplier is invoked at subscription time, on the calling thread, and the
+		 * resulting context is visible to the transport for every leg of the operation,
+		 * including connections opened on other threads, such as the SSE stream started
+		 * during initialization.
 		 * @param contextProvider A supplier to create a context
 		 * @return This builder for method chaining
 		 */
@@ -502,8 +553,9 @@ public interface McpClient {
 		public McpSyncClient build() {
 			McpClientFeatures.Sync syncFeatures = new McpClientFeatures.Sync(this.clientInfo, this.capabilities,
 					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
-					this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers, this.samplingHandler,
-					this.elicitationHandler, this.enableCallToolSchemaCaching, this.applyElicitationDefaults);
+					this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
+					this.elicitationCompleteConsumers, this.samplingHandler, this.formElicitationHandler,
+					this.urlElicitationHandler, this.enableCallToolSchemaCaching, this.applyElicitationDefaults);
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
@@ -529,6 +581,21 @@ public interface McpClient {
 	 * <li>Change notification handlers for tools, resources, and prompts
 	 * <li>Custom message sampling logic
 	 * </ul>
+	 *
+	 * <p>
+	 * Unlike {@link SyncSpec}, this specification has no
+	 * {@code transportContextProvider}. This is deliberate: in a reactive pipeline the
+	 * caller owns the Reactor context, and whatever the transport needs, such as an
+	 * {@link McpTransportContext}, can be written into it directly. Write it once where
+	 * the reactive chain starts, rather than at every call site, and every
+	 * {@link McpAsyncClient} call downstream inherits it, including the connections
+	 * opened during initialization: <pre>{@code
+	 * chain.filter(exchange)
+	 *     .contextWrite(ctx -> ctx.put(McpTransportContext.KEY, context));
+	 * }</pre> To bridge thread-locals into the chain, use Reactor's context propagation
+	 * support.
+	 *
+	 * @see SyncSpec#transportContextProvider(Supplier)
 	 */
 	class AsyncSpec {
 
@@ -556,9 +623,13 @@ public interface McpClient {
 
 		private final List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers = new ArrayList<>();
 
+		private final List<Function<McpSchema.ElicitationCompleteNotification, Mono<Void>>> elicitationCompleteConsumers = new ArrayList<>();
+
 		private Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler;
 
-		private Function<ElicitRequest, Mono<ElicitResult>> elicitationHandler;
+		private Function<ElicitFormRequest, Mono<ElicitResult>> formElicitationHandler;
+
+		private Function<ElicitUrlRequest, Mono<ElicitResult>> urlElicitationHandler;
 
 		private JsonSchemaValidator jsonSchemaValidator;
 
@@ -683,9 +754,24 @@ public interface McpClient {
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if elicitationHandler is null
 		 */
-		public AsyncSpec elicitation(Function<ElicitRequest, Mono<ElicitResult>> elicitationHandler) {
+		public AsyncSpec elicitation(Function<ElicitFormRequest, Mono<ElicitResult>> elicitationHandler) {
 			Assert.notNull(elicitationHandler, "Elicitation handler must not be null");
-			this.elicitationHandler = elicitationHandler;
+			this.formElicitationHandler = elicitationHandler;
+			return this;
+		}
+
+		/**
+		 * Sets a custom elicitation handler for processing elicitation message requests.
+		 * The elicitation handler can modify or validate messages before they are sent to
+		 * the server, enabling custom processing logic.
+		 * @param elicitationHandler A function that processes elicitation requests and
+		 * returns results. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if elicitationHandler is null
+		 */
+		public AsyncSpec urlElicitation(Function<ElicitUrlRequest, Mono<ElicitResult>> elicitationHandler) {
+			Assert.notNull(elicitationHandler, "Elicitation handler must not be null");
+			this.urlElicitationHandler = elicitationHandler;
 			return this;
 		}
 
@@ -813,6 +899,36 @@ public interface McpClient {
 		}
 
 		/**
+		 * Adds a consumer to be notified by the server when an URL elicitation is
+		 * complete.
+		 * @param elicitationCompleteConsumer A consumer that receives elicitation
+		 * complete notifications. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if elicitationCompleteConsumer is null
+		 */
+		public AsyncSpec elicitationCompleteConsumer(
+				Function<McpSchema.ElicitationCompleteNotification, Mono<Void>> elicitationCompleteConsumer) {
+			Assert.notNull(elicitationCompleteConsumer, "Elicitation complete consumer must not be null");
+			this.elicitationCompleteConsumers.add(elicitationCompleteConsumer);
+			return this;
+		}
+
+		/**
+		 * Adds multiple consumers to be notified by the server when an URL elicitation is
+		 * complete.
+		 * @param elicitationCompleteConsumers A list of consumers that receives
+		 * elicitation complete notifications. Must not be null.
+		 * @return This builder instance for method chaining
+		 * @throws IllegalArgumentException if elicitationCompleteConsumers is null
+		 */
+		public AsyncSpec elicitationCompleteConsumers(
+				List<Function<McpSchema.ElicitationCompleteNotification, Mono<Void>>> elicitationCompleteConsumers) {
+			Assert.notNull(elicitationCompleteConsumers, "Elicitation complete consumers must not be null");
+			this.elicitationCompleteConsumers.addAll(elicitationCompleteConsumers);
+			return this;
+		}
+
+		/**
 		 * Sets the JSON schema validator to use for validating tool responses against
 		 * output schemas.
 		 * @param jsonSchemaValidator The validator to use. Must not be null.
@@ -863,7 +979,8 @@ public interface McpClient {
 					new McpClientFeatures.Async(this.clientInfo, this.capabilities, this.roots,
 							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 							this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
-							this.samplingHandler, this.elicitationHandler, this.enableCallToolSchemaCaching,
+							this.elicitationCompleteConsumers, this.samplingHandler, this.formElicitationHandler,
+							this.urlElicitationHandler, this.enableCallToolSchemaCaching,
 							this.applyElicitationDefaults));
 		}
 

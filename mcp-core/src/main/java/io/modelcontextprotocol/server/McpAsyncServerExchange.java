@@ -4,18 +4,16 @@
 
 package io.modelcontextprotocol.server;
 
-import io.modelcontextprotocol.common.McpTransportContext;
 import java.util.ArrayList;
 import java.util.Collections;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpLoggableSession;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
-import io.modelcontextprotocol.spec.McpSession;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
 
@@ -171,13 +169,27 @@ public class McpAsyncServerExchange {
 			return Mono
 				.error(new IllegalStateException("Client must be initialized. Call the initialize method first!"));
 		}
-		if (this.clientCapabilities.elicitation() == null) {
+		McpSchema.ClientCapabilities.Elicitation elicitation = this.clientCapabilities.elicitation();
+		if (elicitation == null) {
 			return Mono.error(new IllegalStateException("Client must be configured with elicitation capabilities"));
 		}
-		if (this.jsonSchemaValidator != null) {
+
+		// elicitation: {} is equivalent to elicitation: { form: {} }
+		boolean supportsForm = elicitation.form() != null || elicitation.url() == null;
+		boolean supportsUrl = elicitation.url() != null;
+
+		if (elicitRequest instanceof McpSchema.ElicitFormRequest && !supportsForm) {
+			return Mono
+				.error(new IllegalStateException("Client must be configured with form elicitation capabilities"));
+		}
+
+		if (elicitRequest instanceof McpSchema.ElicitUrlRequest && !supportsUrl) {
+			return Mono.error(new IllegalStateException("Client must be configured with URL elicitation capabilities"));
+		}
+
+		if (this.jsonSchemaValidator != null && elicitRequest instanceof McpSchema.ElicitFormRequest formRequest) {
 			try {
-				this.jsonSchemaValidator.assertConforms("ElicitRequest requestedSchema",
-						elicitRequest.requestedSchema());
+				this.jsonSchemaValidator.assertConforms("ElicitRequest requestedSchema", formRequest.requestedSchema());
 			}
 			catch (IllegalArgumentException e) {
 				return Mono.error(e);

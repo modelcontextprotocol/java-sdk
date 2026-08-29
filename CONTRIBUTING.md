@@ -35,6 +35,12 @@ propose an enhancement. Bug reports should have a reproducer in the form of a co
 sample or a repository attached that the maintainers or contributors can work with to 
 address the problem.
 
+## AI agents
+
+**We accept contributions created with the help of AI coding agents, but they must be carefully reviewed by a human who remains accountable for the quality of the contribution.**
+These can be issues or pull requests. For issues, please ensure you describe your particular use-case, and not general considerations found by an AI agent.
+Contributions submitted by GitHub accounts controlled by autonomous AI bots are forbidden.
+
 ## Making Changes
 
 1. Create a new branch:

@@ -250,7 +250,6 @@ class LifecycleInitializer {
 	 * @param t The exception to handle
 	 */
 	public void handleException(Throwable t) {
-		logger.warn("Handling exception", t);
 		if (t instanceof McpTransportSessionNotFoundException) {
 			DefaultInitialization previous = this.initializationRef.getAndSet(null);
 			if (previous != null) {

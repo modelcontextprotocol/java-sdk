@@ -24,6 +24,7 @@ import io.modelcontextprotocol.client.McpAsyncClient;
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpHttpClientAuthorizationErrorHandler;
+import io.modelcontextprotocol.client.transport.customizer.McpHttpClientTransportAuthorizationErrorHandler;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonDefaults;
@@ -37,6 +38,7 @@ import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.McpTransportSession;
+import io.modelcontextprotocol.spec.McpTransportSessionClosedException;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import io.modelcontextprotocol.spec.McpTransportStream;
 import io.modelcontextprotocol.spec.ProtocolVersions;
@@ -86,6 +88,11 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	private static final String DEFAULT_ENDPOINT = "/mcp";
 
 	/**
+	 * Default maximum number of bytes read for a single inbound message.
+	 */
+	private static final int DEFAULT_MAX_RESPONSE_SIZE = 16 * 1024 * 1024; // 16MiB
+
+	/**
 	 * HTTP client for sending messages to the server. Uses HTTP POST over the message
 	 * endpoint
 	 */
@@ -112,6 +119,29 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	public static int BAD_REQUEST = 400;
 
+	/**
+	 * Determines whether an SSE event should be treated as a "message" event carrying a
+	 * JSON-RPC payload.
+	 *
+	 * <p>
+	 * Per the <a href=
+	 * "https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation">
+	 * SSE specification (WHATWG HTML Living Standard §9.2.6)</a>, an event with no
+	 * explicit {@code event:} field MUST be dispatched as a {@code message} event by
+	 * default. This method applies that rule by treating {@code null} or empty event
+	 * names as equivalent to {@link #MESSAGE_EVENT_TYPE}.
+	 *
+	 * <p>
+	 * This alignment ensures interoperability with MCP servers that emit bare
+	 * {@code data:} frames without an accompanying {@code event:} line, which are valid
+	 * per the SSE spec.
+	 * @param eventName the SSE event name, which may be {@code null} or empty
+	 * @return {@code true} if the event should be parsed as a JSON-RPC message
+	 */
+	static boolean isMessageEvent(String eventName) {
+		return eventName == null || eventName.isEmpty() || MESSAGE_EVENT_TYPE.equals(eventName);
+	}
+
 	private final McpJsonMapper jsonMapper;
 
 	private final URI baseUri;
@@ -120,7 +150,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private final boolean openConnectionOnStartup;
 
-	private final McpHttpClientAuthorizationErrorHandler authorizationErrorHandler;
+	private final McpHttpClientTransportAuthorizationErrorHandler authorizationErrorHandler;
 
 	private final boolean resumableStreams;
 
@@ -136,10 +166,18 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private final String latestSupportedProtocolVersion;
 
+	/**
+	 * Maximum number of bytes read for a single inbound message, whether it arrives on an
+	 * SSE stream or as a JSON response body.
+	 */
+	private final int maxResponseSize;
+
 	private HttpClientStreamableHttpTransport(McpJsonMapper jsonMapper, HttpClient httpClient,
 			HttpRequest.Builder requestBuilder, String baseUri, String endpoint, boolean resumableStreams,
 			boolean openConnectionOnStartup, McpAsyncHttpClientRequestCustomizer httpRequestCustomizer,
-			McpHttpClientAuthorizationErrorHandler authorizationErrorHandler, List<String> supportedProtocolVersions) {
+			McpHttpClientTransportAuthorizationErrorHandler authorizationErrorHandler,
+			List<String> supportedProtocolVersions, int maxResponseSize) {
+		Assert.isTrue(maxResponseSize > 0, "maxResponseSize must be positive");
 		this.jsonMapper = jsonMapper;
 		this.httpClient = httpClient;
 		this.requestBuilder = requestBuilder;
@@ -155,6 +193,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			.sorted(Comparator.reverseOrder())
 			.findFirst()
 			.get();
+		this.maxResponseSize = maxResponseSize;
 	}
 
 	@Override
@@ -187,14 +226,6 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		return new DefaultMcpTransportSession(onClose);
 	}
 
-	private McpTransportSession<Disposable> createClosedSession(McpTransportSession<Disposable> existingSession) {
-		var existingSessionId = Optional.ofNullable(existingSession)
-			.filter(session -> !(session instanceof ClosedMcpTransportSession<Disposable>))
-			.flatMap(McpTransportSession::sessionId)
-			.orElse(null);
-		return new ClosedMcpTransportSession<>(existingSessionId);
-	}
-
 	private Publisher<Void> createDelete(String sessionId) {
 
 		var uri = Utils.resolveUri(this.baseUri, this.endpoint);
@@ -211,7 +242,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "DELETE", uri, null, transportContext));
 		}).flatMap(requestBuilder -> {
 			var request = requestBuilder.build();
-			return Mono.fromFuture(() -> this.httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()));
+			return Mono.fromFuture(() -> this.httpClient.sendAsync(request,
+					ResponseSubscribers.boundedStringBodyHandler(this.maxResponseSize)));
 		}).then();
 	}
 
@@ -238,7 +270,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	public Mono<Void> closeGracefully() {
 		return Mono.defer(() -> {
 			logger.debug("Graceful close triggered");
-			McpTransportSession<Disposable> currentSession = this.activeSession.getAndUpdate(this::createClosedSession);
+			McpTransportSession<Disposable> currentSession = this.activeSession
+				.getAndSet(ClosedMcpTransportSession.INSTANCE);
 			if (currentSession != null) {
 				return Mono.from(currentSession.closeGracefully());
 			}
@@ -248,6 +281,19 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	private Mono<Disposable> reconnect(McpTransportStream<Disposable> stream) {
 		return Mono.deferContextual(ctx -> {
+			var rh = this.handler.get();
+			if (rh == null) {
+				logger.warn("Transport has no request handler registered. Remember to call connect!");
+			}
+
+			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> requestHandler = rh != null
+					? rh : msg -> Mono.error(new IllegalStateException("No request handler"));
+
+			final McpTransportSession<Disposable> transportSession = this.activeSession.get();
+
+			if (ClosedMcpTransportSession.INSTANCE.equals(transportSession)) {
+				throw new McpTransportSessionClosedException();
+			}
 
 			if (stream != null) {
 				logger.debug("Reconnecting stream {} with lastId {}", stream.streamId(), stream.lastId());
@@ -257,7 +303,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			}
 
 			final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
-			final McpTransportSession<Disposable> transportSession = this.activeSession.get();
+
 			var uri = Utils.resolveUri(this.baseUri, this.endpoint);
 
 			Disposable connection = Mono.deferContextual(connectionCtx -> {
@@ -295,9 +341,12 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						int statusCode = responseEvent.responseInfo().statusCode();
 						if (statusCode == 401 || statusCode == 403) {
 							logger.debug("Authorization error in reconnect with code {}", statusCode);
+							var request = requestBuilder.build();
+							var requestSnapshot = new HttpRequestSnapshot(request.uri(), request.method(),
+									request.headers());
 							return Mono.<McpSchema.JSONRPCMessage>error(
 									new McpHttpClientTransportAuthorizationException(
-											"Authorization error connecting to SSE stream",
+											"Authorization error connecting to SSE stream", requestSnapshot,
 											responseEvent.responseInfo()));
 						}
 						else if (statusCode == METHOD_NOT_ALLOWED) {
@@ -311,7 +360,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 											+ statusCode));
 						}
 						else if (statusCode >= 200 && statusCode < 300) {
-							if (MESSAGE_EVENT_TYPE.equals(sseResponseEvent.sseEvent().event())) {
+							if (isMessageEvent(sseResponseEvent.sseEvent().event())) {
 								String data = sseResponseEvent.sseEvent().data();
 								// Per 2025-11-25 spec (SEP-1699), servers may
 								// send SSE events
@@ -384,18 +433,18 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 								"Received unrecognized SSE event type: " + sseResponseEvent.sseEvent().event()));
 					})
 					.retryWhen(authorizationErrorRetrySpec())
-					.flatMap(jsonrpcMessage -> this.handler.get().apply(Mono.just(jsonrpcMessage)))
+					.flatMap(jsonrpcMessage -> requestHandler.apply(Mono.just(jsonrpcMessage)))
 					.onErrorMap(CompletionException.class, t -> t.getCause())
-					.onErrorComplete(t -> {
-						this.handleException(t);
-						return true;
-					})
 					.doFinally(s -> {
 						Disposable ref = disposableRef.getAndSet(null);
 						if (ref != null) {
 							transportSession.removeConnection(ref);
 						}
 					}))
+				.onErrorComplete(t -> {
+					this.handleException(t);
+					return true;
+				})
 				.contextWrite(ctx)
 				.subscribe();
 
@@ -417,7 +466,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			return Mono.deferContextual(ctx -> {
 				var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 				return Mono
-					.from(this.authorizationErrorHandler.handle(authException.getResponseInfo(), transportContext))
+					.from(this.authorizationErrorHandler.handle(authException.getRequestSnapshot(),
+							authException.getResponseInfo(), transportContext))
 					.switchIfEmpty(Mono.just(false))
 					.flatMap(shouldRetry -> shouldRetry ? Mono.just(retrySignal.totalRetries())
 							: Mono.error(retrySignal.failure()));
@@ -434,16 +484,16 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			if (contentType.contains(TEXT_EVENT_STREAM)) {
 				// For SSE streams, use line subscriber that returns Void
 				logger.debug("Received SSE stream response, using line subscriber");
-				return ResponseSubscribers.sseToBodySubscriber(responseInfo, sink);
+				return ResponseSubscribers.sseToBodySubscriber(responseInfo, sink, this.maxResponseSize);
 			}
 			else if (contentType.contains(APPLICATION_JSON)) {
 				// For JSON responses and others, use string subscriber
 				logger.debug("Received response, using string subscriber");
-				return ResponseSubscribers.aggregateBodySubscriber(responseInfo, sink);
+				return ResponseSubscribers.aggregateBodySubscriber(responseInfo, sink, this.maxResponseSize);
 			}
 
 			logger.debug("Received Bodyless response, using discarding subscriber");
-			return ResponseSubscribers.bodilessBodySubscriber(responseInfo, sink);
+			return ResponseSubscribers.bodilessBodySubscriber(responseInfo, sink, this.maxResponseSize);
 		};
 
 		return responseBodyHandler;
@@ -461,10 +511,23 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 	public Mono<Void> sendMessage(McpSchema.JSONRPCMessage sentMessage) {
 		return Mono.create(deliveredSink -> {
+			var rh = this.handler.get();
+			if (rh == null) {
+				logger.warn("Transport has no request handler registered. Remember to call connect!");
+			}
+
+			final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> requestHandler = rh != null
+					? rh : msg -> Mono.error(new IllegalStateException("No request handler"));
+
+			var transportSession = this.activeSession.get();
+
+			if (ClosedMcpTransportSession.INSTANCE.equals(transportSession)) {
+				throw new McpTransportSessionClosedException();
+			}
+
 			logger.debug("Sending message {}", sentMessage);
 
 			final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
-			final McpTransportSession<Disposable> transportSession = this.activeSession.get();
 
 			var uri = Utils.resolveUri(this.baseUri, this.endpoint);
 			String jsonBody = this.toString(sentMessage);
@@ -489,7 +552,6 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				return Mono
 					.from(this.httpRequestCustomizer.customize(builder, "POST", uri, jsonBody, transportContext));
 			}).flatMapMany(requestBuilder -> Flux.<ResponseEvent>create(responseEventSink -> {
-
 				// Create the async request with proper body subscriber selection
 				Mono.fromFuture(this.httpClient
 					.sendAsync(requestBuilder.build(), this.toSendMessageBodySubscriber(responseEventSink))
@@ -502,12 +564,14 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						}
 					})).onErrorMap(CompletionException.class, t -> t.getCause()).onErrorComplete().subscribe();
 
-			})).flatMap(responseEvent -> {
+			}).flatMap(responseEvent -> {
 				int statusCode = responseEvent.responseInfo().statusCode();
 				if (statusCode == 401 || statusCode == 403) {
+					var request = requestBuilder.build();
+					var requestSnapshot = new HttpRequestSnapshot(request.uri(), request.method(), request.headers());
 					logger.debug("Authorization error in sendMessage with code {}", statusCode);
 					return Mono.<McpSchema.JSONRPCMessage>error(new McpHttpClientTransportAuthorizationException(
-							"Authorization error when sending message", responseEvent.responseInfo()));
+							"Authorization error when sending message", requestSnapshot, responseEvent.responseInfo()));
 				}
 
 				if (transportSession.markInitialized(
@@ -631,33 +695,40 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
 							"Bad Request. Status code:" + statusCode + ", response-event:" + responseEvent));
 				}
+				else if (statusCode >= 400 && statusCode < 500) {
+					return Flux.<McpSchema.JSONRPCMessage>error(
+							new McpTransportException("Invalid request. Status code: " + statusCode));
+				}
 
 				return Flux.<McpSchema.JSONRPCMessage>error(
 						new RuntimeException("Failed to send message: " + responseEvent));
 			})
 				.retryWhen(authorizationErrorRetrySpec())
-				.flatMap(jsonRpcMessage -> this.handler.get().apply(Mono.just(jsonRpcMessage)))
+				.flatMap(jsonRpcMessage -> requestHandler.apply(Mono.just(jsonRpcMessage)))
 				.onErrorMap(CompletionException.class, t -> t.getCause())
-				.onErrorComplete(t -> {
-					// handle the error first
-					this.handleException(t);
-					// inform the caller of sendMessage
-					deliveredSink.error(t);
-					return true;
-				})
 				.doFinally(s -> {
 					logger.debug("SendMessage finally: {}", s);
 					Disposable ref = disposableRef.getAndSet(null);
 					if (ref != null) {
 						transportSession.removeConnection(ref);
 					}
-				})
-				.contextWrite(deliveredSink.contextView())
-				.subscribe();
+				})).onErrorComplete(t -> {
+					// handle the error first
+					try {
+						this.handleException(t);
+					}
+					catch (Exception e) {
+						logger.error("Error handling exception {}", t.getMessage(), e);
+					}
+					// inform the caller of sendMessage
+					deliveredSink.error(t);
+					return true;
+				}).contextWrite(deliveredSink.contextView()).subscribe();
 
 			disposableRef.set(connection);
 			transportSession.addConnection(connection);
 		});
+
 	}
 
 	private static String sessionIdOrPlaceholder(McpTransportSession<?> transportSession) {
@@ -695,7 +766,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		private List<String> supportedProtocolVersions = List.of(ProtocolVersions.MCP_2024_11_05,
 				ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18, ProtocolVersions.MCP_2025_11_25);
 
-		private McpHttpClientAuthorizationErrorHandler authorizationErrorHandler = McpHttpClientAuthorizationErrorHandler.NOOP;
+		private McpHttpClientTransportAuthorizationErrorHandler authorizationErrorHandler = McpHttpClientTransportAuthorizationErrorHandler.NOOP;
+
+		private int maxResponseSize = DEFAULT_MAX_RESPONSE_SIZE;
 
 		/**
 		 * Creates a new builder with the specified base URI.
@@ -828,8 +901,34 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		 * when sending a message.
 		 * @param authorizationErrorHandler the handler
 		 * @return this builder
+		 * @deprecated in favor of
+		 * {@link #authorizationErrorHandler(McpHttpClientTransportAuthorizationErrorHandler)}
 		 */
+		@Deprecated(forRemoval = true, since = "2.0.0")
 		public Builder authorizationErrorHandler(McpHttpClientAuthorizationErrorHandler authorizationErrorHandler) {
+			this.authorizationErrorHandler = new McpHttpClientTransportAuthorizationErrorHandler() {
+				@Override
+				public Publisher<Boolean> handle(HttpRequestSnapshot requestSnapshot,
+						HttpResponse.ResponseInfo responseInfo, McpTransportContext context) {
+					return authorizationErrorHandler.handle(responseInfo, context);
+				}
+
+				@Override
+				public int maxRetries() {
+					return authorizationErrorHandler.maxRetries();
+				}
+			};
+			return this;
+		}
+
+		/**
+		 * Sets the handler to be used when the server responds with HTTP 401 or HTTP 403
+		 * when sending a message.
+		 * @param authorizationErrorHandler the handler
+		 * @return this builder
+		 */
+		public Builder authorizationErrorHandler(
+				McpHttpClientTransportAuthorizationErrorHandler authorizationErrorHandler) {
 			this.authorizationErrorHandler = authorizationErrorHandler;
 			return this;
 		}
@@ -870,6 +969,26 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		}
 
 		/**
+		 * Sets the maximum number of bytes read for a single inbound message, whether it
+		 * arrives on an SSE stream or as a JSON response body. A peer that sends a larger
+		 * message (or never terminates one) has its stream aborted instead of forcing the
+		 * transport to buffer it in memory. Defaults to 16MiB.
+		 *
+		 * <p>
+		 * The bound applies per message, not to the stream as a whole: a long-lived SSE
+		 * stream may deliver any number of messages, each up to this size. SSE field
+		 * framing is allowed a small amount of headroom on top of this size, so a message
+		 * of exactly this many bytes is still accepted.
+		 * @param maxResponseSize the maximum inbound message size, in bytes
+		 * @return this builder
+		 */
+		public Builder maxResponseSize(int maxResponseSize) {
+			Assert.isTrue(maxResponseSize > 0, "maxResponseSize must be positive");
+			this.maxResponseSize = maxResponseSize;
+			return this;
+		}
+
+		/**
 		 * Construct a fresh instance of {@link HttpClientStreamableHttpTransport} using
 		 * the current builder configuration.
 		 * @return a new instance of {@link HttpClientStreamableHttpTransport}
@@ -878,7 +997,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			HttpClient httpClient = this.clientBuilder.connectTimeout(this.connectTimeout).build();
 			return new HttpClientStreamableHttpTransport(jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
 					httpClient, requestBuilder, baseUri, endpoint, resumableStreams, openConnectionOnStartup,
-					httpRequestCustomizer, authorizationErrorHandler, supportedProtocolVersions);
+					httpRequestCustomizer, authorizationErrorHandler, supportedProtocolVersions, maxResponseSize);
 		}
 
 	}

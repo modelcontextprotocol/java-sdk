@@ -6,6 +6,7 @@ package io.modelcontextprotocol.client.transport.customizer;
 
 import java.net.http.HttpResponse;
 
+import io.modelcontextprotocol.client.transport.HttpRequestSnapshot;
 import io.modelcontextprotocol.client.transport.McpHttpClientTransportAuthorizationException;
 import io.modelcontextprotocol.common.McpTransportContext;
 import org.reactivestreams.Publisher;
@@ -20,7 +21,9 @@ import reactor.core.scheduler.Schedulers;
  * "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization">MCP
  * Specification: Authorization</a>
  * @author Daniel Garnier-Moiroux
+ * @deprecated in favor of {@link McpHttpClientTransportAuthorizationErrorHandler}
  */
+@Deprecated(forRemoval = true, since = "2.0.0")
 public interface McpHttpClientAuthorizationErrorHandler {
 
 	/**
@@ -38,7 +41,10 @@ public interface McpHttpClientAuthorizationErrorHandler {
 	 * @param context the MCP client transport context
 	 * @return {@link Publisher} emitting true if the original request should be replayed,
 	 * false otherwise.
+	 * @deprecated in favor of
+	 * {@link McpHttpClientTransportAuthorizationErrorHandler#handle(HttpRequestSnapshot, HttpResponse.ResponseInfo, McpTransportContext)}
 	 */
+	@Deprecated(forRemoval = true, since = "2.0.0")
 	Publisher<Boolean> handle(HttpResponse.ResponseInfo responseInfo, McpTransportContext context);
 
 	/**
@@ -87,7 +93,10 @@ public interface McpHttpClientAuthorizationErrorHandler {
 		 * @param responseInfo the HTTP response information
 		 * @param context the MCP client transport context
 		 * @return true if the original request should be replayed, false otherwise.
+		 * @deprecated in favor of
+		 * {@link McpHttpClientTransportAuthorizationErrorHandler.Sync#handle(HttpRequestSnapshot, HttpResponse.ResponseInfo, McpTransportContext)}
 		 */
+		@Deprecated(forRemoval = true, since = "2.0.0")
 		boolean handle(HttpResponse.ResponseInfo responseInfo, McpTransportContext context);
 
 	}
