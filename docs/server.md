@@ -441,6 +441,102 @@ var syncToolSpecification = SyncToolSpecification.builder()
 
 `ImageContent.builder(data, mimeType)` and `AudioContent.builder(data, mimeType)` both take base64-encoded binary data. `EmbeddedResource.builder(resourceContents)` wraps either a `TextResourceContents` (for text data) or a `BlobResourceContents` (for base64-encoded binary data) — see [Reading Binary Resources](#reading-binary-resources) for the `BlobResourceContents` shape.
 
+### Filtering the Tool Listing per Request
+
+By default every registered tool is advertised to every caller. Over an HTTP transport you can
+vary the `tools/list` response per request — to hide tools the caller is not authorized to see,
+or to trim a large catalog down to a relevant subset — by registering one or more tool filters.
+
+The filter receives the `McpTransportContext` extracted from the current request, so it can key
+on HTTP headers, a token, a resolved principal, or anything else your
+`contextExtractor` puts there.
+
+=== "Sync"
+
+    ```java
+    McpServer.sync(transportProvider)
+        .tools(publicTool, adminTool)
+        .addToolFilter((transportContext, tool) ->
+            !tool.name().startsWith("admin-") || isAdmin(transportContext))
+        .build();
+    ```
+
+=== "Async"
+
+    ```java
+    McpServer.async(transportProvider)
+        .tools(publicTool, adminTool)
+        .addToolFilter((transportContext, tool) -> {
+            if (!tool.name().startsWith("admin-")) {
+                return Mono.just(true);
+            }
+            return isAdmin(transportContext); // Mono<Boolean>
+        })
+        .build();
+    ```
+
+The same `addToolFilter(...)` method is available on the stateless builders.
+
+!!! warning "Hiding a tool does not make it unreachable"
+
+    The filter controls **advertisement only**. A hidden tool called by name still executes:
+    you MUST enforce permissions in the tool's call handler. Use the filter to control what a
+    caller is told about, not what they are allowed to do.
+
+**Evaluation semantics**
+
+- The filter is consulted on **every** listing request and never cached, so the same session may
+  legitimately see different results for two successive requests carrying different credentials.
+- Registration order is preserved; only omissions happen.
+- Returning `Mono.empty()` from an async filter omits the tool. An error fails the whole listing
+  request rather than silently hiding tools: a client cannot tell a filtered-down listing from a
+  partial one, and MCP has no way to signal "this listing was incomplete, retry".
+- A filter that errors is logged server-side and reported to the client as an opaque
+  `-32603 Internal error` with no `data`. If you want the client to see a specific error, throw an
+  `McpError`, those are passed through.
+- Filters accumulate as a boolean **AND**: a tool is listed only when every registered filter accepts it, so a
+  later `addToolFilter(...)` can never widen access. Evaluation follows registration order and
+  short-circuits on the first filter that hides a tool.
+- `toolFilters(Consumer<List<...>>)` hands you the list of filters registered so far, so you can
+  inspect, reorder or clear them before building — useful when filters come from several places:
+
+    ```java
+    McpServer.sync(transportProvider)
+        .addToolFilter(tenantFilter)
+        .toolFilters(filters -> filters.add(0, cheapDenyAllForAnonymousFilter))
+        .build();
+    ```
+
+- Tools are tested one at a time, so a filter that performs I/O per tool costs one round trip per
+  tool. Sync filters also run on a shared scheduler thread — not the request thread — unless
+  `immediateExecution(true)` is set, so thread-bound request state (Spring Security's
+  `SecurityContextHolder`, MDC, custom `ThreadLocal` holders) is **not visible** inside the filter.
+  For both reasons, resolve per-request state **once** in the transport's `contextExtractor`,
+  which does run on the request thread, and read only the extracted context in the filter:
+
+    ```java
+    // transport builder: one authorization lookup, on the request thread,
+    // shared by every tool tested in this request
+    var transportProvider = HttpServletStreamableServerTransportProvider.builder()
+        .contextExtractor(request -> McpTransportContext.create(
+                Map.of("perms", introspect(request.getHeader("Authorization")))))
+        // ...
+        .build();
+
+    // server builder: the filter reads only the extracted context
+    McpServer.sync(transportProvider)
+        .addToolFilter((context, tool) ->
+                ((Set<String>) context.get("perms")).contains(tool.name()))
+        .build();
+    ```
+
+- `notifications/tools/list_changed` is **not** filtered. It is a server-initiated broadcast with
+  no request in flight, so there is no context to evaluate. A client may be told something changed
+  when its own visible set did not; it gets the correct view on its next `tools/list`. Consider disabling
+  this notification entirely when using tool filters.
+- With STDIO there is no per-request metadata, so the filter receives `McpTransportContext.EMPTY` and has nothing to key
+  on.
+
 ### Resource Specification
 
 Specification of a resource with its handler function.

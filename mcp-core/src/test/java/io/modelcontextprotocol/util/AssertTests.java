@@ -6,6 +6,7 @@ package io.modelcontextprotocol.util;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -25,6 +26,17 @@ class AssertTests {
 		assertEquals("collection is empty", e2.getMessage());
 
 		assertDoesNotThrow(() -> Assert.notEmpty(List.of("test"), "collection is not empty"));
+	}
+
+	@Test
+	void testCollectionNoNullElements() {
+		IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+				() -> Assert.noNullElements(Arrays.asList("test", null), "collection has null elements"));
+		assertEquals("collection has null elements", e.getMessage());
+
+		assertDoesNotThrow(() -> Assert.noNullElements(null, "collection is null"));
+		assertDoesNotThrow(() -> Assert.noNullElements(List.of(), "collection is empty"));
+		assertDoesNotThrow(() -> Assert.noNullElements(List.of("test"), "collection has no null elements"));
 	}
 
 	@Test
