@@ -7,6 +7,7 @@ package io.modelcontextprotocol.server.transport;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import jakarta.servlet.Filter;
 import jakarta.servlet.Servlet;
@@ -14,7 +15,9 @@ import jakarta.servlet.ServletConfig;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import org.apache.catalina.Context;
+import org.apache.catalina.Wrapper;
 import org.apache.catalina.startup.Tomcat;
 import org.apache.tomcat.util.descriptor.web.FilterDef;
 import org.apache.tomcat.util.descriptor.web.FilterMap;
@@ -41,7 +44,7 @@ public class TomcatTestUtil {
 		Context context = tomcat.addContext(contextPath, baseDir);
 
 		// Add transport servlet to Tomcat
-		org.apache.catalina.Wrapper wrapper = context.createWrapper();
+		Wrapper wrapper = context.createWrapper();
 		wrapper.setName("mcpServlet");
 		wrapper.setServlet(servlet);
 		wrapper.setLoadOnStartup(1);
@@ -78,12 +81,19 @@ public class TomcatTestUtil {
 
 		private volatile Servlet delegate;
 
+		// Crude way of tracking whether a GET SSE stream has been established, to ensure
+		// a Streamable HTTP MCP Client is connected.
+		// This is an approximation: it switches to "true" whenever the handler is done
+		// servicing a GET request - even if the request is rejected or if it's a replay.
+		private final AtomicBoolean sseStreamEstablished = new AtomicBoolean(false);
+
 		/**
 		 * Sets the servlet handling subsequent requests. The delegate is not
 		 * {@link Servlet#init(ServletConfig) initialized}, since the MCP servlet
 		 * transports do not rely on their {@link ServletConfig}.
 		 */
 		public void setDelegate(Servlet delegate) {
+			this.sseStreamEstablished.set(false);
 			this.delegate = delegate;
 		}
 
@@ -104,6 +114,9 @@ public class TomcatTestUtil {
 				throw new IllegalStateException("No delegate servlet has been set");
 			}
 			current.service(request, response);
+			if (request instanceof HttpServletRequest req && req.getMethod().equals("GET")) {
+				sseStreamEstablished.set(true);
+			}
 		}
 
 		@Override
@@ -114,6 +127,10 @@ public class TomcatTestUtil {
 		@Override
 		public void destroy() {
 			this.delegate = null;
+		}
+
+		public boolean isStreamEstablished() {
+			return this.sseStreamEstablished.get();
 		}
 
 	}
