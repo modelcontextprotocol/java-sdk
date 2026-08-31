@@ -10,6 +10,10 @@ import java.net.ServerSocket;
 
 import jakarta.servlet.Filter;
 import jakarta.servlet.Servlet;
+import jakarta.servlet.ServletConfig;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
 import org.apache.catalina.Context;
 import org.apache.catalina.startup.Tomcat;
 import org.apache.tomcat.util.descriptor.web.FilterDef;
@@ -61,6 +65,57 @@ public class TomcatTestUtil {
 		connector.setAsyncTimeout(3000);
 
 		return tomcat;
+	}
+
+	/**
+	 * A servlet forwarding all requests to a delegate that can be swapped between tests.
+	 * Register one with {@link #createTomcatServer} to start Tomcat once per test class
+	 * while still handing each test a freshly built transport.
+	 */
+	public static class DelegatingServlet implements Servlet {
+
+		private volatile ServletConfig servletConfig;
+
+		private volatile Servlet delegate;
+
+		/**
+		 * Sets the servlet handling subsequent requests. The delegate is not
+		 * {@link Servlet#init(ServletConfig) initialized}, since the MCP servlet
+		 * transports do not rely on their {@link ServletConfig}.
+		 */
+		public void setDelegate(Servlet delegate) {
+			this.delegate = delegate;
+		}
+
+		@Override
+		public void init(ServletConfig config) {
+			this.servletConfig = config;
+		}
+
+		@Override
+		public ServletConfig getServletConfig() {
+			return this.servletConfig;
+		}
+
+		@Override
+		public void service(ServletRequest request, ServletResponse response) throws ServletException, IOException {
+			var current = this.delegate;
+			if (current == null) {
+				throw new IllegalStateException("No delegate servlet has been set");
+			}
+			current.service(request, response);
+		}
+
+		@Override
+		public String getServletInfo() {
+			return DelegatingServlet.class.getSimpleName();
+		}
+
+		@Override
+		public void destroy() {
+			this.delegate = null;
+		}
+
 	}
 
 	/**

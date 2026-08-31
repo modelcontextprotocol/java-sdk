@@ -16,12 +16,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.function.Function;
 
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.read.ListAppender;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
@@ -54,13 +49,10 @@ import net.javacrumbs.jsonunit.core.Option;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.slf4j.LoggerFactory;
-import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -68,7 +60,6 @@ import reactor.test.StepVerifier;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.client.RestClient;
-
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.APPLICATION_JSON;
 import static io.modelcontextprotocol.server.transport.HttpServletStatelessServerTransport.TEXT_EVENT_STREAM;
 import static io.modelcontextprotocol.util.McpJsonMapperUtils.JSON_MAPPER;
@@ -89,7 +80,9 @@ class HttpServletStatelessIntegrationTests {
 
 	private static final int MAX_REQUEST_SIZE = 2048;
 
-	private HttpServletStatelessServerTransport mcpStatelessServerTransport;
+	private static Tomcat tomcat;
+
+	private static HttpServletStatelessServerTransport mcpStatelessServerTransport;
 
 	private final McpClient.SyncSpec clientBuilder = McpClient
 		.sync(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
@@ -98,11 +91,9 @@ class HttpServletStatelessIntegrationTests {
 		.initializationTimeout(Duration.ofHours(10))
 		.requestTimeout(Duration.ofHours(10));
 
-	private Tomcat tomcat;
-
-	@BeforeEach
-	public void before() {
-		this.mcpStatelessServerTransport = HttpServletStatelessServerTransport.builder()
+	@BeforeAll
+	public static void beforeAll() {
+		mcpStatelessServerTransport = HttpServletStatelessServerTransport.builder()
 			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
 			.maxRequestSize(MAX_REQUEST_SIZE)
 			.build();
@@ -117,8 +108,8 @@ class HttpServletStatelessIntegrationTests {
 		}
 	}
 
-	@AfterEach
-	public void after() {
+	@AfterAll
+	public static void afterAll() {
 		if (mcpStatelessServerTransport != null) {
 			mcpStatelessServerTransport.closeGracefully().block();
 		}
@@ -155,7 +146,7 @@ class HttpServletStatelessIntegrationTests {
 					return callResponse;
 				});
 
-		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+		McpServer.sync(mcpStatelessServerTransport)
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(tool1)
 			.build();
@@ -173,21 +164,15 @@ class HttpServletStatelessIntegrationTests {
 			assertThat(response).isNotNull();
 			assertThat(response).isEqualTo(callResponse);
 		}
-		finally {
-			mcpServer.close();
-		}
 	}
 
 	@Test
 	void testInitialize() {
-		var mcpServer = McpServer.sync(mcpStatelessServerTransport).build();
+		McpServer.sync(mcpStatelessServerTransport).build();
 
 		try (var mcpClient = clientBuilder.build()) {
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
-		}
-		finally {
-			mcpServer.close();
 		}
 	}
 
@@ -208,7 +193,7 @@ class HttpServletStatelessIntegrationTests {
 			return completionResponse;
 		};
 
-		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+		McpServer.sync(mcpStatelessServerTransport)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.prompts(new McpStatelessServerFeatures.SyncPromptSpecification(Prompt.builder("code_review")
 				.title("Code review")
@@ -241,9 +226,6 @@ class HttpServletStatelessIntegrationTests {
 			assertThat(completeRequest.get().argument().value()).isEqualTo("py");
 			assertThat(completeRequest.get().ref().type()).isEqualTo(PromptReference.TYPE);
 		}
-		finally {
-			mcpServer.close();
-		}
 	}
 
 	@Test
@@ -265,7 +247,7 @@ class HttpServletStatelessIntegrationTests {
 				.of(PromptArgument.builder("topic").title("Topic").description("string").required(false).build()))
 			.build();
 
-		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+		McpServer.sync(mcpStatelessServerTransport)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.prompts(
 					new McpStatelessServerFeatures.SyncPromptSpecification(prompt,
@@ -291,9 +273,6 @@ class HttpServletStatelessIntegrationTests {
 			assertThat(result.completion().total()).isZero();
 			assertThat(result.completion().hasMore()).isFalse();
 		}
-		finally {
-			mcpServer.close();
-		}
 	}
 
 	@Test
@@ -313,7 +292,7 @@ class HttpServletStatelessIntegrationTests {
 			.mimeType("text/plain")
 			.build();
 
-		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+		McpServer.sync(mcpStatelessServerTransport)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.resourceTemplates(
 					new McpStatelessServerFeatures.SyncResourceTemplateSpecification(template,
@@ -339,14 +318,11 @@ class HttpServletStatelessIntegrationTests {
 			assertThat(result.completion().total()).isZero();
 			assertThat(result.completion().hasMore()).isFalse();
 		}
-		finally {
-			mcpServer.close();
-		}
 	}
 
 	@Test
 	void testCompletionForNonExistentPromptReturnsInvalidParams() {
-		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+		McpServer.sync(mcpStatelessServerTransport)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.build();
 
@@ -364,14 +340,11 @@ class HttpServletStatelessIntegrationTests {
 				.extracting(McpSchema.JSONRPCResponse.JSONRPCError::code)
 				.isEqualTo(ErrorCodes.INVALID_PARAMS);
 		}
-		finally {
-			mcpServer.close();
-		}
 	}
 
 	@Test
 	void testCompletionForNonExistentResourceReturnsResourceNotFound() {
-		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+		McpServer.sync(mcpStatelessServerTransport)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.build();
 
@@ -389,9 +362,6 @@ class HttpServletStatelessIntegrationTests {
 				.extracting(McpError::getJsonRpcError)
 				.extracting(McpSchema.JSONRPCResponse.JSONRPCError::code)
 				.isEqualTo(McpSchema.ErrorCodes.RESOURCE_NOT_FOUND);
-		}
-		finally {
-			mcpServer.close();
 		}
 	}
 
@@ -421,7 +391,7 @@ class HttpServletStatelessIntegrationTests {
 						.build();
 				});
 
-		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+		McpServer.sync(mcpStatelessServerTransport)
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(tool)
@@ -459,9 +429,6 @@ class HttpServletStatelessIntegrationTests {
 				.isEqualTo(json("""
 						{"result":5.0,"operation":"2 + 3","timestamp":"2024-01-01T10:00:00Z"}"""));
 		}
-		finally {
-			mcpServer.close();
-		}
 	}
 
 	@Test
@@ -492,7 +459,7 @@ class HttpServletStatelessIntegrationTests {
 			})
 			.build();
 
-		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+		McpServer.sync(mcpStatelessServerTransport)
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(tool)
@@ -516,9 +483,6 @@ class HttpServletStatelessIntegrationTests {
 				.containsExactlyInAnyOrder(json("""
 						{"name":"John","age":30}"""), json("""
 						{"name":"Peter","age":25}"""));
-		}
-		finally {
-			mcpServer.closeGracefully();
 		}
 	}
 
@@ -545,7 +509,7 @@ class HttpServletStatelessIntegrationTests {
 				.build())
 			.build();
 
-		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+		McpServer.sync(mcpStatelessServerTransport)
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(tool)
@@ -572,9 +536,6 @@ class HttpServletStatelessIntegrationTests {
 					McpSchema.TextContent.builder("Error calling tool: Simulated in-handler error").build());
 			assertThat(response.structuredContent()).isNull();
 		}
-		finally {
-			mcpServer.closeGracefully();
-		}
 	}
 
 	@Test
@@ -599,7 +560,7 @@ class HttpServletStatelessIntegrationTests {
 						.build();
 				});
 
-		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+		McpServer.sync(mcpStatelessServerTransport)
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.tools(tool)
@@ -621,9 +582,6 @@ class HttpServletStatelessIntegrationTests {
 			String errorMessage = ((McpSchema.TextContent) response.content().get(0)).text();
 			assertThat(errorMessage).contains("Validation failed");
 		}
-		finally {
-			mcpServer.close();
-		}
 	}
 
 	@Test
@@ -643,7 +601,7 @@ class HttpServletStatelessIntegrationTests {
 					return CallToolResult.builder().addTextContent("Calculation completed").build();
 				});
 
-		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+		McpServer.sync(mcpStatelessServerTransport)
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().tools(true).build())
 			.instructions("bla")
@@ -666,9 +624,6 @@ class HttpServletStatelessIntegrationTests {
 			String errorMessage = ((McpSchema.TextContent) response.content().get(0)).text();
 			assertThat(errorMessage).isEqualTo(
 					"Response missing structured content which is expected when calling tool with non-empty outputSchema");
-		}
-		finally {
-			mcpServer.close();
 		}
 	}
 
@@ -738,9 +693,6 @@ class HttpServletStatelessIntegrationTests {
 				.isEqualTo(json("""
 						{"count":3,"message":"Dynamic execution"}"""));
 		}
-		finally {
-			mcpServer.close();
-		}
 	}
 
 	@Test
@@ -787,13 +739,11 @@ class HttpServletStatelessIntegrationTests {
 		assertThat(jsonrpcResponse.error()).isNotNull();
 		assertThat(jsonrpcResponse.error().code()).isEqualTo(ErrorCodes.INTERNAL_ERROR);
 		assertThat(jsonrpcResponse.error().message()).isEqualTo("testing");
-
-		mcpServer.close();
 	}
 
 	@Test
 	void testMissingHandlerReturnsMethodNotFoundError() {
-		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+		McpServer.sync(mcpStatelessServerTransport)
 			.serverInfo("test-server", "1.0.0")
 			.capabilities(ServerCapabilities.builder().build())
 			.build();
@@ -828,9 +778,6 @@ class HttpServletStatelessIntegrationTests {
 			assertThat(response.get().error().code()).isEqualTo(McpSchema.ErrorCodes.METHOD_NOT_FOUND);
 			assertThat(response.get().error().message()).isEqualTo("Method not found: foo/bar");
 		}
-		finally {
-			mcpServer.closeGracefully();
-		}
 	}
 
 	@Test
@@ -841,16 +788,13 @@ class HttpServletStatelessIntegrationTests {
 		handlerLogger.addAppender(logAppender);
 
 		try {
-			var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			McpServer.sync(mcpStatelessServerTransport)
 				.serverInfo("test-server", "1.0.0")
 				.capabilities(ServerCapabilities.builder().build())
 				.build();
 
 			try (var mcpClient = clientBuilder.build()) {
 				mcpClient.initialize(); // automatically sends notifications/initialized
-			}
-			finally {
-				mcpServer.close();
 			}
 		}
 		finally {
@@ -869,7 +813,7 @@ class HttpServletStatelessIntegrationTests {
 		handlerLogger.addAppender(logAppender);
 
 		try {
-			var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			McpServer.sync(mcpStatelessServerTransport)
 				.serverInfo("test-server", "1.0.0")
 				.capabilities(ServerCapabilities.builder().build())
 				.build();
@@ -878,9 +822,7 @@ class HttpServletStatelessIntegrationTests {
 				mcpClient.initialize();
 				mcpClient.rootsListChangedNotification();
 			}
-			finally {
-				mcpServer.close();
-			}
+
 		}
 		finally {
 			handlerLogger.detachAppender(logAppender);
@@ -913,7 +855,7 @@ class HttpServletStatelessIntegrationTests {
 				.build())
 			.build();
 
-		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+		McpServer.sync(mcpStatelessServerTransport)
 			.capabilities(ServerCapabilities.builder().tools(false).build())
 			.tools(tool1)
 			.build();
@@ -929,57 +871,48 @@ class HttpServletStatelessIntegrationTests {
 				.isInstanceOf(RuntimeException.class)
 				.hasMessageContaining("413");
 		}
-		finally {
-			mcpServer.closeGracefully();
-		}
 	}
 
 	@Test
 	void rejectsWhenBodyBytesExceedLimitWithoutContentLengthHeader() throws Exception {
-		var mcpServer = McpServer.sync(mcpStatelessServerTransport).build();
+		McpServer.sync(mcpStatelessServerTransport).build();
+		var httpClient = HttpClient.newHttpClient();
 
-		try {
-			var httpClient = HttpClient.newHttpClient();
+		// A publisher with unknown content length forces chunked transfer
+		// encoding, bypassing the Content-Length header check and exercising the
+		// body byte count
+		byte[] oversizedBody = "a".repeat(MAX_REQUEST_SIZE + 1).getBytes(StandardCharsets.UTF_8);
+		HttpRequest.BodyPublisher chunkedPublisher = new HttpRequest.BodyPublisher() {
+			@Override
+			public long contentLength() {
+				return -1;
+			}
 
-			// A publisher with unknown content length forces chunked transfer
-			// encoding, bypassing the Content-Length header check and exercising the
-			// body byte count
-			byte[] oversizedBody = "a".repeat(MAX_REQUEST_SIZE + 1).getBytes(StandardCharsets.UTF_8);
-			HttpRequest.BodyPublisher chunkedPublisher = new HttpRequest.BodyPublisher() {
-				@Override
-				public long contentLength() {
-					return -1;
-				}
+			@Override
+			public void subscribe(java.util.concurrent.Flow.Subscriber<? super ByteBuffer> subscriber) {
+				subscriber.onSubscribe(new java.util.concurrent.Flow.Subscription() {
+					@Override
+					public void request(long n) {
+						subscriber.onNext(ByteBuffer.wrap(oversizedBody));
+						subscriber.onComplete();
+					}
 
-				@Override
-				public void subscribe(java.util.concurrent.Flow.Subscriber<? super ByteBuffer> subscriber) {
-					subscriber.onSubscribe(new java.util.concurrent.Flow.Subscription() {
-						@Override
-						public void request(long n) {
-							subscriber.onNext(ByteBuffer.wrap(oversizedBody));
-							subscriber.onComplete();
-						}
+					@Override
+					public void cancel() {
+					}
+				});
+			}
+		};
 
-						@Override
-						public void cancel() {
-						}
-					});
-				}
-			};
+		var request = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + CUSTOM_MESSAGE_ENDPOINT))
+			.header("Content-Type", "application/json")
+			.header("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
+			.POST(chunkedPublisher)
+			.build();
 
-			var request = HttpRequest.newBuilder()
-				.uri(URI.create("http://localhost:" + PORT + CUSTOM_MESSAGE_ENDPOINT))
-				.header("Content-Type", "application/json")
-				.header("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
-				.POST(chunkedPublisher)
-				.build();
-
-			var response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
-			assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
-		}
-		finally {
-			mcpServer.closeGracefully();
-		}
+		var response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
+		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
 	}
 
 	private double evaluateExpression(String expression) {
