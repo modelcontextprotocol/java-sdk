@@ -43,26 +43,26 @@ class DefaultServerTransportSecurityValidatorTests {
 
 		@Test
 		void originHeaderMissing() {
-			assertThatCode(() -> validator.validateHeaders(emptyAccessor())).doesNotThrowAnyException();
+			assertThatCode(() -> validator.validate(emptyAccessor())).doesNotThrowAnyException();
 		}
 
 		@Test
 		void originHeaderListEmpty() {
-			assertThatCode(() -> validator.validateHeaders(headerAccessor())).doesNotThrowAnyException();
+			assertThatCode(() -> validator.validate(headerAccessor())).doesNotThrowAnyException();
 		}
 
 		@Test
 		void caseInsensitive() {
 			var accessor = headerAccessor("Origin", "http://localhost:8080");
 
-			assertThatCode(() -> validator.validateHeaders(accessor)).doesNotThrowAnyException();
+			assertThatCode(() -> validator.validate(accessor)).doesNotThrowAnyException();
 		}
 
 		@Test
 		void exactMatch() {
 			var accessor = originAccessor("http://localhost:8080");
 
-			assertThatCode(() -> validator.validateHeaders(accessor)).doesNotThrowAnyException();
+			assertThatCode(() -> validator.validate(accessor)).doesNotThrowAnyException();
 		}
 
 		@Test
@@ -70,7 +70,7 @@ class DefaultServerTransportSecurityValidatorTests {
 
 			var accessor = originAccessor("http://localhost:3000");
 
-			assertThatThrownBy(() -> validator.validateHeaders(accessor)).isEqualTo(INVALID_ORIGIN);
+			assertThatThrownBy(() -> validator.validate(accessor)).isEqualTo(INVALID_ORIGIN);
 		}
 
 		@Test
@@ -78,7 +78,7 @@ class DefaultServerTransportSecurityValidatorTests {
 
 			var accessor = originAccessor("http://example.com:8080");
 
-			assertThatThrownBy(() -> validator.validateHeaders(accessor)).isEqualTo(INVALID_ORIGIN);
+			assertThatThrownBy(() -> validator.validate(accessor)).isEqualTo(INVALID_ORIGIN);
 		}
 
 		@Test
@@ -86,7 +86,7 @@ class DefaultServerTransportSecurityValidatorTests {
 
 			var accessor = originAccessor("https://localhost:8080");
 
-			assertThatThrownBy(() -> validator.validateHeaders(accessor)).isEqualTo(INVALID_ORIGIN);
+			assertThatThrownBy(() -> validator.validate(accessor)).isEqualTo(INVALID_ORIGIN);
 		}
 
 		@Nested
@@ -101,35 +101,35 @@ class DefaultServerTransportSecurityValidatorTests {
 			void anyPortWithWildcard() {
 				var accessor = originAccessor("http://localhost:3000");
 
-				assertThatCode(() -> wildcardValidator.validateHeaders(accessor)).doesNotThrowAnyException();
+				assertThatCode(() -> wildcardValidator.validate(accessor)).doesNotThrowAnyException();
 			}
 
 			@Test
 			void noPortWithWildcard() {
 				var accessor = originAccessor("http://localhost");
 
-				assertThatCode(() -> wildcardValidator.validateHeaders(accessor)).doesNotThrowAnyException();
+				assertThatCode(() -> wildcardValidator.validate(accessor)).doesNotThrowAnyException();
 			}
 
 			@Test
 			void differentPortWithWildcard() {
 				var accessor = originAccessor("http://localhost:8080");
 
-				assertThatCode(() -> wildcardValidator.validateHeaders(accessor)).doesNotThrowAnyException();
+				assertThatCode(() -> wildcardValidator.validate(accessor)).doesNotThrowAnyException();
 			}
 
 			@Test
 			void differentHostWithWildcard() {
 				var accessor = originAccessor("http://example.com:3000");
 
-				assertThatThrownBy(() -> wildcardValidator.validateHeaders(accessor)).isEqualTo(INVALID_ORIGIN);
+				assertThatThrownBy(() -> wildcardValidator.validate(accessor)).isEqualTo(INVALID_ORIGIN);
 			}
 
 			@Test
 			void differentSchemeWithWildcard() {
 				var accessor = originAccessor("https://localhost:3000");
 
-				assertThatThrownBy(() -> wildcardValidator.validateHeaders(accessor)).isEqualTo(INVALID_ORIGIN);
+				assertThatThrownBy(() -> wildcardValidator.validate(accessor)).isEqualTo(INVALID_ORIGIN);
 			}
 
 		}
@@ -148,21 +148,21 @@ class DefaultServerTransportSecurityValidatorTests {
 			void matchingOneOfMultiple() {
 				var accessor = originAccessor("http://example.com:3000");
 
-				assertThatCode(() -> multipleOriginsValidator.validateHeaders(accessor)).doesNotThrowAnyException();
+				assertThatCode(() -> multipleOriginsValidator.validate(accessor)).doesNotThrowAnyException();
 			}
 
 			@Test
 			void matchingWildcardInMultiple() {
 				var accessor = originAccessor("http://myapp.example.com:9999");
 
-				assertThatCode(() -> multipleOriginsValidator.validateHeaders(accessor)).doesNotThrowAnyException();
+				assertThatCode(() -> multipleOriginsValidator.validate(accessor)).doesNotThrowAnyException();
 			}
 
 			@Test
 			void notMatchingAny() {
 				var accessor = originAccessor("http://malicious.example.com:1234");
 
-				assertThatThrownBy(() -> multipleOriginsValidator.validateHeaders(accessor)).isEqualTo(INVALID_ORIGIN);
+				assertThatThrownBy(() -> multipleOriginsValidator.validate(accessor)).isEqualTo(INVALID_ORIGIN);
 			}
 
 		}
@@ -178,7 +178,7 @@ class DefaultServerTransportSecurityValidatorTests {
 
 				var accessor = originAccessor("http://example.com:3000");
 
-				assertThatCode(() -> validator.validateHeaders(accessor)).doesNotThrowAnyException();
+				assertThatCode(() -> validator.validate(accessor)).doesNotThrowAnyException();
 			}
 
 			@Test
@@ -188,11 +188,11 @@ class DefaultServerTransportSecurityValidatorTests {
 					.allowedOrigins(List.of("http://example.com:*", "http://test.com:3000"))
 					.build();
 
-				assertThatCode(() -> validator.validateHeaders(originAccessor("http://localhost:8080")))
+				assertThatCode(() -> validator.validate(originAccessor("http://localhost:8080")))
 					.doesNotThrowAnyException();
-				assertThatCode(() -> validator.validateHeaders(originAccessor("http://example.com:9999")))
+				assertThatCode(() -> validator.validate(originAccessor("http://example.com:9999")))
 					.doesNotThrowAnyException();
-				assertThatCode(() -> validator.validateHeaders(originAccessor("http://test.com:3000")))
+				assertThatCode(() -> validator.validate(originAccessor("http://test.com:3000")))
 					.doesNotThrowAnyException();
 			}
 
@@ -210,45 +210,45 @@ class DefaultServerTransportSecurityValidatorTests {
 
 		@Test
 		void notConfigured() {
-			assertThatCode(() -> validator.validateHeaders(emptyAccessor())).doesNotThrowAnyException();
+			assertThatCode(() -> validator.validate(emptyAccessor())).doesNotThrowAnyException();
 		}
 
 		@Test
 		void missing() {
-			assertThatThrownBy(() -> hostValidator.validateHeaders(emptyAccessor())).isEqualTo(INVALID_HOST);
+			assertThatThrownBy(() -> hostValidator.validate(emptyAccessor())).isEqualTo(INVALID_HOST);
 		}
 
 		@Test
 		void listEmpty() {
-			assertThatThrownBy(() -> hostValidator.validateHeaders(headerAccessor())).isEqualTo(INVALID_HOST);
+			assertThatThrownBy(() -> hostValidator.validate(headerAccessor())).isEqualTo(INVALID_HOST);
 		}
 
 		@Test
 		void caseInsensitive() {
 			var accessor = headerAccessor("Host", "localhost:8080");
 
-			assertThatCode(() -> hostValidator.validateHeaders(accessor)).doesNotThrowAnyException();
+			assertThatCode(() -> hostValidator.validate(accessor)).doesNotThrowAnyException();
 		}
 
 		@Test
 		void exactMatch() {
 			var accessor = hostAccessor("localhost:8080");
 
-			assertThatCode(() -> hostValidator.validateHeaders(accessor)).doesNotThrowAnyException();
+			assertThatCode(() -> hostValidator.validate(accessor)).doesNotThrowAnyException();
 		}
 
 		@Test
 		void differentPort() {
 			var accessor = hostAccessor("localhost:3000");
 
-			assertThatThrownBy(() -> hostValidator.validateHeaders(accessor)).isEqualTo(INVALID_HOST);
+			assertThatThrownBy(() -> hostValidator.validate(accessor)).isEqualTo(INVALID_HOST);
 		}
 
 		@Test
 		void differentHost() {
 			var accessor = hostAccessor("example.com:8080");
 
-			assertThatThrownBy(() -> hostValidator.validateHeaders(accessor)).isEqualTo(INVALID_HOST);
+			assertThatThrownBy(() -> hostValidator.validate(accessor)).isEqualTo(INVALID_HOST);
 		}
 
 		@Nested
@@ -263,21 +263,21 @@ class DefaultServerTransportSecurityValidatorTests {
 			void anyPort() {
 				var accessor = hostAccessor("localhost:3000");
 
-				assertThatCode(() -> wildcardHostValidator.validateHeaders(accessor)).doesNotThrowAnyException();
+				assertThatCode(() -> wildcardHostValidator.validate(accessor)).doesNotThrowAnyException();
 			}
 
 			@Test
 			void noPort() {
 				var accessor = hostAccessor("localhost");
 
-				assertThatCode(() -> wildcardHostValidator.validateHeaders(accessor)).doesNotThrowAnyException();
+				assertThatCode(() -> wildcardHostValidator.validate(accessor)).doesNotThrowAnyException();
 			}
 
 			@Test
 			void differentHost() {
 				var accessor = hostAccessor("example.com:3000");
 
-				assertThatThrownBy(() -> wildcardHostValidator.validateHeaders(accessor)).isEqualTo(INVALID_HOST);
+				assertThatThrownBy(() -> wildcardHostValidator.validate(accessor)).isEqualTo(INVALID_HOST);
 			}
 
 		}
@@ -295,28 +295,28 @@ class DefaultServerTransportSecurityValidatorTests {
 			void exactMatch() {
 				var accessor = hostAccessor("example.com:3000");
 
-				assertThatCode(() -> multipleHostsValidator.validateHeaders(accessor)).doesNotThrowAnyException();
+				assertThatCode(() -> multipleHostsValidator.validate(accessor)).doesNotThrowAnyException();
 			}
 
 			@Test
 			void wildcard() {
 				var accessor = hostAccessor("myapp.example.com:9999");
 
-				assertThatCode(() -> multipleHostsValidator.validateHeaders(accessor)).doesNotThrowAnyException();
+				assertThatCode(() -> multipleHostsValidator.validate(accessor)).doesNotThrowAnyException();
 			}
 
 			@Test
 			void differentHost() {
 				var accessor = hostAccessor("malicious.example.com:3000");
 
-				assertThatThrownBy(() -> multipleHostsValidator.validateHeaders(accessor)).isEqualTo(INVALID_HOST);
+				assertThatThrownBy(() -> multipleHostsValidator.validate(accessor)).isEqualTo(INVALID_HOST);
 			}
 
 			@Test
 			void differentPort() {
 				var accessor = hostAccessor("localhost:8080");
 
-				assertThatThrownBy(() -> multipleHostsValidator.validateHeaders(accessor)).isEqualTo(INVALID_HOST);
+				assertThatThrownBy(() -> multipleHostsValidator.validate(accessor)).isEqualTo(INVALID_HOST);
 			}
 
 		}
@@ -330,10 +330,8 @@ class DefaultServerTransportSecurityValidatorTests {
 					.allowedHosts(List.of("localhost:8080", "example.com:*"))
 					.build();
 
-				assertThatCode(() -> validator.validateHeaders(hostAccessor("example.com:3000")))
-					.doesNotThrowAnyException();
-				assertThatCode(() -> validator.validateHeaders(hostAccessor("localhost:8080")))
-					.doesNotThrowAnyException();
+				assertThatCode(() -> validator.validate(hostAccessor("example.com:3000"))).doesNotThrowAnyException();
+				assertThatCode(() -> validator.validate(hostAccessor("localhost:8080"))).doesNotThrowAnyException();
 			}
 
 			@Test
@@ -343,12 +341,9 @@ class DefaultServerTransportSecurityValidatorTests {
 					.allowedHosts(List.of("example.com:*", "test.com:3000"))
 					.build();
 
-				assertThatCode(() -> validator.validateHeaders(hostAccessor("localhost:8080")))
-					.doesNotThrowAnyException();
-				assertThatCode(() -> validator.validateHeaders(hostAccessor("example.com:9999")))
-					.doesNotThrowAnyException();
-				assertThatCode(() -> validator.validateHeaders(hostAccessor("test.com:3000")))
-					.doesNotThrowAnyException();
+				assertThatCode(() -> validator.validate(hostAccessor("localhost:8080"))).doesNotThrowAnyException();
+				assertThatCode(() -> validator.validate(hostAccessor("example.com:9999"))).doesNotThrowAnyException();
+				assertThatCode(() -> validator.validate(hostAccessor("test.com:3000"))).doesNotThrowAnyException();
 			}
 
 		}
@@ -368,21 +363,21 @@ class DefaultServerTransportSecurityValidatorTests {
 		void bothValid() {
 			var accessor = combinedAccessor("http://localhost:8080", "localhost:8080");
 
-			assertThatCode(() -> combinedValidator.validateHeaders(accessor)).doesNotThrowAnyException();
+			assertThatCode(() -> combinedValidator.validate(accessor)).doesNotThrowAnyException();
 		}
 
 		@Test
 		void originValidHostInvalid() {
 			var accessor = combinedAccessor("http://localhost:8080", "malicious.example.com:8080");
 
-			assertThatThrownBy(() -> combinedValidator.validateHeaders(accessor)).isEqualTo(INVALID_HOST);
+			assertThatThrownBy(() -> combinedValidator.validate(accessor)).isEqualTo(INVALID_HOST);
 		}
 
 		@Test
 		void originInvalidHostValid() {
 			var accessor = combinedAccessor("http://malicious.example.com:8080", "localhost:8080");
 
-			assertThatThrownBy(() -> combinedValidator.validateHeaders(accessor)).isEqualTo(INVALID_ORIGIN);
+			assertThatThrownBy(() -> combinedValidator.validate(accessor)).isEqualTo(INVALID_ORIGIN);
 		}
 
 		@Test
@@ -390,7 +385,7 @@ class DefaultServerTransportSecurityValidatorTests {
 			// Origin missing is OK (same-origin request)
 			var accessor = combinedAccessor(null, "localhost:8080");
 
-			assertThatCode(() -> combinedValidator.validateHeaders(accessor)).doesNotThrowAnyException();
+			assertThatCode(() -> combinedValidator.validate(accessor)).doesNotThrowAnyException();
 		}
 
 		@Test
@@ -398,7 +393,7 @@ class DefaultServerTransportSecurityValidatorTests {
 			// Host missing is NOT OK when allowedHosts is configured
 			var accessor = combinedAccessor("http://localhost:8080", null);
 
-			assertThatThrownBy(() -> combinedValidator.validateHeaders(accessor)).isEqualTo(INVALID_HOST);
+			assertThatThrownBy(() -> combinedValidator.validate(accessor)).isEqualTo(INVALID_HOST);
 		}
 
 	}
@@ -477,57 +472,30 @@ class DefaultServerTransportSecurityValidatorTests {
 	}
 
 	@Nested
-	class InterfaceDefaultBridge {
+	class ValidatorCompatibility {
 
 		@Test
 		void noopAcceptsAll() {
-			assertThatCode(() -> ServerTransportSecurityValidator.NOOP.validateHeaders(emptyAccessor()))
-				.doesNotThrowAnyException();
+			assertThatCode(() -> ServerHttpHeaderValidator.NOOP.validate(emptyAccessor())).doesNotThrowAnyException();
 			assertThatCode(() -> ServerTransportSecurityValidator.NOOP.validateHeaders(new HashMap<>()))
 				.doesNotThrowAnyException();
 		}
 
 		@Test
-		void mapDefaultBridgesToAccessorOverride() {
-			// A validator that only overrides the HeaderAccessor method should still work
-			// when called via the deprecated Map method
-			ServerTransportSecurityValidator accessorOnlyValidator = new ServerTransportSecurityValidator() {
-				@Override
-				public void validateHeaders(HeaderAccessor accessor) throws ServerTransportSecurityException {
-					List<String> origins = accessor.getHeader("Origin");
-					if (origins != null && !origins.isEmpty() && origins.get(0).contains("evil")) {
-						throw new ServerTransportSecurityException(403, "Invalid Origin header");
-					}
+		void legacyValidatorAdaptsToHeaderAccessor() {
+			ServerTransportSecurityValidator legacyValidator = headers -> {
+				List<String> origins = headers.getOrDefault("origin", List.of());
+				if (!origins.isEmpty() && origins.get(0).contains("evil")) {
+					throw new ServerTransportSecurityException(403, "Invalid Origin header");
 				}
 			};
+			ServerHttpHeaderValidator headerValidator = ServerTransportSecurityValidator
+				.toHttpHeaderValidator(legacyValidator);
 
-			Map<String, List<String>> goodHeaders = new HashMap<>();
-			goodHeaders.put("Origin", List.of("http://good.example.com"));
-			assertThatCode(() -> accessorOnlyValidator.validateHeaders(goodHeaders)).doesNotThrowAnyException();
-
-			Map<String, List<String>> evilHeaders = new HashMap<>();
-			evilHeaders.put("Origin", List.of("http://evil.example.com"));
-			assertThatThrownBy(() -> accessorOnlyValidator.validateHeaders(evilHeaders)).isEqualTo(INVALID_ORIGIN);
-		}
-
-		@Test
-		void accessorDefaultBridgesToMapOverride() {
-			// A validator that only overrides the deprecated Map method should still work
-			// when called via the new HeaderAccessor method
-			ServerTransportSecurityValidator mapOnlyValidator = new ServerTransportSecurityValidator() {
-				@Override
-				public void validateHeaders(Map<String, List<String>> headers) throws ServerTransportSecurityException {
-					List<String> origins = headers.getOrDefault("origin", List.of());
-					if (!origins.isEmpty() && origins.get(0).contains("evil")) {
-						throw new ServerTransportSecurityException(403, "Invalid Origin header");
-					}
-				}
-			};
-
-			assertThatCode(() -> mapOnlyValidator.validateHeaders(originAccessor("http://good.example.com")))
+			assertThatCode(() -> headerValidator.validate(originAccessor("http://good.example.com")))
 				.doesNotThrowAnyException();
 
-			assertThatThrownBy(() -> mapOnlyValidator.validateHeaders(originAccessor("http://evil.example.com")))
+			assertThatThrownBy(() -> headerValidator.validate(originAccessor("http://evil.example.com")))
 				.isEqualTo(INVALID_ORIGIN);
 		}
 

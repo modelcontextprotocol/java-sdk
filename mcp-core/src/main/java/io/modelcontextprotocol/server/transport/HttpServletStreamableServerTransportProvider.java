@@ -129,7 +129,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	/**
 	 * Security validator for validating HTTP requests.
 	 */
-	private final ServerTransportSecurityValidator securityValidator;
+	private final ServerHttpHeaderValidator httpHeaderValidator;
 
 	/**
 	 * Constructs a new HttpServletStreamableServerTransportProvider instance.
@@ -141,25 +141,25 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * @param contextExtractor The extractor for transport context from the request.
 	 * @param keepAliveInterval The interval for keep-alive pings. If null, no keep-alive
 	 * will be scheduled.
-	 * @param securityValidator The security validator for validating HTTP requests.
+	 * @param httpHeaderValidator The HTTP header validator for validating HTTP requests.
 	 * @param requestMaxSize The maximum size, in bytes, of a single request body. Must be
 	 * positive.
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
 	private HttpServletStreamableServerTransportProvider(McpJsonMapper jsonMapper, String mcpEndpoint,
 			boolean disallowDelete, McpTransportContextExtractor<HttpServletRequest> contextExtractor,
-			Duration keepAliveInterval, ServerTransportSecurityValidator securityValidator, int requestMaxSize) {
+			Duration keepAliveInterval, ServerHttpHeaderValidator httpHeaderValidator, int requestMaxSize) {
 		Assert.notNull(jsonMapper, "JsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "MCP endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
-		Assert.notNull(securityValidator, "Security validator must not be null");
+		Assert.notNull(httpHeaderValidator, "HTTP header validator must not be null");
 		Assert.isTrue(requestMaxSize > 0, "requestMaxSize must be positive");
 
 		this.jsonMapper = jsonMapper;
 		this.mcpEndpoint = mcpEndpoint;
 		this.disallowDelete = disallowDelete;
 		this.contextExtractor = contextExtractor;
-		this.securityValidator = securityValidator;
+		this.httpHeaderValidator = httpHeaderValidator;
 		this.requestMaxSize = requestMaxSize;
 
 		if (keepAliveInterval != null) {
@@ -273,7 +273,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		try {
-			this.securityValidator.validateHeaders(new HttpServletHeaderAccessor(request));
+			this.httpHeaderValidator.validate(new HttpServletHeaderAccessor(request));
 		}
 		catch (ServerTransportSecurityException e) {
 			response.sendError(e.getStatusCode(), e.getMessage());
@@ -412,7 +412,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		try {
-			this.securityValidator.validateHeaders(new HttpServletHeaderAccessor(request));
+			this.httpHeaderValidator.validate(new HttpServletHeaderAccessor(request));
 		}
 		catch (ServerTransportSecurityException e) {
 			response.sendError(e.getStatusCode(), e.getMessage());
@@ -590,7 +590,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		try {
-			this.securityValidator.validateHeaders(new HttpServletHeaderAccessor(request));
+			this.httpHeaderValidator.validate(new HttpServletHeaderAccessor(request));
 		}
 		catch (ServerTransportSecurityException e) {
 			response.sendError(e.getStatusCode(), e.getMessage());
@@ -837,7 +837,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		private Duration keepAliveInterval;
 
-		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
+		private ServerHttpHeaderValidator httpHeaderValidator = ServerHttpHeaderValidator.NOOP;
 
 		private int requestMaxSize = DEFAULT_REQUEST_MAX_SIZE;
 
@@ -905,10 +905,25 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		 * @param securityValidator The security validator to use. Must not be null.
 		 * @return this builder instance
 		 * @throws IllegalArgumentException if securityValidator is null
+		 * @deprecated Use {@link #httpHeaderValidator(ServerHttpHeaderValidator)}
+		 * instead.
 		 */
+		@Deprecated
 		public Builder securityValidator(ServerTransportSecurityValidator securityValidator) {
 			Assert.notNull(securityValidator, "Security validator must not be null");
-			this.securityValidator = securityValidator;
+			this.httpHeaderValidator = ServerTransportSecurityValidator.toHttpHeaderValidator(securityValidator);
+			return this;
+		}
+
+		/**
+		 * Sets the HTTP header validator for validating HTTP requests.
+		 * @param httpHeaderValidator The HTTP header validator to use. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if httpHeaderValidator is null
+		 */
+		public Builder httpHeaderValidator(ServerHttpHeaderValidator httpHeaderValidator) {
+			Assert.notNull(httpHeaderValidator, "HTTP header validator must not be null");
+			this.httpHeaderValidator = httpHeaderValidator;
 			return this;
 		}
 
@@ -935,7 +950,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 			return new HttpServletStreamableServerTransportProvider(
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, mcpEndpoint, disallowDelete,
-					contextExtractor, keepAliveInterval, securityValidator, requestMaxSize);
+					contextExtractor, keepAliveInterval, httpHeaderValidator, requestMaxSize);
 		}
 
 	}

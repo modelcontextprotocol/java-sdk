@@ -209,7 +209,7 @@ class ServerTransportSecurityIntegrationTests {
 		public Sse() {
 			transport = HttpServletSseServerTransportProvider.builder()
 				.messageEndpoint("/mcp/message")
-				.securityValidator(DefaultServerTransportSecurityValidator.builder()
+				.httpHeaderValidator(DefaultServerTransportSecurityValidator.builder()
 					.allowedOrigin("http://localhost:*")
 					.allowedHost("localhost:*")
 					.build())
@@ -242,7 +242,7 @@ class ServerTransportSecurityIntegrationTests {
 
 		public StreamableHttp() {
 			transport = HttpServletStreamableServerTransportProvider.builder()
-				.securityValidator(DefaultServerTransportSecurityValidator.builder()
+				.httpHeaderValidator(DefaultServerTransportSecurityValidator.builder()
 					.allowedOrigin("http://localhost:*")
 					.allowedHost("localhost:*")
 					.build())
@@ -276,7 +276,7 @@ class ServerTransportSecurityIntegrationTests {
 
 		public Stateless() {
 			transport = HttpServletStatelessServerTransport.builder()
-				.securityValidator(DefaultServerTransportSecurityValidator.builder()
+				.httpHeaderValidator(DefaultServerTransportSecurityValidator.builder()
 					.allowedOrigin("http://localhost:*")
 					.allowedHost("localhost:*")
 					.build())

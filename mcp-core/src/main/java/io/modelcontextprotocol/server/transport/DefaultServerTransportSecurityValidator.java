@@ -6,6 +6,7 @@ package io.modelcontextprotocol.server.transport;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import io.modelcontextprotocol.util.Assert;
 
@@ -21,7 +22,8 @@ import io.modelcontextprotocol.util.Assert;
  * @see ServerTransportSecurityValidator
  * @see ServerTransportSecurityException
  */
-public final class DefaultServerTransportSecurityValidator implements ServerTransportSecurityValidator {
+public final class DefaultServerTransportSecurityValidator
+		implements ServerTransportSecurityValidator, ServerHttpHeaderValidator {
 
 	private static final String ORIGIN_HEADER = "Origin";
 
@@ -46,14 +48,35 @@ public final class DefaultServerTransportSecurityValidator implements ServerTran
 	}
 
 	@Override
-	public void validateHeaders(HeaderAccessor accessor) throws ServerTransportSecurityException {
-		List<String> originValues = accessor.getHeader(ORIGIN_HEADER);
+	@Deprecated
+	public void validateHeaders(Map<String, List<String>> headers) throws ServerTransportSecurityException {
+		validate(new HeaderAccessor() {
+			@Override
+			public List<String> getHeader(String name) {
+				return headers.entrySet()
+					.stream()
+					.filter(entry -> entry.getKey().equalsIgnoreCase(name))
+					.map(Map.Entry::getValue)
+					.findFirst()
+					.orElse(List.of());
+			}
+
+			@Override
+			public List<String> getHeaderNames() {
+				return List.copyOf(headers.keySet());
+			}
+		});
+	}
+
+	@Override
+	public void validate(HeaderAccessor headerAccessor) throws ServerTransportSecurityException {
+		List<String> originValues = headerAccessor.getHeader(ORIGIN_HEADER);
 		if (originValues != null && !originValues.isEmpty()) {
 			validateOrigin(originValues.get(0));
 		}
 
 		if (!allowedHosts.isEmpty()) {
-			List<String> hostValues = accessor.getHeader(HOST_HEADER);
+			List<String> hostValues = headerAccessor.getHeader(HOST_HEADER);
 			if (hostValues == null || hostValues.isEmpty()) {
 				throw new ServerTransportSecurityException(421, "Invalid Host header");
 			}

@@ -13,7 +13,7 @@ import java.util.List;
  *
  * @author Neeraj Bhatt
  * @since 0.16.0
- * @see ServerTransportSecurityValidator
+ * @see ServerHttpHeaderValidator
  */
 public interface HeaderAccessor {
 
