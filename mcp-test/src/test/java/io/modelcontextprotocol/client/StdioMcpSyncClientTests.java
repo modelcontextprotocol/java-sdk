@@ -25,16 +25,16 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Tests for the {@link McpSyncClient} with {@link StdioClientTransport}.
  *
  * <p>
- * These tests use npx to download and run the MCP "everything" server locally. The first
- * test execution will download the everything server scripts and cache them locally,
- * which can take more than 15 seconds. Subsequent test runs will use the cached version
- * and execute faster.
+ * These tests run the MCP "everything" server locally, spawning a fresh server process
+ * per test. The server package is installed once and launched directly with node, see
+ * {@link ServerParameterUtils}. The first test execution installs the package, which can
+ * take more than 15 seconds; subsequent runs reuse the installed copy.
  *
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
  */
-@Timeout(25) // Giving extra time beyond the client timeout to account for initial server
-				// download
+@Timeout(25) // Giving extra time beyond the client timeout to account for the one-time
+				// install of the server package
 class StdioMcpSyncClientTests extends AbstractMcpSyncClientTests {
 
 	@Override
