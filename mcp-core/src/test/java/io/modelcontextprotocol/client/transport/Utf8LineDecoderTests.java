@@ -4,21 +4,47 @@
 
 package io.modelcontextprotocol.client.transport;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+import io.modelcontextprotocol.client.transport.ResponseSubscribers.Utf8LineDecoder;
 import org.junit.jupiter.api.Test;
 
-import io.modelcontextprotocol.client.transport.ResponseSubscribers.Utf8LineDecoder;
-
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class Utf8LineDecoderTests {
 
+	/**
+	 * 0xFF cannot appear anywhere in well-formed UTF-8. One of these is what a peer
+	 * mixing encodings, or a proxy corrupting a byte, puts on the wire.
+	 */
+	private static final byte[] INVALID_BYTE = { (byte) 0xFF };
+
+	/**
+	 * The lead byte of the two-byte sequence for {@code 'é'} (U+00E9, 0xC3 0xA9).
+	 */
+	private static final byte[] TRUNCATED_LEAD_BYTE = { (byte) 0xC3 };
+
 	private static List<ByteBuffer> chunk(String... parts) {
 		return List.of(toByteBuffers(parts));
+	}
+
+	/**
+	 * A chunk whose bytes are passed through verbatim, so that bytes no encoder would
+	 * produce reach the decoder as-is.
+	 */
+	private static List<ByteBuffer> rawChunk(byte[]... parts) {
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		for (byte[] part : parts) {
+			out.writeBytes(part);
+		}
+		return List.of(ByteBuffer.wrap(out.toByteArray()));
+	}
+
+	private static byte[] utf8(String text) {
+		return text.getBytes(StandardCharsets.UTF_8);
 	}
 
 	private static ByteBuffer[] toByteBuffers(String... parts) {
@@ -95,10 +121,12 @@ class Utf8LineDecoderTests {
 	}
 
 	@Test
-	void trailingPartialLineWithCrTrimmedOnFlush() {
+	void trailingCrTerminatesTheLine() {
+		// A body whose last byte is a CR ends on a terminator, not part-way through a
+		// line, so there is nothing left to flush.
 		Utf8LineDecoder dec = new Utf8LineDecoder();
-		assertThat(dec.decode(chunk("incomplete\r"))).isEmpty();
-		assertThat(dec.flush()).containsExactly("incomplete");
+		assertThat(dec.decode(chunk("complete\r"))).containsExactly("complete");
+		assertThat(dec.flush()).isEmpty();
 	}
 
 	@Test
@@ -106,14 +134,6 @@ class Utf8LineDecoderTests {
 		Utf8LineDecoder dec = new Utf8LineDecoder();
 		assertThat(dec.decode(List.of())).isEmpty();
 		assertThat(dec.flush()).isEmpty();
-	}
-
-	@Test
-	void invalidUtf8Throws() {
-		// 0xFF is never a valid UTF-8 lead byte
-		Utf8LineDecoder dec = new Utf8LineDecoder();
-		assertThatThrownBy(() -> dec.decode(List.of(ByteBuffer.wrap(new byte[] { (byte) 0xFF }))))
-			.isInstanceOf(RuntimeException.class);
 	}
 
 	@Test
@@ -138,15 +158,6 @@ class Utf8LineDecoderTests {
 	}
 
 	@Test
-	void crLfSplitAcrossChunks() {
-		// The CR ends one chunk and the LF opens the next, so the terminator sits exactly
-		// at the point the previous search stopped.
-		Utf8LineDecoder dec = new Utf8LineDecoder();
-		assertThat(dec.decode(chunk("hello\r"))).isEmpty();
-		assertThat(dec.decode(chunk("\nworld\r\n"))).containsExactly("hello", "world");
-	}
-
-	@Test
 	void linesLongerThanInternalCharBuffer() {
 		// 4096 is the internal CharBuffer size; send a single line ~10k chars to force
 		// multiple overflow cycles.
@@ -160,6 +171,79 @@ class Utf8LineDecoderTests {
 		List<String> lines = dec.decode(chunk(big.toString()));
 		assertThat(lines).hasSize(1);
 		assertThat(lines.get(0)).hasSize(10_000);
+	}
+
+	@Test
+	void loneCrTerminatesLine() {
+		// SSE takes its line endings from HTML, which terminates on CRLF, CR and LF
+		// alike, and HttpResponse.BodySubscribers#fromLineSubscriber -- the path this
+		// decoder replaces -- splits on all three. Splitting on LF alone leaves a
+		// CR-framed stream as one unterminated run: downstream an "Invalid SSE response
+		// line", or past BoundedLineBodySubscriber's bound an aborted response.
+		Utf8LineDecoder dec = new Utf8LineDecoder();
+		assertThat(dec.decode(chunk("one\rtwo\rthree\r"))).containsExactly("one", "two", "three");
+		assertThat(dec.flush()).isEmpty();
+	}
+
+	@Test
+	void blankLinesFramedWithCr() {
+		// A CR ending a chunk terminates its line, so the CR opening the next one ends an
+		// empty line rather than completing a CRLF. Values match what
+		// HttpResponse.BodySubscribers#fromLineSubscriber produces for the same bytes.
+		assertThat(new Utf8LineDecoder().decode(chunk("\r\r"))).containsExactly("", "");
+
+		Utf8LineDecoder dec = new Utf8LineDecoder();
+		assertThat(dec.decode(chunk("one\r"))).containsExactly("one");
+		assertThat(dec.decode(chunk("\r"))).containsExactly("");
+		assertThat(dec.flush()).isEmpty();
+	}
+
+	@Test
+	void sseFramedWithCrOnlyIsSplitIntoFieldLines() {
+		// The same stream as the SSE parser downstream has to receive it: one line per
+		// field, and the empty line that ends the event.
+		Utf8LineDecoder dec = new Utf8LineDecoder();
+		assertThat(dec.decode(chunk("event: message\rdata: {\"a\":1}\r\r"))).containsExactly("event: message",
+				"data: {\"a\":1}", "");
+		assertThat(dec.flush()).isEmpty();
+	}
+
+	@Test
+	void crLfSplitAcrossChunks() {
+		// Splitting on a lone CR means emitting the line as soon as the CR arrives, so a
+		// LF opening the next chunk is the tail of a CRLF rather than an empty line of
+		// its own. The terminator also sits exactly at the point the previous search for
+		// one stopped.
+		Utf8LineDecoder dec = new Utf8LineDecoder();
+		assertThat(dec.decode(chunk("hello\r"))).containsExactly("hello");
+		assertThat(dec.decode(chunk("\nworld\r\n"))).containsExactly("world");
+		assertThat(dec.flush()).isEmpty();
+	}
+
+	@Test
+	void malformedByteIsReplacedAndOtherLinesArePreserved() {
+		Utf8LineDecoder dec = new Utf8LineDecoder();
+		assertThat(dec.decode(rawChunk(utf8("one\ncaf"), INVALID_BYTE, utf8("e\nthree\n")))).containsExactly("one",
+				"caf\uFFFDe", "three");
+		assertThat(dec.flush()).isEmpty();
+	}
+
+	@Test
+	void trailingTruncatedCharacterIsReplacedOnFlush() {
+		Utf8LineDecoder dec = new Utf8LineDecoder();
+		assertThat(dec.decode(rawChunk(utf8("one\ncaf"), TRUNCATED_LEAD_BYTE))).containsExactly("one");
+		assertThat(dec.flush()).containsExactly("caf\uFFFD");
+	}
+
+	@Test
+	void incompleteMultiByteSequenceFollowedByValidDataIsReplaced() {
+		// character is cut short by a chunk boundary
+		// "€" is U+20AC → 0xE2 0x82 0xAC in UTF-8; only the first two bytes arrive.
+		byte[] euro = "€".getBytes(StandardCharsets.UTF_8);
+
+		Utf8LineDecoder dec = new Utf8LineDecoder();
+		assertThat(dec.decode(rawChunk(new byte[] { euro[0], euro[1] }))).isEmpty();
+		assertThat(dec.decode(chunk("x\n"))).containsExactly("\uFFFDx");
 	}
 
 }

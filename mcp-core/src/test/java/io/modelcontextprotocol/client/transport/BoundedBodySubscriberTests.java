@@ -107,17 +107,18 @@ class BoundedBodySubscriberTests {
 	}
 
 	@Test
-	void lineSubscriberIsNotResetByLoneCarriageReturns() {
+	void lineSubscriberIsResetByLoneCarriageReturns() {
 		BoundedLineBodySubscriber<Void> subscriber = lineSubscriber();
 
-		// Utf8LineDecoder only flushes a line on LF, so a peer streaming CR-terminated
-		// runs keeps its buffer growing. A lone CR must not refill the budget.
+		// A lone CR terminates a line, so it flushes Utf8LineDecoder's buffer and has to
+		// refill the budget here too. Otherwise a peer framing short lines with CR alone
+		// has its response aborted for exceeding a bound its lines never reach.
 		boolean accepted = true;
 		for (int i = 0; i < 10 && accepted; i++) {
 			accepted = subscriber.checkSize(buffer("aa\r"));
 		}
 
-		assertThat(accepted).isFalse();
+		assertThat(accepted).isTrue();
 	}
 
 	@Test

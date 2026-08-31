@@ -393,7 +393,10 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 						ResponseSubscribers.boundedPublisherBodyHandler(this.maxResponseSize)))
 				.flatMapMany(response -> {
 					if (isClosing) {
-						return Flux.empty();
+						// The body is handed over as a publisher and nothing is read off
+						// the wire until it is subscribed, so it has to be drained even
+						// when its content is of no further interest.
+						return ResponseSubscribers.drain(response.body());
 					}
 
 					int statusCode = response.statusCode();
