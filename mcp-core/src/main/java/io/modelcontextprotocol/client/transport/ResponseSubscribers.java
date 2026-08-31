@@ -12,6 +12,7 @@ import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CoderResult;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -180,12 +181,25 @@ class ResponseSubscribers {
 
 	/**
 	 * Stateful UTF-8 decoder that splits a stream of byte-buffer chunks into complete
-	 * lines. Handles multi-byte characters split across chunk boundaries, and both
-	 * {@code "\n"} and {@code "\r\n"} terminators.
+	 * lines. Handles multi-byte characters split across chunk boundaries, and terminates
+	 * a line on {@code "\r\n"}, {@code "\r"} or {@code "\n"} alike, as the SSE wire
+	 * format does. Bytes that do not decode are replaced rather than reported, so a peer
+	 * sending one does not cost the stream.
 	 */
 	static final class Utf8LineDecoder {
 
-		private final CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder();
+		/**
+		 * Undecodable input costs one replacement character rather than the stream: a
+		 * decoder left on the default {@link CodingErrorAction#REPORT} fails the whole
+		 * response over a single byte a peer mangled, and takes with it the lines already
+		 * decoded from the same chunk, because {@link #decode(List)} throws instead of
+		 * returning them. A body cut short mid-character is enough to hit it. This
+		 * matches {@link java.net.http.HttpResponse.BodySubscribers#fromLineSubscriber},
+		 * the path this decoder replaces, which configured the same two actions.
+		 */
+		private final CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+			.onMalformedInput(CodingErrorAction.REPLACE)
+			.onUnmappableCharacter(CodingErrorAction.REPLACE);
 
 		private final CharBuffer charBuffer = CharBuffer.allocate(4096);
 
@@ -201,6 +215,14 @@ class ResponseSubscribers {
 		 * "https://github.com/modelcontextprotocol/java-sdk/issues/1042">#1042</a>
 		 */
 		private int scannedForLineTerminator = 0;
+
+		/**
+		 * Whether the line just emitted was terminated by a CR, so that a LF opening what
+		 * follows completes that terminator instead of ending a line of its own. A CR is
+		 * emitted on as soon as it arrives, before it is known whether a LF follows it,
+		 * and the two may be split across chunks.
+		 */
+		private boolean crTerminatedPreviousLine = false;
 
 		// Holds partial UTF-8 sequences left over from a previous chunk (max 3 bytes
 		// for a BMP code point; 4 bytes for a supplementary one).
@@ -221,6 +243,9 @@ class ResponseSubscribers {
 					CoderResult result = decoder.decode(input, charBuffer, false);
 					drainCharBuffer();
 					extractCompletedLines(lines);
+					// Unreachable while the decoder replaces undecodable input, but kept
+					// so that an error result cannot spin this loop: it is neither an
+					// underflow nor an overflow.
 					if (result.isError()) {
 						try {
 							result.throwException();
@@ -270,13 +295,11 @@ class ResponseSubscribers {
 			extractCompletedLines(lines);
 			if (leftover.length() > 0) {
 				String last = leftover.toString();
-				if (last.endsWith("\r")) {
-					last = last.substring(0, last.length() - 1);
-				}
 				leftover.setLength(0);
 				this.scannedForLineTerminator = 0;
 				lines.add(last);
 			}
+			this.crTerminatedPreviousLine = false;
 			return lines;
 		}
 
@@ -287,19 +310,43 @@ class ResponseSubscribers {
 		}
 
 		private void extractCompletedLines(List<String> out) {
-			int newlineIdx;
-			while ((newlineIdx = leftover.indexOf("\n", this.scannedForLineTerminator)) != -1) {
-				String line = leftover.substring(0, newlineIdx);
-				if (line.endsWith("\r")) {
-					line = line.substring(0, line.length() - 1);
+			while (true) {
+				if (this.crTerminatedPreviousLine) {
+					if (leftover.length() == 0) {
+						// The LF, if there is one, is in a chunk that has not arrived.
+						return;
+					}
+					if (leftover.charAt(0) == '\n') {
+						leftover.delete(0, 1);
+					}
+					this.crTerminatedPreviousLine = false;
 				}
-				out.add(line);
-				leftover.delete(0, newlineIdx + 1);
+				int terminatorIdx = indexOfLineTerminator(this.scannedForLineTerminator);
+				if (terminatorIdx == -1) {
+					this.scannedForLineTerminator = leftover.length();
+					return;
+				}
+				out.add(leftover.substring(0, terminatorIdx));
+				this.crTerminatedPreviousLine = leftover.charAt(terminatorIdx) == '\r';
+				leftover.delete(0, terminatorIdx + 1);
 				// What is left starts after the terminator, so none of it has been
 				// searched yet.
 				this.scannedForLineTerminator = 0;
 			}
-			this.scannedForLineTerminator = leftover.length();
+		}
+
+		/**
+		 * Index of the first CR or LF in {@link #leftover} at or after {@code from}, or
+		 * {@code -1} when there is none.
+		 */
+		private int indexOfLineTerminator(int from) {
+			for (int i = from; i < leftover.length(); i++) {
+				char c = leftover.charAt(i);
+				if (c == '\n' || c == '\r') {
+					return i;
+				}
+			}
+			return -1;
 		}
 
 	}
@@ -479,7 +526,7 @@ class ResponseSubscribers {
 
 	/**
 	 * A {@link BoundedBodySubscriber} that aborts the response once a single line (a run
-	 * of bytes with no LF) exceeds {@code maxSize} bytes.
+	 * of bytes with no line terminator) exceeds {@code maxSize} bytes.
 	 *
 	 * <p>
 	 * {@link Utf8LineDecoder} buffers characters until it encounters a line terminator,
@@ -488,9 +535,10 @@ class ResponseSubscribers {
 	 * wire and cancels the subscription before that buffer can grow without bound.
 	 *
 	 * <p>
-	 * Only LF resets the count, because LF is the only byte {@link Utf8LineDecoder}
-	 * flushes a line on: a lone CR leaves the decoder's buffer growing, so it must not
-	 * refill this budget either. CRLF still resets, on its LF.
+	 * CR and LF both reset the count, matching the terminators {@link Utf8LineDecoder}
+	 * flushes a line on: whatever empties the decoder's buffer has to refill this budget,
+	 * or a peer framing short lines with CR alone would be aborted for exceeding a bound
+	 * its lines never reach. A CRLF resets twice, which is harmless.
 	 */
 	static final class BoundedLineBodySubscriber<T> extends BoundedBodySubscriber<T> {
 
@@ -518,7 +566,7 @@ class ResponseSubscribers {
 			// The limit is within reach, so account for every line exactly.
 			for (int i = position; i < limit; i++) {
 				byte b = buffer.get(i);
-				if (b == '\n') {
+				if (b == '\n' || b == '\r') {
 					this.bytesSinceLineTerminator = 0;
 				}
 				else if (++this.bytesSinceLineTerminator > this.maxSize) {
@@ -529,12 +577,13 @@ class ResponseSubscribers {
 		}
 
 		/**
-		 * Returns the number of bytes after the last LF in the buffer, or the whole span
-		 * added to the running count when the buffer holds no LF.
+		 * Returns the number of bytes after the last line terminator in the buffer, or
+		 * the whole span added to the running count when the buffer holds none.
 		 */
 		private long lengthOfTrailingRun(ByteBuffer buffer, int position, int limit) {
 			for (int i = limit - 1; i >= position; i--) {
-				if (buffer.get(i) == '\n') {
+				byte b = buffer.get(i);
+				if (b == '\n' || b == '\r') {
 					return limit - 1 - i;
 				}
 			}

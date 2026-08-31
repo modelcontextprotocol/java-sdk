@@ -286,6 +286,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		return ResponseSubscribers.decodeSseResponse(lines, this.maxResponseSize).flatMap(sseEvent -> {
 			if (!isMessageEvent(sseEvent.event())) {
 				logger.debug("Received SSE event with type: {}", sseEvent);
+				if (onFirstMessage != null) {
+					onFirstMessage.run();
+				}
 				return Flux.empty();
 			}
 			String data = sseEvent.data();
@@ -536,8 +539,6 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 							ResponseSubscribers.boundedPublisherBodyHandler(this.maxResponseSize)))
 					.flatMapMany(httpResponse -> {
 						int statusCode = httpResponse.statusCode();
-						Exception exception = null;
-						boolean proceed = false;
 						Optional<String> maybeSessionId = transportSession == null ? Optional.empty()
 								: transportSession.sessionId();
 						if (statusCode == 401 || statusCode == 403) {
@@ -552,8 +553,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						}
 
 						if (transportSession
-							.markInitialized(httpResponse.headers().firstValue("mcp-session-id").orElse(null))
-								&& !openConnectionOnStartup) {
+							.markInitialized(httpResponse.headers().firstValue("mcp-session-id").orElse(null))) {
 							reconnect(null).contextWrite(deliveredSink.contextView()).subscribe();
 						}
 
