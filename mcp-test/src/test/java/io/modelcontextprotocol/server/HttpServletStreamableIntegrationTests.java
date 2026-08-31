@@ -30,7 +30,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
-import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -42,6 +41,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 @Timeout(15)
 class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerIntegrationTests {
@@ -56,6 +56,16 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 	private static Tomcat tomcat;
 
 	private HttpServletStreamableServerTransportProvider mcpServerTransportProvider;
+
+	@Override
+	protected void awaitClientStreamEstablished() {
+		var timeout = Duration.ofSeconds(5);
+		await().atMost(timeout).untilAsserted(() -> {
+			assertThat(MCP_SERVLET.isStreamEstablished())
+				.withFailMessage("[Failed to observe MCP Client connection within %s]", timeout)
+				.isTrue();
+		});
+	}
 
 	static Stream<Arguments> clientsForTesting() {
 		return Stream.of(Arguments.of("httpclient"));
@@ -151,7 +161,7 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 				.verifyComplete();
 
 			// Wait until we've received the response
-			Awaitility.await().atMost(Duration.ofSeconds(1)).until(() -> response.get() != null);
+			await().atMost(Duration.ofSeconds(1)).until(() -> response.get() != null);
 
 			assertThat(response.get().error().code()).isEqualTo(McpSchema.ErrorCodes.METHOD_NOT_FOUND);
 			assertThat(response.get().error().message()).isEqualTo("Method not found: foo/bar");
