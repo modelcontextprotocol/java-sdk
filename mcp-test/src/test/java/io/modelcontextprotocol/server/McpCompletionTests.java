@@ -13,8 +13,8 @@ import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import io.modelcontextprotocol.client.McpClient;
@@ -48,19 +48,20 @@ import static org.assertj.core.api.InstanceOfAssertFactories.type;
  */
 class McpCompletionTests {
 
-	private HttpServletSseServerTransportProvider mcpServerTransportProvider;
-
 	private static final int PORT = TomcatTestUtil.findAvailablePort();
 
 	private static final String CUSTOM_MESSAGE_ENDPOINT = "/otherPath/mcp/message";
 
-	McpClient.SyncSpec clientBuilder;
+	private static HttpServletSseServerTransportProvider mcpServerTransportProvider;
 
-	private Tomcat tomcat;
+	private static Tomcat tomcat;
 
-	@BeforeEach
-	public void before() {
-		// Create and con figure the transport provider
+	final McpClient.SyncSpec clientBuilder = McpClient
+		.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT).build());
+
+	@BeforeAll
+	public static void beforeAll() {
+		// Create and configure the transport provider
 		mcpServerTransportProvider = HttpServletSseServerTransportProvider.builder()
 			.messageEndpoint(CUSTOM_MESSAGE_ENDPOINT)
 			.build();
@@ -73,12 +74,10 @@ class McpCompletionTests {
 		catch (Exception e) {
 			throw new RuntimeException("Failed to start Tomcat", e);
 		}
-
-		this.clientBuilder = McpClient.sync(HttpClientSseClientTransport.builder("http://localhost:" + PORT).build());
 	}
 
-	@AfterEach
-	public void after() {
+	@AfterAll
+	public static void afterAll() {
 		if (mcpServerTransportProvider != null) {
 			mcpServerTransportProvider.closeGracefully().block();
 		}
@@ -88,7 +87,7 @@ class McpCompletionTests {
 				tomcat.destroy();
 			}
 			catch (LifecycleException e) {
-				e.printStackTrace();
+				throw new RuntimeException("Failed to stop Tomcat", e);
 			}
 		}
 	}
@@ -109,7 +108,7 @@ class McpCompletionTests {
 			.size(123L)
 			.build();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.resources(new McpServerFeatures.SyncResourceSpecification(resource,
 					(exchange, req) -> ReadResourceResult.builder(List.of()).build()))
@@ -135,8 +134,6 @@ class McpCompletionTests {
 			assertThat(receivedRequest.get().context().arguments()).containsEntry("previous", "value");
 			assertThat(result.completion().values()).containsExactly("test-completion");
 		}
-
-		mcpServer.close();
 	}
 
 	@Test
@@ -153,7 +150,7 @@ class McpCompletionTests {
 			.arguments(List.of(PromptArgument.builder("arg").description("string").required(false).build()))
 			.build();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.prompts(new McpServerFeatures.SyncPromptSpecification(prompt,
 					(mcpSyncServerExchange, getPromptRequest) -> null))
@@ -178,8 +175,6 @@ class McpCompletionTests {
 			assertThat(contextWasNull.get()).isTrue();
 			assertThat(result.completion().values()).containsExactly("no-context-completion");
 		}
-
-		mcpServer.close();
 	}
 
 	@Test
@@ -197,7 +192,7 @@ class McpCompletionTests {
 			.arguments(List.of(PromptArgument.builder("topic").description("string").required(false).build()))
 			.build();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.prompts(
 					new McpServerFeatures.SyncPromptSpecification(prompt,
@@ -224,8 +219,6 @@ class McpCompletionTests {
 			assertThat(result.completion().total()).isZero();
 			assertThat(result.completion().hasMore()).isFalse();
 		}
-
-		mcpServer.close();
 	}
 
 	@Test
@@ -243,7 +236,7 @@ class McpCompletionTests {
 			.mimeType("text/plain")
 			.build();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.resourceTemplates(
 					new McpServerFeatures.SyncResourceTemplateSpecification(template,
@@ -271,13 +264,11 @@ class McpCompletionTests {
 			assertThat(result.completion().total()).isZero();
 			assertThat(result.completion().hasMore()).isFalse();
 		}
-
-		mcpServer.close();
 	}
 
 	@Test
 	void testCompletionForNonExistentPromptReturnsInvalidParams() {
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.build();
 
@@ -297,13 +288,11 @@ class McpCompletionTests {
 				.extracting(McpSchema.JSONRPCResponse.JSONRPCError::code)
 				.isEqualTo(ErrorCodes.INVALID_PARAMS);
 		}
-
-		mcpServer.close();
 	}
 
 	@Test
 	void testCompletionForNonExistentResourceReturnsResourceNotFound() {
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.build();
 
@@ -324,8 +313,6 @@ class McpCompletionTests {
 				.extracting(McpSchema.JSONRPCResponse.JSONRPCError::code)
 				.isEqualTo(McpSchema.ErrorCodes.RESOURCE_NOT_FOUND);
 		}
-
-		mcpServer.close();
 	}
 
 	@Test
@@ -364,7 +351,7 @@ class McpCompletionTests {
 			.size(456L)
 			.build();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.resources(new McpServerFeatures.SyncResourceSpecification(resource,
 					(exchange, req) -> ReadResourceResult.builder(List.of()).build()))
@@ -407,8 +394,6 @@ class McpCompletionTests {
 			CompleteResult tableResult2 = mcpClient.completeCompletion(tableRequest2);
 			assertThat(tableResult2.completion().values()).containsExactly("products", "categories", "inventory");
 		}
-
-		mcpServer.close();
 	}
 
 	@Test
@@ -443,7 +428,7 @@ class McpCompletionTests {
 			.size(456L)
 			.build();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.resources(new McpServerFeatures.SyncResourceSpecification(resource,
 					(exchange, req) -> ReadResourceResult.builder(List.of()).build()))
@@ -477,8 +462,6 @@ class McpCompletionTests {
 			CompleteResult resultWithContext = mcpClient.completeCompletion(requestWithContext);
 			assertThat(resultWithContext.completion().values()).containsExactly("users", "orders", "products");
 		}
-
-		mcpServer.close();
 	}
 
 	@Test
@@ -488,7 +471,7 @@ class McpCompletionTests {
 
 		McpSchema.Prompt prompt = Prompt.builder("test-prompt").description("this is a test prompt").build();
 
-		var mcpServer = McpServer.sync(mcpServerTransportProvider)
+		McpServer.sync(mcpServerTransportProvider)
 			.capabilities(ServerCapabilities.builder().completions().build())
 			.prompts(new McpServerFeatures.SyncPromptSpecification(prompt,
 					(mcpSyncServerExchange, getPromptRequest) -> null))
@@ -510,8 +493,6 @@ class McpCompletionTests {
 			CompleteResult completeResult = mcpClient.completeCompletion(request);
 			assertThat(completeResult.completion().values()).isEmpty();
 		}
-
-		mcpServer.close();
 	}
 
 }
