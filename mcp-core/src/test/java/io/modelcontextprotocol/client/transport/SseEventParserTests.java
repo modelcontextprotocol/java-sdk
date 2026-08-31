@@ -108,13 +108,42 @@ class SseEventParserTests {
 	}
 
 	@Test
-	void dataFieldWithEmptyValueIsIgnored() {
-		// preserves the pre-refactor regex behavior where `^data:(.+)$` required at
-		// least one char after the colon — a lone `data:` line contributes nothing.
+	void dataFieldWithEmptyValueStillDispatchesAnEvent() {
+		// Per the SSE spec a data field appends its value plus a separator, so a lone
+		// `data:` line leaves the buffer non-empty and the event is dispatched carrying
+		// empty data. Servers send exactly this to prime a stream, and dropping it leaves
+		// the request the stream answers hanging.
 		SseEventParser p = new SseEventParser(Integer.MAX_VALUE);
 		assertThat(p.feed("data:")).isEmpty();
-		// no pending data → blank line dispatches nothing
+		Optional<SseEvent> event = p.feed("");
+		assertThat(event).isPresent();
+		assertThat(event.get().data()).isEmpty();
+	}
+
+	@Test
+	void dataFieldWithOnlyASpaceIsEquivalentToNoValue() {
+		SseEventParser p = new SseEventParser(Integer.MAX_VALUE);
+		assertThat(p.feed("data: ")).isEmpty();
+		Optional<SseEvent> event = p.feed("");
+		assertThat(event).isPresent();
+		assertThat(event.get().data()).isEmpty();
+	}
+
+	@Test
+	void blankLineWithNoDataFieldDispatchesNothing() {
+		// `event:` alone leaves the data buffer empty, which per the spec is not an event
+		SseEventParser p = new SseEventParser(Integer.MAX_VALUE);
+		assertThat(p.feed("event: message")).isEmpty();
 		assertThat(p.feed("")).isEmpty();
+	}
+
+	@Test
+	void valuelessDataFieldIsDispatchedOnFlush() {
+		SseEventParser p = new SseEventParser(Integer.MAX_VALUE);
+		assertThat(p.feed("data:")).isEmpty();
+		Optional<SseEvent> flushed = p.flush();
+		assertThat(flushed).isPresent();
+		assertThat(flushed.get().data()).isEmpty();
 	}
 
 }
