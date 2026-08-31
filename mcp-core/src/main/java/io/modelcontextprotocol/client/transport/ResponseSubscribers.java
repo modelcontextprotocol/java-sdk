@@ -355,7 +355,8 @@ class ResponseSubscribers {
 	 * Stateful SSE line parser. Accumulates {@code data:}, {@code id:} and {@code event:}
 	 * fields until a blank line dispatches the event. Per the SSE spec, {@code id} and
 	 * {@code event} persist across events until re-set; {@code data} is reset after each
-	 * dispatch.
+	 * dispatch, and a blank line dispatches only when a {@code data:} field was seen,
+	 * whether or not it carried a value.
 	 */
 	static final class SseEventParser {
 
@@ -390,18 +391,19 @@ class ResponseSubscribers {
 				return Optional.of(result);
 			}
 			if (line.startsWith("data:")) {
-				String rest = line.substring(5);
-				if (!rest.isEmpty()) {
-					String value = rest.trim();
-					// Measured before appending, so that an event carrying exactly
-					// maxSize of data is accepted: the trailing separator below is
-					// stripped again before the event is emitted.
-					if (data.length() + value.length() > this.maxSize) {
-						throw new McpTransportException(
-								"Inbound SSE event exceeds the maximum allowed size of " + this.maxSize + " bytes");
-					}
-					data.append(value).append('\n');
+				// Every data field appends its value followed by a separator, so a
+				// valueless `data:` line still marks the event as carrying data and gets
+				// dispatched with empty data. Servers send such an event to prime a
+				// stream, and dropping it leaves the request it answers hanging.
+				String value = line.substring(5).trim();
+				// Measured before appending, so that an event carrying exactly
+				// maxSize of data is accepted: the trailing separator below is
+				// stripped again before the event is emitted.
+				if (data.length() + value.length() > this.maxSize) {
+					throw new McpTransportException(
+							"Inbound SSE event exceeds the maximum allowed size of " + this.maxSize + " bytes");
 				}
+				data.append(value).append('\n');
 			}
 			else if (line.startsWith("id:")) {
 				String rest = line.substring(3);

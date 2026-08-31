@@ -431,7 +431,13 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 							}
 						}
 						else if (MESSAGE_EVENT_TYPE.equals(sseEvent.event())) {
-							JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, sseEvent.data());
+							String data = sseEvent.data();
+							if (data == null || data.isBlank()) {
+								logger.debug("Skipping SSE event with empty data (stream primer)");
+								sink.success();
+								return Flux.<McpSchema.JSONRPCMessage>empty();
+							}
+							JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, data);
 							sink.success();
 							return Flux.just(message);
 						}
