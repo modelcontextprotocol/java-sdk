@@ -178,8 +178,9 @@ class Utf8LineDecoderTests {
 		// SSE takes its line endings from HTML, which terminates on CRLF, CR and LF
 		// alike, and HttpResponse.BodySubscribers#fromLineSubscriber -- the path this
 		// decoder replaces -- splits on all three. Splitting on LF alone leaves a
-		// CR-framed stream as one unterminated run: downstream an "Invalid SSE response
-		// line", or past BoundedLineBodySubscriber's bound an aborted response.
+		// CR-framed stream as one unterminated run: downstream a single unparseable line
+		// whose SSE fields are silently dropped, leaving the request the stream answers
+		// hanging, or past BoundedLineBodySubscriber's bound an aborted response.
 		Utf8LineDecoder dec = new Utf8LineDecoder();
 		assertThat(dec.decode(chunk("one\rtwo\rthree\r"))).containsExactly("one", "two", "three");
 		assertThat(dec.flush()).isEmpty();

@@ -10,10 +10,8 @@ import org.junit.jupiter.api.Test;
 
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.SseEvent;
 import io.modelcontextprotocol.client.transport.ResponseSubscribers.SseEventParser;
-import io.modelcontextprotocol.spec.McpTransportException;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class SseEventParserTests {
 
@@ -100,11 +98,16 @@ class SseEventParserTests {
 	}
 
 	@Test
-	void unknownFieldThrowsMcpTransportException() {
+	void unknownFieldsAreIgnored() {
+		// The SSE spec mandates that unknown fields are ignored, so neither a standard
+		// field the parser does not act on nor a malformed line may fail the stream.
 		SseEventParser p = new SseEventParser(Integer.MAX_VALUE);
-		assertThatThrownBy(() -> p.feed("bogus line")).isInstanceOf(McpTransportException.class)
-			.hasMessageContaining("Invalid SSE response line")
-			.hasMessageContaining("bogus line");
+		assertThat(p.feed("retry: 3000")).isEmpty();
+		assertThat(p.feed("bogus line")).isEmpty();
+		assertThat(p.feed("data: hello")).isEmpty();
+		Optional<SseEvent> event = p.feed("");
+		assertThat(event).isPresent();
+		assertThat(event.get().data()).isEqualTo("hello");
 	}
 
 	@Test
