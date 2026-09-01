@@ -342,15 +342,13 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 			final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
 
-			Optional<String> maybeSessionId = transportSession == null ? Optional.empty()
-					: transportSession.sessionId();
-
 			Disposable connection = Mono.deferContextual(connectionCtx -> {
 				var uri = Utils.resolveUri(this.baseUri, this.endpoint);
 				HttpRequest.Builder requestBuilder = this.requestBuilder.copy();
 
-				if (maybeSessionId.isPresent()) {
-					requestBuilder = requestBuilder.header(HttpHeaders.MCP_SESSION_ID, maybeSessionId.get());
+				if (transportSession != null && transportSession.sessionId().isPresent()) {
+					requestBuilder = requestBuilder.header(HttpHeaders.MCP_SESSION_ID,
+							transportSession.sessionId().get());
 				}
 
 				if (stream != null && stream.lastId().isPresent()) {
@@ -366,9 +364,15 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					.GET();
 				var transportContext = connectionCtx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 				return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
-			})
-				.flatMapMany(requestBuilder -> Mono
-					.fromFuture(() -> this.httpClient.sendAsync(requestBuilder.build(),
+			}).flatMapMany(requestBuilder -> {
+				var request = requestBuilder.build();
+				// Classify the response against the session id that this very request
+				// carried, rather than the one currently held by the session, which
+				// can be established concurrently.
+				Optional<String> maybeSessionId = request.headers().firstValue(HttpHeaders.MCP_SESSION_ID);
+
+				return Mono
+					.fromFuture(() -> this.httpClient.sendAsync(request,
 							ResponseSubscribers.boundedPublisherBodyHandler(this.maxResponseSize)))
 					.flatMapMany(httpResponse -> {
 						int statusCode = httpResponse.statusCode();
@@ -376,7 +380,6 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						boolean proceed = false;
 						if (statusCode == 401 || statusCode == 403) {
 							logger.debug("Authorization error in reconnect with code {}", statusCode);
-							var request = requestBuilder.build();
 							var requestSnapshot = new HttpRequestSnapshot(request.uri(), request.method(),
 									request.headers());
 							exception = new McpHttpClientTransportAuthorizationException(
@@ -429,7 +432,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						return proceed ? consumeSseStream(httpResponse.body(), stream, null)
 								: exception != null ? ResponseSubscribers.drainThenError(httpResponse.body(), exception)
 										: ResponseSubscribers.drain(httpResponse.body());
-					}))
+					});
+			})
 				.retryWhen(authorizationErrorRetrySpec())
 				.flatMap(jsonrpcMessage -> requestHandler.apply(Mono.just(jsonrpcMessage)))
 				.onErrorComplete(t -> {
