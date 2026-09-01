@@ -356,7 +356,8 @@ class ResponseSubscribers {
 	 * fields until a blank line dispatches the event. Per the SSE spec, {@code id} and
 	 * {@code event} persist across events until re-set; {@code data} is reset after each
 	 * dispatch, and a blank line dispatches only when a {@code data:} field was seen,
-	 * whether or not it carried a value.
+	 * whether or not it carried a value. Comments and fields the parser does not handle,
+	 * such as {@code retry:}, are ignored as the spec requires.
 	 */
 	static final class SseEventParser {
 
@@ -421,7 +422,9 @@ class ResponseSubscribers {
 				logger.debug("Ignoring comment line: {}", line);
 			}
 			else {
-				throw new McpTransportException("Invalid SSE response line: " + line);
+				// The SSE spec mandates that fields the client does not know about, such
+				// as `retry:`, are ignored rather than treated as a protocol error.
+				logger.debug("Ignoring unknown SSE field line: {}", line);
 			}
 			return Optional.empty();
 		}
