@@ -151,7 +151,7 @@ public final class McpSchema {
 		/**
 		 * Resource not found.
 		 */
-		public static final int RESOURCE_NOT_FOUND = -32002;
+		public static final int RESOURCE_NOT_FOUND = INVALID_PARAMS;
 
 		/**
 		 * URL elicitation is required before the request can proceed.
