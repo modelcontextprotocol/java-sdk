@@ -273,6 +273,10 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			return;
 		}
 
+		if (!validateProtocolVersion(request, response)) {
+			return;
+		}
+
 		try {
 			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
 			this.securityValidator.validateHeaders(headers);
@@ -439,6 +443,23 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
 
+			// The MCP-Protocol-Version header can only be strictly validated once a
+			// version has been negotiated; during 'initialize' the client advertises its
+			// versions in the request body and any header value is resolved by the
+			// regular version negotiation below instead of being rejected.
+			boolean initializationRequest = message instanceof McpSchema.JSONRPCRequest initRequestCheck
+					&& McpSchema.METHOD_INITIALIZE.equals(initRequestCheck.method());
+			if (!initializationRequest && !validateProtocolVersion(request, response)) {
+				return;
+			}
+
+			// Per SEP-2243, reject header/body mismatches (missing headers are tolerated
+			// so
+			// legacy clients keep working).
+			if (!validateMcpHeaders(request, response, message)) {
+				return;
+			}
+
 			// Handle initialization request
 			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest
 					&& jsonrpcRequest.method().equals(McpSchema.METHOD_INITIALIZE)) {
@@ -592,6 +613,10 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			return;
 		}
 
+		if (!validateProtocolVersion(request, response)) {
+			return;
+		}
+
 		try {
 			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
 			this.securityValidator.validateHeaders(headers);
@@ -651,6 +676,121 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		writer.write(jsonError);
 		writer.flush();
 		return;
+	}
+
+	/**
+	 * Validates the {@code MCP-Protocol-Version} header against the protocol versions
+	 * supported by this transport. A missing header is allowed and falls back to the
+	 * negotiated protocol version, while a header carrying an unsupported version is
+	 * rejected with a 400 Bad Request. Initialize requests are exempt: no version has
+	 * been negotiated yet, so any header value carried on them is resolved through
+	 * regular body-based version negotiation.
+	 * @param request the HTTP servlet request
+	 * @param response the HTTP servlet response
+	 * @return true if the header is missing or contains a supported version, false if a
+	 * 400 error response has been written
+	 * @throws IOException if an I/O error occurs
+	 */
+	private boolean validateProtocolVersion(HttpServletRequest request, HttpServletResponse response)
+			throws IOException {
+		String protocolVersion = request.getHeader(HttpHeaders.PROTOCOL_VERSION);
+		if (protocolVersion == null || this.protocolVersions().contains(protocolVersion)) {
+			return true;
+		}
+		this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+				McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND)
+					.message("Unsupported protocol version (supported versions: "
+							+ String.join(", ", this.protocolVersions()) + ")")
+					.build());
+		return false;
+	}
+
+	/**
+	 * Validates SEP-2243 {@code Mcp-Method} / {@code Mcp-Name} header-to-body mirroring.
+	 * A present header that mismatches the request body is rejected. Absent headers are
+	 * tolerated so that legacy clients keep working.
+	 * @param request the HTTP servlet request
+	 * @param response the HTTP servlet response
+	 * @param message the deserialized JSON-RPC message
+	 * @return true if the headers are valid or absent, false if a 400 error response has
+	 * been written
+	 * @throws IOException if an I/O error occurs
+	 */
+	private boolean validateMcpHeaders(HttpServletRequest request, HttpServletResponse response,
+			McpSchema.JSONRPCMessage message) throws IOException {
+		String method = message instanceof McpSchema.JSONRPCRequest req ? req.method()
+				: message instanceof McpSchema.JSONRPCNotification notif ? notif.method() : null;
+		if (method == null) {
+			return true;
+		}
+
+		String methodHeader = request.getHeader(HttpHeaders.MCP_METHOD);
+		if (methodHeader != null && !methodHeader.isBlank() && !method.equals(methodHeader)) {
+			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+					McpError.builder(McpSchema.ErrorCodes.HEADER_MISMATCH)
+						.message("Mcp-Method header mismatch: expected '" + method + "' but was '" + methodHeader + "'")
+						.build());
+			return false;
+		}
+
+		Object params = message instanceof McpSchema.JSONRPCRequest req ? req.params()
+				: message instanceof McpSchema.JSONRPCNotification notif ? notif.params() : null;
+		String name = extractNameFromParams(method, params);
+		if (name != null) {
+			String nameHeader = request.getHeader(HttpHeaders.MCP_NAME);
+			if (nameHeader != null && !nameHeader.isBlank()) {
+				String decodedName = HttpHeaders.decodeHeaderValue(nameHeader);
+				if (!name.equals(decodedName)) {
+					this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+							McpError.builder(McpSchema.ErrorCodes.HEADER_MISMATCH)
+								.message("Mcp-Name header mismatch: expected '" + name + "' but was '" + nameHeader
+										+ "'")
+								.build());
+					return false;
+				}
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Extracts the name or URI of the tool, prompt, or resource referenced by a request,
+	 * as used to validate the SEP-2243 {@code Mcp-Name} header.
+	 * @param method the JSON-RPC method of the request
+	 * @param params the request parameters
+	 * @return the target name or URI when the method references one, otherwise
+	 * {@code null}
+	 */
+	private String extractNameFromParams(String method, Object params) {
+		if (params == null) {
+			return null;
+		}
+
+		try {
+			return switch (method) {
+				case McpSchema.METHOD_TOOLS_CALL ->
+					this.jsonMapper.convertValue(params, new TypeRef<McpSchema.CallToolRequest>() {
+					}).name();
+				case McpSchema.METHOD_PROMPT_GET ->
+					this.jsonMapper.convertValue(params, new TypeRef<McpSchema.GetPromptRequest>() {
+					}).name();
+				case McpSchema.METHOD_RESOURCES_READ ->
+					this.jsonMapper.convertValue(params, new TypeRef<McpSchema.ReadResourceRequest>() {
+					}).uri();
+				case McpSchema.METHOD_RESOURCES_SUBSCRIBE ->
+					this.jsonMapper.convertValue(params, new TypeRef<McpSchema.SubscribeRequest>() {
+					}).uri();
+				case McpSchema.METHOD_RESOURCES_UNSUBSCRIBE ->
+					this.jsonMapper.convertValue(params, new TypeRef<McpSchema.UnsubscribeRequest>() {
+					}).uri();
+				default -> null;
+			};
+		}
+		catch (Exception e) {
+			logger.debug("Failed to extract name from params for method {}: {}", method, e.getMessage());
+			return null;
+		}
 	}
 
 	/**

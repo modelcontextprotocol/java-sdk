@@ -543,11 +543,32 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				var builder = requestBuilder.uri(uri)
 					.header(HttpHeaders.ACCEPT, APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
 					.header(HttpHeaders.CONTENT_TYPE, APPLICATION_JSON_UTF8)
-					.header(HttpHeaders.CACHE_CONTROL, "no-cache")
-					.header(HttpHeaders.PROTOCOL_VERSION,
-							ctx.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION,
-									this.latestSupportedProtocolVersion))
-					.POST(HttpRequest.BodyPublishers.ofString(jsonBody));
+					.header(HttpHeaders.CACHE_CONTROL, "no-cache");
+				// Per the Streamable HTTP transport spec, the MCP-Protocol-Version header
+				// is required on all requests after initialization completes. The
+				// initialize request itself carries no negotiated version yet -- the
+				// client's supported versions are conveyed in the request body for
+				// server-side negotiation -- so the header must not be sent.
+				if (!(sentMessage instanceof McpSchema.JSONRPCRequest jsonrpcMessage
+						&& McpSchema.METHOD_INITIALIZE.equals(jsonrpcMessage.method()))) {
+					builder = builder.header(HttpHeaders.PROTOCOL_VERSION, ctx
+						.getOrDefault(McpAsyncClient.NEGOTIATED_PROTOCOL_VERSION, this.latestSupportedProtocolVersion));
+				}
+				// Per SEP-2243, mirror the JSON-RPC method and, where applicable, the
+				// target name/URI in dedicated headers so the server can validate
+				// them without parsing the body.
+				if (sentMessage instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
+					builder = builder.header(HttpHeaders.MCP_METHOD, jsonrpcRequest.method());
+					String name = extractNameFromParams(jsonrpcRequest.method(), jsonrpcRequest.params());
+					if (name != null) {
+						builder = builder.header(HttpHeaders.MCP_NAME, HttpHeaders.encodeHeaderValue(name));
+					}
+				}
+				else if (sentMessage instanceof McpSchema.JSONRPCNotification jsonrpcNotification) {
+					builder = builder.header(HttpHeaders.MCP_METHOD, jsonrpcNotification.method());
+				}
+
+				builder = builder.POST(HttpRequest.BodyPublishers.ofString(jsonBody));
 				var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 				return Mono
 					.from(this.httpRequestCustomizer.customize(builder, "POST", uri, jsonBody, transportContext));
@@ -738,6 +759,45 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	@Override
 	public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
 		return this.jsonMapper.convertValue(data, typeRef);
+	}
+
+	/**
+	 * Extracts the name or URI of the tool, prompt, or resource referenced by a request,
+	 * used to populate the SEP-2243 {@code Mcp-Name} header.
+	 * @param method the JSON-RPC method of the request
+	 * @param params the request parameters
+	 * @return the target name or URI when the method references one, otherwise
+	 * {@code null}
+	 */
+	private String extractNameFromParams(String method, Object params) {
+		if (params == null) {
+			return null;
+		}
+
+		try {
+			return switch (method) {
+				case McpSchema.METHOD_TOOLS_CALL ->
+					this.jsonMapper.convertValue(params, new TypeRef<McpSchema.CallToolRequest>() {
+					}).name();
+				case McpSchema.METHOD_PROMPT_GET ->
+					this.jsonMapper.convertValue(params, new TypeRef<McpSchema.GetPromptRequest>() {
+					}).name();
+				case McpSchema.METHOD_RESOURCES_READ ->
+					this.jsonMapper.convertValue(params, new TypeRef<McpSchema.ReadResourceRequest>() {
+					}).uri();
+				case McpSchema.METHOD_RESOURCES_SUBSCRIBE ->
+					this.jsonMapper.convertValue(params, new TypeRef<McpSchema.SubscribeRequest>() {
+					}).uri();
+				case McpSchema.METHOD_RESOURCES_UNSUBSCRIBE ->
+					this.jsonMapper.convertValue(params, new TypeRef<McpSchema.UnsubscribeRequest>() {
+					}).uri();
+				default -> null;
+			};
+		}
+		catch (Exception e) {
+			logger.debug("Failed to extract name from params for method {}: {}", method, e.getMessage());
+			return null;
+		}
 	}
 
 	/**
