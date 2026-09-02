@@ -243,7 +243,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	/**
 	 * Handle the MCP notification.
 	 * @param notification MCP notification
-	 * @return Mono which completes upon succesful handling
+	 * @return Mono which completes upon successful handling
 	 */
 	public Mono<Void> accept(McpSchema.JSONRPCNotification notification) {
 		return Mono.deferContextual(ctx -> {
