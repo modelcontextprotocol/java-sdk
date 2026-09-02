@@ -561,7 +561,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					builder = builder.header(HttpHeaders.MCP_METHOD, jsonrpcRequest.method());
 					String name = extractNameFromParams(jsonrpcRequest.method(), jsonrpcRequest.params());
 					if (name != null) {
-						builder = builder.header(HttpHeaders.MCP_NAME, name);
+						builder = builder.header(HttpHeaders.MCP_NAME, HttpHeaders.encodeHeaderValue(name));
 					}
 				}
 				else if (sentMessage instanceof McpSchema.JSONRPCNotification jsonrpcNotification) {

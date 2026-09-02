@@ -336,7 +336,7 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		String methodHeader = request.getHeader(HttpHeaders.MCP_METHOD);
 		if (methodHeader != null && !methodHeader.isBlank() && !method.equals(methodHeader)) {
 			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
-					McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+					McpError.builder(McpSchema.ErrorCodes.HEADER_MISMATCH)
 						.message("Mcp-Method header mismatch: expected '" + method + "' but was '" + methodHeader + "'")
 						.build());
 			return false;
@@ -347,12 +347,16 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		String name = extractNameFromParams(method, params);
 		if (name != null) {
 			String nameHeader = request.getHeader(HttpHeaders.MCP_NAME);
-			if (nameHeader != null && !nameHeader.isBlank() && !name.equals(nameHeader)) {
-				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
-						McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
-							.message("Mcp-Name header mismatch: expected '" + name + "' but was '" + nameHeader + "'")
-							.build());
-				return false;
+			if (nameHeader != null && !nameHeader.isBlank()) {
+				String decodedName = HttpHeaders.decodeHeaderValue(nameHeader);
+				if (!name.equals(decodedName)) {
+					this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+							McpError.builder(McpSchema.ErrorCodes.HEADER_MISMATCH)
+								.message("Mcp-Name header mismatch: expected '" + name + "' but was '" + nameHeader
+										+ "'")
+								.build());
+					return false;
+				}
 			}
 		}
 
