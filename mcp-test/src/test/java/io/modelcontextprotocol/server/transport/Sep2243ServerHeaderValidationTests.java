@@ -70,7 +70,7 @@ class Sep2243ServerHeaderValidationTests {
 		var resp = invoke(provider, "/mcp", Map.of(HttpHeaders.MCP_METHOD, "wrong/method"), toolCallBody("t"));
 
 		assertThat(resp.getStatus()).isEqualTo(400);
-		assertThat(resp.getContentAsString()).contains("Mcp-Method header mismatch");
+		assertThat(resp.getContentAsString()).contains("Mcp-Method header mismatch", "-32020");
 	}
 
 	@Test
@@ -80,7 +80,17 @@ class Sep2243ServerHeaderValidationTests {
 		var resp = invoke(provider, "/mcp", Map.of(HttpHeaders.MCP_NAME, "wrong-name"), toolCallBody("t"));
 
 		assertThat(resp.getStatus()).isEqualTo(400);
-		assertThat(resp.getContentAsString()).contains("Mcp-Name header mismatch");
+		assertThat(resp.getContentAsString()).contains("Mcp-Name header mismatch", "-32020");
+	}
+
+	@Test
+	void streamableAcceptsBase64EncodedMcpName() throws Exception {
+		var provider = HttpServletStreamableServerTransportProvider.builder().mcpEndpoint("/mcp").build();
+
+		var resp = invoke(provider, "/mcp", Map.of(HttpHeaders.MCP_NAME, "=?base64?6KiI566X5qmf?="),
+				toolCallBody("計算機"));
+
+		assertThat(resp.getContentAsString()).doesNotContain("Mcp-Name header mismatch");
 	}
 
 	@Test
@@ -115,7 +125,7 @@ class Sep2243ServerHeaderValidationTests {
 		var resp = invoke(transport, "/mcp", Map.of(HttpHeaders.MCP_METHOD, "wrong/method"), toolCallBody("t"));
 
 		assertThat(resp.getStatus()).isEqualTo(400);
-		assertThat(resp.getContentAsString()).contains("Mcp-Method header mismatch");
+		assertThat(resp.getContentAsString()).contains("Mcp-Method header mismatch", "-32020");
 	}
 
 	@Test
@@ -125,7 +135,17 @@ class Sep2243ServerHeaderValidationTests {
 		var resp = invoke(transport, "/mcp", Map.of(HttpHeaders.MCP_NAME, "wrong-name"), toolCallBody("t"));
 
 		assertThat(resp.getStatus()).isEqualTo(400);
-		assertThat(resp.getContentAsString()).contains("Mcp-Name header mismatch");
+		assertThat(resp.getContentAsString()).contains("Mcp-Name header mismatch", "-32020");
+	}
+
+	@Test
+	void statelessAcceptsBase64EncodedMcpName() throws Exception {
+		var transport = HttpServletStatelessServerTransport.builder().messageEndpoint("/mcp").build();
+
+		var resp = invoke(transport, "/mcp", Map.of(HttpHeaders.MCP_NAME, "=?base64?6KiI566X5qmf?="),
+				toolCallBody("計算機"));
+
+		assertThat(resp.getContentAsString()).doesNotContain("Mcp-Name header mismatch");
 	}
 
 	@Test

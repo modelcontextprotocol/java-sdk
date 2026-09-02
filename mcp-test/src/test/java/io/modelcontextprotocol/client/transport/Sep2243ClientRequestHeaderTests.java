@@ -133,4 +133,39 @@ class Sep2243ClientRequestHeaderTests {
 		}
 	}
 
+	@Test
+	void emitsBase64EncodedMcpNameForNonAsciiToolCall() throws IOException {
+		var seenNames = new java.util.concurrent.CopyOnWriteArrayList<String>();
+		var server = HttpServer.create(new InetSocketAddress(0), 0);
+
+		try {
+			server.createContext("/mcp", exchange -> {
+				seenNames.add(exchange.getRequestHeaders().getFirst(HttpHeaders.MCP_NAME));
+				exchange.getRequestBody().readAllBytes();
+				exchange.sendResponseHeaders(202, -1);
+				exchange.close();
+			});
+			server.start();
+
+			var transport = HttpClientStreamableHttpTransport
+				.builder("http://localhost:" + server.getAddress().getPort())
+				.endpoint("/mcp")
+				.build();
+
+			try {
+				var request = new McpSchema.CallToolRequest("計算機", Map.of(), null);
+				var testMessage = new McpSchema.JSONRPCRequest(McpSchema.METHOD_TOOLS_CALL, "test-id", request);
+				StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
+			}
+			finally {
+				StepVerifier.create(transport.closeGracefully()).verifyComplete();
+			}
+
+			assertThat(seenNames).contains("=?base64?6KiI566X5qmf?=");
+		}
+		finally {
+			server.stop(0);
+		}
+	}
+
 }
