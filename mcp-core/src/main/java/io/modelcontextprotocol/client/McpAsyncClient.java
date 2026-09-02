@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -38,6 +39,7 @@ import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSchema.PaginatedRequest;
 import io.modelcontextprotocol.spec.McpSchema.Root;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.McpMetadataValidator;
 import io.modelcontextprotocol.util.ToolNameValidator;
 import io.modelcontextprotocol.util.Utils;
 import org.slf4j.Logger;
@@ -184,6 +186,8 @@ public class McpAsyncClient {
 	private final boolean enableCallToolSchemaCaching;
 
 	private final boolean applyElicitationDefaults;
+
+	private final boolean strictMetadataValidation = McpMetadataValidator.isStrictByDefault();
 
 	/**
 	 * Create a new McpAsyncClient with the given transport and session request-response
@@ -759,6 +763,14 @@ public class McpAsyncClient {
 		return this.initializer.withInitialization("listing tools", init -> this.listToolsInternal(init, cursor, meta));
 	}
 
+	/**
+	 * Report any characters in a primitive's metadata that a reviewer cannot see. Fields
+	 * that are absent are passed as {@code null} and ignored.
+	 */
+	private void validateMetadata(String source, Object... fields) {
+		McpMetadataValidator.validate(source, Arrays.asList(fields), this.strictMetadataValidation);
+	}
+
 	private Mono<McpSchema.ListToolsResult> listToolsInternal(Initialization init, String cursor,
 			Map<String, Object> meta) {
 
@@ -771,7 +783,12 @@ public class McpAsyncClient {
 			.doOnNext(result -> {
 				// Validate tool names (warn only)
 				if (result.tools() != null) {
-					result.tools().forEach(tool -> ToolNameValidator.validate(tool.name(), false));
+					result.tools().forEach(tool -> {
+						ToolNameValidator.validate(tool.name(), false);
+						validateMetadata("tool '" + tool.name() + "'", tool.name(), tool.title(), tool.description(),
+								tool.inputSchema(), tool.outputSchema(),
+								tool.annotations() != null ? tool.annotations().title() : null);
+					});
 				}
 				if (this.enableCallToolSchemaCaching && result.tools() != null) {
 					// Cache tools output schema
@@ -861,7 +878,10 @@ public class McpAsyncClient {
 			}
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_RESOURCES_LIST, new McpSchema.PaginatedRequest(cursor, meta),
-						LIST_RESOURCES_RESULT_TYPE_REF);
+						LIST_RESOURCES_RESULT_TYPE_REF)
+				.doOnNext(result -> result.resources()
+					.forEach(resource -> validateMetadata("resource '" + resource.uri() + "'", resource.name(),
+							resource.title(), resource.description())));
 		});
 	}
 
@@ -946,7 +966,10 @@ public class McpAsyncClient {
 			}
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_RESOURCES_TEMPLATES_LIST, new McpSchema.PaginatedRequest(cursor, meta),
-						LIST_RESOURCE_TEMPLATES_RESULT_TYPE_REF);
+						LIST_RESOURCE_TEMPLATES_RESULT_TYPE_REF)
+				.doOnNext(result -> result.resourceTemplates()
+					.forEach(template -> validateMetadata("resource template '" + template.uriTemplate() + "'",
+							template.name(), template.title(), template.description())));
 		});
 	}
 
@@ -1059,7 +1082,17 @@ public class McpAsyncClient {
 		return this.initializer.withInitialization("listing prompts",
 				init -> init.mcpSession()
 					.sendRequest(McpSchema.METHOD_PROMPT_LIST, new PaginatedRequest(cursor, meta),
-							LIST_PROMPTS_RESULT_TYPE_REF));
+							LIST_PROMPTS_RESULT_TYPE_REF)
+					.doOnNext(result -> result.prompts().forEach(prompt -> {
+						validateMetadata("prompt '" + prompt.name() + "'", prompt.name(), prompt.title(),
+								prompt.description());
+						if (prompt.arguments() != null) {
+							prompt.arguments()
+								.forEach(argument -> validateMetadata(
+										"prompt '" + prompt.name() + "' argument '" + argument.name() + "'",
+										argument.name(), argument.title(), argument.description()));
+						}
+					})));
 	}
 
 	/**
