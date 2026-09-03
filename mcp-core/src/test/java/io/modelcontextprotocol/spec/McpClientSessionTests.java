@@ -162,8 +162,10 @@ class McpClientSessionTests {
 		assertThat(transport.getLastSentMessage()).isInstanceOf(McpSchema.JSONRPCResponse.class);
 		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) transport.getLastSentMessage();
 		assertThat(response.id()).isEqualTo("test-id");
+		assertThat(response.result()).isNull();
 		assertThat(response.error()).isNotNull();
 		assertThat(response.error().code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
+		assertThat(response.error().message()).contains("without producing a result");
 
 		session.close();
 	}
