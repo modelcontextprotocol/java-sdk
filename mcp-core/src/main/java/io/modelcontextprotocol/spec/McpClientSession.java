@@ -201,7 +201,10 @@ public class McpClientSession implements McpSession {
 			}
 
 			return handler.handle(request.params())
-				.map(result -> McpSchema.JSONRPCResponse.result(request.id(), result));
+				.map(result -> McpSchema.JSONRPCResponse.result(request.id(), result))
+				.switchIfEmpty(Mono.just(McpSchema.JSONRPCResponse
+					.error(request.id(), new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+							"Request handler completed without producing a result for method: " + request.method()))));
 		});
 	}
 

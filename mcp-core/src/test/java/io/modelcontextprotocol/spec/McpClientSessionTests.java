@@ -152,6 +152,23 @@ class McpClientSessionTests {
 	}
 
 	@Test
+	void testEmptyRequestHandlerSendsErrorResponse() {
+		var transport = new MockMcpClientTransport();
+		var session = new McpClientSession(TIMEOUT, transport, Map.of(TEST_METHOD, params -> Mono.empty()), Map.of(),
+				Function.identity());
+
+		transport.simulateIncomingMessage(new McpSchema.JSONRPCRequest(TEST_METHOD, "test-id"));
+
+		assertThat(transport.getLastSentMessage()).isInstanceOf(McpSchema.JSONRPCResponse.class);
+		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) transport.getLastSentMessage();
+		assertThat(response.id()).isEqualTo("test-id");
+		assertThat(response.error()).isNotNull();
+		assertThat(response.error().code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
+
+		session.close();
+	}
+
+	@Test
 	void testNotificationHandling() {
 		Sinks.One<Object> receivedParams = Sinks.one();
 
