@@ -434,17 +434,18 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
+		McpSchema.JSONRPCMessage message = null;
 		try {
 			String body = HttpServletRequestUtils.readBody(request, this.requestMaxSize);
 
-			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
+			message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
 
 			// Handle initialization request
 			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest
 					&& jsonrpcRequest.method().equals(McpSchema.METHOD_INITIALIZE)) {
 				if (!badRequestErrors.isEmpty()) {
 					String combinedMessage = String.join("; ", badRequestErrors);
-					this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+					this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, jsonrpcRequest.id(),
 							McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND).message(combinedMessage).build());
 					return;
 				}
@@ -474,7 +475,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				}
 				catch (Exception e) {
 					logger.error("Failed to initialize session: {}", e.getMessage());
-					this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+					this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, jsonrpcRequest.id(),
 							McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
 								.message("Failed to initialize session: " + e.getMessage())
 								.build());
@@ -490,7 +491,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 			if (!badRequestErrors.isEmpty()) {
 				String combinedMessage = String.join("; ", badRequestErrors);
-				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, requestId(message),
 						McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND).message(combinedMessage).build());
 				return;
 			}
@@ -498,7 +499,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			McpStreamableServerSession session = this.sessions.get(sessionId);
 
 			if (session == null) {
-				this.responseError(response, HttpServletResponse.SC_NOT_FOUND,
+				this.responseError(response, HttpServletResponse.SC_NOT_FOUND, requestId(message),
 						McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
 							.message("Session not found: " + sessionId)
 							.build());
@@ -541,7 +542,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				}
 			}
 			else {
-				this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+				this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, requestId(message),
 						McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST).message("Unknown message type").build());
 			}
 		}
@@ -550,7 +551,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 		catch (IllegalArgumentException | IOException e) {
 			logger.error("Failed to deserialize message: {}", e.getMessage());
-			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, requestId(message),
 					McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
 						.message("Invalid message format: " + e.getMessage())
 						.build());
@@ -558,7 +559,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		catch (Exception e) {
 			logger.error("Error handling message: {}", e.getMessage());
 			try {
-				this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+				this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, requestId(message),
 						McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
 							.message("Error processing message: " + e.getMessage())
 							.build());
@@ -643,14 +644,16 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	}
 
 	public void responseError(HttpServletResponse response, int httpCode, McpError mcpError) throws IOException {
-		response.setContentType(APPLICATION_JSON);
-		response.setCharacterEncoding(UTF_8);
-		response.setStatus(httpCode);
-		String jsonError = jsonMapper.writeValueAsString(mcpError);
-		PrintWriter writer = response.getWriter();
-		writer.write(jsonError);
-		writer.flush();
-		return;
+		this.responseError(response, httpCode, null, mcpError);
+	}
+
+	private void responseError(HttpServletResponse response, int httpCode, Object requestId, McpError mcpError)
+			throws IOException {
+		HttpServletJsonRpcErrorWriter.writeError(this.jsonMapper, response, httpCode, requestId, mcpError);
+	}
+
+	private static Object requestId(McpSchema.JSONRPCMessage message) {
+		return (message instanceof McpSchema.JSONRPCRequest request) ? request.id() : null;
 	}
 
 	/**

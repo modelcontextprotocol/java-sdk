@@ -204,7 +204,7 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 				}
 				catch (Exception e) {
 					logger.error("Failed to handle request: {}", e.getMessage());
-					this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+					this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, jsonrpcRequest.id(),
 							McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
 								.message("Failed to handle request: " + e.getMessage())
 								.build());
@@ -257,13 +257,12 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 	 * @throws IOException If an I/O error occurs
 	 */
 	private void responseError(HttpServletResponse response, int httpCode, McpError mcpError) throws IOException {
-		response.setContentType(APPLICATION_JSON);
-		response.setCharacterEncoding(UTF_8);
-		response.setStatus(httpCode);
-		String jsonError = jsonMapper.writeValueAsString(mcpError);
-		PrintWriter writer = response.getWriter();
-		writer.write(jsonError);
-		writer.flush();
+		this.responseError(response, httpCode, null, mcpError);
+	}
+
+	private void responseError(HttpServletResponse response, int httpCode, Object requestId, McpError mcpError)
+			throws IOException {
+		HttpServletJsonRpcErrorWriter.writeError(this.jsonMapper, response, httpCode, requestId, mcpError);
 	}
 
 	/**
