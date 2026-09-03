@@ -120,6 +120,11 @@ public class McpAsyncServer {
 
 	private final McpAsyncListFilter<McpSchema.Tool> toolFilter;
 
+	/**
+	 * The caching hint attached to every listing response (SEP-2549).
+	 */
+	private final McpListCacheOptions listCacheOptions;
+
 	private List<String> protocolVersions;
 
 	private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
@@ -134,7 +139,7 @@ public class McpAsyncServer {
 	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
-			boolean validateToolInputs) {
+			boolean validateToolInputs, McpListCacheOptions listCacheOptions) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
@@ -149,6 +154,7 @@ public class McpAsyncServer {
 		this.jsonSchemaValidator = jsonSchemaValidator;
 		this.validateToolInputs = validateToolInputs;
 		this.toolFilter = McpAsyncListFilter.and(features.toolFilters());
+		this.listCacheOptions = listCacheOptions != null ? listCacheOptions : McpListCacheOptions.NONE;
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
@@ -166,7 +172,7 @@ public class McpAsyncServer {
 	McpAsyncServer(McpStreamableServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
-			boolean validateToolInputs) {
+			boolean validateToolInputs, McpListCacheOptions listCacheOptions) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
@@ -181,6 +187,7 @@ public class McpAsyncServer {
 		this.jsonSchemaValidator = jsonSchemaValidator;
 		this.validateToolInputs = validateToolInputs;
 		this.toolFilter = McpAsyncListFilter.and(features.toolFilters());
+		this.listCacheOptions = listCacheOptions != null ? listCacheOptions : McpListCacheOptions.NONE;
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
 		Map<String, McpNotificationHandler> notificationHandlers = prepareNotificationHandlers(features);
@@ -548,9 +555,11 @@ public class McpAsyncServer {
 				.filterWhen(tool -> this.toolFilter.isVisible(exchange.transportContext(), tool)
 					.onErrorResume(error -> opaqueListFilterError(tool, error)))
 				.collectList()
+				// PRIVATE, not PUBLIC: the listing is filtered per caller, so a shared
+				// cache must never serve one principal's response to another.
 				.map(tools -> McpSchema.ListToolsResult.builder(tools)
-					.ttlMs(0L)
-					.cacheScope(McpSchema.CacheScope.PUBLIC)
+					.ttlMs(this.listCacheOptions.ttlMs())
+					.cacheScope(this.listCacheOptions.cacheScope())
 					.build());
 		};
 	}
@@ -819,8 +828,8 @@ public class McpAsyncServer {
 				.map(McpServerFeatures.AsyncResourceSpecification::resource)
 				.toList();
 			return Mono.just(McpSchema.ListResourcesResult.builder(resourceList)
-				.ttlMs(0L)
-				.cacheScope(McpSchema.CacheScope.PUBLIC)
+				.ttlMs(this.listCacheOptions.ttlMs())
+				.cacheScope(this.listCacheOptions.cacheScope())
 				.build());
 		};
 	}
@@ -832,8 +841,8 @@ public class McpAsyncServer {
 				.map(McpServerFeatures.AsyncResourceTemplateSpecification::resourceTemplate)
 				.toList();
 			return Mono.just(McpSchema.ListResourceTemplatesResult.builder(resourceList)
-				.ttlMs(0L)
-				.cacheScope(McpSchema.CacheScope.PUBLIC)
+				.ttlMs(this.listCacheOptions.ttlMs())
+				.cacheScope(this.listCacheOptions.cacheScope())
 				.build());
 		};
 	}
@@ -998,8 +1007,8 @@ public class McpAsyncServer {
 				.toList();
 
 			return Mono.just(McpSchema.ListPromptsResult.builder(promptList)
-				.ttlMs(0L)
-				.cacheScope(McpSchema.CacheScope.PUBLIC)
+				.ttlMs(this.listCacheOptions.ttlMs())
+				.cacheScope(this.listCacheOptions.cacheScope())
 				.build());
 		};
 	}

@@ -1690,6 +1690,7 @@ public final class McpSchema {
 			}
 
 			public Builder ttlMs(Long ttlMs) {
+				Assert.isTrue(ttlMs == null || ttlMs >= 0, "ttlMs must not be negative");
 				this.ttlMs = ttlMs;
 				return this;
 			}
@@ -1786,6 +1787,7 @@ public final class McpSchema {
 			}
 
 			public Builder ttlMs(Long ttlMs) {
+				Assert.isTrue(ttlMs == null || ttlMs >= 0, "ttlMs must not be negative");
 				this.ttlMs = ttlMs;
 				return this;
 			}
@@ -1930,6 +1932,7 @@ public final class McpSchema {
 			}
 
 			public Builder ttlMs(Long ttlMs) {
+				Assert.isTrue(ttlMs == null || ttlMs >= 0, "ttlMs must not be negative");
 				this.ttlMs = ttlMs;
 				return this;
 			}
@@ -2573,6 +2576,7 @@ public final class McpSchema {
 			}
 
 			public Builder ttlMs(Long ttlMs) {
+				Assert.isTrue(ttlMs == null || ttlMs >= 0, "ttlMs must not be negative");
 				this.ttlMs = ttlMs;
 				return this;
 			}
@@ -2806,6 +2810,7 @@ public final class McpSchema {
 			}
 
 			public Builder ttlMs(Long ttlMs) {
+				Assert.isTrue(ttlMs == null || ttlMs >= 0, "ttlMs must not be negative");
 				this.ttlMs = ttlMs;
 				return this;
 			}

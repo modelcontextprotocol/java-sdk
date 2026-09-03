@@ -214,7 +214,7 @@ public class McpAsyncClient {
 		this.roots = new ConcurrentHashMap<>(features.roots());
 		this.jsonSchemaValidator = jsonSchemaValidator;
 		this.toolsOutputSchemaCache = new ConcurrentHashMap<>();
-		this.clientCache = new McpClientCache();
+		this.clientCache = new McpClientCache(features.enableResultCaching(), features.cacheStore());
 		this.enableCallToolSchemaCaching = features.enableCallToolSchemaCaching();
 		this.applyElicitationDefaults = features.applyElicitationDefaults();
 
@@ -341,6 +341,11 @@ public class McpAsyncClient {
 
 		Function<Initialization, Mono<Void>> postInitializationHook = init -> {
 
+			// Entries belong to the session that produced them. A re-initialization may
+			// reach a restarted or different server instance, and any change notification
+			// sent while the client was disconnected was missed.
+			this.clientCache.clear();
+
 			if (init.initializeResult().capabilities().tools() == null || !enableCallToolSchemaCaching) {
 				return Mono.empty();
 			}
@@ -430,6 +435,8 @@ public class McpAsyncClient {
 	 * Closes the client connection immediately.
 	 */
 	public void close() {
+		this.clientCache.clear();
+		this.toolsOutputSchemaCache.clear();
 		this.initializer.close();
 		this.transport.close();
 	}
@@ -440,6 +447,8 @@ public class McpAsyncClient {
 	 */
 	public Mono<Void> closeGracefully() {
 		return Mono.defer(() -> {
+			this.clientCache.clear();
+			this.toolsOutputSchemaCache.clear();
 			return this.initializer.closeGracefully().then(transport.closeGracefully());
 		});
 	}
@@ -763,11 +772,14 @@ public class McpAsyncClient {
 	 * @return A Mono that emits the list of tools result
 	 */
 	public Mono<McpSchema.ListToolsResult> listTools(String cursor, Map<String, Object> meta) {
-		McpSchema.ListToolsResult cached = this.clientCache.get(new McpClientCache.ListToolsCacheKey(cursor, meta));
-		if (cached != null) {
-			return Mono.just(cached);
-		}
-		return this.initializer.withInitialization("listing tools", init -> this.listToolsInternal(init, cursor, meta));
+		return Mono.defer(() -> {
+			McpSchema.ListToolsResult cached = this.clientCache.get(new McpClientCacheKey.ListTools(cursor, meta));
+			if (cached != null) {
+				return Mono.just(cached);
+			}
+			return this.initializer.withInitialization("listing tools",
+					init -> this.listToolsInternal(init, cursor, meta));
+		});
 	}
 
 	private Mono<McpSchema.ListToolsResult> listToolsInternal(Initialization init, String cursor,
@@ -776,6 +788,7 @@ public class McpAsyncClient {
 		if (init.initializeResult().capabilities().tools() == null) {
 			return Mono.error(new IllegalStateException("Server does not provide tools capability"));
 		}
+		long generation = this.clientCache.generation();
 		return init.mcpSession()
 			.sendRequest(McpSchema.METHOD_TOOLS_LIST, new McpSchema.PaginatedRequest(cursor, meta),
 					LIST_TOOLS_RESULT_TYPE_REF)
@@ -784,8 +797,9 @@ public class McpAsyncClient {
 				if (result.tools() != null) {
 					result.tools().forEach(tool -> ToolNameValidator.validate(tool.name(), false));
 				}
-				if (result.ttlMs() != null && result.ttlMs() > 0) {
-					this.clientCache.put(new McpClientCache.ListToolsCacheKey(cursor, meta), result, result.ttlMs());
+				if (isCacheableListing(cursor, result.nextCursor())) {
+					this.clientCache.put(new McpClientCacheKey.ListTools(cursor, meta), result, result.ttlMs(),
+							generation);
 				}
 				if (this.enableCallToolSchemaCaching && result.tools() != null) {
 					// Cache tools output schema
@@ -869,12 +883,14 @@ public class McpAsyncClient {
 	 * @see #readResource(McpSchema.Resource)
 	 */
 	public Mono<McpSchema.ListResourcesResult> listResources(String cursor, Map<String, Object> meta) {
-		McpSchema.ListResourcesResult cached = this.clientCache
-			.get(new McpClientCache.ListResourcesCacheKey(cursor, meta));
-		if (cached != null) {
-			return Mono.just(cached);
-		}
-		return this.listResourcesInternal(cursor, meta);
+		return Mono.defer(() -> {
+			McpSchema.ListResourcesResult cached = this.clientCache
+				.get(new McpClientCacheKey.ListResources(cursor, meta));
+			if (cached != null) {
+				return Mono.just(cached);
+			}
+			return this.listResourcesInternal(cursor, meta);
+		});
 	}
 
 	private Mono<McpSchema.ListResourcesResult> listResourcesInternal(String cursor, Map<String, Object> meta) {
@@ -882,13 +898,14 @@ public class McpAsyncClient {
 			if (init.initializeResult().capabilities().resources() == null) {
 				return Mono.error(new IllegalStateException("Server does not provide the resources capability"));
 			}
+			long generation = this.clientCache.generation();
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_RESOURCES_LIST, new McpSchema.PaginatedRequest(cursor, meta),
 						LIST_RESOURCES_RESULT_TYPE_REF)
 				.doOnNext(result -> {
-					if (result.ttlMs() != null && result.ttlMs() > 0) {
-						this.clientCache.put(new McpClientCache.ListResourcesCacheKey(cursor, meta), result,
-								result.ttlMs());
+					if (isCacheableListing(cursor, result.nextCursor())) {
+						this.clientCache.put(new McpClientCacheKey.ListResources(cursor, meta), result, result.ttlMs(),
+								generation);
 					}
 				});
 		});
@@ -916,23 +933,21 @@ public class McpAsyncClient {
 	 * @see McpSchema.ReadResourceResult
 	 */
 	public Mono<McpSchema.ReadResourceResult> readResource(McpSchema.ReadResourceRequest readResourceRequest) {
-		McpSchema.ReadResourceResult cached = this.clientCache
-			.get(new McpClientCache.ReadResourceCacheKey(readResourceRequest.uri()));
-		if (cached != null) {
-			return Mono.just(cached);
-		}
-		return this.initializer.withInitialization("reading resources", init -> {
-			if (init.initializeResult().capabilities().resources() == null) {
-				return Mono.error(new IllegalStateException("Server does not provide the resources capability"));
+		var cacheKey = new McpClientCacheKey.ReadResource(readResourceRequest.uri(), readResourceRequest.meta());
+		return Mono.defer(() -> {
+			McpSchema.ReadResourceResult cached = this.clientCache.get(cacheKey);
+			if (cached != null) {
+				return Mono.just(cached);
 			}
-			return init.mcpSession()
-				.sendRequest(McpSchema.METHOD_RESOURCES_READ, readResourceRequest, READ_RESOURCE_RESULT_TYPE_REF)
-				.doOnNext(result -> {
-					if (result.ttlMs() != null && result.ttlMs() > 0) {
-						this.clientCache.put(new McpClientCache.ReadResourceCacheKey(readResourceRequest.uri()), result,
-								result.ttlMs());
-					}
-				});
+			return this.initializer.withInitialization("reading resources", init -> {
+				if (init.initializeResult().capabilities().resources() == null) {
+					return Mono.error(new IllegalStateException("Server does not provide the resources capability"));
+				}
+				long generation = this.clientCache.generation();
+				return init.mcpSession()
+					.sendRequest(McpSchema.METHOD_RESOURCES_READ, readResourceRequest, READ_RESOURCE_RESULT_TYPE_REF)
+					.doOnNext(result -> this.clientCache.put(cacheKey, result, result.ttlMs(), generation));
+			});
 		});
 	}
 
@@ -975,12 +990,14 @@ public class McpAsyncClient {
 	 * @see McpSchema.ListResourceTemplatesResult
 	 */
 	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates(String cursor, Map<String, Object> meta) {
-		McpSchema.ListResourceTemplatesResult cached = this.clientCache
-			.get(new McpClientCache.ListResourceTemplatesCacheKey(cursor, meta));
-		if (cached != null) {
-			return Mono.just(cached);
-		}
-		return this.listResourceTemplatesInternal(cursor, meta);
+		return Mono.defer(() -> {
+			McpSchema.ListResourceTemplatesResult cached = this.clientCache
+				.get(new McpClientCacheKey.ListResourceTemplates(cursor, meta));
+			if (cached != null) {
+				return Mono.just(cached);
+			}
+			return this.listResourceTemplatesInternal(cursor, meta);
+		});
 	}
 
 	private Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplatesInternal(String cursor,
@@ -989,13 +1006,14 @@ public class McpAsyncClient {
 			if (init.initializeResult().capabilities().resources() == null) {
 				return Mono.error(new IllegalStateException("Server does not provide the resources capability"));
 			}
+			long generation = this.clientCache.generation();
 			return init.mcpSession()
 				.sendRequest(McpSchema.METHOD_RESOURCES_TEMPLATES_LIST, new McpSchema.PaginatedRequest(cursor, meta),
 						LIST_RESOURCE_TEMPLATES_RESULT_TYPE_REF)
 				.doOnNext(result -> {
-					if (result.ttlMs() != null && result.ttlMs() > 0) {
-						this.clientCache.put(new McpClientCache.ListResourceTemplatesCacheKey(cursor, meta), result,
-								result.ttlMs());
+					if (isCacheableListing(cursor, result.nextCursor())) {
+						this.clientCache.put(new McpClientCacheKey.ListResourceTemplates(cursor, meta), result,
+								result.ttlMs(), generation);
 					}
 				});
 		});
@@ -1108,24 +1126,28 @@ public class McpAsyncClient {
 	 * @see #getPrompt(GetPromptRequest)
 	 */
 	public Mono<ListPromptsResult> listPrompts(String cursor, Map<String, Object> meta) {
-		McpSchema.ListPromptsResult cached = this.clientCache.get(new McpClientCache.ListPromptsCacheKey(cursor, meta));
-		if (cached != null) {
-			return Mono.just(cached);
-		}
-		return this.listPromptsInternal(cursor, meta);
+		return Mono.defer(() -> {
+			McpSchema.ListPromptsResult cached = this.clientCache.get(new McpClientCacheKey.ListPrompts(cursor, meta));
+			if (cached != null) {
+				return Mono.just(cached);
+			}
+			return this.listPromptsInternal(cursor, meta);
+		});
 	}
 
 	private Mono<ListPromptsResult> listPromptsInternal(String cursor, Map<String, Object> meta) {
-		return this.initializer.withInitialization("listing prompts",
-				init -> init.mcpSession()
-					.sendRequest(McpSchema.METHOD_PROMPT_LIST, new PaginatedRequest(cursor, meta),
-							LIST_PROMPTS_RESULT_TYPE_REF)
-					.doOnNext(result -> {
-						if (result.ttlMs() != null && result.ttlMs() > 0) {
-							this.clientCache.put(new McpClientCache.ListPromptsCacheKey(cursor, meta), result,
-									result.ttlMs());
-						}
-					}));
+		return this.initializer.withInitialization("listing prompts", init -> {
+			long generation = this.clientCache.generation();
+			return init.mcpSession()
+				.sendRequest(McpSchema.METHOD_PROMPT_LIST, new PaginatedRequest(cursor, meta),
+						LIST_PROMPTS_RESULT_TYPE_REF)
+				.doOnNext(result -> {
+					if (isCacheableListing(cursor, result.nextCursor())) {
+						this.clientCache.put(new McpClientCacheKey.ListPrompts(cursor, meta), result, result.ttlMs(),
+								generation);
+					}
+				});
+		});
 	}
 
 	/**
@@ -1215,8 +1237,33 @@ public class McpAsyncClient {
 		this.initializer.setProtocolVersions(protocolVersions);
 	}
 
+	/**
+	 * Drops every cached list and {@code resources/read} result, so that the next call
+	 * re-fetches from the server. Use it when the caller must observe current server
+	 * state and can wait for neither the server's {@code ttlMs} to lapse nor a change
+	 * notification to arrive.
+	 * <p>
+	 * The tool output schema cache used by {@link #callTool} is a separate mechanism and
+	 * is not affected.
+	 */
+	public void invalidateCache() {
+		this.clientCache.clear();
+	}
+
 	McpClientCache getClientCache() {
 		return this.clientCache;
+	}
+
+	/**
+	 * Whether a listing response may be cached. Only a listing that is complete in a
+	 * single page qualifies: serving page one from the cache while the remaining pages
+	 * are fetched fresh would aggregate pages taken from two different server snapshots,
+	 * using a cursor the server may already have invalidated.
+	 * @param cursor the cursor the request was made with
+	 * @param nextCursor the cursor the server returned
+	 */
+	private static boolean isCacheableListing(String cursor, String nextCursor) {
+		return cursor == null && (nextCursor == null || nextCursor.isEmpty());
 	}
 
 	// --------------------------

@@ -537,6 +537,68 @@ The same `addToolFilter(...)` method is available on the stateless builders.
 - With STDIO there is no per-request metadata, so the filter receives `McpTransportContext.EMPTY` and has nothing to key
   on.
 
+### Caching Hints for Listings
+
+A server can tell clients how long they may reuse a listing before asking for it again, so that a
+client polling `tools/list` on a stable catalog stops paying for a round trip each time. The hint
+travels on the response as a time to live (TTL) in milliseconds and a cache scope; a client that
+honors it serves the cached listing until the TTL lapses or a `*_changed` notification arrives.
+
+Listings carry no TTL by default. Set one with `listCache(...)`, which applies to `tools/list`,
+`prompts/list`, `resources/list`, and `resources/templates/list`:
+
+=== "Sync"
+
+    ```java
+    McpServer.sync(transportProvider)
+        .tools(calculatorTool, weatherTool)
+        .listCache(Duration.ofMinutes(5), CacheScope.PRIVATE)
+        .build();
+    ```
+
+=== "Async"
+
+    ```java
+    McpServer.async(transportProvider)
+        .tools(calculatorTool, weatherTool)
+        .listCache(Duration.ofMinutes(5), CacheScope.PRIVATE)
+        .build();
+    ```
+
+The same `listCache(...)` method is available on the stateless builders.
+
+!!! warning "`PUBLIC` means any caller may be served the response"
+
+    `CacheScope.PUBLIC` tells a shared cache, such as an MCP gateway, that it may serve one
+    principal the response it stored for another. Use it only for a listing that is identical for
+    every caller. Any registered [tool filter](#filtering-the-tool-listing-per-request) makes the
+    listing caller-specific, so keep the scope `PRIVATE` whenever you filter.
+
+**How a client uses the hint**
+
+- The TTL is a ceiling, not a promise. A client may re-fetch sooner, and it drops the entry as
+  soon as it receives the matching `notifications/tools/list_changed`,
+  `notifications/prompts/list_changed`, or `notifications/resources/list_changed`.
+- Set a TTL only on listings the server can invalidate. With `listChanged` disabled, a client has
+  no way to learn about a change before the TTL lapses.
+- A listing that spans several pages isn't cached: pairing a cached first page with a later page
+  fetched fresh would mix two different views of the catalog.
+
+**Caching a resource read**
+
+`resources/read` carries its own hint, because how long a resource stays valid is a property of
+that resource rather than of the server. Set it on the result the read handler returns:
+
+```java
+ReadResourceResult.builder(contents)
+    .ttlMs(Duration.ofMinutes(1).toMillis())
+    .cacheScope(CacheScope.PRIVATE)
+    .build();
+```
+
+A client drops the entry when it receives `notifications/resources/updated` for that URI. Results
+that set neither field default to a TTL of `0` with a `private` scope, which means no caching.
+
 ### Resource Specification
 
 Specification of a resource with its handler function.
