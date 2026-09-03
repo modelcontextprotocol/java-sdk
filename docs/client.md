@@ -496,6 +496,62 @@ var client = McpClient.sync(transport)
     .build();
 ```
 
+### Result Caching
+
+When a server marks a response cacheable, the client stores it and answers later identical calls
+from that store instead of going back to the server. This covers `listTools`, `listPrompts`,
+`listResources`, `listResourceTemplates`, and `readResource`.
+
+Caching is on by default and does nothing until a server opts in, because only a response that
+carries a time to live (TTL) is ever stored. An entry is dropped when its TTL lapses, when the
+matching `*_changed` or `resources/updated` notification arrives, and when the client reconnects
+or closes.
+
+To read current server state without waiting for either the TTL or a notification, drop every
+entry:
+
+```java
+client.invalidateCache();
+ListToolsResult fresh = client.listTools();
+```
+
+To ignore server TTLs altogether, turn caching off:
+
+```java
+var client = McpClient.sync(transport)
+    .enableResultCaching(false)
+    .build();
+```
+
+**Choosing where entries are kept**
+
+Entries live in a bounded in-memory store that holds 512 of them and evicts the oldest first. To
+use a cache library or share one store across several clients, implement `McpClientCacheStore` and
+pass it to the builder:
+
+```java
+// MyCacheStore is your own implementation, for example over Caffeine
+var client = McpClient.sync(transport)
+    .cacheStore(new MyCacheStore())
+    .build();
+```
+
+A store receives an `McpClientCacheKey` identifying the request, the value, and a TTL in
+milliseconds. It must be safe for concurrent use, and it must not return an entry whose TTL has
+lapsed. The client decides what may be cached and when an entry has to go, so a store only has to
+honor those decisions.
+
+**What the client won't cache**
+
+- A listing that spans several pages. Pairing a cached first page with a later page fetched fresh
+  would mix two different views of the server's catalog.
+- A response whose TTL is missing, zero, or negative.
+- A response that arrives after the notification that invalidates it, which would otherwise pin a
+  stale listing for the whole TTL.
+
+A TTL longer than 24 hours is capped at 24 hours, so a client can't be left serving a response the
+server has no way to invalidate.
+
 ### Pagination
 
 `listTools`, `listResources`, `listResourceTemplates`, and `listPrompts` all accept an optional opaque `cursor` string, and their results carry a `nextCursor` that is non-null while more pages remain. Loop until `nextCursor` is `null` to collect every page:
