@@ -42,28 +42,28 @@ class BoundedBodySubscriberTests {
 
 	@Test
 	void lineSubscriberAcceptsEmptyBuffer() {
-		BoundedLineBodySubscriber subscriber = lineSubscriber();
+		BoundedLineBodySubscriber<Void> subscriber = lineSubscriber();
 
 		assertThat(subscriber.checkSize(buffer(""))).isTrue();
 	}
 
 	@Test
 	void lineSubscriberAcceptsLineOfExactlyMaxSize() {
-		BoundedLineBodySubscriber subscriber = lineSubscriber();
+		BoundedLineBodySubscriber<Void> subscriber = lineSubscriber();
 
 		assertThat(subscriber.checkSize(buffer("a".repeat(MAX_SIZE)))).isTrue();
 	}
 
 	@Test
 	void lineSubscriberRejectsLineOneByteOverMaxSize() {
-		BoundedLineBodySubscriber subscriber = lineSubscriber();
+		BoundedLineBodySubscriber<Void> subscriber = lineSubscriber();
 
 		assertThat(subscriber.checkSize(buffer("a".repeat(MAX_SIZE + 1)))).isFalse();
 	}
 
 	@Test
 	void lineSubscriberAccumulatesAcrossBuffers() {
-		BoundedLineBodySubscriber subscriber = lineSubscriber();
+		BoundedLineBodySubscriber<Void> subscriber = lineSubscriber();
 
 		assertThat(subscriber.checkSize(buffer("a".repeat(10)))).isTrue();
 		assertThat(subscriber.checkSize(buffer("a".repeat(6)))).isTrue();
@@ -73,7 +73,7 @@ class BoundedBodySubscriberTests {
 
 	@Test
 	void lineSubscriberAcceptsUnboundedTotalOfTerminatedLines() {
-		BoundedLineBodySubscriber subscriber = lineSubscriber();
+		BoundedLineBodySubscriber<Void> subscriber = lineSubscriber();
 
 		// Far more than MAX_SIZE in total, but no single line comes close to it.
 		for (int i = 0; i < 100; i++) {
@@ -83,7 +83,7 @@ class BoundedBodySubscriberTests {
 
 	@Test
 	void lineSubscriberResetsOnTerminatorAtEndOfBuffer() {
-		BoundedLineBodySubscriber subscriber = lineSubscriber();
+		BoundedLineBodySubscriber<Void> subscriber = lineSubscriber();
 
 		assertThat(subscriber.checkSize(buffer("a".repeat(10) + "\n"))).isTrue();
 		// A fresh line, so the previous 10 bytes must not count towards it.
@@ -92,7 +92,7 @@ class BoundedBodySubscriberTests {
 
 	@Test
 	void lineSubscriberResetsOnTerminatorAtStartOfBuffer() {
-		BoundedLineBodySubscriber subscriber = lineSubscriber();
+		BoundedLineBodySubscriber<Void> subscriber = lineSubscriber();
 
 		assertThat(subscriber.checkSize(buffer("a".repeat(MAX_SIZE)))).isTrue();
 		assertThat(subscriber.checkSize(buffer("\n" + "a".repeat(MAX_SIZE)))).isTrue();
@@ -100,15 +100,30 @@ class BoundedBodySubscriberTests {
 
 	@Test
 	void lineSubscriberHandlesCrLfSplitAcrossBuffers() {
-		BoundedLineBodySubscriber subscriber = lineSubscriber();
+		BoundedLineBodySubscriber<Void> subscriber = lineSubscriber();
 
 		assertThat(subscriber.checkSize(buffer("a".repeat(12) + "\r"))).isTrue();
 		assertThat(subscriber.checkSize(buffer("\n" + "a".repeat(MAX_SIZE)))).isTrue();
 	}
 
 	@Test
+	void lineSubscriberIsResetByLoneCarriageReturns() {
+		BoundedLineBodySubscriber<Void> subscriber = lineSubscriber();
+
+		// A lone CR terminates a line, so it flushes Utf8LineDecoder's buffer and has to
+		// refill the budget here too. Otherwise a peer framing short lines with CR alone
+		// has its response aborted for exceeding a bound its lines never reach.
+		boolean accepted = true;
+		for (int i = 0; i < 10 && accepted; i++) {
+			accepted = subscriber.checkSize(buffer("aa\r"));
+		}
+
+		assertThat(accepted).isTrue();
+	}
+
+	@Test
 	void lineSubscriberAcceptsBufferLargerThanMaxSizeHoldingOnlyShortLines() {
-		BoundedLineBodySubscriber subscriber = lineSubscriber();
+		BoundedLineBodySubscriber<Void> subscriber = lineSubscriber();
 
 		// Forces the exact per-byte accounting path: the buffer alone is well over the
 		// limit, yet every line in it is legitimate.
@@ -117,7 +132,7 @@ class BoundedBodySubscriberTests {
 
 	@Test
 	void lineSubscriberRejectsRunSpanningManyBuffers() {
-		BoundedLineBodySubscriber subscriber = lineSubscriber();
+		BoundedLineBodySubscriber<Void> subscriber = lineSubscriber();
 
 		boolean accepted = true;
 		for (int i = 0; i < 10 && accepted; i++) {
@@ -129,7 +144,7 @@ class BoundedBodySubscriberTests {
 
 	@Test
 	void lineSubscriberOnlyCountsFromTheBufferPosition() {
-		BoundedLineBodySubscriber subscriber = lineSubscriber();
+		BoundedLineBodySubscriber<Void> subscriber = lineSubscriber();
 		ByteBuffer partiallyConsumed = buffer("a".repeat(MAX_SIZE * 2));
 		partiallyConsumed.position(MAX_SIZE * 2 - 4);
 
@@ -138,7 +153,7 @@ class BoundedBodySubscriberTests {
 
 	@Test
 	void lineSubscriberDoesNotConsumeTheBuffer() {
-		BoundedLineBodySubscriber subscriber = lineSubscriber();
+		BoundedLineBodySubscriber<Void> subscriber = lineSubscriber();
 		ByteBuffer buffer = buffer("aaaa\nbbbb");
 		buffer.position(2);
 
@@ -199,7 +214,7 @@ class BoundedBodySubscriberTests {
 
 	@Test
 	void forwardsBuffersWhileWithinBounds() {
-		BoundedLineBodySubscriber subscriber = lineSubscriber();
+		BoundedLineBodySubscriber<Void> subscriber = lineSubscriber();
 		List<ByteBuffer> buffers = List.of(buffer("aaaa\n"), buffer("bbbb\n"));
 
 		subscriber.onNext(buffers);
@@ -211,7 +226,7 @@ class BoundedBodySubscriberTests {
 
 	@Test
 	void abortsTheResponseWhenTheLineBoundIsExceeded() {
-		BoundedLineBodySubscriber subscriber = lineSubscriber();
+		BoundedLineBodySubscriber<Void> subscriber = lineSubscriber();
 
 		subscriber.onNext(List.of(buffer("a".repeat(MAX_SIZE + 1))));
 
@@ -235,7 +250,7 @@ class BoundedBodySubscriberTests {
 
 	@Test
 	void withholdsTheWholeListWhenALaterBufferExceedsTheBound() {
-		BoundedLineBodySubscriber subscriber = lineSubscriber();
+		BoundedLineBodySubscriber<Void> subscriber = lineSubscriber();
 
 		subscriber.onNext(List.of(buffer("a".repeat(8)), buffer("a".repeat(9))));
 
@@ -245,7 +260,7 @@ class BoundedBodySubscriberTests {
 
 	@Test
 	void ignoresFurtherSignalsOnceAborted() {
-		BoundedLineBodySubscriber subscriber = lineSubscriber();
+		BoundedLineBodySubscriber<Void> subscriber = lineSubscriber();
 		subscriber.onNext(List.of(buffer("a".repeat(MAX_SIZE + 1))));
 		Throwable firstError = this.delegate.error;
 
@@ -262,8 +277,8 @@ class BoundedBodySubscriberTests {
 
 	// --- fixtures ------------------------------------------------------------
 
-	private BoundedLineBodySubscriber lineSubscriber() {
-		BoundedLineBodySubscriber subscriber = new BoundedLineBodySubscriber(this.delegate, MAX_SIZE);
+	private BoundedLineBodySubscriber<Void> lineSubscriber() {
+		BoundedLineBodySubscriber<Void> subscriber = new BoundedLineBodySubscriber<>(this.delegate, MAX_SIZE);
 		subscriber.onSubscribe(this.subscription);
 		return subscriber;
 	}

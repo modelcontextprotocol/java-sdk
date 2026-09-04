@@ -98,6 +98,23 @@ abstract class HttpClientBoundedReadTestSupport {
 	}
 
 	/**
+	 * A responder that writes {@code chunks} blocks of {@code 'a'}, each ending in a lone
+	 * CR. The line decoder only flushes a line on LF, so its buffer keeps growing even
+	 * though a CR arrives regularly.
+	 */
+	protected static Responder carriageReturnTerminatedRuns(int chunks) {
+		return body -> {
+			byte[] chunk = new byte[MAX_SIZE];
+			java.util.Arrays.fill(chunk, (byte) 'a');
+			chunk[MAX_SIZE - 1] = '\r';
+			for (int i = 0; i < chunks; i++) {
+				body.write(chunk);
+				body.flush();
+			}
+		};
+	}
+
+	/**
 	 * A responder that writes enough short, properly terminated lines to exceed the limit
 	 * in aggregate.
 	 */

@@ -11,12 +11,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -390,61 +388,68 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
 		}).flatMap(requestBuilder -> Mono.create(sink -> {
-			Disposable connection = Flux.<ResponseEvent>create(
-					sseSink -> this.httpClient
-						.sendAsync(requestBuilder.build(),
-								responseInfo -> ResponseSubscribers.sseToBodySubscriber(responseInfo, sseSink,
-										this.maxResponseSize))
-						.exceptionallyCompose(e -> {
-							sseSink.error(e);
-							return CompletableFuture.failedFuture(e);
-						}))
-				.map(responseEvent -> (ResponseSubscribers.SseResponseEvent) responseEvent)
-				.flatMap(responseEvent -> {
+			Disposable connection = Mono
+				.fromFuture(() -> this.httpClient.sendAsync(requestBuilder.build(),
+						ResponseSubscribers.boundedPublisherBodyHandler(this.maxResponseSize)))
+				.flatMapMany(response -> {
 					if (isClosing) {
-						return Mono.empty();
+						// The body is handed over as a publisher and nothing is read off
+						// the wire until it is subscribed, so it has to be drained even
+						// when its content is of no further interest.
+						return ResponseSubscribers.drain(response.body());
 					}
 
-					int statusCode = responseEvent.responseInfo().statusCode();
+					int statusCode = response.statusCode();
 
 					if (statusCode >= 200 && statusCode < 300) {
-						try {
-							if (ENDPOINT_EVENT_TYPE.equals(responseEvent.sseEvent().event())) {
-								String messageEndpointUri = responseEvent.sseEvent().data();
-								try {
-									messageEndpointValidator.validate(uri, messageEndpointUri);
-								}
-								catch (InvalidSseMessageEndpointException e) {
-									sink.error(e);
-									this.messageEndpointSink.tryEmitError(e);
-									return Flux.error(e);
-								}
-								if (this.messageEndpointSink.tryEmitValue(messageEndpointUri).isSuccess()) {
-									sink.success();
-									return Flux.empty(); // No further processing needed
-								}
-								else {
-									sink.error(new RuntimeException("Failed to handle SSE endpoint event"));
-								}
+						Flux<String> lines = ResponseSubscribers.decodeLines(response.body());
+						return ResponseSubscribers.decodeSseResponse(lines, this.maxResponseSize);
+					}
+					else {
+						return ResponseSubscribers.drainThenError(response.body(),
+								new RuntimeException("Failed to connect to SSE stream: " + statusCode));
+					}
+				})
+				.flatMap(sseEvent -> {
+					try {
+						if (ENDPOINT_EVENT_TYPE.equals(sseEvent.event())) {
+							String messageEndpointUri = sseEvent.data();
+							try {
+								messageEndpointValidator.validate(uri, messageEndpointUri);
 							}
-							else if (MESSAGE_EVENT_TYPE.equals(responseEvent.sseEvent().event())) {
-								JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper,
-										responseEvent.sseEvent().data());
+							catch (InvalidSseMessageEndpointException e) {
+								sink.error(e);
+								this.messageEndpointSink.tryEmitError(e);
+								return Flux.error(e);
+							}
+							if (this.messageEndpointSink.tryEmitValue(messageEndpointUri).isSuccess()) {
 								sink.success();
-								return Flux.just(message);
+								return Flux.empty(); // No further processing needed
 							}
 							else {
-								logger.debug("Received unrecognized SSE event type: {}", responseEvent.sseEvent());
-								sink.success();
+								sink.error(new RuntimeException("Failed to handle SSE endpoint event"));
 							}
 						}
-						catch (IOException e) {
-							sink.error(new McpTransportException("Error processing SSE event", e));
+						else if (MESSAGE_EVENT_TYPE.equals(sseEvent.event())) {
+							String data = sseEvent.data();
+							if (data == null || data.isBlank()) {
+								logger.debug("Skipping SSE event with empty data (stream primer)");
+								sink.success();
+								return Flux.<McpSchema.JSONRPCMessage>empty();
+							}
+							JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, data);
+							sink.success();
+							return Flux.just(message);
+						}
+						else {
+							logger.debug("Received unrecognized SSE event type: {}", sseEvent);
+							sink.success();
 						}
 					}
-					return Flux.<McpSchema.JSONRPCMessage>error(
-							new RuntimeException("Failed to send message: " + responseEvent));
-
+					catch (IOException e) {
+						sink.error(new McpTransportException("Error processing SSE event", e));
+					}
+					return Flux.<McpSchema.JSONRPCMessage>empty();
 				})
 				.flatMap(jsonRpcMessage -> handler.apply(Mono.just(jsonRpcMessage)))
 				.onErrorComplete(t -> {
@@ -529,8 +534,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", requestUri, body, transportContext));
 		}).flatMap(customizedBuilder -> {
 			var request = customizedBuilder.build();
-			return Mono.fromFuture(
-					httpClient.sendAsync(request, ResponseSubscribers.boundedStringBodyHandler(this.maxResponseSize)));
+			return Mono.fromFuture(this.httpClient.sendAsync(request,
+					ResponseSubscribers.boundedStringBodyHandler(this.maxResponseSize)));
 		});
 	}
 
