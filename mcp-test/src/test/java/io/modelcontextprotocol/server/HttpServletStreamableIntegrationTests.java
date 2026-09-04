@@ -11,8 +11,11 @@ import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -20,10 +23,12 @@ import io.modelcontextprotocol.AbstractMcpClientServerIntegrationTests;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.server.McpServer.AsyncSpecification;
 import io.modelcontextprotocol.server.McpServer.SyncSpecification;
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -173,6 +178,117 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 
 	@Override
 	protected void prepareClients(int port, String mcpEndpoint) {
+	}
+
+	@Test
+	void testRootsListChangedWithoutConsumerDoesNotRequestRoots() {
+		var mcpServer = prepareSyncServerBuilder().build();
+		var clientTransport = createRootsCountingClientTransport();
+
+		try (var mcpClient = McpClient.sync(clientTransport)
+			.capabilities(McpSchema.ClientCapabilities.builder().roots(true).build())
+			.roots(McpSchema.Root.builder("file:///test/root").name("test-root").build())
+			.build()) {
+
+			assertThat(mcpClient.initialize()).isNotNull();
+
+			mcpClient.rootsListChangedNotification();
+
+			assertThat(clientTransport.rootsListRequestCount()).isZero();
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	@Test
+	void testRootsListChangedWithConsumerRequestsRoots() {
+		List<McpSchema.Root> roots = List.of(McpSchema.Root.builder("file:///test/root").name("test-root").build());
+		AtomicInteger consumerInvocationCount = new AtomicInteger();
+		AtomicReference<List<McpSchema.Root>> receivedRoots = new AtomicReference<>();
+		var mcpServer = prepareSyncServerBuilder().rootsChangeHandler((exchange, rootsUpdate) -> {
+			consumerInvocationCount.incrementAndGet();
+			receivedRoots.set(rootsUpdate);
+		}).build();
+		var clientTransport = createRootsCountingClientTransport();
+
+		try (var mcpClient = McpClient.sync(clientTransport)
+			.capabilities(McpSchema.ClientCapabilities.builder().roots(true).build())
+			.roots(roots)
+			.build()) {
+
+			assertThat(mcpClient.initialize()).isNotNull();
+
+			mcpClient.rootsListChangedNotification();
+
+			assertThat(clientTransport.rootsListRequestCount()).isOne();
+			assertThat(consumerInvocationCount).hasValue(1);
+			assertThat(receivedRoots).hasValue(roots);
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	private RootsCountingClientTransport createRootsCountingClientTransport() {
+		return new RootsCountingClientTransport(HttpClientStreamableHttpTransport.builder("http://localhost:" + PORT)
+			.endpoint(MESSAGE_ENDPOINT)
+			.build());
+	}
+
+	private static final class RootsCountingClientTransport implements McpClientTransport {
+
+		private final McpClientTransport delegate;
+
+		private final AtomicInteger rootsListRequestCount = new AtomicInteger();
+
+		private RootsCountingClientTransport(McpClientTransport delegate) {
+			this.delegate = delegate;
+		}
+
+		@Override
+		public Mono<Void> connect(
+				Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> messageHandler) {
+			return this.delegate
+				.connect(message -> messageHandler.apply(message.doOnNext(this::recordRootsListRequest)));
+		}
+
+		private void recordRootsListRequest(McpSchema.JSONRPCMessage message) {
+			if (message instanceof McpSchema.JSONRPCRequest request
+					&& McpSchema.METHOD_ROOTS_LIST.equals(request.method())) {
+				this.rootsListRequestCount.incrementAndGet();
+			}
+		}
+
+		private int rootsListRequestCount() {
+			return this.rootsListRequestCount.get();
+		}
+
+		@Override
+		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+			return this.delegate.sendMessage(message);
+		}
+
+		@Override
+		public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+			return this.delegate.unmarshalFrom(data, typeRef);
+		}
+
+		@Override
+		public List<String> protocolVersions() {
+			return this.delegate.protocolVersions();
+		}
+
+		@Override
+		public void setExceptionHandler(Consumer<Throwable> handler) {
+			this.delegate.setExceptionHandler(handler);
+		}
+
+		@Override
+		public Mono<Void> closeGracefully() {
+			return this.delegate.closeGracefully();
+		}
+
 	}
 
 	static McpTransportContextExtractor<HttpServletRequest> TEST_CONTEXT_EXTRACTOR = (r) -> McpTransportContext
