@@ -4,10 +4,9 @@
 
 package io.modelcontextprotocol.server.transport;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -40,12 +39,7 @@ public interface ServerTransportSecurityValidator {
 		return accessor -> {
 			var collectedHeaders = accessor.getHeaderNames()
 				.stream()
-				.collect(Collectors.<String, String, List<String>>toUnmodifiableMap(String::toLowerCase,
-						accessor::getHeader, (l1, l2) -> {
-							var merged = new ArrayList<>(l1);
-							merged.addAll(l2);
-							return Collections.unmodifiableList(merged);
-						}));
+				.collect(Collectors.toUnmodifiableMap(Function.identity(), accessor::getHeader));
 			validator.validateHeaders(collectedHeaders);
 		};
 	}

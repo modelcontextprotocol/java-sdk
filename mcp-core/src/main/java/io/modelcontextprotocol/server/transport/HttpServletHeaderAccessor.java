@@ -17,7 +17,7 @@ import jakarta.servlet.http.HttpServletRequest;
  * For internal use only.
  *
  * @author Neeraj Bhatt
- * @since 0.16.0
+ * @since 2.1.0
  * @see HeaderAccessor
  */
 final class HttpServletHeaderAccessor implements HeaderAccessor {

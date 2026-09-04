@@ -12,7 +12,7 @@ import java.util.List;
  * {@code HttpServletRequest}).
  *
  * @author Neeraj Bhatt
- * @since 0.16.0
+ * @since 2.1.0
  * @see ServerHttpHeaderValidator
  */
 public interface HeaderAccessor {

@@ -7,6 +7,7 @@ package io.modelcontextprotocol.server.transport;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import io.modelcontextprotocol.util.Assert;
 
@@ -50,22 +51,7 @@ public final class DefaultServerTransportSecurityValidator
 	@Override
 	@Deprecated
 	public void validateHeaders(Map<String, List<String>> headers) throws ServerTransportSecurityException {
-		validate(new HeaderAccessor() {
-			@Override
-			public List<String> getHeader(String name) {
-				return headers.entrySet()
-					.stream()
-					.filter(entry -> entry.getKey().equalsIgnoreCase(name))
-					.map(Map.Entry::getValue)
-					.findFirst()
-					.orElse(List.of());
-			}
-
-			@Override
-			public List<String> getHeaderNames() {
-				return List.copyOf(headers.keySet());
-			}
-		});
+		validate(new MapHeaderAccessor(headers));
 	}
 
 	@Override
@@ -150,6 +136,37 @@ public final class DefaultServerTransportSecurityValidator
 	 */
 	public static Builder builder() {
 		return new Builder();
+	}
+
+	/**
+	 * {@link HeaderAccessor} view over a {@code Map<String, List<String>>}, used to
+	 * bridge the deprecated {@link #validateHeaders(Map)} to
+	 * {@link #validate(HeaderAccessor)}.
+	 */
+	private static final class MapHeaderAccessor implements HeaderAccessor {
+
+		private final Map<String, List<String>> headers;
+
+		private MapHeaderAccessor(Map<String, List<String>> headers) {
+			this.headers = headers;
+		}
+
+		@Override
+		public List<String> getHeader(String name) {
+			return headers.entrySet()
+				.stream()
+				.filter(entry -> entry.getKey().equalsIgnoreCase(name))
+				.map(Map.Entry::getValue)
+				.filter(Objects::nonNull)
+				.findFirst()
+				.orElse(List.of());
+		}
+
+		@Override
+		public List<String> getHeaderNames() {
+			return List.copyOf(headers.keySet());
+		}
+
 	}
 
 	/**

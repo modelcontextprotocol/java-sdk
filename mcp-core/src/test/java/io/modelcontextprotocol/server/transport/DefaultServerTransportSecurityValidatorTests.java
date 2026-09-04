@@ -484,7 +484,7 @@ class DefaultServerTransportSecurityValidatorTests {
 		@Test
 		void legacyValidatorAdaptsToHeaderAccessor() {
 			ServerTransportSecurityValidator legacyValidator = headers -> {
-				List<String> origins = headers.getOrDefault("origin", List.of());
+				List<String> origins = headers.getOrDefault("Origin", List.of());
 				if (!origins.isEmpty() && origins.get(0).contains("evil")) {
 					throw new ServerTransportSecurityException(403, "Invalid Origin header");
 				}
