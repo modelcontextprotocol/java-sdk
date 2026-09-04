@@ -60,6 +60,10 @@ public class McpTestRequestRecordingServletFilter implements Filter {
 		return List.copyOf(calls);
 	}
 
+	public void clear() {
+		calls.clear();
+	}
+
 	public record Call(String method, Map<String, String> headers, String body) {
 
 	}
