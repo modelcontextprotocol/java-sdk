@@ -11,6 +11,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -28,6 +30,8 @@ import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.KeepAliveScheduler;
 import jakarta.servlet.AsyncContext;
+import jakarta.servlet.AsyncEvent;
+import jakarta.servlet.AsyncListener;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -35,8 +39,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * Server-side implementation of the Model Context Protocol (MCP) streamable transport
@@ -90,6 +97,10 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 	public static final String FAILED_TO_SEND_ERROR_RESPONSE = "Failed to send error response: {}";
 
+	private static final Duration MIN_SESSION_TIMEOUT = Duration.ofMillis(1);
+
+	private static final Duration MAX_SESSION_CLEANUP_INTERVAL = Duration.ofSeconds(30);
+
 	/**
 	 * The endpoint URI where clients should send their JSON-RPC messages. Defaults to
 	 * "/mcp".
@@ -113,7 +124,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	/**
 	 * Map of active client sessions, keyed by mcp-session-id.
 	 */
-	private final ConcurrentHashMap<String, McpStreamableServerSession> sessions = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<String, SessionEntry> sessions = new ConcurrentHashMap<>();
 
 	private McpTransportContextExtractor<HttpServletRequest> contextExtractor;
 
@@ -127,6 +138,12 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * set. Disabled by default.
 	 */
 	private KeepAliveScheduler keepAliveScheduler;
+
+	private final Duration sessionTimeout;
+
+	private final Scheduler sessionCleanupScheduler;
+
+	private Disposable sessionCleanupSubscription;
 
 	/**
 	 * Security validator for validating HTTP requests.
@@ -143,14 +160,19 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * @param contextExtractor The extractor for transport context from the request.
 	 * @param keepAliveInterval The interval for keep-alive pings. If null, no keep-alive
 	 * will be scheduled.
+	 * @param sessionTimeout The idle timeout for sessions. If null, idle sessions are not
+	 * automatically closed.
+	 * @param sessionCleanupScheduler The scheduler used to clean up idle sessions.
 	 * @param securityValidator The security validator for validating HTTP requests.
 	 * @param requestMaxSize The maximum size, in bytes, of a single request body. Must be
 	 * positive.
-	 * @throws IllegalArgumentException if any parameter is null
+	 * @throws IllegalArgumentException if a required parameter is null or the session
+	 * timeout or request size is invalid
 	 */
 	private HttpServletStreamableServerTransportProvider(McpJsonMapper jsonMapper, String mcpEndpoint,
 			boolean disallowDelete, McpTransportContextExtractor<HttpServletRequest> contextExtractor,
-			Duration keepAliveInterval, ServerTransportSecurityValidator securityValidator, int requestMaxSize) {
+			Duration keepAliveInterval, Duration sessionTimeout, Scheduler sessionCleanupScheduler,
+			ServerTransportSecurityValidator securityValidator, int requestMaxSize) {
 		Assert.notNull(jsonMapper, "JsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "MCP endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
@@ -163,16 +185,182 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		this.contextExtractor = contextExtractor;
 		this.securityValidator = securityValidator;
 		this.requestMaxSize = requestMaxSize;
+		this.sessionTimeout = sessionTimeout;
+		if (this.sessionTimeout != null) {
+			validateSessionTimeout(this.sessionTimeout);
+		}
+		this.sessionCleanupScheduler = sessionTimeout == null ? null : (sessionCleanupScheduler != null
+				? sessionCleanupScheduler : Schedulers.newSingle("mcp-session-cleanup"));
 
 		if (keepAliveInterval != null) {
 
 			this.keepAliveScheduler = KeepAliveScheduler
-				.builder(() -> (isClosing) ? Flux.empty() : Flux.fromIterable(sessions.values()))
+				.builder(() -> (isClosing) ? Flux.empty()
+						: Flux.fromIterable(sessions.values()).map(SessionEntry::session))
 				.initialDelay(keepAliveInterval)
 				.interval(keepAliveInterval)
 				.build();
 
 			this.keepAliveScheduler.start();
+		}
+
+		if (this.sessionTimeout != null) {
+			Duration cleanupInterval = this.sessionTimeout.compareTo(MAX_SESSION_CLEANUP_INTERVAL) < 0
+					? this.sessionTimeout : MAX_SESSION_CLEANUP_INTERVAL;
+			long cleanupIntervalMillis = cleanupInterval.toMillis();
+			this.sessionCleanupSubscription = this.sessionCleanupScheduler.schedulePeriodically(
+					this::cleanupExpiredSessions, cleanupIntervalMillis, cleanupIntervalMillis, TimeUnit.MILLISECONDS);
+		}
+
+	}
+
+	private static void validateSessionTimeout(Duration sessionTimeout) {
+		Assert.isTrue(!sessionTimeout.isNegative() && !sessionTimeout.isZero(),
+				"Session timeout must be greater than zero");
+		Assert.isTrue(sessionTimeout.compareTo(MIN_SESSION_TIMEOUT) >= 0,
+				"Session timeout must be at least 1 millisecond");
+	}
+
+	private SessionActivityLease acquireSessionActivity(String sessionId, SessionEntry sessionEntry) {
+		SessionActivityLease lease = sessionEntry.acquire();
+		if (lease == null) {
+			return null;
+		}
+
+		if (this.sessions.get(sessionId) != sessionEntry) {
+			lease.close();
+			return null;
+		}
+
+		return lease;
+	}
+
+	private void cleanupExpiredSessions() {
+		if (this.isClosing) {
+			return;
+		}
+
+		this.sessions.forEach((sessionId, sessionEntry) -> {
+			if (!sessionEntry.tryExpire(this.sessionTimeout)) {
+				return;
+			}
+
+			if (!this.sessions.remove(sessionId, sessionEntry)) {
+				return;
+			}
+
+			logger.info("Session {} exceeded idle timeout of {} and will be closed", sessionId, this.sessionTimeout);
+			sessionEntry.session()
+				.closeGracefully()
+				.doOnError(error -> logger.warn("Failed to close idle session {}: {}", sessionId, error.getMessage()))
+				.onErrorComplete()
+				.subscribe();
+		});
+	}
+
+	private static final class SessionEntry {
+
+		private final McpStreamableServerSession session;
+
+		private final Scheduler scheduler;
+
+		private long lastActivityMillis;
+
+		private int references;
+
+		private boolean closed;
+
+		SessionEntry(McpStreamableServerSession session, Scheduler scheduler) {
+			this.session = session;
+			this.scheduler = scheduler;
+			if (scheduler != null) {
+				this.lastActivityMillis = scheduler.now(TimeUnit.MILLISECONDS);
+			}
+		}
+
+		McpStreamableServerSession session() {
+			return this.session;
+		}
+
+		synchronized SessionActivityLease acquire() {
+			if (this.closed) {
+				return null;
+			}
+			if (this.scheduler == null) {
+				return SessionActivityLease.noop();
+			}
+			this.references++;
+			return new SessionActivityLease(this);
+		}
+
+		synchronized boolean tryExpire(Duration timeout) {
+			if (this.scheduler == null || this.closed || this.references > 0) {
+				return false;
+			}
+
+			long idleMillis = Math.max(0, this.scheduler.now(TimeUnit.MILLISECONDS) - this.lastActivityMillis);
+			if (Duration.ofMillis(idleMillis).compareTo(timeout) < 0) {
+				return false;
+			}
+
+			this.closed = true;
+			return true;
+		}
+
+		synchronized void release() {
+			Assert.isTrue(this.references > 0, "Session activity reference count must be greater than zero");
+			this.references--;
+			if (this.references == 0) {
+				this.lastActivityMillis = this.scheduler.now(TimeUnit.MILLISECONDS);
+			}
+		}
+
+		synchronized void close() {
+			this.closed = true;
+		}
+
+	}
+
+	private static final class SessionActivityLease implements AutoCloseable, AsyncListener {
+
+		private static final SessionActivityLease NOOP = new SessionActivityLease(null);
+
+		private final SessionEntry sessionEntry;
+
+		private final AtomicBoolean closed = new AtomicBoolean();
+
+		SessionActivityLease(SessionEntry sessionEntry) {
+			this.sessionEntry = sessionEntry;
+		}
+
+		static SessionActivityLease noop() {
+			return NOOP;
+		}
+
+		@Override
+		public void close() {
+			if (this.sessionEntry != null && this.closed.compareAndSet(false, true)) {
+				this.sessionEntry.release();
+			}
+		}
+
+		@Override
+		public void onComplete(AsyncEvent event) {
+			close();
+		}
+
+		@Override
+		public void onTimeout(AsyncEvent event) {
+			close();
+		}
+
+		@Override
+		public void onError(AsyncEvent event) {
+			close();
+		}
+
+		@Override
+		public void onStartAsync(AsyncEvent event) {
 		}
 
 	}
@@ -200,7 +388,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		logger.debug("Attempting to broadcast message to {} active sessions", this.sessions.size());
 
 		return Mono.fromRunnable(() -> {
-			this.sessions.values().parallelStream().forEach(session -> {
+			this.sessions.values().parallelStream().forEach(sessionEntry -> {
+				McpStreamableServerSession session = sessionEntry.session();
 				try {
 					session.sendNotification(method, params).block();
 				}
@@ -214,12 +403,12 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	@Override
 	public Mono<Void> notifyClient(String sessionId, String method, Object params) {
 		return Mono.defer(() -> {
-			McpStreamableServerSession session = this.sessions.get(sessionId);
-			if (session == null) {
+			SessionEntry sessionEntry = this.sessions.get(sessionId);
+			if (sessionEntry == null) {
 				logger.debug("Session {} not found", sessionId);
 				return Mono.empty();
 			}
-			return session.sendNotification(method, params);
+			return sessionEntry.session().sendNotification(method, params);
 		});
 	}
 
@@ -233,7 +422,9 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			this.isClosing = true;
 			logger.debug("Initiating graceful shutdown with {} active sessions", this.sessions.size());
 
-			this.sessions.values().parallelStream().forEach(session -> {
+			this.sessions.values().forEach(SessionEntry::close);
+			this.sessions.values().parallelStream().forEach(sessionEntry -> {
+				McpStreamableServerSession session = sessionEntry.session();
 				try {
 					session.closeGracefully().block();
 				}
@@ -248,6 +439,12 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			logger.debug("Graceful shutdown completed");
 			if (this.keepAliveScheduler != null) {
 				this.keepAliveScheduler.shutdown();
+			}
+			if (this.sessionCleanupSubscription != null) {
+				this.sessionCleanupSubscription.dispose();
+			}
+			if (this.sessionCleanupScheduler != null) {
+				this.sessionCleanupScheduler.dispose();
 			}
 		});
 	}
@@ -303,16 +500,24 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			return;
 		}
 
-		McpStreamableServerSession session = this.sessions.get(sessionId);
+		SessionEntry sessionEntry = this.sessions.get(sessionId);
 
-		if (session == null) {
+		if (sessionEntry == null) {
+			response.sendError(HttpServletResponse.SC_NOT_FOUND);
+			return;
+		}
+
+		McpTransportContext transportContext = this.contextExtractor.extract(request);
+
+		SessionActivityLease activityLease = acquireSessionActivity(sessionId, sessionEntry);
+		if (activityLease == null) {
 			response.sendError(HttpServletResponse.SC_NOT_FOUND);
 			return;
 		}
 
 		logger.debug("Handling GET request for session: {}", sessionId);
 
-		McpTransportContext transportContext = this.contextExtractor.extract(request);
+		McpStreamableServerSession session = sessionEntry.session();
 
 		try {
 			response.setContentType(TEXT_EVENT_STREAM);
@@ -324,7 +529,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			asyncContext.setTimeout(0);
 
 			HttpServletStreamableMcpSessionTransport sessionTransport = new HttpServletStreamableMcpSessionTransport(
-					sessionId, asyncContext, response.getWriter());
+					sessionId, sessionEntry, asyncContext, response.getWriter(), activityLease);
+			registerSessionActivityLifecycle(asyncContext, activityLease);
 
 			// Check if this is a replay request
 			if (request.getHeader(HttpHeaders.LAST_EVENT_ID) != null) {
@@ -342,13 +548,13 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 							}
 							catch (Exception e) {
 								logger.error("Failed to replay message: {}", e.getMessage());
-								asyncContext.complete();
+								sessionTransport.close();
 							}
 						});
 				}
 				catch (Exception e) {
 					logger.error("Failed to replay messages: {}", e.getMessage());
-					asyncContext.complete();
+					sessionTransport.close();
 				}
 			}
 			else {
@@ -383,6 +589,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			}
 		}
 		catch (Exception e) {
+			activityLease.close();
 			logger.error("Failed to handle GET request for session {}: {}", sessionId, e.getMessage());
 			response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
 		}
@@ -455,7 +662,9 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 						});
 				McpStreamableServerSession.McpStreamableServerSessionInit init = this.sessionFactory
 					.startSession(initializeRequest);
-				this.sessions.put(init.session().getId(), init.session());
+				SessionEntry sessionEntry = new SessionEntry(init.session(), this.sessionCleanupScheduler);
+				SessionActivityLease initializationActivity = sessionEntry.acquire();
+				this.sessions.put(init.session().getId(), sessionEntry);
 
 				try {
 					McpSchema.InitializeResult initResult = init.initResult().block();
@@ -481,6 +690,9 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 								.build());
 					return;
 				}
+				finally {
+					initializationActivity.close();
+				}
 			}
 
 			String sessionId = request.getHeader(HttpHeaders.MCP_SESSION_ID);
@@ -496,9 +708,9 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				return;
 			}
 
-			McpStreamableServerSession session = this.sessions.get(sessionId);
+			SessionEntry sessionEntry = this.sessions.get(sessionId);
 
-			if (session == null) {
+			if (sessionEntry == null) {
 				this.responseError(response, HttpServletResponse.SC_NOT_FOUND,
 						McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
 							.message("Session not found: " + sessionId)
@@ -506,44 +718,63 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				return;
 			}
 
-			if (message instanceof McpSchema.JSONRPCResponse jsonrpcResponse) {
-				session.accept(jsonrpcResponse)
-					.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
-					.block();
-				response.setStatus(HttpServletResponse.SC_ACCEPTED);
+			SessionActivityLease activityLease = acquireSessionActivity(sessionId, sessionEntry);
+			if (activityLease == null) {
+				this.responseError(response, HttpServletResponse.SC_NOT_FOUND,
+						McpError.builder(McpSchema.ErrorCodes.INTERNAL_ERROR)
+							.message("Session not found: " + sessionId)
+							.build());
+				return;
 			}
-			else if (message instanceof McpSchema.JSONRPCNotification jsonrpcNotification) {
-				session.accept(jsonrpcNotification)
-					.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
-					.block();
-				response.setStatus(HttpServletResponse.SC_ACCEPTED);
-			}
-			else if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
-				// For streaming responses, we need to return SSE
-				response.setContentType(TEXT_EVENT_STREAM);
-				response.setCharacterEncoding(UTF_8);
-				response.setHeader("Cache-Control", "no-cache");
-				response.setHeader("Connection", "keep-alive");
 
-				AsyncContext asyncContext = request.startAsync();
-				asyncContext.setTimeout(0);
+			McpStreamableServerSession session = sessionEntry.session();
 
-				HttpServletStreamableMcpSessionTransport sessionTransport = new HttpServletStreamableMcpSessionTransport(
-						sessionId, asyncContext, response.getWriter());
-
-				try {
-					session.responseStream(jsonrpcRequest, sessionTransport)
+			try {
+				if (message instanceof McpSchema.JSONRPCResponse jsonrpcResponse) {
+					session.accept(jsonrpcResponse)
 						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
 						.block();
+					response.setStatus(HttpServletResponse.SC_ACCEPTED);
 				}
-				catch (Exception e) {
-					logger.error("Failed to handle request stream: {}", e.getMessage());
-					asyncContext.complete();
+				else if (message instanceof McpSchema.JSONRPCNotification jsonrpcNotification) {
+					session.accept(jsonrpcNotification)
+						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
+						.block();
+					response.setStatus(HttpServletResponse.SC_ACCEPTED);
+				}
+				else if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
+					// For streaming responses, we need to return SSE
+					response.setContentType(TEXT_EVENT_STREAM);
+					response.setCharacterEncoding(UTF_8);
+					response.setHeader("Cache-Control", "no-cache");
+					response.setHeader("Connection", "keep-alive");
+
+					AsyncContext asyncContext = request.startAsync();
+					asyncContext.setTimeout(0);
+
+					HttpServletStreamableMcpSessionTransport sessionTransport = new HttpServletStreamableMcpSessionTransport(
+							sessionId, sessionEntry, asyncContext, response.getWriter(), activityLease);
+					registerSessionActivityLifecycle(asyncContext, activityLease);
+
+					try {
+						session.responseStream(jsonrpcRequest, sessionTransport)
+							.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
+							.block();
+					}
+					catch (Exception e) {
+						logger.error("Failed to handle request stream: {}", e.getMessage());
+						sessionTransport.close();
+					}
+				}
+				else {
+					this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+							McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+								.message("Unknown message type")
+								.build());
 				}
 			}
-			else {
-				this.responseError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-						McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST).message("Unknown message type").build());
+			finally {
+				activityLease.close();
 			}
 		}
 		catch (MaxSizeExceededException e) {
@@ -568,6 +799,12 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				logger.error(FAILED_TO_SEND_ERROR_RESPONSE, ex.getMessage());
 				response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error processing message");
 			}
+		}
+	}
+
+	private void registerSessionActivityLifecycle(AsyncContext asyncContext, SessionActivityLease activityLease) {
+		if (this.sessionTimeout != null) {
+			asyncContext.addListener(activityLease);
 		}
 	}
 
@@ -618,16 +855,26 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		String sessionId = request.getHeader(HttpHeaders.MCP_SESSION_ID);
-		McpStreamableServerSession session = this.sessions.get(sessionId);
+		SessionEntry sessionEntry = this.sessions.get(sessionId);
 
-		if (session == null) {
+		if (sessionEntry == null) {
 			response.sendError(HttpServletResponse.SC_NOT_FOUND);
 			return;
 		}
 
+		SessionActivityLease activityLease = acquireSessionActivity(sessionId, sessionEntry);
+		if (activityLease == null) {
+			response.sendError(HttpServletResponse.SC_NOT_FOUND);
+			return;
+		}
+
+		McpStreamableServerSession session = sessionEntry.session();
+
 		try {
 			session.delete().contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext)).block();
-			this.sessions.remove(sessionId);
+			if (this.sessions.remove(sessionId, sessionEntry)) {
+				sessionEntry.close();
+			}
 			response.setStatus(HttpServletResponse.SC_OK);
 		}
 		catch (Exception e) {
@@ -640,6 +887,9 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				logger.error(FAILED_TO_SEND_ERROR_RESPONSE, ex.getMessage());
 				response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error deleting session");
 			}
+		}
+		finally {
+			activityLease.close();
 		}
 	}
 
@@ -701,9 +951,13 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		private final String sessionId;
 
+		private final SessionEntry sessionEntry;
+
 		private final AsyncContext asyncContext;
 
 		private final PrintWriter writer;
+
+		private final SessionActivityLease activityLease;
 
 		private volatile boolean closed = false;
 
@@ -712,13 +966,18 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		/**
 		 * Creates a new session transport with the specified ID and SSE writer.
 		 * @param sessionId The unique identifier for this session
+		 * @param sessionEntry The session state associated with this transport
 		 * @param asyncContext The async context for the session
 		 * @param writer The writer for sending server events to the client
+		 * @param activityLease The activity lease held while this transport is open
 		 */
-		HttpServletStreamableMcpSessionTransport(String sessionId, AsyncContext asyncContext, PrintWriter writer) {
+		HttpServletStreamableMcpSessionTransport(String sessionId, SessionEntry sessionEntry, AsyncContext asyncContext,
+				PrintWriter writer, SessionActivityLease activityLease) {
 			this.sessionId = sessionId;
+			this.sessionEntry = sessionEntry;
 			this.asyncContext = asyncContext;
 			this.writer = writer;
+			this.activityLease = activityLease;
 			logger.debug("Streamable session transport {} initialized with SSE writer", sessionId);
 		}
 
@@ -761,7 +1020,11 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				}
 				catch (Exception e) {
 					logger.error("Failed to send message to session {}: {}", this.sessionId, e.getMessage());
-					HttpServletStreamableServerTransportProvider.this.sessions.remove(this.sessionId);
+					if (HttpServletStreamableServerTransportProvider.this.sessions.remove(this.sessionId,
+							this.sessionEntry)) {
+						this.sessionEntry.close();
+					}
+					this.activityLease.close();
 					this.asyncContext.complete();
 				}
 				finally {
@@ -815,6 +1078,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				logger.warn("Failed to complete async context for session {}: {}", sessionId, e.getMessage());
 			}
 			finally {
+				this.activityLease.close();
 				lock.unlock();
 			}
 		}
@@ -847,6 +1111,10 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				serverRequest) -> McpTransportContext.EMPTY;
 
 		private Duration keepAliveInterval;
+
+		private Duration sessionTimeout;
+
+		private Scheduler sessionCleanupScheduler;
 
 		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
 
@@ -912,6 +1180,29 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		/**
+		 * Sets the idle timeout after which a session becomes eligible for periodic
+		 * cleanup. Idle session cleanup is disabled by default.
+		 * @param sessionTimeout The session idle timeout. Must be greater than zero. If
+		 * null, idle session cleanup is disabled.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if the timeout is non-null and less than one
+		 * millisecond
+		 */
+		public Builder sessionTimeout(Duration sessionTimeout) {
+			if (sessionTimeout != null) {
+				validateSessionTimeout(sessionTimeout);
+			}
+			this.sessionTimeout = sessionTimeout;
+			return this;
+		}
+
+		Builder sessionCleanupScheduler(Scheduler sessionCleanupScheduler) {
+			Assert.notNull(sessionCleanupScheduler, "Session cleanup scheduler must not be null");
+			this.sessionCleanupScheduler = sessionCleanupScheduler;
+			return this;
+		}
+
+		/**
 		 * Sets the security validator for validating HTTP requests.
 		 * @param securityValidator The security validator to use. Must not be null.
 		 * @return this builder instance
@@ -946,7 +1237,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 			return new HttpServletStreamableServerTransportProvider(
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, mcpEndpoint, disallowDelete,
-					contextExtractor, keepAliveInterval, securityValidator, requestMaxSize);
+					contextExtractor, keepAliveInterval, sessionTimeout, sessionCleanupScheduler, securityValidator,
+					requestMaxSize);
 		}
 
 	}
