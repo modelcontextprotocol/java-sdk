@@ -324,65 +324,76 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			HttpServletStreamableMcpSessionTransport sessionTransport = new HttpServletStreamableMcpSessionTransport(
 					sessionId, asyncContext, response.getWriter());
 
-			// Check if this is a replay request
-			if (request.getHeader(HttpHeaders.LAST_EVENT_ID) != null) {
-				String lastId = request.getHeader(HttpHeaders.LAST_EVENT_ID);
-
-				try {
-					session.replay(lastId)
-						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
-						.toIterable()
-						.forEach(message -> {
-							try {
-								sessionTransport.sendMessage(message)
-									.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
-									.block();
-							}
-							catch (Exception e) {
-								logger.error("Failed to replay message: {}", e.getMessage());
-								asyncContext.complete();
-							}
-						});
-				}
-				catch (Exception e) {
-					logger.error("Failed to replay messages: {}", e.getMessage());
-					asyncContext.complete();
-				}
+			// Replay the messages the client missed while its stream was broken
+			String lastEventId = request.getHeader(HttpHeaders.LAST_EVENT_ID);
+			if (lastEventId != null
+					&& !this.tryReplayMissedMessages(session, lastEventId, sessionTransport, transportContext)) {
+				// The replay failed and already closed the transport
+				return;
 			}
-			else {
-				// Establish new listening stream
-				McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
-					.listeningStream(sessionTransport);
 
-				asyncContext.addListener(new jakarta.servlet.AsyncListener() {
-					@Override
-					public void onComplete(jakarta.servlet.AsyncEvent event) throws IOException {
-						logger.debug("SSE connection completed for session: {}", sessionId);
-						listeningStream.close();
-					}
+			// Establish the listening stream. Resumed streams are registered too, so
+			// that the session keeps delivering messages to the reconnected client and
+			// the async context is completed once the client goes away.
+			McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
+				.listeningStream(sessionTransport);
 
-					@Override
-					public void onTimeout(jakarta.servlet.AsyncEvent event) throws IOException {
-						logger.debug("SSE connection timed out for session: {}", sessionId);
-						listeningStream.close();
-					}
+			asyncContext.addListener(new jakarta.servlet.AsyncListener() {
+				@Override
+				public void onComplete(jakarta.servlet.AsyncEvent event) throws IOException {
+					logger.debug("SSE connection completed for session: {}", sessionId);
+					listeningStream.close();
+				}
 
-					@Override
-					public void onError(jakarta.servlet.AsyncEvent event) throws IOException {
-						logger.debug("SSE connection error for session: {}", sessionId);
-						listeningStream.close();
-					}
+				@Override
+				public void onTimeout(jakarta.servlet.AsyncEvent event) throws IOException {
+					logger.debug("SSE connection timed out for session: {}", sessionId);
+					listeningStream.close();
+				}
 
-					@Override
-					public void onStartAsync(jakarta.servlet.AsyncEvent event) throws IOException {
-						// No action needed
-					}
-				});
-			}
+				@Override
+				public void onError(jakarta.servlet.AsyncEvent event) throws IOException {
+					logger.debug("SSE connection error for session: {}", sessionId);
+					listeningStream.close();
+				}
+
+				@Override
+				public void onStartAsync(jakarta.servlet.AsyncEvent event) throws IOException {
+					// No action needed
+				}
+			});
 		}
 		catch (Exception e) {
 			logger.error("Failed to handle GET request for session {}: {}", sessionId, e.getMessage());
 			response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	/**
+	 * Replays the messages the client missed while its SSE stream was broken.
+	 * @param session the session the client is resuming
+	 * @param lastEventId the ID of the last event received by the client
+	 * @param sessionTransport the transport of the resumed SSE stream
+	 * @param transportContext the context extracted from the request
+	 * @return {@code true} if the replay completed, {@code false} if it failed, in which
+	 * case the transport has been closed
+	 */
+	private boolean tryReplayMissedMessages(McpStreamableServerSession session, String lastEventId,
+			McpStreamableServerTransport sessionTransport, McpTransportContext transportContext) {
+		try {
+			for (McpSchema.JSONRPCMessage message : session.replay(lastEventId)
+				.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
+				.toIterable()) {
+				sessionTransport.sendMessage(message)
+					.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
+					.block();
+			}
+			return true;
+		}
+		catch (Exception e) {
+			logger.error("Failed to replay messages for session {}: {}", session.getId(), e.getMessage());
+			sessionTransport.close();
+			return false;
 		}
 	}
 

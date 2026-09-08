@@ -179,14 +179,20 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	}
 
 	/**
-	 * Create a listening stream (the generic HTTP GET request without Last-Event-ID
-	 * header).
+	 * Create a listening stream (the generic HTTP GET request, with or without a
+	 * Last-Event-ID header). A session addresses a single listening stream at a time, so
+	 * the stream being replaced, if any, is closed: no message would ever be sent to it
+	 * again, and leaving it open would leak the underlying connection.
 	 * @param transport The dedicated SSE transport stream
 	 * @return a stream representation
 	 */
 	public McpStreamableServerSessionStream listeningStream(McpStreamableServerTransport transport) {
 		McpStreamableServerSessionStream listeningStream = new McpStreamableServerSessionStream(transport);
-		this.listeningStreamRef.set(listeningStream);
+		McpLoggableSession replaced = this.listeningStreamRef.getAndSet(listeningStream);
+		if (replaced instanceof McpStreamableServerSessionStream replacedStream) {
+			logger.debug("Closing the listening stream replaced in session {}", this.id);
+			replacedStream.close();
+		}
 		return listeningStream;
 	}
 
