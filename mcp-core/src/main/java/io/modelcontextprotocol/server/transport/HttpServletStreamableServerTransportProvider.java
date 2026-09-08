@@ -20,6 +20,7 @@ import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSession;
 import io.modelcontextprotocol.spec.McpStreamableServerSession;
 import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
@@ -165,8 +166,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		if (keepAliveInterval != null) {
 
-			this.keepAliveScheduler = KeepAliveScheduler
-				.builder(() -> (isClosing) ? Flux.empty() : Flux.fromIterable(sessions.values()))
+			this.keepAliveScheduler = KeepAliveScheduler.builder(this::sessionsToPing)
 				.initialDelay(keepAliveInterval)
 				.interval(keepAliveInterval)
 				.build();
@@ -174,6 +174,22 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			this.keepAliveScheduler.start();
 		}
 
+	}
+
+	/**
+	 * Returns the sessions a keep-alive ping can be sent to, that is the sessions having
+	 * a listening stream. A session without one, e.g. a client which only ever issues
+	 * POST requests, has nothing to write a ping to: pinging it would fail on every
+	 * interval without ever telling us anything about the client being alive.
+	 * @return the sessions to ping
+	 */
+	private Flux<McpSession> sessionsToPing() {
+		if (this.isClosing) {
+			return Flux.empty();
+		}
+		return Flux.fromIterable(this.sessions.values())
+			.filter(McpStreamableServerSession::hasListeningStream)
+			.cast(McpSession.class);
 	}
 
 	@Override

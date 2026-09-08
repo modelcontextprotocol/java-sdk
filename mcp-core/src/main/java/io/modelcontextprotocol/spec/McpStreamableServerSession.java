@@ -179,6 +179,17 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	}
 
 	/**
+	 * Whether the session currently has a listening stream, that is a stream the server
+	 * can send its own requests and notifications to. Sessions have none until the client
+	 * issues the GET request establishing one, and clients are not required to ever issue
+	 * it.
+	 * @return {@code true} if the session has a listening stream
+	 */
+	public boolean hasListeningStream() {
+		return this.listeningStreamRef.get() instanceof McpStreamableServerSessionStream;
+	}
+
+	/**
 	 * Create a listening stream (the generic HTTP GET request, with or without a
 	 * Last-Event-ID header). A session addresses a single listening stream at a time, so
 	 * the stream being replaced, if any, is closed: no message would ever be sent to it
