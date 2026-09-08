@@ -20,6 +20,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import io.modelcontextprotocol.AbstractMcpClientServerIntegrationTests;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
@@ -30,6 +33,7 @@ import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTrans
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.util.KeepAliveScheduler;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.apache.catalina.LifecycleException;
@@ -42,6 +46,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.provider.Arguments;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -107,7 +112,7 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 		mcpServerTransportProvider = HttpServletStreamableServerTransportProvider.builder()
 			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
 			.mcpEndpoint(MESSAGE_ENDPOINT)
-			.keepAliveInterval(Duration.ofSeconds(1))
+			.keepAliveInterval(Duration.ofMillis(200))
 			.maxRequestSize(MAX_REQUEST_SIZE)
 			.build();
 		MCP_SERVLET.setDelegate(mcpServerTransportProvider);
@@ -265,6 +270,46 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 			assertThat(secondStream.events()).anyMatch(line -> line.contains("notifications/resources/list_changed"));
 			assertThat(firstStream.events()).noneMatch(line -> line.contains("notifications/resources/list_changed"));
 		});
+	}
+
+	@Test
+	void keepAliveSkipsSessionsWithoutListeningStream() throws Exception {
+		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
+		var httpClient = HttpClient.newHttpClient();
+		var keepAliveLogger = (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(KeepAliveScheduler.class);
+		ListAppender<ILoggingEvent> logAppender = new ListAppender<>();
+		logAppender.start();
+		keepAliveLogger.addAppender(logAppender);
+
+		try {
+			// A client is free to never issue the GET request establishing a listening
+			// stream. Such a session has nothing to write a ping to, so it must not be
+			// pinged on every keep-alive interval.
+			initializeSession(httpClient);
+
+			// The keep-alive interval is 200ms, so this spans several intervals
+			Thread.sleep(1_000);
+
+			assertThat(logAppender.list).noneMatch(event -> event.getLevel() == Level.WARN);
+		}
+		finally {
+			keepAliveLogger.detachAppender(logAppender);
+			logAppender.stop();
+		}
+	}
+
+	@Test
+	void keepAlivePingsSessionsWithListeningStream() throws Exception {
+		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
+		var httpClient = HttpClient.newHttpClient();
+
+		var sessionId = initializeSession(httpClient);
+		var stream = openListeningStream(httpClient, sessionId, null);
+		awaitStreamOpen(stream);
+
+		// Sessions with a listening stream are still pinged
+		await().atMost(Duration.ofSeconds(1))
+			.untilAsserted(() -> assertThat(stream.events()).anyMatch(line -> line.contains("\"method\":\"ping\"")));
 	}
 
 	private String initializeSession(HttpClient httpClient) throws Exception {
