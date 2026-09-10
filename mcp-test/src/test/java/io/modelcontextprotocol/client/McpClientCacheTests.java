@@ -149,7 +149,7 @@ class McpClientCacheTests {
 			}
 		};
 
-		McpAsyncClient client = McpClient.async(transport).build();
+		McpAsyncClient client = McpClient.async(transport).enableResultCaching(true).build();
 
 		// First call hits the transport
 		StepVerifier.create(client.listTools()).assertNext(res -> assertThat(res.tools()).hasSize(1)).verifyComplete();
@@ -228,7 +228,7 @@ class McpClientCacheTests {
 			}
 		};
 
-		McpAsyncClient client = McpClient.async(transport).build();
+		McpAsyncClient client = McpClient.async(transport).enableResultCaching(true).build();
 
 		// First call
 		StepVerifier.create(client.listTools()).expectNextCount(1).verifyComplete();
@@ -313,7 +313,7 @@ class McpClientCacheTests {
 			}
 		};
 
-		McpAsyncClient client = McpClient.async(transport).build();
+		McpAsyncClient client = McpClient.async(transport).enableResultCaching(true).build();
 
 		// Prompts caching
 		StepVerifier.create(client.listPrompts())
@@ -459,7 +459,7 @@ class McpClientCacheTests {
 					}
 					return null;
 				});
-		McpAsyncClient client = McpClient.async(transport).build();
+		McpAsyncClient client = McpClient.async(transport).enableResultCaching(true).build();
 
 		StepVerifier.create(client.listTools()).expectNextCount(1).verifyComplete();
 		assertThat(toolListRequestsReceived.get()).isEqualTo(1);
@@ -494,7 +494,7 @@ class McpClientCacheTests {
 					toolListRequestsReceived.incrementAndGet();
 					return "page-2".equals(cursorOf(params)) ? secondPage : firstPage;
 				});
-		McpAsyncClient client = McpClient.async(transport).build();
+		McpAsyncClient client = McpClient.async(transport).enableResultCaching(true).build();
 
 		StepVerifier.create(client.listTools()).assertNext(res -> assertThat(res.tools()).hasSize(2)).verifyComplete();
 		assertThat(toolListRequestsReceived.get()).isEqualTo(2);
@@ -506,7 +506,34 @@ class McpClientCacheTests {
 	}
 
 	@Test
-	void cachingCanBeDisabledOnTheBuilder() {
+	void cachingIsOffByDefault() {
+		AtomicInteger toolListRequestsReceived = new AtomicInteger(0);
+		var toolsResultWithTtl = McpSchema.ListToolsResult
+			.builder(List.of(McpSchema.Tool.builder("calc", Map.of("type", "object")).build()))
+			.ttlMs(10000L)
+			.build();
+
+		var transport = new ScriptedTransport(McpSchema.ServerCapabilities.builder().tools(true).build(),
+				(method, params) -> {
+					if (McpSchema.METHOD_TOOLS_LIST.equals(method)) {
+						toolListRequestsReceived.incrementAndGet();
+						return toolsResultWithTtl;
+					}
+					return null;
+				});
+		// No enableResultCaching(...) call: the default applies
+		McpAsyncClient client = McpClient.async(transport).build();
+
+		StepVerifier.create(client.listTools()).expectNextCount(1).verifyComplete();
+		StepVerifier.create(client.listTools()).expectNextCount(1).verifyComplete();
+
+		// A positive ttlMs is ignored when caching was never turned on, so every call
+		// reaches the transport
+		assertThat(toolListRequestsReceived.get()).isEqualTo(2);
+	}
+
+	@Test
+	void cachingCanBeDisabledExplicitly() {
 		AtomicInteger toolListRequestsReceived = new AtomicInteger(0);
 		var toolsResultWithTtl = McpSchema.ListToolsResult
 			.builder(List.of(McpSchema.Tool.builder("calc", Map.of("type", "object")).build()))
@@ -546,7 +573,7 @@ class McpClientCacheTests {
 					}
 					return null;
 				});
-		McpAsyncClient client = McpClient.async(transport).build();
+		McpAsyncClient client = McpClient.async(transport).enableResultCaching(true).build();
 
 		StepVerifier.create(client.listTools()).expectNextCount(1).verifyComplete();
 		StepVerifier.create(client.listTools()).expectNextCount(1).verifyComplete();
@@ -568,7 +595,7 @@ class McpClientCacheTests {
 
 		var transport = new ScriptedTransport(McpSchema.ServerCapabilities.builder().tools(true).build(),
 				(method, params) -> McpSchema.METHOD_TOOLS_LIST.equals(method) ? toolsResultWithTtl : null);
-		McpAsyncClient client = McpClient.async(transport).cacheStore(store).build();
+		McpAsyncClient client = McpClient.async(transport).enableResultCaching(true).cacheStore(store).build();
 
 		StepVerifier.create(client.listTools()).expectNextCount(1).verifyComplete();
 
