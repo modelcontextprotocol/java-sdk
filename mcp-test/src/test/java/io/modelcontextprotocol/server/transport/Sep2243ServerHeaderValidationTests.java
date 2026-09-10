@@ -60,7 +60,52 @@ class Sep2243ServerHeaderValidationTests {
 		var resp = invoke(provider, "/mcp", Map.of(HttpHeaders.PROTOCOL_VERSION, "junk"), toolCallBody("t"));
 
 		assertThat(resp.getStatus()).isEqualTo(400);
-		assertThat(resp.getContentAsString()).contains("Unsupported protocol version");
+		assertThat(resp.getContentAsString()).contains("Unsupported protocol version", "-32600");
+		assertThat(resp.getContentAsString()).doesNotContain("-32601");
+	}
+
+	@Test
+	void streamableRejectsMissingMcpMethodWhenRequired() throws Exception {
+		var provider = HttpServletStreamableServerTransportProvider.builder()
+			.mcpEndpoint("/mcp")
+			.requireMcpHeaders(true)
+			.build();
+
+		var resp = invoke(provider, "/mcp", Map.of(), toolCallBody("t"));
+
+		assertThat(resp.getStatus()).isEqualTo(400);
+		assertThat(resp.getContentAsString()).contains("-32020", "Mcp-Method");
+	}
+
+	@Test
+	void streamableRejectsMissingMcpNameWhenRequired() throws Exception {
+		var provider = HttpServletStreamableServerTransportProvider.builder()
+			.mcpEndpoint("/mcp")
+			.requireMcpHeaders(true)
+			.build();
+
+		var resp = invoke(provider, "/mcp", Map.of(HttpHeaders.MCP_METHOD, McpSchema.METHOD_TOOLS_CALL),
+				toolCallBody("t"));
+
+		assertThat(resp.getStatus()).isEqualTo(400);
+		assertThat(resp.getContentAsString()).contains("Mcp-Name");
+	}
+
+	@Test
+	void streamableAcceptsCompleteHeadersWhenRequired() throws Exception {
+		var provider = HttpServletStreamableServerTransportProvider.builder()
+			.mcpEndpoint("/mcp")
+			.requireMcpHeaders(true)
+			.build();
+
+		// A dummy session ID is supplied purely to get past the transport's unrelated
+		// "session required" check (a 404 for an unknown session) so that this test
+		// isolates the outcome of the SEP-2243 header validation itself.
+		var resp = invoke(provider, "/mcp", Map.of(HttpHeaders.MCP_METHOD, McpSchema.METHOD_TOOLS_CALL,
+				HttpHeaders.MCP_NAME, "t", HttpHeaders.MCP_SESSION_ID, "test-session"), toolCallBody("t"));
+
+		assertThat(resp.getStatus()).isNotEqualTo(400);
+		assertThat(resp.getContentAsString()).doesNotContain("-32020");
 	}
 
 	@Test
@@ -115,7 +160,50 @@ class Sep2243ServerHeaderValidationTests {
 		var resp = invoke(transport, "/mcp", Map.of(HttpHeaders.PROTOCOL_VERSION, "junk"), toolCallBody("t"));
 
 		assertThat(resp.getStatus()).isEqualTo(400);
-		assertThat(resp.getContentAsString()).contains("Unsupported protocol version");
+		assertThat(resp.getContentAsString()).contains("Unsupported protocol version", "-32600");
+		assertThat(resp.getContentAsString()).doesNotContain("-32601");
+	}
+
+	@Test
+	void statelessRejectsMissingMcpMethodWhenRequired() throws Exception {
+		var transport = HttpServletStatelessServerTransport.builder()
+			.messageEndpoint("/mcp")
+			.requireMcpHeaders(true)
+			.build();
+
+		var resp = invoke(transport, "/mcp", Map.of(), toolCallBody("t"));
+
+		assertThat(resp.getStatus()).isEqualTo(400);
+		assertThat(resp.getContentAsString()).contains("-32020", "Mcp-Method");
+	}
+
+	@Test
+	void statelessRejectsMissingMcpNameWhenRequired() throws Exception {
+		var transport = HttpServletStatelessServerTransport.builder()
+			.messageEndpoint("/mcp")
+			.requireMcpHeaders(true)
+			.build();
+
+		var resp = invoke(transport, "/mcp", Map.of(HttpHeaders.MCP_METHOD, McpSchema.METHOD_TOOLS_CALL),
+				toolCallBody("t"));
+
+		assertThat(resp.getStatus()).isEqualTo(400);
+		assertThat(resp.getContentAsString()).contains("Mcp-Name");
+	}
+
+	@Test
+	void statelessAcceptsCompleteHeadersWhenRequired() throws Exception {
+		var transport = HttpServletStatelessServerTransport.builder()
+			.messageEndpoint("/mcp")
+			.requireMcpHeaders(true)
+			.build();
+
+		var resp = invoke(transport, "/mcp",
+				Map.of(HttpHeaders.MCP_METHOD, McpSchema.METHOD_TOOLS_CALL, HttpHeaders.MCP_NAME, "t"),
+				toolCallBody("t"));
+
+		assertThat(resp.getStatus()).isNotEqualTo(400);
+		assertThat(resp.getContentAsString()).doesNotContain("-32020");
 	}
 
 	@Test
