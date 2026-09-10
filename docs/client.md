@@ -498,11 +498,21 @@ var client = McpClient.sync(transport)
 
 ### Result Caching
 
-When a server marks a response cacheable, the client stores it and answers later identical calls
-from that store instead of going back to the server. This covers `listTools`, `listPrompts`,
-`listResources`, `listResourceTemplates`, and `readResource`.
+When a server marks a response cacheable, the client can store it and answer later identical
+calls from that store instead of going back to the server. This covers `listTools`,
+`listPrompts`, `listResources`, `listResourceTemplates`, and `readResource`.
 
-Caching is on by default and does nothing until a server opts in, because only a response that
+Caching is off by default, so upgrading the SDK does not change what you observe from a server
+that already emits TTLs. Turn it on to let the client serve repeated calls from its cache until
+the TTL lapses or a change notification arrives:
+
+```java
+var client = McpClient.sync(transport)
+    .enableResultCaching(true)
+    .build();
+```
+
+Once enabled, caching still does nothing until a server opts in, because only a response that
 carries a time to live (TTL) is ever stored. An entry is dropped when its TTL lapses, when the
 matching `*_changed` or `resources/updated` notification arrives, and when the client reconnects
 or closes.
@@ -515,13 +525,8 @@ client.invalidateCache();
 ListToolsResult fresh = client.listTools();
 ```
 
-To ignore server TTLs altogether, turn caching off:
-
-```java
-var client = McpClient.sync(transport)
-    .enableResultCaching(false)
-    .build();
-```
+Leaving `enableResultCaching` unset keeps the default: the client ignores server TTLs
+altogether.
 
 **Choosing where entries are kept**
 
@@ -532,6 +537,7 @@ pass it to the builder:
 ```java
 // MyCacheStore is your own implementation, for example over Caffeine
 var client = McpClient.sync(transport)
+    .enableResultCaching(true)
     .cacheStore(new MyCacheStore())
     .build();
 ```
