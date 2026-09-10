@@ -3223,6 +3223,30 @@ public class McpSchemaTests {
 	}
 
 	@Test
+	void testNegativeTtlIsRejectedByBuilders() {
+		assertThatThrownBy(() -> McpSchema.ListToolsResult.builder(List.of()).ttlMs(-1L))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessage("ttlMs must not be negative");
+		assertThatThrownBy(() -> McpSchema.ListPromptsResult.builder(List.of()).ttlMs(-1L))
+			.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> McpSchema.ListResourcesResult.builder(List.of()).ttlMs(-1L))
+			.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> McpSchema.ListResourceTemplatesResult.builder(List.of()).ttlMs(-1L))
+			.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> McpSchema.ReadResourceResult.builder(List.of()).ttlMs(-1L))
+			.isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	void testNegativeTtlOnTheWireIsToleratedRatherThanFailingTheResponse() throws Exception {
+		// A bad server hint must not make the whole listing unparseable; the client
+		// simply does not cache it.
+		McpSchema.ListToolsResult result = JSON_MAPPER.readValue("""
+				{"tools":[],"ttlMs":-1}""", McpSchema.ListToolsResult.class);
+		assertThat(result.ttlMs()).isEqualTo(-1L);
+	}
+
+	@Test
 	void testCacheScopeSerialization() throws Exception {
 		assertThat(JSON_MAPPER.writeValueAsString(McpSchema.CacheScope.PUBLIC)).isEqualTo("\"public\"");
 		assertThat(JSON_MAPPER.writeValueAsString(McpSchema.CacheScope.PRIVATE)).isEqualTo("\"private\"");
