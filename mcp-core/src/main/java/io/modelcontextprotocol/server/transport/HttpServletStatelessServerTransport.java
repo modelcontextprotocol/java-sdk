@@ -13,12 +13,10 @@ import org.slf4j.LoggerFactory;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
-import io.modelcontextprotocol.json.TypeRef;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
-import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
@@ -72,6 +70,12 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 	private final ServerHttpHeaderValidator httpHeaderValidator;
 
 	/**
+	 * Validator for the SEP-2243 {@code MCP-Protocol-Version}, {@code Mcp-Method}, and
+	 * {@code Mcp-Name} header checks that need the parsed JSON-RPC body.
+	 */
+	private final Sep2243RequestValidator sep2243Validator;
+
+	/**
 	 * Maximum size, in bytes, of a single request body accepted by this transport.
 	 */
 	private final int requestMaxSize;
@@ -86,11 +90,13 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 	 * @param httpHeaderValidator The HTTP header validator for validating HTTP requests.
 	 * @param requestMaxSize The maximum size, in bytes, of a single request body. Must be
 	 * positive.
+	 * @param requireMcpHeaders Whether a POST lacking the SEP-2243 {@code Mcp-Method} /
+	 * {@code Mcp-Name} headers is rejected instead of tolerated.
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
 	private HttpServletStatelessServerTransport(McpJsonMapper jsonMapper, String mcpEndpoint,
 			McpTransportContextExtractor<HttpServletRequest> contextExtractor,
-			ServerHttpHeaderValidator httpHeaderValidator, int requestMaxSize) {
+			ServerHttpHeaderValidator httpHeaderValidator, int requestMaxSize, boolean requireMcpHeaders) {
 		Assert.notNull(jsonMapper, "jsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "mcpEndpoint must not be null");
 		Assert.notNull(contextExtractor, "contextExtractor must not be null");
@@ -102,6 +108,7 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		this.contextExtractor = contextExtractor;
 		this.httpHeaderValidator = httpHeaderValidator;
 		this.requestMaxSize = requestMaxSize;
+		this.sep2243Validator = new Sep2243RequestValidator(jsonMapper, this::protocolVersions, requireMcpHeaders);
 	}
 
 	@Override
@@ -187,18 +194,20 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
 
 			// The MCP-Protocol-Version header can only be strictly validated once a
-			// version has been negotiated; during 'initialize' the client advertises its
-			// versions in the request body and any header value is resolved by regular
-			// version negotiation instead of being rejected.
-			boolean initializationRequest = message instanceof McpSchema.JSONRPCRequest initRequestCheck
-					&& McpSchema.METHOD_INITIALIZE.equals(initRequestCheck.method());
-			if (!initializationRequest && !validateProtocolVersion(request, response)) {
+			// version has been negotiated; 'initialize' requests are exempt.
+			HttpServletHeaderAccessor headerAccessor = new HttpServletHeaderAccessor(request);
+			McpError protocolVersionError = this.sep2243Validator.validateProtocolVersion(headerAccessor,
+					Sep2243RequestValidator.isInitializeRequest(message));
+			if (protocolVersionError != null) {
+				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, protocolVersionError);
 				return;
 			}
 
 			// Per SEP-2243, reject header/body mismatches (missing headers are tolerated
-			// so legacy clients keep working).
-			if (!validateMcpHeaders(request, response, message)) {
+			// by default so legacy clients keep working).
+			McpError mirroringError = this.sep2243Validator.validateMirroringHeaders(headerAccessor, message);
+			if (mirroringError != null) {
+				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, mirroringError);
 				return;
 			}
 
@@ -283,124 +292,6 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 	}
 
 	/**
-	 * Validates the {@code MCP-Protocol-Version} header against the protocol versions
-	 * supported by this transport. A missing header is allowed and falls back to the
-	 * negotiated protocol version, while a header carrying an unsupported version is
-	 * rejected with a 400 Bad Request. Initialize requests are exempt: no version has
-	 * been negotiated yet, so any header value carried on them is resolved through
-	 * regular body-based version negotiation.
-	 * @param request the HTTP servlet request
-	 * @param response the HTTP servlet response
-	 * @return true if the header is missing or contains a supported version, false if a
-	 * 400 error response has been written
-	 * @throws IOException if an I/O error occurs
-	 */
-	private boolean validateProtocolVersion(HttpServletRequest request, HttpServletResponse response)
-			throws IOException {
-		String protocolVersion = request.getHeader(HttpHeaders.PROTOCOL_VERSION);
-		if (protocolVersion == null || this.protocolVersions().contains(protocolVersion)) {
-			return true;
-		}
-		this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
-				McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND)
-					.message("Unsupported protocol version (supported versions: "
-							+ String.join(", ", this.protocolVersions()) + ")")
-					.build());
-		return false;
-	}
-
-	/**
-	 * Validates the SEP-2243 {@code Mcp-Method} and {@code Mcp-Name} request headers
-	 * against the deserialized message body. Missing headers are permitted for backwards
-	 * compatibility with legacy clients, but any header that is supplied must match the
-	 * corresponding payload attribute. Mismatches are rejected with a 400 Bad Request.
-	 * @param request the incoming servlet request
-	 * @param response the servlet response used to write an error payload if validation
-	 * fails
-	 * @param message the parsed JSON-RPC message
-	 * @return {@code true} if validation passed, {@code false} if a 400 response was
-	 * written
-	 * @throws IOException if writing the error response fails
-	 */
-	private boolean validateMcpHeaders(HttpServletRequest request, HttpServletResponse response,
-			McpSchema.JSONRPCMessage message) throws IOException {
-		String method = message instanceof McpSchema.JSONRPCRequest req ? req.method()
-				: message instanceof McpSchema.JSONRPCNotification notif ? notif.method() : null;
-
-		if (method == null) {
-			return true;
-		}
-
-		String methodHeader = request.getHeader(HttpHeaders.MCP_METHOD);
-		if (methodHeader != null && !methodHeader.isBlank() && !method.equals(methodHeader)) {
-			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
-					McpError.builder(McpSchema.ErrorCodes.HEADER_MISMATCH)
-						.message("Mcp-Method header mismatch: expected '" + method + "' but was '" + methodHeader + "'")
-						.build());
-			return false;
-		}
-
-		Object params = message instanceof McpSchema.JSONRPCRequest req ? req.params()
-				: message instanceof McpSchema.JSONRPCNotification notif ? notif.params() : null;
-		String name = extractNameFromParams(method, params);
-		if (name != null) {
-			String nameHeader = request.getHeader(HttpHeaders.MCP_NAME);
-			if (nameHeader != null && !nameHeader.isBlank()) {
-				String decodedName = HttpHeaders.decodeHeaderValue(nameHeader);
-				if (!name.equals(decodedName)) {
-					this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
-							McpError.builder(McpSchema.ErrorCodes.HEADER_MISMATCH)
-								.message("Mcp-Name header mismatch: expected '" + name + "' but was '" + nameHeader
-										+ "'")
-								.build());
-					return false;
-				}
-			}
-		}
-
-		return true;
-	}
-
-	/**
-	 * Extracts the name or URI of the tool, prompt, or resource referenced by a request,
-	 * as used to validate the SEP-2243 {@code Mcp-Name} header.
-	 * @param method the JSON-RPC method of the request
-	 * @param params the request parameters
-	 * @return the target name or URI when the method references one, otherwise
-	 * {@code null}
-	 */
-	private String extractNameFromParams(String method, Object params) {
-		if (params == null) {
-			return null;
-		}
-
-		try {
-			return switch (method) {
-				case McpSchema.METHOD_TOOLS_CALL ->
-					this.jsonMapper.convertValue(params, new TypeRef<McpSchema.CallToolRequest>() {
-					}).name();
-				case McpSchema.METHOD_PROMPT_GET ->
-					this.jsonMapper.convertValue(params, new TypeRef<McpSchema.GetPromptRequest>() {
-					}).name();
-				case McpSchema.METHOD_RESOURCES_READ ->
-					this.jsonMapper.convertValue(params, new TypeRef<McpSchema.ReadResourceRequest>() {
-					}).uri();
-				case McpSchema.METHOD_RESOURCES_SUBSCRIBE ->
-					this.jsonMapper.convertValue(params, new TypeRef<McpSchema.SubscribeRequest>() {
-					}).uri();
-				case McpSchema.METHOD_RESOURCES_UNSUBSCRIBE ->
-					this.jsonMapper.convertValue(params, new TypeRef<McpSchema.UnsubscribeRequest>() {
-					}).uri();
-				default -> null;
-			};
-		}
-		catch (Exception e) {
-			logger.debug("Failed to extract name from params for method {}: {}", method, e.getMessage());
-			return null;
-		}
-	}
-
-	/**
 	 * Cleans up resources when the servlet is being destroyed.
 	 * <p>
 	 * This method ensures a graceful shutdown before calling the parent's destroy method.
@@ -437,6 +328,8 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		private ServerHttpHeaderValidator httpHeaderValidator = ServerHttpHeaderValidator.NOOP;
 
 		private int requestMaxSize = DEFAULT_REQUEST_MAX_SIZE;
+
+		private boolean requireMcpHeaders = false;
 
 		private Builder() {
 			// used by a static method
@@ -524,6 +417,22 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		}
 
 		/**
+		 * Opt-in strict mode for SEP-2243. When enabled, a POST whose JSON-RPC request or
+		 * notification carries no {@code Mcp-Method} header, or targets a tool, prompt or
+		 * resource without an {@code Mcp-Name} header, is rejected with HTTP 400 and
+		 * error code {@code HEADER_MISMATCH} (-32020). Disabled by default so that
+		 * clients that do not send these headers keep working. A present header that
+		 * mismatches the body is always rejected regardless of this setting.
+		 * @param requireMcpHeaders whether to require the SEP-2243 {@code Mcp-Method} /
+		 * {@code Mcp-Name} headers
+		 * @return this builder instance
+		 */
+		public Builder requireMcpHeaders(boolean requireMcpHeaders) {
+			this.requireMcpHeaders = requireMcpHeaders;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link HttpServletStatelessServerTransport} with the
 		 * configured settings.
 		 * @return A new HttpServletStatelessServerTransport instance
@@ -533,7 +442,7 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 			return new HttpServletStatelessServerTransport(
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, mcpEndpoint, contextExtractor,
-					httpHeaderValidator, requestMaxSize);
+					httpHeaderValidator, requestMaxSize, requireMcpHeaders);
 		}
 
 	}

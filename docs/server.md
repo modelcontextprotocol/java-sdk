@@ -170,7 +170,8 @@ Key features:
     - SEP-2243 validation: the servlet transport rejects requests whose present
       `Mcp-Method` / `Mcp-Name` headers do not mirror the request body, and rejects
       unsupported `MCP-Protocol-Version` values. Missing headers are tolerated so legacy
-      clients keep working.
+      clients keep working. Call `.requireMcpHeaders(true)` on the builder to also
+      reject requests that omit them.
 
 === "Streamable HTTP WebFlux (external)"
 
