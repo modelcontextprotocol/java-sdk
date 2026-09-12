@@ -8,11 +8,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -24,21 +19,6 @@ import jakarta.servlet.http.HttpServletRequest;
 final class HttpServletRequestUtils {
 
 	private HttpServletRequestUtils() {
-	}
-
-	/**
-	 * Extracts all headers from the HTTP request into a map.
-	 * @param request The HTTP servlet request
-	 * @return A map of header names to their values
-	 */
-	static Map<String, List<String>> extractHeaders(HttpServletRequest request) {
-		Map<String, List<String>> headers = new HashMap<>();
-		Enumeration<String> names = request.getHeaderNames();
-		while (names.hasMoreElements()) {
-			String name = names.nextElement();
-			headers.put(name, Collections.list(request.getHeaders(name)));
-		}
-		return headers;
 	}
 
 	/**

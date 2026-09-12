@@ -9,7 +9,6 @@ import java.io.PrintWriter;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -24,6 +23,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpStreamableServerSession;
 import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
+import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.KeepAliveScheduler;
 import jakarta.servlet.AsyncContext;
@@ -130,7 +130,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	/**
 	 * Security validator for validating HTTP requests.
 	 */
-	private final ServerTransportSecurityValidator securityValidator;
+	private final ServerHttpHeaderValidator httpHeaderValidator;
 
 	/**
 	 * Constructs a new HttpServletStreamableServerTransportProvider instance.
@@ -142,25 +142,25 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * @param contextExtractor The extractor for transport context from the request.
 	 * @param keepAliveInterval The interval for keep-alive pings. If null, no keep-alive
 	 * will be scheduled.
-	 * @param securityValidator The security validator for validating HTTP requests.
+	 * @param httpHeaderValidator The HTTP header validator for validating HTTP requests.
 	 * @param requestMaxSize The maximum size, in bytes, of a single request body. Must be
 	 * positive.
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
 	private HttpServletStreamableServerTransportProvider(McpJsonMapper jsonMapper, String mcpEndpoint,
 			boolean disallowDelete, McpTransportContextExtractor<HttpServletRequest> contextExtractor,
-			Duration keepAliveInterval, ServerTransportSecurityValidator securityValidator, int requestMaxSize) {
+			Duration keepAliveInterval, ServerHttpHeaderValidator httpHeaderValidator, int requestMaxSize) {
 		Assert.notNull(jsonMapper, "JsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "MCP endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
-		Assert.notNull(securityValidator, "Security validator must not be null");
+		Assert.notNull(httpHeaderValidator, "HTTP header validator must not be null");
 		Assert.isTrue(requestMaxSize > 0, "requestMaxSize must be positive");
 
 		this.jsonMapper = jsonMapper;
 		this.mcpEndpoint = mcpEndpoint;
 		this.disallowDelete = disallowDelete;
 		this.contextExtractor = contextExtractor;
-		this.securityValidator = securityValidator;
+		this.httpHeaderValidator = httpHeaderValidator;
 		this.requestMaxSize = requestMaxSize;
 
 		if (keepAliveInterval != null) {
@@ -274,8 +274,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		try {
-			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
-			this.securityValidator.validateHeaders(headers);
+			this.httpHeaderValidator.validate(new HttpServletHeaderAccessor(request));
 		}
 		catch (ServerTransportSecurityException e) {
 			response.sendError(e.getStatusCode(), e.getMessage());
@@ -325,65 +324,76 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			HttpServletStreamableMcpSessionTransport sessionTransport = new HttpServletStreamableMcpSessionTransport(
 					sessionId, asyncContext, response.getWriter());
 
-			// Check if this is a replay request
-			if (request.getHeader(HttpHeaders.LAST_EVENT_ID) != null) {
-				String lastId = request.getHeader(HttpHeaders.LAST_EVENT_ID);
-
-				try {
-					session.replay(lastId)
-						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
-						.toIterable()
-						.forEach(message -> {
-							try {
-								sessionTransport.sendMessage(message)
-									.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
-									.block();
-							}
-							catch (Exception e) {
-								logger.error("Failed to replay message: {}", e.getMessage());
-								asyncContext.complete();
-							}
-						});
-				}
-				catch (Exception e) {
-					logger.error("Failed to replay messages: {}", e.getMessage());
-					asyncContext.complete();
-				}
+			// Replay the messages the client missed while its stream was broken
+			String lastEventId = request.getHeader(HttpHeaders.LAST_EVENT_ID);
+			if (lastEventId != null
+					&& !this.tryReplayMissedMessages(session, lastEventId, sessionTransport, transportContext)) {
+				// The replay failed and already closed the transport
+				return;
 			}
-			else {
-				// Establish new listening stream
-				McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
-					.listeningStream(sessionTransport);
 
-				asyncContext.addListener(new jakarta.servlet.AsyncListener() {
-					@Override
-					public void onComplete(jakarta.servlet.AsyncEvent event) throws IOException {
-						logger.debug("SSE connection completed for session: {}", sessionId);
-						listeningStream.close();
-					}
+			// Establish the listening stream. Resumed streams are registered too, so
+			// that the session keeps delivering messages to the reconnected client and
+			// the async context is completed once the client goes away.
+			McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
+				.listeningStream(sessionTransport);
 
-					@Override
-					public void onTimeout(jakarta.servlet.AsyncEvent event) throws IOException {
-						logger.debug("SSE connection timed out for session: {}", sessionId);
-						listeningStream.close();
-					}
+			asyncContext.addListener(new jakarta.servlet.AsyncListener() {
+				@Override
+				public void onComplete(jakarta.servlet.AsyncEvent event) throws IOException {
+					logger.debug("SSE connection completed for session: {}", sessionId);
+					listeningStream.close();
+				}
 
-					@Override
-					public void onError(jakarta.servlet.AsyncEvent event) throws IOException {
-						logger.debug("SSE connection error for session: {}", sessionId);
-						listeningStream.close();
-					}
+				@Override
+				public void onTimeout(jakarta.servlet.AsyncEvent event) throws IOException {
+					logger.debug("SSE connection timed out for session: {}", sessionId);
+					listeningStream.close();
+				}
 
-					@Override
-					public void onStartAsync(jakarta.servlet.AsyncEvent event) throws IOException {
-						// No action needed
-					}
-				});
-			}
+				@Override
+				public void onError(jakarta.servlet.AsyncEvent event) throws IOException {
+					logger.debug("SSE connection error for session: {}", sessionId);
+					listeningStream.close();
+				}
+
+				@Override
+				public void onStartAsync(jakarta.servlet.AsyncEvent event) throws IOException {
+					// No action needed
+				}
+			});
 		}
 		catch (Exception e) {
 			logger.error("Failed to handle GET request for session {}: {}", sessionId, e.getMessage());
 			response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	/**
+	 * Replays the messages the client missed while its SSE stream was broken.
+	 * @param session the session the client is resuming
+	 * @param lastEventId the ID of the last event received by the client
+	 * @param sessionTransport the transport of the resumed SSE stream
+	 * @param transportContext the context extracted from the request
+	 * @return {@code true} if the replay completed, {@code false} if it failed, in which
+	 * case the transport has been closed
+	 */
+	private boolean tryReplayMissedMessages(McpStreamableServerSession session, String lastEventId,
+			McpStreamableServerTransport sessionTransport, McpTransportContext transportContext) {
+		try {
+			for (McpSchema.JSONRPCMessage message : session.replay(lastEventId)
+				.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
+				.toIterable()) {
+				sessionTransport.sendMessage(message)
+					.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
+					.block();
+			}
+			return true;
+		}
+		catch (Exception e) {
+			logger.error("Failed to replay messages for session {}: {}", session.getId(), e.getMessage());
+			sessionTransport.close();
+			return false;
 		}
 	}
 
@@ -414,8 +424,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		try {
-			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
-			this.securityValidator.validateHeaders(headers);
+			this.httpHeaderValidator.validate(new HttpServletHeaderAccessor(request));
 		}
 		catch (ServerTransportSecurityException e) {
 			response.sendError(e.getStatusCode(), e.getMessage());
@@ -593,8 +602,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		try {
-			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
-			this.securityValidator.validateHeaders(headers);
+			this.httpHeaderValidator.validate(new HttpServletHeaderAccessor(request));
 		}
 		catch (ServerTransportSecurityException e) {
 			response.sendError(e.getStatusCode(), e.getMessage());
@@ -820,6 +828,12 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 	}
 
+	@Override
+	public List<String> protocolVersions() {
+		return List.of(ProtocolVersions.MCP_2025_03_26, ProtocolVersions.MCP_2025_06_18,
+				ProtocolVersions.MCP_2025_11_25);
+	}
+
 	public static Builder builder() {
 		return new Builder();
 	}
@@ -841,7 +855,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		private Duration keepAliveInterval;
 
-		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
+		private ServerHttpHeaderValidator httpHeaderValidator = ServerHttpHeaderValidator.NOOP;
 
 		private int requestMaxSize = DEFAULT_REQUEST_MAX_SIZE;
 
@@ -909,10 +923,25 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		 * @param securityValidator The security validator to use. Must not be null.
 		 * @return this builder instance
 		 * @throws IllegalArgumentException if securityValidator is null
+		 * @deprecated Use {@link #httpHeaderValidator(ServerHttpHeaderValidator)}
+		 * instead.
 		 */
+		@Deprecated
 		public Builder securityValidator(ServerTransportSecurityValidator securityValidator) {
 			Assert.notNull(securityValidator, "Security validator must not be null");
-			this.securityValidator = securityValidator;
+			this.httpHeaderValidator = ServerTransportSecurityValidator.toHttpHeaderValidator(securityValidator);
+			return this;
+		}
+
+		/**
+		 * Sets the HTTP header validator for validating HTTP requests.
+		 * @param httpHeaderValidator The HTTP header validator to use. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if httpHeaderValidator is null
+		 */
+		public Builder httpHeaderValidator(ServerHttpHeaderValidator httpHeaderValidator) {
+			Assert.notNull(httpHeaderValidator, "HTTP header validator must not be null");
+			this.httpHeaderValidator = httpHeaderValidator;
 			return this;
 		}
 
@@ -939,7 +968,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 			return new HttpServletStreamableServerTransportProvider(
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, mcpEndpoint, disallowDelete,
-					contextExtractor, keepAliveInterval, securityValidator, requestMaxSize);
+					contextExtractor, keepAliveInterval, httpHeaderValidator, requestMaxSize);
 		}
 
 	}
