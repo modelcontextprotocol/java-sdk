@@ -7,28 +7,34 @@ package io.modelcontextprotocol.server.transport;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.FilterOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -98,7 +104,7 @@ class StdioServerTransportProviderTests {
 	}
 
 	@Test
-	void shouldHandleIncomingMessages() throws Exception {
+	void shouldHandleIncomingMessages() {
 
 		String jsonMessage = "{\"jsonrpc\":\"2.0\",\"method\":\"test\",\"params\":{},\"id\":1}\n";
 		InputStream stream = new ByteArrayInputStream(jsonMessage.getBytes(StandardCharsets.UTF_8));
@@ -228,7 +234,7 @@ class StdioServerTransportProviderTests {
 	}
 
 	@Test
-	void shouldHandleInvalidJsonMessage() throws Exception {
+	void shouldHandleInvalidJsonMessage() {
 
 		// Write an invalid JSON message to the input stream
 		String jsonMessage = "{invalid json}\n";
@@ -247,7 +253,50 @@ class StdioServerTransportProviderTests {
 	}
 
 	@Test
-	void shouldHandleSessionClose() throws Exception {
+	void shouldRejectInboundMessageExceedingMaxSize() {
+		// A line larger than the configured limit that never terminates with a newline.
+		// BufferedReader#readLine would buffer the whole thing; the bounded reader must
+		// abort instead.
+		int maxSize = 1024;
+		String oversized = "a".repeat(maxSize + 10);
+		InputStream stream = new ByteArrayInputStream(oversized.getBytes(StandardCharsets.UTF_8));
+
+		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getMapper(), stream, testOutPrintStream,
+				maxSize);
+
+		AtomicReference<McpSchema.JSONRPCMessage> capturedMessage = new AtomicReference<>();
+		McpServerSession.Factory realSessionFactory = transport -> {
+			McpServerSession session = mock(McpServerSession.class);
+			when(session.handle(any())).thenAnswer(invocation -> {
+				capturedMessage.set(invocation.getArgument(0));
+				return Mono.empty();
+			});
+			when(session.closeGracefully()).thenReturn(Mono.empty());
+			return session;
+		};
+
+		transportProvider.setSessionFactory(realSessionFactory);
+
+		Awaitility.await()
+			.atMost(Duration.ofSeconds(5))
+			.pollInterval(Duration.ofMillis(100))
+			.untilAsserted(
+					() -> assertThat(testErr.toString()).contains("Inbound message exceeds the maximum allowed size"));
+
+		// message is never processed
+		assertThat(capturedMessage.get()).isNull();
+	}
+
+	@Test
+	void shouldRejectNonPositiveMaxSize() {
+		assertThatThrownBy(
+				() -> new StdioServerTransportProvider(McpJsonDefaults.getMapper(), System.in, System.out, 0))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("inputMaxSize must be positive");
+	}
+
+	@Test
+	void shouldHandleSessionClose() {
 		// Set session factory
 		transportProvider.setSessionFactory(sessionFactory);
 
@@ -256,6 +305,71 @@ class StdioServerTransportProviderTests {
 
 		// Verify session was closed
 		verify(mockSession).closeGracefully();
+	}
+
+	@Test
+	void shouldHandleConcurrentSendMessage() throws Exception {
+		int messageCount = 500;
+		ByteArrayOutputStream output = new ByteArrayOutputStream();
+		CountDownLatch writtenMessages = new CountDownLatch(messageCount);
+
+		// Redirect the transport output to a buffer so we can verify every message lands.
+		// Writes happen serially on the outbound scheduler, so count the
+		// newline delimiters as they are written.
+		OutputStream countingOutput = new FilterOutputStream(output) {
+
+			@Override
+			public void write(int b) throws IOException {
+				this.out.write(b);
+				if (b == '\n') {
+					writtenMessages.countDown();
+				}
+			}
+
+			@Override
+			public void write(byte[] b, int off, int len) throws IOException {
+				this.out.write(b, off, len);
+				for (int i = off; i < off + len; i++) {
+					if (b[i] == '\n') {
+						writtenMessages.countDown();
+					}
+				}
+			}
+		};
+		transportProvider = new StdioServerTransportProvider(McpJsonDefaults.getMapper(), System.in, countingOutput);
+
+		// Capture the inner McpServerTransport handed to the session factory
+		AtomicReference<McpServerTransport> transportRef = new AtomicReference<>();
+		McpServerSession.Factory capturingFactory = transport -> {
+			transportRef.set(transport);
+			return mockSession;
+		};
+
+		transportProvider.setSessionFactory(capturingFactory);
+
+		McpServerTransport transport = transportRef.get();
+		assertThat(transport).isNotNull();
+
+		// Fan sendMessage out across 16 parallel rails to race against the unicast sink
+		Flux<Integer> concurrentSends = Flux.range(0, messageCount)
+			.parallel(16)
+			.runOn(Schedulers.parallel())
+			.flatMap(i -> transport
+				.sendMessage(
+						new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION, "test/notification", Map.of()))
+				.thenReturn(i))
+			.sequential();
+
+		// Every send should complete successfully (no FAIL_NON_SERIALIZED errors)
+		StepVerifier.create(concurrentSends).expectNextCount(messageCount).verifyComplete();
+
+		// Wait until the outbound scheduler has actually written all of them
+		assertThat(writtenMessages.await(30, TimeUnit.SECONDS))
+			.as("all %d messages written, %d still missing", messageCount, writtenMessages.getCount())
+			.isTrue();
+
+		// Every message was written as its own newline-delimited JSON line
+		assertThat(output.toString(StandardCharsets.UTF_8).lines().count()).isEqualTo(messageCount);
 	}
 
 }
