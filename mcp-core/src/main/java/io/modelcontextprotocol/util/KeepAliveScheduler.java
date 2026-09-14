@@ -6,6 +6,7 @@ package io.modelcontextprotocol.util;
 
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import org.slf4j.Logger;
@@ -57,6 +58,9 @@ public class KeepAliveScheduler {
 	/** Supplier for reactive McpSession instances */
 	private final Supplier<Flux<McpSession>> mcpSessions;
 
+	/** Invoked with the session whose keep-alive ping went unanswered */
+	private final Consumer<McpSession> onPingFailure;
+
 	/**
 	 * Creates a KeepAliveScheduler with a custom scheduler, initial delay, interval and a
 	 * supplier for McpSession instances.
@@ -64,13 +68,15 @@ public class KeepAliveScheduler {
 	 * @param initialDelay Initial delay before the first keepAlive call
 	 * @param interval Interval between subsequent keepAlive calls
 	 * @param mcpSessions Supplier for McpSession instances
+	 * @param onPingFailure Callback invoked with the session whose ping went unanswered
 	 */
 	KeepAliveScheduler(Scheduler scheduler, Duration initialDelay, Duration interval,
-			Supplier<Flux<McpSession>> mcpSessions) {
+			Supplier<Flux<McpSession>> mcpSessions, Consumer<McpSession> onPingFailure) {
 		this.scheduler = scheduler;
 		this.initialDelay = initialDelay;
 		this.interval = interval;
 		this.mcpSessions = mcpSessions;
+		this.onPingFailure = onPingFailure;
 	}
 
 	/**
@@ -92,8 +98,14 @@ public class KeepAliveScheduler {
 				.doOnNext(tick -> {
 					this.mcpSessions.get()
 						.flatMap(session -> session.sendRequest(McpSchema.METHOD_PING, null, OBJECT_TYPE_REF)
-							.doOnError(e -> logger.warn("Failed to send keep-alive ping to session {}: {}", session,
-									e.getMessage()))
+							// A ping has to be answered before the next one is due. The
+							// request timeout of the session is unrelated to keeping the
+							// connection alive, and is measured in hours by default.
+							.timeout(this.interval)
+							.doOnError(e -> {
+								logger.warn("Keep-alive ping to session {} failed: {}", session, e.getMessage());
+								this.onPingFailure.accept(session);
+							})
 							.onErrorComplete())
 						.subscribe();
 				})
@@ -154,6 +166,9 @@ public class KeepAliveScheduler {
 
 		private Supplier<Flux<McpSession>> mcpSessions;
 
+		private Consumer<McpSession> onPingFailure = session -> {
+		};
+
 		/**
 		 * Creates a new Builder instance with a supplier for McpSession instances.
 		 * @param mcpSessions The supplier for McpSession instances
@@ -205,11 +220,27 @@ public class KeepAliveScheduler {
 		}
 
 		/**
+		 * Sets the callback invoked when a session does not answer a keep-alive ping
+		 * within the keep-alive interval. An unanswered ping means the connection the
+		 * ping was written to is dead, which the operating system does not necessarily
+		 * report: writing to a connection whose peer is gone keeps succeeding until it
+		 * resets. It does not mean the session itself is over, as the client is free to
+		 * reconnect to it.
+		 * @param onPingFailure The callback receiving the unresponsive session
+		 * @return This builder instance for method chaining
+		 */
+		public Builder onPingFailure(Consumer<McpSession> onPingFailure) {
+			Assert.notNull(onPingFailure, "onPingFailure must not be null");
+			this.onPingFailure = onPingFailure;
+			return this;
+		}
+
+		/**
 		 * Builds and returns a new KeepAliveScheduler instance.
 		 * @return A new KeepAliveScheduler configured with the builder's settings
 		 */
 		public KeepAliveScheduler build() {
-			return new KeepAliveScheduler(scheduler, initialDelay, interval, mcpSessions);
+			return new KeepAliveScheduler(scheduler, initialDelay, interval, mcpSessions, onPingFailure);
 		}
 
 	}

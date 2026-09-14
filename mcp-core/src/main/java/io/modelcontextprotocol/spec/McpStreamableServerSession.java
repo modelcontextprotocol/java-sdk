@@ -41,7 +41,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpStreamableServerSession.class);
 
-	private final ConcurrentHashMap<Object, McpStreamableServerSessionStream> requestIdToStream = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<String, McpStreamableServerSessionStream> requestIdToStream = new ConcurrentHashMap<>();
 
 	/**
 	 * Every stream with a connection currently attached, whether the listening stream or
@@ -193,6 +193,16 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	 */
 	public boolean hasListeningStream() {
 		return this.listeningStreamRef.get() instanceof McpStreamableServerSessionStream;
+	}
+
+	/**
+	 * Whether the session currently has at least one stream with a connection attached,
+	 * whether the listening stream or a POST response stream. A client holding such a
+	 * connection open is still there, however long it stays silent on it.
+	 * @return {@code true} if the session has an open stream
+	 */
+	public boolean hasOpenStream() {
+		return !this.openStreams.isEmpty();
 	}
 
 	/**
@@ -398,7 +408,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	 */
 	public final class McpStreamableServerSessionStream implements McpLoggableSession {
 
-		private final ConcurrentHashMap<Object, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
+		private final ConcurrentHashMap<String, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
 
 		private final McpStreamableServerTransport connection;
 
