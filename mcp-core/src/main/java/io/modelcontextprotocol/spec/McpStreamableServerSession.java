@@ -5,25 +5,25 @@
 package io.modelcontextprotocol.spec;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import io.modelcontextprotocol.json.TypeRef;
-
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpNotificationHandler;
 import io.modelcontextprotocol.server.McpRequestHandler;
 import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.util.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
@@ -42,6 +42,12 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	private static final Logger logger = LoggerFactory.getLogger(McpStreamableServerSession.class);
 
 	private final ConcurrentHashMap<Object, McpStreamableServerSessionStream> requestIdToStream = new ConcurrentHashMap<>();
+
+	/**
+	 * Every stream with a connection currently attached, whether the listening stream or
+	 * a POST response stream, so that they can all be released when the session ends.
+	 */
+	private final Set<McpStreamableServerSessionStream> openStreams = ConcurrentHashMap.newKeySet();
 
 	private final String id;
 
@@ -201,10 +207,22 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		McpStreamableServerSessionStream listeningStream = new McpStreamableServerSessionStream(transport);
 		McpLoggableSession replaced = this.listeningStreamRef.getAndSet(listeningStream);
 		if (replaced instanceof McpStreamableServerSessionStream replacedStream) {
-			logger.debug("Closing the listening stream replaced in session {}", this.id);
-			replacedStream.close();
+			logger.debug("Releasing the connection of the listening stream replaced in session {}", this.id);
+			replacedStream.releaseTransport();
 		}
 		return listeningStream;
+	}
+
+	/**
+	 * Releases the connection of the listening stream, if one is attached, leaving the
+	 * session without one until the client establishes a new stream. Used when the
+	 * connection turns out to be dead, typically because a keep-alive ping went
+	 * unanswered, so that the socket behind it is not held on to for nothing.
+	 */
+	public void releaseListeningStream() {
+		if (this.listeningStreamRef.get() instanceof McpStreamableServerSessionStream stream) {
+			stream.releaseTransport();
+		}
 	}
 
 	// TODO: keep track of history by keeping a map from eventId to stream and then
@@ -226,9 +244,6 @@ public class McpStreamableServerSession implements McpLoggableSession {
 			McpStreamableServerSessionStream stream = new McpStreamableServerSessionStream(transport);
 			McpRequestHandler<?> requestHandler = McpStreamableServerSession.this.requestHandlers
 				.get(jsonrpcRequest.method());
-			// TODO: delegate to stream, which upon successful response should close
-			// remove itself from the registry and also close the underlying transport
-			// (sink)
 			if (requestHandler == null) {
 				MethodNotFoundError error = getMethodNotFoundError(jsonrpcRequest.method());
 				return transport
@@ -237,7 +252,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 								.error(jsonrpcRequest.id(),
 										new McpSchema.JSONRPCResponse.JSONRPCError(
 												McpSchema.ErrorCodes.METHOD_NOT_FOUND, error.message(), error.data())))
-					.then(transport.closeGracefully());
+					.then(stream.closeGracefully());
 			}
 			return requestHandler
 				.handle(new McpAsyncServerExchange(this.id, stream, clientCapabilities.get(), clientInfo.get(),
@@ -253,7 +268,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 					return Mono.just(errorResponse);
 				})
 				.flatMap(transport::sendMessage)
-				.then(transport.closeGracefully());
+				.then(stream.closeGracefully());
 		});
 	}
 
@@ -324,20 +339,18 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	@Override
 	public Mono<Void> closeGracefully() {
 		return this.onClose.get().onErrorComplete().then(Mono.defer(() -> {
-			McpLoggableSession listeningStream = this.listeningStreamRef.getAndSet(missingMcpTransportSession);
-			return listeningStream.closeGracefully();
-			// TODO: Also close all the open streams
+			this.listeningStreamRef.set(this.missingMcpTransportSession);
+			return Flux.fromIterable(List.copyOf(this.openStreams))
+				.flatMap(McpStreamableServerSessionStream::closeGracefully)
+				.then();
 		}));
 	}
 
 	@Override
 	public void close() {
 		this.onClose.get().onErrorComplete().subscribe();
-		McpLoggableSession listeningStream = this.listeningStreamRef.getAndSet(missingMcpTransportSession);
-		if (listeningStream != null) {
-			listeningStream.close();
-		}
-		// TODO: Also close all open streams
+		this.listeningStreamRef.set(this.missingMcpTransportSession);
+		List.copyOf(this.openStreams).forEach(McpStreamableServerSessionStream::close);
 	}
 
 	/**
@@ -387,7 +400,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 		private final ConcurrentHashMap<Object, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
 
-		private final McpStreamableServerTransport transport;
+		private final McpStreamableServerTransport connection;
 
 		private final String transportId;
 
@@ -395,10 +408,11 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 		/**
 		 * Constructor accepting the dedicated transport representing the SSE stream.
-		 * @param transport request-specific SSE transport stream
+		 * @param connection request-specific SSE transport stream
 		 */
-		public McpStreamableServerSessionStream(McpStreamableServerTransport transport) {
-			this.transport = transport;
+		public McpStreamableServerSessionStream(McpStreamableServerTransport connection) {
+			this.connection = connection;
+			McpStreamableServerSession.this.openStreams.add(this);
 			this.transportId = UUID.randomUUID().toString();
 			// This ID design allows for a constant-time extraction of the history by
 			// precisely identifying the SSE stream using the first component
@@ -428,9 +442,11 @@ public class McpStreamableServerSession implements McpLoggableSession {
 						requestParams);
 				String messageId = this.uuidGenerator.get();
 				// TODO: store message in history
-				this.transport.sendMessage(jsonrpcRequest, messageId).subscribe(v -> {
+				this.connection.sendMessage(jsonrpcRequest, messageId).subscribe(v -> {
 				}, sink::error);
-			}).timeout(requestTimeout).doOnError(e -> {
+			}).timeout(requestTimeout).doFinally(signal -> {
+				// Also on completion and cancellation: a resolved request keeps no state,
+				// and a deadline imposed by the caller cancels rather than errors
 				this.pendingResponses.remove(requestId);
 				McpStreamableServerSession.this.requestIdToStream.remove(requestId);
 			}).handle((jsonRpcResponse, sink) -> {
@@ -442,7 +458,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 						sink.complete();
 					}
 					else {
-						sink.next(this.transport.unmarshalFrom(jsonRpcResponse.result(), typeRef));
+						sink.next(this.connection.unmarshalFrom(jsonRpcResponse.result(), typeRef));
 					}
 				}
 			});
@@ -453,31 +469,51 @@ public class McpStreamableServerSession implements McpLoggableSession {
 			McpSchema.JSONRPCNotification jsonrpcNotification = new McpSchema.JSONRPCNotification(method, params);
 			String messageId = this.uuidGenerator.get();
 			// TODO: store message in history
-			return this.transport.sendMessage(jsonrpcNotification, messageId);
+			return this.connection.sendMessage(jsonrpcNotification, messageId);
 		}
 
 		@Override
 		public Mono<Void> closeGracefully() {
 			return Mono.defer(() -> {
+				McpStreamableServerSession.this.openStreams.remove(this);
 				this.pendingResponses.values().forEach(s -> s.error(new RuntimeException("Stream closed")));
 				this.pendingResponses.clear();
 				// If this was the generic stream, reset it
 				McpStreamableServerSession.this.listeningStreamRef.compareAndExchange(this,
 						McpStreamableServerSession.this.missingMcpTransportSession);
 				McpStreamableServerSession.this.requestIdToStream.values().removeIf(this::equals);
-				return this.transport.closeGracefully();
+				return this.connection.closeGracefully();
 			});
 		}
 
 		@Override
 		public void close() {
+			McpStreamableServerSession.this.openStreams.remove(this);
 			this.pendingResponses.values().forEach(s -> s.error(new RuntimeException("Stream closed")));
 			this.pendingResponses.clear();
 			// If this was the generic stream, reset it
 			McpStreamableServerSession.this.listeningStreamRef.compareAndExchange(this,
 					McpStreamableServerSession.this.missingMcpTransportSession);
 			McpStreamableServerSession.this.requestIdToStream.values().removeIf(this::equals);
-			this.transport.close();
+			this.connection.close();
+		}
+
+		/**
+		 * Releases the connection carrying this stream, detaching the stream from the
+		 * session, but keeps its pending server-initiated requests resolvable: the client
+		 * answers those with a separate HTTP POST request, which outlives the SSE stream
+		 * the request was sent on.
+		 * <p>
+		 * This is the counterpart of {@link #close()} for the end of a connection rather
+		 * than the end of the session: an SSE stream going away, whether replaced,
+		 * disconnected or timed out, does not invalidate the requests sent on it.
+		 */
+		public void releaseTransport() {
+			McpStreamableServerSession.this.openStreams.remove(this);
+			// If this was the generic stream, reset it
+			McpStreamableServerSession.this.listeningStreamRef.compareAndExchange(this,
+					McpStreamableServerSession.this.missingMcpTransportSession);
+			this.connection.close();
 		}
 
 	}
