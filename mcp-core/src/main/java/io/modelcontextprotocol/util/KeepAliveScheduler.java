@@ -148,7 +148,7 @@ public class KeepAliveScheduler {
 
 		private Scheduler scheduler = Schedulers.boundedElastic();
 
-		private Duration initialDelay = Duration.ofSeconds(0);
+		private Duration initialDelay = Duration.ofSeconds(30);
 
 		private Duration interval = Duration.ofSeconds(30);
 
