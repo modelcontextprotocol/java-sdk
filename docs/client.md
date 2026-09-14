@@ -195,6 +195,30 @@ McpTransport transport = new StdioClientTransport(params, McpJsonDefaults.getMap
     McpTransport transport = new WebFluxSseClientTransport(webClientBuilder);
     ```
 
+## Protocol Version Negotiation
+
+During `initialize()`, the client sends the list of protocol versions its transport supports (newest first) and the server picks one it also supports. The negotiated version is returned on the `InitializeResult`:
+
+```java
+McpSyncClient client = McpClient.sync(transport).build();
+
+InitializeResult initResult = client.initialize();
+String negotiatedVersion = initResult.protocolVersion();
+```
+
+Built-in transports (`StdioClientTransport`, `HttpClientStreamableHttpTransport`, `HttpClientSseClientTransport`) advertise every protocol version the SDK understands (`2024-11-05`, `2025-03-26`, `2025-06-18`, `2025-11-25`) via their default `protocolVersions()` implementation, so negotiation normally settles on the newest version both sides support. To restrict a custom transport to a specific subset of versions, override `protocolVersions()` on your `McpClientTransport` implementation:
+
+```java
+public class RestrictedTransport extends StdioClientTransport {
+    // ...
+    @Override
+    public List<String> protocolVersions() {
+        return List.of("2025-06-18"); // only negotiate this version
+    }
+}
+```
+
+If the server responds with a version the transport didn't advertise, `initialize()` fails with an `McpError`.
 
 ## Client Capabilities
 
@@ -333,6 +357,29 @@ try {
 }
 ```
 
+#### Elicitation Complete Notification (SEP-1036)
+
+After a user finishes an out-of-band URL elicitation flow (for example, completing an OAuth authorization in a browser), the server sends a `notifications/elicitation/complete` message so the client knows it can stop waiting and re-check the outcome. Register a consumer to receive it:
+
+```java
+var client = McpClient.sync(transport)
+    .capabilities(ClientCapabilities.builder()
+        .elicitation(true, true)
+        .build())
+    .urlElicitation(urlElicitationHandler)
+    .elicitationCompleteConsumer(notification -> {
+        System.out.println("Elicitation " + notification.elicitationId() + " completed, re-checking outcome");
+    })
+    .build();
+```
+
+On the server side, send the notification once the out-of-band flow resolves (e.g. after the user completes the OAuth redirect), using the ID assigned to the original `ElicitUrlRequest` and the session that issued it:
+
+```java
+server.sendElicitationComplete(exchange.sessionId(),
+    new McpSchema.ElicitationCompleteNotification("oauth-123"));
+```
+
 ### Logging Support
 
 The client can register a logging consumer to receive log messages from the server and set the minimum logging level to filter messages:
@@ -366,6 +413,33 @@ var mcpClient = McpClient.sync(transport)
     })
     .build();
 ```
+
+### Pinging the Server
+
+The client can send a `ping` request to check that the server is alive and responsive:
+
+```java
+McpSyncClient client = McpClient.sync(transport).build();
+client.initialize();
+
+Object result = client.ping(); // blocks until the server responds, or the request times out
+```
+
+The async equivalent, `McpAsyncClient.ping()`, returns a `Mono<Object>` that completes when the server responds.
+
+### Request Timeouts and Cancellation
+
+Every request the client sends (`callTool`, `readResource`, `ping`, etc.) is bounded by the `requestTimeout` configured on the client builder (default 20 seconds):
+
+```java
+McpSyncClient client = McpClient.sync(transport)
+    .requestTimeout(Duration.ofSeconds(10))
+    .build();
+```
+
+If a response doesn't arrive within that window, the pending call fails with a timeout error (an `McpError` on the sync API, or an error signal on the corresponding `Mono` for the async API) instead of blocking indefinitely. The server builder has an equivalent `requestTimeout(Duration)` option (default 10 hours) bounding requests the server sends to the client, such as sampling or elicitation.
+
+The SDK does not currently send or process the MCP `notifications/cancelled` message, so timing out a request only stops the caller from waiting on it — it does not notify the other side that the in-flight operation should stop executing.
 
 ## Using MCP Clients
 
@@ -421,6 +495,22 @@ var client = McpClient.sync(transport)
     .enableCallToolSchemaCaching(true)           // Cache tool schemas
     .build();
 ```
+
+### Pagination
+
+`listTools`, `listResources`, `listResourceTemplates`, and `listPrompts` all accept an optional opaque `cursor` string, and their results carry a `nextCursor` that is non-null while more pages remain. Loop until `nextCursor` is `null` to collect every page:
+
+```java
+List<McpSchema.Tool> allTools = new ArrayList<>();
+String cursor = null;
+do {
+    ListToolsResult page = client.listTools(cursor);
+    allTools.addAll(page.tools());
+    cursor = page.nextCursor();
+} while (cursor != null);
+```
+
+Each paginated method also accepts an optional `_meta` map alongside the cursor, e.g. `client.listTools(cursor, Map.of("key", "value"))`, for passing request metadata through to the server.
 
 ### Resource Access
 

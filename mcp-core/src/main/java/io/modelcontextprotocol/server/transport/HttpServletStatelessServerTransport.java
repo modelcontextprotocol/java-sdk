@@ -4,11 +4,9 @@
 
 package io.modelcontextprotocol.server.transport;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.List;
-import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +37,11 @@ import reactor.core.publisher.Mono;
 @WebServlet(asyncSupported = true)
 public class HttpServletStatelessServerTransport extends HttpServlet implements McpStatelessServerTransport {
 
+	/**
+	 * Default maximum size of a single request body: 16 MiB (16 * 1024 * 1024 bytes).
+	 */
+	private static final int DEFAULT_REQUEST_MAX_SIZE = 16 * 1024 * 1024;
+
 	private static final Logger logger = LoggerFactory.getLogger(HttpServletStatelessServerTransport.class);
 
 	public static final String UTF_8 = "UTF-8";
@@ -64,20 +67,39 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 	/**
 	 * Security validator for validating HTTP requests.
 	 */
-	private final ServerTransportSecurityValidator securityValidator;
+	private final ServerHttpHeaderValidator httpHeaderValidator;
 
+	/**
+	 * Maximum size, in bytes, of a single request body accepted by this transport.
+	 */
+	private final int requestMaxSize;
+
+	/**
+	 * Constructs a new HttpServletStatelessServerTransport instance.
+	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization of
+	 * messages.
+	 * @param mcpEndpoint The endpoint URI where clients should send their JSON-RPC
+	 * messages.
+	 * @param contextExtractor The extractor for transport context from the request.
+	 * @param httpHeaderValidator The HTTP header validator for validating HTTP requests.
+	 * @param requestMaxSize The maximum size, in bytes, of a single request body. Must be
+	 * positive.
+	 * @throws IllegalArgumentException if any parameter is null
+	 */
 	private HttpServletStatelessServerTransport(McpJsonMapper jsonMapper, String mcpEndpoint,
 			McpTransportContextExtractor<HttpServletRequest> contextExtractor,
-			ServerTransportSecurityValidator securityValidator) {
+			ServerHttpHeaderValidator httpHeaderValidator, int requestMaxSize) {
 		Assert.notNull(jsonMapper, "jsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "mcpEndpoint must not be null");
 		Assert.notNull(contextExtractor, "contextExtractor must not be null");
-		Assert.notNull(securityValidator, "Security validator must not be null");
+		Assert.notNull(httpHeaderValidator, "HTTP header validator must not be null");
+		Assert.isTrue(requestMaxSize > 0, "requestMaxSize must be positive");
 
 		this.jsonMapper = jsonMapper;
 		this.mcpEndpoint = mcpEndpoint;
 		this.contextExtractor = contextExtractor;
-		this.securityValidator = securityValidator;
+		this.httpHeaderValidator = httpHeaderValidator;
+		this.requestMaxSize = requestMaxSize;
 	}
 
 	@Override
@@ -133,9 +155,13 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 			return;
 		}
 
+		if (request.getContentLengthLong() > this.requestMaxSize) {
+			response.sendError(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+			return;
+		}
+
 		try {
-			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
-			this.securityValidator.validateHeaders(headers);
+			this.httpHeaderValidator.validate(new HttpServletHeaderAccessor(request));
 		}
 		catch (ServerTransportSecurityException e) {
 			response.sendError(e.getStatusCode(), e.getMessage());
@@ -154,14 +180,9 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		}
 
 		try {
-			BufferedReader reader = request.getReader();
-			StringBuilder body = new StringBuilder();
-			String line;
-			while ((line = reader.readLine()) != null) {
-				body.append(line);
-			}
+			String body = HttpServletRequestUtils.readBody(request, this.requestMaxSize);
 
-			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body.toString());
+			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
 
 			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
 				try {
@@ -208,6 +229,9 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 							.message("The server accepts either requests or notifications")
 							.build());
 			}
+		}
+		catch (MaxSizeExceededException e) {
+			response.sendError(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
 		}
 		catch (IllegalArgumentException | IOException e) {
 			logger.error("Failed to deserialize message: {}", e.getMessage());
@@ -274,7 +298,9 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		private McpTransportContextExtractor<HttpServletRequest> contextExtractor = (
 				serverRequest) -> McpTransportContext.EMPTY;
 
-		private ServerTransportSecurityValidator securityValidator = ServerTransportSecurityValidator.NOOP;
+		private ServerHttpHeaderValidator httpHeaderValidator = ServerHttpHeaderValidator.NOOP;
+
+		private int requestMaxSize = DEFAULT_REQUEST_MAX_SIZE;
 
 		private Builder() {
 			// used by a static method
@@ -326,10 +352,38 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		 * @param securityValidator The security validator to use. Must not be null.
 		 * @return this builder instance
 		 * @throws IllegalArgumentException if securityValidator is null
+		 * @deprecated Use {@link #httpHeaderValidator(ServerHttpHeaderValidator)}
+		 * instead.
 		 */
+		@Deprecated
 		public Builder securityValidator(ServerTransportSecurityValidator securityValidator) {
 			Assert.notNull(securityValidator, "Security validator must not be null");
-			this.securityValidator = securityValidator;
+			this.httpHeaderValidator = ServerTransportSecurityValidator.toHttpHeaderValidator(securityValidator);
+			return this;
+		}
+
+		/**
+		 * Sets the HTTP header validator for validating HTTP requests.
+		 * @param httpHeaderValidator The HTTP header validator to use. Must not be null.
+		 * @return this builder instance
+		 * @throws IllegalArgumentException if httpHeaderValidator is null
+		 */
+		public Builder httpHeaderValidator(ServerHttpHeaderValidator httpHeaderValidator) {
+			Assert.notNull(httpHeaderValidator, "HTTP header validator must not be null");
+			this.httpHeaderValidator = httpHeaderValidator;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum size, in bytes, of a single request body accepted by this
+		 * transport. Requests whose body exceeds this size are rejected with a 413
+		 * (Payload Too Large) response. Defaults to 16 MiB if not set.
+		 * @param requestMaxSize The maximum request body size, in bytes. Must be
+		 * positive.
+		 * @return this builder instance
+		 */
+		public Builder maxRequestSize(int requestMaxSize) {
+			this.requestMaxSize = requestMaxSize;
 			return this;
 		}
 
@@ -343,7 +397,7 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 			return new HttpServletStatelessServerTransport(
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, mcpEndpoint, contextExtractor,
-					securityValidator);
+					httpHeaderValidator, requestMaxSize);
 		}
 
 	}
