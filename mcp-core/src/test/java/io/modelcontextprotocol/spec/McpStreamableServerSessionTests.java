@@ -74,6 +74,71 @@ class McpStreamableServerSessionTests {
 		assertThat(transport.closed).isTrue();
 	}
 
+	@Test
+	void closingTheSessionFailsThePendingRequestsOfReleasedStreams() {
+		var session = session();
+		session.listeningStream(new RecordingTransport());
+
+		var pending = session.sendRequest("sampling/createMessage", null, new TypeRef<String>() {
+		}).toFuture();
+
+		// The stream the request was sent on is released, which leaves the request
+		// pending: a reconnecting client can still answer it over a separate POST
+		session.releaseListeningStream();
+		assertThat(pending).isNotDone();
+
+		// The client cannot respond on a closed session, the pending request must be
+		// failed.
+		session.close();
+
+		assertThat(pending).failsWithin(TIMEOUT).withThrowableThat().havingCause().withMessage("Session closed");
+	}
+
+	@Test
+	void closingTheSessionGracefullyFailsThePendingRequestsOfReleasedStreams() {
+		var session = session();
+		session.listeningStream(new RecordingTransport());
+
+		var pending = session.sendRequest("sampling/createMessage", null, new TypeRef<String>() {
+		}).toFuture();
+
+		session.releaseListeningStream();
+		assertThat(pending).isNotDone();
+
+		session.closeGracefully().block(TIMEOUT);
+
+		assertThat(pending).failsWithin(TIMEOUT).withThrowableThat().havingCause().withMessage("Session closed");
+	}
+
+	@Test
+	void closingAStreamFailsOnlyItsOwnPendingRequests() {
+		var session = session();
+		var listeningTransport = new RecordingTransport();
+		session.listeningStream(listeningTransport);
+
+		var onListeningStream = session.sendRequest("sampling/createMessage", null, new TypeRef<String>() {
+		}).toFuture();
+
+		// A POST response stream carries its own server-initiated requests, which can be
+		// closed independently
+		var responseTransport = new RecordingTransport();
+		var responseStream = session.new McpStreamableServerSessionStream(responseTransport);
+		var onResponseStream = responseStream.sendRequest("elicitation/create", null, new TypeRef<String>() {
+		}).toFuture();
+
+		responseStream.close();
+
+		assertThat(onResponseStream).failsWithin(TIMEOUT)
+			.withThrowableThat()
+			.havingCause()
+			.withMessage("Stream closed");
+		assertThat(onListeningStream).isNotDone();
+
+		var requestId = ((McpSchema.JSONRPCRequest) listeningTransport.sent.peek()).id();
+		session.accept(McpSchema.JSONRPCResponse.result(requestId, "response-value")).block(TIMEOUT);
+		assertThat(onListeningStream).succeedsWithin(TIMEOUT).isEqualTo("response-value");
+	}
+
 	static class RecordingTransport implements McpStreamableServerTransport {
 
 		final Queue<McpSchema.JSONRPCMessage> sent = new ConcurrentLinkedQueue<>();
