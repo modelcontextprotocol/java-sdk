@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.spec;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -12,6 +13,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -41,7 +43,14 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpStreamableServerSession.class);
 
-	private final ConcurrentHashMap<String, McpStreamableServerSessionStream> requestIdToStream = new ConcurrentHashMap<>();
+	/**
+	 * Every server-initiated request still awaiting its response, keyed by request ID.
+	 * Tracked per session rather than per stream, because the client answers over a
+	 * separate HTTP POST which outlives the stream the request was sent on: a stream
+	 * going away must not lose the requests it carried, but the end of the session must
+	 * resolve all of them.
+	 */
+	private final ConcurrentHashMap<String, PendingRequest> pendingRequests = new ConcurrentHashMap<>();
 
 	/**
 	 * Every stream with a connection currently attached, whether the listening stream or
@@ -313,22 +322,13 @@ public class McpStreamableServerSession implements McpLoggableSession {
 			logger.debug("Received response: {}", response);
 
 			if (response.id() != null) {
-				var stream = this.requestIdToStream.get(response.id());
-				if (stream == null) {
+				var pendingRequest = this.pendingRequests.remove(response.id());
+				if (pendingRequest == null) {
 					return Mono.error(McpError.builder(ErrorCodes.INTERNAL_ERROR)
 						.message("Unexpected response for unknown id " + response.id())
 						.build());
 				}
-				// TODO: encapsulate this inside the stream itself
-				var sink = stream.pendingResponses.remove(response.id());
-				if (sink == null) {
-					return Mono.error(McpError.builder(ErrorCodes.INTERNAL_ERROR)
-						.message("Unexpected response for unknown id " + response.id())
-						.build());
-				}
-				else {
-					sink.success(response);
-				}
+				pendingRequest.sink().success(response);
 			}
 			else {
 				logger.error("Discarded MCP request response without session id. "
@@ -346,13 +346,38 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		return new MethodNotFoundError(method, "Method not found: " + method, null);
 	}
 
+	/**
+	 * Fails the matching pending requests with the given reason. Each request is removed
+	 * before its sink is failed, so that the cleanup the failure triggers on the
+	 * requesting side finds nothing left to remove.
+	 * @param match selects the requests to fail
+	 * @param reason the message of the error the sinks are failed with
+	 */
+	private void failPendingRequests(Predicate<PendingRequest> match, String reason) {
+		List<String> requestIds = new ArrayList<>();
+		this.pendingRequests.forEach((requestId, pendingRequest) -> {
+			if (match.test(pendingRequest)) {
+				requestIds.add(requestId);
+			}
+		});
+		for (String requestId : requestIds) {
+			PendingRequest pendingRequest = this.pendingRequests.remove(requestId);
+			if (pendingRequest != null) {
+				pendingRequest.sink().error(new RuntimeException(reason));
+			}
+		}
+	}
+
 	@Override
 	public Mono<Void> closeGracefully() {
 		return this.onClose.get().onErrorComplete().then(Mono.defer(() -> {
 			this.listeningStreamRef.set(this.missingMcpTransportSession);
 			return Flux.fromIterable(List.copyOf(this.openStreams))
 				.flatMap(McpStreamableServerSessionStream::closeGracefully)
-				.then();
+				.then()
+				// Also the requests of the streams already released: the session ending
+				// is the point at which no client can answer them anymore
+				.then(Mono.fromRunnable(() -> this.failPendingRequests(request -> true, "Session closed")));
 		}));
 	}
 
@@ -361,6 +386,9 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		this.onClose.get().onErrorComplete().subscribe();
 		this.listeningStreamRef.set(this.missingMcpTransportSession);
 		List.copyOf(this.openStreams).forEach(McpStreamableServerSessionStream::close);
+		// Also the requests of the streams already released: the session ending is the
+		// point at which no client can answer them anymore
+		this.failPendingRequests(request -> true, "Session closed");
 	}
 
 	/**
@@ -403,12 +431,20 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	}
 
 	/**
+	 * A server-initiated request awaiting its response, along with the stream it was sent
+	 * on.
+	 *
+	 * @param stream the stream the request was sent on
+	 * @param sink the sink to resolve once the response arrives
+	 */
+	private record PendingRequest(McpStreamableServerSessionStream stream, MonoSink<McpSchema.JSONRPCResponse> sink) {
+	}
+
+	/**
 	 * An individual SSE stream within a Streamable HTTP context. Can be either the
 	 * listening GET SSE stream or a request-specific POST SSE stream.
 	 */
 	public final class McpStreamableServerSessionStream implements McpLoggableSession {
-
-		private final ConcurrentHashMap<String, MonoSink<McpSchema.JSONRPCResponse>> pendingResponses = new ConcurrentHashMap<>();
 
 		private final McpStreamableServerTransport connection;
 
@@ -444,10 +480,10 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		public <T> Mono<T> sendRequest(String method, Object requestParams, TypeRef<T> typeRef) {
 			String requestId = McpStreamableServerSession.this.generateRequestId();
 
-			McpStreamableServerSession.this.requestIdToStream.put(requestId, this);
-
 			return Mono.<McpSchema.JSONRPCResponse>create(sink -> {
-				this.pendingResponses.put(requestId, sink);
+				// Registered on subscription rather than on assembly, so that a request
+				// which is never sent does not leave the session tracking it forever
+				McpStreamableServerSession.this.pendingRequests.put(requestId, new PendingRequest(this, sink));
 				McpSchema.JSONRPCRequest jsonrpcRequest = new McpSchema.JSONRPCRequest(method, requestId,
 						requestParams);
 				String messageId = this.uuidGenerator.get();
@@ -457,8 +493,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 			}).timeout(requestTimeout).doFinally(signal -> {
 				// Also on completion and cancellation: a resolved request keeps no state,
 				// and a deadline imposed by the caller cancels rather than errors
-				this.pendingResponses.remove(requestId);
-				McpStreamableServerSession.this.requestIdToStream.remove(requestId);
+				McpStreamableServerSession.this.pendingRequests.remove(requestId);
 			}).handle((jsonRpcResponse, sink) -> {
 				if (jsonRpcResponse.error() != null) {
 					sink.error(new McpError(jsonRpcResponse.error()));
@@ -486,12 +521,11 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		public Mono<Void> closeGracefully() {
 			return Mono.defer(() -> {
 				McpStreamableServerSession.this.openStreams.remove(this);
-				this.pendingResponses.values().forEach(s -> s.error(new RuntimeException("Stream closed")));
-				this.pendingResponses.clear();
+				McpStreamableServerSession.this.failPendingRequests(request -> this.equals(request.stream()),
+						"Stream closed");
 				// If this was the generic stream, reset it
 				McpStreamableServerSession.this.listeningStreamRef.compareAndExchange(this,
 						McpStreamableServerSession.this.missingMcpTransportSession);
-				McpStreamableServerSession.this.requestIdToStream.values().removeIf(this::equals);
 				return this.connection.closeGracefully();
 			});
 		}
@@ -499,12 +533,11 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		@Override
 		public void close() {
 			McpStreamableServerSession.this.openStreams.remove(this);
-			this.pendingResponses.values().forEach(s -> s.error(new RuntimeException("Stream closed")));
-			this.pendingResponses.clear();
+			McpStreamableServerSession.this.failPendingRequests(request -> this.equals(request.stream()),
+					"Stream closed");
 			// If this was the generic stream, reset it
 			McpStreamableServerSession.this.listeningStreamRef.compareAndExchange(this,
 					McpStreamableServerSession.this.missingMcpTransportSession);
-			McpStreamableServerSession.this.requestIdToStream.values().removeIf(this::equals);
 			this.connection.close();
 		}
 
