@@ -69,15 +69,25 @@ git checkout -b feature/your-feature-name
 
 ## Submitting Changes
 
+Please don't submit pull requests:
+
+- With GitHub accounts managed by autonomous AI bots
+- For already assigned issues (as the assignee is or plans to work on it)
+
+When submitting changes:
+
 1. For non-trivial changes, please clarify with the maintainers in an issue whether 
    you can contribute the change and the desired scope of the change.
 2. For trivial changes (for example a couple of lines or documentation changes) there 
    is no need to open an issue first.
-3. Push your changes to your fork.
-4. Submit a pull request to the main repository.
-5. Follow the pull request template.
-6. Wait for review.
-7. For any follow-up work, please add new commits instead of force-pushing. This will 
+3. Maintainers will triage issues and act on them. There is no such guarantee on pull requests.
+   PRs opened without being discussed in an issue MAY be ignored, and maintainers reserve the right
+   to close these PRs without justification.
+4. Push your changes to your fork.
+5. Submit a pull request to the main repository.
+6. Follow the pull request template.
+7. Wait for review.
+8. For any follow-up work, please add new commits instead of force-pushing. This will
    allow the reviewer to focus on incremental changes instead of having to restart the 
    review process.
 
