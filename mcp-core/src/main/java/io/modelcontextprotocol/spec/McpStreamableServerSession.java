@@ -251,44 +251,34 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	}
 
 	/**
+	 * Create a response stream (the SSE stream of a single HTTP POST request, finalized
+	 * with the response to the request it carries). The caller owns the returned stream
+	 * and is responsible for releasing it once the connection behind it ends, the same
+	 * way it does for a {@link #listeningStream(McpStreamableServerTransport)}: a stream
+	 * outliving its connection keeps the session looking busy, see
+	 * {@link #hasOpenStream()}.
+	 * @param transport the SSE transport stream to send messages to
+	 * @return a stream representation, on which
+	 * {@link McpStreamableServerSessionStream#handle(McpSchema.JSONRPCRequest)} runs the
+	 * request
+	 */
+	public McpStreamableServerSessionStream responseStream(McpStreamableServerTransport transport) {
+		return new McpStreamableServerSessionStream(transport);
+	}
+
+	/**
 	 * Provide the SSE stream of MCP messages finalized with a Response.
 	 * @param jsonrpcRequest the MCP request triggering the stream creation
 	 * @param transport the SSE transport stream to send messages to
 	 * @return Mono which completes once the processing is done
+	 * @deprecated the stream created for the request is not exposed, which leaves the
+	 * caller unable to release it when the connection carrying it ends. Use
+	 * {@link #responseStream(McpStreamableServerTransport)} and
+	 * {@link McpStreamableServerSessionStream#handle(McpSchema.JSONRPCRequest)} instead.
 	 */
+	@Deprecated
 	public Mono<Void> responseStream(McpSchema.JSONRPCRequest jsonrpcRequest, McpStreamableServerTransport transport) {
-		return Mono.deferContextual(ctx -> {
-			McpTransportContext transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
-
-			McpStreamableServerSessionStream stream = new McpStreamableServerSessionStream(transport);
-			McpRequestHandler<?> requestHandler = McpStreamableServerSession.this.requestHandlers
-				.get(jsonrpcRequest.method());
-			if (requestHandler == null) {
-				MethodNotFoundError error = getMethodNotFoundError(jsonrpcRequest.method());
-				return transport
-					.sendMessage(
-							McpSchema.JSONRPCResponse
-								.error(jsonrpcRequest.id(),
-										new McpSchema.JSONRPCResponse.JSONRPCError(
-												McpSchema.ErrorCodes.METHOD_NOT_FOUND, error.message(), error.data())))
-					.then(stream.closeGracefully());
-			}
-			return requestHandler
-				.handle(new McpAsyncServerExchange(this.id, stream, clientCapabilities.get(), clientInfo.get(),
-						transportContext, this.jsonSchemaValidator), jsonrpcRequest.params())
-				.map(result -> McpSchema.JSONRPCResponse.result(jsonrpcRequest.id(), result))
-				.onErrorResume(e -> {
-					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (e instanceof McpError mcpError
-							&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
-									: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-											e.getMessage(), McpError.aggregateExceptionMessages(e));
-
-					var errorResponse = McpSchema.JSONRPCResponse.error(jsonrpcRequest.id(), jsonRpcError);
-					return Mono.just(errorResponse);
-				})
-				.flatMap(transport::sendMessage)
-				.then(stream.closeGracefully());
-		});
+		return Mono.defer(() -> this.responseStream(transport).handle(jsonrpcRequest));
 	}
 
 	/**
@@ -507,6 +497,50 @@ public class McpStreamableServerSession implements McpLoggableSession {
 					}
 				}
 			});
+		}
+
+		/**
+		 * Runs the request this stream was created for, sending its messages to the
+		 * client and finalizing the stream with the response.
+		 * <p>
+		 * The stream is detached from the session once the request is done with it,
+		 * whatever the outcome: a response, an error, or the caller giving up.
+		 * @param jsonrpcRequest the MCP request this stream carries the response of
+		 * @return Mono which completes once the processing is done
+		 */
+		public Mono<Void> handle(McpSchema.JSONRPCRequest jsonrpcRequest) {
+			// The stream is released whichever way the request ends: with a response, on
+			// an error, or by the caller giving up on it
+			return Mono.usingWhen(Mono.just(this), stream -> Mono.deferContextual(ctx -> {
+				McpTransportContext transportContext = ctx.getOrDefault(McpTransportContext.KEY,
+						McpTransportContext.EMPTY);
+
+				McpRequestHandler<?> requestHandler = McpStreamableServerSession.this.requestHandlers
+					.get(jsonrpcRequest.method());
+				if (requestHandler == null) {
+					MethodNotFoundError error = getMethodNotFoundError(jsonrpcRequest.method());
+					return this.connection.sendMessage(McpSchema.JSONRPCResponse.error(jsonrpcRequest.id(),
+							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.METHOD_NOT_FOUND,
+									error.message(), error.data())));
+				}
+				return requestHandler
+					.handle(new McpAsyncServerExchange(McpStreamableServerSession.this.id, this,
+							clientCapabilities.get(), clientInfo.get(), transportContext,
+							McpStreamableServerSession.this.jsonSchemaValidator), jsonrpcRequest.params())
+					.map(result -> McpSchema.JSONRPCResponse.result(jsonrpcRequest.id(), result))
+					.onErrorResume(e -> {
+						McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (e instanceof McpError mcpError
+								&& mcpError.getJsonRpcError() != null)
+										? mcpError.getJsonRpcError()
+										: new McpSchema.JSONRPCResponse.JSONRPCError(
+												McpSchema.ErrorCodes.INTERNAL_ERROR, e.getMessage(),
+												McpError.aggregateExceptionMessages(e));
+
+						var errorResponse = McpSchema.JSONRPCResponse.error(jsonrpcRequest.id(), jsonRpcError);
+						return Mono.just(errorResponse);
+					})
+					.flatMap(this.connection::sendMessage);
+			}), McpStreamableServerSessionStream::closeGracefully);
 		}
 
 		@Override

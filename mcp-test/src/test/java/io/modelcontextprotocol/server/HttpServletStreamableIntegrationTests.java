@@ -49,9 +49,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.provider.Arguments;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -70,9 +72,13 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 
 	private HttpServletStreamableServerTransportProvider mcpServerTransportProvider;
 
-	private final Duration KEEP_ALIVE_INTERVAL = Duration.ofMillis(200);
+	// Keep alive is fast. A ping failure releases the stream, so listening
+	// steams are released quickly.
+	private final Duration KEEP_ALIVE_INTERVAL = Duration.ofMillis(150);
 
-	private final Duration SESSION_SWEEP_INTERVAL = Duration.ofMillis(200);
+	// Sweeping is slower than keep-alive, so that a failed ping doesn't immediately
+	// result in a session sweep
+	private final Duration SESSION_SWEEP_INTERVAL = KEEP_ALIVE_INTERVAL.multipliedBy(2);
 
 	@Override
 	protected void awaitClientStreamEstablished() {
@@ -463,6 +469,90 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 		assertThat(postNotification(httpClient, sessionId)).isEqualTo(HttpServletResponse.SC_ACCEPTED);
 	}
 
+	/**
+	 * A client which aborts a tool call must not leave its session behind.
+	 */
+	@Test
+	void sessionIsEvictedWhenTheClientAbortsAResponseStream() throws Exception {
+		mcpServerTransportProvider.closeGracefully().block();
+		mcpServerTransportProvider = HttpServletStreamableServerTransportProvider.builder()
+			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
+			.mcpEndpoint(MESSAGE_ENDPOINT)
+			// remove keepalive, so only the response stream can keep the session alive
+			.keepAliveInterval(null)
+			.sessionSweepInterval(SESSION_SWEEP_INTERVAL)
+			.build();
+		MCP_SERVLET.setDelegate(mcpServerTransportProvider);
+
+		// A tool which never returns but keeps writing to its response stream. The
+		// payloads are large and frequent on purpose: writes to a connection whose peer
+		// is gone keep succeeding until the socket buffer fills up, and that is the only
+		// thing which can surface the disconnect here.
+		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
+			.tools(McpServerFeatures.AsyncToolSpecification.builder()
+				.tool(McpSchema.Tool.builder("hangs", EMPTY_JSON_SCHEMA).description("never returns").build())
+				.callHandler((exchange, request) -> Flux.interval(Duration.ofMillis(10))
+					.flatMap(tick -> exchange.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+						.level(McpSchema.LoggingLevel.INFO)
+						.data("x".repeat(64 * 1024))
+						.build()))
+					.then(Mono.<McpSchema.CallToolResult>never()))
+				.build())
+			.build();
+
+		var httpClient = HttpClient.newHttpClient();
+		var sessionId = initializeSession(httpClient);
+
+		// The POST opens a response SSE stream, which the session counts as an open
+		// stream for as long as the call is in flight
+		var responseStream = postToolCall(httpClient, sessionId, "hangs");
+		await().atMost(Duration.ofSeconds(5))
+			.untilAsserted(
+					() -> assertThat(responseStream.events()).anyMatch(line -> line.contains("notifications/message")));
+		assertThat(postNotification(httpClient, sessionId)).isEqualTo(HttpServletResponse.SC_ACCEPTED);
+
+		// The client gives up on the call and disconnects
+		responseStream.closeStream();
+
+		// Nothing is connected to the session anymore, so the sweeper must reclaim it.
+		// Probing only once: any request would count as activity and reset the clock.
+		Thread.sleep(SESSION_SWEEP_INTERVAL.multipliedBy(2).toMillis());
+
+		assertThat(postNotification(httpClient, sessionId)).isEqualTo(HttpServletResponse.SC_NOT_FOUND);
+	}
+
+	/**
+	 * Calls a tool with a POST request, returning a handle on the SSE response stream it
+	 * opens.
+	 */
+	private StreamResponse postToolCall(HttpClient httpClient, String sessionId, String toolName) {
+		var post = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + MESSAGE_ENDPOINT))
+			.header("Content-Type", "application/json")
+			.header("Accept", "text/event-stream, application/json")
+			.header(HttpHeaders.MCP_SESSION_ID, sessionId)
+			.POST(HttpRequest.BodyPublishers.ofString("{\"jsonrpc\":\"2.0\",\"id\":\"call-1\","
+					+ "\"method\":\"tools/call\",\"params\":{\"name\":\"" + toolName + "\",\"arguments\":{}}}"))
+			.build();
+		Queue<String> events = new ConcurrentLinkedQueue<>();
+		var streamRef = new AtomicReference<InputStream>();
+		var clientFuture = httpClient.sendAsync(post, HttpResponse.BodyHandlers.ofInputStream())
+			.thenAccept(response -> {
+				streamRef.set(response.body());
+				try (var r = new BufferedReader(new InputStreamReader(response.body(), UTF_8))) {
+					String l;
+					while ((l = r.readLine()) != null) {
+						events.add(l);
+					}
+				}
+				catch (IOException e) {
+					// "closed" here is our own closeStream(), not a failure
+				}
+			});
+		return new StreamResponse(clientFuture, events, streamRef);
+	}
+
 	private int postNotification(HttpClient httpClient, String sessionId) throws Exception {
 		var notification = HttpRequest.newBuilder()
 			.uri(URI.create("http://localhost:" + PORT + MESSAGE_ENDPOINT))
@@ -533,7 +623,7 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 		void closeStream() {
 			// Close listening stream. We retry a few times in case the stream was not
 			// established on the first try
-			await().atMost(Duration.ofSeconds(1)).until(() -> {
+			await().pollDelay(Duration.ZERO).atMost(Duration.ofSeconds(1)).until(() -> {
 				var stream = streamRef.get();
 				if (stream != null) {
 					stream.close();

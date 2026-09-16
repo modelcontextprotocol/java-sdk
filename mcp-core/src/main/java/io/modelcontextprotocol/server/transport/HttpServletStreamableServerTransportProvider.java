@@ -26,6 +26,7 @@ import io.modelcontextprotocol.spec.McpSession;
 import io.modelcontextprotocol.spec.McpStreamableServerSession;
 import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
+import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.KeepAliveScheduler;
@@ -593,10 +594,17 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 				HttpServletStreamableMcpSessionTransport sessionTransport = new HttpServletStreamableMcpSessionTransport(
 						sessionId, asyncContext, response.getWriter());
-				registerAsyncLifecycle(asyncContext, sessionId, sessionTransport::close);
+
+				// The listener is given the stream rather than its transport, so that the
+				// end of the connection detaches the stream from the session instead of
+				// only dropping the socket: a stream outliving its connection keeps the
+				// session looking busy and spares it from the sweeper
+				McpStreamableServerSession.McpStreamableServerSessionStream responseStream = session
+					.responseStream(sessionTransport);
+				registerAsyncLifecycle(asyncContext, sessionId, responseStream::releaseTransport);
 
 				try {
-					session.responseStream(jsonrpcRequest, sessionTransport)
+					responseStream.handle(jsonrpcRequest)
 						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
 						.block();
 				}
@@ -887,9 +895,16 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				}
 				catch (Exception e) {
 					// The connection is gone, the session is not: the client may come
-					// back for it, and the idle timeout reclaims it if it never does
+					// back for it, and the sweeper reclaims it if it never does
 					logger.error("Failed to send message to session {}: {}", this.sessionId, e.getMessage());
 					this.close();
+					// Surfaced to the caller rather than swallowed: whoever is writing to
+					// this stream has to learn that it no longer leads anywhere, or it
+					// keeps producing messages for a client which is gone. A request
+					// being streamed a response would never finish, holding on to the
+					// container thread which has to be given back before the end of the
+					// connection can be acted upon.
+					throw new McpTransportException("Failed to send message to session " + this.sessionId, e);
 				}
 				finally {
 					lock.unlock();
