@@ -996,7 +996,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		private McpTransportContextExtractor<HttpServletRequest> contextExtractor = (
 				serverRequest) -> McpTransportContext.EMPTY;
 
-		private Duration keepAliveInterval;
+		private Duration keepAliveInterval = Duration.ofMinutes(30);
 
 		private ServerHttpHeaderValidator httpHeaderValidator = ServerHttpHeaderValidator.NOOP;
 
@@ -1055,7 +1055,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		 * Sets the keep-alive interval for the transport. If set, a keep-alive scheduler
 		 * will be activated to periodically ping active sessions.
 		 * @param keepAliveInterval The interval for keep-alive pings. If null, no
-		 * keep-alive will be scheduled.
+		 * keep-alive will be scheduled. Defaults to 30 minutes.
 		 * @return this builder instance
 		 */
 		public Builder keepAliveInterval(Duration keepAliveInterval) {
