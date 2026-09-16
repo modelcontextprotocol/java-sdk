@@ -125,7 +125,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	/**
 	 * IDs of the sessions which received a request since the last sweep. The set is
 	 * swapped for an empty one on every sweep, so it only ever holds the activity of the
-	 * current interval.
+	 * current interval. Only populated when a sweeper runs, as nothing would ever swap it
+	 * otherwise.
 	 */
 	private final AtomicReference<Set<String>> activeSessions = new AtomicReference<>(ConcurrentHashMap.newKeySet());
 
@@ -143,10 +144,10 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	private KeepAliveScheduler keepAliveScheduler;
 
 	/**
-	 * Periodic eviction of the sessions no client came back to. Activated if
-	 * sessionSweepInterval is set.
+	 * Periodic eviction of the sessions no client came back to. {@code null} if no
+	 * sessionSweepInterval is set, in which case sessions are never reclaimed.
 	 */
-	private Disposable sessionSweeper;
+	private final Disposable sessionSweeper;
 
 	/**
 	 * Security validator for validating HTTP requests.
@@ -205,23 +206,27 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			this.keepAliveScheduler.start();
 		}
 
-		if (sessionSweepInterval != null) {
-			this.sessionSweeper = Flux.interval(sessionSweepInterval, sessionSweepInterval, Schedulers.boundedElastic())
-				.doOnNext(tick -> {
-					// Each sweep runs in its own subscription, so that a sweep failing
-					// does not terminate the interval and disable sweeping altogether
-					Mono.fromRunnable(this::sweepSessions)
-						.doOnError(e -> logger.error("Session sweep failed", e))
-						.onErrorComplete()
-						.subscribe();
-				})
-				.onErrorComplete(error -> {
-					logger.error("Session sweeper error", error);
-					return true;
-				})
-				.subscribe();
-		}
+		this.sessionSweeper = sessionSweepInterval == null ? null : startSessionSweeper(sessionSweepInterval);
+	}
 
+	/**
+	 * Schedules the periodic eviction of idle sessions.
+	 * @param sessionSweepInterval the interval between two sweeps
+	 * @return the handle on the scheduled sweeps, to be disposed when the transport shuts
+	 * down
+	 */
+	private Disposable startSessionSweeper(Duration sessionSweepInterval) {
+		return Flux.interval(sessionSweepInterval, sessionSweepInterval, Schedulers.boundedElastic()).doOnNext(tick -> {
+			// Each sweep runs in its own subscription, so that a sweep failing does
+			// not terminate the interval and disable sweeping altogether
+			Mono.fromRunnable(this::sweepSessions)
+				.doOnError(e -> logger.error("Session sweep failed", e))
+				.onErrorComplete()
+				.subscribe();
+		}).onErrorComplete(error -> {
+			logger.error("Session sweeper error", error);
+			return true;
+		}).subscribe();
 	}
 
 	/**
@@ -257,6 +262,11 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * @param sessionId the session the current request belongs to
 	 */
 	private void markSessionActive(String sessionId) {
+		if (this.sessionSweeper == null) {
+			// No sweep ever swaps the set of active sessions, so recording activity would
+			// only accumulate the ID of every session which ever issued a request
+			return;
+		}
 		this.activeSessions.get().add(sessionId);
 	}
 

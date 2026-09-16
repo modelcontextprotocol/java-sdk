@@ -448,13 +448,14 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 
 	@Test
 	void sessionIsNotEvictedWithoutSweepInterval() throws Exception {
-		// Sweeping is opt-in: a transport configured without an interval keeps its
-		// sessions until they are deleted or the server shuts down
+		// Sweeping can be turned off: such a transport keeps its sessions until they are
+		// deleted or the server shuts down
 		mcpServerTransportProvider.closeGracefully().block();
 		mcpServerTransportProvider = HttpServletStreamableServerTransportProvider.builder()
 			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
 			.mcpEndpoint(MESSAGE_ENDPOINT)
 			.keepAliveInterval(KEEP_ALIVE_INTERVAL)
+			.sessionSweepInterval(null)
 			.build();
 		MCP_SERVLET.setDelegate(mcpServerTransportProvider);
 		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
