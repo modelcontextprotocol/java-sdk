@@ -19,6 +19,7 @@ import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpStatelessServerHandler;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
+import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
@@ -133,6 +134,10 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 			return;
 		}
 
+		if (!validateProtocolVersion(request, response)) {
+			return;
+		}
+
 		try {
 			Map<String, List<String>> headers = HttpServletRequestUtils.extractHeaders(request);
 			this.securityValidator.validateHeaders(headers);
@@ -238,6 +243,31 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		PrintWriter writer = response.getWriter();
 		writer.write(jsonError);
 		writer.flush();
+	}
+
+	/**
+	 * Validates the {@code MCP-Protocol-Version} header against the protocol versions
+	 * supported by this transport. A missing header is allowed and falls back to the
+	 * negotiated protocol version, while a header carrying an unsupported version is
+	 * rejected with a 400 Bad Request.
+	 * @param request the HTTP servlet request
+	 * @param response the HTTP servlet response
+	 * @return true if the header is missing or contains a supported version, false if a
+	 * 400 error response has been written
+	 * @throws IOException if an I/O error occurs
+	 */
+	private boolean validateProtocolVersion(HttpServletRequest request, HttpServletResponse response)
+			throws IOException {
+		String protocolVersion = request.getHeader(HttpHeaders.PROTOCOL_VERSION);
+		if (protocolVersion == null || this.protocolVersions().contains(protocolVersion)) {
+			return true;
+		}
+		this.responseError(response, HttpServletResponse.SC_BAD_REQUEST,
+				McpError.builder(McpSchema.ErrorCodes.METHOD_NOT_FOUND)
+					.message("Unsupported protocol version (supported versions: "
+							+ String.join(", ", this.protocolVersions()) + ")")
+					.build());
+		return false;
 	}
 
 	/**
