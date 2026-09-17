@@ -150,6 +150,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 */
 	private final Disposable sessionSweeper;
 
+	private static Duration SESSION_SWEEP_TIMEOUT = Duration.ofSeconds(30);
+
 	/**
 	 * Security validator for validating HTTP requests.
 	 */
@@ -217,14 +219,13 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * down
 	 */
 	private Disposable startSessionSweeper(Duration sessionSweepInterval) {
-		return Flux.interval(sessionSweepInterval, sessionSweepInterval, Schedulers.boundedElastic())
+		return Flux
+			.interval(sessionSweepInterval, sessionSweepInterval,
+					Schedulers.newSingle("streamable-http-server-transport-session-sweeper"))
 			.concatMap(
 					tick -> sweepSessions().doOnError(e -> logger.error("Session sweep failed", e)).onErrorComplete())
-			.onErrorComplete(error -> {
-				logger.error("Session sweeper error", error);
-				return true;
-			})
-			.subscribe();
+			.subscribe(next -> {
+			}, error -> logger.error("Session sweeper error", error));
 	}
 
 	/**
@@ -240,16 +241,18 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			return Mono.empty();
 		}
 		Set<String> active = this.activeSessions.getAndSet(ConcurrentHashMap.newKeySet());
-		return Flux.fromIterable(this.sessions.values())
-			.filter(session -> !session.hasOpenStream() && !active.contains(session.getId()))
-			.filter(session -> this.sessions.remove(session.getId(), session))
-			.flatMap(session -> {
-				logger.debug("Evicting idle session {}", session.getId());
-				return session.closeGracefully()
-					.doOnError(e -> logger.warn("Failed to close idle session {}: {}", session.getId(), e.getMessage()))
-					.onErrorComplete();
-			})
-			.then();
+		return Flux.fromIterable(this.sessions.values()).filter(session -> {
+			if (session.hasOpenStream() || active.contains(session.getId())) {
+				return false;
+			}
+			return this.sessions.remove(session.getId(), session);
+		}).flatMap(session -> {
+			logger.debug("Evicting idle session {}", session.getId());
+			return session.closeGracefully()
+				.timeout(SESSION_SWEEP_TIMEOUT)
+				.doOnError(e -> logger.warn("Failed to close idle session {}: {}", session.getId(), e.getMessage()))
+				.onErrorComplete();
+		}).then();
 	}
 
 	/**
