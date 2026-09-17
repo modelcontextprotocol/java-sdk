@@ -51,7 +51,9 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
+import reactor.test.scheduler.VirtualTimeScheduler;
 
 import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -84,6 +86,8 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 	// Sweeping is slower than keep-alive, so that a failed ping doesn't immediately
 	// result in a session sweep
 	private final Duration SESSION_SWEEP_INTERVAL = KEEP_ALIVE_INTERVAL.multipliedBy(2);
+
+	private final HttpClient httpClient = HttpClient.newHttpClient();
 
 	@Override
 	protected void awaitClientStreamEstablished() {
@@ -209,7 +213,6 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 
 	@Test
 	void rejectsWhenBodyBytesExceedLimitWithoutContentLengthHeader() throws Exception {
-		var httpClient = HttpClient.newHttpClient();
 		// A publisher with unknown content length forces chunked transfer encoding,
 		// bypassing the Content-Length header check and exercising the body byte
 		// count
@@ -248,9 +251,8 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 	}
 
 	@Test
-	void resumedStreamReceivesServerNotifications() throws Exception {
+	void resumedStreamReceivesServerNotifications() {
 		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
-		var httpClient = HttpClient.newHttpClient();
 
 		var sessionId = initializeSession(httpClient);
 
@@ -264,9 +266,8 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 	}
 
 	@Test
-	void replacedListeningStreamIsClosed() throws Exception {
+	void replacedListeningStreamIsClosed() {
 		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
-		var httpClient = HttpClient.newHttpClient();
 
 		var sessionId = initializeSession(httpClient);
 
@@ -292,34 +293,34 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 	}
 
 	@Test
-	void keepAliveSkipsSessionsWithoutListeningStream() throws Exception {
-		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
-		var httpClient = HttpClient.newHttpClient();
+	void keepAliveSkipsSessionsWithoutListeningStream() {
 		var keepAliveLogger = (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(KeepAliveScheduler.class);
 		ListAppender<ILoggingEvent> logAppender = new ListAppender<>();
 		logAppender.start();
 		keepAliveLogger.addAppender(logAppender);
 
+		var virtualTime = VirtualTimeScheduler.getOrSet();
 		try {
-			// A client is free to never issue the GET request establishing a listening
-			// stream. Such a session has nothing to write a ping to, so it must not be
-			// pinged on every keep-alive interval.
+			withTransportProvider(KEEP_ALIVE_INTERVAL, null);
 			initializeSession(httpClient);
 
-			Thread.sleep(KEEP_ALIVE_INTERVAL.multipliedBy(3).toMillis());
+			// go through multiple keep-alive-rounds
+			virtualTime.advanceTimeBy(KEEP_ALIVE_INTERVAL.multipliedBy(3));
 
-			assertThat(logAppender.list).noneMatch(event -> event.getLevel() == Level.WARN);
+			assertThat(logAppender.list).as("Should not display any Keep-Alive warning log")
+				.noneMatch(event -> event.getLevel() == Level.WARN);
 		}
 		finally {
 			keepAliveLogger.detachAppender(logAppender);
 			logAppender.stop();
+			VirtualTimeScheduler.reset();
 		}
+
 	}
 
 	@Test
-	void keepAlivePingsSessionsWithListeningStream() throws Exception {
+	void keepAlivePingsSessionsWithListeningStream() {
 		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
-		var httpClient = HttpClient.newHttpClient();
 
 		var sessionId = initializeSession(httpClient);
 		var stream = openListeningStream(httpClient, sessionId, null);
@@ -331,9 +332,8 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 	}
 
 	@Test
-	void unansweredKeepAlivePingReleasesTheStreamButKeepsTheSession() throws Exception {
+	void unansweredKeepAlivePingReleasesTheStreamButKeepsTheSession() {
 		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
-		var httpClient = HttpClient.newHttpClient();
 
 		var sessionId = initializeSession(httpClient);
 		var stream = openListeningStream(httpClient, sessionId, null);
@@ -350,182 +350,163 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 	}
 
 	@Test
-	void sessionEviction() throws Exception {
-		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
-		var httpClient = HttpClient.newHttpClient();
-		var sessionId = initializeSession(httpClient);
-		for (int i = 0; i < 4; i++) {
-			assertThat(postNotification(httpClient, sessionId)).isEqualTo(HttpServletResponse.SC_ACCEPTED);
-			Thread.sleep(SESSION_SWEEP_INTERVAL.dividedBy(2).toMillis());
+	void sessionEviction() {
+		var virtualTime = VirtualTimeScheduler.getOrSet();
+		try {
+			withTransportProvider(null, SESSION_SWEEP_INTERVAL);
+			var sessionId = initializeSession(httpClient);
+
+			// One client request every sweep interval/2, the session remains active
+			// We do 5 total requests so the total time is > 2 sweep intervals, verifying
+			// that the sweeper does not reclaim a session
+			for (int i = 1; i < 6; i++) {
+				virtualTime.advanceTimeBy(SESSION_SWEEP_INTERVAL.dividedBy(2));
+				assertThat(postNotification(httpClient, sessionId)).as("Session should be active for request #%s", i)
+					.isEqualTo(HttpServletResponse.SC_ACCEPTED);
+			}
+
+			virtualTime.advanceTimeBy(SESSION_SWEEP_INTERVAL.multipliedBy(2));
+			assertThat(postNotification(httpClient, sessionId)).as("Session should be sweeped after SWEEP_INTERVAL * 2")
+				.isEqualTo(HttpServletResponse.SC_NOT_FOUND);
 		}
-		// The session is active, so it's not swept
-		assertThat(postNotification(httpClient, sessionId)).isEqualTo(HttpServletResponse.SC_ACCEPTED);
-
-		// Wait for two sweep intervals to ensure the session has been swept
-		Thread.sleep(SESSION_SWEEP_INTERVAL.multipliedBy(2).toMillis());
-		assertThat(postNotification(httpClient, sessionId)).isEqualTo(HttpServletResponse.SC_NOT_FOUND);
+		finally {
+			VirtualTimeScheduler.reset();
+		}
 	}
 
 	@Test
-	void sessionHoldingAnOpenStreamIsNotEvicted() throws Exception {
-		mcpServerTransportProvider.closeGracefully().block();
-		mcpServerTransportProvider = HttpServletStreamableServerTransportProvider.builder()
-			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
-			.mcpEndpoint(MESSAGE_ENDPOINT)
-			// remove keepalive to ensure the SSE stream is not removed on ping failures
-			.keepAliveInterval(null)
-			.sessionSweepInterval(SESSION_SWEEP_INTERVAL)
-			.build();
-		MCP_SERVLET.setDelegate(mcpServerTransportProvider);
-		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
-		var httpClient = HttpClient.newHttpClient();
+	void sessionHoldingAnOpenStreamIsNotEvicted() {
+		var virtualTime = VirtualTimeScheduler.getOrSet();
+		try {
+			withTransportProvider(null, SESSION_SWEEP_INTERVAL);
+			var sessionId = initializeSession(httpClient);
+			openListeningStream(httpClient, sessionId, null);
+			awaitClientStreamEstablished();
 
-		var sessionId = initializeSession(httpClient);
-		openListeningStream(httpClient, sessionId, null);
-		awaitClientStreamEstablished();
-
-		// A client is allowed to hold a connection open without sending anything on it,
-		// so this session is not idle however long it stays silent
-		Thread.sleep(SESSION_SWEEP_INTERVAL.multipliedBy(2).toMillis());
-
-		assertThat(postNotification(httpClient, sessionId)).isEqualTo(HttpServletResponse.SC_ACCEPTED);
+			virtualTime.advanceTimeBy(SESSION_SWEEP_INTERVAL.multipliedBy(2));
+			assertThat(postNotification(httpClient, sessionId))
+				.as("Session should not be sweeped when a GET SSE stream is open")
+				.isEqualTo(HttpServletResponse.SC_ACCEPTED);
+		}
+		finally {
+			VirtualTimeScheduler.reset();
+		}
 	}
 
 	@Test
-	void sessionWithStreamIsNotEvicted() throws Exception {
-		mcpServerTransportProvider.closeGracefully().block();
-		mcpServerTransportProvider = HttpServletStreamableServerTransportProvider.builder()
-			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
-			.mcpEndpoint(MESSAGE_ENDPOINT)
-			// remove keepalive to ensure the SSE stream is not removed on ping failures
-			.keepAliveInterval(null)
-			.sessionSweepInterval(SESSION_SWEEP_INTERVAL)
-			.build();
-		MCP_SERVLET.setDelegate(mcpServerTransportProvider);
-		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
-		var httpClient = HttpClient.newHttpClient();
-		var sessionId = initializeSession(httpClient);
-		openListeningStream(httpClient, sessionId, null);
+	void sessionEvictionAfterReleasingStream() {
+		var virtualTime = VirtualTimeScheduler.getOrSet();
+		try {
+			withTransportProvider(null, SESSION_SWEEP_INTERVAL);
+			var sessionId = initializeSession(httpClient);
+			var clientStream = openListeningStream(httpClient, sessionId, null);
+			awaitClientStreamEstablished();
+			// "prep" the client so we can close the stream by sending data: the
+			// subscription
+			// in the clientStream is only present when the client has received data
+			awaitNotification(clientStream.events());
+			virtualTime.advanceTimeBy(SESSION_SWEEP_INTERVAL.multipliedBy(2));
+			assertThat(postNotification(httpClient, sessionId)).as("Session should be active when a stream is open")
+				.isEqualTo(HttpServletResponse.SC_ACCEPTED);
 
-		// Wait for two sweep intervals to ensure the sweeper has run
-		Thread.sleep(SESSION_SWEEP_INTERVAL.multipliedBy(2).toMillis());
-		assertThat(postNotification(httpClient, sessionId)).isEqualTo(HttpServletResponse.SC_ACCEPTED);
+			// Close the client stream
+			clientStream.closeStream();
+
+			await().atMost(Duration.ofSeconds(5))
+				.pollDelay(Duration.ZERO)
+				.pollInterval(Duration.ZERO)
+				.untilAsserted(() -> {
+					// send a message so the server realizes the client is gone might take
+					// a few tries before the internal buffer fills up and the connection
+					// errors
+					mcpServerTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED, null)
+						.block();
+					// eventually, the session should be sweepable
+					virtualTime.advanceTimeBy(SESSION_SWEEP_INTERVAL.multipliedBy(2));
+					assertThat(postNotification(httpClient, sessionId))
+						.as("Session should be sweeped after a stream is released")
+						.isEqualTo(HttpServletResponse.SC_NOT_FOUND);
+				});
+		}
+		finally {
+			VirtualTimeScheduler.reset();
+		}
 	}
 
 	@Test
-	void sessionEvictionAfterReleasingStream() throws Exception {
-		mcpServerTransportProvider.closeGracefully().block();
-		mcpServerTransportProvider = HttpServletStreamableServerTransportProvider.builder()
-			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
-			.mcpEndpoint(MESSAGE_ENDPOINT)
-			// remove keepalive to ensure the SSE stream is not removed on ping failures
-			.keepAliveInterval(null)
-			.sessionSweepInterval(SESSION_SWEEP_INTERVAL)
-			.build();
-		MCP_SERVLET.setDelegate(mcpServerTransportProvider);
-		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
-		var httpClient = HttpClient.newHttpClient();
+	void sessionIsNotEvictedWithoutSweepInterval() {
+		var virtualTime = VirtualTimeScheduler.getOrSet();
+		try {
+			withTransportProvider(KEEP_ALIVE_INTERVAL, null);
+			var sessionId = initializeSession(httpClient);
 
-		var sessionId = initializeSession(httpClient);
-		var clientStream = openListeningStream(httpClient, sessionId, null);
-		awaitClientStreamEstablished();
-		// "prep" the client so we can close the stream by sending data: the subscription
-		// in the clientStream is only present when the client has received data
-		awaitNotification(clientStream.events());
-		assertThat(postNotification(httpClient, sessionId)).isEqualTo(HttpServletResponse.SC_ACCEPTED);
-
-		// Close the client stream
-		clientStream.closeStream();
-
-		await().atMost(Duration.ofSeconds(5))
-			.pollDelay(Duration.ZERO)
-			.pollInterval(SESSION_SWEEP_INTERVAL.multipliedBy(2))
-			.untilAsserted(() -> {
-				// send a message so the server realizes the client is gone
-				// might take a few tries before the internal buffer fills up and the
-				// connection errors
-				mcpServerTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED, null)
-					.block();
-				// eventually, the session should be sweepable
-				assertThat(postNotification(httpClient, sessionId)).isEqualTo(HttpServletResponse.SC_NOT_FOUND);
-			});
-	}
-
-	@Test
-	void sessionIsNotEvictedWithoutSweepInterval() throws Exception {
-		// Sweeping can be turned off: such a transport keeps its sessions until they are
-		// deleted or the server shuts down
-		mcpServerTransportProvider.closeGracefully().block();
-		mcpServerTransportProvider = HttpServletStreamableServerTransportProvider.builder()
-			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
-			.mcpEndpoint(MESSAGE_ENDPOINT)
-			.keepAliveInterval(KEEP_ALIVE_INTERVAL)
-			.sessionSweepInterval(null)
-			.build();
-		MCP_SERVLET.setDelegate(mcpServerTransportProvider);
-		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
-
-		var httpClient = HttpClient.newHttpClient();
-		var sessionId = initializeSession(httpClient);
-
-		// The session holds no stream and stays silent for long enough that a scheduled
-		// sweeper would have evicted it several times over
-		Thread.sleep(SESSION_SWEEP_INTERVAL.multipliedBy(4).toMillis());
-
-		assertThat(postNotification(httpClient, sessionId)).isEqualTo(HttpServletResponse.SC_ACCEPTED);
+			virtualTime.advanceTimeBy(SESSION_SWEEP_INTERVAL.multipliedBy(10));
+			assertThat(postNotification(httpClient, sessionId))
+				.as("Session should never be sweeped when there is no sessionSweepInterval")
+				.isEqualTo(HttpServletResponse.SC_ACCEPTED);
+		}
+		finally {
+			VirtualTimeScheduler.reset();
+		}
 	}
 
 	/**
 	 * A client which aborts a tool call must not leave its session behind.
 	 */
 	@Test
-	void sessionIsEvictedWhenTheClientAbortsAResponseStream() throws Exception {
-		mcpServerTransportProvider.closeGracefully().block();
-		mcpServerTransportProvider = HttpServletStreamableServerTransportProvider.builder()
-			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
-			.mcpEndpoint(MESSAGE_ENDPOINT)
-			// remove keepalive, so only the response stream can keep the session alive
-			.keepAliveInterval(null)
-			.sessionSweepInterval(SESSION_SWEEP_INTERVAL)
-			.build();
-		MCP_SERVLET.setDelegate(mcpServerTransportProvider);
+	void sessionIsEvictedWhenTheClientAbortsAResponseStream() {
+		var virtualTime = VirtualTimeScheduler.getOrSet();
+		try {
+			withTransportProvider(null, SESSION_SWEEP_INTERVAL);
+			var toolEmissionInterval = Duration.ofMillis(10);
+			prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+				.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
+				.tools(McpServerFeatures.AsyncToolSpecification.builder()
+					.tool(McpSchema.Tool.builder("hangs", EMPTY_JSON_SCHEMA).description("never returns").build())
+					.callHandler((exchange, request) -> Flux
+						.interval(Duration.ZERO, toolEmissionInterval, Schedulers.newSingle("test-tool"))
+						.flatMap(tick -> exchange.loggingNotification(McpSchema.LoggingMessageNotification.builder()
+							.level(McpSchema.LoggingLevel.INFO)
+							.data("x".repeat(64 * 1024))
+							.build()))
+						.then(Mono.<McpSchema.CallToolResult>never()))
+					.build())
+				.build();
+			var sessionId = initializeSession(httpClient);
 
-		// A tool which never returns but keeps writing to its response stream. The
-		// payloads are large and frequent on purpose: writes to a connection whose peer
-		// is gone keep succeeding until the socket buffer fills up, and that is the only
-		// thing which can surface the disconnect here.
-		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
-			.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
-			.tools(McpServerFeatures.AsyncToolSpecification.builder()
-				.tool(McpSchema.Tool.builder("hangs", EMPTY_JSON_SCHEMA).description("never returns").build())
-				.callHandler((exchange, request) -> Flux.interval(Duration.ofMillis(10))
-					.flatMap(tick -> exchange.loggingNotification(McpSchema.LoggingMessageNotification.builder()
-						.level(McpSchema.LoggingLevel.INFO)
-						.data("x".repeat(64 * 1024))
-						.build()))
-					.then(Mono.<McpSchema.CallToolResult>never()))
-				.build())
-			.build();
+			// The POST opens a response SSE stream, which the session counts as an open
+			// stream for as long as the call is in flight
+			var responseStream = postToolCall(httpClient, sessionId, "hangs");
 
-		var httpClient = HttpClient.newHttpClient();
-		var sessionId = initializeSession(httpClient);
+			await().atMost(Duration.ofSeconds(5))
+				.pollDelay(Duration.ZERO)
+				.pollInterval(Duration.ofMillis(10))
+				.untilAsserted(() -> {
+					// We do this in a loop for the wire-side of the connection - data has
+					// to be buffered then flushed
 
-		// The POST opens a response SSE stream, which the session counts as an open
-		// stream for as long as the call is in flight
-		var responseStream = postToolCall(httpClient, sessionId, "hangs");
-		await().atMost(Duration.ofSeconds(5))
-			.untilAsserted(
-					() -> assertThat(responseStream.events()).anyMatch(line -> line.contains("notifications/message")));
-		assertThat(postNotification(httpClient, sessionId)).isEqualTo(HttpServletResponse.SC_ACCEPTED);
+					// Advance time so the tool emits some data
+					virtualTime.advanceTimeBy(toolEmissionInterval);
+					// Verify the data is received
+					assertThat(responseStream.events()).anyMatch(line -> line.contains("notifications/message"));
+				});
+			virtualTime.advanceTimeBy(SESSION_SWEEP_INTERVAL.multipliedBy(2));
+			assertThat(postNotification(httpClient, sessionId)).as("Session with POST stream is active")
+				.isEqualTo(HttpServletResponse.SC_ACCEPTED);
 
-		// The client gives up on the call and disconnects
-		responseStream.closeStream();
+			// The client gives up on the call and disconnects
+			responseStream.closeStream();
 
-		// Nothing is connected to the session anymore, so the sweeper must reclaim it.
-		// Probing only once: any request would count as activity and reset the clock.
-		Thread.sleep(SESSION_SWEEP_INTERVAL.multipliedBy(2).toMillis());
+			// Nothing is connected to the session anymore, so the sweeper must reclaim
+			// it.
+			// Probing only once: any request would count as activity and reset the clock.
+			virtualTime.advanceTimeBy(SESSION_SWEEP_INTERVAL.multipliedBy(5));
 
-		assertThat(postNotification(httpClient, sessionId)).isEqualTo(HttpServletResponse.SC_NOT_FOUND);
+			assertThat(postNotification(httpClient, sessionId)).isEqualTo(HttpServletResponse.SC_NOT_FOUND);
+		}
+		finally {
+			VirtualTimeScheduler.reset();
+		}
 	}
 
 	/**
@@ -559,7 +540,7 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 		return new StreamResponse(clientFuture, events, streamRef);
 	}
 
-	private int postNotification(HttpClient httpClient, String sessionId) throws Exception {
+	private int postNotification(HttpClient httpClient, String sessionId) {
 		var notification = HttpRequest.newBuilder()
 			.uri(URI.create("http://localhost:" + PORT + MESSAGE_ENDPOINT))
 			.header("Content-Type", "application/json")
@@ -567,10 +548,15 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 			.header(HttpHeaders.MCP_SESSION_ID, sessionId)
 			.POST(HttpRequest.BodyPublishers.ofString("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"))
 			.build();
-		return httpClient.send(notification, HttpResponse.BodyHandlers.ofString()).statusCode();
+		try {
+			return httpClient.send(notification, HttpResponse.BodyHandlers.ofString()).statusCode();
+		}
+		catch (IOException | InterruptedException e) {
+			return -1;
+		}
 	}
 
-	private String initializeSession(HttpClient httpClient) throws Exception {
+	private String initializeSession(HttpClient httpClient) {
 		var initialize = HttpRequest.newBuilder()
 			.uri(URI.create("http://localhost:" + PORT + MESSAGE_ENDPOINT))
 			.header("Content-Type", "application/json")
@@ -581,9 +567,15 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 					"clientInfo":{"name":"test-client","version":"1.0.0"}}}"""))
 			.build();
 
-		var response = httpClient.send(initialize, HttpResponse.BodyHandlers.ofString());
+		HttpResponse<String> response = null;
+		try {
+			response = httpClient.send(initialize, HttpResponse.BodyHandlers.ofString());
+		}
+		catch (IOException | InterruptedException e) {
+			return null;
+		}
 		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_OK);
-		return response.headers().firstValue(HttpHeaders.MCP_SESSION_ID).orElseThrow();
+		return response.headers().firstValue(HttpHeaders.MCP_SESSION_ID).orElse(null);
 	}
 
 	/**
@@ -639,6 +631,19 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 
 			});
 		}
+	}
+
+	private void withTransportProvider(Duration keepAliveInterval, Duration sessionSweepInterval) {
+		mcpServerTransportProvider.closeGracefully().block();
+		mcpServerTransportProvider = HttpServletStreamableServerTransportProvider.builder()
+			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
+			.mcpEndpoint(MESSAGE_ENDPOINT)
+			.keepAliveInterval(keepAliveInterval)
+			// no sweeping: the session must survive every keep-alive round
+			.sessionSweepInterval(sessionSweepInterval)
+			.build();
+		MCP_SERVLET.setDelegate(mcpServerTransportProvider);
+		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
 	}
 
 }
