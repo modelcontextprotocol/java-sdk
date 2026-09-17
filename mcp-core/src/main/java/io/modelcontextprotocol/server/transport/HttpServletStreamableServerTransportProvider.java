@@ -216,17 +216,14 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * down
 	 */
 	private Disposable startSessionSweeper(Duration sessionSweepInterval) {
-		return Flux.interval(sessionSweepInterval, sessionSweepInterval, Schedulers.boundedElastic()).doOnNext(tick -> {
-			// Each sweep runs in its own subscription, so that a sweep failing does
-			// not terminate the interval and disable sweeping altogether
-			Mono.fromRunnable(this::sweepSessions)
-				.doOnError(e -> logger.error("Session sweep failed", e))
-				.onErrorComplete()
-				.subscribe();
-		}).onErrorComplete(error -> {
-			logger.error("Session sweeper error", error);
-			return true;
-		}).subscribe();
+		return Flux.interval(sessionSweepInterval, sessionSweepInterval, Schedulers.boundedElastic())
+			.concatMap(
+					tick -> sweepSessions().doOnError(e -> logger.error("Session sweep failed", e)).onErrorComplete())
+			.onErrorComplete(error -> {
+				logger.error("Session sweeper error", error);
+				return true;
+			})
+			.subscribe();
 	}
 
 	/**
@@ -235,25 +232,23 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * if it received a request during the interval which just elapsed. Anything else is a
 	 * session whose client went away without deleting it: the protocol lets a client
 	 * reconnect to a session, so nothing else ever reclaims it.
+	 * @return a Mono completing once every evicted session has been closed
 	 */
-	private void sweepSessions() {
+	private Mono<Void> sweepSessions() {
 		if (this.isClosing) {
-			return;
+			return Mono.empty();
 		}
 		Set<String> active = this.activeSessions.getAndSet(ConcurrentHashMap.newKeySet());
-		this.sessions.values().removeIf(session -> {
-			if (session.hasOpenStream() || active.contains(session.getId())) {
-				return false;
-			}
-			logger.debug("Evicting idle session {}", session.getId());
-			try {
-				session.closeGracefully().block();
-			}
-			catch (Exception e) {
-				logger.warn("Failed to close idle session {}: {}", session.getId(), e.getMessage());
-			}
-			return true;
-		});
+		return Flux.fromIterable(this.sessions.values())
+			.filter(session -> !session.hasOpenStream() && !active.contains(session.getId()))
+			.filter(session -> this.sessions.remove(session.getId(), session))
+			.flatMap(session -> {
+				logger.debug("Evicting idle session {}", session.getId());
+				return session.closeGracefully()
+					.doOnError(e -> logger.warn("Failed to close idle session {}: {}", session.getId(), e.getMessage()))
+					.onErrorComplete();
+			})
+			.then();
 	}
 
 	/**
