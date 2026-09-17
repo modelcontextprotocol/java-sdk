@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 - 2025 the original author or authors.
+ * Copyright 2025 - 2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.util;
@@ -29,6 +29,7 @@ import reactor.core.scheduler.Schedulers;
  * The pings are sent to all active mcp sessions at regular intervals.
  *
  * @author Christian Tzolov
+ * @author Daniel Garnier-Moiroux
  */
 public class KeepAliveScheduler {
 

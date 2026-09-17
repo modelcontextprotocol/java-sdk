@@ -60,6 +60,7 @@ import reactor.core.scheduler.Schedulers;
  * @author Zachary German
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @author Daniel Garnier-Moiroux
  * @see McpStreamableServerTransportProvider
  * @see HttpServlet
  */
