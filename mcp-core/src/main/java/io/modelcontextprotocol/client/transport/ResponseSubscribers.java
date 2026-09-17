@@ -4,9 +4,6 @@
 
 package io.modelcontextprotocol.client.transport;
 
-import java.net.http.HttpResponse;
-import java.net.http.HttpResponse.BodyHandler;
-import java.net.http.HttpResponse.BodySubscriber;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -17,8 +14,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.CompletionStage;
-import java.util.concurrent.Flow;
 import java.util.concurrent.Flow.Publisher;
 
 import org.slf4j.Logger;
@@ -56,45 +51,6 @@ class ResponseSubscribers {
 	}
 
 	/**
-	 * Creates a {@link BodyHandler} that exposes the response body as a publisher of
-	 * byte-buffer chunks, bounding how much memory reading a single line may occupy.
-	 *
-	 * <p>
-	 * The line decoder downstream of this handler buffers characters until it encounters
-	 * a line terminator, so a peer that never terminates a line (or sends an enormous
-	 * one) would force the transport to buffer it in memory. The bound is allowed
-	 * {@link #SSE_FRAMING_OVERHEAD} extra bytes so that the SSE framing around a payload
-	 * does not count against the payload's own budget; the content type is not known when
-	 * the bound is installed, so the same headroom applies to non-SSE bodies.
-	 *
-	 * <p>
-	 * This only bounds a single line. What accumulates across lines is bounded where it
-	 * accumulates: see {@link #decodeSseResponse} for multi-line SSE events and
-	 * {@link #decodeAggregateResponse} for whole response bodies.
-	 * @param maxSize the maximum number of bytes read for a single inbound message
-	 */
-	static BodyHandler<Publisher<List<ByteBuffer>>> boundedPublisherBodyHandler(int maxSize) {
-		BodyHandler<Publisher<List<ByteBuffer>>> delegate = HttpResponse.BodyHandlers.ofPublisher();
-		int bound = plusFramingOverhead(maxSize);
-		return responseInfo -> new BoundedLineBodySubscriber<>(delegate.apply(responseInfo), bound);
-	}
-
-	/**
-	 * Creates a {@link BodyHandler} that reads the response body into a string, bounding
-	 * how much memory it may occupy. A peer sending more than {@code maxSize} bytes has
-	 * its response aborted instead of forcing the transport to buffer it in memory.
-	 *
-	 * <p>
-	 * Decoding matches {@link HttpResponse.BodyHandlers#ofString()}, including its
-	 * handling of the charset declared in the {@code Content-Type} header.
-	 * @param maxSize the maximum number of bytes read for the response body
-	 */
-	static BodyHandler<String> boundedStringBodyHandler(int maxSize) {
-		BodyHandler<String> delegate = HttpResponse.BodyHandlers.ofString();
-		return responseInfo -> new BoundedTotalBodySubscriber<>(delegate.apply(responseInfo), maxSize);
-	}
-
-	/**
 	 * Adds {@link #SSE_FRAMING_OVERHEAD} to {@code maxSize}, saturating at
 	 * {@link Integer#MAX_VALUE} rather than overflowing into a negative bound that would
 	 * reject everything.
@@ -104,11 +60,30 @@ class ResponseSubscribers {
 	}
 
 	/**
-	 * Converts a publisher of byte-buffer chunks into a flux of decoded string lines.
+	 * Converts a publisher of byte-buffer chunks into a flux of decoded string lines,
+	 * bounding how much memory a single line may occupy.
+	 *
+	 * <p>
+	 * The decoder buffers characters until it encounters a line terminator, so a peer
+	 * that never terminates a line (or sends an enormous one) would force the transport
+	 * to buffer it in memory. Exceeding the bound fails the flux, which cancels the
+	 * subscription and so closes the connection.
+	 *
+	 * <p>
+	 * The bound is allowed {@link #SSE_FRAMING_OVERHEAD} extra characters so that the SSE
+	 * framing around a payload does not count against the payload's own budget: only SSE
+	 * streams are read line by line, so every caller of this method is parsing one.
+	 *
+	 * <p>
+	 * This only bounds a single line. What accumulates across lines is bounded where it
+	 * accumulates: see {@link #decodeSseResponse} for multi-line SSE events and
+	 * {@link #decodeAggregateResponse} for whole response bodies.
+	 * @param publisher the response body
+	 * @param maxSize the maximum number of bytes read for a single inbound message
 	 */
-	static Flux<String> decodeLines(Publisher<List<ByteBuffer>> publisher) {
+	static Flux<String> decodeLines(Publisher<List<ByteBuffer>> publisher, int maxSize) {
 		return Flux.defer(() -> {
-			Utf8LineDecoder dec = new Utf8LineDecoder();
+			Utf8LineDecoder dec = new Utf8LineDecoder(plusFramingOverhead(maxSize));
 			return JdkFlowAdapter.flowPublisherToFlux(publisher)
 				.concatMapIterable(dec::decode)
 				.concatWith(Flux.defer(() -> Flux.fromIterable(dec.flush())));
@@ -139,22 +114,7 @@ class ResponseSubscribers {
 	 * @param maxSize the maximum number of bytes read for the response body
 	 */
 	static Mono<String> decodeAggregateResponse(Publisher<List<ByteBuffer>> publisher, int maxSize) {
-		return Flux.defer(() -> {
-			// Held in an array because the handle callback below cannot mutate a
-			// captured local. The enclosing defer gives each subscriber its own.
-			long[] totalBytes = new long[1];
-			return JdkFlowAdapter.flowPublisherToFlux(publisher)
-				.flatMapIterable(list -> list)
-				.<ByteBuffer>handle((buffer, sink) -> {
-					totalBytes[0] += buffer.remaining();
-					if (totalBytes[0] > maxSize) {
-						sink.error(new McpTransportException(
-								"Inbound response body exceeds the maximum allowed size of " + maxSize + " bytes"));
-						return;
-					}
-					sink.next(buffer);
-				});
-		}).collectList().map(buffers -> {
+		return boundTotalBytes(publisher, maxSize).collectList().map(buffers -> {
 			int totalSize = buffers.stream().mapToInt(ByteBuffer::remaining).sum();
 			ByteBuffer combined = ByteBuffer.allocate(totalSize);
 			buffers.forEach(combined::put);
@@ -166,17 +126,56 @@ class ResponseSubscribers {
 	/**
 	 * Subscribes to the body publisher to release the underlying connection, discarding
 	 * all bytes, then propagates the given error.
+	 *
+	 * <p>
+	 * Nothing accumulates here, so the bound is not protecting memory: it stops a peer
+	 * from making the transport read an unbounded body only to throw it away. Should the
+	 * body outgrow {@code maxSize}, that failure replaces {@code error}, because the
+	 * response is abandoned before the reason for draining it can be reported.
+	 * @param body the response body
+	 * @param maxSize the maximum number of bytes read for the response body
+	 * @param error the error to propagate once the body has been discarded
 	 */
-	static <T> Flux<T> drainThenError(Publisher<List<ByteBuffer>> body, Throwable error) {
-		return JdkFlowAdapter.flowPublisherToFlux(body).thenMany(Flux.error(error));
+	static <T> Flux<T> drainThenError(Publisher<List<ByteBuffer>> body, int maxSize, Throwable error) {
+		return boundTotalBytes(body, maxSize).thenMany(Flux.error(error));
 	}
 
 	/**
 	 * Subscribes to the body publisher to release the underlying connection, discarding
 	 * all bytes, then completes empty.
+	 *
+	 * <p>
+	 * As in {@link #drainThenError}, the bound caps what a peer can make the transport
+	 * read rather than what it can make it hold.
+	 * @param body the response body
+	 * @param maxSize the maximum number of bytes read for the response body
 	 */
-	static <T> Flux<T> drain(Publisher<List<ByteBuffer>> body) {
-		return JdkFlowAdapter.flowPublisherToFlux(body).thenMany(Flux.empty());
+	static <T> Flux<T> drain(Publisher<List<ByteBuffer>> body, int maxSize) {
+		return boundTotalBytes(body, maxSize).thenMany(Flux.empty());
+	}
+
+	/**
+	 * Flattens the body into its individual byte buffers, failing once more than
+	 * {@code maxSize} bytes have passed through. Failing cancels the subscription, which
+	 * closes the connection and so stops the peer from streaming any more.
+	 */
+	private static Flux<ByteBuffer> boundTotalBytes(Publisher<List<ByteBuffer>> body, int maxSize) {
+		return Flux.defer(() -> {
+			// Held in an array because the handle callback below cannot mutate a
+			// captured local. The enclosing defer gives each subscriber its own.
+			long[] totalBytes = new long[1];
+			return JdkFlowAdapter.flowPublisherToFlux(body)
+				.flatMapIterable(list -> list)
+				.<ByteBuffer>handle((buffer, sink) -> {
+					totalBytes[0] += buffer.remaining();
+					if (totalBytes[0] > maxSize) {
+						sink.error(new McpTransportException(
+								"Inbound response body exceeds the maximum allowed size of " + maxSize + " bytes"));
+						return;
+					}
+					sink.next(buffer);
+				});
+		});
 	}
 
 	/**
@@ -206,6 +205,14 @@ class ResponseSubscribers {
 		private final StringBuilder leftover = new StringBuilder();
 
 		/**
+		 * The maximum number of bytes a single line may occupy. Measured against
+		 * {@link #leftover}'s length in characters, which for UTF-8 is never more than
+		 * the number of bytes those characters were decoded from, so a line is only ever
+		 * rejected once it has genuinely exceeded the bound in bytes.
+		 */
+		private final int maxSize;
+
+		/**
 		 * How many leading characters of {@link #leftover} are already known to hold no
 		 * line terminator, so that the search for one resumes where the previous search
 		 * ended instead of restarting at the beginning of the buffer. Without it, a long
@@ -227,6 +234,10 @@ class ResponseSubscribers {
 		// Holds partial UTF-8 sequences left over from a previous chunk (max 3 bytes
 		// for a BMP code point; 4 bytes for a supplementary one).
 		private ByteBuffer pendingBytes = ByteBuffer.allocate(0);
+
+		Utf8LineDecoder(int maxSize) {
+			this.maxSize = maxSize;
+		}
 
 		List<String> decode(List<ByteBuffer> chunk) {
 			List<String> lines = new ArrayList<>();
@@ -324,6 +335,10 @@ class ResponseSubscribers {
 				int terminatorIdx = indexOfLineTerminator(this.scannedForLineTerminator);
 				if (terminatorIdx == -1) {
 					this.scannedForLineTerminator = leftover.length();
+					if (leftover.length() > this.maxSize) {
+						throw new McpTransportException(
+								"Inbound line exceeds the maximum allowed size of " + this.maxSize + " bytes");
+					}
 					return;
 				}
 				out.add(leftover.substring(0, terminatorIdx));
@@ -436,184 +451,6 @@ class ResponseSubscribers {
 			SseEvent result = new SseEvent(id, event, data.toString().trim());
 			data.setLength(0);
 			return Optional.of(result);
-		}
-
-	}
-
-	/**
-	 * Base for {@link BodySubscriber} wrappers that transparently forward the response
-	 * body to a delegate, but abort it once the peer exceeds a size bound.
-	 *
-	 * <p>
-	 * Aborting cancels the upstream subscription, which closes the connection, and
-	 * signals a {@link McpTransportException} to the delegate so the failure surfaces
-	 * both through the body's {@link CompletionStage} and through any sink the delegate
-	 * feeds.
-	 */
-	abstract static class BoundedBodySubscriber<T> implements BodySubscriber<T> {
-
-		private final BodySubscriber<T> delegate;
-
-		protected final int maxSize;
-
-		/**
-		 * What the bound applies to, e.g. {@code "Inbound line"}, used to build the
-		 * failure message.
-		 */
-		private final String boundedEntity;
-
-		private Flow.Subscription subscription;
-
-		private volatile boolean done = false;
-
-		BoundedBodySubscriber(BodySubscriber<T> delegate, int maxSize, String boundedEntity) {
-			this.delegate = delegate;
-			this.maxSize = maxSize;
-			this.boundedEntity = boundedEntity;
-		}
-
-		@Override
-		public CompletionStage<T> getBody() {
-			return this.delegate.getBody();
-		}
-
-		@Override
-		public void onSubscribe(Flow.Subscription subscription) {
-			this.subscription = subscription;
-			this.delegate.onSubscribe(subscription);
-		}
-
-		@Override
-		public void onNext(List<ByteBuffer> buffers) {
-			if (this.done) {
-				return;
-			}
-			for (ByteBuffer buffer : buffers) {
-				if (!checkSize(buffer)) {
-					this.done = true;
-					this.subscription.cancel();
-					this.delegate.onError(new McpTransportException(
-							this.boundedEntity + " exceeds the maximum allowed size of " + this.maxSize + " bytes"));
-					return;
-				}
-			}
-			this.delegate.onNext(buffers);
-		}
-
-		/**
-		 * Accounts for the bytes in {@code buffer}, which must be inspected with absolute
-		 * reads only so the delegate still sees the original position.
-		 * @param buffer the buffer about to be handed to the delegate
-		 * @return {@code true} to accept the buffer, or {@code false} to abort the
-		 * response because the bound has been exceeded
-		 */
-		protected abstract boolean checkSize(ByteBuffer buffer);
-
-		@Override
-		public void onError(Throwable throwable) {
-			if (this.done) {
-				return;
-			}
-			this.done = true;
-			this.delegate.onError(throwable);
-		}
-
-		@Override
-		public void onComplete() {
-			if (this.done) {
-				return;
-			}
-			this.done = true;
-			this.delegate.onComplete();
-		}
-
-	}
-
-	/**
-	 * A {@link BoundedBodySubscriber} that aborts the response once a single line (a run
-	 * of bytes with no line terminator) exceeds {@code maxSize} bytes.
-	 *
-	 * <p>
-	 * {@link Utf8LineDecoder} buffers characters until it encounters a line terminator,
-	 * so a peer that never terminates a line (or sends an enormous one) would force the
-	 * transport to buffer it in memory. This wrapper counts bytes as they arrive off the
-	 * wire and cancels the subscription before that buffer can grow without bound.
-	 *
-	 * <p>
-	 * CR and LF both reset the count, matching the terminators {@link Utf8LineDecoder}
-	 * flushes a line on: whatever empties the decoder's buffer has to refill this budget,
-	 * or a peer framing short lines with CR alone would be aborted for exceeding a bound
-	 * its lines never reach. A CRLF resets twice, which is harmless.
-	 */
-	static final class BoundedLineBodySubscriber<T> extends BoundedBodySubscriber<T> {
-
-		private long bytesSinceLineTerminator = 0;
-
-		BoundedLineBodySubscriber(BodySubscriber<T> delegate, int maxSize) {
-			super(delegate, maxSize, "Inbound line");
-		}
-
-		@Override
-		protected boolean checkSize(ByteBuffer buffer) {
-			int position = buffer.position();
-			int limit = buffer.limit();
-			if (position == limit) {
-				return true;
-			}
-			if (this.bytesSinceLineTerminator + (limit - position) <= this.maxSize) {
-				// No line ending in this buffer can exceed the limit, because there are
-				// not enough bytes since the last LF for one to. Only the trailing
-				// (still unterminated) run matters, so scan back to the last LF instead
-				// of walking every byte.
-				this.bytesSinceLineTerminator = lengthOfTrailingRun(buffer, position, limit);
-				return true;
-			}
-			// The limit is within reach, so account for every line exactly.
-			for (int i = position; i < limit; i++) {
-				byte b = buffer.get(i);
-				if (b == '\n' || b == '\r') {
-					this.bytesSinceLineTerminator = 0;
-				}
-				else if (++this.bytesSinceLineTerminator > this.maxSize) {
-					return false;
-				}
-			}
-			return true;
-		}
-
-		/**
-		 * Returns the number of bytes after the last line terminator in the buffer, or
-		 * the whole span added to the running count when the buffer holds none.
-		 */
-		private long lengthOfTrailingRun(ByteBuffer buffer, int position, int limit) {
-			for (int i = limit - 1; i >= position; i--) {
-				byte b = buffer.get(i);
-				if (b == '\n' || b == '\r') {
-					return limit - 1 - i;
-				}
-			}
-			return this.bytesSinceLineTerminator + (limit - position);
-		}
-
-	}
-
-	/**
-	 * A {@link BoundedBodySubscriber} that aborts the response once the body as a whole
-	 * exceeds {@code maxSize} bytes. Suitable for delegates that aggregate the entire
-	 * body in memory, such as {@link HttpResponse.BodyHandlers#ofString()}.
-	 */
-	static final class BoundedTotalBodySubscriber<T> extends BoundedBodySubscriber<T> {
-
-		private long totalBytes = 0;
-
-		BoundedTotalBodySubscriber(BodySubscriber<T> delegate, int maxSize) {
-			super(delegate, maxSize, "Inbound response body");
-		}
-
-		@Override
-		protected boolean checkSize(ByteBuffer buffer) {
-			this.totalBytes += buffer.remaining();
-			return this.totalBytes <= this.maxSize;
 		}
 
 	}

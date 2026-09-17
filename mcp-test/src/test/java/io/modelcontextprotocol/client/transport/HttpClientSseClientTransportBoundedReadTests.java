@@ -66,8 +66,8 @@ class HttpClientSseClientTransportBoundedReadTests extends HttpClientBoundedRead
 
 	@Test
 	void shouldRejectPostResponseExceedingMaxSize() throws Exception {
-		// The response to a posted message is read into a string in full, so an oversized
-		// one must abort rather than accumulate.
+		// The response to a posted message is discarded on success, but a peer must still
+		// not be able to make the transport read an unbounded one.
 		respondWith(endpoint(), "text/event-stream", body -> {
 			body.write(("event:endpoint\ndata:" + MESSAGE_ENDPOINT + "\n\n").getBytes(StandardCharsets.UTF_8));
 			body.flush();

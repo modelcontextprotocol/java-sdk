@@ -173,7 +173,7 @@ class LargeSseEventDecodingTests {
 	private static List<SseEvent> decode(byte[] body) {
 		Flow.Publisher<List<ByteBuffer>> publisher = JdkFlowAdapter
 			.publisherToFlowPublisher(Flux.fromIterable(chunk(body)));
-		Flux<String> lines = ResponseSubscribers.decodeLines(publisher);
+		Flux<String> lines = ResponseSubscribers.decodeLines(publisher, Integer.MAX_VALUE);
 		return ResponseSubscribers.decodeSseResponse(lines, MAX_SIZE).collectList().block();
 	}
 

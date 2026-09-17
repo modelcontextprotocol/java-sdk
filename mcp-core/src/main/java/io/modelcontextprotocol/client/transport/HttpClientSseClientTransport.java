@@ -390,23 +390,23 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		}).flatMap(requestBuilder -> Mono.create(sink -> {
 			Disposable connection = Mono
 				.fromFuture(() -> this.httpClient.sendAsync(requestBuilder.build(),
-						ResponseSubscribers.boundedPublisherBodyHandler(this.maxResponseSize)))
+						HttpResponse.BodyHandlers.ofPublisher()))
 				.flatMapMany(response -> {
 					if (isClosing) {
 						// The body is handed over as a publisher and nothing is read off
 						// the wire until it is subscribed, so it has to be drained even
 						// when its content is of no further interest.
-						return ResponseSubscribers.drain(response.body());
+						return ResponseSubscribers.drain(response.body(), this.maxResponseSize);
 					}
 
 					int statusCode = response.statusCode();
 
 					if (statusCode >= 200 && statusCode < 300) {
-						Flux<String> lines = ResponseSubscribers.decodeLines(response.body());
+						Flux<String> lines = ResponseSubscribers.decodeLines(response.body(), this.maxResponseSize);
 						return ResponseSubscribers.decodeSseResponse(lines, this.maxResponseSize);
 					}
 					else {
-						return ResponseSubscribers.drainThenError(response.body(),
+						return ResponseSubscribers.drainThenError(response.body(), this.maxResponseSize,
 								new RuntimeException("Failed to connect to SSE stream: " + statusCode));
 					}
 				})
@@ -491,17 +491,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			}
 
 			return this.serializeMessage(message)
-				.flatMap(body -> sendHttpPost(messageEndpointUri, body).handle((response, sink) -> {
-					if (response.statusCode() != 200 && response.statusCode() != 201 && response.statusCode() != 202
-							&& response.statusCode() != 206) {
-						sink.error(new RuntimeException("Sending message failed with a non-OK HTTP code: "
-								+ response.statusCode() + " - " + response.body()));
-					}
-					else {
-						sink.next(response);
-						sink.complete();
-					}
-				}))
+				.flatMap(body -> sendHttpPost(messageEndpointUri, body))
 				.doOnError(error -> {
 					if (!isClosing) {
 						logger.error("Error sending message: {}", error.getMessage());
@@ -522,7 +512,16 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		});
 	}
 
-	private Mono<HttpResponse<String>> sendHttpPost(final String endpoint, final String body) {
+	/**
+	 * POSTs {@code body} to {@code endpoint} and consumes the response, failing if the
+	 * server did not accept the message.
+	 *
+	 * <p>
+	 * The response body is streamed rather than aggregated: it is only read as text when
+	 * a non-OK status makes it part of the failure message, and discarded otherwise.
+	 * Either way it has to be consumed, or the connection is never released.
+	 */
+	private Mono<Void> sendHttpPost(final String endpoint, final String body) {
 		final URI requestUri = Utils.resolveUri(baseUri, endpoint);
 		return Mono.deferContextual(ctx -> {
 			var builder = this.requestBuilder.copy()
@@ -534,8 +533,16 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", requestUri, body, transportContext));
 		}).flatMap(customizedBuilder -> {
 			var request = customizedBuilder.build();
-			return Mono.fromFuture(this.httpClient.sendAsync(request,
-					ResponseSubscribers.boundedStringBodyHandler(this.maxResponseSize)));
+			return Mono.fromFuture(this.httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofPublisher()))
+				.flatMap(response -> {
+					int statusCode = response.statusCode();
+					if (statusCode == 200 || statusCode == 201 || statusCode == 202 || statusCode == 206) {
+						return ResponseSubscribers.drain(response.body(), this.maxResponseSize).then();
+					}
+					return ResponseSubscribers.decodeAggregateResponse(response.body(), this.maxResponseSize)
+						.flatMap(text -> Mono.error(new RuntimeException(
+								"Sending message failed with a non-OK HTTP code: " + statusCode + " - " + text)));
+				});
 		});
 	}
 

@@ -63,12 +63,12 @@ class HttpClientStreamableHttpTransportBoundedReadTests extends HttpClientBounde
 	@Test
 	void shouldRejectDiscardedResponseExceedingMaxSize() {
 		// A content type the transport neither parses as SSE nor as JSON, so the body is
-		// discarded. The line subscriber underneath still buffers each line, so an
-		// unterminated one must abort the response rather than accumulate.
+		// discarded. Nothing accumulates, but a peer must still not be able to make the
+		// transport read an unbounded body only to throw it away.
 		respondWith(endpoint(), "text/plain", unterminatedLine(8));
 
 		StepVerifier.create(sendMessage())
-			.verifyErrorMatches(t -> messageContains(t, "Inbound line exceeds the maximum allowed size"));
+			.verifyErrorMatches(t -> messageContains(t, "Inbound response body exceeds the maximum allowed size"));
 	}
 
 	@Test
