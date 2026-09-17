@@ -264,21 +264,25 @@ public class McpClientSession implements McpSession {
 				this.pendingResponses.remove(requestId);
 				pendingResponseSink.error(error);
 			});
-		})).timeout(this.requestTimeout).handle((jsonRpcResponse, deliveredResponseSink) -> {
-			if (jsonRpcResponse.error() != null) {
-				logger.info("Server returned a JSON-RPC error when calling method {}: {}", method,
-						jsonRpcResponse.error());
-				deliveredResponseSink.error(new McpError(jsonRpcResponse.error()));
-			}
-			else {
-				if (typeRef.getType().equals(Void.class)) {
-					deliveredResponseSink.complete();
+		}))
+			.timeout(this.requestTimeout)
+			.doOnError(e -> this.pendingResponses.remove(requestId))
+			.doOnCancel(() -> this.pendingResponses.remove(requestId))
+			.handle((jsonRpcResponse, deliveredResponseSink) -> {
+				if (jsonRpcResponse.error() != null) {
+					logger.info("Server returned a JSON-RPC error when calling method {}: {}", method,
+							jsonRpcResponse.error());
+					deliveredResponseSink.error(new McpError(jsonRpcResponse.error()));
 				}
 				else {
-					deliveredResponseSink.next(this.transport.unmarshalFrom(jsonRpcResponse.result(), typeRef));
+					if (typeRef.getType().equals(Void.class)) {
+						deliveredResponseSink.complete();
+					}
+					else {
+						deliveredResponseSink.next(this.transport.unmarshalFrom(jsonRpcResponse.result(), typeRef));
+					}
 				}
-			}
-		});
+			});
 	}
 
 	/**
