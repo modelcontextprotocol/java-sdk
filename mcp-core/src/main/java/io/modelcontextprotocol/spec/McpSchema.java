@@ -158,6 +158,12 @@ public final class McpSchema {
 		 */
 		public static final int URL_ELICITATION_REQUIRED = -32042;
 
+		/**
+		 * An MCP HTTP header (Mcp-Method, Mcp-Name, or MCP-Protocol-Version) does not
+		 * match the JSON-RPC body.
+		 */
+		public static final int HEADER_MISMATCH = -32020;
+
 	}
 
 	/**

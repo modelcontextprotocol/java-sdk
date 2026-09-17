@@ -70,6 +70,12 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 	private final ServerHttpHeaderValidator httpHeaderValidator;
 
 	/**
+	 * Validator for the SEP-2243 {@code MCP-Protocol-Version}, {@code Mcp-Method}, and
+	 * {@code Mcp-Name} header checks that need the parsed JSON-RPC body.
+	 */
+	private final Sep2243RequestValidator sep2243Validator;
+
+	/**
 	 * Maximum size, in bytes, of a single request body accepted by this transport.
 	 */
 	private final int requestMaxSize;
@@ -84,11 +90,13 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 	 * @param httpHeaderValidator The HTTP header validator for validating HTTP requests.
 	 * @param requestMaxSize The maximum size, in bytes, of a single request body. Must be
 	 * positive.
+	 * @param requireMcpHeaders Whether a POST lacking the SEP-2243 {@code Mcp-Method} /
+	 * {@code Mcp-Name} headers is rejected instead of tolerated.
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
 	private HttpServletStatelessServerTransport(McpJsonMapper jsonMapper, String mcpEndpoint,
 			McpTransportContextExtractor<HttpServletRequest> contextExtractor,
-			ServerHttpHeaderValidator httpHeaderValidator, int requestMaxSize) {
+			ServerHttpHeaderValidator httpHeaderValidator, int requestMaxSize, boolean requireMcpHeaders) {
 		Assert.notNull(jsonMapper, "jsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "mcpEndpoint must not be null");
 		Assert.notNull(contextExtractor, "contextExtractor must not be null");
@@ -100,6 +108,7 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		this.contextExtractor = contextExtractor;
 		this.httpHeaderValidator = httpHeaderValidator;
 		this.requestMaxSize = requestMaxSize;
+		this.sep2243Validator = new Sep2243RequestValidator(jsonMapper, this::protocolVersions, requireMcpHeaders);
 	}
 
 	@Override
@@ -183,6 +192,24 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 			String body = HttpServletRequestUtils.readBody(request, this.requestMaxSize);
 
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
+
+			// The MCP-Protocol-Version header can only be strictly validated once a
+			// version has been negotiated; 'initialize' requests are exempt.
+			HttpServletHeaderAccessor headerAccessor = new HttpServletHeaderAccessor(request);
+			McpError protocolVersionError = this.sep2243Validator.validateProtocolVersion(headerAccessor,
+					Sep2243RequestValidator.isInitializeRequest(message));
+			if (protocolVersionError != null) {
+				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, protocolVersionError);
+				return;
+			}
+
+			// Per SEP-2243, reject header/body mismatches (missing headers are tolerated
+			// by default so legacy clients keep working).
+			McpError mirroringError = this.sep2243Validator.validateMirroringHeaders(headerAccessor, message);
+			if (mirroringError != null) {
+				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, mirroringError);
+				return;
+			}
 
 			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
 				try {
@@ -302,6 +329,8 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 
 		private int requestMaxSize = DEFAULT_REQUEST_MAX_SIZE;
 
+		private boolean requireMcpHeaders = false;
+
 		private Builder() {
 			// used by a static method
 		}
@@ -388,6 +417,22 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 		}
 
 		/**
+		 * Opt-in strict mode for SEP-2243. When enabled, a POST whose JSON-RPC request or
+		 * notification carries no {@code Mcp-Method} header, or targets a tool, prompt or
+		 * resource without an {@code Mcp-Name} header, is rejected with HTTP 400 and
+		 * error code {@code HEADER_MISMATCH} (-32020). Disabled by default so that
+		 * clients that do not send these headers keep working. A present header that
+		 * mismatches the body is always rejected regardless of this setting.
+		 * @param requireMcpHeaders whether to require the SEP-2243 {@code Mcp-Method} /
+		 * {@code Mcp-Name} headers
+		 * @return this builder instance
+		 */
+		public Builder requireMcpHeaders(boolean requireMcpHeaders) {
+			this.requireMcpHeaders = requireMcpHeaders;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link HttpServletStatelessServerTransport} with the
 		 * configured settings.
 		 * @return A new HttpServletStatelessServerTransport instance
@@ -397,7 +442,7 @@ public class HttpServletStatelessServerTransport extends HttpServlet implements 
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 			return new HttpServletStatelessServerTransport(
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, mcpEndpoint, contextExtractor,
-					httpHeaderValidator, requestMaxSize);
+					httpHeaderValidator, requestMaxSize, requireMcpHeaders);
 		}
 
 	}

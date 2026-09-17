@@ -133,6 +133,12 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	private final ServerHttpHeaderValidator httpHeaderValidator;
 
 	/**
+	 * Validator for the SEP-2243 {@code MCP-Protocol-Version}, {@code Mcp-Method}, and
+	 * {@code Mcp-Name} header checks that need the parsed JSON-RPC body.
+	 */
+	private final Sep2243RequestValidator sep2243Validator;
+
+	/**
 	 * Constructs a new HttpServletStreamableServerTransportProvider instance.
 	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization of
 	 * messages.
@@ -145,11 +151,14 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * @param httpHeaderValidator The HTTP header validator for validating HTTP requests.
 	 * @param requestMaxSize The maximum size, in bytes, of a single request body. Must be
 	 * positive.
+	 * @param requireMcpHeaders Whether a POST lacking the SEP-2243 {@code Mcp-Method} /
+	 * {@code Mcp-Name} headers is rejected instead of tolerated.
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
 	private HttpServletStreamableServerTransportProvider(McpJsonMapper jsonMapper, String mcpEndpoint,
 			boolean disallowDelete, McpTransportContextExtractor<HttpServletRequest> contextExtractor,
-			Duration keepAliveInterval, ServerHttpHeaderValidator httpHeaderValidator, int requestMaxSize) {
+			Duration keepAliveInterval, ServerHttpHeaderValidator httpHeaderValidator, int requestMaxSize,
+			boolean requireMcpHeaders) {
 		Assert.notNull(jsonMapper, "JsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "MCP endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
@@ -162,6 +171,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		this.contextExtractor = contextExtractor;
 		this.httpHeaderValidator = httpHeaderValidator;
 		this.requestMaxSize = requestMaxSize;
+		this.sep2243Validator = new Sep2243RequestValidator(jsonMapper, this::protocolVersions, requireMcpHeaders);
 
 		if (keepAliveInterval != null) {
 
@@ -270,6 +280,13 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		if (this.isClosing) {
 			response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Server is shutting down");
+			return;
+		}
+
+		McpError protocolVersionError = this.sep2243Validator
+			.validateProtocolVersion(new HttpServletHeaderAccessor(request), false);
+		if (protocolVersionError != null) {
+			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, protocolVersionError);
 			return;
 		}
 
@@ -448,6 +465,24 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
 
+			// The MCP-Protocol-Version header can only be strictly validated once a
+			// version has been negotiated; 'initialize' requests are exempt.
+			HttpServletHeaderAccessor headerAccessor = new HttpServletHeaderAccessor(request);
+			McpError protocolVersionError = this.sep2243Validator.validateProtocolVersion(headerAccessor,
+					Sep2243RequestValidator.isInitializeRequest(message));
+			if (protocolVersionError != null) {
+				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, protocolVersionError);
+				return;
+			}
+
+			// Per SEP-2243, reject header/body mismatches (missing headers are tolerated
+			// by default so legacy clients keep working).
+			McpError mirroringError = this.sep2243Validator.validateMirroringHeaders(headerAccessor, message);
+			if (mirroringError != null) {
+				this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, mirroringError);
+				return;
+			}
+
 			// Handle initialization request
 			if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest
 					&& jsonrpcRequest.method().equals(McpSchema.METHOD_INITIALIZE)) {
@@ -598,6 +633,13 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		if (this.isClosing) {
 			response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Server is shutting down");
+			return;
+		}
+
+		McpError protocolVersionError = this.sep2243Validator
+			.validateProtocolVersion(new HttpServletHeaderAccessor(request), false);
+		if (protocolVersionError != null) {
+			this.responseError(response, HttpServletResponse.SC_BAD_REQUEST, protocolVersionError);
 			return;
 		}
 
@@ -859,6 +901,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		private int requestMaxSize = DEFAULT_REQUEST_MAX_SIZE;
 
+		private boolean requireMcpHeaders = false;
+
 		/**
 		 * Sets the JsonMapper to use for JSON serialization/deserialization of MCP
 		 * messages.
@@ -959,6 +1003,22 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		/**
+		 * Opt-in strict mode for SEP-2243. When enabled, a POST whose JSON-RPC request or
+		 * notification carries no {@code Mcp-Method} header, or targets a tool, prompt or
+		 * resource without an {@code Mcp-Name} header, is rejected with HTTP 400 and
+		 * error code {@code HEADER_MISMATCH} (-32020). Disabled by default so that
+		 * clients that do not send these headers keep working. A present header that
+		 * mismatches the body is always rejected regardless of this setting.
+		 * @param requireMcpHeaders whether to require the SEP-2243 {@code Mcp-Method} /
+		 * {@code Mcp-Name} headers
+		 * @return this builder instance
+		 */
+		public Builder requireMcpHeaders(boolean requireMcpHeaders) {
+			this.requireMcpHeaders = requireMcpHeaders;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link HttpServletStreamableServerTransportProvider}
 		 * with the configured settings.
 		 * @return A new HttpServletStreamableServerTransportProvider instance
@@ -968,7 +1028,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 			return new HttpServletStreamableServerTransportProvider(
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, mcpEndpoint, disallowDelete,
-					contextExtractor, keepAliveInterval, httpHeaderValidator, requestMaxSize);
+					contextExtractor, keepAliveInterval, httpHeaderValidator, requestMaxSize, requireMcpHeaders);
 		}
 
 	}

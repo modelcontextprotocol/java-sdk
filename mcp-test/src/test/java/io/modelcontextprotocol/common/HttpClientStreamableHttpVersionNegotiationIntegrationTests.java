@@ -4,8 +4,10 @@
 
 package io.modelcontextprotocol.common;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.BiFunction;
 
 import io.modelcontextprotocol.client.McpClient;
@@ -31,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
+import static org.awaitility.Awaitility.await;
 
 class HttpClientStreamableHttpVersionNegotiationIntegrationTests {
 
@@ -42,8 +45,10 @@ class HttpClientStreamableHttpVersionNegotiationIntegrationTests {
 
 	private static final HttpServletStreamableServerTransportProvider transport = HttpServletStreamableServerTransportProvider
 		.builder()
-		.contextExtractor(
-				req -> McpTransportContext.create(Map.of("protocol-version", req.getHeader("MCP-protocol-version"))))
+		// The MCP-Protocol-Version header may legitimately be absent on initialize
+		// requests, so a missing header must not break context extraction.
+		.contextExtractor(req -> McpTransportContext
+			.create(Map.of("protocol-version", Objects.requireNonNullElse(req.getHeader("MCP-protocol-version"), ""))))
 		.build();
 
 	private final McpSchema.Tool toolSpec = McpSchema.Tool.builder("test-tool")
@@ -98,6 +103,13 @@ class HttpClientStreamableHttpVersionNegotiationIntegrationTests {
 			client.initialize();
 			McpSchema.CallToolResult response = client
 				.callTool(McpSchema.CallToolRequest.builder("test-tool").arguments(Map.of()).build());
+
+			// The GET /mcp stream is opened asynchronously once the initialize response
+			// creates the session, so wait for it to be recorded before asserting.
+			await().atMost(Duration.ofSeconds(5))
+				.untilAsserted(
+						() -> assertThat(requestRecordingFilter.getCalls()).filteredOn(c -> "GET".equals(c.method()))
+							.hasSize(1));
 
 			var calls = requestRecordingFilter.getCalls();
 

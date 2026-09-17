@@ -165,6 +165,9 @@ McpTransport transport = new StdioClientTransport(params, McpJsonDefaults.getMap
     - Configurable connect timeout
     - Custom HTTP request customization
     - Multiple protocol version negotiation
+    - SEP-2243 header mirroring: every POST carries an `Mcp-Method` header, and requests
+      targeting a tool, prompt, or resource also carry `Mcp-Name` (the name or URI), so
+      servers can validate the headers against the body without parsing it.
 
 === "Streamable WebClient (external)"
 
