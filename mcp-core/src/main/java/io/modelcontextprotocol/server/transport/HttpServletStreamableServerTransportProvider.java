@@ -768,8 +768,19 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				}
 				catch (Exception e) {
 					logger.error("Failed to send message to session {}: {}", this.sessionId, e.getMessage());
-					HttpServletStreamableServerTransportProvider.this.sessions.remove(this.sessionId);
-					this.asyncContext.complete();
+					// A failed write breaks this SSE stream, not the session itself: the
+					// client may reopen a stream (GET with Last-Event-ID) or keep
+					// POSTing.
+					// Session removal stays with explicit DELETE handling and lifecycle
+					// events, mirroring close() below.
+					this.closed = true;
+					try {
+						this.asyncContext.complete();
+					}
+					catch (Exception completionError) {
+						logger.warn("Failed to complete async context for session {}: {}", this.sessionId,
+								completionError.getMessage());
+					}
 				}
 				finally {
 					lock.unlock();
