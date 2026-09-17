@@ -61,6 +61,13 @@
                 <version>${project.version}</version>
             </dependency>
 
+            <!-- MCP Resilience4j -->
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-resilience4j</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
         </dependencies>
     </dependencyManagement>
 
