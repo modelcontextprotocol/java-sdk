@@ -238,7 +238,7 @@ public class McpAsyncClient {
 		// Elicitation Handler
 		if (this.clientCapabilities.elicitation() != null) {
 			// elicitation: {} is equivalent to elicitation: { form: {} } for
-			// backwards-compatiblity
+			// backwards-compatibility
 			var supportsForm = this.clientCapabilities.elicitation().form() != null
 					|| this.clientCapabilities.elicitation().url() == null;
 			var supportsUrl = this.clientCapabilities.elicitation().url() != null;
