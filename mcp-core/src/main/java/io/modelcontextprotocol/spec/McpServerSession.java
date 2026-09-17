@@ -297,6 +297,12 @@ public class McpServerSession implements McpLoggableSession {
 								McpSchema.ErrorCodes.METHOD_NOT_FOUND, error.message(), error.data())));
 				}
 
+				if (this.state.get() == STATE_UNINITIALIZED) {
+					return Mono.just(McpSchema.JSONRPCResponse.error(request.id(),
+							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INVALID_REQUEST,
+									"Session is not initialized. Send an initialize request first.")));
+				}
+
 				resultMono = this.exchangeSink.asMono()
 					.flatMap(exchange -> handler.handle(copyExchange(exchange, transportContext), request.params()));
 			}
