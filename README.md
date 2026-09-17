@@ -14,7 +14,7 @@ This SDK enables Java applications to interact with AI models and tools through 
 For comprehensive guides and SDK API documentation
 
 - [Features](https://modelcontextprotocol.github.io/java-sdk/#features) - Overview the features provided by the Java MCP SDK
-- [Architecture](https://modelcontextprotocol.github.io/java-sdk/#architecture) - Java MCP SDK architecture overview.
+- [Architecture](https://java.sdk.modelcontextprotocol.io/latest/overview/#architecture) - Java MCP SDK architecture overview.
 - [Java Dependencies / BOM](https://java.sdk.modelcontextprotocol.io/latest/quickstart/#dependencies) - Java dependencies and BOM.
 - [Java MCP Client](https://java.sdk.modelcontextprotocol.io/latest/client/) - Learn how to use the MCP client to interact with MCP servers.
 - [Java MCP Server](https://java.sdk.modelcontextprotocol.io/latest/server/) - Learn how to implement and configure a MCP servers.
