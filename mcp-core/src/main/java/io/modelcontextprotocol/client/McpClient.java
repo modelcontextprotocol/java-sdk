@@ -202,6 +202,10 @@ public interface McpClient {
 
 		private boolean applyElicitationDefaults = false; // Default to false
 
+		private boolean enableResultCaching = false;
+
+		private McpClientCacheStore cacheStore; // Defaults to an in-memory store
+
 		private SyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
 			this.transport = transport;
@@ -546,6 +550,36 @@ public interface McpClient {
 		}
 
 		/**
+		 * Whether the client honours the {@code ttlMs} caching hints servers attach to
+		 * list and {@code resources/read} results (SEP-2549). Disabled by default so that
+		 * upgrading the SDK does not change what a caller observes from a server that
+		 * already emits TTLs; enable it to serve repeated calls from the cache until the
+		 * TTL lapses or a change notification arrives. See
+		 * {@link McpAsyncClient#invalidateCache()} to drop cached entries without
+		 * disabling caching.
+		 * @param enableResultCaching true to enable, false to disable
+		 * @return This builder instance for method chaining
+		 */
+		public SyncSpec enableResultCaching(boolean enableResultCaching) {
+			this.enableResultCaching = enableResultCaching;
+			return this;
+		}
+
+		/**
+		 * Where results cached under a server {@code ttlMs} hint are kept. Defaults to a
+		 * bounded in-memory store; supply your own to back the cache with a cache library
+		 * or to share one store across clients. Supplying a store does not by itself
+		 * enable caching; see {@link #enableResultCaching(boolean)}.
+		 * @param cacheStore the store to use, or null for the default
+		 * @return This builder instance for method chaining
+		 * @see McpClientCacheStore
+		 */
+		public SyncSpec cacheStore(McpClientCacheStore cacheStore) {
+			this.cacheStore = cacheStore;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpSyncClient} with the provided configurations or
 		 * sensible defaults.
 		 * @return a new instance of {@link McpSyncClient}.
@@ -555,7 +589,8 @@ public interface McpClient {
 					this.roots, this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 					this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
 					this.elicitationCompleteConsumers, this.samplingHandler, this.formElicitationHandler,
-					this.urlElicitationHandler, this.enableCallToolSchemaCaching, this.applyElicitationDefaults);
+					this.urlElicitationHandler, this.enableCallToolSchemaCaching, this.applyElicitationDefaults,
+					this.enableResultCaching, this.cacheStore);
 
 			McpClientFeatures.Async asyncFeatures = McpClientFeatures.Async.fromSync(syncFeatures);
 
@@ -636,6 +671,10 @@ public interface McpClient {
 		private boolean enableCallToolSchemaCaching = false; // Default to false
 
 		private boolean applyElicitationDefaults = false; // Default to false
+
+		private boolean enableResultCaching = false;
+
+		private McpClientCacheStore cacheStore; // Defaults to an in-memory store
 
 		private AsyncSpec(McpClientTransport transport) {
 			Assert.notNull(transport, "Transport must not be null");
@@ -967,6 +1006,36 @@ public interface McpClient {
 		}
 
 		/**
+		 * Whether the client honours the {@code ttlMs} caching hints servers attach to
+		 * list and {@code resources/read} results (SEP-2549). Disabled by default so that
+		 * upgrading the SDK does not change what a caller observes from a server that
+		 * already emits TTLs; enable it to serve repeated calls from the cache until the
+		 * TTL lapses or a change notification arrives. See
+		 * {@link McpAsyncClient#invalidateCache()} to drop cached entries without
+		 * disabling caching.
+		 * @param enableResultCaching true to enable, false to disable
+		 * @return This builder instance for method chaining
+		 */
+		public AsyncSpec enableResultCaching(boolean enableResultCaching) {
+			this.enableResultCaching = enableResultCaching;
+			return this;
+		}
+
+		/**
+		 * Where results cached under a server {@code ttlMs} hint are kept. Defaults to a
+		 * bounded in-memory store; supply your own to back the cache with a cache library
+		 * or to share one store across clients. Supplying a store does not by itself
+		 * enable caching; see {@link #enableResultCaching(boolean)}.
+		 * @param cacheStore the store to use, or null for the default
+		 * @return This builder instance for method chaining
+		 * @see McpClientCacheStore
+		 */
+		public AsyncSpec cacheStore(McpClientCacheStore cacheStore) {
+			this.cacheStore = cacheStore;
+			return this;
+		}
+
+		/**
 		 * Create an instance of {@link McpAsyncClient} with the provided configurations
 		 * or sensible defaults.
 		 * @return a new instance of {@link McpAsyncClient}.
@@ -980,8 +1049,8 @@ public interface McpClient {
 							this.toolsChangeConsumers, this.resourcesChangeConsumers, this.resourcesUpdateConsumers,
 							this.promptsChangeConsumers, this.loggingConsumers, this.progressConsumers,
 							this.elicitationCompleteConsumers, this.samplingHandler, this.formElicitationHandler,
-							this.urlElicitationHandler, this.enableCallToolSchemaCaching,
-							this.applyElicitationDefaults));
+							this.urlElicitationHandler, this.enableCallToolSchemaCaching, this.applyElicitationDefaults,
+							this.enableResultCaching, this.cacheStore));
 		}
 
 	}
