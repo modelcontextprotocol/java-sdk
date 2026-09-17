@@ -149,6 +149,8 @@ public interface McpServer {
 	McpSchema.Implementation DEFAULT_SERVER_INFO = McpSchema.Implementation.builder("Java SDK MCP Server", "0.15.0")
 		.build();
 
+	int NO_PAGING = 0;
+
 	/**
 	 * Starts building a synchronous MCP server that provides blocking operations.
 	 * Synchronous servers block the current Thread's execution upon each request before
@@ -247,7 +249,8 @@ public interface McpServer {
 			validateAsyncToolSchemas(jsonSchemaValidator, this.tools);
 
 			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs,
+					pageSize);
 		}
 
 	}
@@ -276,7 +279,8 @@ public interface McpServer {
 			validateAsyncToolSchemas(jsonSchemaValidator, this.tools);
 
 			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs,
+					pageSize);
 		}
 
 	}
@@ -346,6 +350,8 @@ public interface McpServer {
 
 		Duration requestTimeout = Duration.ofHours(10); // Default timeout
 
+		int pageSize = NO_PAGING;
+
 		public abstract McpAsyncServer build();
 
 		/**
@@ -373,6 +379,12 @@ public interface McpServer {
 		public AsyncSpecification<S> requestTimeout(Duration requestTimeout) {
 			Assert.notNull(requestTimeout, "Request timeout must not be null");
 			this.requestTimeout = requestTimeout;
+			return this;
+		}
+
+		public AsyncSpecification<S> pageSize(int pageSize) {
+			Assert.isTrue(pageSize >= 0, "Page size needs to be greater equals 0.");
+			this.pageSize = pageSize;
 			return this;
 		}
 
@@ -881,7 +893,7 @@ public interface McpServer {
 
 			var asyncServer = new McpAsyncServer(transportProvider,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, requestTimeout,
-					uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
+					uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs, pageSize);
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -915,7 +927,7 @@ public interface McpServer {
 
 			var asyncServer = new McpAsyncServer(transportProvider,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
+					this.uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs, pageSize);
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -939,6 +951,8 @@ public interface McpServer {
 		boolean strictToolNameValidation = ToolNameValidator.isStrictByDefault();
 
 		boolean validateToolInputs = true;
+
+		int pageSize = NO_PAGING;
 
 		final List<McpSyncListFilter<McpSchema.Tool>> toolFilters = new ArrayList<>();
 
@@ -1015,6 +1029,12 @@ public interface McpServer {
 		public SyncSpecification<S> requestTimeout(Duration requestTimeout) {
 			Assert.notNull(requestTimeout, "Request timeout must not be null");
 			this.requestTimeout = requestTimeout;
+			return this;
+		}
+
+		public SyncSpecification<S> pageSize(int pageSize) {
+			Assert.isTrue(pageSize >= 0, "Page size needs to be greater equals 0.");
+			this.pageSize = pageSize;
 			return this;
 		}
 
@@ -1564,6 +1584,8 @@ public interface McpServer {
 
 		Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
 
+		int pageSize = NO_PAGING;
+
 		public StatelessAsyncSpecification(McpStatelessServerTransport transport) {
 			this.transport = transport;
 		}
@@ -1594,6 +1616,12 @@ public interface McpServer {
 		public StatelessAsyncSpecification requestTimeout(Duration requestTimeout) {
 			Assert.notNull(requestTimeout, "Request timeout must not be null");
 			this.requestTimeout = requestTimeout;
+			return this;
+		}
+
+		public StatelessAsyncSpecification pageSize(int pageSize) {
+			Assert.isTrue(pageSize >= 0, "Page size needs to be greater equals 0.");
+			this.pageSize = pageSize;
 			return this;
 		}
 
@@ -2032,7 +2060,8 @@ public interface McpServer {
 			validateStatelessAsyncToolSchemas(jsonSchemaValidator, this.tools);
 
 			return new McpStatelessAsyncServer(transport, jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper,
-					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs,
+					pageSize);
 		}
 
 	}
@@ -2101,6 +2130,8 @@ public interface McpServer {
 
 		Duration requestTimeout = Duration.ofSeconds(10); // Default timeout
 
+		int pageSize = NO_PAGING;
+
 		public StatelessSyncSpecification(McpStatelessServerTransport transport) {
 			this.transport = transport;
 		}
@@ -2131,6 +2162,12 @@ public interface McpServer {
 		public StatelessSyncSpecification requestTimeout(Duration requestTimeout) {
 			Assert.notNull(requestTimeout, "Request timeout must not be null");
 			this.requestTimeout = requestTimeout;
+			return this;
+		}
+
+		public StatelessSyncSpecification pageSize(int pageSize) {
+			Assert.isTrue(pageSize >= 0, "Page size needs to be greater equals 0.");
+			this.pageSize = pageSize;
 			return this;
 		}
 
@@ -2589,7 +2626,7 @@ public interface McpServer {
 
 			var asyncServer = new McpStatelessAsyncServer(transport,
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, asyncFeatures, requestTimeout,
-					uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs);
+					uriTemplateManagerFactory, jsonSchemaValidator, validateToolInputs, pageSize);
 			return new McpStatelessSyncServer(asyncServer, this.immediateExecution);
 		}
 
