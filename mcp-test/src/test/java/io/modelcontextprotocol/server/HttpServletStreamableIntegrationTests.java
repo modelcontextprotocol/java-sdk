@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 - 2024 the original author or authors.
+ * Copyright 2024 - 2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.server;
@@ -58,6 +58,11 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+/**
+ * Based on {@link AbstractMcpClientServerIntegrationTests} for basic client <> server
+ * integration tests. Also contains some tests specific to streamable HTTP, around
+ * resumability, connection lifecycle and session management.
+ */
 @Timeout(15)
 class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerIntegrationTests {
 

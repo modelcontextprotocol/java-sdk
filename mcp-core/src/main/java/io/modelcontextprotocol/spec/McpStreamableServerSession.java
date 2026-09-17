@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 the original author or authors.
+ * Copyright 2024-2026 the original author or authors.
  */
 
 package io.modelcontextprotocol.spec;
@@ -38,6 +38,7 @@ import reactor.core.publisher.MonoSink;
  *
  * @author Dariusz Jędrzejczyk
  * @author Yanming Zhou
+ * @author Daniel Garnier-Moiroux
  */
 public class McpStreamableServerSession implements McpLoggableSession {
 
