@@ -577,6 +577,8 @@ public final class McpSchema {
 	 * @param roots Present if the client supports listing roots
 	 * @param sampling Present if the client supports sampling from an LLM
 	 * @param elicitation Present if the client supports elicitation from the server
+	 * @param extensions Present if the client supports MCP extensions, keyed by extension
+	 * identifier
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -584,7 +586,14 @@ public final class McpSchema {
 		@JsonProperty("experimental") Map<String, Object> experimental,
 		@JsonProperty("roots") RootCapabilities roots,
 		@JsonProperty("sampling") Sampling sampling,
-		@JsonProperty("elicitation") Elicitation elicitation) { // @formatter:on
+		@JsonProperty("elicitation") Elicitation elicitation,
+		@JsonProperty("extensions") Map<String, Object> extensions) { // @formatter:on
+
+		// Keep the old constructor so existing callers still compile
+		public ClientCapabilities(Map<String, Object> experimental, RootCapabilities roots, Sampling sampling,
+				Elicitation elicitation) {
+			this(experimental, roots, sampling, elicitation, null);
+		}
 
 		/**
 		 * Present if the client supports listing roots.
@@ -723,6 +732,8 @@ public final class McpSchema {
 
 			private Elicitation elicitation;
 
+			private Map<String, Object> extensions;
+
 			public Builder experimental(Map<String, Object> experimental) {
 				this.experimental = experimental;
 				return this;
@@ -765,8 +776,13 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder extensions(Map<String, Object> extensions) {
+				this.extensions = extensions;
+				return this;
+			}
+
 			public ClientCapabilities build() {
-				return new ClientCapabilities(experimental, roots, sampling, elicitation);
+				return new ClientCapabilities(experimental, roots, sampling, elicitation, extensions);
 			}
 
 		}
@@ -785,6 +801,8 @@ public final class McpSchema {
 	 * @param prompts Present if the server offers any prompt templates
 	 * @param resources Present if the server offers any resources to read
 	 * @param tools Present if the server offers any tools to call
+	 * @param extensions Present if the server supports MCP extensions, keyed by extension
+	 * identifier
 	 */
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -794,7 +812,15 @@ public final class McpSchema {
 		@JsonProperty("logging") LoggingCapabilities logging,
 		@JsonProperty("prompts") PromptCapabilities prompts,
 		@JsonProperty("resources") ResourceCapabilities resources,
-		@JsonProperty("tools") ToolCapabilities tools) { // @formatter:on
+		@JsonProperty("tools") ToolCapabilities tools,
+		@JsonProperty("extensions") Map<String, Object> extensions) { // @formatter:on
+
+		// Keep the old constructor so existing callers still compile
+		public ServerCapabilities(CompletionCapabilities completions, Map<String, Object> experimental,
+				LoggingCapabilities logging, PromptCapabilities prompts, ResourceCapabilities resources,
+				ToolCapabilities tools) {
+			this(completions, experimental, logging, prompts, resources, tools, null);
+		}
 
 		/**
 		 * Present if the server supports argument autocompletion suggestions.
@@ -923,6 +949,7 @@ public final class McpSchema {
 			builder.prompts = this.prompts;
 			builder.resources = this.resources;
 			builder.tools = this.tools;
+			builder.extensions = this.extensions;
 			return builder;
 		}
 
@@ -943,6 +970,8 @@ public final class McpSchema {
 			private ResourceCapabilities resources;
 
 			private ToolCapabilities tools;
+
+			private Map<String, Object> extensions;
 
 			public Builder completions() {
 				this.completions = new CompletionCapabilities();
@@ -974,8 +1003,14 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder extensions(Map<String, Object> extensions) {
+				this.extensions = extensions;
+				return this;
+			}
+
 			public ServerCapabilities build() {
-				return new ServerCapabilities(completions, experimental, logging, prompts, resources, tools);
+				return new ServerCapabilities(completions, experimental, logging, prompts, resources, tools,
+						extensions);
 			}
 
 		}
