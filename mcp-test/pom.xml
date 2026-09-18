@@ -20,6 +20,10 @@
 		<developerConnection>scm:git:ssh://git@github.com/modelcontextprotocol/java-sdk.git</developerConnection>
 	</scm>
 
+	<properties>
+		<module.name>io.modelcontextprotocol.sdk.mcp.test</module.name>
+	</properties>
+
 	<dependencies>
 		<dependency>
 			<groupId>io.modelcontextprotocol.sdk</groupId>

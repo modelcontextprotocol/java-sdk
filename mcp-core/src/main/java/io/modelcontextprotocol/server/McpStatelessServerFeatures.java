@@ -37,6 +37,7 @@ public class McpStatelessServerFeatures {
 	 * @param resourceTemplates The map of resource templates
 	 * @param prompts The map of prompt specifications
 	 * @param instructions The server instructions text
+	 * @param toolFilters The per-request filters deciding which tools are listed
 	 */
 	record Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 			List<McpStatelessServerFeatures.AsyncToolSpecification> tools,
@@ -44,7 +45,7 @@ public class McpStatelessServerFeatures {
 			Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions,
-			String instructions) {
+			String instructions, List<McpAsyncListFilter<McpSchema.Tool>> toolFilters) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -55,6 +56,7 @@ public class McpStatelessServerFeatures {
 		 * @param resourceTemplates The map of resource templates
 		 * @param prompts The map of prompt specifications
 		 * @param instructions The server instructions text
+		 * @param toolFilters The per-request filters deciding which tools are listed
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpStatelessServerFeatures.AsyncToolSpecification> tools,
@@ -62,7 +64,7 @@ public class McpStatelessServerFeatures {
 				Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
 				Map<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions,
-				String instructions) {
+				String instructions, List<McpAsyncListFilter<McpSchema.Tool>> toolFilters) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -84,6 +86,7 @@ public class McpStatelessServerFeatures {
 			this.prompts = (prompts != null) ? prompts : Map.of();
 			this.completions = (completions != null) ? completions : Map.of();
 			this.instructions = instructions;
+			this.toolFilters = (toolFilters != null) ? toolFilters : List.of();
 		}
 
 		/**
@@ -123,7 +126,11 @@ public class McpStatelessServerFeatures {
 			});
 
 			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources, resourceTemplates,
-					prompts, completions, syncSpec.instructions());
+					prompts, completions, syncSpec.instructions(),
+					syncSpec.toolFilters()
+						.stream()
+						.map(filter -> McpAsyncListFilter.fromSync(filter, immediateExecution))
+						.toList());
 		}
 	}
 
@@ -137,6 +144,7 @@ public class McpStatelessServerFeatures {
 	 * @param resourceTemplates The map of resource templates
 	 * @param prompts The map of prompt specifications
 	 * @param instructions The server instructions text
+	 * @param toolFilters The per-request filters deciding which tools are listed
 	 */
 	record Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 			List<McpStatelessServerFeatures.SyncToolSpecification> tools,
@@ -144,7 +152,7 @@ public class McpStatelessServerFeatures {
 			Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpStatelessServerFeatures.SyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpStatelessServerFeatures.SyncCompletionSpecification> completions,
-			String instructions) {
+			String instructions, List<McpSyncListFilter<McpSchema.Tool>> toolFilters) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -155,6 +163,7 @@ public class McpStatelessServerFeatures {
 		 * @param resourceTemplates The map of resource templates
 		 * @param prompts The map of prompt specifications
 		 * @param instructions The server instructions text
+		 * @param toolFilters The per-request filters deciding which tools are listed
 		 */
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpStatelessServerFeatures.SyncToolSpecification> tools,
@@ -162,7 +171,7 @@ public class McpStatelessServerFeatures {
 				Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
 				Map<String, McpStatelessServerFeatures.SyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpStatelessServerFeatures.SyncCompletionSpecification> completions,
-				String instructions) {
+				String instructions, List<McpSyncListFilter<McpSchema.Tool>> toolFilters) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -187,6 +196,7 @@ public class McpStatelessServerFeatures {
 			this.prompts = (prompts != null) ? prompts : new HashMap<>();
 			this.completions = (completions != null) ? completions : new HashMap<>();
 			this.instructions = instructions;
+			this.toolFilters = (toolFilters != null) ? toolFilters : List.of();
 		}
 
 	}

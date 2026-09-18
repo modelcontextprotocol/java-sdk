@@ -82,6 +82,13 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 	abstract protected McpServer.SyncSpecification<?> prepareSyncServerBuilder();
 
+	// There is, for Streamable HTTP, a race condition between establishing the SSE stream
+	// and the server sending notifications. This breaks some `roots/list` tests (and
+	// could in theory break sampling and elicitation tests). This utility method allows
+	// delaying the test until the stream is opened.
+	protected void awaitClientStreamEstablished() {
+	}
+
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@MethodSource("clientsForTesting")
 	void simple(String clientType) {
@@ -1082,6 +1089,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
+			awaitClientStreamEstablished();
 
 			assertThat(rootsRef.get()).isNull();
 
@@ -1168,7 +1176,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
-
+			awaitClientStreamEstablished();
 			mcpClient.rootsListChangedNotification();
 
 			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
@@ -1201,7 +1209,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.build()) {
 
 			assertThat(mcpClient.initialize()).isNotNull();
-
+			awaitClientStreamEstablished();
 			mcpClient.rootsListChangedNotification();
 
 			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
@@ -1234,7 +1242,7 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 			InitializeResult initResult = mcpClient.initialize();
 			assertThat(initResult).isNotNull();
-
+			awaitClientStreamEstablished();
 			mcpClient.rootsListChangedNotification();
 
 			await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {

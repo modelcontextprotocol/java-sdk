@@ -20,7 +20,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.startup.Tomcat;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.provider.Arguments;
@@ -40,12 +42,40 @@ class HttpServletStatelessSharedIntegrationTests extends AbstractStatelessIntegr
 	static McpTransportContextExtractor<HttpServletRequest> TEST_CONTEXT_EXTRACTOR = (request) -> McpTransportContext
 		.create(Map.of("important", "value"));
 
-	private HttpServletStatelessServerTransport mcpServerTransport;
+	// Tomcat is started once for the whole class; each test swaps in its own transport
+	private static final TomcatTestUtil.DelegatingServlet MCP_SERVLET = new TomcatTestUtil.DelegatingServlet();
 
-	private Tomcat tomcat;
+	private static Tomcat tomcat;
+
+	private HttpServletStatelessServerTransport mcpServerTransport;
 
 	static Stream<Arguments> clientsForTesting() {
 		return Stream.of(Arguments.of("httpclient"));
+	}
+
+	@BeforeAll
+	public static void beforeAll() {
+		tomcat = TomcatTestUtil.createTomcatServer("", PORT, MCP_SERVLET);
+		try {
+			tomcat.start();
+			assertThat(tomcat.getServer().getState()).isEqualTo(LifecycleState.STARTED);
+		}
+		catch (Exception e) {
+			throw new RuntimeException("Failed to start Tomcat", e);
+		}
+	}
+
+	@AfterAll
+	public static void afterAll() {
+		if (tomcat != null) {
+			try {
+				tomcat.stop();
+				tomcat.destroy();
+			}
+			catch (LifecycleException e) {
+				throw new RuntimeException("Failed to stop Tomcat", e);
+			}
+		}
 	}
 
 	@BeforeEach
@@ -54,15 +84,7 @@ class HttpServletStatelessSharedIntegrationTests extends AbstractStatelessIntegr
 			.contextExtractor(TEST_CONTEXT_EXTRACTOR)
 			.messageEndpoint(MESSAGE_ENDPOINT)
 			.build();
-
-		this.tomcat = TomcatTestUtil.createTomcatServer("", PORT, this.mcpServerTransport);
-		try {
-			this.tomcat.start();
-			assertThat(this.tomcat.getServer().getState()).isEqualTo(LifecycleState.STARTED);
-		}
-		catch (Exception e) {
-			throw new RuntimeException("Failed to start Tomcat", e);
-		}
+		MCP_SERVLET.setDelegate(this.mcpServerTransport);
 
 		prepareClients(PORT, MESSAGE_ENDPOINT);
 	}
@@ -89,15 +111,6 @@ class HttpServletStatelessSharedIntegrationTests extends AbstractStatelessIntegr
 	public void after() {
 		if (this.mcpServerTransport != null) {
 			this.mcpServerTransport.closeGracefully().block();
-		}
-		if (this.tomcat != null) {
-			try {
-				this.tomcat.stop();
-				this.tomcat.destroy();
-			}
-			catch (LifecycleException e) {
-				throw new RuntimeException("Failed to stop Tomcat", e);
-			}
 		}
 	}
 

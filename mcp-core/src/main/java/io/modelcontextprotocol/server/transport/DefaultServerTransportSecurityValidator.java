@@ -7,6 +7,7 @@ package io.modelcontextprotocol.server.transport;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import io.modelcontextprotocol.util.Assert;
 
@@ -22,7 +23,8 @@ import io.modelcontextprotocol.util.Assert;
  * @see ServerTransportSecurityValidator
  * @see ServerTransportSecurityException
  */
-public final class DefaultServerTransportSecurityValidator implements ServerTransportSecurityValidator {
+public final class DefaultServerTransportSecurityValidator
+		implements ServerTransportSecurityValidator, ServerHttpHeaderValidator {
 
 	private static final String ORIGIN_HEADER = "Origin";
 
@@ -47,27 +49,24 @@ public final class DefaultServerTransportSecurityValidator implements ServerTran
 	}
 
 	@Override
+	@Deprecated
 	public void validateHeaders(Map<String, List<String>> headers) throws ServerTransportSecurityException {
-		boolean missingHost = true;
-		for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
-			if (ORIGIN_HEADER.equalsIgnoreCase(entry.getKey())) {
-				List<String> values = entry.getValue();
-				if (values == null || values.isEmpty()) {
-					throw new ServerTransportSecurityException(403, "Invalid Origin header");
-				}
-				validateOrigin(values.get(0));
-			}
-			else if (HOST_HEADER.equalsIgnoreCase(entry.getKey())) {
-				missingHost = false;
-				List<String> values = entry.getValue();
-				if (values == null || values.isEmpty()) {
-					throw new ServerTransportSecurityException(421, "Invalid Host header");
-				}
-				validateHost(values.get(0));
-			}
+		validate(new MapHeaderAccessor(headers));
+	}
+
+	@Override
+	public void validate(HeaderAccessor headerAccessor) throws ServerTransportSecurityException {
+		List<String> originValues = headerAccessor.getHeader(ORIGIN_HEADER);
+		if (originValues != null && !originValues.isEmpty()) {
+			validateOrigin(originValues.get(0));
 		}
-		if (!allowedHosts.isEmpty() && missingHost) {
-			throw new ServerTransportSecurityException(421, "Invalid Host header");
+
+		if (!allowedHosts.isEmpty()) {
+			List<String> hostValues = headerAccessor.getHeader(HOST_HEADER);
+			if (hostValues == null || hostValues.isEmpty()) {
+				throw new ServerTransportSecurityException(421, "Invalid Host header");
+			}
+			validateHost(hostValues.get(0));
 		}
 	}
 
@@ -137,6 +136,37 @@ public final class DefaultServerTransportSecurityValidator implements ServerTran
 	 */
 	public static Builder builder() {
 		return new Builder();
+	}
+
+	/**
+	 * {@link HeaderAccessor} view over a {@code Map<String, List<String>>}, used to
+	 * bridge the deprecated {@link #validateHeaders(Map)} to
+	 * {@link #validate(HeaderAccessor)}.
+	 */
+	private static final class MapHeaderAccessor implements HeaderAccessor {
+
+		private final Map<String, List<String>> headers;
+
+		private MapHeaderAccessor(Map<String, List<String>> headers) {
+			this.headers = headers;
+		}
+
+		@Override
+		public List<String> getHeader(String name) {
+			return headers.entrySet()
+				.stream()
+				.filter(entry -> entry.getKey().equalsIgnoreCase(name))
+				.map(Map.Entry::getValue)
+				.filter(Objects::nonNull)
+				.findFirst()
+				.orElse(List.of());
+		}
+
+		@Override
+		public List<String> getHeaderNames() {
+			return List.copyOf(headers.keySet());
+		}
+
 	}
 
 	/**
