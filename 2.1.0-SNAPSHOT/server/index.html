@@ -1721,7 +1721,10 @@ The SDK includes several built-in transport provider implementations:</p>
 <ul>
 <li>Efficient bidirectional HTTP communication</li>
 <li>Session management for multiple client connections</li>
-<li>Configurable keep-alive intervals</li>
+<li>Keep-alive pings on sessions with an open stream, enabled by default every 30 minutes
+  (<code>keepAliveInterval</code>, <code>null</code> to disable)</li>
+<li>Eviction of idle sessions — no open stream and no request for a full interval — every
+  30 minutes by default (<code>sessionSweepInterval</code>, <code>null</code> to keep sessions until deleted)</li>
 <li>Security validation support</li>
 <li>Graceful shutdown support</li>
 </ul>
