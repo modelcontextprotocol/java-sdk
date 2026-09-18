@@ -9,8 +9,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Disposable;
 import reactor.core.Disposables;
+import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -77,8 +79,32 @@ public class DefaultMcpTransportSession implements McpTransportSession<Disposabl
 
 	@Override
 	public Mono<Void> closeGracefully() {
-		return Mono.from(this.onClose.apply(this.sessionId.get()))
-			.then(Mono.fromRunnable(this.openConnections::dispose));
+		return Mono.defer(() -> {
+			String id = this.sessionId.get();
+			if (id == null) {
+				this.openConnections.dispose();
+				return Mono.empty();
+			}
+
+			Publisher<Void> closePublisher;
+			try {
+				closePublisher = this.onClose.apply(id);
+			}
+			catch (Throwable ex) {
+				this.openConnections.dispose();
+				return Mono.error(ex);
+			}
+
+			if (closePublisher == null) {
+				this.openConnections.dispose();
+				return Mono.empty();
+			}
+
+			Duration timeout = Duration.ofSeconds(5);
+
+			// doFinally guarantees execution on success, error, timeout, and cancellation
+			return Mono.from(closePublisher).timeout(timeout).doFinally(signalType -> this.openConnections.dispose());
+		});
 	}
 
 }
