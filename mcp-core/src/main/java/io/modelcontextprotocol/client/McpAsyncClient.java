@@ -10,10 +10,14 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import io.modelcontextprotocol.client.LifecycleInitializer.Initialization;
 import io.modelcontextprotocol.json.TypeRef;
@@ -186,6 +190,12 @@ public class McpAsyncClient {
 	private final boolean applyElicitationDefaults;
 
 	/**
+	 * Bounds applied to the no-arg list operations to protect against unbounded
+	 * pagination from misbehaving servers.
+	 */
+	private final PaginationConfig paginationConfig;
+
+	/**
 	 * Create a new McpAsyncClient with the given transport and session request-response
 	 * timeout.
 	 * @param transport the transport to use.
@@ -196,7 +206,8 @@ public class McpAsyncClient {
 	 * schemas.
 	 */
 	McpAsyncClient(McpClientTransport transport, Duration requestTimeout, Duration initializationTimeout,
-			JsonSchemaValidator jsonSchemaValidator, McpClientFeatures.Async features) {
+			JsonSchemaValidator jsonSchemaValidator, McpClientFeatures.Async features,
+			PaginationConfig paginationConfig) {
 
 		Assert.notNull(transport, "Transport must not be null");
 		Assert.notNull(requestTimeout, "Request timeout must not be null");
@@ -210,6 +221,7 @@ public class McpAsyncClient {
 		this.toolsOutputSchemaCache = new ConcurrentHashMap<>();
 		this.enableCallToolSchemaCaching = features.enableCallToolSchemaCaching();
 		this.applyElicitationDefaults = features.applyElicitationDefaults();
+		this.paginationConfig = paginationConfig != null ? paginationConfig : PaginationConfig.DEFAULT;
 
 		// Request Handlers
 		Map<String, RequestHandler<?>> requestHandlers = new HashMap<>();
@@ -731,13 +743,11 @@ public class McpAsyncClient {
 	 * @return A Mono that emits the list of all tools result
 	 */
 	public Mono<McpSchema.ListToolsResult> listTools() {
-		return this.listTools(McpSchema.FIRST_PAGE).expand(result -> {
-			String next = result.nextCursor();
-			return (next != null && !next.isEmpty()) ? this.listTools(next) : Mono.empty();
-		}).reduce(new ArrayList<McpSchema.Tool>(), (accumulated, result) -> {
-			accumulated.addAll(result.tools());
-			return accumulated;
-		}).map(all -> McpSchema.ListToolsResult.builder(Collections.unmodifiableList(all)).build());
+		return paginate(this::listTools, McpSchema.ListToolsResult::nextCursor, ArrayList<McpSchema.Tool>::new,
+				(all, result) -> {
+					all.addAll(result.tools());
+					return all;
+				}, all -> McpSchema.ListToolsResult.builder(Collections.unmodifiableList(all)).build());
 	}
 
 	/**
@@ -818,13 +828,11 @@ public class McpAsyncClient {
 	 * @see #readResource(McpSchema.Resource)
 	 */
 	public Mono<McpSchema.ListResourcesResult> listResources() {
-		return this.listResources(McpSchema.FIRST_PAGE).expand(result -> {
-			String next = result.nextCursor();
-			return (next != null && !next.isEmpty()) ? this.listResources(next) : Mono.empty();
-		}).reduce(new ArrayList<McpSchema.Resource>(), (accumulated, result) -> {
-			accumulated.addAll(result.resources());
-			return accumulated;
-		}).map(all -> McpSchema.ListResourcesResult.builder(Collections.unmodifiableList(all)).build());
+		return paginate(this::listResources, McpSchema.ListResourcesResult::nextCursor,
+				ArrayList<McpSchema.Resource>::new, (all, result) -> {
+					all.addAll(result.resources());
+					return all;
+				}, all -> McpSchema.ListResourcesResult.builder(Collections.unmodifiableList(all)).build());
 	}
 
 	/**
@@ -904,13 +912,11 @@ public class McpAsyncClient {
 	 * @see McpSchema.ListResourceTemplatesResult
 	 */
 	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates() {
-		return this.listResourceTemplates(McpSchema.FIRST_PAGE).expand(result -> {
-			String next = result.nextCursor();
-			return (next != null && !next.isEmpty()) ? this.listResourceTemplates(next) : Mono.empty();
-		}).reduce(new ArrayList<McpSchema.ResourceTemplate>(), (accumulated, result) -> {
-			accumulated.addAll(result.resourceTemplates());
-			return accumulated;
-		}).map(all -> McpSchema.ListResourceTemplatesResult.builder(Collections.unmodifiableList(all)).build());
+		return paginate(this::listResourceTemplates, McpSchema.ListResourceTemplatesResult::nextCursor,
+				ArrayList<McpSchema.ResourceTemplate>::new, (all, result) -> {
+					all.addAll(result.resourceTemplates());
+					return all;
+				}, all -> McpSchema.ListResourceTemplatesResult.builder(Collections.unmodifiableList(all)).build());
 	}
 
 	/**
@@ -1023,13 +1029,85 @@ public class McpAsyncClient {
 	 * @see #getPrompt(GetPromptRequest)
 	 */
 	public Mono<ListPromptsResult> listPrompts() {
-		return this.listPrompts(McpSchema.FIRST_PAGE).expand(result -> {
-			String next = result.nextCursor();
-			return (next != null && !next.isEmpty()) ? this.listPrompts(next) : Mono.empty();
-		}).reduce(new ArrayList<McpSchema.Prompt>(), (accumulated, result) -> {
-			accumulated.addAll(result.prompts());
-			return accumulated;
-		}).map(all -> McpSchema.ListPromptsResult.builder(Collections.unmodifiableList(all)).build());
+		return paginate(this::listPrompts, ListPromptsResult::nextCursor, ArrayList<McpSchema.Prompt>::new,
+				(all, result) -> {
+					all.addAll(result.prompts());
+					return all;
+				}, all -> McpSchema.ListPromptsResult.builder(Collections.unmodifiableList(all)).build());
+	}
+
+	/**
+	 * Fetches every page of a paginated list operation, accumulating the pages into a
+	 * single result, while enforcing the client's pagination bounds. A server that
+	 * returns an endless stream of non-empty cursors is stopped with an
+	 * {@link McpPaginationException} once the configured page limit, cursor-repetition
+	 * guard or total timeout is hit.
+	 * @param pageFetcher fetches a single page for a given cursor
+	 * @param nextCursorOf extracts the next cursor from a page result
+	 * @param initialAccumulator supplies the accumulator for the aggregated result
+	 * @param accumulate merges one page into the accumulator
+	 * @param finalize converts the accumulated pages into the final result
+	 * @param <R> the page/result type
+	 * @param <A> the accumulator type
+	 * @return a Mono that emits the aggregated result of all pages
+	 */
+	private <R, A> Mono<R> paginate(Function<String, Mono<R>> pageFetcher, Function<R, String> nextCursorOf,
+			Supplier<A> initialAccumulator, BiFunction<A, R, A> accumulate, Function<A, R> finalize) {
+		return Mono.defer(() -> {
+			PaginationGuard guard = new PaginationGuard(this.paginationConfig);
+			return pageFetcher.apply(McpSchema.FIRST_PAGE).expand(page -> {
+				String next = nextCursorOf.apply(page);
+				if (next == null || next.isEmpty()) {
+					return Mono.empty();
+				}
+				guard.beforeNextPage(next);
+				return pageFetcher.apply(next);
+			}).reduce(initialAccumulator.get(), accumulate).map(finalize);
+		});
+	}
+
+	/**
+	 * Tracks pagination state for a single list operation and enforces the configured
+	 * bounds. Fresh state is created per subscription so that a shared {@link Mono} can
+	 * be subscribed multiple times without carrying stale guards.
+	 */
+	private static final class PaginationGuard {
+
+		private final Set<String> visitedCursors = new HashSet<>();
+
+		private final PaginationConfig config;
+
+		private final long startNanos = System.nanoTime();
+
+		private int pagesFetched = 1;
+
+		PaginationGuard(PaginationConfig config) {
+			this.config = config;
+		}
+
+		/**
+		 * Validates that the next page may be fetched, throwing an
+		 * {@link McpPaginationException} when a bound is exceeded.
+		 * @param cursor the next cursor the server asked the client to follow
+		 */
+		void beforeNextPage(String cursor) {
+			if (!this.visitedCursors.add(cursor)) {
+				throw new McpPaginationException("Pagination loop detected: the server returned cursor '" + cursor
+						+ "' more than once. Aborting the list operation to avoid an endless request loop.");
+			}
+			if (this.config.maxPages() > 0 && this.pagesFetched >= this.config.maxPages()) {
+				throw new McpPaginationException(
+						"Pagination limit exceeded: the server returned more than " + this.config.maxPages()
+								+ " pages. Increase maxPaginationPages if this is expected for the server.");
+			}
+			if (this.config.timeout() != null
+					&& Duration.ofNanos(System.nanoTime() - this.startNanos).compareTo(this.config.timeout()) > 0) {
+				throw new McpPaginationException("Pagination timed out after " + this.config.timeout()
+						+ ". Increase paginationTimeout if this is expected for the server.");
+			}
+			this.pagesFetched++;
+		}
+
 	}
 
 	/**
