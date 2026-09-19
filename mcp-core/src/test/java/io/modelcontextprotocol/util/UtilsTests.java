@@ -45,9 +45,11 @@ class UtilsTests {
 	@ParameterizedTest
 	@CsvSource({
 			// relative endpoints
-			"http://localhost:8080/root, /api/v1, http://localhost:8080/api/v1",
+			"http://localhost:8080/root, /api/v1, http://localhost:8080/root/api/v1",
+			"http://localhost:8080/root, api/v1, http://localhost:8080/root/api/v1",
 			"http://localhost:8080/root/, api, http://localhost:8080/root/api",
 			"http://localhost:8080, /api, http://localhost:8080/api",
+			"http://localhost:8080/root, /api/v1?key=value, http://localhost:8080/root/api/v1?key=value",
 			// absolute endpoints matching base
 			"http://localhost:8080/root, http://localhost:8080/root/api/v1, http://localhost:8080/root/api/v1",
 			"http://localhost:8080/root, http://localhost:8080/root, http://localhost:8080/root" })
