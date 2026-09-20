@@ -20,6 +20,10 @@
 		<developerConnection>scm:git:ssh://git@github.com/modelcontextprotocol/java-sdk.git</developerConnection>
 	</scm>
 
+	<properties>
+		<module.name>io.modelcontextprotocol.sdk.mcp.core</module.name>
+	</properties>
+
 	<build>
 		<plugins>
 			<plugin>
@@ -37,7 +41,7 @@
 								Bundle-Name:            Bundle ${project.groupId} : ${project.artifactId}
 								Bundle-SymbolicName:    ${project.groupId}.${project.artifactId}
 								Bundle-Version:         ${project.version}
-								Automatic-Module-Name:  ${project.groupId}.${project.artifactId}
+								Automatic-Module-Name:  ${module.name}
 								Import-Package:         jakarta.*;resolution:=optional, \
 								                        *;
 								Service-Component: 		OSGI-INF/io.modelcontextprotocol.json.McpJsonDefaults.xml

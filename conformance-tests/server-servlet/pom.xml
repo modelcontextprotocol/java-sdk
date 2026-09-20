@@ -21,6 +21,7 @@
 	</scm>
 
 	<properties>
+		<module.name>io.modelcontextprotocol.sdk.conformance.server.servlet</module.name>
 		<maven.deploy.skip>true</maven.deploy.skip>
 	</properties>
 

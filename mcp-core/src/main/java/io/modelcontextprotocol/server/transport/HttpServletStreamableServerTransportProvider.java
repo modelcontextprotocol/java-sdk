@@ -9,7 +9,9 @@ import java.io.PrintWriter;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -20,13 +22,17 @@ import io.modelcontextprotocol.server.McpTransportContextExtractor;
 import io.modelcontextprotocol.spec.HttpHeaders;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSession;
 import io.modelcontextprotocol.spec.McpStreamableServerSession;
 import io.modelcontextprotocol.spec.McpStreamableServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
+import io.modelcontextprotocol.spec.McpTransportException;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.KeepAliveScheduler;
 import jakarta.servlet.AsyncContext;
+import jakarta.servlet.AsyncEvent;
+import jakarta.servlet.AsyncListener;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -34,8 +40,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * Server-side implementation of the Model Context Protocol (MCP) streamable transport
@@ -52,6 +60,7 @@ import reactor.core.publisher.Mono;
  * @author Zachary German
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
+ * @author Daniel Garnier-Moiroux
  * @see McpStreamableServerTransportProvider
  * @see HttpServlet
  */
@@ -114,6 +123,14 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 */
 	private final ConcurrentHashMap<String, McpStreamableServerSession> sessions = new ConcurrentHashMap<>();
 
+	/**
+	 * IDs of the sessions which received a request since the last sweep. The set is
+	 * swapped for an empty one on every sweep, so it only ever holds the activity of the
+	 * current interval. Only populated when a sweeper runs, as nothing would ever swap it
+	 * otherwise.
+	 */
+	private final AtomicReference<Set<String>> activeSessions = new AtomicReference<>(ConcurrentHashMap.newKeySet());
+
 	private McpTransportContextExtractor<HttpServletRequest> contextExtractor;
 
 	/**
@@ -126,6 +143,14 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * set. Disabled by default.
 	 */
 	private KeepAliveScheduler keepAliveScheduler;
+
+	/**
+	 * Periodic eviction of the sessions no client came back to. {@code null} if no
+	 * sessionSweepInterval is set, in which case sessions are never reclaimed.
+	 */
+	private final Disposable sessionSweeper;
+
+	private static Duration SESSION_SWEEP_TIMEOUT = Duration.ofSeconds(30);
 
 	/**
 	 * Security validator for validating HTTP requests.
@@ -145,11 +170,14 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * @param httpHeaderValidator The HTTP header validator for validating HTTP requests.
 	 * @param requestMaxSize The maximum size, in bytes, of a single request body. Must be
 	 * positive.
+	 * @param sessionSweepInterval The interval at which idle sessions are evicted. If
+	 * null, no sweeping will be scheduled.
 	 * @throws IllegalArgumentException if any parameter is null
 	 */
 	private HttpServletStreamableServerTransportProvider(McpJsonMapper jsonMapper, String mcpEndpoint,
 			boolean disallowDelete, McpTransportContextExtractor<HttpServletRequest> contextExtractor,
-			Duration keepAliveInterval, ServerHttpHeaderValidator httpHeaderValidator, int requestMaxSize) {
+			Duration keepAliveInterval, ServerHttpHeaderValidator httpHeaderValidator, int requestMaxSize,
+			Duration sessionSweepInterval) {
 		Assert.notNull(jsonMapper, "JsonMapper must not be null");
 		Assert.notNull(mcpEndpoint, "MCP endpoint must not be null");
 		Assert.notNull(contextExtractor, "Context extractor must not be null");
@@ -165,15 +193,96 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 
 		if (keepAliveInterval != null) {
 
-			this.keepAliveScheduler = KeepAliveScheduler
-				.builder(() -> (isClosing) ? Flux.empty() : Flux.fromIterable(sessions.values()))
+			this.keepAliveScheduler = KeepAliveScheduler.builder(this::sessionsToPing)
 				.initialDelay(keepAliveInterval)
 				.interval(keepAliveInterval)
+				.onPingFailure(session -> {
+					// The stream the ping was written to is dead. The session survives:
+					// the client may reconnect to it, and the idle timeout reclaims it if
+					// it never does.
+					if (session instanceof McpStreamableServerSession streamableSession) {
+						streamableSession.releaseListeningStream();
+					}
+				})
 				.build();
 
 			this.keepAliveScheduler.start();
 		}
 
+		this.sessionSweeper = sessionSweepInterval == null ? null : startSessionSweeper(sessionSweepInterval);
+	}
+
+	/**
+	 * Schedules the periodic eviction of idle sessions.
+	 * @param sessionSweepInterval the interval between two sweeps
+	 * @return the handle on the scheduled sweeps, to be disposed when the transport shuts
+	 * down
+	 */
+	private Disposable startSessionSweeper(Duration sessionSweepInterval) {
+		return Flux
+			.interval(sessionSweepInterval, sessionSweepInterval,
+					Schedulers.newSingle("streamable-http-server-transport-session-sweeper"))
+			.concatMap(
+					tick -> sweepSessions().doOnError(e -> logger.error("Session sweep failed", e)).onErrorComplete())
+			.subscribe(next -> {
+			}, error -> logger.error("Session sweeper error", error));
+	}
+
+	/**
+	 * Evicts the sessions no client is using anymore. A session is kept if it holds an
+	 * open stream, which a client can legitimately sit on without ever writing to it, or
+	 * if it received a request during the interval which just elapsed. Anything else is a
+	 * session whose client went away without deleting it: the protocol lets a client
+	 * reconnect to a session, so nothing else ever reclaims it.
+	 * @return a Mono completing once every evicted session has been closed
+	 */
+	private Mono<Void> sweepSessions() {
+		if (this.isClosing) {
+			return Mono.empty();
+		}
+		Set<String> active = this.activeSessions.getAndSet(ConcurrentHashMap.newKeySet());
+		return Flux.fromIterable(this.sessions.values()).filter(session -> {
+			if (session.hasOpenStream() || active.contains(session.getId())) {
+				return false;
+			}
+			return this.sessions.remove(session.getId(), session);
+		}).flatMap(session -> {
+			logger.debug("Evicting idle session {}", session.getId());
+			return session.closeGracefully()
+				.timeout(SESSION_SWEEP_TIMEOUT)
+				.doOnError(e -> logger.warn("Failed to close idle session {}: {}", session.getId(), e.getMessage()))
+				.onErrorComplete();
+		}).then();
+	}
+
+	/**
+	 * Records that the given session is being used, so that the next sweep does not
+	 * mistake it for a session whose client is gone.
+	 * @param sessionId the session the current request belongs to
+	 */
+	private void markSessionActive(String sessionId) {
+		if (this.sessionSweeper == null) {
+			// No sweep ever swaps the set of active sessions, so recording activity would
+			// only accumulate the ID of every session which ever issued a request
+			return;
+		}
+		this.activeSessions.get().add(sessionId);
+	}
+
+	/**
+	 * Returns the sessions a keep-alive ping can be sent to, that is the sessions having
+	 * a listening stream. A session without one, e.g. a client which only ever issues
+	 * POST requests, has nothing to write a ping to: pinging it would fail on every
+	 * interval without ever telling us anything about the client being alive.
+	 * @return the sessions to ping
+	 */
+	private Flux<McpSession> sessionsToPing() {
+		if (this.isClosing) {
+			return Flux.empty();
+		}
+		return Flux.fromIterable(this.sessions.values())
+			.filter(McpStreamableServerSession::hasListeningStream)
+			.cast(McpSession.class);
 	}
 
 	@Override
@@ -248,6 +357,9 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			if (this.keepAliveScheduler != null) {
 				this.keepAliveScheduler.shutdown();
 			}
+			if (this.sessionSweeper != null) {
+				this.sessionSweeper.dispose();
+			}
 		});
 	}
 
@@ -307,6 +419,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			response.sendError(HttpServletResponse.SC_NOT_FOUND);
 			return;
 		}
+		this.markSessionActive(sessionId);
 
 		logger.debug("Handling GET request for session: {}", sessionId);
 
@@ -338,62 +451,11 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
 				.listeningStream(sessionTransport);
 
-			asyncContext.addListener(new jakarta.servlet.AsyncListener() {
-				@Override
-				public void onComplete(jakarta.servlet.AsyncEvent event) throws IOException {
-					logger.debug("SSE connection completed for session: {}", sessionId);
-					listeningStream.close();
-				}
-
-				@Override
-				public void onTimeout(jakarta.servlet.AsyncEvent event) throws IOException {
-					logger.debug("SSE connection timed out for session: {}", sessionId);
-					listeningStream.close();
-				}
-
-				@Override
-				public void onError(jakarta.servlet.AsyncEvent event) throws IOException {
-					logger.debug("SSE connection error for session: {}", sessionId);
-					listeningStream.close();
-				}
-
-				@Override
-				public void onStartAsync(jakarta.servlet.AsyncEvent event) throws IOException {
-					// No action needed
-				}
-			});
+			registerAsyncLifecycle(asyncContext, sessionId, listeningStream::releaseTransport);
 		}
 		catch (Exception e) {
 			logger.error("Failed to handle GET request for session {}: {}", sessionId, e.getMessage());
 			response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-		}
-	}
-
-	/**
-	 * Replays the messages the client missed while its SSE stream was broken.
-	 * @param session the session the client is resuming
-	 * @param lastEventId the ID of the last event received by the client
-	 * @param sessionTransport the transport of the resumed SSE stream
-	 * @param transportContext the context extracted from the request
-	 * @return {@code true} if the replay completed, {@code false} if it failed, in which
-	 * case the transport has been closed
-	 */
-	private boolean tryReplayMissedMessages(McpStreamableServerSession session, String lastEventId,
-			McpStreamableServerTransport sessionTransport, McpTransportContext transportContext) {
-		try {
-			for (McpSchema.JSONRPCMessage message : session.replay(lastEventId)
-				.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
-				.toIterable()) {
-				sessionTransport.sendMessage(message)
-					.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
-					.block();
-			}
-			return true;
-		}
-		catch (Exception e) {
-			logger.error("Failed to replay messages for session {}: {}", session.getId(), e.getMessage());
-			sessionTransport.close();
-			return false;
 		}
 	}
 
@@ -463,6 +525,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 						});
 				McpStreamableServerSession.McpStreamableServerSessionInit init = this.sessionFactory
 					.startSession(initializeRequest);
+				this.markSessionActive(init.session().getId());
 				this.sessions.put(init.session().getId(), init.session());
 
 				try {
@@ -514,6 +577,8 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				return;
 			}
 
+			this.markSessionActive(sessionId);
+
 			if (message instanceof McpSchema.JSONRPCResponse jsonrpcResponse) {
 				session.accept(jsonrpcResponse)
 					.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
@@ -539,8 +604,16 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				HttpServletStreamableMcpSessionTransport sessionTransport = new HttpServletStreamableMcpSessionTransport(
 						sessionId, asyncContext, response.getWriter());
 
+				// The listener is given the stream rather than its transport, so that the
+				// end of the connection detaches the stream from the session instead of
+				// only dropping the socket: a stream outliving its connection keeps the
+				// session looking busy and spares it from the sweeper
+				McpStreamableServerSession.McpStreamableServerSessionStream responseStream = session
+					.responseStream(sessionTransport);
+				registerAsyncLifecycle(asyncContext, sessionId, responseStream::releaseTransport);
+
 				try {
-					session.responseStream(jsonrpcRequest, sessionTransport)
+					responseStream.handle(jsonrpcRequest)
 						.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
 						.block();
 				}
@@ -695,6 +768,70 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	}
 
 	/**
+	 * Replays the messages the client missed while its SSE stream was broken.
+	 * @param session the session the client is resuming
+	 * @param lastEventId the ID of the last event received by the client
+	 * @param sessionTransport the transport of the resumed SSE stream
+	 * @param transportContext the context extracted from the request
+	 * @return {@code true} if the replay completed, {@code false} if it failed, in which
+	 * case the transport has been closed
+	 */
+	private static boolean tryReplayMissedMessages(McpStreamableServerSession session, String lastEventId,
+			McpStreamableServerTransport sessionTransport, McpTransportContext transportContext) {
+		try {
+			for (McpSchema.JSONRPCMessage message : session.replay(lastEventId)
+				.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
+				.toIterable()) {
+				sessionTransport.sendMessage(message)
+					.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext))
+					.block();
+			}
+			return true;
+		}
+		catch (Exception e) {
+			logger.error("Failed to replay messages for session {}: {}", session.getId(), e.getMessage());
+			sessionTransport.close();
+			return false;
+		}
+	}
+
+	/**
+	 * Registers a listener releasing the SSE stream carried by the given asynchronous
+	 * request once the container is done with it, whether the client went away, the
+	 * request timed out or it errored. Without this, the connection is left open, holding
+	 * on to a socket and a container thread, until the process restarts.
+	 * @param asyncContext the asynchronous context of the SSE request
+	 * @param sessionId the session the stream belongs to
+	 * @param onConnectionEnd the action releasing the stream
+	 */
+	private static void registerAsyncLifecycle(AsyncContext asyncContext, String sessionId, Runnable onConnectionEnd) {
+		asyncContext.addListener(new AsyncListener() {
+			@Override
+			public void onComplete(AsyncEvent event) throws IOException {
+				logger.debug("SSE connection completed for session: {}", sessionId);
+				onConnectionEnd.run();
+			}
+
+			@Override
+			public void onTimeout(AsyncEvent event) throws IOException {
+				logger.debug("SSE connection timed out for session: {}", sessionId);
+				onConnectionEnd.run();
+			}
+
+			@Override
+			public void onError(AsyncEvent event) throws IOException {
+				logger.debug("SSE connection error for session: {}", sessionId);
+				onConnectionEnd.run();
+			}
+
+			@Override
+			public void onStartAsync(AsyncEvent event) throws IOException {
+				// No action needed
+			}
+		});
+	}
+
+	/**
 	 * Implementation of McpStreamableServerTransport for HttpServlet SSE sessions. This
 	 * class handles the transport-level communication for a specific client session.
 	 *
@@ -703,7 +840,6 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 	 * underlying PrintWriter to prevent race conditions when multiple threads attempt to
 	 * send messages concurrently.
 	 */
-
 	private class HttpServletStreamableMcpSessionTransport implements McpStreamableServerTransport {
 
 		private final String sessionId;
@@ -767,9 +903,17 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 					logger.debug("Message sent to session {} with ID {}", this.sessionId, messageId);
 				}
 				catch (Exception e) {
+					// The connection is gone, the session is not: the client may come
+					// back for it, and the sweeper reclaims it if it never does
 					logger.error("Failed to send message to session {}: {}", this.sessionId, e.getMessage());
-					HttpServletStreamableServerTransportProvider.this.sessions.remove(this.sessionId);
-					this.asyncContext.complete();
+					this.close();
+					// Surfaced to the caller rather than swallowed: whoever is writing to
+					// this stream has to learn that it no longer leads anywhere, or it
+					// keeps producing messages for a client which is gone. A request
+					// being streamed a response would never finish, holding on to the
+					// container thread which has to be given back before the end of the
+					// connection can be acted upon.
+					throw new McpTransportException("Failed to send message to session " + this.sessionId, e);
 				}
 				finally {
 					lock.unlock();
@@ -813,8 +957,6 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				}
 
 				this.closed = true;
-
-				// HttpServletStreamableServerTransportProvider.this.sessions.remove(this.sessionId);
 				this.asyncContext.complete();
 				logger.debug("Successfully completed async context for session {}", sessionId);
 			}
@@ -853,11 +995,13 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		private McpTransportContextExtractor<HttpServletRequest> contextExtractor = (
 				serverRequest) -> McpTransportContext.EMPTY;
 
-		private Duration keepAliveInterval;
+		private Duration keepAliveInterval = Duration.ofMinutes(30);
 
 		private ServerHttpHeaderValidator httpHeaderValidator = ServerHttpHeaderValidator.NOOP;
 
 		private int requestMaxSize = DEFAULT_REQUEST_MAX_SIZE;
+
+		private Duration sessionSweepInterval = Duration.ofMinutes(30);
 
 		/**
 		 * Sets the JsonMapper to use for JSON serialization/deserialization of MCP
@@ -910,7 +1054,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		 * Sets the keep-alive interval for the transport. If set, a keep-alive scheduler
 		 * will be activated to periodically ping active sessions.
 		 * @param keepAliveInterval The interval for keep-alive pings. If null, no
-		 * keep-alive will be scheduled.
+		 * keep-alive will be scheduled. Defaults to 30 minutes.
 		 * @return this builder instance
 		 */
 		public Builder keepAliveInterval(Duration keepAliveInterval) {
@@ -959,6 +1103,22 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 		}
 
 		/**
+		 * Sets the interval at which idle sessions are evicted. A session is idle once it
+		 * holds no open stream and has received no request for a full interval, which is
+		 * how a session whose client went away without deleting it looks. Nothing else
+		 * reclaims those sessions, as the protocol lets a client reconnect to a session
+		 * it has been disconnected from.
+		 * @param sessionSweepInterval The interval between two sweeps. If null, no
+		 * sweeping will be scheduled and sessions are kept until they are deleted or the
+		 * server shuts down. Defaults to 30 minutes.
+		 * @return this builder instance
+		 */
+		public Builder sessionSweepInterval(Duration sessionSweepInterval) {
+			this.sessionSweepInterval = sessionSweepInterval;
+			return this;
+		}
+
+		/**
 		 * Builds a new instance of {@link HttpServletStreamableServerTransportProvider}
 		 * with the configured settings.
 		 * @return A new HttpServletStreamableServerTransportProvider instance
@@ -968,7 +1128,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			Assert.notNull(this.mcpEndpoint, "MCP endpoint must be set");
 			return new HttpServletStreamableServerTransportProvider(
 					jsonMapper == null ? McpJsonDefaults.getMapper() : jsonMapper, mcpEndpoint, disallowDelete,
-					contextExtractor, keepAliveInterval, httpHeaderValidator, requestMaxSize);
+					contextExtractor, keepAliveInterval, httpHeaderValidator, requestMaxSize, sessionSweepInterval);
 		}
 
 	}
