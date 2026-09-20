@@ -14,6 +14,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
@@ -201,6 +202,69 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 		}
 		finally {
 			mcpServer.close();
+		}
+	}
+
+	/**
+	 * https://github.com/modelcontextprotocol/java-sdk/issues/293 - without this header,
+	 * proxies like Nginx buffer the SSE response, breaking real-time streaming.
+	 */
+	@Test
+	void listeningStreamIncludesXAccelBufferingHeader() throws Exception {
+		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
+		var sessionId = initializeSession(httpClient);
+
+		var get = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + MESSAGE_ENDPOINT))
+			.header("Accept", "text/event-stream")
+			.header(HttpHeaders.MCP_SESSION_ID, sessionId)
+			.GET()
+			.build();
+
+		var response = httpClient.send(get, HttpResponse.BodyHandlers.ofInputStream());
+		try {
+			assertThat(response.headers().firstValue("X-Accel-Buffering")).contains("no");
+		}
+		finally {
+			response.body().close();
+		}
+	}
+
+	/**
+	 * https://github.com/modelcontextprotocol/java-sdk/issues/293 - same header is also
+	 * required on the SSE response a POST request opens for a streamed tool call.
+	 */
+	@Test
+	void toolCallSseResponseIncludesXAccelBufferingHeader() throws Exception {
+		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
+			.tools(McpServerFeatures.AsyncToolSpecification.builder()
+				.tool(McpSchema.Tool.builder("echo", EMPTY_JSON_SCHEMA).description("returns immediately").build())
+				.callHandler((exchange,
+						request) -> Mono.just(McpSchema.CallToolResult.builder()
+							.content(List.of(McpSchema.TextContent.builder("ok").build()))
+							.isError(false)
+							.build()))
+				.build())
+			.build();
+		var sessionId = initializeSession(httpClient);
+
+		var post = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + MESSAGE_ENDPOINT))
+			.header("Content-Type", "application/json")
+			.header("Accept", "text/event-stream, application/json")
+			.header(HttpHeaders.MCP_SESSION_ID, sessionId)
+			.POST(HttpRequest.BodyPublishers
+				.ofString("{\"jsonrpc\":\"2.0\",\"id\":\"call-1\",\"method\":\"tools/call\","
+						+ "\"params\":{\"name\":\"echo\",\"arguments\":{}}}"))
+			.build();
+
+		var response = httpClient.send(post, HttpResponse.BodyHandlers.ofInputStream());
+		try {
+			assertThat(response.headers().firstValue("X-Accel-Buffering")).contains("no");
+		}
+		finally {
+			response.body().close();
 		}
 	}
 

@@ -122,6 +122,29 @@ class HttpServletSseIntegrationTests extends AbstractMcpClientServerIntegrationT
 	}
 
 	@Test
+	void sseResponseIncludesXAccelBufferingHeader() throws Exception {
+		// https://github.com/modelcontextprotocol/java-sdk/issues/293 - without this
+		// header, proxies like Nginx buffer the SSE response, breaking real-time
+		// streaming.
+		prepareAsyncServerBuilder().build();
+
+		var httpClient = HttpClient.newHttpClient();
+		var sseRequest = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + CUSTOM_SSE_ENDPOINT))
+			.header("Accept", "text/event-stream")
+			.GET()
+			.build();
+
+		var response = httpClient.send(sseRequest, HttpResponse.BodyHandlers.ofInputStream());
+		try {
+			assertThat(response.headers().firstValue("X-Accel-Buffering")).contains("no");
+		}
+		finally {
+			response.body().close();
+		}
+	}
+
+	@Test
 	void rejectsWhenBodyBytesExceedLimitWithoutContentLengthHeader() throws Exception {
 		var httpClient = HttpClient.newHttpClient();
 
