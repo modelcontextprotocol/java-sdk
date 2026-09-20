@@ -14,6 +14,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
@@ -212,8 +213,70 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 		}
 	}
 
+	@Test
+	void listeningStreamHasStreamingHeaders() throws Exception {
+		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
+		var sessionId = initializeSession(httpClient);
+
+		var get = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + MESSAGE_ENDPOINT))
+			.header("Accept", "text/event-stream")
+			.header(HttpHeaders.MCP_SESSION_ID, sessionId)
+			.GET()
+			.build();
+
+		var response = httpClient.send(get, HttpResponse.BodyHandlers.ofInputStream());
+		try {
+			assertSseHeaders(response);
+		}
+		finally {
+			response.body().close();
+		}
+	}
+
+	@Test
+	void toolCallSseResponseHasStreamingHeaders() throws Exception {
+		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
+			.tools(McpServerFeatures.AsyncToolSpecification.builder()
+				.tool(McpSchema.Tool.builder("echo", EMPTY_JSON_SCHEMA).description("returns immediately").build())
+				.callHandler((exchange,
+						request) -> Mono.just(McpSchema.CallToolResult.builder()
+							.content(List.of(McpSchema.TextContent.builder("ok").build()))
+							.isError(false)
+							.build()))
+				.build())
+			.build();
+		var sessionId = initializeSession(httpClient);
+
+		var post = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + MESSAGE_ENDPOINT))
+			.header("Content-Type", "application/json")
+			.header("Accept", "text/event-stream, application/json")
+			.header(HttpHeaders.MCP_SESSION_ID, sessionId)
+			.POST(HttpRequest.BodyPublishers
+				.ofString("{\"jsonrpc\":\"2.0\",\"id\":\"call-1\",\"method\":\"tools/call\","
+						+ "\"params\":{\"name\":\"echo\",\"arguments\":{}}}"))
+			.build();
+
+		var response = httpClient.send(post, HttpResponse.BodyHandlers.ofInputStream());
+		try {
+			assertSseHeaders(response);
+		}
+		finally {
+			response.body().close();
+		}
+	}
+
 	@Override
 	protected void prepareClients(int port, String mcpEndpoint) {
+	}
+
+	private static void assertSseHeaders(HttpResponse<?> response) {
+		assertThat(response.headers().firstValue("Content-Type")).contains("text/event-stream;charset=UTF-8");
+		assertThat(response.headers().firstValue("Cache-Control")).contains("no-cache, no-transform");
+		assertThat(response.headers().firstValue("X-Accel-Buffering")).contains("no");
+		assertThat(response.headers().firstValue("Connection")).isEmpty();
 	}
 
 	static McpTransportContextExtractor<HttpServletRequest> TEST_CONTEXT_EXTRACTOR = (r) -> McpTransportContext

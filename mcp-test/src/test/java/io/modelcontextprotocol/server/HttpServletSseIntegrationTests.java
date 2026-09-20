@@ -183,6 +183,29 @@ class HttpServletSseIntegrationTests extends AbstractMcpClientServerIntegrationT
 	}
 
 	@Test
+	void sseResponseHasStreamingHeaders() throws Exception {
+		prepareAsyncServerBuilder().build();
+
+		var httpClient = HttpClient.newHttpClient();
+		var sseRequest = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + CUSTOM_SSE_ENDPOINT))
+			.header("Accept", "text/event-stream")
+			.GET()
+			.build();
+
+		var response = httpClient.send(sseRequest, HttpResponse.BodyHandlers.ofInputStream());
+		try {
+			assertThat(response.headers().firstValue("Content-Type")).contains("text/event-stream;charset=UTF-8");
+			assertThat(response.headers().firstValue("Cache-Control")).contains("no-cache, no-transform");
+			assertThat(response.headers().firstValue("X-Accel-Buffering")).contains("no");
+			assertThat(response.headers().firstValue("Connection")).isEmpty();
+		}
+		finally {
+			response.body().close();
+		}
+	}
+
+	@Test
 	void rejectsWhenBodyBytesExceedLimitWithoutContentLengthHeader() throws Exception {
 		var httpClient = HttpClient.newHttpClient();
 
