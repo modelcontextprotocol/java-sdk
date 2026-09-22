@@ -173,6 +173,22 @@ public class McpStatelessSyncServer {
 	}
 
 	/**
+	 * Adds a skill entry served through {@code skills/list} and {@code skills/get}.
+	 * @param skill The skill entry to register
+	 */
+	public void addSkill(McpSchema.Skill skill) {
+		this.asyncServer.addSkill(skill).block();
+	}
+
+	/**
+	 * Lists every skill registered with this server.
+	 * @return A list of skill entries
+	 */
+	public List<McpSchema.Skill> listSkills() {
+		return this.asyncServer.listSkills().collectList().block();
+	}
+
+	/**
 	 * This method is package-private and used for test only. Should not be called by user
 	 * code.
 	 * @param protocolVersions the Client supported protocol versions.

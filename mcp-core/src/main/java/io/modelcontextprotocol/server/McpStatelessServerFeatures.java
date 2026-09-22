@@ -41,11 +41,12 @@ public class McpStatelessServerFeatures {
 	 */
 	record Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 			List<McpStatelessServerFeatures.AsyncToolSpecification> tools,
-			Map<String, AsyncResourceSpecification> resources,
+			Map<String, AsyncResourceSpecification> resources, Map<String, McpSchema.Skill> skills,
 			Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions,
-			String instructions, List<McpAsyncListFilter<McpSchema.Tool>> toolFilters) {
+			String instructions, List<McpAsyncListFilter<McpSchema.Tool>> toolFilters,
+			BiFunction<McpTransportContext, McpSchema.ReadDirectoryRequest, Mono<McpSchema.ListResourcesResult>> directoryReadHandler) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -60,11 +61,12 @@ public class McpStatelessServerFeatures {
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpStatelessServerFeatures.AsyncToolSpecification> tools,
-				Map<String, AsyncResourceSpecification> resources,
+				Map<String, AsyncResourceSpecification> resources, Map<String, McpSchema.Skill> skills,
 				Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
 				Map<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions,
-				String instructions, List<McpAsyncListFilter<McpSchema.Tool>> toolFilters) {
+				String instructions, List<McpAsyncListFilter<McpSchema.Tool>> toolFilters,
+				BiFunction<McpTransportContext, McpSchema.ReadDirectoryRequest, Mono<McpSchema.ListResourcesResult>> directoryReadHandler) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -82,11 +84,13 @@ public class McpStatelessServerFeatures {
 
 			this.tools = (tools != null) ? tools : List.of();
 			this.resources = (resources != null) ? resources : Map.of();
+			this.skills = (skills != null) ? skills : Map.of();
 			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : Map.of();
 			this.prompts = (prompts != null) ? prompts : Map.of();
 			this.completions = (completions != null) ? completions : Map.of();
 			this.instructions = instructions;
 			this.toolFilters = (toolFilters != null) ? toolFilters : List.of();
+			this.directoryReadHandler = directoryReadHandler;
 		}
 
 		/**
@@ -125,12 +129,16 @@ public class McpStatelessServerFeatures {
 				completions.put(key, AsyncCompletionSpecification.fromSync(completion, immediateExecution));
 			});
 
-			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources, resourceTemplates,
-					prompts, completions, syncSpec.instructions(),
+			return new Async(syncSpec.serverInfo(), syncSpec.serverCapabilities(), tools, resources, syncSpec.skills(),
+					resourceTemplates, prompts, completions, syncSpec.instructions(),
 					syncSpec.toolFilters()
 						.stream()
 						.map(filter -> McpAsyncListFilter.fromSync(filter, immediateExecution))
-						.toList());
+						.toList(),
+					syncSpec.directoryReadHandler() == null ? null : (ctx, request) -> {
+						var result = Mono.fromCallable(() -> syncSpec.directoryReadHandler().apply(ctx, request));
+						return immediateExecution ? result : result.subscribeOn(Schedulers.boundedElastic());
+					});
 		}
 	}
 
@@ -149,10 +157,12 @@ public class McpStatelessServerFeatures {
 	record Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 			List<McpStatelessServerFeatures.SyncToolSpecification> tools,
 			Map<String, McpStatelessServerFeatures.SyncResourceSpecification> resources,
+			Map<String, McpSchema.Skill> skills,
 			Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
 			Map<String, McpStatelessServerFeatures.SyncPromptSpecification> prompts,
 			Map<McpSchema.CompleteReference, McpStatelessServerFeatures.SyncCompletionSpecification> completions,
-			String instructions, List<McpSyncListFilter<McpSchema.Tool>> toolFilters) {
+			String instructions, List<McpSyncListFilter<McpSchema.Tool>> toolFilters,
+			BiFunction<McpTransportContext, McpSchema.ReadDirectoryRequest, McpSchema.ListResourcesResult> directoryReadHandler) {
 
 		/**
 		 * Create an instance and validate the arguments.
@@ -168,10 +178,12 @@ public class McpStatelessServerFeatures {
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<McpStatelessServerFeatures.SyncToolSpecification> tools,
 				Map<String, McpStatelessServerFeatures.SyncResourceSpecification> resources,
+				Map<String, McpSchema.Skill> skills,
 				Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
 				Map<String, McpStatelessServerFeatures.SyncPromptSpecification> prompts,
 				Map<McpSchema.CompleteReference, McpStatelessServerFeatures.SyncCompletionSpecification> completions,
-				String instructions, List<McpSyncListFilter<McpSchema.Tool>> toolFilters) {
+				String instructions, List<McpSyncListFilter<McpSchema.Tool>> toolFilters,
+				BiFunction<McpTransportContext, McpSchema.ReadDirectoryRequest, McpSchema.ListResourcesResult> directoryReadHandler) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -192,11 +204,13 @@ public class McpStatelessServerFeatures {
 
 			this.tools = (tools != null) ? tools : new ArrayList<>();
 			this.resources = (resources != null) ? resources : new HashMap<>();
+			this.skills = (skills != null) ? skills : Map.of();
 			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : Map.of();
 			this.prompts = (prompts != null) ? prompts : new HashMap<>();
 			this.completions = (completions != null) ? completions : new HashMap<>();
 			this.instructions = instructions;
 			this.toolFilters = (toolFilters != null) ? toolFilters : List.of();
+			this.directoryReadHandler = directoryReadHandler;
 		}
 
 	}

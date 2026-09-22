@@ -600,6 +600,63 @@ var binaryResourceSpecification = new McpServerFeatures.SyncResourceSpecificatio
 
 `ReadResourceResult` accepts a list mixing `TextResourceContents` and `BlobResourceContents`, so a single resource read can return multiple representations if needed.
 
+### Skills Specification
+
+The Skills extension represents an Agent Skill as a `SKILL.md` resource plus an entry containing its frontmatter and a file manifest. It requires the normal `resources` capability and declares `io.modelcontextprotocol/skills` in `ServerCapabilities.extensions`. Set `directoryRead` to `true` only when clients may call `resources/directory/read`.
+
+The stateless server API registers entries at build time with `skills(...)`, or later with `addSkill`. Register resource handlers for `SKILL.md` and every supporting file as well: clients retrieve their contents through the standard `resources/read` method. The following synchronous example advertises a static skill whose only file is `SKILL.md`:
+
+```java
+var skillUri = "skill://pdf-processing/SKILL.md";
+var skillFile = new McpStatelessServerFeatures.SyncResourceSpecification(
+    Resource.builder(skillUri, "SKILL.md")
+        .mimeType("text/markdown")
+        .build(),
+    (exchange, request) -> ReadResourceResult.builder(List.of(
+        McpSchema.TextResourceContents.builder(skillUri,
+            "---\nname: pdf-processing\ndescription: Process PDF documents\n---\n")
+            .mimeType("text/markdown")
+            .build()))
+        .build());
+
+var skill = new McpSchema.Skill(
+    skillUri,
+    McpSchema.SkillFrontmatter.of(Map.of(
+        "name", "pdf-processing",
+        "description", "Process PDF documents")),
+    McpSchema.SkillResources.manifest(List.of(
+        new McpSchema.SkillResource(skillUri,
+            "sha256:0ba2bf2df2af28aa6da64011be00042083a1b87bd0979a6d45e0b7bbf149e6a4",
+            64L))));
+
+// A stateless server built with the capabilities below:
+server.addResource(skillFile);
+server.addSkill(skill);
+```
+
+Configure the capabilities when building that server:
+
+```java
+ServerCapabilities capabilities = ServerCapabilities.builder()
+    .resources(false, false)
+    .extensions(Map.of(
+        "io.modelcontextprotocol/skills", Map.of("directoryRead", true)))
+    .build();
+```
+
+`skills/list` returns every registered entry and `skills/get` retrieves one by its `SKILL.md` URI. A static manifest must contain every served file, including `SKILL.md`, with its digest and byte size. Use `SkillResources.dynamicResources()` when the skill's files are generated dynamically. When `directoryRead` is enabled, clients can list a skill directory's direct children.
+
+For resources registered with `addResource` or `resources(...)`, the server derives directory resources and their direct children automatically. A generated or non-enumerable tree must provide its own directory listing handler; it receives the request URI and cursor and returns the corresponding page:
+
+```java
+McpStatelessAsyncServer server = McpServer.async(transport)
+    .serverInfo("my-server", "1.0.0")
+    .capabilities(capabilities)
+    .directoryReadHandler((context, request) ->
+        listGeneratedDirectory(request.uri(), request.cursor()))
+    .build();
+```
+
 ### Resource Subscriptions
 
 When the `subscribe` capability is enabled, clients can subscribe to specific resources and receive targeted `notifications/resources/updated` notifications when those resources change. Only sessions that have explicitly subscribed to a given URI receive the notification — not every connected client.

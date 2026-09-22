@@ -1543,6 +1543,13 @@ public interface McpServer {
 		final Map<String, McpStatelessServerFeatures.AsyncResourceSpecification> resources = new HashMap<>();
 
 		/**
+		 * The Skills extension lets servers advertise Agent Skills. Each skill is backed
+		 * by a {@code SKILL.md} resource and includes frontmatter plus either a static
+		 * resource manifest or a dynamic-resource marker.
+		 */
+		final Map<String, McpSchema.Skill> skills = new HashMap<>();
+
+		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
 		 * expose resource templates to clients. Resource templates allow servers to
 		 * define parameterized URIs that clients can use to access dynamic resources.
@@ -1550,6 +1557,8 @@ public interface McpServer {
 		 * concrete resource URIs.
 		 */
 		final Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates = new HashMap<>();
+
+		BiFunction<McpTransportContext, McpSchema.ReadDirectoryRequest, Mono<McpSchema.ListResourcesResult>> directoryReadHandler;
 
 		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
@@ -1867,6 +1876,21 @@ public interface McpServer {
 		}
 
 		/**
+		 * Registers skill entries served through {@code skills/list} and
+		 * {@code skills/get}.
+		 * @param skills the skill entries to register, must not be null
+		 * @return this builder instance
+		 */
+		public StatelessAsyncSpecification skills(McpSchema.Skill... skills) {
+			Assert.notNull(skills, "Skills must not be null");
+			for (McpSchema.Skill skill : skills) {
+				Assert.notNull(skill, "Skill must not be null");
+				this.skills.put(skill.uri(), skill);
+			}
+			return this;
+		}
+
+		/**
 		 * Sets the resource templates that define patterns for dynamic resource access.
 		 * Templates use URI patterns with placeholders that can be filled at runtime.
 		 * @param resourceTemplates List of resource templates. If null, clears existing
@@ -1897,6 +1921,20 @@ public interface McpServer {
 			for (McpStatelessServerFeatures.AsyncResourceTemplateSpecification resourceTemplate : resourceTemplates) {
 				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
 			}
+			return this;
+		}
+
+		/**
+		 * Sets the handler for {@code resources/directory/read}. Use this for dynamic or
+		 * non-enumerable resource trees; the handler receives every directory request and
+		 * is responsible for validating the URI and applying pagination.
+		 * @param directoryReadHandler the directory read handler, must not be null
+		 * @return this builder instance
+		 */
+		public StatelessAsyncSpecification directoryReadHandler(
+				BiFunction<McpTransportContext, McpSchema.ReadDirectoryRequest, Mono<McpSchema.ListResourcesResult>> directoryReadHandler) {
+			Assert.notNull(directoryReadHandler, "Directory read handler must not be null");
+			this.directoryReadHandler = directoryReadHandler;
 			return this;
 		}
 
@@ -2024,8 +2062,8 @@ public interface McpServer {
 
 		public McpStatelessAsyncServer build() {
 			var features = new McpStatelessServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
-					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions,
-					this.toolFilters);
+					this.resources, this.skills, this.resourceTemplates, this.prompts, this.completions,
+					this.instructions, this.toolFilters, this.directoryReadHandler);
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
 					: McpJsonDefaults.getSchemaValidator();
 
@@ -2080,6 +2118,13 @@ public interface McpServer {
 		final Map<String, McpStatelessServerFeatures.SyncResourceSpecification> resources = new HashMap<>();
 
 		/**
+		 * The Skills extension lets servers advertise Agent Skills. Each skill is backed
+		 * by a {@code SKILL.md} resource and includes frontmatter plus either a static
+		 * resource manifest or a dynamic-resource marker.
+		 */
+		final Map<String, McpSchema.Skill> skills = new HashMap<>();
+
+		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
 		 * expose resource templates to clients. Resource templates allow servers to
 		 * define parameterized URIs that clients can use to access dynamic resources.
@@ -2087,6 +2132,8 @@ public interface McpServer {
 		 * concrete resource URIs.
 		 */
 		final Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplates = new HashMap<>();
+
+		BiFunction<McpTransportContext, McpSchema.ReadDirectoryRequest, McpSchema.ListResourcesResult> directoryReadHandler;
 
 		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
@@ -2406,6 +2453,21 @@ public interface McpServer {
 		}
 
 		/**
+		 * Registers skill entries served through {@code skills/list} and
+		 * {@code skills/get}.
+		 * @param skills the skill entries to register, must not be null
+		 * @return this builder instance
+		 */
+		public StatelessSyncSpecification skills(McpSchema.Skill... skills) {
+			Assert.notNull(skills, "Skills must not be null");
+			for (McpSchema.Skill skill : skills) {
+				Assert.notNull(skill, "Skill must not be null");
+				this.skills.put(skill.uri(), skill);
+			}
+			return this;
+		}
+
+		/**
 		 * Sets the resource templates that define patterns for dynamic resource access.
 		 * Templates use URI patterns with placeholders that can be filled at runtime.
 		 * @param resourceTemplatesSpec List of resource templates. If null, clears
@@ -2436,6 +2498,20 @@ public interface McpServer {
 			for (McpStatelessServerFeatures.SyncResourceTemplateSpecification resourceTemplate : resourceTemplates) {
 				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
 			}
+			return this;
+		}
+
+		/**
+		 * Sets the handler for {@code resources/directory/read}. Use this for dynamic or
+		 * non-enumerable resource trees; the handler receives every directory request and
+		 * is responsible for validating the URI and applying pagination.
+		 * @param directoryReadHandler the directory read handler, must not be null
+		 * @return this builder instance
+		 */
+		public StatelessSyncSpecification directoryReadHandler(
+				BiFunction<McpTransportContext, McpSchema.ReadDirectoryRequest, McpSchema.ListResourcesResult> directoryReadHandler) {
+			Assert.notNull(directoryReadHandler, "Directory read handler must not be null");
+			this.directoryReadHandler = directoryReadHandler;
 			return this;
 		}
 
@@ -2579,8 +2655,8 @@ public interface McpServer {
 
 		public McpStatelessSyncServer build() {
 			var syncFeatures = new McpStatelessServerFeatures.Sync(this.serverInfo, this.serverCapabilities, this.tools,
-					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions,
-					this.toolFilters);
+					this.resources, this.skills, this.resourceTemplates, this.prompts, this.completions,
+					this.instructions, this.toolFilters, this.directoryReadHandler);
 			var asyncFeatures = McpStatelessServerFeatures.Async.fromSync(syncFeatures, this.immediateExecution);
 			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
 					: McpJsonDefaults.getSchemaValidator();

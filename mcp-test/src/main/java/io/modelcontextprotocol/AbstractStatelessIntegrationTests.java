@@ -74,6 +74,37 @@ public abstract class AbstractStatelessIntegrationTests {
 	}
 
 	// ---------------------------------------
+	// Skills Tests
+	// ---------------------------------------
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testSkillListingAndRetrieval(String clientType) {
+		var clientBuilder = clientBuilders.get(clientType);
+		McpSchema.Skill skill = new McpSchema.Skill("skill://data-analysis/SKILL.md",
+				McpSchema.SkillFrontmatter.of(Map.of("name", "data-analysis", "description", "Analyze tabular data.")),
+				McpSchema.SkillResources.dynamicResources());
+
+		McpStatelessSyncServer mcpServer = prepareSyncServerBuilder()
+			.capabilities(ServerCapabilities.builder()
+				.resources(false, false)
+				.extensions(Map.of("io.modelcontextprotocol/skills", Map.of()))
+				.build())
+			.build();
+
+		try (var mcpClient = clientBuilder.build()) {
+			assertThat(mcpClient.initialize()).isNotNull();
+
+			mcpServer.addSkill(skill);
+
+			assertThat(mcpClient.listSkills().skills()).containsExactly(skill);
+			assertThat(mcpClient.getSkill(skill.uri()).skill()).isEqualTo(skill);
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	// ---------------------------------------
 	// Tools Tests
 	// ---------------------------------------
 	@ParameterizedTest(name = "{0} : {displayName} ")

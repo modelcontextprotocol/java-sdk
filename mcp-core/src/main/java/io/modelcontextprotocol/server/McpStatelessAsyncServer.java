@@ -7,12 +7,16 @@ package io.modelcontextprotocol.server;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
+import java.util.regex.Pattern;
 
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonMapper;
@@ -52,6 +56,12 @@ public class McpStatelessAsyncServer {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpStatelessAsyncServer.class);
 
+	private static final Pattern SHA_256_DIGEST = Pattern.compile("sha256:[0-9a-f]{64}");
+
+	private static final int MAX_SKILL_RESOURCES = 512;
+
+	private static final long MAX_SKILL_SIZE_BYTES = 16L * 1024 * 1024;
+
 	private final McpStatelessServerTransport mcpTransportProvider;
 
 	private final McpJsonMapper jsonMapper;
@@ -68,6 +78,8 @@ public class McpStatelessAsyncServer {
 
 	private final ConcurrentHashMap<String, McpStatelessServerFeatures.AsyncResourceSpecification> resources = new ConcurrentHashMap<>();
 
+	private final ConcurrentHashMap<String, McpSchema.Skill> skills = new ConcurrentHashMap<>();
+
 	private final ConcurrentHashMap<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts = new ConcurrentHashMap<>();
 
 	private final ConcurrentHashMap<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions = new ConcurrentHashMap<>();
@@ -82,6 +94,8 @@ public class McpStatelessAsyncServer {
 
 	private final McpAsyncListFilter<McpSchema.Tool> toolFilter;
 
+	private final BiFunction<McpTransportContext, McpSchema.ReadDirectoryRequest, Mono<McpSchema.ListResourcesResult>> directoryReadHandler;
+
 	McpStatelessAsyncServer(McpStatelessServerTransport mcpTransport, McpJsonMapper jsonMapper,
 			McpStatelessServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
@@ -90,9 +104,16 @@ public class McpStatelessAsyncServer {
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
 		this.serverCapabilities = features.serverCapabilities();
+		if (this.serverCapabilities.skillsExtensionEnabled() && this.serverCapabilities.resources() == null) {
+			throw new IllegalArgumentException("Skills extension requires resource capabilities");
+		}
 		this.instructions = features.instructions();
 		this.tools.addAll(withStructuredOutputHandling(jsonSchemaValidator, features.tools()));
 		this.resources.putAll(features.resources());
+		features.skills().values().forEach(skill -> {
+			validateSkill(skill);
+			this.skills.put(skill.uri(), skill);
+		});
 		this.resourceTemplates.putAll(features.resourceTemplates());
 		this.prompts.putAll(features.prompts());
 		this.completions.putAll(features.completions());
@@ -100,6 +121,7 @@ public class McpStatelessAsyncServer {
 		this.jsonSchemaValidator = jsonSchemaValidator;
 		this.validateToolInputs = validateToolInputs;
 		this.toolFilter = McpAsyncListFilter.and(features.toolFilters());
+		this.directoryReadHandler = features.directoryReadHandler();
 
 		Map<String, McpStatelessRequestHandler<?>> requestHandlers = new HashMap<>();
 
@@ -121,6 +143,14 @@ public class McpStatelessAsyncServer {
 			requestHandlers.put(McpSchema.METHOD_RESOURCES_LIST, resourcesListRequestHandler());
 			requestHandlers.put(McpSchema.METHOD_RESOURCES_READ, resourcesReadRequestHandler());
 			requestHandlers.put(McpSchema.METHOD_RESOURCES_TEMPLATES_LIST, resourceTemplateListRequestHandler());
+			if (this.serverCapabilities.skillsDirectoryReadEnabled()) {
+				requestHandlers.put(McpSchema.METHOD_RESOURCES_DIRECTORY_READ, resourcesDirectoryReadRequestHandler());
+			}
+		}
+
+		if (this.serverCapabilities.skillsExtensionEnabled()) {
+			requestHandlers.put(McpSchema.METHOD_SKILLS_LIST, skillsListRequestHandler());
+			requestHandlers.put(McpSchema.METHOD_SKILLS_GET, skillsGetRequestHandler());
 		}
 
 		// Add prompts API handlers if provider exists
@@ -639,6 +669,189 @@ public class McpStatelessAsyncServer {
 				});
 
 		};
+	}
+
+	private McpStatelessRequestHandler<McpSchema.ListResourcesResult> resourcesDirectoryReadRequestHandler() {
+		return (ctx, params) -> {
+			McpSchema.ReadDirectoryRequest directoryRequest = jsonMapper.convertValue(params, new TypeRef<>() {
+			});
+			return this.directoryReadHandler != null ? this.directoryReadHandler.apply(ctx, directoryRequest)
+					: defaultDirectoryRead(directoryRequest);
+		};
+	}
+
+	private Mono<McpSchema.ListResourcesResult> defaultDirectoryRead(McpSchema.ReadDirectoryRequest directoryRequest) {
+		String directoryUri = directoryRequest.uri();
+		if (!isDirectoryResource(directoryUri) && !hasResourceDescendant(directoryUri)) {
+			return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
+				.message("URI does not identify a directory resource")
+				.build());
+		}
+		Map<String, McpSchema.Resource> children = new LinkedHashMap<>();
+		this.resources.values()
+			.stream()
+			.map(McpStatelessServerFeatures.AsyncResourceSpecification::resource)
+			.forEach(resource -> {
+				if (isDirectChild(directoryUri, resource.uri())) {
+					children.put(resource.uri(), resource);
+				}
+				else {
+					String childDirectory = directChildDirectory(directoryUri, resource.uri());
+					if (childDirectory != null) {
+						children.putIfAbsent(childDirectory, directoryResource(childDirectory));
+					}
+				}
+			});
+		return Mono.just(McpSchema.ListResourcesResult.builder(List.copyOf(children.values())).build());
+	}
+
+	/**
+	 * Adds a skill entry served through {@code skills/list} and {@code skills/get}.
+	 * @param skill The skill entry to register
+	 * @return A Mono that completes when the skill is registered
+	 */
+	public Mono<Void> addSkill(McpSchema.Skill skill) {
+		Assert.notNull(skill, "skill must not be null");
+		if (!this.serverCapabilities.skillsExtensionEnabled()) {
+			return Mono.error(new IllegalStateException("Server must declare the Skills extension"));
+		}
+		return Mono.fromRunnable(() -> {
+			validateSkill(skill);
+			this.skills.put(skill.uri(), skill);
+		});
+	}
+
+	private static void validateSkill(McpSchema.Skill skill) {
+		String skillUri = skill.uri();
+		String skillRoot = parentUri(skillUri);
+		if (skillRoot == null || !skillUri.endsWith("/SKILL.md")) {
+			throw new IllegalArgumentException("Skill URI must identify a SKILL.md resource");
+		}
+
+		String skillName = skillRoot.substring(skillRoot.lastIndexOf('/') + 1);
+		if (skill.frontmatter().name() == null || skill.frontmatter().name().isBlank()) {
+			throw new IllegalArgumentException("Skill frontmatter must contain a non-blank name");
+		}
+		if (skill.frontmatter().description() == null || skill.frontmatter().description().isBlank()) {
+			throw new IllegalArgumentException("Skill frontmatter must contain a non-blank description");
+		}
+		if (!skillName.equals(skill.frontmatter().name())) {
+			throw new IllegalArgumentException("Skill URI path must end with the frontmatter name");
+		}
+
+		if (skill.resources().dynamic()) {
+			return;
+		}
+
+		List<McpSchema.SkillResource> manifest = skill.resources().manifest();
+		if (manifest.size() > MAX_SKILL_RESOURCES) {
+			throw new IllegalArgumentException(
+					"Skill manifest must not contain more than " + MAX_SKILL_RESOURCES + " resources");
+		}
+
+		Set<String> resourceUris = new HashSet<>();
+		long totalSize = 0;
+		for (McpSchema.SkillResource resource : manifest) {
+			if (!resourceUris.add(resource.uri())) {
+				throw new IllegalArgumentException("Skill manifest must not contain duplicate resource URIs");
+			}
+			if (resource.uri().equals(skillRoot) || !isWithinDirectory(resource.uri(), skillRoot)) {
+				throw new IllegalArgumentException("Skill manifest resource URI must be within the skill directory");
+			}
+			if (!SHA_256_DIGEST.matcher(resource.digest()).matches()) {
+				throw new IllegalArgumentException("Skill manifest digest must be a lowercase SHA-256 digest");
+			}
+			if (resource.size() < 0) {
+				throw new IllegalArgumentException("Skill manifest resource size must not be negative");
+			}
+			try {
+				totalSize = Math.addExact(totalSize, resource.size());
+			}
+			catch (ArithmeticException e) {
+				throw new IllegalArgumentException("Skill manifest total size is too large", e);
+			}
+		}
+
+		if (!resourceUris.contains(skillUri)) {
+			throw new IllegalArgumentException("Skill manifest must contain the SKILL.md resource");
+		}
+		if (totalSize > MAX_SKILL_SIZE_BYTES) {
+			throw new IllegalArgumentException(
+					"Skill manifest total size must not exceed " + MAX_SKILL_SIZE_BYTES + " bytes");
+		}
+	}
+
+	/**
+	 * Lists every skill registered with this server.
+	 * @return A Flux stream of skill entries
+	 */
+	public Flux<McpSchema.Skill> listSkills() {
+		return Flux.fromIterable(this.skills.values());
+	}
+
+	private McpStatelessRequestHandler<McpSchema.ListSkillsResult> skillsListRequestHandler() {
+		return (ctx, params) -> Mono
+			.just(McpSchema.ListSkillsResult.builder(List.copyOf(this.skills.values())).build());
+	}
+
+	private McpStatelessRequestHandler<McpSchema.GetSkillResult> skillsGetRequestHandler() {
+		return (ctx, params) -> {
+			McpSchema.GetSkillRequest skillRequest = jsonMapper.convertValue(params, new TypeRef<>() {
+			});
+			McpSchema.Skill skill = this.skills.get(skillRequest.uri());
+			return skill != null ? Mono.just(new McpSchema.GetSkillResult(skill))
+					: Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS).message("Unknown skill URI").build());
+		};
+	}
+
+	private static boolean isDirectChild(String directoryUri, String resourceUri) {
+		if (directoryUri.endsWith("/")) {
+			return false;
+		}
+		String prefix = directoryUri + "/";
+		if (!resourceUri.startsWith(prefix)) {
+			return false;
+		}
+		String relativeUri = resourceUri.substring(prefix.length());
+		return !relativeUri.isEmpty() && !relativeUri.contains("/");
+	}
+
+	private static String directChildDirectory(String directoryUri, String resourceUri) {
+		String prefix = directoryUri + "/";
+		if (!resourceUri.startsWith(prefix)) {
+			return null;
+		}
+		String relativeUri = resourceUri.substring(prefix.length());
+		int slash = relativeUri.indexOf('/');
+		return slash < 0 ? null : prefix + relativeUri.substring(0, slash);
+	}
+
+	private boolean isDirectoryResource(String uri) {
+		return this.resources.values()
+			.stream()
+			.map(McpStatelessServerFeatures.AsyncResourceSpecification::resource)
+			.anyMatch(resource -> resource.uri().equals(uri) && "inode/directory".equals(resource.mimeType()));
+	}
+
+	private boolean hasResourceDescendant(String directoryUri) {
+		String prefix = directoryUri + "/";
+		return this.resources.keySet().stream().anyMatch(uri -> uri.startsWith(prefix));
+	}
+
+	private static String parentUri(String uri) {
+		int slash = uri.lastIndexOf('/');
+		int schemeSeparator = uri.indexOf("://");
+		int authorityEnd = schemeSeparator < 0 ? 0 : schemeSeparator + 2;
+		return slash > authorityEnd ? uri.substring(0, slash) : null;
+	}
+
+	private static boolean isWithinDirectory(String uri, String directory) {
+		return uri.equals(directory) || uri.startsWith(directory + "/");
+	}
+
+	private static McpSchema.Resource directoryResource(String uri) {
+		int slash = uri.lastIndexOf('/');
+		return McpSchema.Resource.builder(uri, uri.substring(slash + 1)).mimeType("inode/directory").build();
 	}
 
 	private Optional<McpStatelessServerFeatures.AsyncResourceSpecification> findResourceSpecification(String uri) {
