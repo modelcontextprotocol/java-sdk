@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Pattern;
 
 import org.reactivestreams.FlowAdapters;
 import org.reactivestreams.Subscription;
@@ -148,21 +147,6 @@ class ResponseSubscribers {
 	static class SseLineSubscriber extends BaseSubscriber<String> {
 
 		/**
-		 * Pattern to extract data content from SSE "data:" lines.
-		 */
-		private static final Pattern EVENT_DATA_PATTERN = Pattern.compile("^data:(.+)$", Pattern.MULTILINE);
-
-		/**
-		 * Pattern to extract event ID from SSE "id:" lines.
-		 */
-		private static final Pattern EVENT_ID_PATTERN = Pattern.compile("^id:(.+)$", Pattern.MULTILINE);
-
-		/**
-		 * Pattern to extract event type from SSE "event:" lines.
-		 */
-		private static final Pattern EVENT_TYPE_PATTERN = Pattern.compile("^event:(.+)$", Pattern.MULTILINE);
-
-		/**
 		 * The sink for emitting parsed response events.
 		 */
 		private final FluxSink<ResponseEvent> sink;
@@ -227,13 +211,49 @@ class ResponseSubscribers {
 			});
 		}
 
+		/**
+		 * Extracts the value of an SSE field from a line, per the <a href=
+		 * "https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation">
+		 * SSE specification</a>: the characters after the colon with a single leading
+		 * space removed.
+		 *
+		 * <p>
+		 * A value may legally contain U+2028 (LINE SEPARATOR), U+2029 (PARAGRAPH
+		 * SEPARATOR) and U+0085 (NEXT LINE). Those are not SSE line terminators, so
+		 * extracting the value with a {@code MULTILINE} regex instead of this method
+		 * silently truncates it there.
+		 * @param line the SSE line, already stripped of its terminator by the line
+		 * subscriber
+		 * @param field the field prefix, e.g. {@code "data:"}
+		 * @return the field value with a single leading space removed, never truncated
+		 * @see #hookOnNext(String)
+		 */
+		private static String fieldValue(String line, String field) {
+			String value = line.substring(field.length());
+			if (value.startsWith(" ")) {
+				value = value.substring(1);
+			}
+			return value;
+		}
+
+		/**
+		 * Returns the buffered data lines joined by the separators the data: handler
+		 * appended, with only the final separator removed. Trimming the whole buffer
+		 * instead would also strip significant leading/trailing whitespace from the first
+		 * and last data lines, which the SSE field rules explicitly preserve.
+		 */
+		private String concatenatedDataLines() {
+			String buffered = this.eventBuilder.toString();
+			return buffered.substring(0, buffered.length() - 1);
+		}
+
 		@Override
 		protected void hookOnNext(String line) {
 			if (line.isEmpty()) {
 				// Empty line means end of event
 				if (this.eventBuilder.length() > 0) {
-					String eventData = this.eventBuilder.toString();
-					SseEvent sseEvent = new SseEvent(currentEventId.get(), currentEventType.get(), eventData.trim());
+					String eventData = concatenatedDataLines();
+					SseEvent sseEvent = new SseEvent(currentEventId.get(), currentEventType.get(), eventData);
 
 					this.sink.next(new SseResponseEvent(responseInfo, sseEvent));
 					this.eventBuilder.setLength(0);
@@ -241,35 +261,25 @@ class ResponseSubscribers {
 			}
 			else {
 				if (line.startsWith("data:")) {
-					var matcher = EVENT_DATA_PATTERN.matcher(line);
-					if (matcher.find()) {
-						String data = matcher.group(1).trim();
-						// Measured before appending, so that an event carrying exactly
-						// maxSize of data is accepted: the trailing separator below is
-						// stripped again before the event is emitted.
-						if (this.eventBuilder.length() + data.length() > this.maxSize) {
-							upstream().cancel();
-							this.sink.error(
-									new McpTransportException("Inbound SSE event exceeds the maximum allowed size of "
-											+ this.maxSize + " bytes"));
-							return;
-						}
-						this.eventBuilder.append(data).append("\n");
+					String data = fieldValue(line, "data:");
+					// Measured before appending, so that an event carrying exactly
+					// maxSize of data is accepted: the trailing separator below is
+					// stripped again before the event is emitted.
+					if (this.eventBuilder.length() + data.length() > this.maxSize) {
+						upstream().cancel();
+						this.sink.error(new McpTransportException(
+								"Inbound SSE event exceeds the maximum allowed size of " + this.maxSize + " bytes"));
+						return;
 					}
+					this.eventBuilder.append(data).append("\n");
 					upstream().request(1);
 				}
 				else if (line.startsWith("id:")) {
-					var matcher = EVENT_ID_PATTERN.matcher(line);
-					if (matcher.find()) {
-						this.currentEventId.set(matcher.group(1).trim());
-					}
+					this.currentEventId.set(fieldValue(line, "id:"));
 					upstream().request(1);
 				}
 				else if (line.startsWith("event:")) {
-					var matcher = EVENT_TYPE_PATTERN.matcher(line);
-					if (matcher.find()) {
-						this.currentEventType.set(matcher.group(1).trim());
-					}
+					this.currentEventType.set(fieldValue(line, "event:"));
 					upstream().request(1);
 				}
 				else if (line.startsWith(":")) {
@@ -290,8 +300,8 @@ class ResponseSubscribers {
 		@Override
 		protected void hookOnComplete() {
 			if (this.eventBuilder.length() > 0) {
-				String eventData = this.eventBuilder.toString();
-				SseEvent sseEvent = new SseEvent(currentEventId.get(), currentEventType.get(), eventData.trim());
+				String eventData = concatenatedDataLines();
+				SseEvent sseEvent = new SseEvent(currentEventId.get(), currentEventType.get(), eventData);
 				this.sink.next(new SseResponseEvent(responseInfo, sseEvent));
 			}
 			this.sink.complete();
