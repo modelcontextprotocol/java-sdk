@@ -59,6 +59,10 @@
 		<maven.compiler.target>17</maven.compiler.target>
 		<surefireArgLine />
 
+		<!-- JPMS module name. Every module that produces a jar must override this;
+		     an empty value makes maven-jar-plugin fail, which is intentional. -->
+		<module.name />
+
 		<assert4j.version>3.27.6</assert4j.version>
 		<junit.version>6.0.2</junit.version>
 		<mockito.version>5.20.0</mockito.version>
@@ -207,6 +211,7 @@
 						<manifestEntries>
 							<Implementation-Title>${project.artifactId}</Implementation-Title>
 							<Implementation-Version>${project.version}</Implementation-Version>
+							<Automatic-Module-Name>${module.name}</Automatic-Module-Name>
 						</manifestEntries>
 					</archive>
 				</configuration>

@@ -164,7 +164,10 @@ Key features:
 
     - Efficient bidirectional HTTP communication
     - Session management for multiple client connections
-    - Configurable keep-alive intervals
+    - Keep-alive pings on sessions with an open stream, enabled by default every 30 minutes
+      (`keepAliveInterval`, `null` to disable)
+    - Eviction of idle sessions — no open stream and no request for a full interval — every
+      30 minutes by default (`sessionSweepInterval`, `null` to keep sessions until deleted)
     - Security validation support
     - Graceful shutdown support
 

@@ -21,6 +21,7 @@
 	</scm>
 
 	<properties>
+		<module.name>io.modelcontextprotocol.sdk.conformance.client.spring</module.name>
 		<java.version>17</java.version>
 		<spring-boot.version>4.1.0</spring-boot.version>
 		<spring-ai.version>2.0.0</spring-ai.version>
