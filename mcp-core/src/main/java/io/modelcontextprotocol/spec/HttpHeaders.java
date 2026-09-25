@@ -27,6 +27,13 @@ public interface HttpHeaders {
 	String PROTOCOL_VERSION = "MCP-Protocol-Version";
 
 	/**
+	 * Mirrors the JSON-RPC method of the request or notification carried in the body.
+	 * @see <a href=
+	 * "https://modelcontextprotocol.io/seps/2243-http-standardization">SEP-2243</a>
+	 */
+	String MCP_METHOD = "Mcp-Method";
+
+	/**
 	 * The HTTP Content-Length header.
 	 * @see <a href=
 	 * "https://httpwg.org/specs/rfc9110.html#field.content-length">RFC9110</a>
