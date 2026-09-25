@@ -6238,6 +6238,40 @@ public final class McpSchema {
 		@JsonProperty("annotations") Annotations annotations,
 		@JsonProperty("_meta") Map<String, Object> meta) implements Content, ResourceContent { // @formatter:on
 
+		public ResourceLink {
+			Assert.notNull(uri, "uri must not be null");
+			Assert.notNull(name, "name must not be null");
+		}
+
+		@JsonCreator
+		static ResourceLink fromJson(@JsonProperty("name") String name, @JsonProperty("title") String title,
+				@JsonProperty("uri") String uri, @JsonProperty("description") String description,
+				@JsonProperty("mimeType") String mimeType, @JsonProperty("size") Long size,
+				@JsonProperty("annotations") Annotations annotations, @JsonProperty("_meta") Map<String, Object> meta) {
+			if (name == null || uri == null) {
+				List<String> missing = new ArrayList<>();
+				if (name == null) {
+					missing.add("name -> ''");
+					name = "";
+				}
+				if (uri == null) {
+					missing.add("uri -> ''");
+					uri = "";
+				}
+				logger.warn("ResourceLink: missing required fields during deserialization: {}",
+						String.join(", ", missing));
+			}
+			return new ResourceLink(name, title, uri, description, mimeType, size, annotations, meta);
+		}
+
+		public static Builder builder(String uri, String name) {
+			return new Builder(uri, name);
+		}
+
+		/**
+		 * @deprecated Use {@link #builder(String, String)} instead.
+		 */
+		@Deprecated
 		public static Builder builder() {
 			return new Builder();
 		}
@@ -6260,6 +6294,24 @@ public final class McpSchema {
 
 			private Map<String, Object> meta;
 
+			/**
+			 * @deprecated Use {@link ResourceLink#builder(String, String)} instead.
+			 */
+			@Deprecated
+			public Builder() {
+			}
+
+			private Builder(String uri, String name) {
+				Assert.hasText(uri, "uri must not be empty");
+				Assert.hasText(name, "name must not be empty");
+				this.uri = uri;
+				this.name = name;
+			}
+
+			/**
+			 * @deprecated Use {@link ResourceLink#builder(String, String)} instead.
+			 */
+			@Deprecated
 			public Builder name(String name) {
 				this.name = name;
 				return this;
@@ -6270,6 +6322,10 @@ public final class McpSchema {
 				return this;
 			}
 
+			/**
+			 * @deprecated Use {@link ResourceLink#builder(String, String)} instead.
+			 */
+			@Deprecated
 			public Builder uri(String uri) {
 				this.uri = uri;
 				return this;
