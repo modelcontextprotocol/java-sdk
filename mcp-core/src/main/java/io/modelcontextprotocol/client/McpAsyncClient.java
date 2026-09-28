@@ -1055,7 +1055,7 @@ public class McpAsyncClient {
 			Supplier<A> initialAccumulator, BiFunction<A, R, A> accumulate, Function<A, R> finalize) {
 		return Mono.defer(() -> {
 			PaginationGuard guard = new PaginationGuard(this.paginationConfig);
-			return pageFetcher.apply(McpSchema.FIRST_PAGE).expand(page -> {
+			Mono<R> result = pageFetcher.apply(McpSchema.FIRST_PAGE).expand(page -> {
 				String next = nextCursorOf.apply(page);
 				if (next == null || next.isEmpty()) {
 					return Mono.empty();
@@ -1063,6 +1063,12 @@ public class McpAsyncClient {
 				guard.beforeNextPage(next);
 				return pageFetcher.apply(next);
 			}).reduce(initialAccumulator.get(), accumulate).map(finalize);
+			if (this.paginationConfig.timeout() != null) {
+				return result.timeout(this.paginationConfig.timeout(), Mono.error(new McpPaginationException(
+						"Pagination timed out after " + this.paginationConfig.timeout()
+								+ ". Increase paginationTimeout if this is expected for the server.")));
+			}
+			return result;
 		});
 	}
 
@@ -1076,8 +1082,6 @@ public class McpAsyncClient {
 		private final Set<String> visitedCursors = new HashSet<>();
 
 		private final PaginationConfig config;
-
-		private final long startNanos = System.nanoTime();
 
 		private int pagesFetched = 1;
 
@@ -1099,11 +1103,6 @@ public class McpAsyncClient {
 				throw new McpPaginationException(
 						"Pagination limit exceeded: the server returned more than " + this.config.maxPages()
 								+ " pages. Increase maxPaginationPages if this is expected for the server.");
-			}
-			if (this.config.timeout() != null
-					&& Duration.ofNanos(System.nanoTime() - this.startNanos).compareTo(this.config.timeout()) > 0) {
-				throw new McpPaginationException("Pagination timed out after " + this.config.timeout()
-						+ ". Increase paginationTimeout if this is expected for the server.");
 			}
 			this.pagesFetched++;
 		}

@@ -65,6 +65,10 @@ class McpAsyncClientPaginationTests {
 			return Duration.ZERO;
 		}
 
+		default Duration pageDelay(String cursor) {
+			return pageDelay();
+		}
+
 	}
 
 	private McpClientTransport createPaginatedTransport(PaginatedServer server, AtomicInteger toolsRequests,
@@ -119,8 +123,9 @@ class McpAsyncClientPaginationTests {
 				}
 
 				Mono<McpSchema.JSONRPCMessage> responseMono = Mono.just(response);
-				if (!server.pageDelay().isZero()) {
-					responseMono = responseMono.delayElement(server.pageDelay());
+				Duration delay = server.pageDelay(cursorOf(request));
+				if (!delay.isZero()) {
+					responseMono = responseMono.delayElement(delay);
 				}
 				return responseMono.flatMap(r -> handler.apply(Mono.just(r))).then();
 			}
@@ -233,6 +238,34 @@ class McpAsyncClientPaginationTests {
 			assertThat(error).isInstanceOf(McpPaginationException.class);
 			assertThat(error.getMessage()).contains("timed out");
 		}).verify();
+	}
+
+	@Test
+	void listToolsTimesOutWhileWaitingForFinalPage() {
+		AtomicInteger toolsRequests = new AtomicInteger();
+		AtomicInteger resourcesRequests = new AtomicInteger();
+		PaginatedServer server = new PaginatedServer() {
+			@Override
+			public String nextCursorFor(String cursor) {
+				return cursor == null ? "last-page" : null;
+			}
+
+			@Override
+			public Duration pageDelay(String cursor) {
+				return cursor == null ? Duration.ofMillis(20) : Duration.ofMillis(800);
+			}
+		};
+		McpAsyncClient client = McpClient.async(createPaginatedTransport(server, toolsRequests, resourcesRequests))
+			.paginationTimeout(Duration.ofMillis(300))
+			.build();
+
+		client.initialize().block();
+
+		StepVerifier.create(client.listTools()).expectErrorSatisfies(error -> {
+			assertThat(error).isInstanceOf(McpPaginationException.class);
+			assertThat(error.getMessage()).contains("timed out");
+		}).verify();
+		assertThat(toolsRequests.get()).isEqualTo(2);
 	}
 
 	@Test
