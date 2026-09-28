@@ -389,6 +389,22 @@ public class HttpClientStreamableHttpTransportErrorHandlingTest {
 		StepVerifier.create(transport.closeGracefully()).verifyComplete();
 	}
 
+	@Test
+	void test405OnSendMessageDoesNotOpenSseConnection() {
+		serverResponseStatus.set(405);
+		currentServerSessionId.set("ignored-session-id");
+
+		StepVerifier.create(transport.sendMessage(createTestRequestMessage()))
+			.expectErrorMatches(
+					error -> error instanceof McpTransportException && error.getMessage().contains("Status code: 405"))
+			.verify();
+
+		Awaitility.await()
+			.during(Duration.ofMillis(300))
+			.atMost(Duration.ofSeconds(1))
+			.untilAsserted(() -> assertThat(processedSseConnectCount.get()).isZero());
+	}
+
 	@Nested
 	class AuthorizationError {
 
