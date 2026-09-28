@@ -2697,11 +2697,18 @@ public final class McpSchema {
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record JsonSchema( // @formatter:off
 		@JsonProperty("type") String type,
-		@JsonProperty("properties") Map<String, Object> properties,
-		@JsonProperty("required") List<String> required,
+		@JsonProperty("properties") @JsonInclude(JsonInclude.Include.NON_EMPTY) Map<String, Object> properties,
+		@JsonProperty("required") @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> required,
 		@JsonProperty("additionalProperties") Boolean additionalProperties,
-		@JsonProperty("$defs") Map<String, Object> defs,
-		@JsonProperty("definitions") Map<String, Object> definitions) { // @formatter:on
+		@JsonProperty("$defs") @JsonInclude(JsonInclude.Include.NON_EMPTY) Map<String, Object> defs,
+		@JsonProperty("definitions") @JsonInclude(JsonInclude.Include.NON_EMPTY) Map<String, Object> definitions) { // @formatter:on
+
+		public JsonSchema {
+			required = required != null ? required : List.of();
+			properties = properties != null ? properties : Map.of();
+			defs = defs != null ? defs : Map.of();
+			definitions = definitions != null ? definitions : Map.of();
+		}
 
 		public static Builder builder() {
 			return new Builder();
