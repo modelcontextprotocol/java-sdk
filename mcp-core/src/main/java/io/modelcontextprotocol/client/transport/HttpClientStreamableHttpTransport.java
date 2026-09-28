@@ -574,17 +574,18 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 							"Authorization error when sending message", requestSnapshot, responseEvent.responseInfo()));
 				}
 
-				if (transportSession.markInitialized(
-						responseEvent.responseInfo().headers().firstValue("mcp-session-id").orElseGet(() -> null))) {
-					// Once we have a session, we try to open an async stream for
-					// the server to send notifications and requests out-of-band.
-
-					reconnect(null).contextWrite(deliveredSink.contextView()).subscribe();
-				}
-
 				String sessionRepresentation = sessionIdOrPlaceholder(transportSession);
 
 				if (statusCode >= 200 && statusCode < 300) {
+					if (transportSession.markInitialized(responseEvent.responseInfo()
+						.headers()
+						.firstValue("mcp-session-id")
+						.orElseGet(() -> null))) {
+						// Once we have a session, we try to open an async stream
+						// for the server to send notifications and requests
+						// out-of-band.
+						reconnect(null).contextWrite(deliveredSink.contextView()).subscribe();
+					}
 
 					String contentType = responseEvent.responseInfo()
 						.headers()
