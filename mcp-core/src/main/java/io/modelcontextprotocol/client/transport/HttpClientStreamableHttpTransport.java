@@ -245,7 +245,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					() -> this.httpClient.sendAsync(requestBuilder.build(), HttpResponse.BodyHandlers.ofPublisher()))
 				// The response is not inspected, but the body still has to be consumed
 				// to release the connection.
-				.flatMapMany(response -> ResponseSubscribers.drain(response.body(), this.maxResponseSize))
+				.flatMapMany(response -> ResponseBodyHandlers.drain(response.body(), this.maxResponseSize))
 				.then())
 			.then();
 	}
@@ -286,8 +286,8 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 	private Flux<McpSchema.JSONRPCMessage> consumeSseStream(
 			java.util.concurrent.Flow.Publisher<List<java.nio.ByteBuffer>> body,
 			McpTransportStream<Disposable> existingStream, Runnable onFirstMessage) {
-		Flux<String> lines = ResponseSubscribers.decodeLines(body, this.maxResponseSize);
-		return ResponseSubscribers.decodeSseResponse(lines, this.maxResponseSize).flatMap(sseEvent -> {
+		Flux<String> lines = ResponseBodyHandlers.decodeLines(body, this.maxResponseSize);
+		return ResponseBodyHandlers.decodeSseResponse(lines, this.maxResponseSize).flatMap(sseEvent -> {
 			if (!isMessageEvent(sseEvent.event())) {
 				logger.debug("Received SSE event with type: {}", sseEvent);
 				if (onFirstMessage != null) {
@@ -434,9 +434,9 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 						return proceed ? consumeSseStream(httpResponse.body(), stream, null)
 								: exception != null
-										? ResponseSubscribers.drainThenError(httpResponse.body(), this.maxResponseSize,
+										? ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
 												exception)
-										: ResponseSubscribers.drain(httpResponse.body(), this.maxResponseSize);
+										: ResponseBodyHandlers.drain(httpResponse.body(), this.maxResponseSize);
 					});
 			})
 				.retryWhen(authorizationErrorRetrySpec())
@@ -555,7 +555,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 							var request = requestBuilder.build();
 							var requestSnapshot = new HttpRequestSnapshot(request.uri(), request.method(),
 									request.headers());
-							return ResponseSubscribers.drainThenError(httpResponse.body(), this.maxResponseSize,
+							return ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
 									new McpHttpClientTransportAuthorizationException(
 											"Authorization error when sending message", requestSnapshot,
 											toResponseInfo(httpResponse)));
@@ -580,7 +580,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 							if (contentType.isBlank() || "0".equals(contentLength) || statusCode == 202) {
 								logger.debug("No body returned for POST in session {}", sessionRepresentation);
 								deliveredSink.success();
-								return ResponseSubscribers.drain(httpResponse.body(), this.maxResponseSize);
+								return ResponseBodyHandlers.drain(httpResponse.body(), this.maxResponseSize);
 							}
 							else if (contentType.contains(TEXT_EVENT_STREAM)) {
 								AtomicBoolean delivered = new AtomicBoolean();
@@ -591,7 +591,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 								});
 							}
 							else if (contentType.contains(APPLICATION_JSON)) {
-								return ResponseSubscribers
+								return ResponseBodyHandlers
 									.decodeAggregateResponse(httpResponse.body(), this.maxResponseSize)
 									.flatMapMany(data -> {
 										deliveredSink.success();
@@ -612,34 +612,34 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 							logger.warn("Unknown media type {} returned for POST in session {}", contentType,
 									sessionRepresentation);
-							return ResponseSubscribers.drainThenError(httpResponse.body(), this.maxResponseSize,
+							return ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
 									new RuntimeException("Unknown media type returned: " + contentType));
 						}
 						else if (statusCode == NOT_FOUND) {
 							if (maybeSessionId.isPresent()) {
 								logger.debug("Session not found for session ID: {}", sessionRepresentation);
-								return ResponseSubscribers.drainThenError(httpResponse.body(), this.maxResponseSize,
+								return ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
 										new McpTransportSessionNotFoundException(
 												"Session not found for session ID: " + sessionRepresentation));
 							}
-							return ResponseSubscribers.drainThenError(httpResponse.body(), this.maxResponseSize,
+							return ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
 									new McpTransportException("Server Not Found. Status code:" + statusCode));
 						}
 						else if (statusCode == BAD_REQUEST) {
 							if (maybeSessionId.isPresent()) {
-								return ResponseSubscribers.drainThenError(httpResponse.body(), this.maxResponseSize,
+								return ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
 										new McpTransportSessionNotFoundException(
 												"Session not found for session ID: " + sessionRepresentation));
 							}
-							return ResponseSubscribers.drainThenError(httpResponse.body(), this.maxResponseSize,
+							return ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
 									new McpTransportException("Bad Request. Status code:" + statusCode));
 						}
 						else if (statusCode >= 400 && statusCode < 500) {
-							return ResponseSubscribers.drainThenError(httpResponse.body(), this.maxResponseSize,
+							return ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
 									new McpTransportException("Invalid request. Status code: " + statusCode));
 						}
 
-						return ResponseSubscribers.drainThenError(httpResponse.body(), this.maxResponseSize,
+						return ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
 								new RuntimeException("Failed to send message, status code: " + statusCode));
 					})
 					.onErrorMap(CompletionException.class, Throwable::getCause))

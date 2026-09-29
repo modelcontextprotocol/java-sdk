@@ -17,7 +17,7 @@ import org.slf4j.LoggerFactory;
 import reactor.adapter.JdkFlowAdapter;
 import reactor.core.publisher.Flux;
 
-import io.modelcontextprotocol.client.transport.ResponseSubscribers.SseEvent;
+import io.modelcontextprotocol.client.transport.ResponseBodyHandlers.SseEvent;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -48,7 +48,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>
  * The middle column read each chunk incrementally, which is ~25x quicker than what 2.0.0
- * shipped, but {@link ResponseSubscribers.Utf8LineDecoder} still searched its buffered
+ * shipped, but {@link ResponseBodyHandlers.Utf8LineDecoder} still searched its buffered
  * characters for a line terminator from the start of the buffer on every chunk, so eight
  * times the payload cost ~45x the time. Resuming that search where the previous one ended
  * gives the third column, which scales with the payload rather than with its square and
@@ -173,8 +173,8 @@ class LargeSseEventDecodingTests {
 	private static List<SseEvent> decode(byte[] body) {
 		Flow.Publisher<List<ByteBuffer>> publisher = JdkFlowAdapter
 			.publisherToFlowPublisher(Flux.fromIterable(chunk(body)));
-		Flux<String> lines = ResponseSubscribers.decodeLines(publisher, Integer.MAX_VALUE);
-		return ResponseSubscribers.decodeSseResponse(lines, MAX_SIZE).collectList().block();
+		Flux<String> lines = ResponseBodyHandlers.decodeLines(publisher, Integer.MAX_VALUE);
+		return ResponseBodyHandlers.decodeSseResponse(lines, MAX_SIZE).collectList().block();
 	}
 
 	private static List<List<ByteBuffer>> chunk(byte[] body) {

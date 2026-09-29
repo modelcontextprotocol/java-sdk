@@ -8,8 +8,8 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
-import io.modelcontextprotocol.client.transport.ResponseSubscribers.SseEvent;
-import io.modelcontextprotocol.client.transport.ResponseSubscribers.SseEventParser;
+import io.modelcontextprotocol.client.transport.ResponseBodyHandlers.SseEvent;
+import io.modelcontextprotocol.client.transport.ResponseBodyHandlers.SseEventParser;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

@@ -396,17 +396,17 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 						// The body is handed over as a publisher and nothing is read off
 						// the wire until it is subscribed, so it has to be drained even
 						// when its content is of no further interest.
-						return ResponseSubscribers.drain(response.body(), this.maxResponseSize);
+						return ResponseBodyHandlers.drain(response.body(), this.maxResponseSize);
 					}
 
 					int statusCode = response.statusCode();
 
 					if (statusCode >= 200 && statusCode < 300) {
-						Flux<String> lines = ResponseSubscribers.decodeLines(response.body(), this.maxResponseSize);
-						return ResponseSubscribers.decodeSseResponse(lines, this.maxResponseSize);
+						Flux<String> lines = ResponseBodyHandlers.decodeLines(response.body(), this.maxResponseSize);
+						return ResponseBodyHandlers.decodeSseResponse(lines, this.maxResponseSize);
 					}
 					else {
-						return ResponseSubscribers.drainThenError(response.body(), this.maxResponseSize,
+						return ResponseBodyHandlers.drainThenError(response.body(), this.maxResponseSize,
 								new RuntimeException("Failed to connect to SSE stream: " + statusCode));
 					}
 				})
@@ -537,10 +537,10 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 				.flatMap(response -> {
 					int statusCode = response.statusCode();
 					if (statusCode == 200 || statusCode == 201 || statusCode == 202 || statusCode == 206) {
-						return ResponseSubscribers.drain(response.body(), this.maxResponseSize).then();
+						return ResponseBodyHandlers.drain(response.body(), this.maxResponseSize).then();
 					}
-					return ResponseSubscribers.decodeAggregateResponse(response.body(), this.maxResponseSize)
-						.flatMap(text -> Mono.error(new RuntimeException(
+					return ResponseBodyHandlers.decodeAggregateResponse(response.body(), this.maxResponseSize)
+					                           .flatMap(text -> Mono.error(new RuntimeException(
 								"Sending message failed with a non-OK HTTP code: " + statusCode + " - " + text)));
 				});
 		});

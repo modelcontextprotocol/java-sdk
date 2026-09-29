@@ -9,7 +9,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-import io.modelcontextprotocol.client.transport.ResponseSubscribers.Utf8LineDecoder;
+import io.modelcontextprotocol.client.transport.ResponseBodyHandlers.Utf8LineDecoder;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

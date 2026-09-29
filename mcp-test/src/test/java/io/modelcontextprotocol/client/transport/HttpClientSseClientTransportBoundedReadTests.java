@@ -48,38 +48,41 @@ class HttpClientSseClientTransportBoundedReadTests extends HttpClientBoundedRead
 	void shouldRejectSingleLineExceedingMaxSize() {
 		// A line that never terminates, so the line buffer underneath the SSE parser
 		// would grow without limit before any event could be flushed.
-		respondWith(endpoint(), "text/event-stream", unterminatedLine(8));
+		var response = respondWith("GET", endpoint(), "text/event-stream", unterminatedLine());
 
 		StepVerifier.create(connect())
 			.verifyErrorMatches(t -> messageContains(t, "Inbound line exceeds the maximum allowed size"));
+		assertHungUp(response);
 	}
 
 	@Test
 	void shouldRejectEventExceedingMaxSize() {
 		// Many short, terminated "data:" lines with no blank line to end the event. Each
 		// line is small, but the accumulated event data would grow without limit.
-		respondWith(endpoint(), "text/event-stream", manyShortLines("data:"));
+		var response = respondWith("GET", endpoint(), "text/event-stream", manyShortLines("data:"));
 
 		StepVerifier.create(connect())
 			.verifyErrorMatches(t -> messageContains(t, "Inbound SSE event exceeds the maximum allowed size"));
+		assertHungUp(response);
 	}
 
 	@Test
-	void shouldRejectPostResponseExceedingMaxSize() throws Exception {
+	void shouldRejectPostResponseExceedingMaxSize() {
 		// The response to a posted message is discarded on success, but a peer must still
 		// not be able to make the transport read an unbounded one.
-		respondWith(endpoint(), "text/event-stream", body -> {
+		respondWith("GET", endpoint(), "text/event-stream", body -> {
 			body.write(("event:endpoint\ndata:" + MESSAGE_ENDPOINT + "\n\n").getBytes(StandardCharsets.UTF_8));
 			body.flush();
 			awaitTeardown();
 		});
-		respondWith(MESSAGE_ENDPOINT, "application/json", unterminatedLine(64));
+		var response = respondWith("POST", MESSAGE_ENDPOINT, "application/json", unterminatedLine());
 
 		HttpClientSseClientTransport transport = transport();
 		transport.connect(Function.identity()).block(Duration.ofSeconds(5));
 
 		StepVerifier.create(sendMessage(transport))
 			.verifyErrorMatches(t -> messageContains(t, "Inbound response body exceeds the maximum allowed size"));
+		assertHungUp(response);
 	}
 
 	private void awaitTeardown() {

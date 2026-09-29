@@ -36,7 +36,7 @@ import reactor.core.publisher.Mono;
  * @author Dariusz Jędrzejczyk
  * @author Daniel Garnier-Moiroux
  */
-class ResponseSubscribers {
+class ResponseBodyHandlers {
 
 	/**
 	 * Bytes of SSE field framing a single line may carry on top of the message payload:
@@ -137,7 +137,7 @@ class ResponseSubscribers {
 	 * @param error the error to propagate once the body has been discarded
 	 */
 	static <T> Flux<T> drainThenError(Publisher<List<ByteBuffer>> body, int maxSize, Throwable error) {
-		return boundTotalBytes(body, maxSize).thenMany(Flux.error(error));
+		return boundTotalBytes(body, maxSize).onErrorComplete().thenMany(Mono.error(error));
 	}
 
 	/**
