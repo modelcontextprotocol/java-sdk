@@ -11,6 +11,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -388,6 +389,14 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
 		}).flatMap(requestBuilder -> Mono.create(sink -> {
+			// Once connect() has completed, a later failure can no longer be reported
+			// through its sink: signalling it there would only have Reactor drop it.
+			AtomicBoolean connected = new AtomicBoolean();
+			Runnable markConnected = () -> {
+				if (connected.compareAndSet(false, true)) {
+					sink.success();
+				}
+			};
 			Disposable connection = Mono
 				.fromFuture(() -> this.httpClient.sendAsync(requestBuilder.build(),
 						HttpResponse.BodyHandlers.ofPublisher()))
@@ -407,7 +416,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 					}
 					else {
 						return ResponseBodyHandlers.drainThenError(response.body(), this.maxResponseSize,
-								new RuntimeException("Failed to connect to SSE stream: " + statusCode));
+								new McpTransportException("Failed to connect to SSE stream: " + statusCode));
 					}
 				})
 				.flatMap(sseEvent -> {
@@ -418,44 +427,44 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 								messageEndpointValidator.validate(uri, messageEndpointUri);
 							}
 							catch (InvalidSseMessageEndpointException e) {
-								sink.error(e);
 								this.messageEndpointSink.tryEmitError(e);
 								return Flux.error(e);
 							}
 							if (this.messageEndpointSink.tryEmitValue(messageEndpointUri).isSuccess()) {
-								sink.success();
+								markConnected.run();
 								return Flux.empty(); // No further processing needed
 							}
-							else {
-								sink.error(new RuntimeException("Failed to handle SSE endpoint event"));
-							}
+							return Flux.error(new McpTransportException("Failed to handle SSE endpoint event"));
 						}
 						else if (MESSAGE_EVENT_TYPE.equals(sseEvent.event())) {
 							String data = sseEvent.data();
 							if (data == null || data.isBlank()) {
 								logger.debug("Skipping SSE event with empty data (stream primer)");
-								sink.success();
+								markConnected.run();
 								return Flux.<McpSchema.JSONRPCMessage>empty();
 							}
 							JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, data);
-							sink.success();
+							markConnected.run();
 							return Flux.just(message);
 						}
 						else {
 							logger.debug("Received unrecognized SSE event type: {}", sseEvent);
-							sink.success();
+							markConnected.run();
+							return Flux.<McpSchema.JSONRPCMessage>empty();
 						}
 					}
 					catch (IOException e) {
-						sink.error(new McpTransportException("Error processing SSE event", e));
+						return Flux.<McpSchema.JSONRPCMessage>error(
+								new McpTransportException("Error processing SSE event", e));
 					}
-					return Flux.<McpSchema.JSONRPCMessage>empty();
 				})
 				.flatMap(jsonRpcMessage -> handler.apply(Mono.just(jsonRpcMessage)))
 				.onErrorComplete(t -> {
 					if (!isClosing) {
 						logger.warn("SSE stream observed an error", t);
-						sink.error(t);
+						if (connected.compareAndSet(false, true)) {
+							sink.error(t);
+						}
 					}
 					return true;
 				})
@@ -540,7 +549,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 						return ResponseBodyHandlers.drain(response.body(), this.maxResponseSize).then();
 					}
 					return ResponseBodyHandlers.decodeAggregateResponse(response.body(), this.maxResponseSize)
-					                           .flatMap(text -> Mono.error(new RuntimeException(
+						.flatMap(text -> Mono.error(new McpTransportException(
 								"Sending message failed with a non-OK HTTP code: " + statusCode + " - " + text)));
 				});
 		});

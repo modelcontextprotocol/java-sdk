@@ -403,15 +403,11 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 							}
 						}
 						else if (statusCode == BAD_REQUEST) {
-							// if the session id was set, but the session no longer
-							// exists, some servers can return 400 instead of 404
-							if (maybeSessionId.isPresent()) {
-								String sessionIdRepresentation = sessionIdOrPlaceholder(maybeSessionId);
-								exception = new McpTransportSessionNotFoundException(sessionIdRepresentation);
-							}
-							else {
-								exception = new McpTransportException("Bad Request. Status code:" + statusCode);
-							}
+							// Unlike a POST, a GET is not treated as a session-not-found
+							// signal on 400: servers also reject the listening stream
+							// itself with 400, which must not cost the client its
+							// session.
+							exception = new McpTransportException("Bad Request. Status code:" + statusCode);
 						}
 						else if (statusCode >= 200 && statusCode < 300) {
 							String contentType = httpResponse.headers()
@@ -521,6 +517,15 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 			final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
 
+			// Once sendMessage() has completed, a later failure can no longer be reported
+			// through its sink: signalling it there would only have Reactor drop it.
+			final AtomicBoolean delivered = new AtomicBoolean();
+			final Runnable markDelivered = () -> {
+				if (delivered.compareAndSet(false, true)) {
+					deliveredSink.success();
+				}
+			};
+
 			Disposable connection = Mono.deferContextual(ctx -> {
 				HttpRequest.Builder requestBuilder = this.requestBuilder.copy();
 
@@ -579,22 +584,17 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 							if (contentType.isBlank() || "0".equals(contentLength) || statusCode == 202) {
 								logger.debug("No body returned for POST in session {}", sessionRepresentation);
-								deliveredSink.success();
+								markDelivered.run();
 								return ResponseBodyHandlers.drain(httpResponse.body(), this.maxResponseSize);
 							}
 							else if (contentType.contains(TEXT_EVENT_STREAM)) {
-								AtomicBoolean delivered = new AtomicBoolean();
-								return consumeSseStream(httpResponse.body(), null, () -> {
-									if (delivered.compareAndSet(false, true)) {
-										deliveredSink.success();
-									}
-								});
+								return consumeSseStream(httpResponse.body(), null, markDelivered);
 							}
 							else if (contentType.contains(APPLICATION_JSON)) {
 								return ResponseBodyHandlers
 									.decodeAggregateResponse(httpResponse.body(), this.maxResponseSize)
 									.flatMapMany(data -> {
-										deliveredSink.success();
+										markDelivered.run();
 										if (sentMessage instanceof McpSchema.JSONRPCNotification) {
 											logger.warn("Notification: {} received non-compliant response: {}",
 													sentMessage, Utils.hasText(data) ? data : "[empty]");
@@ -613,7 +613,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 							logger.warn("Unknown media type {} returned for POST in session {}", contentType,
 									sessionRepresentation);
 							return ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
-									new RuntimeException("Unknown media type returned: " + contentType));
+									new McpTransportException("Unknown media type returned: " + contentType));
 						}
 						else if (statusCode == NOT_FOUND) {
 							if (maybeSessionId.isPresent()) {
@@ -640,7 +640,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						}
 
 						return ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
-								new RuntimeException("Failed to send message, status code: " + statusCode));
+								new McpTransportException("Failed to send message, status code: " + statusCode));
 					})
 					.onErrorMap(CompletionException.class, Throwable::getCause))
 				.retryWhen(authorizationErrorRetrySpec())
@@ -660,10 +660,16 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					catch (Exception e) {
 						logger.error("Error handling exception {}", t.getMessage(), e);
 					}
-					// inform the caller of sendMessage
-					deliveredSink.error(t);
+					// inform the caller of sendMessage, unless it has already completed
+					if (delivered.compareAndSet(false, true)) {
+						deliveredSink.error(t);
+					}
 					return true;
 				})
+				// An exchange can end without anything having signalled delivery, e.g.
+				// an SSE response closed before its first event. The server accepted
+				// the message all the same, so sendMessage() must not be left pending.
+				.doOnComplete(markDelivered)
 				.contextWrite(deliveredSink.contextView())
 				.subscribe();
 

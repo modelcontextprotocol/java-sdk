@@ -47,6 +47,11 @@ class ResponseBodyHandlers {
 	 */
 	private static final int SSE_FRAMING_OVERHEAD = "event: ".length();
 
+	/**
+	 * The type of an SSE event that does not name one with an {@code event:} field.
+	 */
+	private static final String DEFAULT_EVENT_TYPE = "message";
+
 	record SseEvent(String id, String event, String data) {
 	}
 
@@ -368,11 +373,17 @@ class ResponseBodyHandlers {
 
 	/**
 	 * Stateful SSE line parser. Accumulates {@code data:}, {@code id:} and {@code event:}
-	 * fields until a blank line dispatches the event. Per the SSE spec, {@code id} and
-	 * {@code event} persist across events until re-set; {@code data} is reset after each
-	 * dispatch, and a blank line dispatches only when a {@code data:} field was seen,
-	 * whether or not it carried a value. Comments and fields the parser does not handle,
-	 * such as {@code retry:}, are ignored as the spec requires.
+	 * fields until a blank line dispatches the event. Per the SSE spec, {@code id} is the
+	 * last event ID and persists across events until re-set, with an empty value clearing
+	 * it; {@code event} and {@code data} are reset by every blank line, so an event that
+	 * does not name its type is a {@code message} event whatever preceded it. A blank
+	 * line dispatches only when a {@code data:} field was seen, whether or not it carried
+	 * a value. Comments and fields the parser does not handle, such as {@code retry:},
+	 * are ignored as the spec requires.
+	 *
+	 * @see <a href=
+	 * "https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation">Interpreting
+	 * an event stream</a>
 	 */
 	static final class SseEventParser {
 
@@ -399,12 +410,7 @@ class ResponseBodyHandlers {
 
 		Optional<SseEvent> feed(String line) {
 			if (line.isEmpty()) {
-				if (data.length() == 0) {
-					return Optional.empty();
-				}
-				SseEvent result = new SseEvent(id, event, data.toString().trim());
-				data.setLength(0);
-				return Optional.of(result);
+				return flush();
 			}
 			if (line.startsWith("data:")) {
 				// Every data field appends its value followed by a separator, so a
@@ -422,16 +428,16 @@ class ResponseBodyHandlers {
 				data.append(value).append('\n');
 			}
 			else if (line.startsWith("id:")) {
-				String rest = line.substring(3);
-				if (!rest.isEmpty()) {
-					id = rest.trim();
+				String value = line.substring(3).trim();
+				// The spec ignores an id carrying a NULL, and an empty id resets the last
+				// event ID, which leaves nothing to resume from.
+				if (value.indexOf('\0') == -1) {
+					id = value.isEmpty() ? null : value;
 				}
 			}
 			else if (line.startsWith("event:")) {
-				String rest = line.substring(6);
-				if (!rest.isEmpty()) {
-					event = rest.trim();
-				}
+				String value = line.substring(6).trim();
+				event = value.isEmpty() ? null : value;
 			}
 			else if (line.startsWith(":")) {
 				logger.debug("Ignoring comment line: {}", line);
@@ -444,11 +450,19 @@ class ResponseBodyHandlers {
 			return Optional.empty();
 		}
 
+		/**
+		 * Emits the pending event, if a {@code data:} field was seen, and resets the
+		 * per-event state. The event type is reset even when nothing is dispatched, as
+		 * the spec requires, while the id is the last event ID and so survives. An event
+		 * that did not name its type is emitted as a {@code message} event.
+		 */
 		Optional<SseEvent> flush() {
-			if (data.length() == 0) {
+			String type = this.event;
+			this.event = null;
+			if (data.isEmpty()) {
 				return Optional.empty();
 			}
-			SseEvent result = new SseEvent(id, event, data.toString().trim());
+			SseEvent result = new SseEvent(id, type != null ? type : DEFAULT_EVENT_TYPE, data.toString().trim());
 			data.setLength(0);
 			return Optional.of(result);
 		}

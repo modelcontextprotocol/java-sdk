@@ -23,7 +23,7 @@ class SseEventParserTests {
 		assertThat(event).isPresent();
 		assertThat(event.get().data()).isEqualTo("hello");
 		assertThat(event.get().id()).isNull();
-		assertThat(event.get().event()).isNull();
+		assertThat(event.get().event()).isEqualTo("message");
 	}
 
 	@Test
@@ -50,20 +50,53 @@ class SseEventParserTests {
 	}
 
 	@Test
-	void idAndEventPersistAcrossEvents() {
+	void idPersistsAcrossEventsButEventTypeDoesNot() {
 		SseEventParser p = new SseEventParser(Integer.MAX_VALUE);
 		p.feed("id: 1");
-		p.feed("event: message");
+		p.feed("event: endpoint");
 		p.feed("data: one");
 		SseEvent first = p.feed("").orElseThrow();
 		assertThat(first.id()).isEqualTo("1");
-		assertThat(first.event()).isEqualTo("message");
+		assertThat(first.event()).isEqualTo("endpoint");
 
+		// An event that does not name its type is a message event, not another
+		// endpoint event
 		p.feed("data: two");
 		SseEvent second = p.feed("").orElseThrow();
 		assertThat(second.id()).isEqualTo("1");
 		assertThat(second.event()).isEqualTo("message");
 		assertThat(second.data()).isEqualTo("two");
+	}
+
+	@Test
+	void blankLineWithNoDataStillResetsEventType() {
+		SseEventParser p = new SseEventParser(Integer.MAX_VALUE);
+		p.feed("event: endpoint");
+		assertThat(p.feed("")).isEmpty();
+		p.feed("data: payload");
+		SseEvent event = p.feed("").orElseThrow();
+		assertThat(event.event()).isEqualTo("message");
+	}
+
+	@Test
+	void emptyIdClearsLastEventId() {
+		SseEventParser p = new SseEventParser(Integer.MAX_VALUE);
+		p.feed("id: 1");
+		p.feed("data: one");
+		assertThat(p.feed("").orElseThrow().id()).isEqualTo("1");
+
+		p.feed("id:");
+		p.feed("data: two");
+		assertThat(p.feed("").orElseThrow().id()).isNull();
+	}
+
+	@Test
+	void idContainingNullIsIgnored() {
+		SseEventParser p = new SseEventParser(Integer.MAX_VALUE);
+		p.feed("id: 1");
+		p.feed("id: 2\u0000" + "3");
+		p.feed("data: payload");
+		assertThat(p.feed("").orElseThrow().id()).isEqualTo("1");
 	}
 
 	@Test
