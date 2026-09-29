@@ -28,7 +28,6 @@ import com.sun.net.httpserver.HttpServer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.ProtocolVersions;
 import reactor.test.StepVerifier;
 
 /**
@@ -112,18 +111,15 @@ public class HttpClientStreamableHttpTransportEmptyResponseTests {
 			.httpRequestCustomizer(mockRequestCustomizer)
 			.build();
 
-		var initializeRequest = McpSchema.InitializeRequest
-			.builder(ProtocolVersions.MCP_2025_03_26, McpSchema.ClientCapabilities.builder().roots(true).build(),
-					McpSchema.Implementation.builder("MCP Client", "0.3.1").build())
-			.build();
-		var testMessage = new McpSchema.JSONRPCRequest(McpSchema.METHOD_INITIALIZE, "test-id", initializeRequest);
+		// Some servers answer a notification with an empty JSON body rather than 202.
+		var testMessage = new McpSchema.JSONRPCNotification(McpSchema.JSONRPC_VERSION,
+				McpSchema.METHOD_NOTIFICATION_INITIALIZED, null);
 
 		StepVerifier.create(transport.sendMessage(testMessage)).verifyComplete();
 
 		// Verify the customizer was called
-		verify(mockRequestCustomizer, atLeastOnce()).customize(any(), eq("POST"), eq(uri), eq(
-				"{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":\"test-id\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{\"roots\":{\"listChanged\":true}},\"clientInfo\":{\"name\":\"MCP Client\",\"version\":\"0.3.1\"}}}"),
-				any());
+		verify(mockRequestCustomizer, atLeastOnce()).customize(any(), eq("POST"), eq(uri),
+				eq("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"), any());
 
 	}
 

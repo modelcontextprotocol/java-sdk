@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Flow;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -269,6 +268,15 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		}
 	}
 
+	private void handleExceptionSafely(Throwable t) {
+		try {
+			handleException(t);
+		}
+		catch (Exception e) {
+			logger.error("Error handling exception {}", t.getMessage(), e);
+		}
+	}
+
 	@Override
 	public Mono<Void> closeGracefully() {
 		return Mono.defer(() -> {
@@ -282,24 +290,22 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 		});
 	}
 
-	private Flux<McpSchema.JSONRPCMessage> consumeSseStream(Flow.Publisher<List<ByteBuffer>> body,
-			McpTransportStream<Disposable> existingStream, Runnable onFirstMessage) {
+	/**
+	 * Every successfully processed event yields exactly one element, empty when it
+	 * carries no message, so that callers can tell when the first one has arrived.
+	 */
+	private Flux<Optional<McpSchema.JSONRPCMessage>> consumeSseStream(Flow.Publisher<List<ByteBuffer>> body,
+			McpTransportStream<Disposable> existingStream) {
 		Flux<String> lines = ResponseBodyHandlers.decodeLines(body, this.maxResponseSize);
 		return ResponseBodyHandlers.decodeSseResponse(lines, this.maxResponseSize).flatMap(sseEvent -> {
 			if (!isMessageEvent(sseEvent.event())) {
 				logger.debug("Received SSE event with type: {}", sseEvent);
-				if (onFirstMessage != null) {
-					onFirstMessage.run();
-				}
-				return Flux.empty();
+				return Flux.just(Optional.empty());
 			}
 			String data = sseEvent.data();
 			if (data == null || data.isBlank()) {
 				logger.debug("Skipping SSE event with empty data (stream primer)");
-				if (onFirstMessage != null) {
-					onFirstMessage.run();
-				}
-				return Flux.empty();
+				return Flux.just(Optional.empty());
 			}
 			try {
 				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(this.jsonMapper, data);
@@ -307,13 +313,10 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					.of(Optional.ofNullable(sseEvent.id()), List.of(message));
 				McpTransportStream<Disposable> sessionStream = existingStream != null ? existingStream
 						: new DefaultMcpTransportStream<>(this.resumableStreams, this::reconnect);
-				if (onFirstMessage != null) {
-					onFirstMessage.run();
-				}
-				return Flux.from(sessionStream.consumeSseStream(Flux.just(idWithMessages)));
+				return Flux.from(sessionStream.consumeSseStream(Flux.just(idWithMessages))).map(Optional::of);
 			}
 			catch (IOException e) {
-				return Flux.<McpSchema.JSONRPCMessage>error(
+				return Flux.<Optional<McpSchema.JSONRPCMessage>>error(
 						new McpTransportException("Error parsing JSON-RPC message: " + data, e));
 			}
 		});
@@ -395,10 +398,11 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 								"Unrecognized server error when connecting to SSE stream, status code: " + statusCode);
 					}
 					logger.debug("SSE connection established successfully");
-					return consumeSseStream(httpResponse.body(), stream, null);
+					return consumeSseStream(httpResponse.body(), stream);
 				});
 			})
-				.retryWhen(authorizationErrorRetrySpec())
+				.retryWhen(authorizationErrorRetrySpec()).<McpSchema
+						.JSONRPCMessage>handle((message, messages) -> message.ifPresent(messages::next))
 				.flatMap(jsonrpcMessage -> requestHandler.apply(Mono.just(jsonrpcMessage)))
 				.onErrorComplete(t -> {
 					if (t instanceof CompletionException) {
@@ -480,15 +484,6 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 			final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
 
-			// Once sendMessage() has completed, a later failure can no longer be reported
-			// through its sink: signalling it there would only have Reactor drop it.
-			final AtomicBoolean delivered = new AtomicBoolean();
-			final Runnable markDelivered = () -> {
-				if (delivered.compareAndSet(false, true)) {
-					deliveredSink.success();
-				}
-			};
-
 			Disposable connection = Mono.deferContextual(ctx -> {
 				HttpRequest.Builder requestBuilder = this.requestBuilder.copy();
 
@@ -543,29 +538,32 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 					if (contentType.isBlank() || "0".equals(contentLength) || statusCode == 202) {
 						logger.debug("No body returned for POST in session {}", sessionRepresentation);
-						markDelivered.run();
-						return ResponseBodyHandlers.drain(httpResponse.body(), this.maxResponseSize);
+						return ResponseBodyHandlers.<Optional<McpSchema.JSONRPCMessage>>drain(httpResponse.body(),
+								this.maxResponseSize)
+							.startWith(Optional.empty());
 					}
 					else if (contentType.contains(TEXT_EVENT_STREAM)) {
-						return consumeSseStream(httpResponse.body(), null, markDelivered);
+						return consumeSseStream(httpResponse.body(), null);
 					}
 					else if (contentType.contains(APPLICATION_JSON)) {
-						return ResponseBodyHandlers.decodeAggregateResponse(httpResponse.body(), this.maxResponseSize)
-							.flatMapMany(data -> {
-								markDelivered.run();
-								if (sentMessage instanceof McpSchema.JSONRPCNotification) {
-									logger.warn("Notification: {} received non-compliant response: {}", sentMessage,
-											Utils.hasText(data) ? data : "[empty]");
-									return Flux.empty();
-								}
-								try {
-									return Flux.just(McpSchema.deserializeJsonRpcMessage(jsonMapper, data));
-								}
-								catch (IOException e) {
-									return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
-											"Error deserializing JSON-RPC message: " + data, e));
-								}
-							});
+						return ResponseBodyHandlers.decodeAggregateResponse(httpResponse.body(),
+								this.maxResponseSize).<Optional<McpSchema.JSONRPCMessage>>handle((data, messages) -> {
+									if (sentMessage instanceof McpSchema.JSONRPCNotification) {
+										logger.warn("Notification: {} received non-compliant response: {}", sentMessage,
+												Utils.hasText(data) ? data : "[empty]");
+										messages.next(Optional.empty());
+										return;
+									}
+									try {
+										messages
+											.next(Optional.of(McpSchema.deserializeJsonRpcMessage(jsonMapper, data)));
+									}
+									catch (IOException e) {
+										messages.error(new McpTransportException(
+												"Error deserializing JSON-RPC message: " + data, e));
+									}
+								})
+							.flux();
 					}
 
 					logger.warn("Unknown media type {} returned for POST in session {}", contentType,
@@ -575,8 +573,27 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				});
 			})
 				.retryWhen(authorizationErrorRetrySpec())
-				.flatMap(jsonRpcMessage -> requestHandler.apply(Mono.just(jsonRpcMessage)))
 				.onErrorMap(CompletionException.class, t -> t.getCause())
+				// sendMessage() is resolved by the first signal only: any later failure
+				// is
+				// merely handled below, as sendMessage() has already completed by then.
+				// An exchange ending without any event still means the server accepted
+				// the message, so completion resolves it successfully too.
+				.switchOnFirst((first, messages) -> {
+					if (first.isOnError()) {
+						// Handled before failing sendMessage(), so that a session the
+						// server does not recognise is already invalidated by the time
+						// the caller learns about it. Consumed here so that it is not
+						// handled a second time below.
+						handleExceptionSafely(first.getThrowable());
+						deliveredSink.error(first.getThrowable());
+						return Flux.empty();
+					}
+					deliveredSink.success();
+					return messages;
+				}).<McpSchema
+						.JSONRPCMessage>handle((message, messages) -> message.ifPresent(messages::next))
+				.flatMap(jsonRpcMessage -> requestHandler.apply(Mono.just(jsonRpcMessage)))
 				.doFinally(s -> {
 					Disposable ref = disposableRef.getAndSet(null);
 					if (ref != null) {
@@ -584,23 +601,13 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					}
 				})
 				.onErrorComplete(t -> {
-					// handle the error first
-					try {
-						this.handleException(t);
-					}
-					catch (Exception e) {
-						logger.error("Error handling exception {}", t.getMessage(), e);
-					}
-					// inform the caller of sendMessage, unless it has already completed
-					if (delivered.compareAndSet(false, true)) {
-						deliveredSink.error(t);
-					}
+					handleExceptionSafely(t);
 					return true;
 				})
-				// An exchange can end without anything having signalled delivery, e.g.
-				// an SSE response closed before its first event. The server accepted
-				// the message all the same, so sendMessage() must not be left pending.
-				.doOnComplete(markDelivered)
+				// Closing the session before the first signal cancels the exchange:
+				// complete sendMessage() instead of leaving it pending. A no-op once it
+				// has resolved.
+				.doOnCancel(deliveredSink::success)
 				.contextWrite(deliveredSink.contextView())
 				.subscribe();
 
