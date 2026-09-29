@@ -397,15 +397,13 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 					sink.success();
 				}
 			};
-			Disposable connection = Mono
-				.fromFuture(() -> this.httpClient.sendAsync(requestBuilder.build(),
-						HttpResponse.BodyHandlers.ofPublisher()))
+			Disposable connection = ResponseBodyHandlers.sendAsync(this.httpClient, requestBuilder.build())
 				.flatMapMany(response -> {
 					if (isClosing) {
-						// The body is handed over as a publisher and nothing is read off
-						// the wire until it is subscribed, so it has to be drained even
-						// when its content is of no further interest.
-						return ResponseBodyHandlers.drain(response.body(), this.maxResponseSize);
+						// The body is handed over as a publisher and the connection is
+						// only released once it is subscribed to. It is an SSE stream
+						// that may never end, so it is cancelled rather than drained.
+						return ResponseBodyHandlers.cancel(response.body());
 					}
 
 					int statusCode = response.statusCode();
@@ -542,16 +540,15 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", requestUri, body, transportContext));
 		}).flatMap(customizedBuilder -> {
 			var request = customizedBuilder.build();
-			return Mono.fromFuture(this.httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofPublisher()))
-				.flatMap(response -> {
-					int statusCode = response.statusCode();
-					if (statusCode == 200 || statusCode == 201 || statusCode == 202 || statusCode == 206) {
-						return ResponseBodyHandlers.drain(response.body(), this.maxResponseSize).then();
-					}
-					return ResponseBodyHandlers.decodeAggregateResponse(response.body(), this.maxResponseSize)
-						.flatMap(text -> Mono.error(new McpTransportException(
-								"Sending message failed with a non-OK HTTP code: " + statusCode + " - " + text)));
-				});
+			return ResponseBodyHandlers.sendAsync(this.httpClient, request).flatMap(response -> {
+				int statusCode = response.statusCode();
+				if (statusCode == 200 || statusCode == 201 || statusCode == 202 || statusCode == 206) {
+					return ResponseBodyHandlers.drain(response.body(), this.maxResponseSize).then();
+				}
+				return ResponseBodyHandlers.decodeAggregateResponse(response.body(), this.maxResponseSize)
+					.flatMap(text -> Mono.error(new McpTransportException(
+							"Sending message failed with a non-OK HTTP code: " + statusCode + " - " + text)));
+			});
 		});
 	}
 

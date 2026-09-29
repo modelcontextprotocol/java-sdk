@@ -4,6 +4,9 @@
 
 package io.modelcontextprotocol.client.transport;
 
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -14,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Flow;
 import java.util.concurrent.Flow.Publisher;
 
 import org.slf4j.Logger;
@@ -135,8 +139,9 @@ class ResponseBodyHandlers {
 	 * <p>
 	 * Nothing accumulates here, so the bound is not protecting memory: it stops a peer
 	 * from making the transport read an unbounded body only to throw it away. Should the
-	 * body outgrow {@code maxSize}, that failure replaces {@code error}, because the
-	 * response is abandoned before the reason for draining it can be reported.
+	 * body outgrow {@code maxSize}, or fail to be read, that failure is dropped and
+	 * {@code error} is propagated all the same, as it is the reason the body is being
+	 * discarded in the first place.
 	 * @param body the response body
 	 * @param maxSize the maximum number of bytes read for the response body
 	 * @param error the error to propagate once the body has been discarded
@@ -157,6 +162,45 @@ class ResponseBodyHandlers {
 	 */
 	static <T> Flux<T> drain(Publisher<List<ByteBuffer>> body, int maxSize) {
 		return boundTotalBytes(body, maxSize).thenMany(Flux.empty());
+	}
+
+	/**
+	 * Subscribes to the body publisher only to cancel it, which releases the underlying
+	 * connection without reading the body, then completes empty.
+	 *
+	 * <p>
+	 * Unlike {@link #drain}, this suits a body that may never end, such as an SSE stream
+	 * whose content is of no further interest.
+	 * @param body the response body
+	 */
+	static <T> Flux<T> cancel(Publisher<List<ByteBuffer>> body) {
+		return Flux.defer(() -> {
+			cancelBody(body);
+			return Flux.empty();
+		});
+	}
+
+	/**
+	 * Sends {@code request}, handing the response body over as a publisher.
+	 *
+	 * <p>
+	 * Such a body must be subscribed to, or the connection it is read from is never
+	 * released. Should the exchange be cancelled once the response has arrived but before
+	 * its body could be subscribed to, the response is discarded, and its body cancelled.
+	 * @param httpClient the client to send the request with
+	 * @param request the request to send
+	 */
+	static Mono<HttpResponse<Publisher<List<ByteBuffer>>>> sendAsync(HttpClient httpClient, HttpRequest request) {
+		return Mono.fromFuture(() -> httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofPublisher()))
+			.doOnDiscard(HttpResponse.class, response -> {
+				if (response.body() instanceof Publisher<?> body) {
+					cancelBody(body);
+				}
+			});
+	}
+
+	private static void cancelBody(Publisher<?> body) {
+		body.subscribe(CancellingSubscriber.INSTANCE);
 	}
 
 	/**
@@ -465,6 +509,29 @@ class ResponseBodyHandlers {
 			SseEvent result = new SseEvent(id, type != null ? type : DEFAULT_EVENT_TYPE, data.toString().trim());
 			data.setLength(0);
 			return Optional.of(result);
+		}
+
+	}
+
+	private static class CancellingSubscriber implements Flow.Subscriber<Object> {
+
+		private static final CancellingSubscriber INSTANCE = new CancellingSubscriber();
+
+		@Override
+		public void onSubscribe(Flow.Subscription subscription) {
+			subscription.cancel();
+		}
+
+		@Override
+		public void onNext(Object item) {
+		}
+
+		@Override
+		public void onError(Throwable throwable) {
+		}
+
+		@Override
+		public void onComplete() {
 		}
 
 	}
