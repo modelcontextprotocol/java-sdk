@@ -11,7 +11,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -389,14 +389,6 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
 		}).flatMap(requestBuilder -> Mono.create(sink -> {
-			// Once connect() has completed, a later failure can no longer be reported
-			// through its sink: signalling it there would only have Reactor drop it.
-			AtomicBoolean connected = new AtomicBoolean();
-			Runnable markConnected = () -> {
-				if (connected.compareAndSet(false, true)) {
-					sink.success();
-				}
-			};
 			Disposable connection = ResponseBodyHandlers.sendAsync(this.httpClient, requestBuilder.build())
 				.flatMapMany(response -> {
 					if (isClosing) {
@@ -417,7 +409,10 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 								"Failed to connect to SSE stream: " + statusCode);
 					}
 				})
-				.flatMap(sseEvent -> {
+				// Every successfully processed event yields exactly one element, empty
+				// when it carries no message, so that the first one can mark the
+				// connection as established.
+				.<Optional<JSONRPCMessage>>handle((sseEvent, events) -> {
 					try {
 						if (ENDPOINT_EVENT_TYPE.equals(sseEvent.event())) {
 							String messageEndpointUri = sseEvent.data();
@@ -426,46 +421,61 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 							}
 							catch (InvalidSseMessageEndpointException e) {
 								this.messageEndpointSink.tryEmitError(e);
-								return Flux.error(e);
+								events.error(e);
+								return;
 							}
 							if (this.messageEndpointSink.tryEmitValue(messageEndpointUri).isSuccess()) {
-								markConnected.run();
-								return Flux.empty(); // No further processing needed
+								events.next(Optional.empty());
 							}
-							return Flux.error(new McpTransportException("Failed to handle SSE endpoint event"));
+							else {
+								events.error(new McpTransportException("Failed to handle SSE endpoint event"));
+							}
 						}
 						else if (MESSAGE_EVENT_TYPE.equals(sseEvent.event())) {
 							String data = sseEvent.data();
 							if (data == null || data.isBlank()) {
 								logger.debug("Skipping SSE event with empty data (stream primer)");
-								markConnected.run();
-								return Flux.<McpSchema.JSONRPCMessage>empty();
+								events.next(Optional.empty());
 							}
-							JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, data);
-							markConnected.run();
-							return Flux.just(message);
+							else {
+								events.next(Optional.of(McpSchema.deserializeJsonRpcMessage(jsonMapper, data)));
+							}
 						}
 						else {
 							logger.debug("Received unrecognized SSE event type: {}", sseEvent);
-							markConnected.run();
-							return Flux.<McpSchema.JSONRPCMessage>empty();
+							events.next(Optional.empty());
 						}
 					}
 					catch (IOException e) {
-						return Flux.<McpSchema.JSONRPCMessage>error(
-								new McpTransportException("Error processing SSE event", e));
+						events.error(new McpTransportException("Error processing SSE event", e));
 					}
 				})
-				.flatMap(jsonRpcMessage -> handler.apply(Mono.just(jsonRpcMessage)))
+				// connect() is resolved by the first signal only: any later failure is
+				// merely logged below, as connect() has already completed by then.
+				.switchOnFirst((first, events) -> {
+					if (first.hasValue()) {
+						sink.success();
+					}
+					else if (first.isOnError()) {
+						sink.error(first.getThrowable());
+					}
+					else if (first.isOnComplete()) {
+						sink.error(new McpTransportException("SSE stream closed before any event was received"));
+					}
+					return events;
+				})
+				.<JSONRPCMessage>handle((message, messages) -> message.ifPresent(messages::next))
+				.flatMap(message -> handler.apply(Mono.just(message)))
 				.onErrorComplete(t -> {
 					if (!isClosing) {
 						logger.warn("SSE stream observed an error", t);
-						if (connected.compareAndSet(false, true)) {
-							sink.error(t);
-						}
 					}
 					return true;
 				})
+				// A closeGracefully() before the first signal cancels the stream:
+				// complete
+				// connect() instead of leaving it pending. A no-op once it has resolved.
+				.doOnCancel(sink::success)
 				.doFinally(s -> {
 					Disposable ref = this.sseSubscription.getAndSet(null);
 					if (ref != null && !ref.isDisposed()) {
