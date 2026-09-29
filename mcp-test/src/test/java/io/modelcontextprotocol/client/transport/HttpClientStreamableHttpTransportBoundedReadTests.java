@@ -77,6 +77,17 @@ class HttpClientStreamableHttpTransportBoundedReadTests extends HttpClientBounde
 	}
 
 	@Test
+	void shouldIncludeErrorResponseBodyInError() {
+		// What the server says about a failure is the most useful part of it to report.
+		respondWith("POST", endpoint(), 404, "text/plain",
+				body -> body.write("no MCP server here".getBytes(StandardCharsets.UTF_8)));
+
+		StepVerifier.create(sendMessage())
+			.verifyErrorMatches(
+					t -> messageContains(t, "Server Not Found. Status code:404, response body: no MCP server here"));
+	}
+
+	@Test
 	void shouldAcceptEventOfExactlyMaxSize() {
 		// The bound is inclusive and the SSE framing around the payload is given its own
 		// headroom, so a message of exactly maxResponseSize must still be delivered.

@@ -413,8 +413,8 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 						return ResponseBodyHandlers.decodeSseResponse(lines, this.maxResponseSize);
 					}
 					else {
-						return ResponseBodyHandlers.drainThenError(response.body(), this.maxResponseSize,
-								new McpTransportException("Failed to connect to SSE stream: " + statusCode));
+						return ResponseBodyHandlers.readThenError(response.body(), this.maxResponseSize,
+								"Failed to connect to SSE stream: " + statusCode);
 					}
 				})
 				.flatMap(sseEvent -> {

@@ -314,7 +314,7 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			}
 			catch (IOException e) {
 				return Flux.<McpSchema.JSONRPCMessage>error(
-						new McpTransportException("Error parsing JSON-RPC message", e));
+						new McpTransportException("Error parsing JSON-RPC message: " + data, e));
 			}
 		});
 	}
@@ -368,73 +368,34 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 				return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
 			}).flatMapMany(requestBuilder -> {
 				var request = requestBuilder.build();
-				// Classify the response against the session id that this very request
-				// carried, rather than the one currently held by the session, which
-				// can be established concurrently.
-				Optional<String> maybeSessionId = request.headers().firstValue(HttpHeaders.MCP_SESSION_ID);
-
 				return ResponseBodyHandlers.sendAsync(this.httpClient, request).flatMapMany(httpResponse -> {
 					int statusCode = httpResponse.statusCode();
-					Exception exception = null;
-					boolean proceed = false;
 					if (statusCode == 401 || statusCode == 403) {
 						logger.debug("Authorization error in reconnect with code {}", statusCode);
 						var requestSnapshot = new HttpRequestSnapshot(request.uri(), request.method(),
 								request.headers());
-						exception = new McpHttpClientTransportAuthorizationException(
-								"Authorization error connecting to SSE stream", requestSnapshot,
-								toResponseInfo(httpResponse));
+						return ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
+								new McpHttpClientTransportAuthorizationException(
+										"Authorization error connecting to SSE stream", requestSnapshot,
+										toResponseInfo(httpResponse)));
 					}
-					else if (statusCode == METHOD_NOT_ALLOWED) {
+					if (statusCode == METHOD_NOT_ALLOWED) {
 						logger.debug("The server does not support SSE streams, using request-response mode.");
+						return ResponseBodyHandlers.drain(httpResponse.body(), this.maxResponseSize);
 					}
-					else if (statusCode == NOT_FOUND) {
-						if (maybeSessionId.isPresent()) {
-							logger.debug("Session not found for session ID: {}", maybeSessionId.get());
-							String sessionIdRepresentation = sessionIdOrPlaceholder(maybeSessionId);
-							exception = new McpTransportSessionNotFoundException(sessionIdRepresentation);
-						}
-						else {
-							exception = new McpTransportException("Server Not Found. Status code:" + statusCode);
-						}
+					if (statusCode < 200 || statusCode >= 300) {
+						return statusError(request, httpResponse);
 					}
-					else if (statusCode == BAD_REQUEST) {
-						// Some implementations return 400 when presented with a session
-						// id they do not know about, so the session is invalidated.
-						// https://github.com/modelcontextprotocol/typescript-sdk/issues/389
-						if (maybeSessionId.isPresent()) {
-							String sessionIdRepresentation = sessionIdOrPlaceholder(maybeSessionId);
-							exception = new McpTransportSessionNotFoundException(
-									"Session not found for session ID: " + sessionIdRepresentation);
-						}
-						else {
-							exception = new McpTransportException("Bad Request. Status code:" + statusCode);
-						}
+					String contentType = httpResponse.headers()
+						.firstValue(HttpHeaders.CONTENT_TYPE)
+						.orElse("")
+						.toLowerCase();
+					if (!contentType.contains(TEXT_EVENT_STREAM)) {
+						return ResponseBodyHandlers.readThenError(httpResponse.body(), this.maxResponseSize,
+								"Unrecognized server error when connecting to SSE stream, status code: " + statusCode);
 					}
-					else if (statusCode >= 200 && statusCode < 300) {
-						String contentType = httpResponse.headers()
-							.firstValue(HttpHeaders.CONTENT_TYPE)
-							.orElse("")
-							.toLowerCase();
-						if (contentType.contains(TEXT_EVENT_STREAM)) {
-							logger.debug("SSE connection established successfully");
-							proceed = true;
-						}
-						else {
-							exception = new McpTransportException(
-									"Unrecognized server error when connecting to SSE stream, status code: "
-											+ statusCode);
-						}
-					}
-					else {
-						exception = new McpTransportException("Received unrecognized status code: " + statusCode);
-					}
-
-					return proceed ? consumeSseStream(httpResponse.body(), stream, null)
-							: exception != null
-									? ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
-											exception)
-									: ResponseBodyHandlers.drain(httpResponse.body(), this.maxResponseSize);
+					logger.debug("SSE connection established successfully");
+					return consumeSseStream(httpResponse.body(), stream, null);
 				});
 			})
 				.retryWhen(authorizationErrorRetrySpec())
@@ -551,11 +512,6 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 					.from(this.httpRequestCustomizer.customize(builder, "POST", uri, jsonBody, transportContext));
 			}).flatMapMany(requestBuilder -> {
 				var request = requestBuilder.build();
-				// Classify the response against the session id that this very request
-				// carried, rather than the one currently held by the session, which
-				// can be established concurrently.
-				Optional<String> maybeSessionId = request.headers().firstValue(HttpHeaders.MCP_SESSION_ID);
-
 				return ResponseBodyHandlers.sendAsync(this.httpClient, request).flatMapMany(httpResponse -> {
 					int statusCode = httpResponse.statusCode();
 					if (statusCode == 401 || statusCode == 403) {
@@ -573,76 +529,49 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 						reconnect(null).contextWrite(deliveredSink.contextView()).subscribe();
 					}
 
-					String sessionRepresentation = sessionIdOrPlaceholder(maybeSessionId);
-
-					if (statusCode >= 200 && statusCode < 300) {
-						String contentType = httpResponse.headers()
-							.firstValue(HttpHeaders.CONTENT_TYPE)
-							.orElse("")
-							.toLowerCase();
-						String contentLength = httpResponse.headers()
-							.firstValue(HttpHeaders.CONTENT_LENGTH)
-							.orElse(null);
-
-						if (contentType.isBlank() || "0".equals(contentLength) || statusCode == 202) {
-							logger.debug("No body returned for POST in session {}", sessionRepresentation);
-							markDelivered.run();
-							return ResponseBodyHandlers.drain(httpResponse.body(), this.maxResponseSize);
-						}
-						else if (contentType.contains(TEXT_EVENT_STREAM)) {
-							return consumeSseStream(httpResponse.body(), null, markDelivered);
-						}
-						else if (contentType.contains(APPLICATION_JSON)) {
-							return ResponseBodyHandlers
-								.decodeAggregateResponse(httpResponse.body(), this.maxResponseSize)
-								.flatMapMany(data -> {
-									markDelivered.run();
-									if (sentMessage instanceof McpSchema.JSONRPCNotification) {
-										logger.warn("Notification: {} received non-compliant response: {}", sentMessage,
-												Utils.hasText(data) ? data : "[empty]");
-										return Flux.empty();
-									}
-									try {
-										return Flux.just(McpSchema.deserializeJsonRpcMessage(jsonMapper, data));
-									}
-									catch (IOException e) {
-										return Flux.<McpSchema.JSONRPCMessage>error(
-												new McpTransportException("Error deserializing JSON-RPC message", e));
-									}
-								});
-						}
-
-						logger.warn("Unknown media type {} returned for POST in session {}", contentType,
-								sessionRepresentation);
-						return ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
-								new McpTransportException("Unknown media type returned: " + contentType));
-					}
-					else if (statusCode == NOT_FOUND) {
-						if (maybeSessionId.isPresent()) {
-							logger.debug("Session not found for session ID: {}", sessionRepresentation);
-							return ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
-									new McpTransportSessionNotFoundException(
-											"Session not found for session ID: " + sessionRepresentation));
-						}
-						return ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
-								new McpTransportException("Server Not Found. Status code:" + statusCode));
-					}
-					else if (statusCode == BAD_REQUEST) {
-						if (maybeSessionId.isPresent()) {
-							return ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
-									new McpTransportSessionNotFoundException(
-											"Session not found for session ID: " + sessionRepresentation));
-						}
-						return ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
-								new McpTransportException("Bad Request. Status code:" + statusCode));
-					}
-					else if (statusCode >= 400 && statusCode < 500) {
-						return ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
-								new McpTransportException("Invalid request. Status code: " + statusCode));
+					if (statusCode < 200 || statusCode >= 300) {
+						return statusError(request, httpResponse);
 					}
 
+					String sessionRepresentation = sessionIdOrPlaceholder(
+							request.headers().firstValue(HttpHeaders.MCP_SESSION_ID));
+					String contentType = httpResponse.headers()
+						.firstValue(HttpHeaders.CONTENT_TYPE)
+						.orElse("")
+						.toLowerCase();
+					String contentLength = httpResponse.headers().firstValue(HttpHeaders.CONTENT_LENGTH).orElse(null);
+
+					if (contentType.isBlank() || "0".equals(contentLength) || statusCode == 202) {
+						logger.debug("No body returned for POST in session {}", sessionRepresentation);
+						markDelivered.run();
+						return ResponseBodyHandlers.drain(httpResponse.body(), this.maxResponseSize);
+					}
+					else if (contentType.contains(TEXT_EVENT_STREAM)) {
+						return consumeSseStream(httpResponse.body(), null, markDelivered);
+					}
+					else if (contentType.contains(APPLICATION_JSON)) {
+						return ResponseBodyHandlers.decodeAggregateResponse(httpResponse.body(), this.maxResponseSize)
+							.flatMapMany(data -> {
+								markDelivered.run();
+								if (sentMessage instanceof McpSchema.JSONRPCNotification) {
+									logger.warn("Notification: {} received non-compliant response: {}", sentMessage,
+											Utils.hasText(data) ? data : "[empty]");
+									return Flux.empty();
+								}
+								try {
+									return Flux.just(McpSchema.deserializeJsonRpcMessage(jsonMapper, data));
+								}
+								catch (IOException e) {
+									return Flux.<McpSchema.JSONRPCMessage>error(new McpTransportException(
+											"Error deserializing JSON-RPC message: " + data, e));
+								}
+							});
+					}
+
+					logger.warn("Unknown media type {} returned for POST in session {}", contentType,
+							sessionRepresentation);
 					return ResponseBodyHandlers.drainThenError(httpResponse.body(), this.maxResponseSize,
-							new McpTransportException("Failed to send message, status code: " + statusCode));
+							new McpTransportException("Unknown media type returned: " + contentType));
 				});
 			})
 				.retryWhen(authorizationErrorRetrySpec())
@@ -679,6 +608,30 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 			transportSession.addConnection(connection);
 		});
 
+	}
+
+	/**
+	 * Fails the exchange over a response with an error status. A session id the server
+	 * does not recognise invalidates the session; any other failure carries the response
+	 * body, which is what the server said about it.
+	 */
+	private <T> Flux<T> statusError(HttpRequest request, HttpResponse<Flow.Publisher<List<ByteBuffer>>> response) {
+		int statusCode = response.statusCode();
+		// Classify the response against the session id that this very request carried,
+		// rather than the one currently held by the session, which can be established
+		// concurrently. Some implementations return 400 rather than 404 for a session id
+		// they do not know about.
+		// https://github.com/modelcontextprotocol/typescript-sdk/issues/389
+		Optional<String> sessionId = request.headers().firstValue(HttpHeaders.MCP_SESSION_ID);
+		if ((statusCode == NOT_FOUND || statusCode == BAD_REQUEST) && sessionId.isPresent()) {
+			logger.debug("Session not found for session ID: {}", sessionId.get());
+			return ResponseBodyHandlers.drainThenError(response.body(), this.maxResponseSize,
+					new McpTransportSessionNotFoundException(sessionId.get()));
+		}
+		String failure = statusCode == NOT_FOUND ? "Server Not Found. Status code:" + statusCode
+				: statusCode == BAD_REQUEST ? "Bad Request. Status code:" + statusCode
+						: "Received unexpected status code: " + statusCode;
+		return ResponseBodyHandlers.readThenError(response.body(), this.maxResponseSize, failure);
 	}
 
 	private static String sessionIdOrPlaceholder(Optional<String> sessionId) {

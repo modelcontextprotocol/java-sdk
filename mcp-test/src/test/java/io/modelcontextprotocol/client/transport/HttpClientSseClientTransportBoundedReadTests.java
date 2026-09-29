@@ -85,6 +85,17 @@ class HttpClientSseClientTransportBoundedReadTests extends HttpClientBoundedRead
 		assertHungUp(response);
 	}
 
+	@Test
+	void shouldIncludeConnectErrorResponseBodyInError() {
+		// What the server says about a failure is the most useful part of it to report.
+		respondWith("GET", endpoint(), 500, "text/plain",
+				body -> body.write("upstream unavailable".getBytes(StandardCharsets.UTF_8)));
+
+		StepVerifier.create(connect())
+			.verifyErrorMatches(t -> messageContains(t,
+					"Failed to connect to SSE stream: 500, response body: upstream unavailable"));
+	}
+
 	private void awaitTeardown() {
 		try {
 			this.keepStreamOpen.await(10, TimeUnit.SECONDS);

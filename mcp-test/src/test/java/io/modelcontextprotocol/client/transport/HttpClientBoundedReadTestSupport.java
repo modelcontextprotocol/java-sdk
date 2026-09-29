@@ -77,6 +77,15 @@ abstract class HttpClientBoundedReadTestSupport {
 	 */
 	protected CompletableFuture<IOException> respondWith(String method, String path, String contentType,
 			Responder responder) {
+		return respondWith(method, path, 200, contentType, responder);
+	}
+
+	/**
+	 * Like {@link #respondWith(String, String, String, Responder)}, but answering with
+	 * {@code status} rather than 200.
+	 */
+	protected CompletableFuture<IOException> respondWith(String method, String path, int status, String contentType,
+			Responder responder) {
 		CompletableFuture<IOException> response = new CompletableFuture<>();
 		this.server.createContext(path, exchange -> {
 			try {
@@ -85,7 +94,7 @@ abstract class HttpClientBoundedReadTestSupport {
 					return;
 				}
 				exchange.getResponseHeaders().set("Content-Type", contentType);
-				exchange.sendResponseHeaders(200, 0);
+				exchange.sendResponseHeaders(status, 0);
 				try (OutputStream body = exchange.getResponseBody()) {
 					responder.respond(body);
 					response.complete(null);

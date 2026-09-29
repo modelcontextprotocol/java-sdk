@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.modelcontextprotocol.spec.McpTransportException;
+import io.modelcontextprotocol.util.Utils;
 import reactor.adapter.JdkFlowAdapter;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -148,6 +149,19 @@ class ResponseBodyHandlers {
 	 */
 	static <T> Flux<T> drainThenError(Publisher<List<ByteBuffer>> body, int maxSize, Throwable error) {
 		return boundTotalBytes(body, maxSize).onErrorComplete().thenMany(Mono.error(error));
+	}
+
+	/**
+	 * Reads the body as text, then propagates a {@link McpTransportException} carrying
+	 * {@code message} followed by that text, so that what the server said about the
+	 * failure reaches the caller. The body is read under the same bound as any other.
+	 * @param body the response body
+	 * @param maxSize the maximum number of bytes read for the response body
+	 * @param message describes the failure the body explains
+	 */
+	static <T> Flux<T> readThenError(Publisher<List<ByteBuffer>> body, int maxSize, String message) {
+		return decodeAggregateResponse(body, maxSize).flatMapMany(text -> Flux
+			.error(new McpTransportException(Utils.hasText(text) ? message + ", response body: " + text : message)));
 	}
 
 	/**
