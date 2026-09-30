@@ -287,8 +287,12 @@ public class McpServerSession implements McpLoggableSession {
 				resultMono = this.initRequestHandler.handle(initializeRequest);
 			}
 			else {
-				// TODO handle errors for communication to this session without
-				// initialization happening first
+				if (this.state.get() != STATE_INITIALIZED) {
+					logger.warn("Rejecting uninitialized request method: {}", request.method());
+					return Mono.just(McpSchema.JSONRPCResponse.error(request.id(),
+							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INVALID_REQUEST,
+									"Session is not initialized. Cannot process method: " + request.method(), null)));
+				}
 				var handler = this.requestHandlers.get(request.method());
 				if (handler == null) {
 					MethodNotFoundError error = getMethodNotFoundError(request.method());
@@ -326,6 +330,12 @@ public class McpServerSession implements McpLoggableSession {
 				// legacy SSE transport.
 				exchangeSink.tryEmitValue(new McpAsyncServerExchange(this.id, this, clientCapabilities.get(),
 						clientInfo.get(), transportContext, this.jsonSchemaValidator));
+			}
+			else if (this.state.get() != STATE_INITIALIZED) {
+				logger.warn("Rejecting uninitialized notification method: {}", notification.method());
+				return Mono
+					.error(new McpError(new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INVALID_REQUEST,
+							"Session is not initialized. Cannot process method: " + notification.method(), null)));
 			}
 
 			var handler = notificationHandlers.get(notification.method());
