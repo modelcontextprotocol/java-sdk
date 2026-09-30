@@ -197,25 +197,14 @@ class ResponseBodyHandlers {
 		});
 	}
 
-	/**
-	 * Sends {@code request}, handing the response body over as a publisher.
-	 *
-	 * <p>
-	 * Such a body must be subscribed to, or the connection it is read from is never
-	 * released. Should the exchange be cancelled once the response has arrived but before
-	 * its body could be subscribed to, the response is discarded, and its body cancelled.
-	 *
-	 * <p>
-	 * Cancelling the exchange before the response has arrived aborts the request. The
-	 * {@link HttpClient} then fails its future with a {@link CompletionException}
-	 * wrapping a {@link CancellationException}, which {@link Mono#fromFuture} does not
-	 * recognise as the outcome of its own cancellation and reports as a dropped error.
-	 * Only this method can cancel the future, so such a failure is always the expected
-	 * outcome of cancelling, and is ignored.
-	 * @param httpClient the client to send the request with
-	 * @param request the request to send
-	 */
 	static Mono<HttpResponse<Publisher<List<ByteBuffer>>>> sendAsync(HttpClient httpClient, HttpRequest request) {
+		// Not Mono.fromFuture: cancelling aborts the exchange, and the HttpClient then
+		// fails the future with a CompletionException wrapping a CancellationException,
+		// which fromFuture reports as a dropped error. Only this method cna cancel the
+		// future, so that failure is ignored here. Replace with a plain fromFuture,
+		// keeping
+		// the doOnDiscard, once https://github.com/reactor/reactor-core/issues/4415 is
+		// resolved.
 		return Mono.<HttpResponse<Publisher<List<ByteBuffer>>>>create(sink -> {
 			CompletableFuture<HttpResponse<Publisher<List<ByteBuffer>>>> exchange = httpClient.sendAsync(request,
 					HttpResponse.BodyHandlers.ofPublisher());
@@ -238,11 +227,13 @@ class ResponseBodyHandlers {
 					sink.error(cause);
 				}
 			});
-		}).doOnDiscard(HttpResponse.class, response -> {
-			if (response.body() instanceof Publisher<?> body) {
-				cancelBody(body);
-			}
-		});
+		})
+			// A body that is never subscribed to never releases its connection.
+			.doOnDiscard(HttpResponse.class, response -> {
+				if (response.body() instanceof Publisher<?> body) {
+					cancelBody(body);
+				}
+			});
 	}
 
 	private static void cancelBody(Publisher<?> body) {

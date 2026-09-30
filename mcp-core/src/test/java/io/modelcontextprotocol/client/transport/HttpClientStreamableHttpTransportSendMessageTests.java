@@ -26,10 +26,6 @@ import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Verifies that {@link HttpClientStreamableHttpTransport#sendMessage} always resolves,
- * and that it fails when the server's response to it cannot be read.
- */
 class HttpClientStreamableHttpTransportSendMessageTests {
 
 	// Only bounds a regression: every test resolves without waiting on it.

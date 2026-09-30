@@ -23,10 +23,6 @@ import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Verifies that {@link HttpClientSseClientTransport#connect} always resolves, even when
- * the SSE stream ends, fails or is closed before its first event.
- */
 class HttpClientSseClientTransportConnectTests {
 
 	// Only bounds a regression: every test resolves without waiting on it.
