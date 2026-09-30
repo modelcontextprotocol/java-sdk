@@ -17,6 +17,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Flow;
 import java.util.concurrent.Flow.Publisher;
 
@@ -201,16 +204,45 @@ class ResponseBodyHandlers {
 	 * Such a body must be subscribed to, or the connection it is read from is never
 	 * released. Should the exchange be cancelled once the response has arrived but before
 	 * its body could be subscribed to, the response is discarded, and its body cancelled.
+	 *
+	 * <p>
+	 * Cancelling the exchange before the response has arrived aborts the request. The
+	 * {@link HttpClient} then fails its future with a {@link CompletionException}
+	 * wrapping a {@link CancellationException}, which {@link Mono#fromFuture} does not
+	 * recognise as the outcome of its own cancellation and reports as a dropped error.
+	 * Only this method can cancel the future, so such a failure is always the expected
+	 * outcome of cancelling, and is ignored.
 	 * @param httpClient the client to send the request with
 	 * @param request the request to send
 	 */
 	static Mono<HttpResponse<Publisher<List<ByteBuffer>>>> sendAsync(HttpClient httpClient, HttpRequest request) {
-		return Mono.fromFuture(() -> httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofPublisher()))
-			.doOnDiscard(HttpResponse.class, response -> {
-				if (response.body() instanceof Publisher<?> body) {
-					cancelBody(body);
+		return Mono.<HttpResponse<Publisher<List<ByteBuffer>>>>create(sink -> {
+			CompletableFuture<HttpResponse<Publisher<List<ByteBuffer>>>> exchange = httpClient.sendAsync(request,
+					HttpResponse.BodyHandlers.ofPublisher());
+			sink.onCancel(() -> exchange.cancel(true));
+			exchange.whenComplete((response, error) -> {
+				if (error == null) {
+					// Emit the response so the body can be consumed.
+					// If the surrounding Mono was cancelled though and due to a race
+					// the headers were already parsed, the below call will simply
+					// discard the response.
+					sink.success(response);
+					return;
+				}
+				Throwable cause = error instanceof CompletionException && error.getCause() != null ? error.getCause()
+						: error;
+				if (cause instanceof CancellationException) {
+					sink.success();
+				}
+				else {
+					sink.error(cause);
 				}
 			});
+		}).doOnDiscard(HttpResponse.class, response -> {
+			if (response.body() instanceof Publisher<?> body) {
+				cancelBody(body);
+			}
+		});
 	}
 
 	private static void cancelBody(Publisher<?> body) {

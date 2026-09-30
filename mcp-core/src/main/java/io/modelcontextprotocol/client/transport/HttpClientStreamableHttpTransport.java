@@ -521,7 +521,10 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 
 					if (transportSession
 						.markInitialized(httpResponse.headers().firstValue("mcp-session-id").orElse(null))) {
-						reconnect(null).contextWrite(deliveredSink.contextView()).subscribe();
+						// Fails only when the transport has been closed in the meantime,
+						// in which case there is no stream left to open.
+						reconnect(null).contextWrite(deliveredSink.contextView()).subscribe(ignored -> {
+						}, t -> logger.debug("Not opening the SSE stream: {}", t.getMessage()));
 					}
 
 					if (statusCode < 200 || statusCode >= 300) {
