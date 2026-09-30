@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
+import io.modelcontextprotocol.client.transport.McpStdioServerProcessExitException;
 import io.modelcontextprotocol.spec.McpClientSession;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -209,7 +210,7 @@ class LifecycleInitializer {
 
 		private void complete(McpSchema.InitializeResult initializeResult) {
 			// inform all the subscribers waiting for the initialization
-			this.initSink.emitValue(initializeResult, Sinks.EmitFailureHandler.FAIL_FAST);
+			this.initSink.tryEmitValue(initializeResult);
 		}
 
 		private void cacheResult(McpSchema.InitializeResult initializeResult) {
@@ -218,7 +219,7 @@ class LifecycleInitializer {
 		}
 
 		private void error(Throwable t) {
-			this.initSink.emitError(t, Sinks.EmitFailureHandler.FAIL_FAST);
+			this.initSink.tryEmitError(t);
 		}
 
 		private void close() {
@@ -259,6 +260,12 @@ class LifecycleInitializer {
 			// the implicit initialization step.
 			this.withInitialization("re-initializing", result -> Mono.empty()).subscribe();
 		}
+		else if (t instanceof McpStdioServerProcessExitException) {
+			DefaultInitialization current = this.initializationRef.get();
+			if (current != null && current.initializeResult() == null) {
+				current.error(t);
+			}
+		}
 	}
 
 	/**
@@ -277,8 +284,8 @@ class LifecycleInitializer {
 			boolean needsToInitialize = previous == null;
 			logger.debug(needsToInitialize ? "Initialization process started" : "Joining previous initialization");
 
-			Mono<McpSchema.InitializeResult> initializationJob = needsToInitialize
-					? this.doInitialize(newInit, this.postInitializationHook, ctx) : previous.await();
+			Mono<McpSchema.InitializeResult> initializationJob = needsToInitialize ? Mono.firstWithSignal(
+					newInit.await(), this.doInitialize(newInit, this.postInitializationHook, ctx)) : previous.await();
 
 			return initializationJob.map(initializeResult -> this.initializationRef.get())
 				.timeout(this.initializationTimeout)
