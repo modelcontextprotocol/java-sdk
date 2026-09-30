@@ -645,16 +645,27 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 							});
 					}
 					else if (contentType.contains(APPLICATION_JSON)) {
-						deliveredSink.success();
 						String data = ((ResponseSubscribers.AggregateResponseEvent) responseEvent).data();
 						if (sentMessage instanceof McpSchema.JSONRPCNotification) {
 							logger.warn("Notification: {} received non-compliant response: {}", sentMessage,
 									Utils.hasText(data) ? data : "[empty]");
+							deliveredSink.success();
 							return Mono.empty();
 						}
 
 						try {
-							return Mono.just(McpSchema.deserializeJsonRpcMessage(jsonMapper, data));
+							McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, data);
+							// Signal delivery only after the payload has been parsed
+							// successfully.
+							// Completing the sink before deserialization would swallow a
+							// parse
+							// failure: McpClientSession relies on the error signal to
+							// remove the
+							// pending response, and without it the caller waits for the
+							// full
+							// request timeout and only sees a TimeoutException.
+							deliveredSink.success();
+							return Mono.just(message);
 						}
 						catch (IOException e) {
 							return Mono.error(new McpTransportException(
