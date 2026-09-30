@@ -496,6 +496,27 @@ var client = McpClient.sync(transport)
     .build();
 ```
 
+### Required Tool Result Content
+
+By default, the SDK accepts a `tools/call` result with missing or null `content` and
+replaces it with an empty list. To reject these responses before that substitution,
+enable content validation on either the synchronous or asynchronous client builder:
+
+```java
+var client = McpClient.async(transport)
+    .validateCallToolResultContent(true)
+    .build();
+```
+
+With this option enabled, `callTool` fails with `IllegalArgumentException` when
+`content` is missing, null, or not an array, including when `isError` is true.
+An explicit `content: []` remains valid. This validates the required content field;
+it is separate from validating `structuredContent` against a tool's `outputSchema`.
+It does not enable strict validation for other MCP messages.
+
+A rejected response does not imply that the server rolled back the tool's effects.
+The SDK does not retry the tool call because content validation failed.
+
 ### Pagination
 
 `listTools`, `listResources`, `listResourceTemplates`, and `listPrompts` all accept an optional opaque `cursor` string, and their results carry a `nextCursor` that is non-null while more pages remain. Loop until `nextCursor` is `null` to collect every page:
