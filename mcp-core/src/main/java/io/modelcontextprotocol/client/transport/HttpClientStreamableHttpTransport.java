@@ -645,16 +645,18 @@ public class HttpClientStreamableHttpTransport implements McpClientTransport {
 							});
 					}
 					else if (contentType.contains(APPLICATION_JSON)) {
-						deliveredSink.success();
 						String data = ((ResponseSubscribers.AggregateResponseEvent) responseEvent).data();
 						if (sentMessage instanceof McpSchema.JSONRPCNotification) {
 							logger.warn("Notification: {} received non-compliant response: {}", sentMessage,
 									Utils.hasText(data) ? data : "[empty]");
+							deliveredSink.success();
 							return Mono.empty();
 						}
 
 						try {
-							return Mono.just(McpSchema.deserializeJsonRpcMessage(jsonMapper, data));
+							McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, data);
+							deliveredSink.success();
+							return Mono.just(message);
 						}
 						catch (IOException e) {
 							return Mono.error(new McpTransportException(
