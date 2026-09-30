@@ -18,6 +18,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonValue;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
@@ -73,10 +74,17 @@ public final class McpSchema {
 
 	public static final String METHOD_NOTIFICATION_TOOLS_LIST_CHANGED = "notifications/tools/list_changed";
 
+	// Skills Extension Methods
+	public static final String METHOD_SKILLS_LIST = "skills/list";
+
+	public static final String METHOD_SKILLS_GET = "skills/get";
+
 	// Resources Methods
 	public static final String METHOD_RESOURCES_LIST = "resources/list";
 
 	public static final String METHOD_RESOURCES_READ = "resources/read";
+
+	public static final String METHOD_RESOURCES_DIRECTORY_READ = "resources/directory/read";
 
 	public static final String METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED = "notifications/resources/list_changed";
 
@@ -794,7 +802,42 @@ public final class McpSchema {
 		@JsonProperty("logging") LoggingCapabilities logging,
 		@JsonProperty("prompts") PromptCapabilities prompts,
 		@JsonProperty("resources") ResourceCapabilities resources,
-		@JsonProperty("tools") ToolCapabilities tools) { // @formatter:on
+		@JsonProperty("tools") ToolCapabilities tools,
+		@JsonProperty("extensions") Map<String, Object> extensions) { // @formatter:on
+
+		/**
+		 * @deprecated Use the constructor including {@code extensions}.
+		 */
+		@Deprecated
+		public ServerCapabilities(CompletionCapabilities completions, Map<String, Object> experimental,
+				LoggingCapabilities logging, PromptCapabilities prompts, ResourceCapabilities resources,
+				ToolCapabilities tools) {
+			this(completions, experimental, logging, prompts, resources, tools, null);
+		}
+
+		/**
+		 * Whether the Skills extension declares support for
+		 * {@code resources/directory/read}.
+		 * @return {@code true} only if the extension declares {@code directoryRead: true}
+		 */
+		public boolean skillsDirectoryReadEnabled() {
+			if (!(skillsExtension() instanceof Map<?, ?> skills)) {
+				return false;
+			}
+			return Boolean.TRUE.equals(skills.get("directoryRead"));
+		}
+
+		/**
+		 * Whether the server declares the SEP-2640 Skills extension.
+		 * @return {@code true} if the Skills extension is declared
+		 */
+		public boolean skillsExtensionEnabled() {
+			return skillsExtension() != null;
+		}
+
+		private Object skillsExtension() {
+			return extensions == null ? null : extensions.get("io.modelcontextprotocol/skills");
+		}
 
 		/**
 		 * Present if the server supports argument autocompletion suggestions.
@@ -923,6 +966,7 @@ public final class McpSchema {
 			builder.prompts = this.prompts;
 			builder.resources = this.resources;
 			builder.tools = this.tools;
+			builder.extensions = this.extensions;
 			return builder;
 		}
 
@@ -943,6 +987,8 @@ public final class McpSchema {
 			private ResourceCapabilities resources;
 
 			private ToolCapabilities tools;
+
+			private Map<String, Object> extensions;
 
 			public Builder completions() {
 				this.completions = new CompletionCapabilities();
@@ -974,8 +1020,14 @@ public final class McpSchema {
 				return this;
 			}
 
+			public Builder extensions(Map<String, Object> extensions) {
+				this.extensions = extensions;
+				return this;
+			}
+
 			public ServerCapabilities build() {
-				return new ServerCapabilities(completions, experimental, logging, prompts, resources, tools);
+				return new ServerCapabilities(completions, experimental, logging, prompts, resources, tools,
+						extensions);
 			}
 
 		}
@@ -1797,6 +1849,44 @@ public final class McpSchema {
 	}
 
 	/**
+	 * Sent from the client to list the direct children of a directory resource.
+	 *
+	 * @param uri The URI of the directory resource.
+	 * @param cursor An optional pagination cursor from a previous directory read.
+	 * @param meta See specification for notes on _meta usage.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ReadDirectoryRequest( // @formatter:off
+		@JsonProperty("uri") String uri,
+		@JsonProperty("cursor") String cursor,
+		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
+
+		public ReadDirectoryRequest {
+			Assert.notNull(uri, "uri must not be null");
+		}
+
+		@JsonCreator
+		static ReadDirectoryRequest fromJson(@JsonProperty("uri") String uri, @JsonProperty("cursor") String cursor,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (uri == null) {
+				logger.warn(
+						"ReadDirectoryRequest: missing required field 'uri' during deserialization, using default ''");
+				uri = "";
+			}
+			return new ReadDirectoryRequest(uri, cursor, meta);
+		}
+
+		public ReadDirectoryRequest(String uri, String cursor) {
+			this(uri, cursor, null);
+		}
+
+		public ReadDirectoryRequest(String uri) {
+			this(uri, null, null);
+		}
+	}
+
+	/**
 	 * The server's response to a resources/read request from the client.
 	 *
 	 * @param contents The contents of the resource
@@ -2470,6 +2560,303 @@ public final class McpSchema {
 				return new ListPromptsResult(prompts, nextCursor, meta);
 			}
 
+		}
+	}
+
+	// ---------------------------
+	// Skills Extension
+	// ---------------------------
+	/**
+	 * A file in a skill's manifest.
+	 *
+	 * @param uri The resource URI of the file.
+	 * @param digest The content digest, including its algorithm prefix.
+	 * @param size The file size in bytes.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record SkillResource( // @formatter:off
+		@JsonProperty("uri") String uri,
+		@JsonProperty("digest") String digest,
+		@JsonProperty("size") Long size) { // @formatter:on
+
+		public SkillResource {
+			Assert.notNull(uri, "uri must not be null");
+			Assert.notNull(digest, "digest must not be null");
+			Assert.notNull(size, "size must not be null");
+		}
+
+		@JsonCreator
+		static SkillResource fromJson(@JsonProperty("uri") String uri, @JsonProperty("digest") String digest,
+				@JsonProperty("size") Long size) {
+			if (uri == null || digest == null || size == null) {
+				logger.warn("SkillResource: missing required fields during deserialization; using safe defaults");
+				uri = uri == null ? "" : uri;
+				digest = digest == null ? "" : digest;
+				size = size == null ? 0L : size;
+			}
+			return new SkillResource(uri, digest, size);
+		}
+	}
+
+	/**
+	 * The two wire representations permitted for a skill resource manifest.
+	 *
+	 * <p>
+	 * The extension represents a static manifest directly as an array and a dynamic
+	 * manifest as the string {@code "dynamic"}. The {@link JsonValue} and delegating
+	 * creator preserve that union without adding a Java-only wrapper to the wire format.
+	 *
+	 * @param manifest The static resource manifest, or {@code null} when dynamic.
+	 * @param dynamic Whether the skill's resources are generated dynamically.
+	 */
+	public record SkillResources(List<SkillResource> manifest, boolean dynamic) {
+
+		public SkillResources {
+			if (dynamic == (manifest != null)) {
+				throw new IllegalArgumentException("exactly one of manifest or dynamic must be set");
+			}
+		}
+
+		public static SkillResources manifest(List<SkillResource> manifest) {
+			Assert.notNull(manifest, "manifest must not be null");
+			return new SkillResources(manifest, false);
+		}
+
+		public static SkillResources dynamicResources() {
+			return new SkillResources(null, true);
+		}
+
+		@JsonValue
+		Object toJson() {
+			return dynamic ? "dynamic" : manifest;
+		}
+
+		@JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+		static SkillResources fromJson(List<SkillResource> manifest) {
+			return manifest(manifest);
+		}
+
+		@JsonCreator
+		static SkillResources fromJson(String value) {
+			if (!"dynamic".equals(value)) {
+				throw new IllegalArgumentException("resources must be an array or 'dynamic'");
+			}
+			return dynamicResources();
+		}
+	}
+
+	/**
+	 * The verbatim YAML frontmatter of a skill, represented on the wire as a JSON object.
+	 *
+	 * <p>
+	 * The Agent Skills specification requires {@code name} and {@code description}, but
+	 * permits additional fields. This type preserves every field while providing typed
+	 * accessors for the fields required by the specification.
+	 *
+	 * @param values Every frontmatter field, including fields unknown to this SDK.
+	 */
+	public record SkillFrontmatter(Map<String, Object> values) {
+
+		public SkillFrontmatter {
+			Assert.notNull(values, "frontmatter values must not be null");
+		}
+
+		public static SkillFrontmatter of(Map<String, Object> values) {
+			return new SkillFrontmatter(values);
+		}
+
+		/**
+		 * @return The required skill name, or {@code null} when a non-conforming peer
+		 * omits it.
+		 */
+		public String name() {
+			return this.values.get("name") instanceof String name ? name : null;
+		}
+
+		/**
+		 * @return The required skill description, or {@code null} when a non-conforming
+		 * peer omits it.
+		 */
+		public String description() {
+			return this.values.get("description") instanceof String description ? description : null;
+		}
+
+		/**
+		 * @return The optional frontmatter metadata, or {@code null} when absent or not
+		 * an object.
+		 */
+		public Map<String, Object> metadata() {
+			if (!(this.values.get("metadata") instanceof Map<?, ?> metadata)) {
+				return null;
+			}
+			Map<String, Object> result = new HashMap<>();
+			metadata.forEach((key, value) -> {
+				if (key instanceof String name) {
+					result.put(name, value);
+				}
+			});
+			return result;
+		}
+
+		@JsonValue
+		Map<String, Object> toJson() {
+			return this.values;
+		}
+
+		@JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+		static SkillFrontmatter fromJson(Map<String, Object> values) {
+			return new SkillFrontmatter(values == null ? Map.of() : values);
+		}
+	}
+
+	/**
+	 * A skill entry returned by the Skills extension.
+	 *
+	 * @param uri The URI of the skill's {@code SKILL.md} resource.
+	 * @param frontmatter The verbatim Agent Skills frontmatter.
+	 * @param resources The static resource manifest or a dynamic-manifest marker.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record Skill( // @formatter:off
+		@JsonProperty("uri") String uri,
+		@JsonProperty("frontmatter") SkillFrontmatter frontmatter,
+		@JsonProperty("resources") SkillResources resources) { // @formatter:on
+
+		public Skill {
+			Assert.notNull(uri, "uri must not be null");
+			Assert.notNull(frontmatter, "frontmatter must not be null");
+			Assert.notNull(resources, "resources must not be null");
+		}
+
+		@JsonCreator
+		static Skill fromJson(@JsonProperty("uri") String uri,
+				@JsonProperty("frontmatter") SkillFrontmatter frontmatter,
+				@JsonProperty("resources") SkillResources resources) {
+			if (uri == null || frontmatter == null || resources == null) {
+				logger.warn("Skill: missing required fields during deserialization; using safe defaults");
+				uri = uri == null ? "" : uri;
+				frontmatter = frontmatter == null ? SkillFrontmatter.of(Map.of()) : frontmatter;
+				resources = resources == null ? SkillResources.manifest(List.of()) : resources;
+			}
+			return new Skill(uri, frontmatter, resources);
+		}
+
+	}
+
+	/**
+	 * The server's response to a {@code skills/list} request.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record ListSkillsResult( // @formatter:off
+		@JsonProperty("skills") List<Skill> skills,
+		@JsonProperty("nextCursor") String nextCursor,
+		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+
+		public ListSkillsResult {
+			Assert.notNull(skills, "skills must not be null");
+		}
+
+		@JsonCreator
+		static ListSkillsResult fromJson(@JsonProperty("skills") List<Skill> skills,
+				@JsonProperty("nextCursor") String nextCursor, @JsonProperty("_meta") Map<String, Object> meta) {
+			if (skills == null) {
+				logger
+					.warn("ListSkillsResult: missing required field 'skills' during deserialization, using default []");
+				skills = List.of();
+			}
+			return new ListSkillsResult(skills, nextCursor, meta);
+		}
+
+		public static Builder builder(List<Skill> skills) {
+			return new Builder(skills);
+		}
+
+		public static class Builder {
+
+			private final List<Skill> skills;
+
+			private String nextCursor;
+
+			private Map<String, Object> meta;
+
+			private Builder(List<Skill> skills) {
+				Assert.notNull(skills, "skills must not be null");
+				this.skills = skills;
+			}
+
+			public Builder nextCursor(String nextCursor) {
+				this.nextCursor = nextCursor;
+				return this;
+			}
+
+			public Builder meta(Map<String, Object> meta) {
+				this.meta = meta;
+				return this;
+			}
+
+			public ListSkillsResult build() {
+				return new ListSkillsResult(skills, nextCursor, meta);
+			}
+
+		}
+	}
+
+	/**
+	 * Parameters for a {@code skills/get} request.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record GetSkillRequest( // @formatter:off
+		@JsonProperty("uri") String uri,
+		@JsonProperty("_meta") Map<String, Object> meta) implements Request { // @formatter:on
+
+		public GetSkillRequest {
+			Assert.notNull(uri, "uri must not be null");
+		}
+
+		@JsonCreator
+		static GetSkillRequest fromJson(@JsonProperty("uri") String uri,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (uri == null) {
+				logger.warn("GetSkillRequest: missing required field 'uri' during deserialization, using default ''");
+				uri = "";
+			}
+			return new GetSkillRequest(uri, meta);
+		}
+
+		public GetSkillRequest(String uri) {
+			this(uri, null);
+		}
+	}
+
+	/**
+	 * The server's response to a {@code skills/get} request.
+	 */
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record GetSkillResult( // @formatter:off
+		@JsonProperty("skill") Skill skill,
+		@JsonProperty("_meta") Map<String, Object> meta) implements Result { // @formatter:on
+
+		public GetSkillResult {
+			Assert.notNull(skill, "skill must not be null");
+		}
+
+		@JsonCreator
+		static GetSkillResult fromJson(@JsonProperty("skill") Skill skill,
+				@JsonProperty("_meta") Map<String, Object> meta) {
+			if (skill == null) {
+				logger.warn("GetSkillResult: missing required field 'skill'; using an empty skill");
+				skill = new Skill("", SkillFrontmatter.of(Map.of()), SkillResources.manifest(List.of()));
+			}
+			return new GetSkillResult(skill, meta);
+		}
+
+		public GetSkillResult(Skill skill) {
+			this(skill, null);
 		}
 	}
 

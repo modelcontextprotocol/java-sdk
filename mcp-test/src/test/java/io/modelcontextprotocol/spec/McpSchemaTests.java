@@ -376,6 +376,28 @@ public class McpSchemaTests {
 							{"protocolVersion":"2024-11-05","capabilities":{"logging":{},"prompts":{"listChanged":true},"resources":{"subscribe":true,"listChanged":true},"tools":{"listChanged":true}},"serverInfo":{"name":"test-server","version":"1.0.0"},"instructions":"Server initialized successfully"}"""));
 	}
 
+	@Test
+	void serverCapabilitiesDeserializesWithoutExtensions() throws Exception {
+		McpSchema.ServerCapabilities capabilities = JSON_MAPPER.readValue("{}", McpSchema.ServerCapabilities.class);
+
+		assertThat(capabilities.extensions()).isNull();
+	}
+
+	@Test
+	void serverCapabilitiesOmitsNullExtensions() throws Exception {
+		String json = JSON_MAPPER.writeValueAsString(McpSchema.ServerCapabilities.builder().build());
+
+		assertThatJson(json).isEqualTo(json("{}"));
+	}
+
+	@Test
+	void serverCapabilitiesToleratesUnknownFieldsWithExtensionsAbsent() throws Exception {
+		McpSchema.ServerCapabilities capabilities = JSON_MAPPER.readValue("""
+				{"futureCapability":true}""", McpSchema.ServerCapabilities.class);
+
+		assertThat(capabilities.extensions()).isNull();
+	}
+
 	// Resource Tests
 
 	@Test
@@ -669,6 +691,131 @@ public class McpSchemaTests {
 			.isEqualTo(
 					json("""
 							{"prompts":[{"name":"prompt1","title":"First prompt","description":"First prompt","arguments":[{"name":"arg","title":"Argument","description":"An argument","required":true}]},{"name":"prompt2","title":"Second prompt","description":"Second prompt","arguments":[]}],"nextCursor":"next-cursor"}"""));
+	}
+
+	@Test
+	void testSkillResults() throws Exception {
+		McpSchema.SkillResource resource = new McpSchema.SkillResource("skill://pdf/SKILL.md", "sha256:abc", 512L);
+		McpSchema.Skill skill = new McpSchema.Skill("skill://pdf/SKILL.md",
+				McpSchema.SkillFrontmatter.of(Map.of("name", "pdf", "description", "Process PDFs")),
+				McpSchema.SkillResources.manifest(List.of(resource)));
+
+		McpSchema.ListSkillsResult listResult = McpSchema.ListSkillsResult.builder(List.of(skill))
+			.nextCursor("next-cursor")
+			.build();
+		String listJson = JSON_MAPPER.writeValueAsString(listResult);
+		assertThatJson(listJson).isEqualTo(
+				json("""
+						{"skills":[{"uri":"skill://pdf/SKILL.md","frontmatter":{"name":"pdf","description":"Process PDFs"},"resources":[{"uri":"skill://pdf/SKILL.md","digest":"sha256:abc","size":512}]}],"nextCursor":"next-cursor"}"""));
+
+		McpSchema.GetSkillResult getResult = JSON_MAPPER.readValue("""
+				{"skill":{"uri":"skill://pdf/SKILL.md","frontmatter":{"name":"pdf"},"resources":"dynamic"}}""",
+				McpSchema.GetSkillResult.class);
+		assertThat(getResult.skill().resources().dynamic()).isTrue();
+		assertThat(getResult.skill().resources().manifest()).isNull();
+		assertThat(getResult.skill().frontmatter().name()).isEqualTo("pdf");
+	}
+
+	@Test
+	void testReadDirectoryRequest() throws Exception {
+		McpSchema.ReadDirectoryRequest request = new McpSchema.ReadDirectoryRequest("skill://pdf/templates", "cursor-1",
+				Map.of("progressToken", "token"));
+
+		assertThatJson(JSON_MAPPER.writeValueAsString(request)).isEqualTo(json("""
+				{"uri":"skill://pdf/templates","cursor":"cursor-1","_meta":{"progressToken":"token"}}"""));
+	}
+
+	@Test
+	void skillSchemaRequiredConstructorsRejectNull() {
+		McpSchema.SkillResource resource = new McpSchema.SkillResource("skill://pdf/SKILL.md", "sha256:abc", 1L);
+		McpSchema.SkillFrontmatter frontmatter = McpSchema.SkillFrontmatter.of(Map.of());
+		McpSchema.SkillResources resources = McpSchema.SkillResources.manifest(List.of(resource));
+
+		assertThatThrownBy(() -> new McpSchema.ReadDirectoryRequest(null)).isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new McpSchema.SkillResource(null, "sha256:abc", 1L))
+			.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new McpSchema.SkillResource("skill://pdf/SKILL.md", null, 1L))
+			.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new McpSchema.SkillResource("skill://pdf/SKILL.md", "sha256:abc", null))
+			.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new McpSchema.SkillFrontmatter(null)).isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new McpSchema.Skill(null, frontmatter, resources))
+			.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new McpSchema.Skill("skill://pdf/SKILL.md", null, resources))
+			.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new McpSchema.Skill("skill://pdf/SKILL.md", frontmatter, null))
+			.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new McpSchema.ListSkillsResult(null, null, null))
+			.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new McpSchema.GetSkillRequest(null)).isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new McpSchema.GetSkillResult(null)).isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	void skillSchemaDeserializesMissingRequiredFieldsWithDefaults() throws Exception {
+		McpSchema.ReadDirectoryRequest directoryRequest = JSON_MAPPER.readValue("{}",
+				McpSchema.ReadDirectoryRequest.class);
+		McpSchema.SkillResource resourceWithoutUri = JSON_MAPPER.readValue("""
+				{"digest":"sha256:abc","size":1}""", McpSchema.SkillResource.class);
+		McpSchema.SkillResource resourceWithoutDigest = JSON_MAPPER.readValue("""
+				{"uri":"skill://pdf/SKILL.md","size":1}""", McpSchema.SkillResource.class);
+		McpSchema.SkillResource resourceWithoutSize = JSON_MAPPER.readValue("""
+				{"uri":"skill://pdf/SKILL.md","digest":"sha256:abc"}""", McpSchema.SkillResource.class);
+		McpSchema.Skill skillWithoutUri = JSON_MAPPER.readValue("""
+				{"frontmatter":{},"resources":[]}""", McpSchema.Skill.class);
+		McpSchema.Skill skillWithoutFrontmatter = JSON_MAPPER.readValue("""
+				{"uri":"skill://pdf/SKILL.md","resources":[]}""", McpSchema.Skill.class);
+		McpSchema.Skill skillWithoutResources = JSON_MAPPER.readValue("""
+				{"uri":"skill://pdf/SKILL.md","frontmatter":{}}""", McpSchema.Skill.class);
+		McpSchema.ListSkillsResult listResult = JSON_MAPPER.readValue("{}", McpSchema.ListSkillsResult.class);
+		McpSchema.GetSkillRequest getRequest = JSON_MAPPER.readValue("{}", McpSchema.GetSkillRequest.class);
+		McpSchema.GetSkillResult getResult = JSON_MAPPER.readValue("{}", McpSchema.GetSkillResult.class);
+		McpSchema.Skill nestedResourceSkill = JSON_MAPPER.readValue("""
+				{"uri":"skill://pdf/SKILL.md","frontmatter":{},"resources":[{}]}""", McpSchema.Skill.class);
+
+		assertThat(directoryRequest.uri()).isEmpty();
+		assertThat(resourceWithoutUri.uri()).isEmpty();
+		assertThat(resourceWithoutDigest.digest()).isEmpty();
+		assertThat(resourceWithoutSize.size()).isZero();
+		assertThat(skillWithoutUri.uri()).isEmpty();
+		assertThat(skillWithoutFrontmatter.frontmatter().values()).isEmpty();
+		assertThat(skillWithoutResources.resources().manifest()).isEmpty();
+		assertThat(listResult.skills()).isEmpty();
+		assertThat(getRequest.uri()).isEmpty();
+		assertThat(getResult.skill().uri()).isEmpty();
+		assertThat(nestedResourceSkill.resources().manifest()).singleElement().satisfies(nestedResource -> {
+			assertThat(nestedResource.uri()).isEmpty();
+			assertThat(nestedResource.digest()).isEmpty();
+			assertThat(nestedResource.size()).isZero();
+		});
+	}
+
+	@Test
+	void skillSchemaToleratesUnknownFields() throws Exception {
+		assertThat(JSON_MAPPER.readValue("""
+				{"uri":"skill://pdf","futureField":true}""", McpSchema.ReadDirectoryRequest.class).uri())
+			.isEqualTo("skill://pdf");
+		assertThat(JSON_MAPPER
+			.readValue("""
+					{"uri":"skill://pdf/SKILL.md","digest":"sha256:abc","size":1,"futureField":true}""",
+					McpSchema.SkillResource.class)
+			.uri()).isEqualTo("skill://pdf/SKILL.md");
+		assertThat(JSON_MAPPER
+			.readValue("""
+					{"uri":"skill://pdf/SKILL.md","frontmatter":{},"resources":[],"futureField":true}""",
+					McpSchema.Skill.class)
+			.uri()).isEqualTo("skill://pdf/SKILL.md");
+		assertThat(JSON_MAPPER.readValue("""
+				{"skills":[],"futureField":true}""", McpSchema.ListSkillsResult.class).skills()).isEmpty();
+		assertThat(JSON_MAPPER.readValue("""
+				{"uri":"skill://pdf/SKILL.md","futureField":true}""", McpSchema.GetSkillRequest.class).uri())
+			.isEqualTo("skill://pdf/SKILL.md");
+		assertThat(JSON_MAPPER
+			.readValue("""
+					{"skill":{"uri":"skill://pdf/SKILL.md","frontmatter":{},"resources":[]},"futureField":true}""",
+					McpSchema.GetSkillResult.class)
+			.skill()
+			.uri()).isEqualTo("skill://pdf/SKILL.md");
 	}
 
 	@Test

@@ -498,7 +498,7 @@ var client = McpClient.sync(transport)
 
 ### Pagination
 
-`listTools`, `listResources`, `listResourceTemplates`, and `listPrompts` all accept an optional opaque `cursor` string, and their results carry a `nextCursor` that is non-null while more pages remain. Loop until `nextCursor` is `null` to collect every page:
+`listTools`, `listResources`, `listResourceTemplates`, `listPrompts`, and `listSkills` all accept an optional opaque `cursor` string, and their results carry a `nextCursor` that is non-null while more pages remain. Loop until `nextCursor` is `null` to collect every page:
 
 ```java
 List<McpSchema.Tool> allTools = new ArrayList<>();
@@ -541,6 +541,40 @@ Resources represent server-side data sources that clients can access using URI t
     client.readResource(ReadResourceRequest.builder("resource://uri").build())
         .subscribe();
     ```
+
+### Skills Access
+
+Servers that declare the `io.modelcontextprotocol/skills` extension expose Agent Skills as ordinary resources. After initialization, use `listSkills()` to discover the available skill entries and `getSkill(uri)` to retrieve the current entry for a known `SKILL.md` URI.
+
+The entry contains the skill's `SKILL.md` URI, its verbatim frontmatter, and either a manifest of `SkillResource` values (URI, digest, and size) or `SkillResources.dynamicResources()`. Read `SKILL.md` and supporting files with the standard resource API; `readSkillUri(uri)` is a convenience for `readResource`:
+
+=== "Sync API"
+
+    ```java
+    ListSkillsResult skills = client.listSkills();
+    McpSchema.Skill skill = skills.skills().get(0);
+
+    // Retrieves a listed skill's current manifest, or a skill URI obtained elsewhere.
+    McpSchema.GetSkillResult result = client.getSkill(skill.uri());
+
+    // Skill files are regular resources, including SKILL.md.
+    ReadResourceResult skillInstructions = client.readSkillUri(result.skill().uri());
+    ```
+
+=== "Async API"
+
+    ```java
+    client.listSkills()
+        .flatMap(skills -> client.getSkill(skills.skills().get(0).uri()))
+        .flatMap(skill -> client.readSkillUri(skill.skill().uri()))
+        .subscribe();
+    ```
+
+If the server declares `directoryRead: true` in this extension's capabilities, `readDirectory(uri)` lists all direct children of a directory resource. The SDK checks this capability before sending `resources/directory/read`:
+
+```java
+ListResourcesResult templates = client.readDirectory("skill://pdf-processing/templates");
+```
 
 ### Resource Subscriptions
 

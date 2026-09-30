@@ -32,7 +32,10 @@ import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
 import io.modelcontextprotocol.spec.McpSchema.ElicitUrlRequest;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
+import io.modelcontextprotocol.spec.McpSchema.GetSkillRequest;
+import io.modelcontextprotocol.spec.McpSchema.GetSkillResult;
 import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
+import io.modelcontextprotocol.spec.McpSchema.ListSkillsResult;
 import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSchema.PaginatedRequest;
@@ -897,6 +900,63 @@ public class McpAsyncClient {
 	}
 
 	/**
+	 * Reads a skill resource through the standard {@code resources/read} method.
+	 * @param uri The skill resource URI, including a skill's {@code SKILL.md} URI
+	 * @return A Mono that emits the resource content.
+	 */
+	public Mono<McpSchema.ReadResourceResult> readSkillUri(String uri) {
+		return this.readResource(McpSchema.ReadResourceRequest.builder(uri).build());
+	}
+
+	/**
+	 * Lists every direct child of a directory resource. This method is available only
+	 * when the server's Skills extension declares {@code directoryRead: true}.
+	 * @param uri The directory resource URI
+	 * @return A Mono that emits all direct children of the directory.
+	 */
+	public Mono<McpSchema.ListResourcesResult> readDirectory(String uri) {
+		return this.readDirectory(uri, McpSchema.FIRST_PAGE).expand(result -> {
+			String next = result.nextCursor();
+			return (next != null && !next.isEmpty()) ? this.readDirectory(uri, next) : Mono.empty();
+		}).reduce(new ArrayList<McpSchema.Resource>(), (accumulated, result) -> {
+			accumulated.addAll(result.resources());
+			return accumulated;
+		}).map(all -> McpSchema.ListResourcesResult.builder(Collections.unmodifiableList(all)).build());
+	}
+
+	/**
+	 * Lists one page of direct children of a directory resource.
+	 * @param uri The directory resource URI
+	 * @param cursor Optional pagination cursor from a previous directory read
+	 * @return A Mono that emits one page of directory children.
+	 */
+	public Mono<McpSchema.ListResourcesResult> readDirectory(String uri, String cursor) {
+		return this.readDirectory(uri, cursor, null);
+	}
+
+	/**
+	 * Lists one page of direct children of a directory resource with optional metadata.
+	 * @param uri The directory resource URI
+	 * @param cursor Optional pagination cursor from a previous directory read
+	 * @param meta Optional metadata to include in the request ({@code _meta} field)
+	 * @return A Mono that emits one page of directory children.
+	 */
+	public Mono<McpSchema.ListResourcesResult> readDirectory(String uri, String cursor, Map<String, Object> meta) {
+		return this.initializer.withInitialization("reading resource directories", init -> {
+			if (init.initializeResult().capabilities().resources() == null) {
+				return Mono.error(new IllegalStateException("Server does not provide the resources capability"));
+			}
+			if (!init.initializeResult().capabilities().skillsDirectoryReadEnabled()) {
+				return Mono.error(
+						new IllegalStateException("Server does not declare Skills extension directoryRead capability"));
+			}
+			return init.mcpSession()
+				.sendRequest(McpSchema.METHOD_RESOURCES_DIRECTORY_READ,
+						new McpSchema.ReadDirectoryRequest(uri, cursor, meta), LIST_RESOURCES_RESULT_TYPE_REF);
+		});
+	}
+
+	/**
 	 * Retrieves the list of all resource templates provided by the server. Resource
 	 * templates allow servers to expose parameterized resources using URI templates,
 	 * enabling dynamic resource access based on variable parameters.
@@ -1085,6 +1145,74 @@ public class McpAsyncClient {
 				return Mono.empty();
 			})
 			.then());
+	}
+
+	// --------------------------
+	// Skills Extension
+	// --------------------------
+	private static final TypeRef<McpSchema.ListSkillsResult> LIST_SKILLS_RESULT_TYPE_REF = new TypeRef<>() {
+	};
+
+	private static final TypeRef<McpSchema.GetSkillResult> GET_SKILL_RESULT_TYPE_REF = new TypeRef<>() {
+	};
+
+	/**
+	 * Retrieves every skill exposed by a server supporting the Skills extension.
+	 * @return A Mono that emits the complete list of skills.
+	 */
+	public Mono<ListSkillsResult> listSkills() {
+		return this.listSkills(McpSchema.FIRST_PAGE).expand(result -> {
+			String next = result.nextCursor();
+			return (next != null && !next.isEmpty()) ? this.listSkills(next) : Mono.empty();
+		}).reduce(new ArrayList<McpSchema.Skill>(), (accumulated, result) -> {
+			accumulated.addAll(result.skills());
+			return accumulated;
+		}).map(all -> McpSchema.ListSkillsResult.builder(Collections.unmodifiableList(all)).build());
+	}
+
+	/**
+	 * Retrieves one page of skills exposed by a server supporting the Skills extension.
+	 * @param cursor Optional pagination cursor from a previous list request
+	 * @return A Mono that emits the page of skills.
+	 */
+	public Mono<ListSkillsResult> listSkills(String cursor) {
+		return this.listSkillsInternal(cursor, null);
+	}
+
+	/**
+	 * Retrieves one page of skills, including optional request metadata.
+	 * @param cursor Optional pagination cursor from a previous list request
+	 * @param meta Optional metadata to include in the request ({@code _meta} field)
+	 * @return A Mono that emits the page of skills.
+	 */
+	public Mono<ListSkillsResult> listSkills(String cursor, Map<String, Object> meta) {
+		return this.listSkillsInternal(cursor, meta);
+	}
+
+	private Mono<ListSkillsResult> listSkillsInternal(String cursor, Map<String, Object> meta) {
+		return this.initializer.withInitialization("listing skills",
+				init -> init.mcpSession()
+					.sendRequest(McpSchema.METHOD_SKILLS_LIST, new PaginatedRequest(cursor, meta),
+							LIST_SKILLS_RESULT_TYPE_REF));
+	}
+
+	/**
+	 * Retrieves the current entry for a skill URI, including its manifest.
+	 * @param uri The {@code SKILL.md} URI of the skill
+	 * @return A Mono that emits the skill entry.
+	 */
+	public Mono<GetSkillResult> getSkill(String uri) {
+		return this.getSkill(new GetSkillRequest(uri));
+	}
+
+	/**
+	 * Retrieves the current entry for a skill URI, including its manifest.
+	 * @param getSkillRequest The request containing the {@code SKILL.md} URI
+	 * @return A Mono that emits the skill entry.
+	 */
+	public Mono<GetSkillResult> getSkill(GetSkillRequest getSkillRequest) {
+		return this.initializer.withInitialization("getting skills", init -> init.mcpSession()
+			.sendRequest(McpSchema.METHOD_SKILLS_GET, getSkillRequest, GET_SKILL_RESULT_TYPE_REF));
 	}
 
 	// --------------------------

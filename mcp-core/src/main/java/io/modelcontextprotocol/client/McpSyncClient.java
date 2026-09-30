@@ -16,7 +16,10 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
 import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
+import io.modelcontextprotocol.spec.McpSchema.GetSkillRequest;
+import io.modelcontextprotocol.spec.McpSchema.GetSkillResult;
 import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
+import io.modelcontextprotocol.spec.McpSchema.ListSkillsResult;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
 
@@ -327,6 +330,50 @@ public class McpSyncClient implements AutoCloseable {
 	}
 
 	/**
+	 * Reads a skill resource through the standard {@code resources/read} method.
+	 * @param uri The skill resource URI, including a skill's {@code SKILL.md} URI
+	 * @return The resource content.
+	 */
+	public McpSchema.ReadResourceResult readSkillUri(String uri) {
+		return withProvidedContext(this.delegate.readSkillUri(uri)).block();
+
+	}
+
+	/**
+	 * Lists every direct child of a directory resource. This method is available only
+	 * when the server's Skills extension declares {@code directoryRead: true}.
+	 * @param uri The directory resource URI
+	 * @return All direct children of the directory.
+	 */
+	public McpSchema.ListResourcesResult readDirectory(String uri) {
+		return withProvidedContext(this.delegate.readDirectory(uri)).block();
+
+	}
+
+	/**
+	 * Lists one page of direct children of a directory resource.
+	 * @param uri The directory resource URI
+	 * @param cursor Optional pagination cursor from a previous directory read
+	 * @return One page of directory children.
+	 */
+	public McpSchema.ListResourcesResult readDirectory(String uri, String cursor) {
+		return withProvidedContext(this.delegate.readDirectory(uri, cursor)).block();
+
+	}
+
+	/**
+	 * Lists one page of direct children of a directory resource with optional metadata.
+	 * @param uri The directory resource URI
+	 * @param cursor Optional pagination cursor from a previous directory read
+	 * @param meta Optional metadata to include in the request ({@code _meta} field)
+	 * @return One page of directory children.
+	 */
+	public McpSchema.ListResourcesResult readDirectory(String uri, String cursor, Map<String, Object> meta) {
+		return withProvidedContext(this.delegate.readDirectory(uri, cursor, meta)).block();
+
+	}
+
+	/**
 	 * Retrieves the list of all resource templates provided by the server.
 	 * @return The list of all resource templates result.
 	 */
@@ -421,6 +468,55 @@ public class McpSyncClient implements AutoCloseable {
 
 	public GetPromptResult getPrompt(GetPromptRequest getPromptRequest) {
 		return withProvidedContext(this.delegate.getPrompt(getPromptRequest)).block();
+	}
+
+	// --------------------------
+	// Skills Extension
+	// --------------------------
+
+	/**
+	 * Retrieves every skill exposed by a server supporting the Skills extension.
+	 * @return The complete list of skills.
+	 */
+	public ListSkillsResult listSkills() {
+		return withProvidedContext(this.delegate.listSkills()).block();
+	}
+
+	/**
+	 * Retrieves one page of skills exposed by a server supporting the Skills extension.
+	 * @param cursor Optional pagination cursor from a previous list request
+	 * @return The page of skills.
+	 */
+	public ListSkillsResult listSkills(String cursor) {
+		return withProvidedContext(this.delegate.listSkills(cursor)).block();
+	}
+
+	/**
+	 * Retrieves one page of skills, including optional request metadata.
+	 * @param cursor Optional pagination cursor from a previous list request
+	 * @param meta Optional metadata to include in the request ({@code _meta} field)
+	 * @return The page of skills.
+	 */
+	public ListSkillsResult listSkills(String cursor, Map<String, Object> meta) {
+		return withProvidedContext(this.delegate.listSkills(cursor, meta)).block();
+	}
+
+	/**
+	 * Retrieves the current entry for a skill URI, including its manifest.
+	 * @param uri The {@code SKILL.md} URI of the skill
+	 * @return The skill entry.
+	 */
+	public GetSkillResult getSkill(String uri) {
+		return withProvidedContext(this.delegate.getSkill(uri)).block();
+	}
+
+	/**
+	 * Retrieves the current entry for a skill URI, including its manifest.
+	 * @param getSkillRequest The request containing the {@code SKILL.md} URI
+	 * @return The skill entry.
+	 */
+	public GetSkillResult getSkill(GetSkillRequest getSkillRequest) {
+		return withProvidedContext(this.delegate.getSkill(getSkillRequest)).block();
 	}
 
 	/**

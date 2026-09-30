@@ -300,6 +300,51 @@ class McpAsyncClientTests {
 	}
 
 	@Test
+	void testListSkillsWithCursorAndMeta() {
+		var transport = new TestMcpClientTransport();
+		McpAsyncClient client = McpClient.async(transport).build();
+
+		McpSchema.ListSkillsResult result = client.listSkills("cursor-1", Map.of("customKey", "customValue")).block();
+
+		assertThat(result.skills()).extracting(McpSchema.Skill::uri).containsExactly("skill://test/SKILL.md");
+		assertThat(transport.getCapturedRequest().cursor()).isEqualTo("cursor-1");
+		assertThat(transport.getCapturedRequest().meta()).containsEntry("customKey", "customValue");
+	}
+
+	@Test
+	void testGetSkill() {
+		var transport = new TestMcpClientTransport();
+		McpAsyncClient client = McpClient.async(transport).build();
+
+		McpSchema.GetSkillResult result = client.getSkill("skill://test/SKILL.md").block();
+
+		assertThat(result.skill().uri()).isEqualTo("skill://test/SKILL.md");
+		assertThat(transport.getCapturedRequestMessage().method()).isEqualTo(McpSchema.METHOD_SKILLS_GET);
+		assertThat(JSON_MAPPER
+			.convertValue(transport.getCapturedRequestMessage().params(), McpSchema.GetSkillRequest.class)
+			.uri()).isEqualTo("skill://test/SKILL.md");
+	}
+
+	@Test
+	void testReadDirectoryWithCursorAndMeta() {
+		var transport = new TestMcpClientTransport();
+		McpAsyncClient client = McpClient.async(transport).build();
+
+		McpSchema.ListResourcesResult result = client
+			.readDirectory("skill://test/templates", "cursor-1", Map.of("customKey", "customValue"))
+			.block();
+
+		assertThat(result.resources()).extracting(McpSchema.Resource::uri)
+			.containsExactly("skill://test/templates/example.md");
+		assertThat(transport.getCapturedRequestMessage().method()).isEqualTo(McpSchema.METHOD_RESOURCES_DIRECTORY_READ);
+		McpSchema.ReadDirectoryRequest request = JSON_MAPPER
+			.convertValue(transport.getCapturedRequestMessage().params(), McpSchema.ReadDirectoryRequest.class);
+		assertThat(request.uri()).isEqualTo("skill://test/templates");
+		assertThat(request.cursor()).isEqualTo("cursor-1");
+		assertThat(request.meta()).containsEntry("customKey", "customValue");
+	}
+
+	@Test
 	void listResourcesStopsOnEmptyNextCursor() {
 		var transport = new EmptyCursorTestMcpClientTransport(McpSchema.METHOD_RESOURCES_LIST);
 		McpAsyncClient client = McpClient.async(transport).build();
@@ -341,6 +386,8 @@ class McpAsyncClientTests {
 
 		private McpSchema.PaginatedRequest capturedRequest = null;
 
+		private McpSchema.JSONRPCRequest capturedRequestMessage;
+
 		@Override
 		public Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
 			return Mono.deferContextual(ctx -> {
@@ -359,12 +406,14 @@ class McpAsyncClientTests {
 			if (!(message instanceof McpSchema.JSONRPCRequest request)) {
 				return Mono.empty();
 			}
+			this.capturedRequestMessage = request;
 			McpSchema.JSONRPCResponse response;
 			if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
 				McpSchema.ServerCapabilities caps = McpSchema.ServerCapabilities.builder()
 					.prompts(false)
-					.resources(false, false)
+					.resources(true, false)
 					.tools(false)
+					.extensions(Map.of("io.modelcontextprotocol/skills", Map.of("directoryRead", true)))
 					.build();
 
 				McpSchema.InitializeResult initResult = McpSchema.InitializeResult
@@ -412,6 +461,26 @@ class McpAsyncClientTests {
 				McpSchema.ListToolsResult mockToolsResult = McpSchema.ListToolsResult.builder(List.of(addTool)).build();
 				response = McpSchema.JSONRPCResponse.result(request.id(), mockToolsResult);
 			}
+			else if (McpSchema.METHOD_SKILLS_LIST.equals(request.method())) {
+				capturedRequest = JSON_MAPPER.convertValue(request.params(), McpSchema.PaginatedRequest.class);
+				McpSchema.Skill skill = new McpSchema.Skill("skill://test/SKILL.md",
+						McpSchema.SkillFrontmatter.of(Map.of("name", "test")),
+						McpSchema.SkillResources.manifest(List.of()));
+				response = McpSchema.JSONRPCResponse.result(request.id(),
+						McpSchema.ListSkillsResult.builder(List.of(skill)).build());
+			}
+			else if (McpSchema.METHOD_SKILLS_GET.equals(request.method())) {
+				McpSchema.Skill skill = new McpSchema.Skill("skill://test/SKILL.md",
+						McpSchema.SkillFrontmatter.of(Map.of("name", "test")),
+						McpSchema.SkillResources.dynamicResources());
+				response = McpSchema.JSONRPCResponse.result(request.id(), new McpSchema.GetSkillResult(skill));
+			}
+			else if (McpSchema.METHOD_RESOURCES_DIRECTORY_READ.equals(request.method())) {
+				McpSchema.Resource child = McpSchema.Resource.builder("skill://test/templates/example.md", "example.md")
+					.build();
+				response = McpSchema.JSONRPCResponse.result(request.id(),
+						McpSchema.ListResourcesResult.builder(List.of(child)).build());
+			}
 			else {
 				return Mono.empty();
 			}
@@ -430,6 +499,10 @@ class McpAsyncClientTests {
 
 		public McpSchema.PaginatedRequest getCapturedRequest() {
 			return capturedRequest;
+		}
+
+		public McpSchema.JSONRPCRequest getCapturedRequestMessage() {
+			return capturedRequestMessage;
 		}
 
 	}
