@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.server;
 
 import java.time.Duration;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -124,6 +125,11 @@ public class McpAsyncServer {
 
 	private McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
 
+	private final TypeRef<McpSchema.PaginatedRequest> PAGINATED_REQUEST_TYPE_REF = new TypeRef<>() {
+	};
+
+	private final int pageSize;
+
 	/**
 	 * Create a new McpAsyncServer with the given transport provider and capabilities.
 	 * @param mcpTransportProvider The transport layer implementation for MCP
@@ -134,7 +140,7 @@ public class McpAsyncServer {
 	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
-			boolean validateToolInputs) {
+			boolean validateToolInputs, int pageSize) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
@@ -148,6 +154,7 @@ public class McpAsyncServer {
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
 		this.validateToolInputs = validateToolInputs;
+		this.pageSize = pageSize;
 		this.toolFilter = McpAsyncListFilter.and(features.toolFilters());
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
@@ -166,7 +173,7 @@ public class McpAsyncServer {
 	McpAsyncServer(McpStreamableServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
 			McpServerFeatures.Async features, Duration requestTimeout,
 			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator,
-			boolean validateToolInputs) {
+			boolean validateToolInputs, int pageSize) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
@@ -180,6 +187,7 @@ public class McpAsyncServer {
 		this.uriTemplateManagerFactory = uriTemplateManagerFactory;
 		this.jsonSchemaValidator = jsonSchemaValidator;
 		this.validateToolInputs = validateToolInputs;
+		this.pageSize = pageSize;
 		this.toolFilter = McpAsyncListFilter.and(features.toolFilters());
 
 		Map<String, McpRequestHandler<?>> requestHandlers = prepareRequestHandlers();
@@ -541,14 +549,32 @@ public class McpAsyncServer {
 
 	private McpRequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
 		return (exchange, params) -> {
-			// TODO: Implement pagination. Cursors must be computed over the filtered
-			// view, otherwise page offsets leak the number of hidden tools.
 			return Flux.fromIterable(this.tools)
 				.map(McpServerFeatures.AsyncToolSpecification::tool)
 				.filterWhen(tool -> this.toolFilter.isVisible(exchange.transportContext(), tool)
 					.onErrorResume(error -> opaqueListFilterError(tool, error)))
 				.collectList()
-				.map(tools -> McpSchema.ListToolsResult.builder(tools).build());
+				.flatMap(visibleTools -> {
+					if (pageSize <= 0) {
+						return Mono.just(McpSchema.ListToolsResult.builder(visibleTools).build());
+					}
+					var paginatedRequest = jsonMapper.convertValue(params, PAGINATED_REQUEST_TYPE_REF);
+					var cursor = paginatedRequest != null ? paginatedRequest.cursor() : null;
+
+					var mapSize = visibleTools.size();
+					var mapHash = computeToolsHash(visibleTools);
+
+					return handleCursor(cursor, mapSize, mapHash).map(requestedStartIndex -> {
+						var startIndex = requestedStartIndex != null ? requestedStartIndex : 0;
+						var endIndex = Math.min(startIndex + pageSize, mapSize);
+
+						var nextCursor = getCursor(endIndex, mapSize, mapHash);
+
+						var resultList = visibleTools.stream().skip(startIndex).limit(endIndex - startIndex).toList();
+
+						return McpSchema.ListToolsResult.builder(resultList).nextCursor(nextCursor).build();
+					});
+				});
 		};
 	}
 
@@ -811,21 +837,70 @@ public class McpAsyncServer {
 
 	private McpRequestHandler<McpSchema.ListResourcesResult> resourcesListRequestHandler() {
 		return (exchange, params) -> {
-			var resourceList = this.resources.values()
-				.stream()
-				.map(McpServerFeatures.AsyncResourceSpecification::resource)
-				.toList();
-			return Mono.just(McpSchema.ListResourcesResult.builder(resourceList).build());
+			if (pageSize <= 0) {
+				var resourceList = this.resources.values()
+					.stream()
+					.map(McpServerFeatures.AsyncResourceSpecification::resource)
+					.toList();
+				return Mono.just(McpSchema.ListResourcesResult.builder(resourceList).build());
+			}
+
+			var paginatedRequest = jsonMapper.convertValue(params, PAGINATED_REQUEST_TYPE_REF);
+			var cursor = paginatedRequest != null ? paginatedRequest.cursor() : null;
+
+			var mapSize = this.resources.size();
+			var mapHash = computeMapKeysHash(this.resources);
+
+			return handleCursor(cursor, mapSize, mapHash).map(requestedStartIndex -> {
+				var startIndex = requestedStartIndex != null ? requestedStartIndex : 0;
+				var endIndex = Math.min(startIndex + pageSize, mapSize);
+
+				var nextCursor = getCursor(endIndex, mapSize, mapHash);
+
+				var resourceList = this.resources.entrySet()
+					.stream()
+					.sorted(Map.Entry.comparingByKey())
+					.skip(startIndex)
+					.limit(endIndex - startIndex)
+					.map(entry -> entry.getValue().resource())
+					.toList();
+
+				return McpSchema.ListResourcesResult.builder(resourceList).nextCursor(nextCursor).build();
+			});
 		};
 	}
 
 	private McpRequestHandler<McpSchema.ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
 		return (exchange, params) -> {
-			var resourceList = this.resourceTemplates.values()
-				.stream()
-				.map(McpServerFeatures.AsyncResourceTemplateSpecification::resourceTemplate)
-				.toList();
-			return Mono.just(McpSchema.ListResourceTemplatesResult.builder(resourceList).build());
+			if (pageSize <= 0) {
+				var resourceList = this.resourceTemplates.values()
+					.stream()
+					.map(McpServerFeatures.AsyncResourceTemplateSpecification::resourceTemplate)
+					.toList();
+				return Mono.just(McpSchema.ListResourceTemplatesResult.builder(resourceList).build());
+			}
+			var paginatedRequest = jsonMapper.convertValue(params, PAGINATED_REQUEST_TYPE_REF);
+			var cursor = paginatedRequest != null ? paginatedRequest.cursor() : null;
+
+			var mapSize = this.resourceTemplates.size();
+			var mapHash = computeMapKeysHash(this.resourceTemplates);
+
+			return handleCursor(cursor, mapSize, mapHash).map(requestedStartIndex -> {
+				var startIndex = requestedStartIndex != null ? requestedStartIndex : 0;
+				var endIndex = Math.min(startIndex + pageSize, mapSize);
+
+				var templateList = this.resourceTemplates.entrySet()
+					.stream()
+					.sorted(Map.Entry.comparingByKey())
+					.skip(startIndex)
+					.limit(endIndex - startIndex)
+					.map(entry -> entry.getValue().resourceTemplate())
+					.toList();
+
+				return McpSchema.ListResourceTemplatesResult.builder(templateList)
+					.nextCursor(getCursor(endIndex, mapSize, mapHash))
+					.build();
+			});
 		};
 	}
 
@@ -966,17 +1041,36 @@ public class McpAsyncServer {
 
 	private McpRequestHandler<McpSchema.ListPromptsResult> promptsListRequestHandler() {
 		return (exchange, params) -> {
-			// TODO: Implement pagination
-			// McpSchema.PaginatedRequest request = objectMapper.convertValue(params,
-			// new TypeReference<McpSchema.PaginatedRequest>() {
-			// });
+			if (pageSize <= 0) {
+				var promptList = this.prompts.values()
+					.stream()
+					.map(McpServerFeatures.AsyncPromptSpecification::prompt)
+					.toList();
 
-			var promptList = this.prompts.values()
-				.stream()
-				.map(McpServerFeatures.AsyncPromptSpecification::prompt)
-				.toList();
+				return Mono.just(McpSchema.ListPromptsResult.builder(promptList).build());
+			}
+			var paginatedRequest = jsonMapper.convertValue(params, PAGINATED_REQUEST_TYPE_REF);
+			var cursor = paginatedRequest != null ? paginatedRequest.cursor() : null;
 
-			return Mono.just(McpSchema.ListPromptsResult.builder(promptList).build());
+			var mapSize = this.prompts.size();
+			var mapHash = computeMapKeysHash(this.prompts);
+
+			return handleCursor(cursor, mapSize, mapHash).map(requestedStartIndex -> {
+				var startIndex = requestedStartIndex != null ? requestedStartIndex : 0;
+				var endIndex = Math.min(startIndex + pageSize, mapSize);
+
+				var promptList = this.prompts.entrySet()
+					.stream()
+					.sorted(Map.Entry.comparingByKey())
+					.skip(startIndex)
+					.limit(endIndex - startIndex)
+					.map(entry -> entry.getValue().prompt())
+					.toList();
+
+				return McpSchema.ListPromptsResult.builder(promptList)
+					.nextCursor(getCursor(endIndex, mapSize, mapHash))
+					.build();
+			});
 		};
 	}
 
@@ -1128,6 +1222,98 @@ public class McpAsyncServer {
 	 */
 	void setProtocolVersions(List<String> protocolVersions) {
 		this.protocolVersions = protocolVersions;
+	}
+
+	// ---------------------------------------
+	// Cursor Handling for paginated requests
+	// ---------------------------------------
+
+	/**
+	 * Handles the cursor by decoding, validating and reading the index of it.
+	 * @param cursor the base64 representation of the cursor.
+	 * @param mapSize the size of the map from which the values should be read.
+	 * @param mapHash the hash of the map to compare the cursor value to.
+	 * @return a {@link Mono} which contains the index to which the cursor points.
+	 */
+	private Mono<Integer> handleCursor(String cursor, int mapSize, int mapHash) {
+		if (cursor == null) {
+			return Mono.just(0);
+		}
+
+		var decodedCursor = decodeCursor(cursor);
+
+		if (!isCursorValid(decodedCursor, mapSize, mapHash)) {
+			return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS).message("Invalid cursor").build());
+		}
+
+		return Mono.just(getCursorIndex(decodedCursor));
+	}
+
+	private String getCursor(int endIndex, int mapSize, int mapHash) {
+		if (endIndex >= mapSize) {
+			return null;
+		}
+		return encodeCursor(endIndex, mapHash);
+	}
+
+	private int getCursorIndex(String cursor) {
+		return Integer.parseInt(cursor.split(":")[0]);
+	}
+
+	private boolean isCursorValid(String cursor, int maxPageSize, int currentHash) {
+		var cursorElements = cursor.split(":");
+
+		if (cursorElements.length != 2) {
+			logger.debug("Length of elements in cursor doesn't match expected number. Cursor: {} Actual number: {}",
+					cursor, cursorElements.length);
+			return false;
+		}
+
+		int index;
+		int hash;
+
+		try {
+			index = Integer.parseInt(cursorElements[0]);
+			hash = Integer.parseInt(cursorElements[1]);
+		}
+		catch (NumberFormatException e) {
+			logger.debug("Failed to parse cursor elements.");
+			return false;
+		}
+
+		if (index < 0 || index > maxPageSize) {
+			logger.debug("Cursor boundaries are invalid.");
+			return false;
+		}
+
+		if (hash != currentHash) {
+			logger.debug("Cursor not valid, anymore.");
+			return false;
+		}
+
+		return true;
+	}
+
+	private String encodeCursor(int index, int hash) {
+		var cursor = index + ":" + hash;
+
+		return Base64.getEncoder().encodeToString(cursor.getBytes());
+	}
+
+	private String decodeCursor(String base64Cursor) {
+		return new String(Base64.getDecoder().decode(base64Cursor));
+	}
+
+	private static int computeMapKeysHash(ConcurrentHashMap<String, ?> map) {
+		return map.keySet().stream().sorted().mapToInt(String::hashCode).reduce(0, (acc, hash) -> 31 * acc + hash);
+	}
+
+	private static int computeToolsHash(List<McpSchema.Tool> visibleTools) {
+		return visibleTools.stream()
+			.map(McpSchema.Tool::name)
+			.sorted()
+			.mapToInt(String::hashCode)
+			.reduce(0, (acc, hash) -> 31 * acc + hash);
 	}
 
 }

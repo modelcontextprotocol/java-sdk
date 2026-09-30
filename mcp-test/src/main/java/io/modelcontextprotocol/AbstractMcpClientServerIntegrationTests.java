@@ -4,11 +4,15 @@
 
 package io.modelcontextprotocol;
 
+import static io.modelcontextprotocol.spec.McpSchema.ErrorCodes.INVALID_PARAMS;
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,7 +61,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import reactor.core.publisher.Mono;
 
-import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.json;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -1550,6 +1553,171 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 	@ParameterizedTest(name = "{0} : {displayName} ")
 	@MethodSource("clientsForTesting")
+	void testPaginatedListToolsSuccess(String clientType) {
+
+		List<McpServerFeatures.SyncToolSpecification> tools = new ArrayList<>();
+
+		for (int i = 0; i < 11; i++) {
+			var mock = McpSchema.Tool.builder("test-tool-" + i, EMPTY_JSON_SCHEMA)
+				.description("Test progress notifications")
+				.build();
+			var spec = McpServerFeatures.SyncToolSpecification.builder()
+				.tool(mock)
+				.callHandler(buildCallToolRequestHandlerMock())
+				.build();
+
+			tools.add(spec);
+		}
+
+		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tools)
+			.pageSize(10)
+			.build();
+
+		try (var mcpClient = clientBuilders.get(clientType).build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var res = mcpClient.listTools(null);
+
+			assertThat(res.tools().size()).isEqualTo(10);
+			assertThat(res.nextCursor()).isNotNull();
+
+			res = mcpClient.listTools(res.nextCursor());
+			assertThat(res.tools().size()).isEqualTo(1);
+			assertThat(res.nextCursor()).isNull();
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testListToolSuccessWithoutPageSize(String clientType) {
+
+		List<McpServerFeatures.SyncToolSpecification> tools = new ArrayList<>();
+
+		for (int i = 0; i < 11; i++) {
+			var mock = McpSchema.Tool.builder("test-tool-" + i, EMPTY_JSON_SCHEMA)
+				.description("Test progress notifications")
+				.build();
+			var spec = McpServerFeatures.SyncToolSpecification.builder()
+				.tool(mock)
+				.callHandler(buildCallToolRequestHandlerMock())
+				.build();
+
+			tools.add(spec);
+		}
+
+		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tools)
+			.build();
+
+		try (var mcpClient = clientBuilders.get(clientType).build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var res = mcpClient.listTools(null);
+
+			assertThat(res.tools().size()).isEqualTo(11);
+			assertThat(res.nextCursor()).isNull();
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testPaginatedListToolsCursorInvalidListChanged(String clientType) {
+
+		var pageSize = 11;
+		List<McpServerFeatures.SyncToolSpecification> tools = new ArrayList<>();
+
+		for (int i = 0; i <= pageSize; i++) {
+			var mock = McpSchema.Tool.builder("test-tool-" + i, EMPTY_JSON_SCHEMA)
+				.description("Test progress notifications")
+				.build();
+			var spec = McpServerFeatures.SyncToolSpecification.builder()
+				.tool(mock)
+				.callHandler(buildCallToolRequestHandlerMock())
+				.build();
+
+			tools.add(spec);
+		}
+
+		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(tools)
+			.pageSize(10)
+			.build();
+
+		try (var mcpClient = clientBuilders.get(clientType).build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var res = mcpClient.listTools(null);
+
+			// Change list
+			var mock = McpSchema.Tool.builder("test-tool-xyz", EMPTY_JSON_SCHEMA)
+				.description("Test progress notifications")
+				.build();
+			mcpServer.addTool(new McpServerFeatures.SyncToolSpecification(mock, null));
+
+			assertThatThrownBy(() -> mcpClient.listTools(res.nextCursor())).isInstanceOf(McpError.class)
+				.hasMessage("Invalid cursor")
+				.satisfies(exception -> {
+					var error = (McpError) exception;
+					assertThat(error.getJsonRpcError().code()).isEqualTo(INVALID_PARAMS);
+					assertThat(error.getJsonRpcError().message()).isEqualTo("Invalid cursor");
+				});
+
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testPaginatedListToolsInvalidCursor(String clientType) {
+
+		var mock = McpSchema.Tool.builder("test-tool-xyz", EMPTY_JSON_SCHEMA)
+			.description("Test progress notifications")
+			.build();
+		var spec = new McpServerFeatures.SyncToolSpecification(mock, null);
+
+		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().tools(true).build())
+			.tools(spec)
+			.pageSize(10)
+			.build();
+
+		try (var mcpClient = clientBuilders.get(clientType).build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThatThrownBy(() -> mcpClient.listTools("INVALID")).isInstanceOf(McpError.class)
+				.hasMessage("Invalid cursor")
+				.satisfies(exception -> {
+					var error = (McpError) exception;
+					assertThat(error.getJsonRpcError().code()).isEqualTo(INVALID_PARAMS);
+					assertThat(error.getJsonRpcError().message()).isEqualTo("Invalid cursor");
+				});
+
+		}
+
+		mcpServer.close();
+	}
+
+	private BiFunction<McpSyncServerExchange, McpSchema.CallToolRequest, CallToolResult> buildCallToolRequestHandlerMock() {
+		return (exchange, request) -> McpSchema.CallToolResult.builder()
+			.addContent(McpSchema.TextContent.builder("CALL RESPONSE").build())
+			.build();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
 	void testInitialize(String clientType) {
 
 		var clientBuilder = clientBuilders.get(clientType);
@@ -2406,6 +2574,454 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		finally {
 			mcpServer.closeGracefully();
 		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testPaginatedListResourcesSuccess(String clientType) {
+
+		List<McpServerFeatures.SyncResourceSpecification> resources = new ArrayList<>();
+
+		for (int i = 0; i < 11; i++) {
+			var mock = McpSchema.Resource.builder("test://static-text/" + i, "Static Text Resource")
+				.description("A static text resource for testing")
+				.mimeType("text/plain")
+				.build();
+			var spec = new McpServerFeatures.SyncResourceSpecification(mock, null);
+			resources.add(spec);
+		}
+
+		var mcpServer = prepareSyncServerBuilder()
+			.capabilities(ServerCapabilities.builder().resources(true, true).build())
+			.resources(resources)
+			.pageSize(10)
+			.build();
+
+		try (var mcpClient = clientBuilders.get(clientType).build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var res = mcpClient.listResources(null);
+
+			assertThat(res.resources().size()).isEqualTo(10);
+			assertThat(res.nextCursor()).isNotNull();
+
+			res = mcpClient.listResources(res.nextCursor());
+			assertThat(res.resources().size()).isEqualTo(1);
+			assertThat(res.nextCursor()).isNull();
+
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testListResourcesWithoutPageSizeSuccess(String clientType) {
+
+		List<McpServerFeatures.SyncResourceSpecification> resources = new ArrayList<>();
+
+		for (int i = 0; i < 11; i++) {
+			var mock = McpSchema.Resource.builder("test://static-text/" + i, "Static Text Resource")
+				.description("A static text resource for testing")
+				.mimeType("text/plain")
+				.build();
+			var spec = new McpServerFeatures.SyncResourceSpecification(mock, null);
+			resources.add(spec);
+		}
+
+		var mcpServer = prepareSyncServerBuilder()
+			.capabilities(ServerCapabilities.builder().resources(true, true).build())
+			.resources(resources)
+			.build();
+
+		try (var mcpClient = clientBuilders.get(clientType).build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var res = mcpClient.listResources(null);
+
+			assertThat(res.resources().size()).isEqualTo(11);
+			assertThat(res.nextCursor()).isNull();
+
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testPaginatedListResourcesCursorInvalidListChanged(String clientType) {
+
+		var pageSize = 11;
+		List<McpServerFeatures.SyncResourceSpecification> resources = new ArrayList<>();
+
+		for (int i = 0; i < pageSize; i++) {
+			var mock = McpSchema.Resource.builder("test://static-text/" + i, "Static Text Resource")
+				.description("A static text resource for testing")
+				.mimeType("text/plain")
+				.build();
+			var spec = new McpServerFeatures.SyncResourceSpecification(mock, null);
+			resources.add(spec);
+		}
+
+		var mcpServer = prepareSyncServerBuilder()
+			.capabilities(ServerCapabilities.builder().resources(true, true).build())
+			.resources(resources)
+			.pageSize(10)
+			.build();
+
+		try (var mcpClient = clientBuilders.get(clientType).build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var res = mcpClient.listResources(null);
+
+			// Change list
+			var mock = McpSchema.Resource.builder("test://static-text/" + 99, "Static Text Resource")
+				.description("A static text resource for testing")
+				.mimeType("text/plain")
+				.build();
+			var spec = new McpServerFeatures.SyncResourceSpecification(mock, null);
+			mcpServer.addResource(spec);
+
+			assertThatThrownBy(() -> mcpClient.listResources(res.nextCursor())).isInstanceOf(McpError.class)
+				.hasMessage("Invalid cursor")
+				.satisfies(exception -> {
+					var error = (McpError) exception;
+					assertThat(error.getJsonRpcError().code()).isEqualTo(INVALID_PARAMS);
+					assertThat(error.getJsonRpcError().message()).isEqualTo("Invalid cursor");
+				});
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testPaginatedListResourcesInvalidCursor(String clientType) {
+
+		var mock = McpSchema.Resource.builder("test://static-text/" + 0, "Static Text Resource")
+			.description("A static text resource for testing")
+			.mimeType("text/plain")
+			.build();
+		var spec = new McpServerFeatures.SyncResourceSpecification(mock, null);
+
+		var mcpServer = prepareSyncServerBuilder()
+			.capabilities(ServerCapabilities.builder().resources(true, true).build())
+			.resources(spec)
+			.pageSize(10)
+			.build();
+
+		try (var mcpClient = clientBuilders.get(clientType).build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThatThrownBy(() -> mcpClient.listResources("INVALID")).isInstanceOf(McpError.class)
+				.hasMessage("Invalid cursor")
+				.satisfies(exception -> {
+					var error = (McpError) exception;
+					assertThat(error.getJsonRpcError().code()).isEqualTo(INVALID_PARAMS);
+					assertThat(error.getJsonRpcError().message()).isEqualTo("Invalid cursor");
+				});
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testPaginatedListResourceTemplatesListSuccess(String clientType) {
+
+		List<McpServerFeatures.SyncResourceTemplateSpecification> resources = new ArrayList<>();
+
+		for (int i = 0; i < 11; i++) {
+			var mock = McpSchema.ResourceTemplate.builder("test://static-text/" + i, "Static Text Resource")
+				.description("A static text resource for testing")
+				.mimeType("text/plain")
+				.build();
+			var spec = new McpServerFeatures.SyncResourceTemplateSpecification(mock, null);
+			resources.add(spec);
+		}
+
+		var mcpServer = prepareSyncServerBuilder()
+			.capabilities(ServerCapabilities.builder().resources(true, true).build())
+			.resourceTemplates(resources)
+			.pageSize(10)
+			.build();
+
+		try (var mcpClient = clientBuilders.get(clientType).build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var res = mcpClient.listResourceTemplates(null);
+
+			assertThat(res.resourceTemplates().size()).isEqualTo(10);
+			assertThat(res.nextCursor()).isNotNull();
+
+			res = mcpClient.listResourceTemplates(res.nextCursor());
+			assertThat(res.resourceTemplates().size()).isEqualTo(1);
+			assertThat(res.nextCursor()).isNull();
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testListResourceTemplatesSuccessWithoutPageSize(String clientType) {
+
+		List<McpServerFeatures.SyncResourceTemplateSpecification> resources = new ArrayList<>();
+
+		for (int i = 0; i < 11; i++) {
+			var mock = McpSchema.ResourceTemplate.builder("test://static-text/" + i, "Static Text Resource")
+				.description("A static text resource for testing")
+				.mimeType("text/plain")
+				.build();
+			var spec = new McpServerFeatures.SyncResourceTemplateSpecification(mock, null);
+			resources.add(spec);
+		}
+
+		var mcpServer = prepareSyncServerBuilder()
+			.capabilities(ServerCapabilities.builder().resources(true, true).build())
+			.resourceTemplates(resources)
+			.build();
+
+		try (var mcpClient = clientBuilders.get(clientType).build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var res = mcpClient.listResourceTemplates(null);
+
+			assertThat(res.resourceTemplates().size()).isEqualTo(11);
+			assertThat(res.nextCursor()).isNull();
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testPaginatedListResourceTemplatesListCursorInvalidListChanged(String clientType) {
+
+		var pageSize = 11;
+		List<McpServerFeatures.SyncResourceTemplateSpecification> resources = new ArrayList<>();
+
+		for (int i = 0; i < pageSize; i++) {
+			var mock = McpSchema.ResourceTemplate.builder("test://static-text/" + i, "Static Text Resource")
+				.description("A static text resource for testing")
+				.mimeType("text/plain")
+				.build();
+			var spec = new McpServerFeatures.SyncResourceTemplateSpecification(mock, null);
+			resources.add(spec);
+		}
+
+		var mcpServer = prepareSyncServerBuilder()
+			.capabilities(ServerCapabilities.builder().resources(true, true).build())
+			.resourceTemplates(resources)
+			.pageSize(10)
+			.build();
+
+		try (var mcpClient = clientBuilders.get(clientType).build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var res = mcpClient.listResourceTemplates(null);
+
+			// Change list
+			var mock = McpSchema.ResourceTemplate.builder("test://static-text/" + 99, "Static Text Resource")
+				.description("A static text resource for testing")
+				.mimeType("text/plain")
+				.build();
+			var spec = new McpServerFeatures.SyncResourceTemplateSpecification(mock, null);
+			mcpServer.addResourceTemplate(spec);
+
+			assertThatThrownBy(() -> mcpClient.listResourceTemplates(res.nextCursor())).isInstanceOf(McpError.class)
+				.hasMessage("Invalid cursor")
+				.satisfies(exception -> {
+					var error = (McpError) exception;
+					assertThat(error.getJsonRpcError().code()).isEqualTo(INVALID_PARAMS);
+					assertThat(error.getJsonRpcError().message()).isEqualTo("Invalid cursor");
+				});
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testPaginatedListResourceTemplatesListInvalidCursor(String clientType) {
+
+		var mock = McpSchema.ResourceTemplate.builder("test://static-text/" + 0, "Static Text Resource")
+			.description("A static text resource for testing")
+			.mimeType("text/plain")
+			.build();
+		var spec = new McpServerFeatures.SyncResourceTemplateSpecification(mock, null);
+
+		var mcpServer = prepareSyncServerBuilder()
+			.capabilities(ServerCapabilities.builder().resources(true, true).build())
+			.resourceTemplates(spec)
+			.pageSize(10)
+			.build();
+
+		try (var mcpClient = clientBuilders.get(clientType).build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThatThrownBy(() -> mcpClient.listResourceTemplates("INVALID")).isInstanceOf(McpError.class)
+				.hasMessage("Invalid cursor")
+				.satisfies(exception -> {
+					var error = (McpError) exception;
+					assertThat(error.getJsonRpcError().code()).isEqualTo(INVALID_PARAMS);
+					assertThat(error.getJsonRpcError().message()).isEqualTo("Invalid cursor");
+				});
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testPaginatedPromptsListSuccess(String clientType) {
+
+		List<McpServerFeatures.SyncPromptSpecification> prompts = new ArrayList<>();
+
+		for (int i = 0; i < 11; i++) {
+			var mock = McpSchema.Prompt.builder("Prompt " + i).build();
+			var spec = new McpServerFeatures.SyncPromptSpecification(mock, null);
+			prompts.add(spec);
+		}
+
+		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().prompts(true).build())
+			.prompts(prompts)
+			.pageSize(10)
+			.build();
+
+		try (var mcpClient = clientBuilders.get(clientType).build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var res = mcpClient.listPrompts(null);
+
+			assertThat(res.prompts().size()).isEqualTo(10);
+			assertThat(res.nextCursor()).isNotNull();
+
+			res = mcpClient.listPrompts(res.nextCursor());
+			assertThat(res.prompts().size()).isEqualTo(1);
+			assertThat(res.nextCursor()).isNull();
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testListPromptsSuccessWithoutPageSize(String clientType) {
+
+		List<McpServerFeatures.SyncPromptSpecification> prompts = new ArrayList<>();
+
+		for (int i = 0; i < 11; i++) {
+			var mock = McpSchema.Prompt.builder("Prompt " + i).build();
+			var spec = new McpServerFeatures.SyncPromptSpecification(mock, null);
+			prompts.add(spec);
+		}
+
+		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().prompts(true).build())
+			.prompts(prompts)
+			.build();
+
+		try (var mcpClient = clientBuilders.get(clientType).build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var res = mcpClient.listPrompts(null);
+
+			assertThat(res.prompts().size()).isEqualTo(11);
+			assertThat(res.nextCursor()).isNull();
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testPaginatedPromptsCursorInvalidListChanged(String clientType) {
+
+		var pageSize = 11;
+		List<McpServerFeatures.SyncPromptSpecification> prompts = new ArrayList<>();
+
+		for (int i = 0; i < pageSize; i++) {
+			var mock = McpSchema.Prompt.builder("Prompt " + i).build();
+			var spec = new McpServerFeatures.SyncPromptSpecification(mock, null);
+			prompts.add(spec);
+		}
+
+		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().prompts(true).build())
+			.prompts(prompts)
+			.pageSize(10)
+			.build();
+
+		try (var mcpClient = clientBuilders.get(clientType).build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			var res = mcpClient.listPrompts(null);
+
+			// Change list
+			var mock = McpSchema.Prompt.builder("Prompt " + 99).build();
+			var spec = new McpServerFeatures.SyncPromptSpecification(mock, null);
+			mcpServer.addPrompt(spec);
+
+			assertThatThrownBy(() -> mcpClient.listPrompts(res.nextCursor())).isInstanceOf(McpError.class)
+				.hasMessage("Invalid cursor")
+				.satisfies(exception -> {
+					var error = (McpError) exception;
+					assertThat(error.getJsonRpcError().code()).isEqualTo(INVALID_PARAMS);
+					assertThat(error.getJsonRpcError().message()).isEqualTo("Invalid cursor");
+				});
+		}
+
+		mcpServer.close();
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testPaginatedListPromptsInvalidCursor(String clientType) {
+
+		var mock = McpSchema.Prompt.builder("Prompt").build();
+		var spec = new McpServerFeatures.SyncPromptSpecification(mock, null);
+
+		var mcpServer = prepareSyncServerBuilder().capabilities(ServerCapabilities.builder().prompts(true).build())
+			.prompts(spec)
+			.pageSize(10)
+			.build();
+
+		try (var mcpClient = clientBuilders.get(clientType).build()) {
+
+			InitializeResult initResult = mcpClient.initialize();
+			assertThat(initResult).isNotNull();
+
+			assertThatThrownBy(() -> mcpClient.listPrompts("INVALID")).isInstanceOf(McpError.class)
+				.hasMessage("Invalid cursor")
+				.satisfies(exception -> {
+					var error = (McpError) exception;
+					assertThat(error.getJsonRpcError().code()).isEqualTo(INVALID_PARAMS);
+					assertThat(error.getJsonRpcError().message()).isEqualTo("Invalid cursor");
+				});
+		}
+
+		mcpServer.close();
 	}
 
 	private double evaluateExpression(String expression) {
