@@ -11,12 +11,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import io.modelcontextprotocol.client.transport.ResponseSubscribers.ResponseEvent;
 import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -390,70 +389,93 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			var transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "GET", uri, null, transportContext));
 		}).flatMap(requestBuilder -> Mono.create(sink -> {
-			Disposable connection = Flux.<ResponseEvent>create(
-					sseSink -> this.httpClient
-						.sendAsync(requestBuilder.build(),
-								responseInfo -> ResponseSubscribers.sseToBodySubscriber(responseInfo, sseSink,
-										this.maxResponseSize))
-						.exceptionallyCompose(e -> {
-							sseSink.error(e);
-							return CompletableFuture.failedFuture(e);
-						}))
-				.map(responseEvent -> (ResponseSubscribers.SseResponseEvent) responseEvent)
-				.flatMap(responseEvent -> {
+			Disposable connection = ResponseBodyHandlers.sendAsync(this.httpClient, requestBuilder.build())
+				.flatMapMany(response -> {
 					if (isClosing) {
-						return Mono.empty();
+						// The body is handed over as a publisher and the connection is
+						// only released once it is subscribed to. It is an SSE stream
+						// that may never end, so it is cancelled rather than drained.
+						return ResponseBodyHandlers.cancel(response.body());
 					}
 
-					int statusCode = responseEvent.responseInfo().statusCode();
+					int statusCode = response.statusCode();
 
 					if (statusCode >= 200 && statusCode < 300) {
-						try {
-							if (ENDPOINT_EVENT_TYPE.equals(responseEvent.sseEvent().event())) {
-								String messageEndpointUri = responseEvent.sseEvent().data();
-								try {
-									messageEndpointValidator.validate(uri, messageEndpointUri);
-								}
-								catch (InvalidSseMessageEndpointException e) {
-									sink.error(e);
-									this.messageEndpointSink.tryEmitError(e);
-									return Flux.error(e);
-								}
-								if (this.messageEndpointSink.tryEmitValue(messageEndpointUri).isSuccess()) {
-									sink.success();
-									return Flux.empty(); // No further processing needed
-								}
-								else {
-									sink.error(new RuntimeException("Failed to handle SSE endpoint event"));
-								}
+						Flux<String> lines = ResponseBodyHandlers.decodeLines(response.body(), this.maxResponseSize);
+						return ResponseBodyHandlers.decodeSseResponse(lines, this.maxResponseSize);
+					}
+					else {
+						return ResponseBodyHandlers.readThenError(response.body(), this.maxResponseSize,
+								"Failed to connect to SSE stream: " + statusCode);
+					}
+				})
+				// Every successfully processed event yields exactly one element, empty
+				// when it carries no message, so that the first one can mark the
+				// connection as established.
+				.<Optional<JSONRPCMessage>>handle((sseEvent, events) -> {
+					try {
+						if (ENDPOINT_EVENT_TYPE.equals(sseEvent.event())) {
+							String messageEndpointUri = sseEvent.data();
+							try {
+								messageEndpointValidator.validate(uri, messageEndpointUri);
 							}
-							else if (MESSAGE_EVENT_TYPE.equals(responseEvent.sseEvent().event())) {
-								JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper,
-										responseEvent.sseEvent().data());
-								sink.success();
-								return Flux.just(message);
+							catch (InvalidSseMessageEndpointException e) {
+								this.messageEndpointSink.tryEmitError(e);
+								events.error(e);
+								return;
+							}
+							if (this.messageEndpointSink.tryEmitValue(messageEndpointUri).isSuccess()) {
+								events.next(Optional.empty());
 							}
 							else {
-								logger.debug("Received unrecognized SSE event type: {}", responseEvent.sseEvent());
-								sink.success();
+								events.error(new McpTransportException("Failed to handle SSE endpoint event"));
 							}
 						}
-						catch (IOException e) {
-							sink.error(new McpTransportException("Error processing SSE event", e));
+						else if (MESSAGE_EVENT_TYPE.equals(sseEvent.event())) {
+							String data = sseEvent.data();
+							if (data == null || data.isBlank()) {
+								logger.debug("Skipping SSE event with empty data (stream primer)");
+								events.next(Optional.empty());
+							}
+							else {
+								events.next(Optional.of(McpSchema.deserializeJsonRpcMessage(jsonMapper, data)));
+							}
+						}
+						else {
+							logger.debug("Received unrecognized SSE event type: {}", sseEvent);
+							events.next(Optional.empty());
 						}
 					}
-					return Flux.<McpSchema.JSONRPCMessage>error(
-							new RuntimeException("Failed to send message: " + responseEvent));
-
+					catch (IOException e) {
+						events.error(new McpTransportException("Error processing SSE event", e));
+					}
 				})
-				.flatMap(jsonRpcMessage -> handler.apply(Mono.just(jsonRpcMessage)))
+				// connect() is resolved by the first signal only: any later failure is
+				// merely logged below, as connect() has already completed by then.
+				.switchOnFirst((first, events) -> {
+					if (first.hasValue()) {
+						sink.success();
+					}
+					else if (first.isOnError()) {
+						sink.error(first.getThrowable());
+					}
+					else if (first.isOnComplete()) {
+						sink.error(new McpTransportException("SSE stream closed before any event was received"));
+					}
+					return events;
+				})
+				.<JSONRPCMessage>handle((message, messages) -> message.ifPresent(messages::next))
+				.flatMap(message -> handler.apply(Mono.just(message)))
 				.onErrorComplete(t -> {
 					if (!isClosing) {
 						logger.warn("SSE stream observed an error", t);
-						sink.error(t);
 					}
 					return true;
 				})
+				// A closeGracefully() before the first signal cancels the stream:
+				// complete
+				// connect() instead of leaving it pending. A no-op once it has resolved.
+				.doOnCancel(sink::success)
 				.doFinally(s -> {
 					Disposable ref = this.sseSubscription.getAndSet(null);
 					if (ref != null && !ref.isDisposed()) {
@@ -486,17 +508,7 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			}
 
 			return this.serializeMessage(message)
-				.flatMap(body -> sendHttpPost(messageEndpointUri, body).handle((response, sink) -> {
-					if (response.statusCode() != 200 && response.statusCode() != 201 && response.statusCode() != 202
-							&& response.statusCode() != 206) {
-						sink.error(new RuntimeException("Sending message failed with a non-OK HTTP code: "
-								+ response.statusCode() + " - " + response.body()));
-					}
-					else {
-						sink.next(response);
-						sink.complete();
-					}
-				}))
+				.flatMap(body -> sendHttpPost(messageEndpointUri, body))
 				.doOnError(error -> {
 					if (!isClosing) {
 						logger.error("Error sending message: {}", error.getMessage());
@@ -517,7 +529,16 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 		});
 	}
 
-	private Mono<HttpResponse<String>> sendHttpPost(final String endpoint, final String body) {
+	/**
+	 * POSTs {@code body} to {@code endpoint} and consumes the response, failing if the
+	 * server did not accept the message.
+	 *
+	 * <p>
+	 * The response body is streamed rather than aggregated: it is only read as text when
+	 * a non-OK status makes it part of the failure message, and discarded otherwise.
+	 * Either way it has to be consumed, or the connection is never released.
+	 */
+	private Mono<Void> sendHttpPost(final String endpoint, final String body) {
 		final URI requestUri = Utils.resolveUri(baseUri, endpoint);
 		return Mono.deferContextual(ctx -> {
 			var builder = this.requestBuilder.copy()
@@ -529,8 +550,15 @@ public class HttpClientSseClientTransport implements McpClientTransport {
 			return Mono.from(this.httpRequestCustomizer.customize(builder, "POST", requestUri, body, transportContext));
 		}).flatMap(customizedBuilder -> {
 			var request = customizedBuilder.build();
-			return Mono.fromFuture(
-					httpClient.sendAsync(request, ResponseSubscribers.boundedStringBodyHandler(this.maxResponseSize)));
+			return ResponseBodyHandlers.sendAsync(this.httpClient, request).flatMap(response -> {
+				int statusCode = response.statusCode();
+				if (statusCode == 200 || statusCode == 201 || statusCode == 202 || statusCode == 206) {
+					return ResponseBodyHandlers.drain(response.body(), this.maxResponseSize).then();
+				}
+				return ResponseBodyHandlers.decodeAggregateResponse(response.body(), this.maxResponseSize)
+					.flatMap(text -> Mono.error(new McpTransportException(
+							"Sending message failed with a non-OK HTTP code: " + statusCode + " - " + text)));
+			});
 		});
 	}
 
