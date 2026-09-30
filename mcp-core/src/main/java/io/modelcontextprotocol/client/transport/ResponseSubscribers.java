@@ -320,7 +320,7 @@ class ResponseSubscribers {
 		 * The response information from the HTTP response. Send with each event to
 		 * provide context.
 		 */
-		private ResponseInfo responseInfo;
+		private final ResponseInfo responseInfo;
 
 		volatile boolean hasRequestedDemand = false;
 
@@ -348,16 +348,15 @@ class ResponseSubscribers {
 
 		@Override
 		protected void hookOnSubscribe(Subscription subscription) {
+			// Register disposal callback to cancel subscription when Flux is disposed
+			sink.onDispose(subscription::cancel);
 
 			sink.onRequest(n -> {
 				if (!hasRequestedDemand) {
+					hasRequestedDemand = true;
 					subscription.request(Long.MAX_VALUE);
 				}
-				hasRequestedDemand = true;
 			});
-
-			// Register disposal callback to cancel subscription when Flux is disposed
-			sink.onDispose(subscription::cancel);
 		}
 
 		@Override
@@ -410,17 +409,14 @@ class ResponseSubscribers {
 
 		@Override
 		protected void hookOnSubscribe(Subscription subscription) {
+			// Register disposal callback to cancel subscription when Flux is disposed
+			sink.onDispose(subscription::cancel);
 
 			sink.onRequest(n -> {
 				if (!hasRequestedDemand) {
+					hasRequestedDemand = true;
 					subscription.request(Long.MAX_VALUE);
 				}
-				hasRequestedDemand = true;
-			});
-
-			// Register disposal callback to cancel subscription when Flux is disposed
-			sink.onDispose(() -> {
-				subscription.cancel();
 			});
 		}
 
