@@ -170,6 +170,39 @@ class McpSyncServerExchangeTests {
 	}
 
 	@Test
+	void testListRootsWithNullCapabilities() {
+		// Given - Create exchange with null capabilities
+		McpAsyncServerExchange asyncExchangeWithNullCapabilities = new McpAsyncServerExchange("testSessionId",
+				mockSession, null, clientInfo, McpTransportContext.EMPTY);
+		McpSyncServerExchange exchangeWithNullCapabilities = new McpSyncServerExchange(
+				asyncExchangeWithNullCapabilities);
+
+		assertThatThrownBy(() -> exchangeWithNullCapabilities.listRoots()).isInstanceOf(IllegalStateException.class)
+			.hasMessage("Client must be initialized. Call the initialize method first!");
+
+		// Verify that sendRequest was never called due to null capabilities
+		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), any(), any(TypeRef.class));
+	}
+
+	@Test
+	void testListRootsWithoutRootsCapabilities() {
+		// Given - Create exchange without roots capabilities
+		McpSchema.ClientCapabilities capabilitiesWithoutRoots = McpSchema.ClientCapabilities.builder()
+			.sampling()
+			.build();
+
+		McpAsyncServerExchange asyncExchangeWithoutRoots = new McpAsyncServerExchange("testSessionId", mockSession,
+				capabilitiesWithoutRoots, clientInfo, McpTransportContext.EMPTY);
+		McpSyncServerExchange exchangeWithoutRoots = new McpSyncServerExchange(asyncExchangeWithoutRoots);
+
+		assertThatThrownBy(() -> exchangeWithoutRoots.listRoots()).isInstanceOf(IllegalStateException.class)
+			.hasMessage("Client must be configured with roots capabilities");
+
+		// Verify that sendRequest was never called due to missing roots capabilities
+		verify(mockSession, never()).sendRequest(eq(McpSchema.METHOD_ROOTS_LIST), any(), any(TypeRef.class));
+	}
+
+	@Test
 	void testListRootsUnmodifiabilityAfterAccumulation() {
 
 		List<McpSchema.Root> page1Roots = new ArrayList<>(
