@@ -11,7 +11,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
@@ -23,6 +25,7 @@ import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse;
 import io.modelcontextprotocol.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -290,7 +293,15 @@ public class StdioClientTransport implements McpClientTransport {
 						if (!isClosing) {
 							logger.error("Error processing inbound message for line: {}", line, e);
 						}
-						break;
+						// One malformed message must not end the session. Fail the
+						// request it answers, if any, and keep reading.
+						JSONRPCResponse failure = failureForMalformedResponse(line, e);
+						if (failure != null && !this.inboundSink.tryEmitNext(failure).isSuccess()) {
+							if (!isClosing) {
+								logger.error("Failed to enqueue inbound message: {}", failure);
+							}
+							break;
+						}
 					}
 				}
 			}
@@ -309,6 +320,32 @@ public class StdioClientTransport implements McpClientTransport {
 				inboundSink.tryEmitComplete();
 			}
 		});
+	}
+
+	/**
+	 * Builds an error response for a response that could not be deserialized, so that the
+	 * request it answers fails right away instead of waiting for its timeout.
+	 * @param line the raw message
+	 * @param cause the deserialization failure
+	 * @return the error response, or {@code null} if the line is not a response with a
+	 * usable id
+	 */
+	private JSONRPCResponse failureForMalformedResponse(String line, Exception cause) {
+		try {
+			Map<String, Object> message = this.jsonMapper.readValue(line, new TypeRef<HashMap<String, Object>>() {
+			});
+			Object id = message.get("id");
+			boolean isResponse = !message.containsKey("method")
+					&& (message.containsKey("result") || message.containsKey("error"));
+			if (isResponse && (id instanceof String || id instanceof Integer || id instanceof Long)) {
+				return JSONRPCResponse.error(id, new JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+						"Received a malformed JSON-RPC response", cause.getMessage()));
+			}
+		}
+		catch (Exception ignored) {
+			// not JSON, so there is no request to fail
+		}
+		return null;
 	}
 
 	/**
