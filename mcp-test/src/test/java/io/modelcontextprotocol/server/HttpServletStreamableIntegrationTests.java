@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -448,6 +449,26 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 		finally {
 			VirtualTimeScheduler.reset();
 		}
+	}
+
+	@Test
+	void getStreamSendsHeadersBeforeFirstEvent() throws Exception {
+		withTransportProvider(null, null);
+		String sessionId = initializeSession(httpClient);
+
+		var get = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + MESSAGE_ENDPOINT))
+			.header("Accept", "text/event-stream")
+			.header(HttpHeaders.MCP_SESSION_ID, sessionId)
+			.GET()
+			.build();
+
+		HttpResponse<InputStream> response = httpClient.sendAsync(get, HttpResponse.BodyHandlers.ofInputStream())
+			.get(5, TimeUnit.SECONDS);
+
+		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_OK);
+		assertThat(response.headers().firstValue("Content-Type").orElse("")).startsWith("text/event-stream");
+		response.body().close();
 	}
 
 	/**
