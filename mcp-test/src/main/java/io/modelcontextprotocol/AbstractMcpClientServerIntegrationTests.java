@@ -1129,9 +1129,10 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 			.tool(Tool.builder("tool1", EMPTY_JSON_SCHEMA).description("tool1 description").build())
 			.callHandler((exchange, request) -> {
 
-				exchange.listRoots(); // try to list roots
+				assertThatThrownBy(exchange::listRoots).isInstanceOf(IllegalStateException.class)
+					.hasMessage("Client must be configured with root listing capabilities");
 
-				return mock(CallToolResult.class);
+				return CallToolResult.builder().addTextContent("Roots capability rejected").build();
 			})
 			.build();
 
@@ -1145,13 +1146,10 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 
 			assertThat(mcpClient.initialize()).isNotNull();
 
-			// Attempt to list roots should fail
-			try {
-				mcpClient.callTool(McpSchema.CallToolRequest.builder("tool1").arguments(Map.of()).build());
-			}
-			catch (McpError e) {
-				assertThat(e).isInstanceOf(McpError.class).hasMessage("Roots not supported");
-			}
+			CallToolResult result = mcpClient
+				.callTool(McpSchema.CallToolRequest.builder("tool1").arguments(Map.of()).build());
+			assertThat(result.isError()).isFalse();
+			assertThat(result.content()).containsExactly(new McpSchema.TextContent("Roots capability rejected"));
 		}
 		finally {
 			mcpServer.closeGracefully();
