@@ -161,7 +161,7 @@ class SchemaEvolutionTests {
 
 	@Test
 	void serverCapabilitiesExtensionsRoundTrip() throws IOException {
-		Map<String, Object> extensions = Map.of("com.example/ext-with-settings", Map.of("maxDepth", 3),
+		Map<String, Map<String, Object>> extensions = Map.of("com.example/ext-with-settings", Map.of("maxDepth", 3),
 				"com.example/ext-without-settings", Map.of());
 		McpSchema.ServerCapabilities caps = McpSchema.ServerCapabilities.builder().extensions(extensions).build();
 
@@ -202,7 +202,7 @@ class SchemaEvolutionTests {
 
 	@Test
 	void clientCapabilitiesExtensionsRoundTrip() throws IOException {
-		Map<String, Object> extensions = Map.of("com.example/ext-with-settings", Map.of("maxDepth", 3),
+		Map<String, Map<String, Object>> extensions = Map.of("com.example/ext-with-settings", Map.of("maxDepth", 3),
 				"com.example/ext-without-settings", Map.of());
 		McpSchema.ClientCapabilities caps = McpSchema.ClientCapabilities.builder().extensions(extensions).build();
 

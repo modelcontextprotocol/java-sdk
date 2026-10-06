@@ -587,7 +587,7 @@ public final class McpSchema {
 		@JsonProperty("roots") RootCapabilities roots,
 		@JsonProperty("sampling") Sampling sampling,
 		@JsonProperty("elicitation") Elicitation elicitation,
-		@JsonProperty("extensions") Map<String, Object> extensions) { // @formatter:on
+		@JsonProperty("extensions") Map<String, Map<String, Object>> extensions) { // @formatter:on
 
 		// Keep the old constructor so existing callers still compile
 		public ClientCapabilities(Map<String, Object> experimental, RootCapabilities roots, Sampling sampling,
@@ -732,7 +732,7 @@ public final class McpSchema {
 
 			private Elicitation elicitation;
 
-			private Map<String, Object> extensions;
+			private Map<String, Map<String, Object>> extensions;
 
 			public Builder experimental(Map<String, Object> experimental) {
 				this.experimental = experimental;
@@ -776,7 +776,7 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder extensions(Map<String, Object> extensions) {
+			public Builder extensions(Map<String, Map<String, Object>> extensions) {
 				this.extensions = extensions;
 				return this;
 			}
@@ -813,7 +813,7 @@ public final class McpSchema {
 		@JsonProperty("prompts") PromptCapabilities prompts,
 		@JsonProperty("resources") ResourceCapabilities resources,
 		@JsonProperty("tools") ToolCapabilities tools,
-		@JsonProperty("extensions") Map<String, Object> extensions) { // @formatter:on
+		@JsonProperty("extensions") Map<String, Map<String, Object>> extensions) { // @formatter:on
 
 		// Keep the old constructor so existing callers still compile
 		public ServerCapabilities(CompletionCapabilities completions, Map<String, Object> experimental,
@@ -971,7 +971,7 @@ public final class McpSchema {
 
 			private ToolCapabilities tools;
 
-			private Map<String, Object> extensions;
+			private Map<String, Map<String, Object>> extensions;
 
 			public Builder completions() {
 				this.completions = new CompletionCapabilities();
@@ -1003,7 +1003,7 @@ public final class McpSchema {
 				return this;
 			}
 
-			public Builder extensions(Map<String, Object> extensions) {
+			public Builder extensions(Map<String, Map<String, Object>> extensions) {
 				this.extensions = extensions;
 				return this;
 			}
