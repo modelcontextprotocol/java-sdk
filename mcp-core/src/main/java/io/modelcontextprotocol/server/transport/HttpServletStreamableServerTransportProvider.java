@@ -452,6 +452,7 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 				.listeningStream(sessionTransport);
 
 			registerAsyncLifecycle(asyncContext, sessionId, listeningStream::releaseTransport);
+			response.flushBuffer();
 		}
 		catch (Exception e) {
 			logger.error("Failed to handle GET request for session {}: {}", sessionId, e.getMessage());
