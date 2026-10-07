@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 
@@ -781,6 +782,45 @@ class HttpServletStatelessIntegrationTests {
 
 			var response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
 			assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+		}
+		finally {
+			mcpServer.closeGracefully();
+		}
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "text/plain;charset=UTF-8", "application/x-www-form-urlencoded", "multipart/form-data" })
+	void rejectsNonJsonContentType(String contentType) throws Exception {
+		AtomicBoolean toolCalled = new AtomicBoolean();
+		var mcpServer = McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().tools(false).build())
+			.tools(McpStatelessServerFeatures.SyncToolSpecification.builder()
+				.tool(Tool.builder().name("tool1").inputSchema(EMPTY_JSON_SCHEMA).build())
+				.callHandler((transportContext, request) -> {
+					toolCalled.set(true);
+					return CallToolResult.builder().build();
+				})
+				.build())
+			.build();
+
+		try {
+			// CORS-safelisted content types can be sent cross-origin by a browser without
+			// a preflight, so they must be rejected before the message is handled
+			var request = HttpRequest.newBuilder()
+				.uri(URI.create("http://localhost:" + PORT + CUSTOM_MESSAGE_ENDPOINT))
+				.header("Content-Type", contentType)
+				.header("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
+				.POST(HttpRequest.BodyPublishers.ofString(
+						"""
+								{"jsonrpc":"2.0","id":"call-1","method":"tools/call","params":{"name":"tool1","arguments":{}}}"""))
+				.build();
+
+			var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+			assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE);
+			assertThatJson(response.body()).inPath("message")
+				.isEqualTo("Unsupported Media Type: Content-Type must be application/json");
+			assertThat(toolCalled).isFalse();
 		}
 		finally {
 			mcpServer.closeGracefully();

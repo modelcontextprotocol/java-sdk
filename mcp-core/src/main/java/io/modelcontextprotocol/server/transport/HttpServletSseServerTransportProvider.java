@@ -373,6 +373,14 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 			return;
 		}
 
+		if (!HttpServletRequestUtils.isJsonContentType(request.getContentType())) {
+			this.responseError(response, HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE,
+					McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+						.message("Unsupported Media Type: Content-Type must be application/json")
+						.build());
+			return;
+		}
+
 		// Get the session ID from the request parameter
 		String sessionId = request.getParameter("sessionId");
 		if (sessionId == null) {
@@ -475,6 +483,16 @@ public class HttpServletSseServerTransportProvider extends HttpServlet implement
 		if (writer.checkError()) {
 			throw new IOException("Client disconnected");
 		}
+	}
+
+	private void responseError(HttpServletResponse response, int httpCode, McpError mcpError) throws IOException {
+		response.setContentType(APPLICATION_JSON);
+		response.setCharacterEncoding(UTF_8);
+		response.setStatus(httpCode);
+		String jsonError = jsonMapper.writeValueAsString(mcpError);
+		PrintWriter writer = response.getWriter();
+		writer.write(jsonError);
+		writer.flush();
 	}
 
 	/**

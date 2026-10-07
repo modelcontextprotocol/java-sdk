@@ -4,6 +4,9 @@
 
 package io.modelcontextprotocol.server;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -12,6 +15,9 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 import io.modelcontextprotocol.AbstractMcpClientServerIntegrationTests;
@@ -22,6 +28,7 @@ import io.modelcontextprotocol.server.McpServer.AsyncSpecification;
 import io.modelcontextprotocol.server.McpServer.SyncSpecification;
 import io.modelcontextprotocol.server.transport.HttpServletSseServerTransportProvider;
 import io.modelcontextprotocol.server.transport.TomcatTestUtil;
+import io.modelcontextprotocol.spec.McpSchema;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.apache.catalina.LifecycleException;
@@ -31,8 +38,12 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.ValueSource;
+import reactor.core.publisher.Mono;
 
+import static io.modelcontextprotocol.util.ToolsUtils.EMPTY_JSON_SCHEMA;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Timeout(15)
@@ -179,6 +190,55 @@ class HttpServletSseIntegrationTests extends AbstractMcpClientServerIntegrationT
 
 		var response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
 		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "text/plain;charset=UTF-8", "application/x-www-form-urlencoded", "multipart/form-data" })
+	void rejectsNonJsonContentType(String contentType) throws Exception {
+		var httpClient = HttpClient.newHttpClient();
+		var toolCalled = new AtomicBoolean();
+		prepareAsyncServerBuilder().capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
+			.tools(McpServerFeatures.AsyncToolSpecification.builder()
+				.tool(McpSchema.Tool.builder().name("tool1").inputSchema(EMPTY_JSON_SCHEMA).build())
+				.callHandler((exchange, request) -> {
+					toolCalled.set(true);
+					return Mono.just(McpSchema.CallToolResult.builder().build());
+				})
+				.build())
+			.build();
+
+		// Establish an SSE session to obtain a valid session ID
+		var sseRequest = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + CUSTOM_SSE_ENDPOINT))
+			.header("Accept", "text/event-stream")
+			.GET()
+			.build();
+		HttpResponse<InputStream> sseResponse = httpClient.send(sseRequest, HttpResponse.BodyHandlers.ofInputStream());
+		try (var reader = new BufferedReader(new InputStreamReader(sseResponse.body(), StandardCharsets.UTF_8))) {
+			var sessionIdFuture = CompletableFuture.supplyAsync(() -> reader.lines()
+				.filter(line -> line.startsWith("data:") && line.contains("sessionId="))
+				.map(line -> line.substring(line.indexOf("sessionId=") + "sessionId=".length()).strip())
+				.findFirst()
+				.orElseThrow(() -> new IllegalStateException("sessionId not found in SSE stream")));
+			String sessionId = sessionIdFuture.get(5, TimeUnit.SECONDS);
+
+			// CORS-safelisted content types can be sent cross-origin by a browser without
+			// a
+			// preflight, so they must be rejected before the message is handled
+			var request = HttpRequest.newBuilder()
+				.uri(URI.create("http://localhost:" + PORT + CUSTOM_MESSAGE_ENDPOINT + "?sessionId=" + sessionId))
+				.header("Content-Type", contentType)
+				.POST(HttpRequest.BodyPublishers.ofString(
+						"""
+								{"jsonrpc":"2.0","id":"call-1","method":"tools/call","params":{"name":"tool1","arguments":{}}}"""))
+				.build();
+
+			var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+			assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE);
+			assertThat(response.body()).contains("Unsupported Media Type: Content-Type must be application/json");
+			assertThat(toolCalled).isFalse();
+		}
 	}
 
 	static McpTransportContextExtractor<HttpServletRequest> TEST_CONTEXT_EXTRACTOR = (r) -> McpTransportContext
