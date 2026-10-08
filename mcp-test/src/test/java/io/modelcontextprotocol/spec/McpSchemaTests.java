@@ -11,7 +11,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
 import net.javacrumbs.jsonunit.core.Option;
 import org.assertj.core.api.InstanceOfAssertFactories;
@@ -765,22 +764,11 @@ public class McpSchemaTests {
 				}
 				""";
 
-		// Deserialize the original string to a JsonSchema object
-		Map<String, Object> schema = JSON_MAPPER.readValue(schemaJson, new TypeRef<HashMap<String, Object>>() {
-		});
+		McpSchema.Tool tool = JSON_MAPPER.readValue("""
+				{"name": "addressTool", "inputSchema": %s}
+				""".formatted(schemaJson), McpSchema.Tool.class);
 
-		// Serialize the object back to a string
-		String serialized = JSON_MAPPER.writeValueAsString(schema);
-
-		// Deserialize again
-		Map<String, Object> deserialized = JSON_MAPPER.readValue(serialized, new TypeRef<HashMap<String, Object>>() {
-		});
-
-		// Serialize one more time and compare with the first serialization
-		String serializedAgain = JSON_MAPPER.writeValueAsString(deserialized);
-
-		// The two serialized strings should be the same
-		assertThatJson(serializedAgain).when(Option.IGNORING_ARRAY_ORDER).isEqualTo(json(serialized));
+		assertThatJson(JSON_MAPPER.writeValueAsString(tool)).inPath("$.inputSchema").isEqualTo(json(schemaJson));
 	}
 
 	@Test
@@ -810,22 +798,11 @@ public class McpSchemaTests {
 				}
 				""";
 
-		// Deserialize the original string to a JsonSchema object
-		Map<String, Object> schema = JSON_MAPPER.readValue(schemaJson, new TypeRef<HashMap<String, Object>>() {
-		});
+		McpSchema.Tool tool = JSON_MAPPER.readValue("""
+				{"name": "addressTool", "inputSchema": %s}
+				""".formatted(schemaJson), McpSchema.Tool.class);
 
-		// Serialize the object back to a string
-		String serialized = JSON_MAPPER.writeValueAsString(schema);
-
-		// Deserialize again
-		Map<String, Object> deserialized = JSON_MAPPER.readValue(serialized, new TypeRef<HashMap<String, Object>>() {
-		});
-
-		// Serialize one more time and compare with the first serialization
-		String serializedAgain = JSON_MAPPER.writeValueAsString(deserialized);
-
-		// The two serialized strings should be the same
-		assertThatJson(serializedAgain).when(Option.IGNORING_ARRAY_ORDER).isEqualTo(json(serialized));
+		assertThatJson(JSON_MAPPER.writeValueAsString(tool)).inPath("$.inputSchema").isEqualTo(json(schemaJson));
 	}
 
 	@Test
@@ -922,10 +899,9 @@ public class McpSchemaTests {
 				}
 				""";
 
-		Map<String, Object> inputSchema = Map.of("inputSchema", schemaJson);
 		Map<String, Object> meta = Map.of("metaKey", "metaValue");
 
-		McpSchema.Tool tool = McpSchema.Tool.builder("addressTool", inputSchema)
+		McpSchema.Tool tool = McpSchema.Tool.builder("addressTool", JSON_MAPPER, schemaJson)
 			.title("addressTool")
 			.description("Handles addresses")
 			.meta(meta)
