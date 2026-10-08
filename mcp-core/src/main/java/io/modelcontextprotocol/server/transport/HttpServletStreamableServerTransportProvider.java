@@ -503,6 +503,14 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			badRequestErrors.add("application/json required in Accept header");
 		}
 
+		if (!HttpServletRequestUtils.isJsonContentType(request.getContentType())) {
+			this.responseError(response, HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE,
+					McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+						.message("Unsupported Media Type: Content-Type must be application/json")
+						.build());
+			return;
+		}
+
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		try {

@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -47,7 +48,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -248,6 +251,61 @@ class HttpServletStreamableIntegrationTests extends AbstractMcpClientServerInteg
 
 		var response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
 		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "text/plain;charset=UTF-8", "application/x-www-form-urlencoded", "multipart/form-data" })
+	void rejectsInitializeWithNonJsonContentType(String contentType) throws Exception {
+		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").build();
+
+		// CORS-safelisted content types can be sent cross-origin by a browser without a
+		// preflight, so they must be rejected before a session is created
+		var initialize = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + MESSAGE_ENDPOINT))
+			.header("Content-Type", contentType)
+			.header("Accept", "text/event-stream, application/json")
+			.POST(HttpRequest.BodyPublishers.ofString("""
+					{"jsonrpc":"2.0","id":"init","method":"initialize","params":{
+					"protocolVersion":"2025-06-18","capabilities":{},
+					"clientInfo":{"name":"test-client","version":"1.0.0"}}}"""))
+			.build();
+
+		var response = httpClient.send(initialize, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE);
+		assertThat(response.body()).contains("Unsupported Media Type: Content-Type must be application/json");
+		assertThat(response.headers().firstValue(HttpHeaders.MCP_SESSION_ID)).isEmpty();
+	}
+
+	@Test
+	void rejectsToolCallWithNonJsonContentType() throws Exception {
+		var toolCalled = new AtomicBoolean();
+		prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0")
+			.capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
+			.tools(McpServerFeatures.AsyncToolSpecification.builder()
+				.tool(McpSchema.Tool.builder("tool1", EMPTY_JSON_SCHEMA).build())
+				.callHandler((exchange, request) -> {
+					toolCalled.set(true);
+					return Mono.just(McpSchema.CallToolResult.builder().build());
+				})
+				.build())
+			.build();
+		var sessionId = initializeSession(httpClient);
+
+		var toolCall = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + MESSAGE_ENDPOINT))
+			.header("Content-Type", "text/plain;charset=UTF-8")
+			.header("Accept", "text/event-stream, application/json")
+			.header(HttpHeaders.MCP_SESSION_ID, sessionId)
+			.POST(HttpRequest.BodyPublishers.ofString("""
+					{"jsonrpc":"2.0","id":"call-1","method":"tools/call","params":{"name":"tool1","arguments":{}}}"""))
+			.build();
+
+		var response = httpClient.send(toolCall, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE);
+		assertThat(response.body()).contains("Unsupported Media Type: Content-Type must be application/json");
+		assertThat(toolCalled).isFalse();
 	}
 
 	@Test
