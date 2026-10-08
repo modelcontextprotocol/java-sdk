@@ -5,13 +5,20 @@
 package io.modelcontextprotocol.client.transport;
 
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import io.modelcontextprotocol.client.transport.ResponseBodyHandlers.SseEvent;
 import io.modelcontextprotocol.client.transport.ResponseBodyHandlers.SseEventParser;
+import io.modelcontextprotocol.spec.McpTransportException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class SseEventParserTests {
 
@@ -27,13 +34,56 @@ class SseEventParserTests {
 	}
 
 	@Test
-	void multiLineDataAccumulatesWithNewlineSeparatorAndTrims() {
+	void multiLineDataAccumulatesWithNewlineSeparatorAndPreservesWhitespace() {
 		SseEventParser p = new SseEventParser(Integer.MAX_VALUE);
-		assertThat(p.feed("data: first")).isEmpty();
-		assertThat(p.feed("data: second")).isEmpty();
+		assertThat(p.feed("data:  first ")).isEmpty();
+		assertThat(p.feed("data: \tsecond\t")).isEmpty();
 		Optional<SseEvent> event = p.feed("");
 		assertThat(event).isPresent();
-		assertThat(event.get().data()).isEqualTo("first\nsecond");
+		assertThat(event.get().data()).isEqualTo(" first \n\tsecond\t");
+	}
+
+	@ParameterizedTest
+	@MethodSource("fieldValues")
+	void fieldValuesRemoveAtMostOneLeadingSpace(String input, String expected) {
+		SseEventParser p = new SseEventParser(Integer.MAX_VALUE);
+		p.feed("id:" + input);
+		p.feed("event:" + input);
+		p.feed("data:" + input);
+		SseEvent first = p.feed("").orElseThrow();
+		assertThat(first.id()).isEqualTo(expected);
+		assertThat(first.event()).isEqualTo(expected);
+		assertThat(first.data()).isEqualTo(expected);
+
+		p.feed("data: next");
+		SseEvent second = p.feed("").orElseThrow();
+		assertThat(second.id()).isEqualTo(expected);
+		assertThat(second.event()).isEqualTo("message");
+		assertThat(second.data()).isEqualTo("next");
+	}
+
+	static Stream<Arguments> fieldValues() {
+		return Stream.of(Arguments.of("token", "token"), Arguments.of(" token", "token"),
+				Arguments.of(" token ", "token "), Arguments.of("  token  ", " token  "),
+				Arguments.of("\ttoken\t", "\ttoken\t"), Arguments.of(" \ttoken\t", "\ttoken\t"),
+				Arguments.of("  ", " "), Arguments.of("\t", "\t"));
+	}
+
+	@Test
+	void emptyDataLinesPreserveLeadingAndTrailingNewlines() {
+		SseEventParser p = new SseEventParser(Integer.MAX_VALUE);
+		p.feed("data:");
+		p.feed("data: payload");
+		p.feed("data:");
+		assertThat(p.feed("").orElseThrow().data()).isEqualTo("\npayload\n");
+	}
+
+	@Test
+	void preservedWhitespaceCountsTowardsSizeLimit() {
+		SseEventParser p = new SseEventParser(3);
+		p.feed("data:  a ");
+		assertThat(p.feed("").orElseThrow().data()).isEqualTo(" a ");
+		assertThatThrownBy(() -> p.feed("data:  a  ")).isInstanceOf(McpTransportException.class);
 	}
 
 	@Test
@@ -90,11 +140,12 @@ class SseEventParserTests {
 		assertThat(p.feed("").orElseThrow().id()).isNull();
 	}
 
-	@Test
-	void idContainingNullIsIgnored() {
+	@ParameterizedTest
+	@ValueSource(strings = { "\0token", "token\0", "to\0ken" })
+	void idContainingNullIsIgnored(String id) {
 		SseEventParser p = new SseEventParser(Integer.MAX_VALUE);
 		p.feed("id: 1");
-		p.feed("id: 2\u0000" + "3");
+		p.feed("id: " + id);
 		p.feed("data: payload");
 		assertThat(p.feed("").orElseThrow().id()).isEqualTo("1");
 	}
