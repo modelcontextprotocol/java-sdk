@@ -10,6 +10,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.fail;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -23,6 +24,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import io.modelcontextprotocol.client.transport.customizer.McpAsyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.spec.McpSchema.ElicitFormRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -66,6 +68,15 @@ public abstract class AbstractMcpAsyncClientTests {
 	private static final String ECHO_TEST_MESSAGE = "Hello MCP Spring AI!";
 
 	abstract protected McpClientTransport createMcpTransport();
+
+	// Creates a client transport that applies request customizers, in the order they
+	// appear in the list. Subclasses whose transport supports
+	// McpAsyncHttpClientRequestCustomizer should override this; tests relying on it are
+	// skipped otherwise.
+	protected McpClientTransport createMcpTransport(
+			Consumer<List<McpAsyncHttpClientRequestCustomizer>> requestCustomizers) {
+		return null;
+	}
 
 	protected Duration getRequestTimeout() {
 		return Duration.ofSeconds(14);
@@ -123,6 +134,30 @@ public abstract class AbstractMcpAsyncClientTests {
 	<T> void verifyCallSucceedsWithImplicitInitialization(Function<McpAsyncClient, Mono<T>> operation, String action) {
 		withClient(createMcpTransport(), mcpAsyncClient -> {
 			StepVerifier.create(operation.apply(mcpAsyncClient)).expectNextCount(1).verifyComplete();
+		});
+	}
+
+	@Test
+	void testRequestCustomizersAreAppliedInOrder() {
+		var invocations = new CopyOnWriteArrayList<String>();
+		Function<String, McpAsyncHttpClientRequestCustomizer> recording = name -> (builder, method, endpoint, body,
+				context) -> {
+			invocations.add(name);
+			return Mono.just(builder);
+		};
+
+		var transport = createMcpTransport(customizers -> {
+			customizers.add(recording.apply("second"));
+			customizers.add(recording.apply("third"));
+			customizers.add(0, recording.apply("first"));
+		});
+		assumeTrue(transport != null, "Transport does not support request customizers");
+
+		withClient(transport, mcpAsyncClient -> {
+			StepVerifier.create(mcpAsyncClient.initialize()).expectNextCount(1).verifyComplete();
+			// Later requests may run concurrently, e.g. the Streamable HTTP GET
+			// stream, so only check the first one.
+			assertThat(invocations).startsWith("first", "second", "third");
 		});
 	}
 
