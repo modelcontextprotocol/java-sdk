@@ -340,6 +340,13 @@ public class WebMvcSseServerTransportProvider implements McpServerTransportProvi
 			return ServerResponse.status(e.getStatusCode()).body(e.getMessage());
 		}
 
+		if (!WebMvcServerRequestUtils.isJsonContentType(request)) {
+			return ServerResponse.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+				.body(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+					.message("Unsupported Media Type: Content-Type must be application/json")
+					.build());
+		}
+
 		if (request.param(SESSION_ID).isEmpty()) {
 			return ServerResponse.badRequest().body(new McpError("Session ID missing in message endpoint"));
 		}

@@ -246,6 +246,13 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 			return ServerResponse.status(e.getStatusCode()).bodyValue(e.getMessage());
 		}
 
+		if (!WebFluxServerRequestUtils.isJsonContentType(request)) {
+			return ServerResponse.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+				.bodyValue(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+					.message("Unsupported Media Type: Content-Type must be application/json")
+					.build());
+		}
+
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		List<MediaType> acceptHeaders = request.headers().asHttpHeaders().getAccept();

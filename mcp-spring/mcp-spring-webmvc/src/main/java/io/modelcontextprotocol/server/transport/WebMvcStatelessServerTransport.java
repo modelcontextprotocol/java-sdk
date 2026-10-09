@@ -118,6 +118,13 @@ public class WebMvcStatelessServerTransport implements McpStatelessServerTranspo
 			return ServerResponse.status(e.getStatusCode()).body(e.getMessage());
 		}
 
+		if (!WebMvcServerRequestUtils.isJsonContentType(request)) {
+			return ServerResponse.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+				.body(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+					.message("Unsupported Media Type: Content-Type must be application/json")
+					.build());
+		}
+
 		McpTransportContext transportContext = this.contextExtractor.extract(request);
 
 		List<MediaType> acceptHeaders = request.headers().asHttpHeaders().getAccept();
