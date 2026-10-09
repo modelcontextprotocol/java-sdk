@@ -41,7 +41,12 @@ jobs:
           MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
         run: |
-          mvn -Pjavadoc -Prelease --batch-mode --update-snapshots deploy
+          mvn \
+            -Pjavadoc \
+            -Prelease \
+            --batch-mode \
+            --update-snapshots deploy \
+            -Dmaven.repository.credentialScope=id
 
       - name: Capture project version
         run: echo PROJECT_VERSION=$(mvn help:evaluate -Dexpression=project.version --quiet -DforceStdout) >> $GITHUB_ENV
