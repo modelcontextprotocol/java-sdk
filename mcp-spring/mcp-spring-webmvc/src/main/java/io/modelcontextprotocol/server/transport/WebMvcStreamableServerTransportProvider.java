@@ -343,6 +343,13 @@ public class WebMvcStreamableServerTransportProvider implements McpStreamableSer
 			return ServerResponse.status(e.getStatusCode()).body(e.getMessage());
 		}
 
+		if (!WebMvcServerRequestUtils.isJsonContentType(request)) {
+			return ServerResponse.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+				.body(McpError.builder(McpSchema.ErrorCodes.INVALID_REQUEST)
+					.message("Unsupported Media Type: Content-Type must be application/json")
+					.build());
+		}
+
 		List<MediaType> acceptHeaders = request.headers().asHttpHeaders().getAccept();
 		if (!acceptHeaders.contains(MediaType.TEXT_EVENT_STREAM)
 				|| !acceptHeaders.contains(MediaType.APPLICATION_JSON)) {
