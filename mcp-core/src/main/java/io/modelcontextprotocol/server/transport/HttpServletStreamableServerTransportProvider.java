@@ -437,6 +437,13 @@ public class HttpServletStreamableServerTransportProvider extends HttpServlet
 			HttpServletStreamableMcpSessionTransport sessionTransport = new HttpServletStreamableMcpSessionTransport(
 					sessionId, asyncContext, response.getWriter());
 
+			// Commit the status line and SSE headers right away. Without an explicit
+			// flush the
+			// response is only sent together with the first event, so clients waiting for
+			// the
+			// stream headers time out when no event arrives.
+			response.flushBuffer();
+
 			// Replay the messages the client missed while its stream was broken
 			String lastEventId = request.getHeader(HttpHeaders.LAST_EVENT_ID);
 			if (lastEventId != null
