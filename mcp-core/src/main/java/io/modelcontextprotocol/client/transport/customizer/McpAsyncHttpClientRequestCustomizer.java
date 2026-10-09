@@ -10,9 +10,9 @@ import java.net.http.HttpRequest;
 import io.modelcontextprotocol.client.McpClient.SyncSpec;
 import io.modelcontextprotocol.common.McpTransportContext;
 import org.reactivestreams.Publisher;
+import org.jspecify.annotations.Nullable;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-import reactor.util.annotation.Nullable;
 
 /**
  * Customize {@link HttpRequest.Builder} before executing the request, in either SSE or
