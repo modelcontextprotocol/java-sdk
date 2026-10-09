@@ -951,6 +951,26 @@ class HttpServletStatelessIntegrationTests {
 		assertThat(toolCalled).isFalse();
 	}
 
+	@Test
+	void rejectsMalformedMessageAsInvalidRequest() throws Exception {
+		McpServer.sync(mcpStatelessServerTransport).build();
+
+		// Valid JSON, but "jsonrpc" is an object instead of a string, so it cannot be
+		// converted into a JSONRPCRequest
+		var request = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + CUSTOM_MESSAGE_ENDPOINT))
+			.header("Content-Type", APPLICATION_JSON)
+			.header("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
+			.POST(HttpRequest.BodyPublishers.ofString("""
+					{"jsonrpc":{"a":1},"id":1,"method":"tools/list"}"""))
+			.build();
+
+		var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_BAD_REQUEST);
+		assertThatJson(response.body()).inPath("message").isEqualTo("Invalid message format");
+	}
+
 	private double evaluateExpression(String expression) {
 		// Simple expression evaluator for testing
 		return switch (expression) {
