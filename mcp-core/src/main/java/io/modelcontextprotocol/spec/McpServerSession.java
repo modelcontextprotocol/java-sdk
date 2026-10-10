@@ -184,19 +184,23 @@ public class McpServerSession implements McpLoggableSession {
 				this.pendingResponses.remove(requestId);
 				sink.error(error);
 			});
-		}).timeout(requestTimeout).handle((jsonRpcResponse, sink) -> {
-			if (jsonRpcResponse.error() != null) {
-				sink.error(new McpError(jsonRpcResponse.error()));
-			}
-			else {
-				if (typeRef.getType().equals(Void.class)) {
-					sink.complete();
+		})
+			.timeout(requestTimeout)
+			.doOnError(e -> this.pendingResponses.remove(requestId))
+			.doOnCancel(() -> this.pendingResponses.remove(requestId))
+			.handle((jsonRpcResponse, sink) -> {
+				if (jsonRpcResponse.error() != null) {
+					sink.error(new McpError(jsonRpcResponse.error()));
 				}
 				else {
-					sink.next(this.transport.unmarshalFrom(jsonRpcResponse.result(), typeRef));
+					if (typeRef.getType().equals(Void.class)) {
+						sink.complete();
+					}
+					else {
+						sink.next(this.transport.unmarshalFrom(jsonRpcResponse.result(), typeRef));
+					}
 				}
-			}
-		});
+			});
 	}
 
 	@Override

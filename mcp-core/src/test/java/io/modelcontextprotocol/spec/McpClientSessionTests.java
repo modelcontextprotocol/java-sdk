@@ -303,4 +303,43 @@ class McpClientSessionTests {
 		StepVerifier.create(session.closeGracefully()).verifyComplete();
 	}
 
+	@Test
+	void testRequestTimeoutRemovesPendingResponse() throws Exception {
+		var transport = new MockMcpClientTransport();
+		var session = new McpClientSession(Duration.ofMillis(50), transport, Map.of(), Map.of(), Function.identity());
+
+		Mono<String> responseMono = session.sendRequest(TEST_METHOD, "test", responseType);
+
+		StepVerifier.create(responseMono).expectError(java.util.concurrent.TimeoutException.class).verify();
+
+		var field = McpClientSession.class.getDeclaredField("pendingResponses");
+		field.setAccessible(true);
+		@SuppressWarnings("unchecked")
+		var pendingResponses = (java.util.Map<Object, ?>) field.get(session);
+		assertThat(pendingResponses).isEmpty();
+
+		session.close();
+	}
+
+	@Test
+	void testRequestCancellationRemovesPendingResponse() throws Exception {
+		var transport = new MockMcpClientTransport();
+		var session = new McpClientSession(TIMEOUT, transport, Map.of(), Map.of(), Function.identity());
+
+		Mono<String> responseMono = session.sendRequest(TEST_METHOD, "test", responseType);
+
+		var subscription = responseMono.subscribe();
+		var field = McpClientSession.class.getDeclaredField("pendingResponses");
+		field.setAccessible(true);
+		@SuppressWarnings("unchecked")
+		var pendingResponses = (java.util.Map<Object, ?>) field.get(session);
+		assertThat(pendingResponses).hasSize(1);
+
+		subscription.dispose();
+
+		assertThat(pendingResponses).isEmpty();
+
+		session.close();
+	}
+
 }
