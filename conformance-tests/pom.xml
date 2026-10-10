@@ -28,6 +28,7 @@
 		<module>client-jdk-http-client</module>
 		<module>client-spring-http-client</module>
 		<module>server-servlet</module>
+		<module>server-servlet-modern</module>
 	</modules>
 
 </project>
