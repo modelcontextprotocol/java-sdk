@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -53,6 +54,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -913,6 +916,59 @@ class HttpServletStatelessIntegrationTests {
 
 		var response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
 		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "text/plain;charset=UTF-8", "application/x-www-form-urlencoded", "multipart/form-data" })
+	void rejectsNonJsonContentType(String contentType) throws Exception {
+		AtomicBoolean toolCalled = new AtomicBoolean();
+		McpServer.sync(mcpStatelessServerTransport)
+			.capabilities(ServerCapabilities.builder().tools(false).build())
+			.tools(McpStatelessServerFeatures.SyncToolSpecification.builder()
+				.tool(Tool.builder("tool1", EMPTY_JSON_SCHEMA).build())
+				.callHandler((transportContext, request) -> {
+					toolCalled.set(true);
+					return CallToolResult.builder().build();
+				})
+				.build())
+			.build();
+
+		// CORS-safelisted content types can be sent cross-origin by a browser without a
+		// preflight, so they must be rejected before the message is handled
+		var request = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + CUSTOM_MESSAGE_ENDPOINT))
+			.header("Content-Type", contentType)
+			.header("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
+			.POST(HttpRequest.BodyPublishers.ofString("""
+					{"jsonrpc":"2.0","id":"call-1","method":"tools/call","params":{"name":"tool1","arguments":{}}}"""))
+			.build();
+
+		var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE);
+		assertThatJson(response.body()).inPath("message")
+			.isEqualTo("Unsupported Media Type: Content-Type must be application/json");
+		assertThat(toolCalled).isFalse();
+	}
+
+	@Test
+	void rejectsMalformedMessageAsInvalidRequest() throws Exception {
+		McpServer.sync(mcpStatelessServerTransport).build();
+
+		// Valid JSON, but "jsonrpc" is an object instead of a string, so it cannot be
+		// converted into a JSONRPCRequest
+		var request = HttpRequest.newBuilder()
+			.uri(URI.create("http://localhost:" + PORT + CUSTOM_MESSAGE_ENDPOINT))
+			.header("Content-Type", APPLICATION_JSON)
+			.header("Accept", APPLICATION_JSON + ", " + TEXT_EVENT_STREAM)
+			.POST(HttpRequest.BodyPublishers.ofString("""
+					{"jsonrpc":{"a":1},"id":1,"method":"tools/list"}"""))
+			.build();
+
+		var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+		assertThat(response.statusCode()).isEqualTo(HttpServletResponse.SC_BAD_REQUEST);
+		assertThatJson(response.body()).inPath("message").isEqualTo("Invalid message format");
 	}
 
 	private double evaluateExpression(String expression) {

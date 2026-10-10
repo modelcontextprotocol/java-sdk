@@ -168,7 +168,7 @@ Key features:
       (`keepAliveInterval`, `null` to disable)
     - Eviction of idle sessions — no open stream and no request for a full interval — every
       30 minutes by default (`sessionSweepInterval`, `null` to keep sessions until deleted)
-    - Security validation support
+    - Origin and Host validation (opt-in, see [HTTP Transport Security](#http-transport-security))
     - Graceful shutdown support
 
 === "Streamable HTTP WebFlux (external)"
@@ -261,6 +261,7 @@ Key features:
         - SSE endpoint (`/sse`) for server-to-client events
         - Message endpoint (configurable) for client-to-server requests
     - Error handling and response formatting
+    - Origin and Host validation (opt-in, see [HTTP Transport Security](#http-transport-security))
     - Graceful shutdown support
 
 === "SSE WebFlux (external)"
@@ -317,6 +318,25 @@ Key features:
     - Support for traditional web applications
     - Synchronous operation handling
 
+### HTTP Transport Security
+
+!!! warning
+    HTTP transports do not validate the `Origin` or `Host` headers by default.
+
+To turn validation on, configure a `DefaultServerTransportSecurityValidator` with the allowed origins and hosts:
+
+```java
+HttpServletStreamableServerTransportProvider transportProvider =
+    HttpServletStreamableServerTransportProvider.builder()
+        .mcpEndpoint("/mcp")
+        .httpHeaderValidator(DefaultServerTransportSecurityValidator.builder()
+            .allowedOrigin("http://localhost:*")
+            .allowedHost("localhost:*")
+            .build())
+        .build();
+```
+
+The same `httpHeaderValidator(...)` method is available on the Stateless and SSE transport builders.
 
 ## Server Capabilities
 
