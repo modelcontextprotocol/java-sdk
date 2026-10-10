@@ -114,13 +114,13 @@ Records in `McpSchema` are serialized directly to the MCP JSON wire format. The 
 
 When the MCP specification marks a field as required, callers must not be able to construct a structurally invalid record, but the wire parser must still tolerate peers that fail to send it. Follow these rules in addition to the relevant Case A rules (annotation, naming, append-only).
 
-1. **Reject `null` in the compact constructor.** Use `Assert.notNull` for required objects or `Assert.hasText` for required `String` identifiers (`name`, `uri`, `uriTemplate`, `version`). This throws `IllegalArgumentException` at construction time instead of producing a record that fails later in serialization or protocol handling. Overrides Case A Rule 7 for this field.
+1. **Reject `null` in the compact constructor** with `Assert.notNull`. This throws `IllegalArgumentException` at construction time instead of producing a record that fails later in serialization or protocol handling. Overrides Case A Rule 7 for this field. The compact constructor is the one path that both Java callers and `fromJson` (Rule 2) go through, so it may only enforce what a wire default can satisfy. Stricter Java-side checks, such as non-empty identifiers (`Assert.hasText` on `name`, `uri`, `uriTemplate`, `version`), belong in the required-first builder factory (Rule 3).
 2. **Add a `@JsonCreator` static `fromJson` factory** alongside the canonical constructor. When a required field is absent from the wire, substitute a documented safe default (`""` for strings, `[]` for collections, `{}` for maps, `0` / `0.0` for numerics, `INFO` for `LoggingLevel`, etc.) and log at `WARN` naming the field and the value used. The SDK must not halt the conversation because of a missing field. Place `@JsonCreator` on this `fromJson` factory, never on the canonical constructor (Case A Rule 6 still applies to the canonical constructor itself).
-   - Exception: `JSONRPCResponse.JSONRPCError` fails fast on missing `code` / `message` because a malformed JSON-RPC error envelope is unrecoverable.
+   - Exception: do not substitute a default when the missing value would make the message unprocessable anyway. This covers `JSONRPCResponse.JSONRPCError` (`code` / `message`), since a malformed JSON-RPC error envelope is unrecoverable, and the identifiers a request is dispatched on (e.g. `name` of `tools/call` and `prompts/get`, `uri` of `resources/read`, `ref` of `completion/complete`). A missing dispatch identifier must fail fast with an `INVALID_PARAMS` error, not an internal error.
 3. **Provide a required-first builder factory** `builder(req1, req2, …)` and remove the corresponding setters from the `Builder`. A no-arg `builder()` factory must not exist on a record that has required fields. If one already exists for source compatibility, mark it `@Deprecated`.
 4. **Add tests per required field**:
    - Constructing the record with `null` for the field throws `IllegalArgumentException`.
-   - Deserializing JSON *without* the field succeeds and yields the documented default.
+   - Deserializing JSON *without* the field succeeds and yields the documented default, or, for a Rule 2 exception, fails.
    - Deserializing JSON with an extra *unknown* field still succeeds (Case A Rule 8 also applies).
 
 ### Example
