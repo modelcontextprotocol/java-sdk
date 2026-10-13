@@ -209,7 +209,7 @@ public class McpAsyncServerExchange {
 		return this.listRoots(McpSchema.FIRST_PAGE)
 			.expand(result -> (result.nextCursor() != null) ?
 					this.listRoots(result.nextCursor()) : Mono.empty())
-			.reduce(McpSchema.ListRootsResult.builder(new ArrayList<>()).build(),
+			.reduceWith(() -> McpSchema.ListRootsResult.builder(new ArrayList<>()).build(),
 				(allRootsResult, result) -> {
 					allRootsResult.roots().addAll(result.roots());
 					return allRootsResult;

@@ -734,7 +734,7 @@ public class McpAsyncClient {
 		return this.listTools(McpSchema.FIRST_PAGE).expand(result -> {
 			String next = result.nextCursor();
 			return (next != null && !next.isEmpty()) ? this.listTools(next) : Mono.empty();
-		}).reduce(new ArrayList<McpSchema.Tool>(), (accumulated, result) -> {
+		}).reduceWith(ArrayList<McpSchema.Tool>::new, (accumulated, result) -> {
 			accumulated.addAll(result.tools());
 			return accumulated;
 		}).map(all -> McpSchema.ListToolsResult.builder(Collections.unmodifiableList(all)).build());
@@ -821,7 +821,7 @@ public class McpAsyncClient {
 		return this.listResources(McpSchema.FIRST_PAGE).expand(result -> {
 			String next = result.nextCursor();
 			return (next != null && !next.isEmpty()) ? this.listResources(next) : Mono.empty();
-		}).reduce(new ArrayList<McpSchema.Resource>(), (accumulated, result) -> {
+		}).reduceWith(ArrayList<McpSchema.Resource>::new, (accumulated, result) -> {
 			accumulated.addAll(result.resources());
 			return accumulated;
 		}).map(all -> McpSchema.ListResourcesResult.builder(Collections.unmodifiableList(all)).build());
@@ -907,7 +907,7 @@ public class McpAsyncClient {
 		return this.listResourceTemplates(McpSchema.FIRST_PAGE).expand(result -> {
 			String next = result.nextCursor();
 			return (next != null && !next.isEmpty()) ? this.listResourceTemplates(next) : Mono.empty();
-		}).reduce(new ArrayList<McpSchema.ResourceTemplate>(), (accumulated, result) -> {
+		}).reduceWith(ArrayList<McpSchema.ResourceTemplate>::new, (accumulated, result) -> {
 			accumulated.addAll(result.resourceTemplates());
 			return accumulated;
 		}).map(all -> McpSchema.ListResourceTemplatesResult.builder(Collections.unmodifiableList(all)).build());
@@ -1026,7 +1026,7 @@ public class McpAsyncClient {
 		return this.listPrompts(McpSchema.FIRST_PAGE).expand(result -> {
 			String next = result.nextCursor();
 			return (next != null && !next.isEmpty()) ? this.listPrompts(next) : Mono.empty();
-		}).reduce(new ArrayList<McpSchema.Prompt>(), (accumulated, result) -> {
+		}).reduceWith(ArrayList<McpSchema.Prompt>::new, (accumulated, result) -> {
 			accumulated.addAll(result.prompts());
 			return accumulated;
 		}).map(all -> McpSchema.ListPromptsResult.builder(Collections.unmodifiableList(all)).build());
