@@ -511,7 +511,7 @@ public class McpAsyncClient {
 
 		logger.debug("Added root: {}", root);
 
-		if (this.clientCapabilities.roots().listChanged()) {
+		if (Boolean.TRUE.equals(this.clientCapabilities.roots().listChanged())) {
 			if (this.isInitialized()) {
 				return this.rootsListChangedNotification();
 			}
@@ -539,7 +539,7 @@ public class McpAsyncClient {
 
 		if (removed != null) {
 			logger.debug("Removed Root: {}", rootUri);
-			if (this.clientCapabilities.roots().listChanged()) {
+			if (Boolean.TRUE.equals(this.clientCapabilities.roots().listChanged())) {
 				if (this.isInitialized()) {
 					return this.rootsListChangedNotification();
 				}
