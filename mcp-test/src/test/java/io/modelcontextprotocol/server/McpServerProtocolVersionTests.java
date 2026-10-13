@@ -41,7 +41,7 @@ class McpServerProtocolVersionTests {
 
 		String requestId = UUID.randomUUID().toString();
 
-		transportProvider.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, ProtocolVersions.MCP_2025_11_25));
+		transportProvider.simulateIncomingMessage(jsonRpcInitializeRequest(requestId, ProtocolVersions.MCP_2026_07_28));
 
 		McpSchema.JSONRPCMessage response = serverTransport.getLastSentMessage();
 		assertThat(response).isInstanceOf(McpSchema.JSONRPCResponse.class);

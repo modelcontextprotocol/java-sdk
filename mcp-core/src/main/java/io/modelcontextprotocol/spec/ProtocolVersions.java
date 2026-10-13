@@ -26,4 +26,10 @@ public interface ProtocolVersions {
 	 */
 	String MCP_2025_11_25 = "2025-11-25";
 
+	/**
+	 * MCP protocol version for 2026-07-28.
+	 * https://modelcontextprotocol.io/specification/2026-07-28
+	 */
+	String MCP_2026_07_28 = "2026-07-28";
+
 }
