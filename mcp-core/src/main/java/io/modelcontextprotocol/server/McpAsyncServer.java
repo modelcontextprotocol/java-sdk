@@ -371,7 +371,7 @@ public class McpAsyncServer {
 			this.tools.add(wrappedToolSpecification);
 			logger.debug("Added tool handler: {}", wrappedToolSpecification.tool().name());
 
-			if (this.serverCapabilities.tools().listChanged()) {
+			if (Boolean.TRUE.equals(this.serverCapabilities.tools().listChanged())) {
 				return notifyToolsListChanged();
 			}
 			return Mono.empty();
@@ -519,7 +519,7 @@ public class McpAsyncServer {
 		return Mono.defer(() -> {
 			if (this.tools.removeIf(toolSpecification -> toolSpecification.tool().name().equals(toolName))) {
 				logger.debug("Removed tool handler: {}", toolName);
-				if (this.serverCapabilities.tools().listChanged()) {
+				if (Boolean.TRUE.equals(this.serverCapabilities.tools().listChanged())) {
 					return notifyToolsListChanged();
 				}
 			}
@@ -622,7 +622,7 @@ public class McpAsyncServer {
 			else {
 				logger.debug("Added resource handler: {}", resourceSpecification.resource().uri());
 			}
-			if (this.serverCapabilities.resources().listChanged()) {
+			if (Boolean.TRUE.equals(this.serverCapabilities.resources().listChanged())) {
 				return notifyResourcesListChanged();
 			}
 			return Mono.empty();
@@ -655,7 +655,7 @@ public class McpAsyncServer {
 			McpServerFeatures.AsyncResourceSpecification removed = this.resources.remove(resourceUri);
 			if (removed != null) {
 				logger.debug("Removed resource handler: {}", resourceUri);
-				if (this.serverCapabilities.resources().listChanged()) {
+				if (Boolean.TRUE.equals(this.serverCapabilities.resources().listChanged())) {
 					return notifyResourcesListChanged();
 				}
 				return Mono.empty();
@@ -691,7 +691,7 @@ public class McpAsyncServer {
 				logger.debug("Added resource template handler: {}",
 						resourceTemplateSpecification.resourceTemplate().uriTemplate());
 			}
-			if (this.serverCapabilities.resources().listChanged()) {
+			if (Boolean.TRUE.equals(this.serverCapabilities.resources().listChanged())) {
 				return notifyResourcesListChanged();
 			}
 			return Mono.empty();
@@ -891,7 +891,7 @@ public class McpAsyncServer {
 			else {
 				logger.debug("Added prompt handler: {}", promptSpecification.prompt().name());
 			}
-			if (this.serverCapabilities.prompts().listChanged()) {
+			if (Boolean.TRUE.equals(this.serverCapabilities.prompts().listChanged())) {
 				return this.notifyPromptsListChanged();
 			}
 
@@ -925,7 +925,7 @@ public class McpAsyncServer {
 
 			if (removed != null) {
 				logger.debug("Removed prompt handler: {}", promptName);
-				if (this.serverCapabilities.prompts().listChanged()) {
+				if (Boolean.TRUE.equals(this.serverCapabilities.prompts().listChanged())) {
 					return this.notifyPromptsListChanged();
 				}
 				return Mono.empty();
