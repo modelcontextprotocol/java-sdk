@@ -48,7 +48,15 @@ class DefaultMcpStatelessServerHandler implements McpStatelessServerHandler {
 							t.getMessage());
 				}
 				return Mono.just(McpSchema.JSONRPCResponse.error(request.id(), error));
-			});
+			})
+			.switchIfEmpty(Mono.defer(() -> {
+				logger.warn("Request handler for method '{}' completed without producing a result. "
+						+ "Responding with an internal error to honor JSON-RPC 2.0's "
+						+ "one-response-per-request contract.", request.method());
+				return Mono.just(McpSchema.JSONRPCResponse
+					.error(request.id(), new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+							"Request handler completed without producing a result for method: " + request.method())));
+			}));
 	}
 
 	@Override
