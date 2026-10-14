@@ -2729,6 +2729,59 @@ public class McpSchemaTests {
 		assertThat(notification.data()).isEmpty();
 	}
 
+	@Test
+	void testLoggingMessageNotificationDeserializationWithObjectData() throws Exception {
+		// FastMCP ctx.info()/ctx.log() sends data as an object; the MCP spec allows any
+		// JSON
+		// value. Keep the public API as String by coercing non-string data to JSON text.
+		McpSchema.LoggingMessageNotification notification = JSON_MAPPER.readValue("""
+				{"level":"info","logger":"server","data":{"msg":"working","extra":null}}""",
+				McpSchema.LoggingMessageNotification.class);
+
+		assertThat(notification).isNotNull();
+		assertThat(notification.level()).isEqualTo(McpSchema.LoggingLevel.INFO);
+		assertThat(notification.logger()).isEqualTo("server");
+		assertThatJson(notification.data()).isObject().containsEntry("msg", "working").containsEntry("extra", null);
+	}
+
+	@Test
+	void testLoggingMessageNotificationDeserializationWithStringDataStillWorks() throws Exception {
+		McpSchema.LoggingMessageNotification notification = JSON_MAPPER.readValue("""
+				{"level":"warning","logger":"my-logger","data":"plain text"}""",
+				McpSchema.LoggingMessageNotification.class);
+
+		assertThat(notification.data()).isEqualTo("plain text");
+		assertThat(notification.level()).isEqualTo(McpSchema.LoggingLevel.WARNING);
+	}
+
+	@Test
+	void testLoggingMessageNotificationDeserializationWithArrayAndNumberData() throws Exception {
+		McpSchema.LoggingMessageNotification arrayNotification = JSON_MAPPER.readValue("""
+				{"level":"debug","data":[1,"two",true]}""", McpSchema.LoggingMessageNotification.class);
+		assertThatJson(arrayNotification.data()).isArray().containsExactly(1, "two", true);
+
+		McpSchema.LoggingMessageNotification numberNotification = JSON_MAPPER.readValue("""
+				{"level":"debug","data":42}""", McpSchema.LoggingMessageNotification.class);
+		assertThat(numberNotification.data()).isEqualTo("42");
+
+		McpSchema.LoggingMessageNotification boolNotification = JSON_MAPPER.readValue("""
+				{"level":"debug","data":true}""", McpSchema.LoggingMessageNotification.class);
+		assertThat(boolNotification.data()).isEqualTo("true");
+	}
+
+	@Test
+	void testLoggingMessageNotificationConvertValueWithObjectData() {
+		Map<String, Object> params = new HashMap<>();
+		params.put("level", "info");
+		params.put("logger", "server");
+		params.put("data", Map.of("msg", "working"));
+
+		McpSchema.LoggingMessageNotification notification = JSON_MAPPER.convertValue(params,
+				McpSchema.LoggingMessageNotification.class);
+
+		assertThatJson(notification.data()).isObject().containsEntry("msg", "working");
+	}
+
 	// --- Icon tests (SEP-973) ---
 
 	@Test
