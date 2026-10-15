@@ -1066,6 +1066,73 @@ public abstract class AbstractMcpClientServerIntegrationTests {
 		}
 	}
 
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testToolErrorDoesNotSendCauseChain(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(Tool.builder("tool1", EMPTY_JSON_SCHEMA).description("tool1 description").build())
+			.callHandler((exchange,
+					request) -> Mono.error(new IllegalStateException("Tool failed",
+							new IllegalArgumentException("connect to db.internal:5432 failed"))))
+			.build();
+
+		var mcpServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").tools(tool).build();
+
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample client", "0.0.0").build())
+			.build()) {
+
+			assertThatThrownBy(
+					() -> mcpClient.callTool(McpSchema.CallToolRequest.builder("tool1").arguments(Map.of()).build()))
+				.isInstanceOf(McpError.class)
+				.extracting("jsonRpcError")
+				.asInstanceOf(type(McpSchema.JSONRPCResponse.JSONRPCError.class))
+				.satisfies(error -> {
+					assertThat(error.code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
+					assertThat(error.message()).isEqualTo("Tool failed");
+					assertThat(error.data()).isNull();
+				});
+		}
+		finally {
+			mcpServer.closeGracefully().block();
+		}
+	}
+
+	@ParameterizedTest(name = "{0} : {displayName} ")
+	@MethodSource("clientsForTesting")
+	void testToolErrorWithoutMessage(String clientType) {
+
+		var clientBuilder = clientBuilders.get(clientType);
+
+		McpServerFeatures.AsyncToolSpecification tool = McpServerFeatures.AsyncToolSpecification.builder()
+			.tool(Tool.builder("tool1", EMPTY_JSON_SCHEMA).description("tool1 description").build())
+			.callHandler((exchange, request) -> Mono.error(new IllegalStateException()))
+			.build();
+
+		var mcpServer = prepareAsyncServerBuilder().serverInfo("test-server", "1.0.0").tools(tool).build();
+
+		try (var mcpClient = clientBuilder
+			.clientInfo(McpSchema.Implementation.builder("Sample client", "0.0.0").build())
+			.build()) {
+
+			assertThatThrownBy(
+					() -> mcpClient.callTool(McpSchema.CallToolRequest.builder("tool1").arguments(Map.of()).build()))
+				.isInstanceOf(McpError.class)
+				.extracting("jsonRpcError")
+				.asInstanceOf(type(McpSchema.JSONRPCResponse.JSONRPCError.class))
+				.satisfies(error -> {
+					assertThat(error.code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
+					assertThat(error.message()).isEqualTo("Internal error");
+				});
+		}
+		finally {
+			mcpServer.closeGracefully().block();
+		}
+	}
+
 	// ---------------------------------------
 	// Roots Tests
 	// ---------------------------------------
