@@ -6,6 +6,7 @@ package io.modelcontextprotocol.spec;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -179,10 +180,18 @@ public class McpStreamableServerSession implements McpLoggableSession {
 				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), result,
 						null))
 				.onErrorResume(e -> {
-					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (e instanceof McpError mcpError
-							&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
-									: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-											e.getMessage(), McpError.aggregateExceptionMessages(e));
+					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError;
+					if (e instanceof McpError mcpError && mcpError.getJsonRpcError() != null) {
+						jsonRpcError = mcpError.getJsonRpcError();
+					}
+					else {
+						// The cause chain may contain internal details: log it, but only
+						// send
+						// the message to the client
+						logger.warn("Error handling request {} [{}]", jsonrpcRequest.id(), jsonrpcRequest.method(), e);
+						jsonRpcError = new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+								Objects.requireNonNullElse(e.getMessage(), "Internal error"), null);
+					}
 
 					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(),
 							null, jsonRpcError);

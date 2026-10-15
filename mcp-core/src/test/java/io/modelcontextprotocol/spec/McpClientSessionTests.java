@@ -246,30 +246,23 @@ class McpClientSessionTests {
 				"test-id", null);
 		transport.simulateIncomingMessage(request);
 
-		// Verify: The response should contain INTERNAL_ERROR with aggregated exception
-		// messages in data field
+		// Verify: The response should contain INTERNAL_ERROR with the exception message
 		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
 		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
 		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
 		assertThat(response.error()).isNotNull();
 		assertThat(response.error().code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
 		assertThat(response.error().message()).isEqualTo("Something went wrong");
-		// Verify data field contains aggregated exception messages
-		assertThat(response.error().data()).isNotNull();
-		assertThat(response.error().data().toString()).contains("RuntimeException");
-		assertThat(response.error().data().toString()).contains("Something went wrong");
+		assertThat(response.error().data()).isNull();
 
 		session.close();
 	}
 
 	@Test
-	void testRequestHandlerThrowsExceptionWithCause() {
-		// Setup: Create a request handler that throws an exception with a cause chain
-		String testMethod = "test.chainedError";
-		RuntimeException rootCause = new IllegalArgumentException("Root cause message");
-		RuntimeException middleCause = new IllegalStateException("Middle cause message", rootCause);
-		RuntimeException topException = new RuntimeException("Top level message", middleCause);
-		McpClientSession.RequestHandler<?> failingHandler = params -> Mono.error(topException);
+	void testRequestHandlerThrowsExceptionWithoutMessage() {
+		// Setup: Create a request handler that throws an exception with a null message
+		String testMethod = "test.noMessageError";
+		McpClientSession.RequestHandler<?> failingHandler = params -> Mono.error(new IllegalStateException());
 
 		var transport = new MockMcpClientTransport();
 		var session = new McpClientSession(TIMEOUT, transport, Map.of(testMethod, failingHandler), Map.of(),
@@ -280,22 +273,13 @@ class McpClientSessionTests {
 				"test-id", null);
 		transport.simulateIncomingMessage(request);
 
-		// Verify: The response should contain INTERNAL_ERROR with full exception chain
-		// in data field
+		// Verify: An error response is still sent
 		McpSchema.JSONRPCMessage sentMessage = transport.getLastSentMessage();
 		assertThat(sentMessage).isInstanceOf(McpSchema.JSONRPCResponse.class);
 		McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) sentMessage;
 		assertThat(response.error()).isNotNull();
 		assertThat(response.error().code()).isEqualTo(McpSchema.ErrorCodes.INTERNAL_ERROR);
-		assertThat(response.error().message()).isEqualTo("Top level message");
-		// Verify data field contains the full exception chain
-		String dataString = response.error().data().toString();
-		assertThat(dataString).contains("RuntimeException");
-		assertThat(dataString).contains("Top level message");
-		assertThat(dataString).contains("IllegalStateException");
-		assertThat(dataString).contains("Middle cause message");
-		assertThat(dataString).contains("IllegalArgumentException");
-		assertThat(dataString).contains("Root cause message");
+		assertThat(response.error().message()).isEqualTo("Internal error");
 
 		session.close();
 	}
