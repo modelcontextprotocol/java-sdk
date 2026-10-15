@@ -185,6 +185,8 @@ public class McpAsyncClient {
 
 	private final boolean applyElicitationDefaults;
 
+	private final boolean validateCallToolResultContent;
+
 	/**
 	 * Create a new McpAsyncClient with the given transport and session request-response
 	 * timeout.
@@ -210,6 +212,7 @@ public class McpAsyncClient {
 		this.toolsOutputSchemaCache = new ConcurrentHashMap<>();
 		this.enableCallToolSchemaCaching = features.enableCallToolSchemaCaching();
 		this.applyElicitationDefaults = features.applyElicitationDefaults();
+		this.validateCallToolResultContent = features.validateCallToolResultContent();
 
 		// Request Handlers
 		Map<String, RequestHandler<?>> requestHandlers = new HashMap<>();
@@ -672,6 +675,9 @@ public class McpAsyncClient {
 	private static final TypeRef<McpSchema.CallToolResult> CALL_TOOL_RESULT_TYPE_REF = new TypeRef<>() {
 	};
 
+	private static final TypeRef<Object> RAW_TOOL_RESULT_TYPE_REF = new TypeRef<>() {
+	};
+
 	private static final TypeRef<McpSchema.ListToolsResult> LIST_TOOLS_RESULT_TYPE_REF = new TypeRef<>() {
 	};
 
@@ -692,10 +698,24 @@ public class McpAsyncClient {
 				return Mono.error(new IllegalStateException("Server does not provide tools capability"));
 			}
 
-			return init.mcpSession()
-				.sendRequest(McpSchema.METHOD_TOOLS_CALL, callToolRequest, CALL_TOOL_RESULT_TYPE_REF)
-				.flatMap(result -> Mono.just(validateToolResult(callToolRequest.name(), result)));
+			Mono<McpSchema.CallToolResult> result = this.validateCallToolResultContent
+					? init.mcpSession()
+						.sendRequest(McpSchema.METHOD_TOOLS_CALL, callToolRequest, RAW_TOOL_RESULT_TYPE_REF)
+						.map(this::decodeToolResultWithContentValidation)
+					: init.mcpSession()
+						.sendRequest(McpSchema.METHOD_TOOLS_CALL, callToolRequest, CALL_TOOL_RESULT_TYPE_REF);
+			return result.map(value -> validateToolResult(callToolRequest.name(), value));
 		});
+	}
+
+	private McpSchema.CallToolResult decodeToolResultWithContentValidation(Object result) {
+		// Check before CallToolResult.fromJson replaces missing or null content with [].
+		Object content = result instanceof Map<?, ?> fields ? fields.get("content") : null;
+		// Untyped JSON arrays may be represented as a List or a Java array by the mapper.
+		if (!(content instanceof List<?>) && !(content instanceof Object[])) {
+			throw new IllegalArgumentException("CallToolResult.content must be a non-null array");
+		}
+		return this.transport.unmarshalFrom(result, CALL_TOOL_RESULT_TYPE_REF);
 	}
 
 	private McpSchema.CallToolResult validateToolResult(String toolName, McpSchema.CallToolResult result) {
