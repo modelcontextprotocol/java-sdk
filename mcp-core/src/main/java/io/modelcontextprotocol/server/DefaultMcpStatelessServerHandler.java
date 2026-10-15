@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
+import java.util.Objects;
 
 class DefaultMcpStatelessServerHandler implements McpStatelessServerHandler {
 
@@ -44,8 +45,11 @@ class DefaultMcpStatelessServerHandler implements McpStatelessServerHandler {
 					error = mcpError.getJsonRpcError();
 				}
 				else {
+					// The cause chain may contain internal details: log it, but only send
+					// the message to the client
+					logger.warn("Error handling request {} [{}]", request.id(), request.method(), t);
 					error = new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-							t.getMessage(), null);
+							Objects.requireNonNullElse(t.getMessage(), "Internal error"), null);
 				}
 				return Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null, error));
 			});

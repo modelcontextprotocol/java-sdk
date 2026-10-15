@@ -6,6 +6,7 @@ package io.modelcontextprotocol.spec;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -219,10 +220,7 @@ public class McpServerSession implements McpLoggableSession {
 			else if (message instanceof McpSchema.JSONRPCRequest request) {
 				logger.debug("Received request: {}", request);
 				return handleIncomingRequest(request, transportContext).onErrorResume(error -> {
-					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (error instanceof McpError mcpError
-							&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
-									: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-											error.getMessage(), McpError.aggregateExceptionMessages(error));
+					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = toJsonRpcError(request, error);
 					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
 							jsonRpcError);
 					// TODO: Should the error go to SSE or back as POST return?
@@ -280,16 +278,26 @@ public class McpServerSession implements McpLoggableSession {
 			}
 			return resultMono
 				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
-				.onErrorResume(error -> {
-					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (error instanceof McpError mcpError
-							&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
-									// TODO: add error message through the data field
-									: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-											error.getMessage(), McpError.aggregateExceptionMessages(error));
-					return Mono.just(
-							new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null, jsonRpcError));
-				});
+				.onErrorResume(error -> Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(),
+						null, toJsonRpcError(request, error))));
 		});
+	}
+
+	/**
+	 * Converts a request handler failure into the JSON-RPC error sent to the client.
+	 * Errors other than {@link McpError} are logged, and only their message is sent:
+	 * their cause chain may contain internal details that must not reach the client.
+	 * @param request the request that failed
+	 * @param error the failure
+	 * @return the JSON-RPC error to send to the client
+	 */
+	private McpSchema.JSONRPCResponse.JSONRPCError toJsonRpcError(McpSchema.JSONRPCRequest request, Throwable error) {
+		if (error instanceof McpError mcpError && mcpError.getJsonRpcError() != null) {
+			return mcpError.getJsonRpcError();
+		}
+		logger.warn("Error handling request {} [{}]", request.id(), request.method(), error);
+		return new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+				Objects.requireNonNullElse(error.getMessage(), "Internal error"), null);
 	}
 
 	/**
